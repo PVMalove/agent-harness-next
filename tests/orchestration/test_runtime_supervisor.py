@@ -142,6 +142,7 @@ def test_an_execution_seen_from_another_boot_or_pid_namespace_stays_unknown_and_
     assert repo.execution_actions()[-1] == "execution-unknown"
 
 
+@pytest.mark.fault_injection
 def test_a_reused_pid_is_lost_and_the_live_process_is_never_signalled(
     supervised: Factory,
 ) -> None:
@@ -373,6 +374,7 @@ def test_an_adopted_leader_that_exits_before_its_group_keeps_the_lease_until_the
     ]
 
 
+@pytest.mark.fault_injection
 def test_a_lost_response_after_the_receipt_is_answered_from_the_stored_receipt_with_one_launch(
     supervised: Factory,
 ) -> None:
@@ -386,6 +388,7 @@ def test_a_lost_response_after_the_receipt_is_answered_from_the_stored_receipt_w
     assert len(repo.launches()) == 1
 
 
+@pytest.mark.fault_injection
 def test_a_runtime_killed_between_launch_and_receipt_adopts_the_process_without_a_second_launch(
     supervised: Factory,
 ) -> None:
@@ -511,6 +514,7 @@ def test_a_failed_receipt_write_keeps_the_intent_and_the_repeat_adopts_the_proce
     assert len(repo.launches()) == 1
 
 
+@pytest.mark.fault_injection
 def test_a_second_send_during_a_launch_returns_the_same_receipt(
     supervised: Factory,
 ) -> None:
@@ -600,6 +604,7 @@ def test_a_cancel_of_a_running_execution_is_refused_until_its_stop_is_proven(
     assert repo.status()["state"] == "cancelled"
 
 
+@pytest.mark.fault_injection
 def test_a_broken_audit_chain_refuses_the_launch_before_any_process_starts(
     supervised: Factory,
 ) -> None:

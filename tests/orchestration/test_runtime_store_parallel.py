@@ -240,6 +240,7 @@ def planned(tmp_path: Path) -> Iterator[Batches]:
         batches.stop()
 
 
+@pytest.mark.fault_injection
 def test_two_dispatch_creates_under_a_budget_with_one_free_slot_admit_one(
     planned: Batches,
 ) -> None:

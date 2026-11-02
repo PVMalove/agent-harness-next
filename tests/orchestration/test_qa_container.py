@@ -374,11 +374,17 @@ def test_tooling_and_timeout_endings_block_the_report_with_their_domain(
     assert (lane["lease"], lane["queue"]) == (None, [])
 
 
-def test_a_failed_preparation_in_a_broken_environment_is_a_new_attempt(
+@pytest.mark.fault_injection
+def test_an_offline_dependency_install_is_environment_preparation_and_a_new_attempt(
     qa: Make,
 ) -> None:
     repo = qa(preparation=PREPARATION)
-    repo.engine.script("preparation-1", stderr="network unreachable\n", exit_code=2)
+    # `uv sync` of the preparation finds no package index, and the registry probe fails too.
+    offline = (
+        "error: Failed to fetch: `https://pypi.org/simple/pytest/`\n"
+        "  Caused by: Could not connect, are you offline?\n"
+    )
+    repo.engine.script("preparation-1", stderr=offline, exit_code=2)
     repo.engine.script("environment-probe-1", exit_code=6)
 
     code, _, err = repo.qa_run()

@@ -196,6 +196,7 @@ def test_a_holder_killed_by_sigkill_is_reaped_by_the_next_admission_without_forc
     assert store.validate()["valid"] is True
 
 
+@pytest.mark.fault_injection
 def test_a_stopped_owner_keeps_its_expired_lease_and_the_next_admission_is_lease_held(
     store: Store,
 ) -> None:
