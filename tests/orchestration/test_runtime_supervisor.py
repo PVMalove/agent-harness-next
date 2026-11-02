@@ -382,7 +382,12 @@ def test_a_lost_response_after_the_receipt_is_answered_from_the_stored_receipt_w
 
     answer = sent(repo.send())
 
+    # The runtime committed the launch and dropped its response: without the fault the test fails.
+    repo.runtime.wait_injected("execution.launch:respond")
     assert dig(answer, "execution", "state") == "running"
+    assert repo.rows(
+        "SELECT state FROM operations WHERE operation = 'execution.launch'"
+    ) == [("committed",)]
     assert len(repo.wait_launches(1)) == 1
     time.sleep(0.5)
     assert len(repo.launches()) == 1
