@@ -47,11 +47,13 @@ ADDED_AFTER_1X: dict[str, tuple[tuple[str, ...], ...]] = {
         ("dispatches", "*", "startup", "observation"),
         ("dispatches", "*", "startup", "startup_elapsed_seconds"),
         ("dispatches", "*", "startup", "startup_timeout_seconds"),
+        ("qa_lane",),
     ),
     "batch decision-packet": (
         ("route_preview", "retry", "failure"),
         ("operational_hold",),
     ),
+    "qa status": (("stale_heartbeat",),),
 }
 #: The elapsed-time field of ``dispatch status``: in both answers, its value depends on the clock.
 MASKED_ELAPSED = "silent_seconds"
