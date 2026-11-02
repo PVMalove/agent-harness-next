@@ -58,19 +58,25 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         self.assertNotRegex(workflow, r"(?<!uv )\bpip install|-m pip\b")
         self.assertNotIn("run: python scripts/verify.py", workflow)
-        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 6)
-        self.assertEqual(workflow.count("run: make bootstrap"), 6)
+        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 7)
+        self.assertEqual(workflow.count("run: make bootstrap"), 7)
         self.assertEqual(workflow.count("make verify"), 2)
 
-    def test_only_the_docker_smoke_job_selects_the_smoke_and_it_requires_the_engine(
-        self,
-    ) -> None:
+    @staticmethod
+    def _jobs() -> tuple[str, dict[str, str]]:
+        """The workflow text and the text of each of its jobs, by job name."""
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         jobs = workflow.split("\njobs:\n", 1)[1]
         blocks = {
             block.strip().split(":", 1)[0]: block
             for block in re.split(r"\n(?=  [a-z][a-z0-9-]*:\n)", jobs)
         }
+        return workflow, blocks
+
+    def test_only_the_docker_smoke_job_selects_the_smoke_and_it_requires_the_engine(
+        self,
+    ) -> None:
+        workflow, blocks = self._jobs()
         smoke = blocks["docker-smoke"]
 
         # pyproject.toml deselects the marker everywhere else; this job alone selects it.
@@ -86,6 +92,37 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
             self.assertIn(f"-t {tag}", smoke)
         self.assertIn("name: junit-docker-smoke", smoke)
         self.assertIn("docker-smoke", blocks["dashboard"].split("runs-on:", 1)[0])
+
+    def test_only_the_fault_injection_job_selects_the_suite_and_it_requires_the_runtime(
+        self,
+    ) -> None:
+        workflow, blocks = self._jobs()
+        job = blocks["fault-injection"]
+
+        # Every default run keeps the marked tests; this job alone runs only them.
+        self.assertEqual(workflow.count("-m fault_injection"), 1)
+        self.assertIn("-m fault_injection", job)
+        self.assertIn("tests/orchestration\n", job)
+        self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', job)
+        self.assertIn('HARNESS_REQUIRE_FAULT_INJECTION: "1"', job)
+        # The test hooks of the runtime exist only in a debug build.
+        self.assertIn("run: cargo build --locked\n", job)
+        self.assertIn("native/harness-runtime/target/debug/harness-runtime", job)
+        self.assertNotIn("--release", job)
+        self.assertIn("--junitxml=.harness/.sandboxes/logs/junit-fault-injection.xml", job)
+        self.assertIn("name: junit-fault-injection", job)
+        self.assertIn("fault-injection", blocks["dashboard"].split("runs-on:", 1)[0])
+        # A failing scenario fails the job: nothing reruns, reorders or tolerates it.
+        for masking in (
+            "continue-on-error",
+            "--reruns",
+            "--lf",
+            "--last-failed",
+            "--failed-first",
+            "--fail-fast",
+            "make verify",
+        ):
+            self.assertNotIn(masking, job)
 
 
 class ContractErrorInvariantTests(unittest.TestCase):
