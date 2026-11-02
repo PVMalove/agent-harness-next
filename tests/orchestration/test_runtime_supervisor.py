@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sqlite3
 import sys
 import time
@@ -225,6 +226,41 @@ def test_a_stop_begun_before_a_runtime_restart_is_driven_to_its_proof_by_reconci
     assert dig(exited, "exit", "kill_sent_at") is not None
     assert dig(exited, "lease", "released_at") is not None
     assert not alive(launch.pid)
+    assert repo.execution_actions() == [
+        "execution-launching",
+        "execution-running",
+        "execution-stopping",
+        "execution-exited",
+    ]
+
+
+@pytest.mark.fault_injection
+def test_an_orphan_worker_of_a_killed_runtime_is_supervised_by_its_successor_until_the_deadline(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=6, grace=2)
+    repo.ignore_term()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    repo.wait_execution("running")
+
+    # The runtime dies while its worker runs, long before the deadline: the worker outlives it as
+    # an orphan, and only the successor can stop it.
+    repo.runtime.kill()
+    assert alive(launch.pid)
+    assert repo.rows(
+        "SELECT state FROM executions WHERE dispatch_id = ?", repo.dispatch
+    ) == [("running",)]
+    repo.restart_runtime()
+
+    stopping = repo.wait_execution("stopping", timeout=20)
+    assert dig(stopping, "lease", "released_at") is None
+    assert alive(launch.pid)
+    exited = repo.wait_execution("exited", timeout=20)
+    assert dig(exited, "exit", "stopped_by") == "deadline"
+    assert dig(exited, "lease", "released_at") is not None
+    assert not alive(launch.pid)
+    assert len(repo.launches()) == 1
     assert repo.execution_actions() == [
         "execution-launching",
         "execution-running",
@@ -481,6 +517,34 @@ def test_a_runtime_killed_before_the_launch_leaves_a_lost_execution_and_no_proce
     ) == [("failed",)]
     assert repo.launches() == []
     assert repo.status()["state"] == "blocked"
+
+
+@pytest.mark.fault_injection
+def test_a_coordinator_killed_after_the_launch_intent_gets_the_same_receipt_on_repeat_with_one_launch(
+    supervised: Factory,
+) -> None:
+    repo = supervised(env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:intent"})
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:intent")
+
+    # SIGKILL of the coordinator: the runtime holds the committed intent and goes on alone.
+    send.kill()
+    send.communicate(timeout=30)
+    assert send.returncode == -signal.SIGKILL
+    repo.runtime.resume()
+    receipt = sent(repo.send())["execution"]
+
+    execution_id = dig(repo.execution(), "execution_id")
+    (launch,) = repo.wait_launches(1)
+    assert launch.operation_id == execution_id
+    assert dig(receipt, "adopted") is False
+    assert dig(receipt, "identity", "pid") == launch.pid
+    assert repo.rows(
+        "SELECT operation_id, state FROM operations WHERE operation = 'execution.launch'"
+    ) == [(execution_id, "committed")]
+    time.sleep(0.5)
+    assert len(repo.launches()) == 1
+    assert repo.status()["state"] == "dispatched"
 
 
 def test_a_store_failure_before_the_launch_starts_nothing_and_a_repeat_launches_once(
