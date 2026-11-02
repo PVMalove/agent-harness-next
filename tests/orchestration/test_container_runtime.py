@@ -250,6 +250,37 @@ def test_a_plan_root_that_holds_the_runtime_directory_is_policy_denied_before_th
     assert engine.calls() == []
 
 
+@pytest.mark.fault_injection
+@pytest.mark.parametrize("form", ["direct", "symlink"])
+def test_a_plan_root_holding_an_engine_socket_is_policy_denied_before_any_engine_call(
+    podman: Podman, tmp_path: Path, form: str
+) -> None:
+    repo, engine = podman(create=False)
+    # Rootless Podman keeps its socket below $XDG_RUNTIME_DIR/podman of the runtime's user.
+    sockets = repo.runtime.xdg / "podman"
+    sockets.mkdir()
+    root = sockets
+    if form == "symlink":
+        root = tmp_path / "engine-link"
+        root.symlink_to(sockets, target_is_directory=True)
+    config_path = repo.repo / ".harness" / "orchestration.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["access_policy"] = policy(
+        filesystem=[{"resource": "cache", "path": str(root), "access": "write"}]
+    )
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    refused = repo.propose()
+
+    assert refused.returncode == 2, refused.stderr
+    remedy = next(
+        line for line in refused.stderr.splitlines() if line.startswith("REMEDY:")
+    )
+    assert remedy.startswith("REMEDY: [policy_denied] "), refused.stderr
+    assert str(sockets) in refused.stderr
+    assert engine.calls() == []
+
+
 def test_the_executor_has_no_engine_boundary_of_its_own() -> None:
     source = Path(container_executor.__file__).read_text(encoding="utf-8")
 
