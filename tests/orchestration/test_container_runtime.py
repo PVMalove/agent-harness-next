@@ -190,6 +190,31 @@ def test_an_image_rebuilt_after_approval_refuses_the_send_before_any_launch(
     assert repo.status()["state"] == "approved"
 
 
+@pytest.mark.fault_injection
+def test_an_image_rebuilt_after_the_coordinator_check_is_approval_mismatch_in_the_runtime_before_any_create(
+    podman: Podman,
+) -> None:
+    repo, engine = podman(
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:before-begin"}
+    )
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:before-begin")
+
+    # The coordinator checked the pinned image already; the image changes before the runtime does.
+    engine.update(lambda state: state["images"].update({WORKER_TAG: "c" * 64}))
+    repo.runtime.resume()
+    _, err = send.communicate(timeout=60)
+
+    assert send.returncode == 2, err
+    remedy = next(line for line in err.splitlines() if line.startswith("REMEDY:"))
+    assert remedy.startswith("REMEDY: [approval_mismatch] "), err
+    assert not any(
+        call[1] in {"create", "start"} or call[1:3] == ["network", "create"]
+        for call in engine.calls()
+    )
+    assert repo.execution() is None
+
+
 def test_a_name_missing_from_the_runtime_environment_blocks_propose_by_its_name(
     podman: Podman,
 ) -> None:
