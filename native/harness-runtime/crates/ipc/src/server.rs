@@ -259,7 +259,8 @@ pub(crate) fn refusal(
 /// Test hook of a debug build (`HARNESS_RUNTIME_TEST_FAIL_AT=<operation>:respond`, such as
 /// `state.write:respond` or `execution.launch:respond`): once, the runtime closes the connection
 /// after the operation succeeded and before it answers, so a test can lose the response of a
-/// committed write or launch. A release build never drops a response.
+/// committed write or launch; the runtime prints `INJECTED:<operation>:respond` to stderr then.
+/// A release build never drops a response.
 #[cfg(debug_assertions)]
 fn drops_the_response(body: &[u8], reply: &crate::session::Reply) -> bool {
     use contracts::{Status, decode};

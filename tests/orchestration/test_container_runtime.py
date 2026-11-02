@@ -190,6 +190,31 @@ def test_an_image_rebuilt_after_approval_refuses_the_send_before_any_launch(
     assert repo.status()["state"] == "approved"
 
 
+@pytest.mark.fault_injection
+def test_an_image_rebuilt_after_the_coordinator_check_is_approval_mismatch_in_the_runtime_before_any_create(
+    podman: Podman,
+) -> None:
+    repo, engine = podman(
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:before-begin"}
+    )
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:before-begin")
+
+    # The coordinator checked the pinned image already; the image changes before the runtime does.
+    engine.update(lambda state: state["images"].update({WORKER_TAG: "c" * 64}))
+    repo.runtime.resume()
+    _, err = send.communicate(timeout=60)
+
+    assert send.returncode == 2, err
+    remedy = next(line for line in err.splitlines() if line.startswith("REMEDY:"))
+    assert remedy.startswith("REMEDY: [approval_mismatch] "), err
+    assert not any(
+        call[1] in {"create", "start"} or call[1:3] == ["network", "create"]
+        for call in engine.calls()
+    )
+    assert repo.execution() is None
+
+
 def test_a_name_missing_from_the_runtime_environment_blocks_propose_by_its_name(
     podman: Podman,
 ) -> None:
@@ -222,6 +247,37 @@ def test_a_plan_root_that_holds_the_runtime_directory_is_policy_denied_before_th
 
     assert refused.returncode != 0
     assert "policy_denied" in refused.stderr
+    assert engine.calls() == []
+
+
+@pytest.mark.fault_injection
+@pytest.mark.parametrize("form", ["direct", "symlink"])
+def test_a_plan_root_holding_an_engine_socket_is_policy_denied_before_any_engine_call(
+    podman: Podman, tmp_path: Path, form: str
+) -> None:
+    repo, engine = podman(create=False)
+    # Rootless Podman keeps its socket below $XDG_RUNTIME_DIR/podman of the runtime's user.
+    sockets = repo.runtime.xdg / "podman"
+    sockets.mkdir()
+    root = sockets
+    if form == "symlink":
+        root = tmp_path / "engine-link"
+        root.symlink_to(sockets, target_is_directory=True)
+    config_path = repo.repo / ".harness" / "orchestration.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["access_policy"] = policy(
+        filesystem=[{"resource": "cache", "path": str(root), "access": "write"}]
+    )
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    refused = repo.propose()
+
+    assert refused.returncode == 2, refused.stderr
+    remedy = next(
+        line for line in refused.stderr.splitlines() if line.startswith("REMEDY:")
+    )
+    assert remedy.startswith("REMEDY: [policy_denied] "), refused.stderr
+    assert str(sockets) in refused.stderr
     assert engine.calls() == []
 
 

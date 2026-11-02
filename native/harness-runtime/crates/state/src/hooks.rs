@@ -125,10 +125,15 @@ pub fn reach_once(_step: &str) -> Result<()> {
 
 /// Whether a test asked, once, for the failure at `step` that has no error to return: the
 /// response of an operation is dropped after it succeeded (`state.write:respond`,
-/// `execution.launch:respond`).
+/// `execution.launch:respond`). When it fires, the process prints `INJECTED:<step>` to stderr,
+/// so a test proves the fault happened instead of passing without it.
 #[cfg(debug_assertions)]
 pub fn fail_once(step: &str) -> bool {
-    first_asked(step, &["HARNESS_RUNTIME_TEST_FAIL_AT"])
+    let fires = first_asked(step, &["HARNESS_RUNTIME_TEST_FAIL_AT"]);
+    if fires {
+        eprintln!("INJECTED:{step}");
+    }
+    fires
 }
 
 #[cfg(not(debug_assertions))]

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Protocol
@@ -25,12 +26,13 @@ from tests.orchestration import test_coordinator as coordinator_tests
 from tests.orchestration.runtime_store_support import (
     STATE_REL,
     ServingRuntime,
+    coordinator_popen,
     coordinator_with,
     migrate,
     store_call,
     store_records,
 )
-from tests.orchestration.scripted_engine import ScriptedEngine
+from tests.orchestration.scripted_engine import ScriptedEngine, podman_info
 
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
@@ -71,6 +73,7 @@ class ContainerQa:
         proxy_tag: str = PROXY_TAG,
         gate: list[str] | None = None,
         scripted_engine: bool = True,
+        selinux: bool = False,
     ) -> None:
         gate = GATE if gate is None else gate
         self.fx = coordinator_tests.CoordinatorRetryRoutingTests()
@@ -123,9 +126,13 @@ class ContainerQa:
         self.engine.update(
             lambda state: state["images"].update({worker_tag: WORKER_BARE, proxy_tag: "b" * 64})
         )
+        if selinux:
+            # The engine facts the plan pins are those before propose.
+            self.engine.update(lambda state: state.update(info=podman_info(selinux=True)))
         assert migrate(repo).returncode == 0
         engine_path = {"PATH": str(self.engine.bin)} if scripted_engine else {}
-        self.runtime = ServingRuntime(repo, env={**engine_path, SECRET_NAME: SECRET})
+        self.environ = {**engine_path, SECRET_NAME: SECRET}
+        self.runtime = ServingRuntime(repo, env=self.environ)
         self.dispatch = self.create()
 
     def run(self, *command: str) -> tuple[int, JsonObject | None, str]:
@@ -201,6 +208,7 @@ class Make(Protocol):
         hosts: list[str] | None = ...,
         cache: Path | None = ...,
         lease_ttl: int | None = ...,
+        selinux: bool = ...,
     ) -> ContainerQa: ...
 
 
@@ -215,9 +223,16 @@ def qa(tmp_path: Path) -> Iterator[Make]:
         hosts: list[str] | None = None,
         cache: Path | None = None,
         lease_ttl: int | None = None,
+        selinux: bool = False,
     ) -> ContainerQa:
         root = tmp_path / f"q{len(made)}"
-        options = {"timeout": timeout, "hosts": hosts, "cache": cache, "lease_ttl": lease_ttl}
+        options = {
+            "timeout": timeout,
+            "hosts": hosts,
+            "cache": cache,
+            "lease_ttl": lease_ttl,
+            "selinux": selinux,
+        }
         made.append(ContainerQa(root, preparation=preparation, **options))  # type: ignore[arg-type]
         return made[-1]
 
@@ -349,6 +364,63 @@ def test_an_infrastructure_ending_is_a_new_attempt_without_a_report_or_a_develop
     assert [d["role"] for d in dispatches if isinstance(d, dict)].count("developer") == 1
 
 
+_MARKER = "partial-output-of-an-interrupted-command-3b9d"
+
+
+def _artifact_texts(repo: ContainerQa) -> list[str]:
+    """Every immutable artifact of the store, as text."""
+    connection = sqlite3.connect(repo.repo / STATE_REL / "runtime.db", timeout=10)
+    try:
+        return [
+            bytes(content).decode("utf-8", "replace")
+            for (content,) in connection.execute("SELECT bytes FROM artifact")
+        ]
+    finally:
+        connection.close()
+
+
+@pytest.mark.fault_injection
+def test_a_partial_command_record_left_by_a_killed_runtime_is_not_run_and_never_evidence(
+    qa: Make,
+) -> None:
+    repo = qa()
+    repo.engine.script("gate-2", stdout=f"{_MARKER}\n", hang=True)
+    run = coordinator_popen(repo.repo, repo.runtime, "qa", "run", "--dispatch", repo.dispatch)
+    deadline = time.monotonic() + 60
+    while len(repo.engine.runs()) < 2 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert len(repo.engine.runs()) == 2, repo.engine.calls()
+    execution_id = str(repo.execution()["execution_id"])
+
+    # SIGKILL while gate-2 runs, and its record half written: what write_record leaves behind.
+    repo.runtime.kill()
+    commands = repo.repo / STATE_REL / "executions" / execution_id / "commands"
+    (commands / "001.json.partial").write_text(
+        '{"index":1,"stage_id":"gate-2","result":"ran","exit_code":0,"stdout":{"tail":"'
+        + _MARKER,
+        encoding="utf-8",
+    )
+    repo.runtime = ServingRuntime(repo.repo, env=repo.environ, xdg=repo.runtime.xdg)
+    _, err = run.communicate(timeout=120)
+
+    assert run.returncode == 2, err
+    execution = repo.execution()
+    assert execution["state"] == "lost"
+    records = execution["exit"]["commands"]
+    assert [(r["stage_id"], r["result"], r["exit_code"]) for r in records] == [
+        ("gate-1", "ran", 0), ("gate-2", "not_run", None), ("gate-3", "not_run", None),
+    ]
+    [attempt] = repo.attempts()
+    assert attempt["domain"] == "infrastructure"
+    report = f"reports/{repo.dispatch}.json"
+    assert report not in store_records(repo.repo, repo.runtime, report)
+    assert _MARKER not in json.dumps(attempt)
+    assert not any(_MARKER in text for text in _artifact_texts(repo))
+    assert repo.status()["state"] == "approved"
+    lane = repo.lane()
+    assert (lane["lease"], lane["queue"]) == (None, [])
+
+
 @pytest.mark.parametrize(
     ("code", "hang", "domain"), [(127, False, "tooling"), (126, False, "tooling"), (0, True, "timeout")]
 )
@@ -374,11 +446,42 @@ def test_tooling_and_timeout_endings_block_the_report_with_their_domain(
     assert (lane["lease"], lane["queue"]) == (None, [])
 
 
-def test_a_failed_preparation_in_a_broken_environment_is_a_new_attempt(
+@pytest.mark.fault_injection
+def test_an_selinux_permission_denied_command_blocks_the_report_as_tooling_without_a_new_attempt(
+    qa: Make,
+) -> None:
+    repo = qa(selinux=True)
+    denied = "crun: open executable: Permission denied: OCI permission denied\n"
+    repo.engine.script("gate-1", stderr=denied, exit_code=126)
+
+    code, result, err = repo.qa_run()
+
+    assert code == 0 and result is not None, err
+    report = repo.report()
+    assert report["outcome"] == "blocked"
+    assert "tooling" in report["blockers"]["details"]
+    assert [c["result"] for c in report["checks_run"]] == ["fail", "not_run", "not_run"]
+    records = repo.execution()["exit"]["commands"]
+    assert (records[0]["domain"], records[0]["exit_code"]) == ("tooling", 126)
+    assert repo.attempts() == []
+    [run] = repo.engine.runs()
+    assert "label=disable" in _flag(run, "--security-opt")
+    assert not any(part.endswith((":z", ":Z")) or "relabel" in part for part in run)
+    lane = repo.lane()
+    assert (lane["lease"], lane["queue"]) == (None, [])
+
+
+@pytest.mark.fault_injection
+def test_an_offline_dependency_install_is_environment_preparation_and_a_new_attempt(
     qa: Make,
 ) -> None:
     repo = qa(preparation=PREPARATION)
-    repo.engine.script("preparation-1", stderr="network unreachable\n", exit_code=2)
+    # `uv sync` of the preparation finds no package index, and the registry probe fails too.
+    offline = (
+        "error: Failed to fetch: `https://pypi.org/simple/pytest/`\n"
+        "  Caused by: Could not connect, are you offline?\n"
+    )
+    repo.engine.script("preparation-1", stderr=offline, exit_code=2)
     repo.engine.script("environment-probe-1", exit_code=6)
 
     code, _, err = repo.qa_run()

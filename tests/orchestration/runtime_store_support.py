@@ -565,6 +565,7 @@ class ServingRuntime:
         lines: queue.Queue[str] = queue.Queue()
         threading.Thread(target=lambda: lines.put(stdout.readline()), daemon=True).start()
         self._paused: queue.Queue[str] = queue.Queue()
+        self._injected: queue.Queue[str] = queue.Queue()
         threading.Thread(target=self._read_stderr, daemon=True).start()
         try:
             text = lines.get(timeout=30)
@@ -579,6 +580,17 @@ class ServingRuntime:
         for line in stderr:
             if line.startswith("PAUSED:"):
                 self._paused.put(line.strip().removeprefix("PAUSED:"))
+            elif line.startswith("INJECTED:"):
+                self._injected.put(line.strip().removeprefix("INJECTED:"))
+
+    def wait_injected(self, step: str, timeout: float = 30.0) -> None:
+        """Wait until the runtime reports that the debug failure ``step`` fired
+        (``HARNESS_RUNTIME_TEST_FAIL_AT``): a hook that never fires fails the test."""
+        try:
+            reached = self._injected.get(timeout=timeout)
+        except queue.Empty:
+            pytest.fail(f"the runtime did not inject {step!r} within {timeout} seconds")
+        assert reached == step
 
     def wait_paused(self, step: str, timeout: float = 30.0) -> None:
         """Wait until the runtime stops at the debug hook ``step`` (``HARNESS_RUNTIME_TEST_PAUSE_AT``)."""
