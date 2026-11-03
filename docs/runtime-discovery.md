@@ -24,8 +24,10 @@ Hooks проекта подключаются по тем же двум runtime,
 `harness init`, `adopt` и `update` сливают управляемые записи в `.claude/settings.local.json` для
 Claude Code и в `.codex/hooks.json` для Codex, не трогая записи пользователя. Для Codex
 подключены критические guards и `require-bounded-check` на `PreToolUse` для `Bash` и advisory
-`targeted-check-reminder` на `Stop` и `SubagentStop`. Строки `Write` и `Edit` hooks ChangeImpact ждут
-адаптера `apply_patch`, а проектные hooks
+`targeted-check-reminder` на `Stop` и `SubagentStop`. Правки файлов Codex присылает как `apply_patch`:
+критические guards `protect-hook-policy` и `block-scratch-outside-docs-tasks` подключены группой
+`apply_patch|Write|Edit` и проверяют пути патча через адаптер `apply_patch_payload.py`. Строки `Write`
+и `Edit` hooks ChangeImpact к `apply_patch` не подключаются, а проектные hooks
 работают после того, как пользователь доверит слою `.codex/` и каждому hook по хэшу. Проверка
 `hooks.policy` в `harness health` показывает подключённые и отсутствующие hooks каждого runtime;
 подробности — в [docs/hooks/install-and-update.md](hooks/install-and-update.md).

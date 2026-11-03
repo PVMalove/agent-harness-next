@@ -239,7 +239,9 @@ class HookSpec:
 
     `out_of_hook` — проверка вне hook, которая защищает, если runtime не доставляет событие;
     None — столбец «Проверка вне hook» равен «нет». `wiring` — где hook подключён: в файле
-    настроек runtime или во frontmatter агента.
+    настроек runtime или во frontmatter агента. `apply_patch` — hook понимает payload
+    `apply_patch` (адаптер `apply_patch_payload.py`), поэтому runtime, который доставляет только
+    `apply_patch`, доставляет ему и Write/Edit (`PATCH_TOOLS`).
     """
 
     hook_id: str
@@ -249,8 +251,11 @@ class HookSpec:
     critical: bool
     out_of_hook: str | None = None
     wiring: Literal["settings", "agent"] = "settings"
+    apply_patch: bool = False
 
 
+# Инструменты первого runtime, которые второй runtime присылает одним `apply_patch`.
+PATCH_TOOLS = ("Write", "Edit")
 # Критичность каждой строки сверяет tests/health/test_hooks_policy_check.py
 # (test_hook_catalog_agrees_with_the_response_envelope) с `HOOKS` из
 # harness/project/hooks/hook_response.py; проводку и состав второго runtime —
@@ -263,6 +268,7 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         ("Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"),
         True,
         "hook_policy_sha256 в brief",
+        apply_patch=True,
     ),
     HookSpec(
         "block-public-attribution",
@@ -310,6 +316,7 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         "PreToolUse",
         ("Write", "Edit"),
         True,
+        apply_patch=True,
     ),
     HookSpec(
         "check-worktree-branch-name",
@@ -326,6 +333,7 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         ("Write", "Edit", "Bash"),
         True,
         wiring="agent",
+        apply_patch=True,
     ),
     HookSpec(
         "require-bounded-check",
@@ -412,8 +420,13 @@ class RuntimeAdapter:
 # (https://developers.openai.com/codex/hooks, 2026-10-22). Файл `<repo>/.codex/hooks.json` той же
 # формы `{"hooks": {<событие>: [{matcher, hooks: [handler]}]}}`; stdin shell-инструмента `Bash`
 # содержит `tool_name`, `tool_input.command`, `cwd`; код 2 блокирует. Правки файлов приходят как
-# `apply_patch` с патчем в `tool_input.command` и без `file_path`, поэтому hooks на Write и Edit
-# (адаптер payload — отдельная задача) не подключаются. События EnterWorktree и Skill в runtime
+# `tool_name: "apply_patch"` с сырым телом патча в `tool_input.command` и без `file_path`
+# (исходники runtime, 2026-11-03: core/src/tools/handlers/apply_patch.rs — pre_tool_use_payload;
+# core/src/tools/hook_names.rs — matcher-алиасы Write и Edit; hooks/src/events/pre_tool_use.rs —
+# в stdin каноническое имя apply_patch). Shell-вызов `apply_patch <<'EOF'` приходит как Bash
+# (unified_exec/exec_command.rs, registry.rs). Поэтому Write и Edit доставляются только hooks с
+# адаптером `apply_patch_payload.py` (`HookSpec.apply_patch`): их группа `apply_patch|Write|Edit`;
+# остальные hooks на Write и Edit не подключаются. События EnterWorktree и Skill в runtime
 # нет. Проектные hooks работают только после доверия слою `.codex/` и каждому hook по хэшу.
 # `mark-qa-gate-passed` на `PostToolUse` не подключается: runtime вызывает `PostToolUse` и после
 # команды Bash с ненулевым кодом выхода, а в payload нет поля с кодом выхода. Hook записал бы
@@ -421,9 +434,15 @@ class RuntimeAdapter:
 # События Stop и SubagentStop подтверждены тем же источником (страница hooks, 2026-10-27): payload
 # несёт `session_id`, `hook_event_name`, `stop_hook_active`, а SubagentStop — ещё `agent_id`; при коде 0
 # stdout принимает только JSON или пустую строку. Журнал касаний `targeted-check-reminder` на Write и
-# Edit ждёт адаптера `apply_patch`, поэтому до него напоминание второго runtime молчит.
+# Edit к `apply_patch` не подключается (учётный hook), поэтому напоминание второго runtime на
+# правки молчит.
 CODEX_SUPPORT: frozenset[EventTool] = frozenset(
-    {("PreToolUse", "Bash"), ("Stop", "*"), ("SubagentStop", "*")}
+    {
+        ("PreToolUse", "Bash"),
+        ("PreToolUse", "apply_patch"),
+        ("Stop", "*"),
+        ("SubagentStop", "*"),
+    }
 )
 
 
@@ -487,10 +506,19 @@ def is_wired(document: JsonObject, spec: HookSpec, tool: str) -> bool:
 def supported_tools(
     spec: HookSpec, support: frozenset[EventTool] | None
 ) -> tuple[str, ...]:
-    """Инструменты `spec`, на которых runtime доставляет событие hook-а."""
+    """Инструменты `spec`, на которых runtime доставляет событие hook-а.
+
+    Write и Edit считаются доставленными и тогда, когда runtime доставляет `apply_patch`, а hook
+    понимает его payload (`spec.apply_patch`).
+    """
     if support is None:
         return ()
-    return tuple(tool for tool in spec.tools if (spec.event, tool) in support)
+    patch = spec.apply_patch and (spec.event, "apply_patch") in support
+    return tuple(
+        tool
+        for tool in spec.tools
+        if (spec.event, tool) in support or (patch and tool in PATCH_TOOLS)
+    )
 
 
 def critical_wiring(

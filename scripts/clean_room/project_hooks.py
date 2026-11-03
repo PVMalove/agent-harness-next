@@ -2060,12 +2060,16 @@ def check_hooks_policy_health(project: Path) -> None:
         capture_json(HARNESS + ["health", str(project), "--json"]), "hooks.policy"
     )
     message = policy["message"]
+    # Both runtimes wire every critical hook they can receive, so a fresh install is ok.
     if (
-        policy["status"] != "warn"
+        policy["status"] != "ok"
         or "профиль standard (.harness/project.json)" not in message
     ):
         sys.exit(f"hooks.policy did not report the standard profile: {policy}")
-    if "claude: критических hooks подключено 9/9" not in message:
+    if (
+        "claude: критических hooks подключено 9/9" not in message
+        or "codex: критических hooks подключено 8/8" not in message
+    ):
         sys.exit(f"hooks.policy did not report the wired critical hooks: {message}")
     script = project / ".claude" / "hooks" / "block-dangerous-git.sh"
     content = script.read_bytes()

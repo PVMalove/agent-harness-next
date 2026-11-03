@@ -261,6 +261,26 @@ def test_the_scoped_test_author_guard_denies_in_every_profile_and_role(
 
 
 @pytest.mark.parametrize("profile", PROFILES)
+@pytest.mark.parametrize(
+    "hook_id", ["protect-hook-policy", "block-scratch-outside-docs-tasks"]
+)
+def test_an_unparsable_apply_patch_blocks_in_every_profile(
+    projects: dict[str, Path], profile: str, hook_id: str
+) -> None:
+    """The second runtime's apply_patch payload: a patch the guards cannot parse never passes."""
+    project = projects[profile]
+    payload = {
+        "tool_name": "apply_patch",
+        "cwd": str(project),
+        "tool_input": {"command": "*** Add File: docs/tasks/a.md\n+x\n"},
+    }
+
+    done = _run(project, hook_id, payload, "developer", profile)
+
+    assert _decision(done) == (2, "block", "apply-patch-unparseable"), done.stderr
+
+
+@pytest.mark.parametrize("profile", PROFILES)
 def test_minimal_downgrades_only_the_behavioral_hook(
     projects: dict[str, Path], profile: str
 ) -> None:

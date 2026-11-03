@@ -144,7 +144,10 @@ Hooks ставятся в проект, поэтому действуют для
   только отвечает `qa_evidence_verify` (ADR 0021, раздел 7) и не принимает решения о публикации.
   Hook-скрипты coding runtime — адаптеры той же таблицы политики и не единственный уровень защиты.
 - Адаптер для второго coding runtime (`.codex/hooks.json`) ставится из того же набора скриптов, и
-  его критические guard-ы равны первому. Если hooks этого runtime недоступны, критическую
+  его критические guard-ы равны первому. Правки файлов этот runtime присылает как `apply_patch`:
+  `protect-hook-policy` и `block-scratch-outside-docs-tasks` подключены группой
+  `apply_patch|Write|Edit`, а адаптер `apply_patch_payload.py` отдаёт им пути патча, чтобы решение
+  совпадало с `Write`/`Edit` первого runtime (#830). Если hooks этого runtime недоступны, критическую
   защиту дают только проверки Rust runtime и coordinator, и `harness health` сообщает это как
   предупреждение.
 - Ответ hook — JSON `{hook_id, profile, decision: allow|warn|block, reason_code, remedy,

@@ -74,7 +74,9 @@ EXTRA_REASONS: Dict[str, Tuple[str, ...]] = {
         "hook-policy-unparseable",
         "project-json-shell-write",
         "agent-config-edit",
+        "apply-patch-unparseable",
     ),
+    "block-scratch-outside-docs-tasks": ("apply-patch-unparseable",),
 }
 PROFILES = ("minimal", "standard", "strict")
 DEFAULT_PROFILE = "standard"

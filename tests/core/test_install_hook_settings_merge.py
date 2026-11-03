@@ -353,17 +353,28 @@ def test_init_installs_the_second_runtime_adapter_from_the_same_scripts(
 ) -> None:
     install(repo)
 
-    # The second runtime delivers PreToolUse for Bash and the end of a turn (Stop, SubagentStop).
+    # The second runtime delivers PreToolUse for Bash and apply_patch and the end of a turn (Stop,
+    # SubagentStop); apply_patch reaches only the critical guards with the patch adapter.
     expected = sorted(
-        (event, group.get("matcher", ""), script)
-        for event, groups in template_document()["hooks"].items()
-        for group in groups
-        for handler in group["hooks"]
-        if (script := script_of(handler))
-        and (
-            (event == "PreToolUse" and "Bash" in group["matcher"].split("|"))
-            or event in ("Stop", "SubagentStop")
-        )
+        [
+            *(
+                (event, group.get("matcher", ""), script)
+                for event, groups in template_document()["hooks"].items()
+                for group in groups
+                for handler in group["hooks"]
+                if (script := script_of(handler))
+                and (
+                    (event == "PreToolUse" and "Bash" in group["matcher"].split("|"))
+                    or event in ("Stop", "SubagentStop")
+                )
+            ),
+            ("PreToolUse", "apply_patch|Write|Edit", "protect-hook-policy.sh"),
+            (
+                "PreToolUse",
+                "apply_patch|Write|Edit",
+                "block-scratch-outside-docs-tasks.sh",
+            ),
+        ]
     )
     assert ("Stop", "", "targeted-check-reminder.sh") in expected
     assert sorted(codex_triples(load_codex(repo))) == expected
@@ -389,7 +400,6 @@ def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
 
     assert scripts.isdisjoint(
         {
-            "block-scratch-outside-docs-tasks.sh",
             "check-worktree-branch-name.sh",
             "count-skill-usage.sh",
             "impact-first-touch.sh",
@@ -397,7 +407,16 @@ def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
         }
     )
     assert "protect-hook-policy.sh" in scripts
-    # Write and Edit arrive as apply_patch without file_path: only the end-of-turn rows are wired.
+    # Write and Edit arrive as apply_patch: only the critical guards with the patch adapter take it.
+    assert {
+        (matcher, script)
+        for event, matcher, script in codex_triples(load_codex(repo))
+        if event == "PreToolUse" and matcher == "apply_patch|Write|Edit"
+    } == {
+        ("apply_patch|Write|Edit", "protect-hook-policy.sh"),
+        ("apply_patch|Write|Edit", "block-scratch-outside-docs-tasks.sh"),
+    }
+    # The advisory Write/Edit rows stay unwired: only the end-of-turn rows of the reminder are.
     assert {
         (event, script)
         for event, _, script in codex_triples(load_codex(repo))

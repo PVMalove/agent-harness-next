@@ -32,15 +32,17 @@ from __future__ import annotations
 
 import fnmatch
 import glob
+import importlib
 import json
 import os
 import re
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 if TYPE_CHECKING:
-    from harness.project.hooks import pr_commands
+    from harness.project.hooks import apply_patch_payload, pr_commands
 else:
     # .claude/hooks must stay prunable by uninstall: never leave __pycache__ next to it.
     sys.dont_write_bytecode = True
@@ -459,6 +461,134 @@ def check_bash(command: str, cwd: str, root: str) -> None:
             raise refusal
 
 
+def _read_text(real: str) -> Optional[str]:
+    """Текст файла в UTF-8; None — файла нет; иначе отказ."""
+    try:
+        with open(real, "rb") as handle:
+            return handle.read().decode("utf-8")
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError) as exc:
+        raise Refusal(
+            "hook-policy-unparseable",
+            f".harness/project.json не читается как UTF-8 ({type(exc).__name__}): ключ hook_policy "
+            "нельзя сравнить.",
+        ) from exc
+
+
+def _patch_adapter() -> ModuleType:
+    """Адаптер apply_patch: импортируется только для патча, первый runtime его не требует."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    return importlib.import_module(
+        "apply_patch_payload"
+    )  # sibling in the hooks directory
+
+
+def _config_refusal(real: str) -> Refusal:
+    return Refusal(
+        "agent-config-edit",
+        "настройки hooks (.claude/settings*.json, .codex/hooks.json) и каталоги hooks "
+        f"агент не правит: {real}. Такие изменения делает человек.",
+    )
+
+
+def check_patch_op(op: "apply_patch_payload.FileOp") -> None:
+    """Операция патча с абсолютными путями: то же решение, что для Write/Edit по каждому пути.
+
+    Для `.harness/project.json` ключ hook_policy до и после вычисляется по семантике runtime:
+    Add — содержимое патча, Delete и Move с файла — файла нет, Update — применённые чанки.
+    """
+    adapter = _patch_adapter()
+    source = os.path.realpath(op.path)
+    target = None if op.move_to is None else os.path.realpath(op.move_to)
+    for real in (source, target):
+        if real is not None and classify(real) == CONFIG:
+            raise _config_refusal(real)
+    unknown = Refusal(
+        "hook-policy-unparseable",
+        "результат патча .harness/project.json нельзя вычислить заранее: перечитай файл и "
+        "пришли патч, строки которого есть в файле, либо правь файл вручную.",
+    )
+    if classify(source) == PROJECT:
+        before_text = _read_text(source)
+        if op.kind == "add":
+            after_text: Optional[str] = op.content
+        elif op.kind == "delete" or target is not None and target != source:
+            after_text = None
+        else:
+            after_text = (
+                None
+                if before_text is None
+                else adapter.apply_update(before_text, op.chunks)
+            )
+            if after_text is None:
+                raise unknown
+        if _policy(before_text, "до правки") != _policy(after_text, "после правки"):
+            raise _changed_refusal()
+    if target is not None and target != source and classify(target) == PROJECT:
+        source_text = _read_text(source)
+        moved = (
+            None
+            if source_text is None
+            else adapter.apply_update(source_text, op.chunks)
+        )
+        if moved is None:
+            raise unknown
+        if _policy(_read_text(target), "до правки") != _policy(moved, "после правки"):
+            raise _changed_refusal()
+
+
+def _changed_refusal() -> Refusal:
+    return Refusal(
+        "hook-policy-changed",
+        "правка меняет ключ hook_policy в .harness/project.json: политику hooks меняет "
+        "только человек. Правка других ключей файла разрешена.",
+    )
+
+
+def check_apply_patch(payload: Dict[str, object]) -> None:
+    """Payload apply_patch второго runtime: каждая операция патча проверяется отдельно."""
+    adapter = _patch_adapter()
+    try:
+        ops = adapter.operations(payload)
+    except adapter.PatchError as error:
+        raise Refusal(adapter.REASON, adapter.detail(error)) from None
+    for op in ops:
+        check_patch_op(op)
+
+
+def check_bash_patch(payload: object, command: str, cwd: str, root: str) -> None:
+    """Тело apply_patch внутри Bash: только добавляет отказы к решению `check_bash`."""
+    if "apply_patch" not in command and "applypatch" not in command:
+        return
+    adapter = _patch_adapter()
+    if not adapter.mentions_patch(command):
+        return
+    try:
+        ops = adapter.bash_operations(payload)
+    except adapter.PatchError as error:
+        raise Refusal(adapter.REASON, adapter.detail(error)) from None
+    if ops is not None:
+        for op in ops:
+            check_patch_op(op)
+        return
+    bases = _bases(pr_commands.parse(command).commands, cwd, root)
+    for path in adapter.header_paths(command):
+        for base in bases:
+            real = _real(path, base)
+            if classify(real) == CONFIG:
+                raise _config_refusal(real)
+            if classify(real) == PROJECT:
+                raise Refusal(
+                    "hook-policy-unparseable",
+                    "патч apply_patch в команде Bash трогает .harness/project.json, но команду "
+                    "нельзя разобрать как вызов apply_patch: результат нельзя вычислить. Правь "
+                    "файл инструментом без изменения ключа hook_policy.",
+                )
+
+
 def decide(payload: object, root: str) -> None:
     """Проверить payload PreToolUse; отказ — `Refusal`."""
     tool_input = payload.get("tool_input") if isinstance(payload, dict) else None
@@ -469,9 +599,13 @@ def decide(payload: object, root: str) -> None:
         )
     cwd = payload.get("cwd") if isinstance(payload, dict) else None
     cwd = cwd if isinstance(cwd, str) and cwd else os.getcwd()
+    if isinstance(payload, dict) and payload.get("tool_name") == "apply_patch":
+        check_apply_patch(payload)
+        return
     command = tool_input.get("command")
     if isinstance(command, str):
         check_bash(command, cwd, root)
+        check_bash_patch(payload, command, cwd, root)
     elif any(isinstance(tool_input.get(field), str) for field in PATH_FIELDS):
         tool = payload.get("tool_name") if isinstance(payload, dict) else None
         check_file_tool(tool if isinstance(tool, str) else "Write", tool_input, cwd)

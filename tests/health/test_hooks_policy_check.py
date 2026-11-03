@@ -16,6 +16,7 @@ from harness.health.hook_settings import (
     HOOK_CATALOG,
     is_wired,
     script_name,
+    supported_tools,
 )
 from harness.json_types import JsonObject
 from tests.core.test_uninstall import git, harness
@@ -66,26 +67,26 @@ def test_installed_project_reports_profile_source_and_wiring(repo: Path) -> None
     result = check(repo)
 
     assert result["group"] == "hooks"
-    assert result["status"] == "warn"
+    assert result["status"] == "ok"
     message = result["message"]
     assert "профиль standard" in message
     assert ".harness/project.json" in message
     assert "claude: критических hooks подключено 9/9" in message
-    assert "codex: критических hooks подключено 7/7" in message
+    assert "codex: критических hooks подключено 8/8" in message
 
 
-def test_events_the_second_runtime_lacks_are_listed_and_a_missing_out_of_hook_check_warns(
+def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_not(
     repo: Path,
 ) -> None:
     result = check(repo)
 
-    assert result["status"] == "warn"
     message = result["message"]
-    assert "ограничение адаптера codex:" in message
+    assert "ограничение адаптера codex:" not in message
+    assert "block-scratch-outside-docs-tasks" not in message
     assert (
-        "codex: нет события или payload: block-scratch-outside-docs-tasks "
-        "(нет проверки вне hook)"
-    ) in message
+        "protect-hook-policy (MultiEdit, NotebookEdit; вне hook: hook_policy_sha256 в brief)"
+        in message
+    )
     assert (
         "check-worktree-branch-name (вне hook: batch create по branch_pattern)"
         in message
@@ -187,11 +188,26 @@ def test_hook_catalog_agrees_with_the_templates() -> None:
     for spec in settings_specs:
         for tool in spec.tools:
             assert is_wired(first, spec, tool), (spec.hook_id, tool)
-            # The second runtime wires exactly what it delivers.
-            assert is_wired(second, spec, tool) == ((spec.event, tool) in CODEX_SUPPORT), (
+            # The second runtime wires exactly what it delivers, Write/Edit via apply_patch.
+            assert is_wired(second, spec, tool) == (
+                tool in supported_tools(spec, CODEX_SUPPORT)
+            ), (
                 spec.hook_id,
                 tool,
             )
+
+
+def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards() -> None:
+    catalog = {(spec.hook_id, spec.event): spec for spec in HOOK_CATALOG}
+
+    def delivered(hook_id: str) -> tuple[str, ...]:
+        return supported_tools(catalog[(hook_id, "PreToolUse")], CODEX_SUPPORT)
+
+    assert delivered("protect-hook-policy") == ("Bash", "Write", "Edit")
+    assert delivered("block-scratch-outside-docs-tasks") == ("Write", "Edit")
+    assert delivered("test-author-guard") == ("Write", "Edit", "Bash")
+    for advisory in ("impact-first-touch", "sensitive-path-recheck", "targeted-check-reminder"):
+        assert delivered(advisory) == ()
 
 
 def test_profile_without_hook_policy_key_comes_from_the_default_source(
@@ -217,9 +233,10 @@ def test_legacy_project_keeps_the_standard_wiring_after_update(repo: Path) -> No
 
     result = check(repo)
 
-    assert result["status"] == "warn"
+    assert result["status"] == "ok"
     assert "профиль standard (по умолчанию)" in result["message"]
     assert "claude: критических hooks подключено 9/9" in result["message"]
+    assert "codex: критических hooks подключено 8/8" in result["message"]
     assert "hook_policy" not in json.loads(project_json.read_text(encoding="utf-8"))
 
 

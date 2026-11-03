@@ -1314,6 +1314,7 @@
         "worktree-branch-name": "A worktree name outside the project convention was refused.",
         "unbounded-check": "An unbounded full test or quality-gate run was refused.",
         "scratch-location": "Task artifacts or pull request text outside their folders were refused.",
+        "apply-patch-unparseable": "An apply_patch payload could not be parsed, so a critical guard refused the edit it could not verify.",
         "risky-path-first-touch": "The first touch of a risky path in an operation was reported; ChangeImpact cannot compute its impact from the import graph.",
         "targeted-checks-unreported": "Files changed after the last report of the operation, and the targeted checks are not reported yet.",
         "sensitive-path-touched": "An edit of a sensitive path (manifest, CI, migration, auth, permissions or hooks) was reported with an evidence record."
