@@ -1095,3 +1095,136 @@ def test_typed_catalog_confirmation_is_preserved(project: Path) -> None:
             await server.close()
 
     asyncio.run(scenario())
+
+
+PERMISSION = {
+    "dispatch": "dispatch-0123abcd",
+    "request_id": "request-1",
+    "request_sha256": DIGEST,
+}
+
+
+def _with_coordinator(project: Path) -> None:
+    """An empty stand-in script: the fake executor never runs it, so no real ledger is touched."""
+    script = project / ".harness" / "orchestration" / "coordinator.py"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("")
+
+
+def test_native_permission_answer_runs_only_confirmed_in_its_project(
+    project: Path,
+) -> None:
+    async def scenario() -> None:
+        fake = FakeExecutor()
+        fake.finish.set()
+        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                command = "native-permission-allow"
+                reply = await start(client, command_id=command, values=PERMISSION)
+                assert reply["error"]["code"] == "confirmation_required"
+                bad = {**PERMISSION, "request_sha256": "not-a-digest"}
+                reply = await start(
+                    client, command_id=command, values=bad, confirmed=True
+                )
+                assert reply["error"]["code"] == "bad_request"
+                reply = await start(
+                    client, command_id=command, values=PERMISSION, confirmed=True
+                )
+                assert reply["error"]["code"] == "unavailable_command"
+                _with_coordinator(project)
+                reply = await start(
+                    client, command_id=command, values=PERMISSION, confirmed=True
+                )
+                assert reply["ok"] is True, reply
+                await read_until_done(client, reply["job"]["id"])
+        finally:
+            await server.close()
+        [(argv, cwd)] = fake.calls
+        assert cwd == project.resolve()
+        assert argv[0] == sys.executable
+        assert argv[1].endswith("harness/console/native_permission.py")
+        assert argv[2:4] == ["--repo", str(project.resolve())]
+        assert argv[-1] == "--allow"
+
+    asyncio.run(scenario())
+
+
+def test_decisions_wait_for_the_running_mutation(project: Path) -> None:
+    async def scenario() -> None:
+        _with_coordinator(project)
+        fake = FakeExecutor()
+        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                first = await start(client, command_id="registry")
+                assert first["ok"] is True, first
+                await asyncio.wait_for(fake.started.wait(), 3)
+                decisions = [
+                    ("native-permission-deny", PERMISSION),
+                    (
+                        "batch-approve",
+                        {"batch": "batch-1", "approved_by": "dev", "approved_at": "now"},
+                    ),
+                    ("dispatch-propose", {"batch": "batch-1"}),
+                ]
+                for command, values in decisions:
+                    refused = await start(
+                        client, command_id=command, values=values, confirmed=True
+                    )
+                    assert refused["error"]["code"] == "busy", (command, refused)
+                    assert refused["error"]["job_id"] == first["job"]["id"]
+                fake.finish.set()
+                await read_until_done(client, first["job"]["id"])
+        finally:
+            fake.finish.set()
+            await server.close()
+        assert len(fake.calls) == 1
+
+    asyncio.run(scenario())
+
+
+def test_dispatch_approval_proposes_then_creates_with_the_shown_digest(
+    project: Path,
+) -> None:
+    async def scenario() -> None:
+        _with_coordinator(project)
+        fake = FakeExecutor()
+        fake.finish.set()
+        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                proposed = await start(
+                    client, command_id="dispatch-propose", values={"batch": "batch-1"}
+                )
+                assert proposed["ok"] is True, proposed
+                await read_until_done(client, proposed["job"]["id"])
+                approval = {
+                    "batch": "batch-1",
+                    "role": "developer",
+                    "approved_by": "dev",
+                    "approved_at": "now",
+                    "transition_digest": DIGEST,
+                }
+                refused = await start(
+                    client, command_id="dispatch-create", values=approval
+                )
+                assert refused["error"]["code"] == "confirmation_required"
+                created = await start(
+                    client,
+                    command_id="dispatch-create",
+                    values=approval,
+                    confirmed=True,
+                )
+                assert created["ok"] is True, created
+                await read_until_done(client, created["job"]["id"])
+        finally:
+            await server.close()
+        propose_argv, create_argv = (call[0] for call in fake.calls)
+        assert propose_argv[-4:] == ["dispatch", "propose", "--batch", "batch-1"]
+        assert create_argv[create_argv.index("--transition-digest") + 1] == DIGEST
+
+    asyncio.run(scenario())

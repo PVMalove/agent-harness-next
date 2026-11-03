@@ -678,6 +678,7 @@ EN_COMMANDS: dict[str, str] = {
     "Решение по batch": "Batch decision",
     "Пакет решения": "Decision packet",
     "Статус dispatch": "Dispatch status",
+    "Предложить dispatch": "Propose a dispatch",
     "Создать dispatch": "Create a dispatch",
     "Отменить dispatch": "Cancel a dispatch",
     "Отправить dispatch": "Send a dispatch",
@@ -687,6 +688,8 @@ EN_COMMANDS: dict[str, str] = {
     "Состояние ledger": "Ledger status",
     "Состояние lock ledger": "Ledger lock status",
     "Снять lock ledger": "Release the ledger lock",
+    "Разрешить запрос native permission": "Allow a native permission request",
+    "Отклонить запрос native permission": "Deny a native permission request",
 }
 EN.update(
     {
