@@ -12,6 +12,7 @@ from .decisions import DecisionService, is_decisions_request
 from .decisions import respond as respond_decisions
 from .discovery import Discovery
 from .jobs import JobService, job_request_type
+from .orchestration_events import OrchestrationEvents, is_orchestration_request
 from .snapshots import SnapshotService, busy, respond
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -26,7 +27,8 @@ CLOSE_TIMEOUT = 0.5
 READ_CHUNK = 16384
 MESSAGE_LIMIT = 65536
 MAX_UNFINISHED_REQUESTS = 4
-# A subscription stays unfinished while its job runs, so it never takes a request slot.
+# A subscription stays unfinished while its job runs or its stream is open, so it never takes a
+# request slot.
 MAX_SUBSCRIPTIONS = 4
 
 # This independent logger never propagates protocol headers, even under root DEBUG.
@@ -56,11 +58,13 @@ class ConsoleServer:
         snapshots: SnapshotService | None = None,
         jobs: JobService | None = None,
         decisions: DecisionService | None = None,
+        events: OrchestrationEvents | None = None,
     ) -> None:
         self.repo = repo.resolve()
         self._snapshots = snapshots or SnapshotService(self.repo)
         self._jobs = jobs or JobService(self.repo)
         self._decisions = decisions or DecisionService(self.repo)
+        self._events = events or OrchestrationEvents(self.repo)
         self._idle_grace = idle_grace_seconds
         self._clients = 0
         self._idle_task: asyncio.Task[None] | None = None
@@ -346,6 +350,7 @@ class ConsoleServer:
                         pending, limit = (
                             (subscriptions, MAX_SUBSCRIPTIONS)
                             if job_type == "job.subscribe"
+                            or is_orchestration_request(raw)
                             else (requests, MAX_UNFINISHED_REQUESTS)
                         )
                         if len(pending) >= limit:
@@ -393,6 +398,13 @@ class ConsoleServer:
         try:
             if job_type is not None:
                 async with contextlib.aclosing(self._jobs.replies(raw)) as replies:
+                    async for reply in replies:
+                        if not await self._send_reply(
+                            reply, protocol, writer, send_lock
+                        ):
+                            return
+            elif is_orchestration_request(raw):
+                async with contextlib.aclosing(self._events.replies(raw)) as replies:
                     async for reply in replies:
                         if not await self._send_reply(
                             reply, protocol, writer, send_lock
@@ -461,6 +473,7 @@ class ConsoleServer:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             await self._jobs.close()
+            await self._events.close()
         finally:
             try:
                 if self._discovery is not None:
