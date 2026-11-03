@@ -24,6 +24,7 @@ from ..hook_settings import (
 from ..model import CheckResult, Fix, Status
 from ..project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
+    HOOK_POLICY_REL,
     HOOK_PROFILES,
     INTEGRATIONS_REL,
     JSON_READ_ERRORS,
@@ -283,6 +284,36 @@ def _script_drift(context: HealthContext, warns: list[str]) -> None:
             )
 
 
+def _policy_file(context: HealthContext, warns: list[str]) -> None:
+    """Сгенерированный `.harness/hook-policy.json`: отсутствие и дрейф от effective policy.
+
+    Health только сообщает, файл пишет установка (`harness init|adopt|update`). Содержимое
+    сверяется по разобранному JSON (CRLF после клона — не дрейф) и только при шаблонах hooks;
+    некорректный hook_policy уже даёт fail в `_profile_part`, поэтому сверка пропускается."""
+    path = context.repo / HOOK_POLICY_REL
+    relative = HOOK_POLICY_REL.as_posix()
+    if not path.is_file():
+        warns.append(f"{relative} отсутствует: effective policy hooks не записана")
+        return
+    if context.hook_templates is None:
+        return
+    from harness.errors import PolicyError
+    from harness.orchestration.hook_policy import effective_policy, load_policy
+
+    try:
+        expected = effective_policy(load_policy(context.repo), context.hook_templates)
+    except PolicyError:
+        return
+    try:
+        actual: object = json.loads(path.read_text(encoding="utf-8"))
+    except JSON_READ_ERRORS:
+        actual = None
+    if actual != expected:
+        warns.append(
+            f"дрейф: {relative} не совпадает с effective policy текущей конфигурации"
+        )
+
+
 def check_policy(context: HealthContext) -> CheckResult:
     """Профиль hooks и его источник, эскалации, скрипты, проводка по runtime, нехватка событий и дрейф."""
     if context.lock is None:
@@ -330,4 +361,5 @@ def check_policy(context: HealthContext) -> CheckResult:
         notes.append("дрейф не проверен (нет шаблонов проекта)")
     else:
         _script_drift(context, warns)
+    _policy_file(context, warns)
     return _result(context, fails, warns, advisory, notes)
