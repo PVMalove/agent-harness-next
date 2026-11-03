@@ -165,6 +165,15 @@ def wait_removed(
 
 
 @pytest.fixture
+def host_runtime_dir() -> Path:
+    """Keep the runtime and the real Podman in the host's existing rootless namespace."""
+    require_engine()
+    directory = os.environ.get("XDG_RUNTIME_DIR")
+    assert directory, "the rootless Podman smoke needs the host XDG_RUNTIME_DIR"
+    return Path(directory)
+
+
+@pytest.fixture
 def labelled() -> Iterator[list[str]]:
     """Dispatch ids whose labelled containers and networks are removed after the test, so a failed
     smoke leaves nothing on the engine."""
@@ -208,18 +217,24 @@ def test_rootless_containers_get_the_delegated_cgroup_limits() -> None:
     require_engine()
 
     limited = _cgroup_files("--memory", "128m", "--pids-limit", "64", "--cpus", "0.5")
-    unlimited = _cgroup_files()
+    unlimited = _cgroup_files("--memory", "0", "--pids-limit", "-1")
 
     assert limited == ["134217728", "64", "50000 100000"]
-    # Without the flags the same files hold no limit, so the values above come from the flags.
+    # Clear the control's limits explicitly: Podman defaults to a pids limit of 2048.
+    # The difference proves the values above come from the requested flags.
     assert unlimited[:2] == ["max", "max"]
 
 
 def test_a_worker_reaches_only_its_allowed_host_and_writes_as_the_host_user(
-    tmp_path: Path, labelled: list[str]
+    tmp_path: Path, labelled: list[str], host_runtime_dir: Path
 ) -> None:
     require_engine()
-    repo = Supervised(tmp_path / "worker", access_policy=POLICY, create=False)
+    repo = Supervised(
+        tmp_path / "worker",
+        access_policy=POLICY,
+        create=False,
+        host_runtime_dir=host_runtime_dir,
+    )
     try:
         repo.create()
         labelled.append(repo.dispatch)
@@ -277,7 +292,7 @@ def test_a_worker_reaches_only_its_allowed_host_and_writes_as_the_host_user(
 
 
 def test_a_container_qa_run_reports_the_real_exit_code_of_a_failing_gate(
-    tmp_path: Path, labelled: list[str]
+    tmp_path: Path, labelled: list[str], host_runtime_dir: Path
 ) -> None:
     require_engine()
     identity = f"{os.getuid()}:{os.getgid()}"
@@ -290,6 +305,7 @@ def test_a_container_qa_run_reports_the_real_exit_code_of_a_failing_gate(
         gate=gate,
         hosts=[ALLOWED_HOST],
         scripted_engine=False,
+        host_runtime_dir=host_runtime_dir,
     )
     try:
         labelled.append(repo.dispatch)

@@ -71,6 +71,7 @@ class ContainerQa:
         proxy_tag: str = PROXY_TAG,
         gate: list[str] | None = None,
         scripted_engine: bool = True,
+        host_runtime_dir: Path | None = None,
     ) -> None:
         gate = GATE if gate is None else gate
         self.fx = coordinator_tests.CoordinatorRetryRoutingTests()
@@ -125,7 +126,11 @@ class ContainerQa:
         )
         assert migrate(repo).returncode == 0
         engine_path = {"PATH": str(self.engine.bin)} if scripted_engine else {}
-        self.runtime = ServingRuntime(repo, env={**engine_path, SECRET_NAME: SECRET})
+        self.runtime = ServingRuntime(
+            repo,
+            env={**engine_path, SECRET_NAME: SECRET},
+            host_runtime_dir=host_runtime_dir,
+        )
         self.dispatch = self.create()
 
     def run(self, *command: str) -> tuple[int, JsonObject | None, str]:

@@ -547,10 +547,21 @@ class ServingRuntime:
         *,
         env: dict[str, str] | None = None,
         xdg: Path | None = None,
+        host_runtime_dir: Path | None = None,
     ) -> None:
-        """``env`` sets the debug hooks of the runtime (``HARNESS_RUNTIME_TEST_*``); ``xdg`` is
-        the runtime directory of an earlier runtime that a new one takes over after a kill."""
-        self.xdg = xdg or Path(tempfile.mkdtemp(prefix="hr", dir=SHORT_TMP)).resolve()
+        """``env`` sets debug hooks; ``xdg`` takes over an earlier fixture-owned directory.
+
+        ``host_runtime_dir`` borrows the real engine's directory without removing it on stop.
+        Rootless Podman needs the same XDG_RUNTIME_DIR as its existing network namespace.
+        """
+        if host_runtime_dir is not None and xdg is not None:
+            raise ValueError("choose a host runtime directory or a fixture-owned directory")
+        self.host_runtime_dir = host_runtime_dir
+        self.xdg = (
+            host_runtime_dir.resolve()
+            if host_runtime_dir is not None
+            else xdg or Path(tempfile.mkdtemp(prefix="hr", dir=SHORT_TMP)).resolve()
+        )
         self.environ = {"XDG_RUNTIME_DIR": str(self.xdg)}
         self.process = subprocess.Popen(
             [str(runtime_binary()), "serve", "--repo", str(repo)],
@@ -611,7 +622,8 @@ class ServingRuntime:
                     stream.close()
                 except OSError:
                     pass
-        shutil.rmtree(self.xdg, ignore_errors=True)
+        if self.host_runtime_dir is None:
+            shutil.rmtree(self.xdg, ignore_errors=True)
 
 
 def store_call(
@@ -885,6 +897,7 @@ class Supervised:
         env: dict[str, str] | None = None,
         access_policy: JsonObject | None = None,
         create: bool = True,
+        host_runtime_dir: Path | None = None,
     ) -> None:
         repo = coordinator_repository(tmp)
         role = repo / ".harness" / "orchestration" / "roles" / "code-review.md"
@@ -923,7 +936,7 @@ class Supervised:
         self.adapter.write_text(
             FAKE_ADAPTER.format(control=str(self.control)), encoding="utf-8"
         )
-        self.runtime = ServingRuntime(repo, env=env)
+        self.runtime = ServingRuntime(repo, env=env, host_runtime_dir=host_runtime_dir)
         self.dispatch = ""
         self.brief: JsonObject = {}
         if create:
@@ -1080,8 +1093,14 @@ class Supervised:
     def restart_runtime(self, env: dict[str, str] | None = None) -> None:
         """SIGKILL the runtime and start another in its directory with the hooks ``env``."""
         xdg = self.runtime.xdg
+        host_runtime_dir = self.runtime.host_runtime_dir
         self.runtime.kill()
-        self.runtime = ServingRuntime(self.repo, env=env, xdg=xdg)
+        self.runtime = ServingRuntime(
+            self.repo,
+            env=env,
+            xdg=xdg if host_runtime_dir is None else None,
+            host_runtime_dir=host_runtime_dir,
+        )
 
     def close(self) -> None:
         self.release()
