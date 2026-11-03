@@ -23,7 +23,7 @@
     dialog.querySelector("button").addEventListener("click", () => dialog.close());
     dialog.addEventListener("close", () => initiator?.focus());
     document.addEventListener("click", event => {
-      const target = event.target.closest("[data-screen], [data-example-action], .preview-menu");
+      const target = event.target.closest("a[data-screen], [data-example-action], .preview-menu");
       if (!target) return;
       if (target.dataset.screen) {
         event.preventDefault();
