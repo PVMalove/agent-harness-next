@@ -46,18 +46,13 @@ use crate::migrate::STATE_REL;
 use crate::parity;
 use crate::platform;
 use crate::schema;
-use crate::time::{iso_now, now_micros, parse_rfc3339};
+use crate::time::iso_now;
 
 /// An execution in one of these states may still change the repository or the store.
 const LIVE_EXECUTION_STATES: [&str; 4] = ["launching", "running", "stopping", "unknown"];
 
 /// The human approval of a rollback (as for `release-lock --force`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Approval {
-    pub approved_by: String,
-    pub approved_at: String,
-    pub reason: String,
-}
+pub use crate::approval::Approval;
 
 /// What a successful rollback reports.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -115,49 +110,7 @@ fn refused(code: ErrorCode, message: impl Into<String>, remedy: impl Into<String
 /// `malformed_request` for a blank field, or an `approved_at` that is no RFC 3339 time or lies in
 /// the future; `policy_denied` for a `policy:` approver.
 pub fn check_approval(approval: &Approval) -> Result<()> {
-    const REMEDY: &str = "pass --approved-by <human>, --approved-at <RFC 3339 time> and --reason \
-        <text> of the human who approved the rollback";
-    for (flag, value) in [
-        ("--approved-by", &approval.approved_by),
-        ("--approved-at", &approval.approved_at),
-        ("--reason", &approval.reason),
-    ] {
-        if value.trim().is_empty() {
-            return Err(refused(
-                ErrorCode::MalformedRequest,
-                format!("{flag} is blank"),
-                REMEDY,
-            ));
-        }
-    }
-    if approval.approved_by.trim_start().starts_with("policy:") {
-        return Err(refused(
-            ErrorCode::PolicyDenied,
-            format!(
-                "{:?} is a policy approver; a rollback needs a human approval",
-                approval.approved_by
-            ),
-            "ask a human to approve the rollback and pass their name as --approved-by",
-        ));
-    }
-    let Some(at) = parse_rfc3339(approval.approved_at.trim()) else {
-        return Err(refused(
-            ErrorCode::MalformedRequest,
-            format!(
-                "--approved-at {:?} is no RFC 3339 time",
-                approval.approved_at
-            ),
-            REMEDY,
-        ));
-    };
-    if at > now_micros() {
-        return Err(refused(
-            ErrorCode::MalformedRequest,
-            format!("--approved-at {} lies in the future", approval.approved_at),
-            "pass the time at which the human approved the rollback",
-        ));
-    }
-    Ok(())
+    crate::approval::check(approval, "rollback")
 }
 
 /// The rollback mark of `AUTHORITY.json` (step 8).

@@ -390,11 +390,20 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
+/// The human approval of the cutover of a test repository.
+fn approval() -> state::approval::Approval {
+    state::approval::Approval {
+        approved_by: "human:operator".to_owned(),
+        approved_at: "2026-10-27T09:00:00+00:00".to_owned(),
+        reason: "cut the test repository over to the runtime store".to_owned(),
+    }
+}
+
 /// The fixture state of the Python 1.x ledger, without its QA lease and queue, cut over to the
 /// store of `fixture`; the state directory.
 fn cut_over(fixture: &Fixture) -> PathBuf {
     let state_dir = legacy_state(fixture);
-    state::migrate::run(&fixture.root).unwrap();
+    state::migrate::run(&fixture.root, &approval()).unwrap();
     state_dir
 }
 
@@ -594,7 +603,7 @@ fn qa_evidence_verify_judges_the_stored_pair_and_writes_nothing() {
         &state_dir.join("generations").join(pointer.generation),
         &run,
     );
-    state::migrate::run(&fixture.root).unwrap();
+    state::migrate::run(&fixture.root, &approval()).unwrap();
     let (_runtime, mut stream, features) = serving(&fixture, state_dir);
     let before = exchange(
         &mut stream,

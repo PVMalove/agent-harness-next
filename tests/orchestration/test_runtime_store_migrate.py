@@ -14,6 +14,8 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+import pytest
+
 from harness.orchestration.core.constants import DispatchState
 from harness.orchestration.ledger.lifecycle import JsonObject, LifecycleLedger, _canonical
 
@@ -116,6 +118,75 @@ def test_a_working_dispatch_refuses_with_exit_code_2_and_a_remedy(tmp_path: Path
     assert "REMEDY:" in result.stderr
     assert tree(tmp_path / STATE_REL) == before
     assert not (tmp_path / ".harness/orchestration/state-snapshots").exists()
+
+
+def _approval(**fields: str | None) -> tuple[str, ...]:
+    """The approval flags of a cutover; a field set to ``None`` is left out."""
+    values: dict[str, str | None] = {
+        "--approved-by": "Malove",
+        "--approved-at": "2026-09-17T00:00:00+00:00",
+        "--reason": "cut the scratch state over to the runtime store",
+    }
+    values.update({f"--{name.replace('_', '-')}": value for name, value in fields.items()})
+    return tuple(word for flag, value in values.items() if value is not None for word in (flag, value))
+
+
+def _assert_refused_without_a_change(
+    repo: Path, approval: tuple[str, ...], code: str, named: str
+) -> None:
+    state = repo / STATE_REL
+    before = tree(state)
+
+    result = migrate(repo, approval=approval)
+
+    assert result.returncode == 2, result.stderr
+    assert result.stdout == ""
+    error, remedy = result.stderr.splitlines()[:2]
+    assert error.startswith("ERROR: ") and named in error, error
+    assert "unknown argument" not in error, error
+    assert remedy.startswith(f"REMEDY: [{code}] "), remedy
+    assert tree(state) == before
+    assert not (state / "runtime.db").exists()
+    assert not (repo / ".harness/orchestration/state-snapshots").exists()
+
+
+def test_migrate_without_an_approval_refuses_with_exit_code_2_and_changes_nothing(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+
+    _assert_refused_without_a_change(tmp_path, (), "malformed_request", "--approved-by")
+
+
+@pytest.mark.parametrize(
+    ("fields", "named"),
+    [
+        ({"approved_by": None}, "--approved-by"),
+        ({"approved_at": None}, "--approved-at"),
+        ({"reason": None}, "--reason"),
+        ({"approved_by": "  "}, "--approved-by"),
+        ({"approved_at": ""}, "--approved-at"),
+        ({"reason": " "}, "--reason"),
+        ({"approved_at": "yesterday"}, "--approved-at"),
+        ({"approved_at": "2999-01-01T00:00:00+00:00"}, "--approved-at"),
+    ],
+)
+def test_migrate_with_a_missing_blank_or_impossible_approval_field_refuses_and_changes_nothing(
+    tmp_path: Path, fields: dict[str, str | None], named: str
+) -> None:
+    build_state(tmp_path)
+
+    _assert_refused_without_a_change(tmp_path, _approval(**fields), "malformed_request", named)
+
+
+def test_migrate_approved_by_a_policy_actor_is_denied_and_changes_nothing(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+
+    _assert_refused_without_a_change(
+        tmp_path, _approval(approved_by="policy:auto"), "policy_denied", "policy:auto"
+    )
 
 
 def test_an_empty_repository_has_nothing_to_migrate(tmp_path: Path) -> None:

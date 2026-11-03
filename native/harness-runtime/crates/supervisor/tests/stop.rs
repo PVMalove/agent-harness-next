@@ -57,7 +57,7 @@ impl Repo {
         fs::remove_file(generation.join("qa-lane/lease.json")).unwrap();
         fs::remove_file(generation.join("qa-lane/queue/00000000000000000001-dispatch.json"))
             .unwrap();
-        state::migrate::run(&root).unwrap();
+        state::migrate::run(&root, &common::approval()).unwrap();
         let repo = Self {
             root,
             groups: Vec::new(),

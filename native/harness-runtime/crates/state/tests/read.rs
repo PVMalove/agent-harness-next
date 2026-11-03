@@ -12,7 +12,7 @@ use common::Repo;
 
 fn migrated(name: &str) -> (Repo, state::migrate::Outcome) {
     let repo = Repo::new(name);
-    let outcome = run(&repo.root).unwrap();
+    let outcome = run(&repo.root, &common::approval()).unwrap();
     (repo, outcome)
 }
 

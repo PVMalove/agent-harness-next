@@ -26,7 +26,7 @@ fn approval() -> Approval {
 
 fn cut_over(name: &str) -> Repo {
     let repo = Repo::new(name);
-    state::migrate::run(&repo.root).unwrap();
+    state::migrate::run(&repo.root, &common::approval()).unwrap();
     repo
 }
 

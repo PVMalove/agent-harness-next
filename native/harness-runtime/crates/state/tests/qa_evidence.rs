@@ -384,7 +384,7 @@ fn the_report_reference_and_the_trailer_follow_the_shared_golden_fixture() {
 fn store_with(run: &Run) -> Repo {
     let repo = Repo::new("qa-evidence");
     qa_store::write_legacy(&repo.generation(), run);
-    state::migrate::run(&repo.root).unwrap();
+    state::migrate::run(&repo.root, &common::approval()).unwrap();
     repo
 }
 
@@ -425,7 +425,7 @@ fn the_file_ledger_is_not_attached_and_a_bad_payload_is_malformed() {
     let payload = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET});
 
     let file_ledger = qa_evidence::verify(&repo.state(), Some(&payload));
-    state::migrate::run(&repo.root).unwrap();
+    state::migrate::run(&repo.root, &common::approval()).unwrap();
     let malformed = qa_evidence::verify(&repo.state(), Some(&json!({"candidate_sha": CANDIDATE})));
 
     assert!(

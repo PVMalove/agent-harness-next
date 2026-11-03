@@ -1,9 +1,11 @@
 //! Entry point of the `harness-runtime` process (ADR 0021, section 8).
 //!
-//! `harness-runtime migrate [--repo <path>]` cuts the state of a repository over from the file
-//! ledger to the runtime store (ADR 0020, section 5). It prints one JSON line and exits with 0
-//! (done, or already done), 2 (a precondition refused it, nothing changed), 3 (it failed after it
-//! began; the file ledger is still the authority) or 4 (an invariant broke; an operator must look).
+//! `harness-runtime migrate [--repo <path>] --approved-by <human> --approved-at <RFC 3339 time>
+//! --reason <text>` cuts the state of a repository over from the file ledger to the runtime store
+//! with a human approval (ADR 0020, section 5). It prints one JSON line and exits with 0 (done, or
+//! already done), 2 (the approval or a precondition refused it, nothing changed), 3 (it failed
+//! after it began; the file ledger is still the authority) or 4 (an invariant broke; an operator
+//! must look).
 //!
 //! `harness-runtime rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <RFC
 //! 3339 time> --reason <text>` exports the runtime store into a new generation of the file ledger
@@ -41,7 +43,8 @@ use serde_json::json;
 
 const EXIT_FAILED: u8 = 1;
 const EXIT_REFUSED: u8 = 2;
-const USAGE: &str = "usage: harness-runtime serve|migrate [--repo <path>] | harness-runtime \
+const USAGE: &str = "usage: harness-runtime serve [--repo <path>] | harness-runtime migrate \
+    [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
     rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <time> --reason <text>";
 
 /// What the command line asked for.
@@ -57,8 +60,9 @@ enum Command {
 struct Args {
     command: Command,
     repo: PathBuf,
-    /// The approval of `rollback`; blank fields are refused by the rollback itself.
-    approval: state::rollback::Approval,
+    /// The approval of `migrate` and `rollback`; a missing flag leaves its field blank, and the
+    /// command itself refuses a blank field.
+    approval: state::approval::Approval,
 }
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
@@ -71,22 +75,19 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
     };
     let mut repo = None;
     let mut to_legacy = false;
-    let mut approval = state::rollback::Approval {
-        approved_by: String::new(),
-        approved_at: String::new(),
-        reason: String::new(),
-    };
+    let mut approval = state::approval::Approval::default();
     while let Some(flag) = args.next() {
         let rollback = command == Command::Rollback;
+        let approved = command != Command::Serve;
         let field = match flag.to_str() {
             Some("--repo") => None,
             Some("--to-legacy") if rollback => {
                 to_legacy = true;
                 continue;
             }
-            Some("--approved-by") if rollback => Some(&mut approval.approved_by),
-            Some("--approved-at") if rollback => Some(&mut approval.approved_at),
-            Some("--reason") if rollback => Some(&mut approval.reason),
+            Some("--approved-by") if approved => Some(&mut approval.approved_by),
+            Some("--approved-at") if approved => Some(&mut approval.approved_at),
+            Some("--reason") if approved => Some(&mut approval.reason),
             _ => return Err(format!("unknown argument {flag:?}; {USAGE}")),
         };
         let what = if field.is_none() { "a path" } else { "a value" };
@@ -291,7 +292,7 @@ fn serve(args: &Args) -> Result<(), Failure> {
 
 /// Run the migration and print its outcome as one JSON line.
 fn migrate(args: &Args) -> ExitCode {
-    match state::migrate::run(&args.repo) {
+    match state::migrate::run(&args.repo, &args.approval) {
         Ok(outcome) => {
             let mut stdout = std::io::stdout().lock();
             match writeln!(stdout, "{}", outcome.to_json()).and_then(|()| stdout.flush()) {
@@ -367,8 +368,8 @@ fn main() -> ExitCode {
             return Report::new(
                 ErrorCode::MalformedRequest,
                 message,
-                "pass `serve` or `migrate` with an optional `--repo <path>`, or `rollback \
-                 --to-legacy` with `--approved-by`, `--approved-at` and `--reason`",
+                "pass `serve` with an optional `--repo <path>`, `migrate` with `--approved-by`, \
+                 `--approved-at` and `--reason`, or `rollback --to-legacy` with the same three",
             )
             .print(EXIT_REFUSED);
         }
@@ -407,6 +408,28 @@ mod tests {
 
         assert_eq!(args.command, Command::Migrate);
         assert_eq!(args.repo, PathBuf::from("/r"));
+    }
+
+    #[test]
+    fn migrate_takes_the_approval_from_its_flags() {
+        let args = parse(&[
+            "migrate",
+            "--approved-by",
+            "human:a",
+            "--approved-at",
+            "2026-10-27T10:00:00+00:00",
+            "--reason",
+            "cut over",
+            "--repo",
+            "/r",
+        ])
+        .unwrap();
+
+        assert_eq!(args.command, Command::Migrate);
+        assert_eq!(args.repo, PathBuf::from("/r"));
+        assert_eq!(args.approval.approved_by, "human:a");
+        assert_eq!(args.approval.approved_at, "2026-10-27T10:00:00+00:00");
+        assert_eq!(args.approval.reason, "cut over");
     }
 
     #[test]
@@ -491,7 +514,12 @@ mod tests {
         assert!(parse(&["rewind"]).unwrap_err().contains("usage"));
         assert!(parse(&["rollback"]).unwrap_err().contains("--to-legacy"));
         assert!(
-            parse(&["migrate", "--reason", "x"])
+            parse(&["serve", "--reason", "x"])
+                .unwrap_err()
+                .contains("unknown argument")
+        );
+        assert!(
+            parse(&["migrate", "--to-legacy"])
                 .unwrap_err()
                 .contains("unknown argument")
         );

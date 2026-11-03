@@ -1,7 +1,9 @@
-//! `harness-runtime migrate --repo <repo>` (ADR 0020, section 5): the cutover from the file ledger
-//! of installation 1.x to the runtime store, in one operation.
+//! `harness-runtime migrate --repo <repo> --approved-by <human> --approved-at <time> --reason
+//! <text>` (ADR 0020, section 5): the cutover from the file ledger of installation 1.x to the
+//! runtime store, in one operation with a human approval.
 //!
-//! 1. Preconditions: nothing that the import would have to guess, and nothing running.
+//! 1. The approval, checked first as the rollback checks its own (`approval::check`), then the
+//!    preconditions: nothing that the import would have to guess, and nothing running.
 //! 2. The legacy lock, with `owner.json` and a held `flock`.
 //! 3. A snapshot of the state directory, flushed to disk.
 //! 4. The import into `state/runtime.db.importing`.
@@ -11,7 +13,7 @@
 //!
 //! Until step 6 writes the pointer, the file ledger is the authority and every failure leaves it so.
 //! The pointer is the commit point, so a repeated migrate after a crash at any step either starts
-//! again or, after the pointer, answers `already_cut_over`.
+//! again or, after the pointer, answers `already_cut_over`. A repeat needs an approval too.
 
 use std::fs;
 use std::io;
@@ -20,6 +22,7 @@ use std::path::{Path, PathBuf};
 use contracts::ErrorCode;
 use serde_json::json;
 
+use crate::approval::{self, Approval};
 use crate::authority::{
     AUTHORITY_NAME, Authority, Epoch, IMPORTING_NAME, RUNTIME_STORE, STORE_NAME, STORE_VERSION,
     epoch,
@@ -310,14 +313,15 @@ fn already_cut_over(state: &Path, authority: Authority) -> Outcome {
     }
 }
 
-/// Run the migration of the repository at `repo`.
+/// Run the migration of the repository at `repo` with the human `approval`.
 ///
 /// # Errors
-/// `Error::Refused` (exit code 2): a precondition failed, nothing was changed. `Error::Interrupted`
-/// (3): the operation failed after it began; the partial store was removed and the file ledger is
-/// still the authority. `Error::Invariant` (4): the legacy state changed during the operation or
-/// the parity check failed; an operator must look.
-pub fn run(repo: &Path) -> Result<Outcome> {
+/// `Error::Refused` (exit code 2): the approval or a precondition refused it, nothing was
+/// changed. `Error::Interrupted` (3): the operation failed after it began; the partial store was
+/// removed and the file ledger is still the authority. `Error::Invariant` (4): the legacy state
+/// changed during the operation or the parity check failed; an operator must look.
+pub fn run(repo: &Path, approval: &Approval) -> Result<Outcome> {
+    approval::check(approval, "migration")?;
     let state: PathBuf = repo.join(STATE_REL);
     match epoch(&state) {
         Epoch::Store(authority) => return Ok(already_cut_over(&state, authority)),

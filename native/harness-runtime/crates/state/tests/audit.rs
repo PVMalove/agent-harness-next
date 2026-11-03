@@ -20,7 +20,7 @@ const BATCH: &str = "batch-aaaaaaaa-0000-4000-8000-000000000001";
 
 fn cut_over(name: &str) -> Repo {
     let repo = Repo::new(name);
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     repo
 }
 
@@ -37,7 +37,7 @@ fn repaired_store(name: &str) -> Repo {
         .unwrap()
         .remove("risk_reassessment_triggers");
     std::fs::write(path, canonical_json(&record)).unwrap();
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     repo
 }
 
