@@ -415,6 +415,57 @@ def test_a_cursor_below_the_kept_window_expires_after_compaction(
     asyncio.run(scenario())
 
 
+def test_compaction_replaces_the_journal_only_after_closing_it(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows refuses to replace a file that the process still holds open."""
+    import os
+
+    from harness.console import event_journal
+
+    monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
+    journal = _journal(project)
+    held: set[int] = set()
+    real_open, real_close, real_replace = os.open, os.close, os.replace
+
+    def tracking_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+        fd = real_open(path, flags, *args, **kwargs)
+        if Path(path) == journal:
+            held.add(fd)
+        return fd
+
+    def tracking_close(fd: int) -> None:
+        held.discard(fd)
+        real_close(fd)
+
+    def windows_replace(source, target):  # type: ignore[no-untyped-def]
+        if Path(target) == journal and held:
+            raise PermissionError("the journal is open in this process")
+        real_replace(source, target)
+
+    monkeypatch.setattr(os, "open", tracking_open)
+    monkeypatch.setattr(os, "close", tracking_close)
+    monkeypatch.setattr(os, "replace", windows_replace)
+    ledger = _ledger(project)
+
+    async def scenario() -> None:
+        server = _server(project)
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(_subscribe("live"))
+                assert (await _next_source(client))["state"] == "available"
+                for index in range(6):
+                    _Batch(ledger, f"batch-{index}", f"#{index}")
+                    (event,) = await _events(client, 1)
+                    assert event["event"] == "batch.transition"
+        finally:
+            await server.close()
+        assert len(journal.read_bytes().splitlines()) <= 1 + 2 * 2
+
+    asyncio.run(scenario())
+
+
 async def _home_answers(client: ClientConnection) -> bool:
     await client.send(json.dumps({"id": "home", "type": "home.snapshot"}))
     while True:

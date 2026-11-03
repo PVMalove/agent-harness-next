@@ -249,9 +249,13 @@ class EventJournal:
                 stream.write(json.dumps(header, ensure_ascii=False).encode() + b"\n")
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, self.path)
+            # Windows refuses to replace a file this process still holds open; when the
+            # replace fails, the previous file is opened again.
             self.close()
-            self._fd = self._open()
+            try:
+                os.replace(temporary, self.path)
+            finally:
+                self._fd = self._open()
         except OSError as exc:
             raise JournalUnavailable(type(exc).__name__) from exc
         finally:
