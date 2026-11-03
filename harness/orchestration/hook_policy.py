@@ -45,7 +45,8 @@ def normalize_policy(value: object) -> dict[str, object]:
 
     ``None`` (ключ отсутствует) даёт профиль по умолчанию без эскалаций. Пути и роли эскалаций
     сортируются без повторов, сами эскалации упорядочиваются, поэтому смена порядка в файле не
-    меняет хеш. Некорректное значение — ``PolicyError``.
+    меняет хеш. Некорректное значение — ``PolicyError``, в том числе текст без UTF-8 формы
+    (одиночный суррогат), у которого нет хеша.
     """
     if value is None:
         return {"profile": DEFAULT_PROFILE, "escalations": []}
@@ -62,7 +63,14 @@ def normalize_policy(value: object) -> dict[str, object]:
         for item in value.get("escalations", [])
     ]
     escalations.sort(key=lambda item: json.dumps(item, sort_keys=True))
-    return {"profile": value["profile"], "escalations": escalations}
+    policy: dict[str, object] = {"profile": value["profile"], "escalations": escalations}
+    try:
+        _canonical_bytes(policy)
+    except UnicodeEncodeError as exc:
+        raise _fail(
+            f"{PROJECT_JSON_REL} hook_policy text cannot be encoded as UTF-8: {exc.reason}"
+        ) from exc
+    return policy
 
 
 def load_policy(repo: Path) -> dict[str, object]:
@@ -339,12 +347,16 @@ def dispatch_policy(dispatch: Mapping[str, object]) -> dict[str, object]:
     return policy
 
 
-def hook_policy_sha256(policy: Mapping[str, object]) -> str:
-    """Стабильный SHA-256 канонического документа политики."""
+def _canonical_bytes(policy: Mapping[str, object]) -> bytes:
     canonical = json.dumps(
         policy, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical.encode("utf-8")
+
+
+def hook_policy_sha256(policy: Mapping[str, object]) -> str:
+    """Стабильный SHA-256 канонического документа политики."""
+    return hashlib.sha256(_canonical_bytes(policy)).hexdigest()
 
 
 def project_hook_policy_sha256(repo: Path) -> str:

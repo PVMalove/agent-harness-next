@@ -63,9 +63,8 @@ def set_hook_policy(repo: Path, value: object) -> None:
     path = repo / PROJECT_JSON
     data = json.loads(path.read_text(encoding="utf-8"))
     data["hook_policy"] = value
-    path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    # JSON escapes keep any str value expressible, including a lone surrogate.
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def policy_file(repo: Path) -> JsonObject:
@@ -162,6 +161,24 @@ def test_an_invalid_hook_policy_exits_2_and_keeps_the_file(repo: Path) -> None:
     result = harness("update", str(repo))
 
     assert result.returncode == 2, result.stdout + result.stderr
+    assert "hook_policy" in result.stderr
+    assert "REMEDY:" in result.stderr
+    assert (repo / POLICY_FILE).read_bytes() == before
+
+
+@pytest.mark.parametrize("field", ["paths", "roles"])
+def test_a_hook_policy_without_a_utf8_form_exits_2_and_keeps_the_file(
+    repo: Path, field: str
+) -> None:
+    install(repo)
+    before = (repo / POLICY_FILE).read_bytes()
+    escalation = {"profile": "strict", field: ["a\ud800b"]}
+    set_hook_policy(repo, {"profile": "standard", "escalations": [escalation]})
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
     assert "hook_policy" in result.stderr
     assert "REMEDY:" in result.stderr
     assert (repo / POLICY_FILE).read_bytes() == before
