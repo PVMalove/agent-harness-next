@@ -17,7 +17,7 @@ from textual.pilot import Pilot
 from textual.widgets import RichLog, Static, Select, TabbedContent, Button
 
 from harness.orchestration.core.utils import JsonObject
-from tests.console._pilot_wait import crumb_text
+from tests.console._pilot_wait import crumb_text, wait_until
 from harness.console.shell import Breadcrumbs
 from harness.console.app import HarnessConsoleApp
 from harness.console.screens.worker_observation import WorkerObservationScreen
@@ -547,26 +547,23 @@ def test_worker_breadcrumbs_link_back_to_orchestration_and_home(tmp_path: Path) 
                 tmp_path, _LONG_ID, observer=_blocked_snapshot
             )
             await app.push_screen(worker)
-            await pilot.pause()
-            await app.workers.wait_for_complete()
-            await pilot.pause()
+            # Navigation may cancel background jobs of a screen that is being replaced.
+            # Wait for the rendered links, not for every application's background worker.
+            await wait_until(pilot, lambda: len(worker.query(CrumbLink)) == 2)
             links = [str(link.content) for link in worker.query(CrumbLink)]
             orchestration_link = list(worker.query(CrumbLink))[1]
             orchestration_link.focus()
             await pilot.press("enter")
-            for _ in range(4):
-                await pilot.pause()
+            await wait_until(pilot, lambda: app.screen is orchestration)
             back_on_orchestration = app.screen is orchestration
-            await app.push_screen(
-                WorkerObservationScreen(tmp_path, _LONG_ID, observer=_blocked_snapshot)
+            second_worker = WorkerObservationScreen(
+                tmp_path, _LONG_ID, observer=_blocked_snapshot
             )
-            await pilot.pause()
-            await app.workers.wait_for_complete()
-            await pilot.pause()
+            await app.push_screen(second_worker)
+            await wait_until(pilot, lambda: len(second_worker.query(CrumbLink)) == 2)
             home_link = list(app.screen.query(CrumbLink))[0]
             await pilot.click(CrumbLink, offset=(1, 0))
-            for _ in range(4):
-                await pilot.pause()
+            await wait_until(pilot, lambda: isinstance(app.screen, DashboardScreen))
             assert home_link
             return (
                 links,

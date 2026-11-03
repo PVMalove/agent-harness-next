@@ -76,6 +76,11 @@ pub fn internal_network_name(base: &str) -> String {
     format!("{base}-net")
 }
 
+/// The Podman sidecar's DNS-enabled external network, never attached to a worker.
+pub fn egress_network_name(base: &str) -> String {
+    format!("{base}-egress-net")
+}
+
 fn owned(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
 }
@@ -209,6 +214,14 @@ pub fn network_argv(spec: &Spec<'_>, base: &str) -> Vec<String> {
     let mut argv = owned(&[spec.plan.engine.as_str(), "network", "create", "--internal"]);
     argv.extend(labels_argv(spec.labels));
     argv.push(internal_network_name(base));
+    argv
+}
+
+/// A dedicated external bridge: Podman's default network has no DNS forwarding.
+pub fn egress_network_argv(spec: &Spec<'_>, base: &str) -> Vec<String> {
+    let mut argv = owned(&[spec.plan.engine.as_str(), "network", "create"]);
+    argv.extend(labels_argv(spec.labels));
+    argv.push(egress_network_name(base));
     argv
 }
 

@@ -92,7 +92,8 @@ pub const CARRIED_ITEM_RECORD_FIELDS: [&str; 8] = [
 ];
 
 /// `ATTENTION_REASONS`.
-pub const ATTENTION_REASONS: [&str; 6] = [
+pub const ATTENTION_REASONS: [&str; 7] = [
+    "operational-hold",
     "unknown-reason",
     "infrastructure-retry-repeated",
     "tooling-retry-repeated",
@@ -184,7 +185,7 @@ pub const AUTO_STOP_BUDGET_EXHAUSTED: [&str; 5] = [
 ];
 
 /// `AUTO_STOP_REASONS` of the category `integrity-failure`.
-pub const AUTO_STOP_INTEGRITY_FAILURE: [&str; 7] = [
+pub const AUTO_STOP_INTEGRITY_FAILURE: [&str; 8] = [
     "runtime-unavailable",
     "stale",
     "model-mismatch",
@@ -192,6 +193,7 @@ pub const AUTO_STOP_INTEGRITY_FAILURE: [&str; 7] = [
     "harness-snapshot-changed",
     "deterministic-gate-failed",
     "ledger-validation-failed",
+    "operational-hold",
 ];
 
 /// `AUTO_STOP_REASONS` of the category `no-automatic-route`.
