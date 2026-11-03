@@ -10,8 +10,6 @@ import json
 import os
 import subprocess
 import sys
-import time
-from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
@@ -83,20 +81,6 @@ def no_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", str(empty))
 
 
-@pytest.fixture
-def slow_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """PATH whose git never answers within the test's timeout."""
-    if sys.platform == "win32":
-        pytest.skip("a POSIX shell script stands in for git")
-    bin_dir = tmp_path / "slow-bin"
-    bin_dir.mkdir()
-    script = bin_dir / "git"
-    script.write_text("#!/bin/sh\nexec sleep 5\n", encoding="utf-8")
-    script.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
-    yield
-
-
 @pytest.mark.parametrize(
     "hook", sorted(path.name for path in HOOKS.glob("*.py")), ids=str
 )
@@ -137,15 +121,23 @@ def test_a_commit_is_blocked_when_git_cannot_start(
     assert reason == direct_commits.GIT_NO_ANSWER
 
 
-@pytest.mark.usefixtures("slow_git")
 def test_a_commit_is_blocked_when_git_does_not_answer(
     direct_commits: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(direct_commits, "GIT_TIMEOUT_SECONDS", 0.5)
-    started = time.monotonic()
+    calls: list[object] = []
+
+    def timed_out(
+        argv: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        timeout = kwargs["timeout"]
+        assert timeout == direct_commits.GIT_TIMEOUT_SECONDS
+        calls.append(timeout)
+        raise subprocess.TimeoutExpired(argv, direct_commits.GIT_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
     reason = direct_commits.block_reason("git commit -m x", tmp_path, tmp_path)
     assert reason == direct_commits.GIT_NO_ANSWER
-    assert time.monotonic() - started < 4
+    assert calls
 
 
 @pytest.mark.usefixtures("no_git")
@@ -249,16 +241,20 @@ def test_parsed_is_immutable() -> None:
         parsed.opaque = []
 
 
-@pytest.mark.usefixtures("slow_git")
 def test_qa_gate_git_is_bounded(
     qa_gate_state: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A git that does not answer ends the hook with an error (exit 2), never a hang."""
-    monkeypatch.setattr(qa_gate_state, "GIT_TIMEOUT_SECONDS", 0.5)
-    started = time.monotonic()
+
+    def timed_out(
+        argv: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert kwargs["timeout"] == qa_gate_state.GIT_TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired(argv, qa_gate_state.GIT_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
     with pytest.raises(subprocess.TimeoutExpired):
         qa_gate_state.git(tmp_path, "rev-parse", "HEAD")
-    assert time.monotonic() - started < 4
 
 
 def test_literal_heredoc_does_not_taint_an_unrelated_computed_command(

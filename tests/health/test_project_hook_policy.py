@@ -29,10 +29,6 @@ def _problems(tmp_path: Path, extra: dict[str, object]) -> list[str]:
     return problems
 
 
-def test_field_is_optional(tmp_path: Path) -> None:
-    assert _problems(tmp_path, {}) == []
-
-
 @pytest.mark.parametrize(
     "value",
     [

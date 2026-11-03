@@ -1,15 +1,9 @@
-"""WCAG contrast of the console's colour tokens, measured against the real palette.
-
-Component edges, controls, the selection edge and the scrollbar must stand out from the surface by
-3:1; text on a highlighted row by 4.5:1; decorative dividers stay deliberately faint."""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
-# ruff: noqa: E402 — optional Textual imports must follow importorskip.
-
-import asyncio
+# ruff: noqa: E402 — optional Textual imports follow importorskip.
 import re
-from pathlib import Path
 
 import pytest
 
@@ -18,7 +12,9 @@ pytest.importorskip("textual")
 from harness.console import brand, shell
 
 SURFACE = brand.PALETTE["surface"]
+
 TOKENS = brand.SHELL_TOKENS
+
 HIGHLIGHTED_ROWS = {
     "row-highlight": TOKENS["row-highlight"],
     "selection-background": TOKENS["selection-background"],
@@ -92,22 +88,3 @@ def test_the_shell_draws_component_borders_with_the_component_token() -> None:
                 allowed.add(TOKENS["border-subtle"])
             assert color in allowed, selector.strip()
     assert TOKENS["component-border"] in css
-
-
-def test_a_shell_button_is_drawn_with_the_component_border(tmp_path: Path) -> None:
-    from textual.color import Color
-    from textual.widgets import Button
-
-    from harness.console.app import HarnessConsoleApp
-    from harness.console.screens.worker_observation import WorkerObservationScreen
-
-    async def scenario() -> Color:
-        app = HarnessConsoleApp(tmp_path)
-        async with app.run_test(size=(160, 52)) as pilot:
-            await app.push_screen(
-                WorkerObservationScreen(tmp_path, observer=lambda *_: {})
-            )
-            await pilot.pause()
-            return app.screen.query_one("#worker-details", Button).styles.border_top[1]
-
-    assert asyncio.run(scenario()) == Color.parse(TOKENS["component-border"])

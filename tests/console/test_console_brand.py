@@ -1,4 +1,4 @@
-"""The console mark and banner: stdlib data, testable without textual."""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
@@ -64,20 +64,15 @@ def test_capabilities_come_from_the_lock_and_tolerate_a_broken_one(
     lock.parent.mkdir()
     lock.write_text("{not json", encoding="utf-8")
     assert brand.installed_capabilities(tmp_path) == ()
-    lock.write_text(json.dumps({"capabilities": ["engineering-suite"]}), encoding="utf-8")
+    lock.write_text(
+        json.dumps({"capabilities": ["engineering-suite"]}), encoding="utf-8"
+    )
     assert brand.installed_capabilities(tmp_path) == ("engineering-suite",)
-
-
-def test_current_branch_reads_git_and_is_none_outside_a_repository(
-    tmp_path: Path,
-) -> None:
-    assert brand.current_branch(tmp_path) is None
-    subprocess.run(["git", "init", "-q", "-b", "trunk", str(tmp_path)], check=True)
-    assert brand.current_branch(tmp_path) == "trunk"
 
 
 def test_banner_reads_installed_revision_from_lock_for_selected_project(
     tmp_path: Path,
+    fixed_git_metadata: None,
 ) -> None:
     lock = tmp_path / ".harness" / "harness.lock"
     lock.parent.mkdir()
@@ -102,7 +97,7 @@ def test_banner_reads_installed_revision_from_lock_for_selected_project(
 
 @pytest.mark.parametrize("revision", [None, "uncommitted", "not a commit", 42])
 def test_banner_does_not_invent_a_revision_for_legacy_or_invalid_lock(
-    tmp_path: Path, revision: object
+    tmp_path: Path, revision: object, fixed_git_metadata: None
 ) -> None:
     lock = tmp_path / ".harness" / "harness.lock"
     lock.parent.mkdir()
@@ -117,42 +112,6 @@ def test_banner_does_not_invent_a_revision_for_legacy_or_invalid_lock(
     )
     lock.write_text("{broken", encoding="utf-8")
     assert brand.collect_banner(tmp_path, "1.4.0").installed_commit is None
-
-
-def test_console_revision_comes_from_its_source_checkout(tmp_path: Path) -> None:
-    assert brand.source_commit(tmp_path) is None
-    source = tmp_path / "source"
-    subprocess.run(["git", "init", "-q", str(source)], check=True)
-    assert brand.source_commit(source) is None
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(source),
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.com",
-            "commit",
-            "-q",
-            "--allow-empty",
-            "-m",
-            "test: source revision",
-        ],
-        check=True,
-    )
-    head = subprocess.run(
-        ["git", "-C", str(source), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    assert brand.source_commit(source) == head[:8]
-    subprocess.run(["git", "-C", str(source), "checkout", "-q", "--detach"], check=True)
-    assert brand.source_commit(source) == head[:8]
-    nested = source / "archive"
-    nested.mkdir()
-    assert brand.source_commit(nested) is None
 
 
 @pytest.mark.parametrize(
@@ -210,67 +169,6 @@ def test_help_matches_the_current_interface(guide: str) -> None:
     assert "config-versions" not in guide
 
 
-def _git(repo: Path, *args: str) -> str:
-    import os
-    import subprocess
-
-    env = {
-        **os.environ,
-        "GIT_AUTHOR_NAME": "t",
-        "GIT_AUTHOR_EMAIL": "t@example.test",
-        "GIT_COMMITTER_NAME": "t",
-        "GIT_COMMITTER_EMAIL": "t@example.test",
-    }
-    return subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env,
-    ).stdout.strip()
-
-
-def _committed_repo(path: Path, message: str = "first") -> tuple[Path, str]:
-    path.mkdir(parents=True)
-    _git(path, "init", "-q")
-    _git(path, "commit", "-q", "--allow-empty", "-m", message)
-    return path, _git(path, "rev-parse", "HEAD")[:8]
-
-
-def test_project_commit_is_the_short_head_of_the_selected_project(
-    tmp_path: Path,
-) -> None:
-    repo, head = _committed_repo(tmp_path / "app")
-    assert brand.project_commit(repo) == head
-    info = brand.collect_banner(repo, "1.4.0")
-    assert info.project_commit == head
-    assert f"· commit {head}" in brand.banner_lines(info)[4]
-
-
-def test_project_commit_follows_a_detached_head(tmp_path: Path) -> None:
-    repo, head = _committed_repo(tmp_path / "app")
-    _git(repo, "checkout", "-q", "--detach", "HEAD")
-    info = brand.collect_banner(repo, "1.4.0")
-    assert info.branch is None and info.project_commit == head
-    assert brand.banner_lines(info)[4] == f"detached HEAD · commit {head}"
-
-
-def test_a_repository_without_a_commit_or_git_says_the_commit_is_unknown(
-    tmp_path: Path,
-) -> None:
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    _git(empty, "init", "-q")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    assert brand.project_commit(empty) is None
-    assert brand.project_commit(outside) is None
-    line = brand.banner_lines(brand.collect_banner(empty, "1.4.0"))[4]
-    assert line.endswith("· commit не определён")
-    nowhere = brand.banner_lines(brand.collect_banner(outside, "1.4.0"))[4]
-    assert nowhere == "ветка не определена · commit не определён"
-
-
 @pytest.mark.parametrize(
     "error", [OSError("no git"), subprocess.TimeoutExpired("git", 5)]
 )
@@ -308,3 +206,10 @@ def test_shell_css_resolves_only_the_shell_tokens() -> None:
     assert brand.shell_css(css) == (
         "A { border: solid #3a3731; color: $text; background: #45332c; }"
     )
+
+
+@pytest.fixture
+def fixed_git_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(brand, "current_branch", lambda _repo: "main")
+    monkeypatch.setattr(brand, "project_commit", lambda _repo: "12345678")
+    monkeypatch.setattr(brand, "source_commit", lambda: "87654321")

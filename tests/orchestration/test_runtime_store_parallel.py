@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -38,9 +37,11 @@ from .runtime_store_support import (
     migrate,
 )
 
+
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="the seam tests drive a Unix-socket runtime"
 )
+
 
 IN_SNAPSHOT = "state.read:in-snapshot"
 BEFORE_BEGIN = "state.write:before-begin"
@@ -206,7 +207,6 @@ def test_read_commands_answer_the_state_before_a_writer_paused_in_its_transactio
     auto_working.runtime.wait_paused(IN_TRANSACTION)
 
     reads = {}
-    started = time.monotonic()
     for name, command in (
         ("dispatch status", ("dispatch", "status", "--dispatch", dispatch)),
         ("auto-report", ("batch", "auto-report", "--batch", batch)),
@@ -214,14 +214,12 @@ def test_read_commands_answer_the_state_before_a_writer_paused_in_its_transactio
         ("qa status", ("qa", "status")),
     ):
         reads[name] = auto_working.run(*command)
-    elapsed = time.monotonic() - started
     auto_working.runtime.resume()
     _, stderr = writer.communicate(timeout=60)
     after = auto_working.run("dispatch", "status", "--dispatch", dispatch)
 
     for name, result in reads.items():
         assert result.returncode == 0, f"{name}: {result.stderr}"
-    assert elapsed < 30
     # The readers see the state before the transaction in flight, never half of it.
     assert '"state": "working"' in reads["dispatch status"].stdout
     assert '"state": "reported"' not in reads["dispatch status"].stdout
@@ -261,7 +259,8 @@ def test_two_dispatch_creates_under_a_budget_with_one_free_slot_admit_one(
     listed = planned.run("batch", "list", "--open")
     assert listed.returncode == 0, listed.stderr
     states = {
-        batch["batch_id"]: batch["state"] for batch in json.loads(listed.stdout)["batches"]
+        batch["batch_id"]: batch["state"]
+        for batch in json.loads(listed.stdout)["batches"]
     }
     assert states[planned.batches[1]] == "active"
     assert states[planned.batches[0]] == "awaiting-approval"

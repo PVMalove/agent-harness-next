@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import pytest
 
 from harness.configuration import parse_object
@@ -125,3 +126,10 @@ def test_recommendations_use_project_facts_and_options_describe_limits(
         steps, "project.json.language: значение вне допустимых"
     ) == (steps.index(language))
     assert step_for_problem(steps, "что-то без имени поля") is None
+
+
+@pytest.fixture(autouse=True)
+def no_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.console import project_facts
+
+    monkeypatch.setattr(project_facts, "_default_branch", lambda _repo: None)

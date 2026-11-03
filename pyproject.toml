@@ -61,8 +61,6 @@ markers = [
 "tests/orchestration/test_advisory.py" = ["E402"]
 "tests/console/test_console_app.py" = ["E402"]
 "tests/console/test_console_harness.py" = ["E402"]
-"tests/console/test_console_orchestration.py" = ["E402"]
-"tests/console/test_console_repo_map_app.py" = ["E402"]
 "tests/console/test_console_reports_app.py" = ["E402"]
 
 [dependency-groups]
@@ -73,7 +71,7 @@ dev = [
     "pytest-cov==7.1.0",
     "pytest-xdist==3.8.0",
     "ruff==0.8.6",
-    # harness console TUI tests (tests/console/test_console_app.py) - same pin as
+    # Console widget/formatting unit tests use the same pin as
     # harness/console/pin.py (ADR 0009); tests/console/test_console_pin.py keeps them equal. Dev-only:
     # `harness console` itself gets textual through `uv run --with`, never a project dependency.
     "textual==6.5.0",
