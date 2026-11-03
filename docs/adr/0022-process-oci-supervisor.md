@@ -491,3 +491,29 @@ Linux: группа процессов, в которой остались то�
   исполнение заканчивается `lost` вместо `exited`. Не доказаны: проход на настоящем монтировании с
   `hidepid` и на procfs чужого namespace (проверен только разбор опций) и `os::reap` на Windows,
   который собирается только в Windows CI.
+
+
+## Решения реализации #811
+
+**Принято оператором (2026-10-30).**
+
+| Текст ADR | Решение #811 | Причина |
+|---|---|---|
+| §6: без делегирования cgroup и с лимитом в плане — блокер | Preflight smoke проверяет делегирование cpu, memory и pids; без него smoke падает, а не пропускается. Отдельный живой тест читает memory.max, pids.max и cpu.max контейнера. Блокер в runtime не вводится: в `Plan` (`crates/engine/src/plan.rs`) и argv-матрице нет лимитов ресурсов, а `limits` в `qa_run.rs` содержит сроки. Блокер добавит задача, которая введёт лимит в план. | Блокировать нечего; изменение плана и argv Rust выходит за границы chore(ci). |
+| Fedora с SELinux и rootless Podman требует self-hosted runner или VM | Отдельный `.github/workflows/podman-smoke.yml` использует runner владельца с меткой `fedora-selinux-podman`. Запускается по push путей контейнерного исполнителя и вручную, без pull_request; находится вне verify.yml и make verify. Маркер podman_smoke исключён из обычного pytest. | Публичный PR не выполняет код на машине владельца; выключенный runner не держит проверки PR и release. |
+
+**Проверки (2026-11-03).** [Положительный прогон](https://github.com/PVMalove/claude-agent-harness/actions/runs/41687555523),
+SHA `75431885af4c963a291d6a7a881c77202153fb40`: 3 passed, 0 skipped. Артефакты подтверждают
+Podman 5.8.9, rootless, SELinux Enforcing, cgroup v2 и делегированные cpu, memory, pids.
+[Отрицательный прогон, попытка 2](https://github.com/PVMalove/claude-agent-harness/actions/runs/41687555523/attempts/2)
+на том же SHA: 1 failure, 2 setup errors, 0 skipped. Все три теста остановлены preflight с
+`HARNESS_REQUIRE_PODMAN_SMOKE=1, but cgroup delegation to the user lacks cpu, memory, pids`.
+Контроллеры временно отключены через `DisableControllers=cpu memory pids` только для
+`user-1001.slice`, при сохранённом `Delegate=yes`; `podman info` показал только `io`.
+Первый способ с `Delegate=no` не позволил запустить пользовательский systemd, поэтому не
+считается отрицательной проверкой smoke. После проверки настройки восстановлены: доступны
+cpuset, cpu, io, memory, pids, пользовательский systemd активен, runner онлайн.
+
+[Положительный повтор после восстановления, попытка 3](https://github.com/PVMalove/claude-agent-harness/actions/runs/41687555523/attempts/3)
+на том же SHA: 3 passed, 0 skipped; `podman info` вновь подтверждает cpu, io, memory, pids,
+SELinux остаётся Enforcing.
