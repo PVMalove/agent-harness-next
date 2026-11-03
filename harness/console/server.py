@@ -8,6 +8,8 @@ import importlib
 import logging
 import secrets
 
+from .decisions import DecisionService, is_decisions_request
+from .decisions import respond as respond_decisions
 from .discovery import Discovery
 from .jobs import JobService, job_request_type
 from .snapshots import SnapshotService, busy, respond
@@ -53,10 +55,12 @@ class ConsoleServer:
         idle_grace_seconds: float = 30,
         snapshots: SnapshotService | None = None,
         jobs: JobService | None = None,
+        decisions: DecisionService | None = None,
     ) -> None:
         self.repo = repo.resolve()
         self._snapshots = snapshots or SnapshotService(self.repo)
         self._jobs = jobs or JobService(self.repo)
+        self._decisions = decisions or DecisionService(self.repo)
         self._idle_grace = idle_grace_seconds
         self._clients = 0
         self._idle_task: asyncio.Task[None] | None = None
@@ -394,6 +398,13 @@ class ConsoleServer:
                             reply, protocol, writer, send_lock
                         ):
                             return
+            elif is_decisions_request(raw):
+                await self._send_reply(
+                    await respond_decisions(raw, self._decisions),
+                    protocol,
+                    writer,
+                    send_lock,
+                )
             else:
                 await self._send_reply(
                     await respond(raw, self._snapshots), protocol, writer, send_lock
