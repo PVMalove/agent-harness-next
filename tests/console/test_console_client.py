@@ -11,6 +11,7 @@ import sys
 import threading
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -135,6 +136,24 @@ def test_a_failed_collect_is_a_server_error_with_its_code(project: Path) -> None
     assert (failed.value.code, failed.value.message) == ("collect_failed", "OSError")
 
 
+def test_home_reads_every_problem_whole_beyond_one_reply(project: Path) -> None:
+    """What one reply lists is capped; the client pages the rest, so the snapshot it returns is
+    the one the server built, problem for problem."""
+    from tests.console.test_snapshots import _many_problems
+
+    many = build_home_snapshot(_many_problems(400, "сообщение " * 60), HomeContext())
+    online = build_home_snapshot(_many_problems(130, "x" * 1000), HomeContext())
+    with _server(
+        project, collect=lambda repo: many, collect_online=lambda repo: online
+    ):
+        client = ConsoleClient.connect(_endpoint(project))
+        try:
+            assert client.home() == many
+            assert client.home(online=True) == online
+        finally:
+            client.close()
+
+
 Answer = Callable[[dict[str, object]], str | bytes]
 
 
@@ -238,6 +257,85 @@ def test_a_server_that_closes_mid_request_is_connection_lost() -> None:
         server.close()  # type: ignore[attr-defined]
         loop.run(server.wait_closed())  # type: ignore[attr-defined]
         loop.stop()
+
+
+_PAGED = build_home_snapshot(
+    replace(DATA, problems=(("fail", "a.b", "x" * 400),)), HomeContext()
+)
+
+
+def _paged(**page: object) -> Answer:
+    """A server whose Home reply names a problem page and whose page reply is `page`."""
+
+    def answer(request: dict[str, object]) -> str:
+        if request["type"] == "home.snapshot":
+            reply = json.loads(_reply(request, problems_snapshot_id=7))
+            reply["snapshot"] = json.loads(json.dumps(_PAGED.to_payload()))
+            return json.dumps(reply)
+        assert (request["snapshot_id"], request["offset"]) == (7, 0)
+        body = {"v": 1, "id": request["id"], "type": request["type"], "ok": True}
+        return json.dumps({**body, **page})
+
+    return answer
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        lambda request: _reply(request, problems_snapshot_id="7"),
+        lambda request: _reply(request, problems_snapshot_id=True),
+        _paged(text="[]", next=2),
+        _paged(text="[", next=0, done=False),
+        _paged(text=1, next=1, done=True),
+        _paged(text="[]", next=True, done=True),
+        _paged(text="not json", next=8, done=True),
+        _paged(text='[{"status": "fail"}]', next=20, done=True),
+        _paged(text="[]", next=2, done=True),
+    ],
+    ids=[
+        "page-id-string",
+        "page-id-bool",
+        "page-without-done",
+        "page-that-does-not-move-on",
+        "page-text-not-string",
+        "page-next-bool",
+        "problems-not-json",
+        "problem-outside-schema",
+        "fewer-problems-than-total",
+    ],
+)
+def test_a_problem_page_outside_the_protocol_is_malformed(answer: Answer) -> None:
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            with pytest.raises(MalformedReply):
+                client.home()
+        finally:
+            client.close()
+
+
+def test_an_expired_problem_page_is_a_server_error() -> None:
+    def answer(request: dict[str, object]) -> str | bytes:
+        if request["type"] == "home.snapshot":
+            return _paged()(request)
+        return json.dumps(
+            {
+                "v": 1,
+                "id": request["id"],
+                "type": request["type"],
+                "ok": False,
+                "error": {"code": "snapshot_expired", "message": "again"},
+            }
+        )
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            with pytest.raises(ServerError) as failed:
+                client.home()
+        finally:
+            client.close()
+    assert failed.value.code == "snapshot_expired"
 
 
 def test_the_well_formed_fake_reply_is_accepted() -> None:

@@ -27,11 +27,16 @@ PROTOCOL_VERSION = 1
 MAX_REQUEST_BYTES = 4096
 MAX_ID_CHARS = 64
 HOME_REQUEST = "home.snapshot"
+HOME_PROBLEMS_REQUEST = "home.problems"
 
 PROBLEMS_LIMIT = 100
 SOURCE_TYPES_LIMIT = 32
 MESSAGE_BYTES = 300
 ID_BYTES = 100
+# A `home.problems` page: the problems beyond what one Home reply lists, in wire bytes.
+PAGE_BYTES = 32768
+# How many rebuilt snapshots keep their problems for paging, the cached one among them.
+KEPT_SNAPSHOTS = 4
 
 _TIER = re.compile(r"tier=(\w+)")
 
@@ -125,7 +130,23 @@ class HomeSnapshot:
     memory: MemoryCard
 
     def to_payload(self) -> dict[str, object]:
-        return asdict(self)
+        """The snapshot as one reply carries it: only the `listed_problems`, so that any reply
+        stays below the message limit; `problems_total` keeps the real count."""
+        payload = asdict(self)
+        payload["problems"] = [asdict(problem) for problem in self.listed_problems()]
+        return payload
+
+    def listed_problems(self) -> tuple[Problem, ...]:
+        """The first `PROBLEMS_LIMIT` problems with their texts clipped. When they are not all of
+        `problems`, a client reads the whole list with `home.problems`."""
+        return tuple(
+            Problem(
+                _clip(problem.status, ID_BYTES),
+                _clip(problem.id, ID_BYTES),
+                _clip(problem.message, MESSAGE_BYTES),
+            )
+            for problem in self.problems[:PROBLEMS_LIMIT]
+        )
 
     @classmethod
     def from_payload(cls, payload: object) -> HomeSnapshot:
@@ -205,6 +226,24 @@ def _problem_from(value: object) -> Problem:
         id=_str(found["id"]),
         message=_str(found["message"]),
     )
+
+
+def problems_text(problems: tuple[Problem, ...]) -> str:
+    """The problems as the JSON text `home.problems` pages through."""
+    return json.dumps(
+        [asdict(problem) for problem in problems],
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def problems_from_text(text: str) -> tuple[Problem, ...]:
+    """The problems a `problems_text` result describes; any mismatch is `ValueError`."""
+    try:
+        items = json.loads(text)
+    except RecursionError:
+        raise ValueError("problems: too deeply nested") from None
+    return tuple(_problem_from(item) for item in _list(items))
 
 
 def _head_map_from(value: object) -> HeadMap:
@@ -324,18 +363,14 @@ def _memory_card(data: DashboardData, status: MemoryStatus | None) -> MemoryCard
 
 
 def build_home_snapshot(data: DashboardData, context: HomeContext) -> HomeSnapshot:
-    """Map the dashboard data and the Home context to JSON-safe values. Problems are capped so
-    that any reply stays below the message limit; `problems_total` keeps the real count."""
+    """Map the dashboard data and the Home context to JSON-safe values. The problems stay whole,
+    as the Home screen shows them; `to_payload` bounds what one reply lists."""
     return HomeSnapshot(
         version=SCHEMA_VERSION,
         health=HealthCounters(data.ok, data.warn, data.fail, data.skipped),
         problems=tuple(
-            Problem(
-                _clip(status, ID_BYTES),
-                _clip(check_id, ID_BYTES),
-                _clip(message, MESSAGE_BYTES),
-            )
-            for status, check_id, message in data.problems[:PROBLEMS_LIMIT]
+            Problem(status, check_id, message)
+            for status, check_id, message in data.problems
         ),
         problems_total=len(data.problems),
         harness_version=_clip(data.harness_version, ID_BYTES),
@@ -374,11 +409,13 @@ def collect_home(
 
 @dataclass(frozen=True)
 class Served:
-    """A snapshot as served: whether it came from the cache and how old it is."""
+    """A snapshot as served: whether it came from the cache, how old it is and the id under
+    which its problems are paged."""
 
     snapshot: HomeSnapshot
     cached: bool
     age_seconds: float
+    snapshot_id: int
 
 
 class SnapshotService:
@@ -401,23 +438,38 @@ class SnapshotService:
         self._clock = clock
         self._collect = collect
         self._collect_online = collect_online
-        self._building: asyncio.Task[HomeSnapshot] | None = None
+        self._building: asyncio.Task[Served] | None = None
         self._snapshot: HomeSnapshot | None = None
+        self._snapshot_id = 0
         self._stamp = 0.0
+        self._kept: dict[int, HomeSnapshot] = {}
+        self._last_id = 0
 
     def _fresh(self) -> Served | None:
         if self._snapshot is None:
             return None
         age = self._clock() - self._stamp
-        return Served(self._snapshot, True, age) if age < self._ttl else None
+        if age >= self._ttl:
+            return None
+        return Served(self._snapshot, True, age, self._snapshot_id)
 
-    async def _rebuild(self) -> HomeSnapshot:
+    def _keep(self, snapshot: HomeSnapshot) -> int:
+        """Keep a rebuilt snapshot for `problems_page`; the oldest beyond the limit goes."""
+        self._last_id += 1
+        self._kept[self._last_id] = snapshot
+        while len(self._kept) > KEPT_SNAPSHOTS:
+            del self._kept[next(iter(self._kept))]
+        return self._last_id
+
+    async def _rebuild(self) -> Served:
         """The collect, as a task of its own: it records its result and ends the rebuild even
         when every request that waited for it was cancelled."""
         try:
             snapshot = await asyncio.to_thread(self._collect, self._repo)
+            snapshot_id = self._keep(snapshot)
             self._snapshot, self._stamp = snapshot, self._clock()
-            return snapshot
+            self._snapshot_id = snapshot_id
+            return Served(snapshot, False, 0.0, snapshot_id)
         finally:
             self._building = None
 
@@ -436,13 +488,27 @@ class SnapshotService:
         # Nobody may be left to read the outcome of a collect whose requester went away.
         task.add_done_callback(lambda done: done.cancelled() or done.exception())
         await asyncio.wait({task})
-        return Served(task.result(), False, 0.0)
+        return task.result()
 
     async def home_online(self) -> Served:
         """A snapshot with the online checks, always rebuilt and never cached: the cache keeps
         the offline facts the TTL is about."""
         snapshot = await asyncio.to_thread(self._collect_online, self._repo)
-        return Served(snapshot, False, 0.0)
+        return Served(snapshot, False, 0.0, self._keep(snapshot))
+
+    def problems_page(self, snapshot_id: int, offset: int) -> tuple[str, int, bool]:
+        """The `problems_text` of a kept snapshot from `offset` on, at most `PAGE_BYTES` on the
+        wire, with the offset of the next page and whether this page is the last. A snapshot
+        that is no longer kept is `LookupError`; an offset beyond the text is `ValueError`."""
+        snapshot = self._kept.get(snapshot_id)
+        if snapshot is None:
+            raise LookupError(snapshot_id)
+        text = problems_text(snapshot.problems)
+        if offset > len(text):
+            raise ValueError(offset)
+        page = _clip(text[offset : offset + PAGE_BYTES], PAGE_BYTES)
+        next_offset = offset + len(page)
+        return page, next_offset, next_offset == len(text)
 
 
 _ERRORS = {
@@ -452,6 +518,7 @@ _ERRORS = {
     "too_large": "Request is too large.",
     "busy": "Too many unfinished requests.",
     "collect_failed": "Snapshot collection failed.",
+    "snapshot_expired": "The snapshot is no longer kept; request it again.",
 }
 
 
@@ -461,6 +528,8 @@ class _Request:
     type: str
     force: bool
     online: bool
+    snapshot_id: int = 0
+    offset: int = 0
 
 
 class Rejected(Exception):
@@ -497,6 +566,17 @@ def parse_envelope(raw: str) -> tuple[dict[str, object], str | int | None, str]:
 
 def _parse(raw: str) -> _Request:
     body, request_id, kind = parse_envelope(raw)
+    if kind == HOME_PROBLEMS_REQUEST:
+        snapshot_id, offset = body.get("snapshot_id"), body.get("offset")
+        if not (
+            isinstance(snapshot_id, int)
+            and isinstance(offset, int)
+            and not isinstance(snapshot_id, bool)
+            and not isinstance(offset, bool)
+            and offset >= 0
+        ):
+            raise Rejected("bad_request", request_id, kind)
+        return _Request(request_id, kind, False, False, snapshot_id, offset)
     if kind != HOME_REQUEST:
         raise Rejected("unknown_type", request_id, kind[:MAX_ID_CHARS])
     force = body.get("force", False)
@@ -548,6 +628,8 @@ async def respond(raw: str, snapshots: SnapshotService) -> str:
         request = _parse(raw)
     except Rejected as rejected:
         return error_reply(rejected.code, rejected.id, rejected.type)
+    if request.type == HOME_PROBLEMS_REQUEST:
+        return _problems_reply(request, snapshots)
     try:
         served = await (
             snapshots.home_online()
@@ -558,14 +640,38 @@ async def respond(raw: str, snapshots: SnapshotService) -> str:
         return error_reply(
             "collect_failed", request.id, request.type, type(exc).__name__
         )
+    reply: dict[str, object] = {
+        "v": PROTOCOL_VERSION,
+        "id": request.id,
+        "type": request.type,
+        "ok": True,
+        "cached": served.cached,
+        "age_seconds": round(served.age_seconds, 3),
+        "snapshot": served.snapshot.to_payload(),
+    }
+    # Only a reply that does not list every problem whole names where the rest is paged.
+    if served.snapshot.listed_problems() != served.snapshot.problems:
+        reply["problems_snapshot_id"] = served.snapshot_id
+    return encode(reply)
+
+
+def _problems_reply(request: _Request, snapshots: SnapshotService) -> str:
+    try:
+        text, next_offset, done = snapshots.problems_page(
+            request.snapshot_id, request.offset
+        )
+    except LookupError:
+        return error_reply("snapshot_expired", request.id, request.type)
+    except ValueError:
+        return error_reply("bad_request", request.id, request.type)
     return encode(
         {
             "v": PROTOCOL_VERSION,
             "id": request.id,
             "type": request.type,
             "ok": True,
-            "cached": served.cached,
-            "age_seconds": round(served.age_seconds, 3),
-            "snapshot": served.snapshot.to_payload(),
+            "text": text,
+            "next": next_offset,
+            "done": done,
         }
     )

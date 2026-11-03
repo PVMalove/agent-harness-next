@@ -18,15 +18,18 @@ from harness.console.repo_map import MapEdge, MapFile, RepoMapView
 from harness.console.repo_map_settings import MemoryStatus
 from harness.console.snapshots import (
     HOME_TTL_SECONDS,
+    KEPT_SNAPSHOTS,
     MAX_REQUEST_BYTES,
     PROTOCOL_VERSION,
     SCHEMA_VERSION,
     HomeContext,
     HomeSnapshot,
+    Problem,
     SnapshotService,
     build_home_snapshot,
     busy,
     collect_home,
+    problems_from_text,
     respond,
 )
 from harness.health.model import CheckResult
@@ -92,6 +95,7 @@ class Absent(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, Absent())
 sys.path.insert(0, sys.argv[1])
 from pathlib import Path
+from typing import Any
 from harness.console.snapshots import collect_home
 snapshot = collect_home(Path(sys.argv[2]))
 loaded = sorted(set(sys.modules) & {'rich', 'textual', 'h11', 'websockets'})
@@ -213,9 +217,13 @@ def test_problems_are_capped_and_the_reply_stays_below_the_message_limit() -> No
     )
     snapshot = build_home_snapshot(data, HomeContext())
     assert isinstance(snapshot, HomeSnapshot)
-    assert len(snapshot.problems) == 100 and snapshot.problems_total == 1000
-    assert all(len(problem.message) <= 300 for problem in snapshot.problems)
-    assert snapshot.problems[0].id == "check.0"
+    # The snapshot keeps every problem whole; what one reply carries is capped.
+    assert snapshot.problems == tuple(Problem(*problem) for problem in problems)
+    listed = _wire(snapshot)["problems"]
+    assert isinstance(listed, list)
+    assert len(listed) == 100 and snapshot.problems_total == 1000
+    assert all(len(problem["message"]) <= 300 for problem in listed)
+    assert listed[0]["id"] == "check.0"
     encoded = json.dumps(snapshot.to_payload(), ensure_ascii=False).encode()
     assert len(encoded) < MESSAGE_LIMIT
 
@@ -287,8 +295,13 @@ def test_a_clipped_message_is_a_prefix_of_the_original(raw: str) -> None:
         active_batches=None,
         problems=(("fail", "a.b", raw),),
     )
-    message = build_home_snapshot(data, HomeContext()).problems[0].message
+    snapshot = build_home_snapshot(data, HomeContext())
+    assert snapshot.problems[0].message == raw
+    message = snapshot.listed_problems()[0].message
     assert raw.startswith(message) and 0 < len(message) <= 300
+    assert _wire(snapshot)["problems"] == [
+        {"status": "fail", "id": "a.b", "message": message}
+    ]
 
 
 class FakeClock:
@@ -816,4 +829,160 @@ def test_a_failed_online_collect_is_an_error_reply() -> None:
         "home.snapshot",
         "collect_failed",
         "TimeoutError",
+    )
+
+
+def _many_problems(count: int, text: str) -> DashboardData:
+    return DashboardData(
+        ok=0,
+        warn=0,
+        fail=count,
+        skipped=0,
+        repo_map_tier="x",
+        harness_version="1",
+        drift_state="clean",
+        active_batches=None,
+        problems=tuple(("fail", f"check.{index}", text) for index in range(count)),
+    )
+
+
+def _page_all(service: SnapshotService, snapshot_id: int) -> tuple[list[str], str]:
+    """Every `home.problems` reply text for `snapshot_id`, and the joined page texts."""
+    from harness.console.server import MESSAGE_LIMIT
+
+    async def scenario() -> tuple[list[str], str]:
+        raws: list[str] = []
+        parts: list[str] = []
+        offset = 0
+        while True:
+            raw = await respond(
+                json.dumps(
+                    {
+                        "id": len(raws),
+                        "type": "home.problems",
+                        "snapshot_id": snapshot_id,
+                        "offset": offset,
+                    }
+                ),
+                service,
+            )
+            assert len(raw.encode("utf-8")) < MESSAGE_LIMIT
+            raws.append(raw)
+            reply = json.loads(raw.encode("utf-8"))
+            assert reply["ok"] is True and reply["id"] == len(raws) - 1
+            parts.append(reply["text"])
+            if reply["done"]:
+                return raws, "".join(parts)
+            assert reply["next"] > offset
+            offset = reply["next"]
+
+    return asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("char", ["я", '"', "\x01", "\ud800"])
+def test_problems_beyond_one_reply_are_paged_whole_below_the_message_limit(
+    char: str,
+) -> None:
+    data = _many_problems(1000, char * 500)
+    snapshot = build_home_snapshot(data, HomeContext())
+    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+    reply = json.loads(
+        asyncio.run(respond('{"id": 1, "type": "home.snapshot"}', service))
+    )
+    snapshot_id = reply["problems_snapshot_id"]
+    assert isinstance(snapshot_id, int) and not isinstance(snapshot_id, bool)
+    raws, text = _page_all(service, snapshot_id)
+    assert len(raws) > 1
+    assert problems_from_text(text) == snapshot.problems
+
+
+def test_a_long_message_alone_is_paged_whole() -> None:
+    snapshot = build_home_snapshot(_many_problems(1, "ё" * 400), HomeContext())
+    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+    reply = json.loads(asyncio.run(respond('{"type": "home.snapshot"}', service)))
+    assert reply["snapshot"]["problems"][0]["message"] != "ё" * 400
+    _raws, text = _page_all(service, reply["problems_snapshot_id"])
+    assert problems_from_text(text)[0].message == "ё" * 400
+
+
+def test_a_reply_listing_every_problem_whole_names_no_page() -> None:
+    reply = _ask('{"type": "home.snapshot"}')
+    assert "problems_snapshot_id" not in reply
+
+
+def test_an_online_snapshot_is_kept_for_its_problem_pages() -> None:
+    online = build_home_snapshot(_many_problems(150, "x"), HomeContext())
+    service = SnapshotService(
+        Path("."),
+        clock=FakeClock(),
+        collect=CountingCollect(),
+        collect_online=lambda _: online,
+    )
+    reply = json.loads(
+        asyncio.run(respond('{"type": "home.snapshot", "online": true}', service))
+    )
+    _raws, text = _page_all(service, reply["problems_snapshot_id"])
+    assert problems_from_text(text) == online.problems
+
+
+def test_a_snapshot_no_longer_kept_is_expired_and_the_cached_one_still_pages() -> None:
+    snapshot = build_home_snapshot(_many_problems(150, "x"), HomeContext())
+    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+
+    async def scenario() -> tuple[dict[str, object], dict[str, object]]:
+        first = json.loads(await respond('{"type": "home.snapshot"}', service))
+        for _ in range(KEPT_SNAPSHOTS):
+            await respond('{"type": "home.snapshot", "force": true}', service)
+        cached = json.loads(await respond('{"type": "home.snapshot"}', service))
+        expired = json.loads(
+            await respond(
+                json.dumps(
+                    {
+                        "id": 4,
+                        "type": "home.problems",
+                        "snapshot_id": first["problems_snapshot_id"],
+                        "offset": 0,
+                    }
+                ),
+                service,
+            )
+        )
+        return expired, cached
+
+    expired, cached = asyncio.run(scenario())
+    kept_id = cached["problems_snapshot_id"]
+    assert isinstance(kept_id, int)
+    assert _failure(expired)[:3] == (4, "home.problems", "snapshot_expired")
+    assert cached["cached"] is True
+    assert problems_from_text(_page_all(service, kept_id)[1]) == snapshot.problems
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {},
+        {"snapshot_id": 1},
+        {"offset": 0},
+        {"snapshot_id": True, "offset": 0},
+        {"snapshot_id": "1", "offset": 0},
+        {"snapshot_id": 1, "offset": -1},
+        {"snapshot_id": 1, "offset": False},
+        {"snapshot_id": 1, "offset": 10**9},
+    ],
+)
+def test_a_problem_page_with_a_missing_or_invalid_field_is_bad_request(
+    fields: dict[str, object],
+) -> None:
+    snapshot = build_home_snapshot(_many_problems(150, "x"), HomeContext())
+    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+
+    async def scenario() -> dict[str, object]:
+        await respond('{"type": "home.snapshot"}', service)
+        raw = json.dumps({"id": "p", "type": "home.problems", **fields})
+        return json.loads(await respond(raw, service))  # type: ignore[no-any-return]
+
+    assert _failure(asyncio.run(scenario()))[:3] == (
+        "p",
+        "home.problems",
+        "bad_request",
     )

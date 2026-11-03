@@ -17,6 +17,7 @@ from threading import Event
 import pytest
 
 pytest.importorskip("textual")
+from rich.text import Text
 from textual.widgets import Button, Collapsible, ListView, Static
 from textual.widgets._collapsible import CollapsibleTitle
 from textual.widgets._footer import FooterKey
@@ -631,13 +632,20 @@ def test_home_reads_the_server_snapshot_forced_offline_and_online(
     assert client.requests == [(False, False), (True, False), (False, True)]
 
 
-def test_the_attention_count_is_the_total_beyond_the_listed_problems(
+def test_every_problem_is_shown_in_full_however_many_and_however_long(
     project: Path,
 ) -> None:
-    problems = tuple(("fail", f"check.{index}", "broken") for index in range(130))
+    """What the Home screen at 8b5a609 showed for a project with more problems than one server
+    reply lists and a message longer than it carries: every row, each caption and the report in
+    full, and the count of all of them."""
+    long = "сообщение " * 120
+    problems = tuple(
+        ("fail", f"check.{index}", long if index == 120 else "broken")
+        for index in range(130)
+    )
     data = replace(DATA, fail=130, problems=problems)
 
-    async def scenario() -> tuple[str, int]:
+    async def scenario() -> tuple[str, list[str], str]:
         app = HarnessConsoleApp(project)
         async with app.run_test(size=WIDE) as pilot:
             home = DashboardScreen(
@@ -648,8 +656,19 @@ def test_the_attention_count_is_the_total_beyond_the_listed_problems(
             await app.switch_screen(home)
             await pilot.pause()
             card = home.query_one("#dashboard-attention-card", SectionCard)
-            return str(card.border_title), len(home.query(".problem-row"))
+            captions = [
+                str(row.query_one(".problem-caption", Static).content)
+                for row in home.query(".problem-row")
+            ]
+            summary = Text.from_markup(
+                str(home.query_one("#dashboard-summary", Static).content)
+            ).plain
+            return str(card.border_title), captions, summary
 
-    title, rows = asyncio.run(scenario())
+    title, captions, summary = asyncio.run(scenario())
     assert title == " ТРЕБУЕТ ВНИМАНИЯ  130 "
-    assert rows <= 100
+    assert len(captions) == 130
+    assert captions[120] == f"check.120 · {long}"
+    assert captions[129] == "check.129 · broken"
+    assert f"check.120 — {long}" in summary
+    assert "check.129 — broken" in summary

@@ -528,7 +528,7 @@ class DashboardScreen(ConsoleShell):
             )
             with SectionCard(
                 title="Требует внимания",
-                note=str(self._problems_total()),
+                note=str(len(data.problems)),
                 id="dashboard-attention-card",
                 classes="-alert" if data.problems else "",
             ):
@@ -620,10 +620,6 @@ class DashboardScreen(ConsoleShell):
         assert data is not None and banner is not None and snapshot is not None
         return _snapshot_facts(data, snapshot, banner, self.repo.name, self._language)
 
-    def _problems_total(self) -> int:
-        """How many problems there are; the snapshot lists at most `PROBLEMS_LIMIT` of them."""
-        return 0 if self._snapshot is None else self._snapshot.problems_total
-
     def _session_row(self, stage: reports.StageEntry) -> Table:
         return session_row(
             ticket=stage.ticket,
@@ -694,7 +690,7 @@ class DashboardScreen(ConsoleShell):
     def _render_attention(self, data: DashboardData) -> None:
         card = self.query_one("#dashboard-attention-card", SectionCard)
         card.set_class(bool(data.problems), "-alert")
-        card.set_note(str(self._problems_total()))
+        card.set_note(str(len(data.problems)))
         status = self.query_one("#dashboard-attention", Static)
         status.update(self._attention_status(data))
         status.display = not data.problems

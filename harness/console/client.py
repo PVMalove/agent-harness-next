@@ -11,10 +11,18 @@ from __future__ import annotations
 
 import json
 import threading
+from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 from .discovery import ServerEndpoint
-from .snapshots import HOME_REQUEST, PROTOCOL_VERSION, HomeSnapshot
+from .snapshots import (
+    HOME_PROBLEMS_REQUEST,
+    HOME_REQUEST,
+    PROTOCOL_VERSION,
+    HomeSnapshot,
+    Problem,
+    problems_from_text,
+)
 
 if TYPE_CHECKING:
     from websockets.sync.client import ClientConnection
@@ -112,21 +120,70 @@ class ConsoleClient:
         return cls(connection)
 
     def home(self, *, force: bool = False, online: bool = False) -> HomeSnapshot:
-        """The Home snapshot; `force` rebuilds the cached one, `online` runs the online checks."""
+        """The Home snapshot with every problem whole; `force` rebuilds the cached one, `online`
+        runs the online checks. Problems one reply does not list are read with `home.problems`."""
         with self._lock:
-            self._next_id += 1
-            request_id = self._next_id
-            reply = self._exchange(
+            reply = self._request(
+                {"type": HOME_REQUEST, "force": force, "online": online}
+            )
+            try:
+                snapshot = HomeSnapshot.from_payload(reply.get("snapshot"))
+            except ValueError:
+                raise MalformedReply("snapshot сервера консоли не по схеме") from None
+            if "problems_snapshot_id" not in reply:
+                return snapshot
+            snapshot_id = reply["problems_snapshot_id"]
+            if isinstance(snapshot_id, bool) or not isinstance(snapshot_id, int):
+                raise MalformedReply("ответ сервера консоли без id списка проблем")
+            problems = self._problems(snapshot_id)
+        if len(problems) != snapshot.problems_total:
+            raise MalformedReply("список проблем сервера консоли неполон")
+        return replace(snapshot, problems=problems)
+
+    def _problems(self, snapshot_id: int) -> tuple[Problem, ...]:
+        """Every problem of the served snapshot `snapshot_id`, page by page."""
+        parts: list[str] = []
+        offset = 0
+        while True:
+            reply = self._request(
                 {
-                    "id": request_id,
-                    "type": HOME_REQUEST,
-                    "force": force,
-                    "online": online,
+                    "type": HOME_PROBLEMS_REQUEST,
+                    "snapshot_id": snapshot_id,
+                    "offset": offset,
                 }
             )
+            text, next_offset, done = (
+                reply.get("text"),
+                reply.get("next"),
+                reply.get("done"),
+            )
+            if (
+                not isinstance(text, str)
+                or not isinstance(done, bool)
+                or isinstance(next_offset, bool)
+                or not isinstance(next_offset, int)
+            ):
+                raise MalformedReply("страница проблем сервера консоли не по схеме")
+            # A page that does not move on would be asked for again forever.
+            if not done and next_offset <= offset:
+                raise MalformedReply("страница проблем сервера консоли пуста")
+            parts.append(text)
+            if done:
+                break
+            offset = next_offset
+        try:
+            return problems_from_text("".join(parts))
+        except ValueError:
+            raise MalformedReply("список проблем сервера консоли не по схеме") from None
+
+    def _request(self, body: dict[str, object]) -> dict[str, object]:
+        """The successful reply to one request; the caller holds the lock."""
+        self._next_id += 1
+        request_id = self._next_id
+        reply = self._exchange({"id": request_id, **body})
         if reply.get("v") != PROTOCOL_VERSION:
             raise MalformedReply("ответ сервера консоли другой версии протокола")
-        if reply.get("id") != request_id or reply.get("type") != HOME_REQUEST:
+        if reply.get("id") != request_id or reply.get("type") != body["type"]:
             raise MalformedReply("ответ сервера консоли не на этот запрос")
         ok = reply.get("ok")
         if ok is False:
@@ -139,10 +196,7 @@ class ConsoleClient:
             raise ServerError(code, message)
         if ok is not True:
             raise MalformedReply("ответ сервера консоли без признака ok")
-        try:
-            return HomeSnapshot.from_payload(reply.get("snapshot"))
-        except ValueError:
-            raise MalformedReply("snapshot сервера консоли не по схеме") from None
+        return reply
 
     def _exchange(self, request: dict[str, object]) -> dict[str, object]:
         from websockets.exceptions import ConnectionClosed
