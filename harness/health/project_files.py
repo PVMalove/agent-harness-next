@@ -27,6 +27,8 @@ from .model import JsonObject
 REGISTRY_REL = Path(".harness/skills/REGISTRY.md")
 LOCK_REL = Path(".harness/harness.lock")
 INTEGRATIONS_REL = Path(".harness/integrations.json")
+# Effective hook policy, ADR 0024 section 3: written only by `harness init|adopt|update`.
+HOOK_POLICY_REL = Path(".harness/hook-policy.json")
 DISCOVERY_LINKS = {
     ".agents/skills": "../.harness/skills",
     ".claude/skills": "../.harness/skills",

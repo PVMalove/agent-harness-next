@@ -21,6 +21,7 @@ from harness.runtime_adapters import ADAPTER_ROOT, adapter_problem
 from harness.health.hook_settings import ADAPTERS
 from harness.health.project_files import (
     DISCOVERY_LINKS,
+    HOOK_POLICY_REL,
     LOCK_REL,
     REGISTRY_REL,
     native_link_target,
@@ -48,6 +49,7 @@ _NO_BACKUP_PREFIXES = (".sandboxes/", ".venv/")
 _NO_BACKUP_FILES = {
     LOCK_REL.relative_to(HARNESS_DIR).as_posix(),
     REGISTRY_REL.relative_to(HARNESS_DIR).as_posix(),
+    HOOK_POLICY_REL.relative_to(HARNESS_DIR).as_posix(),
     ".gitignore",
     "orchestration.example.json",
 }
