@@ -1292,3 +1292,70 @@ def test_expensive_checks_are_not_rerun_within_the_ttl_and_force_rebuilds(
     assert (after["cached"], after["age_seconds"]) == (False, 0.0)
     assert (forced["cached"], forced["age_seconds"]) == (False, 0.0)
     assert runs == 3
+
+
+def test_pending_decisions_are_answered_beside_the_home_snapshot(
+    project: Path,
+) -> None:
+    from harness.console.decisions import (
+        DecisionItem,
+        DecisionService,
+        DecisionsSnapshot,
+    )
+
+    item = DecisionItem(
+        kind="batch-approval",
+        batch_id="batch-1",
+        dispatch_id=None,
+        ticket="#1",
+        role=None,
+        reversibility="terminal-coordinator-action",
+        command_ids=["batch-approve"],
+        values={"batch": "batch-1"},
+    )
+    reads: list[Path] = []
+
+    def fake(repo: Path) -> DecisionsSnapshot:
+        reads.append(repo)
+        return DecisionsSnapshot(items=(item,), total=1)
+
+    async def scenario() -> None:
+        server = ConsoleServer(
+            project,
+            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+            decisions=DecisionService(project, collect=fake),
+        )
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(json.dumps({"id": "d", "type": "decisions.snapshot"}))
+                reply = json.loads(await asyncio.wait_for(client.recv(), 5))
+                assert (reply["id"], reply["type"], reply["ok"]) == (
+                    "d",
+                    "decisions.snapshot",
+                    True,
+                )
+                [listed] = reply["snapshot"]["items"]
+                assert listed["command_ids"] == ["batch-approve"]
+                assert listed["values"] == {"batch": "batch-1"}
+                await client.send(
+                    json.dumps({"id": "x", "type": "decisions.snapshot", "force": True})
+                )
+                reply = json.loads(await asyncio.wait_for(client.recv(), 5))
+                assert reply["error"]["code"] == "bad_request"
+                await client.send(_request("h"))
+                reply = json.loads(await asyncio.wait_for(client.recv(), 5))
+                assert (reply["id"], reply["ok"]) == ("h", True)
+                assert "snapshot" in reply and "harness_version" in reply["snapshot"]
+        finally:
+            await server.close()
+        assert reads == [project.resolve()]
+
+    asyncio.run(scenario())
+
+
+def test_a_server_without_an_injected_decision_service_reads_its_own_project(
+    project: Path,
+) -> None:
+    server = ConsoleServer(project)
+    assert server._decisions.repo == project.resolve()
