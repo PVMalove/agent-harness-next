@@ -106,6 +106,59 @@ def test_a_repeated_migrate_reports_already_cut_over_and_changes_no_byte(
     assert tree(tmp_path / STATE_REL, skip=("runtime.db-",)) == before
 
 
+def test_the_cutover_records_the_approval_in_the_anchor_and_in_authority(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+    approval = _approval(
+        approved_by="Rina", approved_at="2026-10-30T08:15:00+00:00", reason="release 2.0 cutover"
+    )
+    expected = {
+        "approved_by": "Rina",
+        "approved_at": "2026-10-30T08:15:00+00:00",
+        "reason": "release 2.0 cutover",
+    }
+
+    result = migrate(tmp_path, approval=approval)
+
+    assert result.returncode == 0, result.stderr
+    with closing(_store(tmp_path)) as store:
+        (details,) = store.execute(
+            "SELECT details_json FROM audit WHERE seq = 1 AND action = 'legacy-import'"
+        ).fetchone()
+    anchor = json.loads(details)
+    assert {key: anchor[key] for key in expected} == expected
+    authority = load(tmp_path / STATE_REL / "AUTHORITY.json")
+    assert {key: authority[key] for key in expected} == expected
+
+
+def test_a_repeat_with_another_approval_is_already_cut_over_and_records_nothing(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+    first = migrate(tmp_path)
+    assert first.returncode == 0, first.stderr
+    before = tree(tmp_path / STATE_REL, skip=("runtime.db-",))
+    with closing(_store(tmp_path)) as store:
+        audit_before = store.execute("SELECT * FROM audit ORDER BY seq").fetchall()
+
+    again = migrate(
+        tmp_path,
+        approval=_approval(approved_by="Rina", reason="a second cutover of the same state"),
+    )
+    unapproved = migrate(tmp_path, approval=())
+
+    assert again.returncode == 0, again.stderr
+    report = json.loads(again.stdout)
+    assert report["already_cut_over"] is True
+    assert unapproved.returncode == 2
+    assert "[malformed_request]" in unapproved.stderr
+    assert load(tmp_path / STATE_REL / "AUTHORITY.json")["approved_by"] == "Malove"
+    with closing(_store(tmp_path)) as store:
+        assert store.execute("SELECT * FROM audit ORDER BY seq").fetchall() == audit_before
+    assert tree(tmp_path / STATE_REL, skip=("runtime.db-",)) == before
+
+
 def test_a_working_dispatch_refuses_with_exit_code_2_and_a_remedy(tmp_path: Path) -> None:
     build_state(tmp_path, second_status=DispatchState.WORKING)
     before = tree(tmp_path / STATE_REL)
