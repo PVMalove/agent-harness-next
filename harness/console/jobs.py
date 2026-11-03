@@ -8,6 +8,11 @@ cursor; ``done`` means execution and replay ended. Subscriptions own no executio
 a bounded output, and ``truncated`` marks the cut. Jobs live until server exit, except that only
 the newest finished ones are kept.
 
+Human decisions are ordinary commands with the same confirmation, slot and journal: coordinator
+decisions (``batch-approve``, ``batch-decide``, ``batch-attention-resolve``, ``dispatch-propose``
+then ``dispatch-create``) and native permission answers (``native-permission-allow`` or
+``native-permission-deny``). The coordinator and the runtime recheck every decision.
+
 The optional ``client`` identifies the initiating surface as ``tui`` or ``browser``; older
 clients without it are recorded as ``unknown``. Completed, failed and cancelled jobs append a
 record to the project-local ``.harness/console/commands.jsonl`` journal. A missing exit code is null.
@@ -37,6 +42,7 @@ from typing import Literal, NamedTuple, Protocol, cast
 
 from .catalog import HARNESS_COMMANDS, MEMORY_COMMANDS, CatalogEntry, process_argv
 from .coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand
+from .native_permission import NATIVE_PERMISSION_COMMANDS, DecisionCommand
 from .process_tree import CommandCancelled
 from .discovery import discovery_path
 from .runner import capturing_runner
@@ -239,10 +245,11 @@ class JobService:
     ) -> None:
         self.repo = repo.resolve()
         self._executor = executor
-        entries: tuple[CatalogEntry | CoordinatorCommand, ...] = (
+        entries: tuple[CatalogEntry | CoordinatorCommand | DecisionCommand, ...] = (
             *HARNESS_COMMANDS,
             *MEMORY_COMMANDS,
             *COORDINATOR_COMMANDS,
+            *NATIVE_PERMISSION_COMMANDS,
         )
         self._catalog = {entry.key: entry for entry in entries}
         self._jobs: dict[str, _Job] = {}

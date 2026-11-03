@@ -47,6 +47,7 @@ MINIMAL_VALUES = {
         "approved_at": "now",
     },
     "batch-decision-packet": {"batch": "batch-1"},
+    "dispatch-propose": {"batch": "batch-1"},
     "dispatch-create": {"batch": "batch-1"},
     "dispatch-cancel": {
         "dispatch": "dispatch-1",
@@ -88,6 +89,7 @@ EXPECTED_HANDLER = {
     "batch-abandon": "abandon_batch",
     "batch-decide": "decide_batch",
     "batch-decision-packet": "decision_packet",
+    "dispatch-propose": "create_dispatch",
     "dispatch-create": "create_dispatch",
     "dispatch-cancel": "cancel_dispatch",
     "dispatch-send": "send_dispatch",
@@ -110,6 +112,7 @@ EXPECTED_REVERSIBILITY = {
     "batch-abandon": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "batch-decide": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "batch-decision-packet": Reversibility.REVERSIBLE,
+    "dispatch-propose": Reversibility.REVERSIBLE,
     "dispatch-create": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "dispatch-cancel": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "dispatch-send": Reversibility.EXTERNAL_CHANGE,
@@ -238,3 +241,16 @@ def test_value_less_flag_is_passed_alone_only_when_set() -> None:
     assert open_field.default is None
     assert entry.cli_argv(REPO, {"open": "1"})[-1] == "--open"
     assert "--open" not in entry.cli_argv(REPO, {"open": ""})
+
+
+def test_dispatch_propose_renders_the_transition_without_an_approval() -> None:
+    """The first step of a dispatch approval parses as a proposal and takes no approval fields."""
+    entry = ENTRIES["dispatch-propose"]
+    assert not entry.read_only
+    assert not {"approved_by", "approved_at", "transition_digest"} & {
+        field.dest for field in entry.fields
+    }
+    argv = entry.cli_argv(REPO, {"batch": "batch-1", "role": "developer"})
+    args = coordinator.parser().parse_args(argv[4:])
+    assert args.propose is True
+    assert args.role == "developer"
