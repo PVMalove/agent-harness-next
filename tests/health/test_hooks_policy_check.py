@@ -424,6 +424,51 @@ def test_update_clears_the_policy_file_drift(repo: Path) -> None:
     assert POLICY_FILE not in check(repo)["message"]
 
 
+# A lone surrogate passes hook_policy_problems and JSON, but has no UTF-8 form: the resolver
+# refuses it (PolicyError), and the hooks keep the configured profile.
+UNENCODABLE_POLICY: JsonObject = {
+    "profile": "minimal",
+    "escalations": [{"profile": "standard", "paths": ["a\ud800b"]}],
+}
+UNENCODABLE_PROBLEM = (
+    ".harness/project.json hook_policy text cannot be encoded as UTF-8: "
+    "surrogates not allowed"
+)
+
+
+@pytest.mark.parametrize("policy_file", ["kept", "removed"])
+def test_a_hook_policy_without_a_utf8_form_fails_with_the_resolver_problem(
+    repo: Path, policy_file: str
+) -> None:
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = UNENCODABLE_POLICY
+    save(repo, PROJECT_JSON, project)
+    if policy_file == "removed":
+        (repo / POLICY_FILE).unlink()
+
+    result = check(repo)
+
+    message = result["message"]
+    assert result["status"] == "fail"
+    assert UNENCODABLE_PROBLEM in message
+    assert "применяют strict" not in message
+    assert "профиль standard (.harness/project.json; базовый minimal)" in message
+    assert "эскалации: standard: paths=a\\ud800b" in message
+
+
+def test_a_standalone_run_message_has_a_utf8_form(repo: Path) -> None:
+    from harness.health import registry
+
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = UNENCODABLE_POLICY
+    save(repo, PROJECT_JSON, project)
+
+    report = registry.run(repo)
+
+    result = next(c for c in report.checks if c.id == "hooks.policy")
+    result.message.encode("utf-8")
+
+
 def test_standalone_run_reports_a_missing_policy_file(repo: Path) -> None:
     from harness.health import registry
 
