@@ -9,7 +9,9 @@ Request: ``{id, type: "orchestration.subscribe", cursor?}``. Without a cursor th
 the head. Replies carry ``kind``: ``source`` (always first, then on every change of the source
 state) or ``events`` (a non-empty batch with the cursor of its last event). A cursor is
 ``<journal>-<seq>``; a subscription with cursor ``c`` gets exactly the events with ``seq > c``, in
-order. Event types: ``batch.transition``, ``dispatch.transition``, ``gate.decision``, ``qa.run``
+order. Events are served only after the console-owned journal (``event_journal.py``) has them on
+disk, so a cursor survives a restart of the server; the first poll after a restart appends the
+changes made while no server ran. Event types: ``batch.transition``, ``dispatch.transition``, ``gate.decision``, ``qa.run``
 and ``qa.attempt``.
 
 Standard library and harness only: nothing here imports ``h11`` or ``websockets``.
@@ -18,7 +20,6 @@ Standard library and harness only: nothing here imports ``h11`` or ``websockets`
 from __future__ import annotations
 
 import asyncio
-import secrets
 from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -28,6 +29,8 @@ from typing import Protocol
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.ledger.lifecycle import JsonObject, LifecycleLedger
 
+from .discovery import discovery_path
+from .event_journal import Event, EventJournal, JournalUnavailable, View
 from .json_fields import text
 from .snapshots import (
     ID_BYTES,
@@ -45,9 +48,10 @@ ORCHESTRATION_SUBSCRIBE = "orchestration.subscribe"
 POLL_INTERVAL_SECONDS = 1.0
 _BATCH_EVENTS = 32
 _FIELDS = frozenset({"id", "type", "cursor"})
-
-type View = dict[str, object]
-type Event = dict[str, object]
+JOURNAL_NAME = "orchestration-events.jsonl"
+_EXPIRED = (
+    "The cursor is older than the kept events: read the snapshot and subscribe again."
+)
 
 
 @dataclass(frozen=True)
@@ -353,7 +357,7 @@ def _parse_cursor(value: str) -> tuple[str, int] | None:
 
 
 class OrchestrationEvents:
-    """Owns the poller, the event sequence and the source state of one console server."""
+    """Owns the poller, the event journal and the source state of one console server."""
 
     def __init__(
         self,
@@ -361,13 +365,13 @@ class OrchestrationEvents:
         *,
         reader: OrchestrationReader | None = None,
         interval: float = POLL_INTERVAL_SECONDS,
+        journal_path: Path | None = None,
     ) -> None:
         self.repo = repo.resolve()
         self._reader = reader or ProjectReader(self.repo)
         self._interval = interval
-        self._journal = secrets.token_hex(8)
-        self._events: list[Event] = []
-        self._view: View | None = None
+        self._journal_path = journal_path
+        self._journal: EventJournal | None = None
         self._source: dict[str, object] = {
             "state": "unavailable",
             "store": None,
@@ -378,10 +382,6 @@ class OrchestrationEvents:
         self._task: asyncio.Task[None] | None = None
         self._first_poll = asyncio.Event()
         self._next_change = asyncio.Event()
-
-    @property
-    def head(self) -> int:
-        return int(self._events[-1]["seq"]) if self._events else 0  # type: ignore[call-overload]
 
     def _notify(self) -> None:
         previous, self._next_change = self._next_change, asyncio.Event()
@@ -399,21 +399,64 @@ class OrchestrationEvents:
         }
         self._notify()
 
+    def _path(self) -> Path:
+        if self._journal_path is None:
+            self._journal_path = discovery_path(self.repo).with_name(JOURNAL_NAME)
+        return self._journal_path
+
+    async def _opened(self) -> EventJournal | None:
+        """The loaded journal; a journal that cannot be loaded is tried again on the next poll."""
+        if self._journal is None:
+            try:
+                path = await asyncio.to_thread(self._path)
+                journal = EventJournal(path, str((self.repo / STATE_REL).resolve()))
+                await asyncio.to_thread(journal.load)
+            except (JournalUnavailable, OSError, ValueError):
+                return None
+            self._journal = journal
+            self._notify()
+        return self._journal
+
     async def _poll(self) -> None:
+        journal = await self._opened()
+        if journal is None:
+            return
         try:
             observation = await asyncio.to_thread(self._reader.read)
         except Exception:
             return
         view = compact(observation)
-        if self._view is not None:
-            observed_at = _now()
-            for event in diff(self._view, observation):
-                self._events.append(
-                    {"seq": self.head + 1, "observed_at": observed_at, **event}
-                )
-        self._view = view
+        observed_at = _now()
+        events = [
+            {"seq": journal.head + offset, "observed_at": observed_at, **event}
+            for offset, event in enumerate(
+                diff(journal.view, observation) if journal.view is not None else [],
+                start=1,
+            )
+        ]
+        line = journal.record(events, view)
+        if line is not None:
+            try:
+                await asyncio.to_thread(journal.write, line)
+            except JournalUnavailable:
+                # The view stays where it was, so the next poll writes the same events again.
+                self._drop(journal)
+                return
+            journal.accept(events, view)
+            if journal.needs_compaction():
+                try:
+                    await asyncio.to_thread(journal.rewrite, journal.checkpoint())
+                    journal.compacted()
+                except JournalUnavailable:
+                    # The records are on disk already; a broken file is reloaded from it.
+                    self._drop(journal)
         self._set_source("available", observation.store)
         self._notify()
+
+    def _drop(self, journal: EventJournal) -> None:
+        journal.close()
+        if self._journal is journal:
+            self._journal = None
 
     async def _run(self) -> None:
         while True:
@@ -426,17 +469,19 @@ class OrchestrationEvents:
             self._task = asyncio.create_task(self._run())
         await self._first_poll.wait()
 
-    def _position(self, body: Mapping[str, object]) -> int:
-        cursor = body.get("cursor")
+    @staticmethod
+    def _position(journal: EventJournal, cursor: object) -> int:
         if cursor is None:
-            return self.head
-        if not isinstance(cursor, str):
-            raise _Subscribe("bad_request")
-        parsed = _parse_cursor(cursor)
-        if parsed is None or parsed[1] > self.head:
+            return journal.head
+        parsed = _parse_cursor(cursor) if isinstance(cursor, str) else None
+        if parsed is not None and parsed[0] != journal.journal_id:
+            raise _Subscribe("cursor_expired", _EXPIRED)
+        if parsed is None or parsed[1] > journal.head:
             raise _Subscribe(
                 "invalid_cursor", "The cursor is not a cursor of this stream."
             )
+        if parsed[1] < journal.floor:
+            raise _Subscribe("cursor_expired", _EXPIRED)
         return parsed[1]
 
     async def replies(self, raw: str) -> AsyncGenerator[str, None]:
@@ -455,28 +500,37 @@ class OrchestrationEvents:
             if set(body) - _FIELDS or not isinstance(body.get("cursor", ""), str):
                 raise _Subscribe("bad_request")
             await self._started()
-            position = self._position(body)
+            while (journal := self._journal) is None:
+                await self._next_change.wait()
+            position = self._position(journal, body.get("cursor"))
             sent_source: dict[str, object] | None = None
             while True:
                 next_change = self._next_change
+                current = self._journal
+                if current is not None and current is not journal:
+                    if current.journal_id != journal.journal_id:
+                        raise _Subscribe("cursor_expired", _EXPIRED)
+                    journal = current
+                if position < journal.floor:
+                    raise _Subscribe("cursor_expired", _EXPIRED)
                 if self._source is not sent_source:
                     sent_source = self._source
                     yield encode(
                         {
                             **envelope,
                             "kind": "source",
-                            "cursor": f"{self._journal}-{position}",
+                            "cursor": f"{journal.journal_id}-{position}",
                             "source": sent_source,
                         }
                     )
-                batch = self._events[position : position + _BATCH_EVENTS]
+                batch = journal.events_after(position, _BATCH_EVENTS)
                 if batch:
-                    position = int(batch[-1]["seq"])  # type: ignore[call-overload]
+                    position += len(batch)
                     yield encode(
                         {
                             **envelope,
                             "kind": "events",
-                            "cursor": f"{self._journal}-{position}",
+                            "cursor": f"{journal.journal_id}-{position}",
                             "events": batch,
                         }
                     )
@@ -490,6 +544,8 @@ class OrchestrationEvents:
         if self._task is not None:
             self._task.cancel()
             await asyncio.gather(self._task, return_exceptions=True)
+        if self._journal is not None:
+            self._drop(self._journal)
 
 
 def is_orchestration_request(raw: str) -> bool:
