@@ -106,7 +106,9 @@ jobs:
     # the suite no longer executes twice in one job.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The full measured suite exceeded 60 minutes at 67% on a hosted runner (#943).
+    # Keep every test and the coverage threshold; allow for instrumentation overhead.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
