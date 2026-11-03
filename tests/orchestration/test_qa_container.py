@@ -565,7 +565,7 @@ def test_the_runs_share_one_sidecar_and_network_and_mount_the_pinned_cache(
     calls = repo.engine.calls()
     runs = repo.engine.runs()
     assert len(runs) == 3
-    assert len([c for c in calls if c[1:3] == ["network", "create"]]) == 1
+    assert len([c for c in calls if c[1:3] == ["network", "create"]]) == 2
     assert len([c for c in calls if c[1] == "create" and "--name" in c]) == 1
     networks = {tuple(_flag(run, "--network")) for run in runs}
     assert len(networks) == 1 and networks != {("none",)}

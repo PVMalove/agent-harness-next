@@ -10,6 +10,7 @@ and removed by the calls that make them, so a test scripts a worker's exit inste
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import sys
@@ -152,8 +153,10 @@ def _find(state: State, kind: str | None, wanted: str) -> State | None:
     )
 
 
-def _describe(item: State) -> State:
+def _describe(item: State, binary: str) -> State:
     if item["kind"] == "network":
+        if binary == "podman":
+            return {"id": item["id"], "name": item["name"], "labels": item["labels"]}
         return {"Id": item["id"], "Name": item["name"], "Labels": item["labels"]}
     exited = item["status"] == "exited"
     return {
@@ -209,13 +212,15 @@ def _answer(state: State, argv: list[str]) -> tuple[int, str, str]:
         if any(item is None for item in found):
             missing = ids[found.index(None)]
             return 1, "", f"Error: no such object: {missing}"
-        described = [_describe(item) for item in found if item is not None]
+        described = [_describe(item, str(state["binary"])) for item in found if item is not None]
         if verb == "inspect":
-            return 0, described[0]["Id"] + "\n", ""
+            return 0, str(described[0].get("Id", described[0].get("id"))) + "\n", ""
         return 0, json.dumps(described[0] if formatted else described) + "\n", ""
     if verb == "create" or kind == "network-create":
         name = argv[argv.index("--name") + 1] if verb == "create" else argv[-1]
         object_id = NETWORK_ID if verb == "network" else (PROXY_ID if name.endswith("-proxy") else WORKER_ID)
+        if verb == "network" and name.endswith("-egress-net"):
+            object_id = hashlib.sha256(name.encode()).hexdigest()
         state["objects"][object_id] = {
             "kind": "network" if verb == "network" else "container", "id": object_id,
             "name": name, "labels": _labels(argv), "status": "created", "exit_code": 0,
