@@ -112,11 +112,14 @@ Operational state живёт ровно в одной эпохе:
 - Инкрементальная проверка (замена кэша #778 в эпохе store): Rust хранит
   `audit_checkpoint(seq, chain_sha256)` и при обычной команде проверяет только записи после
   checkpoint. `ledger validate --full` пересчитывает цепочку от genesis и сверяет её с якорем
-  импорта (ниже). Кэш не является источником истины: удалённый checkpoint означает полную проверку.
+  импорта (ниже), а approval якоря — с `AUTHORITY.json`: approver — человек, не `policy:`, и все
+  три поля совпадают. Кэш не является источником истины: удалённый checkpoint означает полную
+  проверку.
 - **Legacy audit не переписывается.** Миграция импортирует каждый файл `audit/*.json` и
   `lock-audit/*.json` побайтно в таблицу `legacy_audit(path, bytes, sha256, record_sha256_valid)`
   и строит `import_manifest` — отсортированный по пути список `(path, sha256)` с итоговым
-  `manifest_sha256`. Первая запись новой цепочки — `legacy-import` с этим `manifest_sha256`;
+  `manifest_sha256`. Первая запись новой цепочки — `legacy-import` с этим `manifest_sha256` и
+  human approval cutover-а (`approved_by`, `approved_at`, `reason`);
   манифест также сохраняется файлом рядом со снимком (раздел 5). Так история становится
   проверяемой на полноту с момента импорта, хотя до импорта цепочки не было; удаление legacy-файла
   до миграции этим не обнаруживается, что фиксируется как известное ограничение.
@@ -126,11 +129,16 @@ Operational state живёт ровно в одной эпохе:
 
 ### 5. Миграция, cutover и откат
 
-Команда `harness-runtime migrate --repo <repo>` выполняет cutover одной операцией:
+Команда `harness-runtime migrate --repo <repo> --approved-by <human> --approved-at <RFC 3339>
+--reason <text>` выполняет cutover одной операцией с human approval:
 
-1. **Предусловия** (нарушение — код 2, ничего не изменено): нет живого QA-lease и записей
-   очереди QA; нет dispatch в `sent`/`working` с живым worker-ом; `ledger validate` проходит;
-   Rust store отсутствует или в состоянии `importing` от прерванной попытки.
+1. **Approval и предусловия** (нарушение — код 2, ничего не изменено). Approval проверяется
+   первым, до определения эпохи, тем же правилом и с теми же кодами, что шаг 1 отката:
+   `--approved-by`, `--approved-at` и `--reason` не пустые (иначе `malformed_request`), approver
+   с префиксом `policy:` отклоняется (`policy_denied`), `--approved-at` — время RFC 3339 не в
+   будущем. Затем предусловия: нет живого QA-lease и записей очереди QA; нет dispatch в
+   `sent`/`working` с живым worker-ом; `ledger validate` проходит; Rust store отсутствует или в
+   состоянии `importing` от прерванной попытки.
 2. **Захват legacy-замка** по существующему протоколу (`owner.json` с `operation:
    runtime-cutover`) плюс удержание flock на файле внутри `.coordinator.lock/` на всё время
    операции (критерии #777, реализация в Rust-мигратор). Живой
@@ -139,7 +147,9 @@ Operational state живёт ровно в одной эпохе:
 3. **Снимок**: копия state-каталога в `.harness/orchestration/state-snapshots/<utc>/` и
    `snapshot-manifest.json` (sha256 каждого файла), `fsync` файлов и каталога.
 4. **Импорт** в `state/runtime.db.importing`: выбранное поколение → таблицы; остальные
-   поколения → `legacy_generation` только для чтения; legacy audit → раздел 4. Исторически
+   поколения → `legacy_generation` только для чтения; legacy audit → раздел 4; запись
+   `legacy-import` несёт `manifest_sha256` и approval (`approved_by`, `approved_at`, `reason`) в
+   той же транзакции импорта. Исторически
    невалидные состояния чинит детерминированный repair с audit-записью `migration-repair`
    (`before_sha256`, `after_sha256`, правило). Первое правило — #781: batch с
    `risk_reassessment_required = true` без `risk_reassessment_candidate` получает
@@ -151,18 +161,21 @@ Operational state живёт ровно в одной эпохе:
    `qa status`) проверяется не здесь, а golden-тестом в CI: фикстура state-каталога 1.x даёт те же
    ответы CLI 1.x до импорта и CLI 2.0.0 после импорта.
 6. **Точка фиксации**: `rename(runtime.db.importing → runtime.db)`, `fsync` каталога, запись
-   `state/AUTHORITY.json` (`authority`, `store_id`, `manifest_sha256`, `snapshot`, `cutover_at`),
-   затем замена `ledger.json` на `version: 4` через `os.replace`. Запись указателя — commit point.
+   `state/AUTHORITY.json` (`authority`, `store_id`, `manifest_sha256`, `snapshot`, `cutover_at`,
+   а также `approved_by`, `approved_at`, `reason` из approval), затем замена `ledger.json` на
+   `version: 4` через `os.replace`. Запись указателя — commit point.
 7. Снятие legacy-замка.
 
 **Идемпотентность и сбои.** Сбой до шага 6 оставляет authority у файлового ledger; повторный
 `migrate` удаляет `runtime.db.importing` и начинает заново. Повтор после шага 6 при совпадающем
-`manifest_sha256` возвращает 0 и `already_cut_over: true`. Если legacy-каталог изменился после
+`manifest_sha256` проверяет approval (без approval — код 2), возвращает 0 и
+`already_cut_over: true` и approval не записывает: запись `legacy-import` и `AUTHORITY.json`
+хранят approval cutover-а. Если legacy-каталог изменился после
 снимка (нарушение замка), `migrate` останавливается с кодом 4 и не фиксирует cutover.
 
 Коды выхода `harness-runtime migrate|rollback`: 0 — выполнено или уже выполнено; 2 — отказ по
-предусловию, состояние не изменено; 3 — прервано после начала, частичный store отброшен,
-authority прежняя; 4 — нарушение инварианта, требуется оператор (legacy изменён во время
+approval или предусловию, состояние не изменено; 3 — прервано после начала, частичный store
+отброшен, authority прежняя; 4 — нарушение инварианта, требуется оператор (legacy изменён во время
 операции, расхождение паритета).
 
 **Откат** (`harness-runtime rollback --to-legacy`, human approval с `--approved-by`,
@@ -210,7 +223,9 @@ authority прежняя; 4 — нарушение инварианта, тре�
    `approved_by`, `approved_at`, `reason`), checkpoint WAL, `runtime.db` переводится в read-only и
    не удаляется.
 8. **`AUTHORITY.json`**: `authority: file-ledger`, `rolled_back_from: <store_id>`, `generation`,
-   `export`, `export_sha256`, `rolled_back_at` и поля cutover.
+   `export`, `export_sha256`, `rolled_back_at` и поля cutover `store_id`, `manifest_sha256`,
+   `snapshot`, `cutover_at`. Approval cutover-а остаётся в записи `legacy-import` read-only
+   `runtime.db`.
 9. **`ledger.json`** заменяется на `{version: 3, generation: <новое>, selected_at}` — commit point.
 
 **Повторы.** Повтор после шага 9 возвращает код 0 и `already_rolled_back`. Повтор, который застал
