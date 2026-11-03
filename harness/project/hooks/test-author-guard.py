@@ -31,6 +31,10 @@ TARGET_AGENT = "test-author"
 AGENT_RELATIVE = Path(".claude/agents/test-author.md")
 RUNNER_RELATIVE = Path(".claude/hooks/run-test.sh")
 SHELL_META = frozenset(";|&<>$`\\\n\r")
+PATCH_UNPARSEABLE = (
+    "patch_unparseable: send one *** Begin Patch ... *** End Patch patch with "
+    "*** Add File:/*** Update File:/*** Delete File: headers inside test_paths"
+)
 
 
 class GuardRefusal(Exception):
@@ -308,7 +312,7 @@ def _patch_targets(payload: dict[str, object]) -> list[str]:
     try:
         return apply_patch_payload.targets(apply_patch_payload.operations(payload))
     except apply_patch_payload.PatchError:
-        raise GuardRefusal("malformed_payload") from None
+        raise GuardRefusal(PATCH_UNPARSEABLE) from None
 
 
 def _valid_test_id(value: object) -> bool:

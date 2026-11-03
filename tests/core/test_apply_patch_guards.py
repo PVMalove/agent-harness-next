@@ -406,3 +406,85 @@ def test_the_test_author_guard_decides_each_patch_path_like_a_write(
         _author(project, "Write", {"file_path": write_path, "content": "x"}, project)
         == expected
     )
+
+
+UNPARSEABLE = (2, "block", "apply-patch-unparseable")
+BROKEN_PATCHES = [
+    "*** Add File: a.md\n+x\n",
+    "*** Begin Patch\n*** Add File: \n+x\n*** End Patch",
+    "*** Begin Patch\n*** Update File: docs/note.md\n*** End Patch",
+    "*** Begin Patch\n*** Add File: docs/tasks/a.md\n+x\n*** End Patch\nrm -rf /",
+]
+
+
+def _remedy(project: Path, hook_id: str, tool_input: dict[str, object]) -> str:
+    payload = {
+        "tool_name": "apply_patch",
+        "cwd": str(project),
+        "tool_input": tool_input,
+    }
+    env = {
+        key: value for key, value in os.environ.items() if key != "CLAUDE_PROJECT_DIR"
+    }
+    done = subprocess.run(
+        [str(BASH), str(project / ".claude" / "hooks" / f"{hook_id}.sh")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=project,
+        check=False,
+        timeout=60,
+    )
+    verdict = parse_hook_response(done.stderr)
+    assert (done.returncode, verdict["decision"], verdict["reason_code"]) == UNPARSEABLE
+    return str(verdict["remedy"])
+
+
+@pytest.mark.parametrize(
+    "hook_id", ["protect-hook-policy", "block-scratch-outside-docs-tasks"]
+)
+@pytest.mark.parametrize("patch", BROKEN_PATCHES)
+def test_an_unparsable_patch_blocks_every_critical_guard_with_a_remedy(
+    project: Path, hook_id: str, patch: str
+) -> None:
+    remedy = _remedy(project, hook_id, {"command": patch})
+
+    assert "*** Begin Patch" in remedy and "*** Add File:" in remedy, remedy
+    assert "rm -rf" not in remedy
+
+
+@pytest.mark.parametrize(
+    "hook_id", ["protect-hook-policy", "block-scratch-outside-docs-tasks"]
+)
+@pytest.mark.parametrize(
+    "tool_input", [{}, {"command": ["*** Begin Patch"]}, {"command": 7}]
+)
+def test_a_patch_payload_without_a_string_command_blocks_fail_closed(
+    project: Path, hook_id: str, tool_input: dict[str, object]
+) -> None:
+    assert "*** Begin Patch" in _remedy(project, hook_id, tool_input)
+
+
+def test_a_shell_apply_patch_the_runtime_would_reject_blocks(project: Path) -> None:
+    command = "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: docs/note.md\nEOF"
+    payload: dict[str, object] = {
+        "tool_name": "Bash",
+        "cwd": str(project),
+        "tool_input": {"command": command},
+    }
+
+    assert (
+        _hook(project, "protect-hook-policy", payload, first_runtime=True)
+        == UNPARSEABLE
+    )
+
+
+@pytest.mark.parametrize("patch", BROKEN_PATCHES)
+def test_the_test_author_guard_refuses_an_unparsable_patch_with_a_remedy(
+    project: Path, patch: str
+) -> None:
+    reason = _author(project, "apply_patch", {"command": patch}, project)
+
+    assert reason.startswith("test-author: patch_unparseable: "), reason
+    assert "*** Begin Patch" in reason and "rm -rf" not in reason

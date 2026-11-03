@@ -554,9 +554,7 @@ def check_apply_patch(payload: Dict[str, object]) -> None:
     try:
         ops = adapter.operations(payload)
     except adapter.PatchError as error:
-        raise Refusal(
-            DEFAULT_REASON, f"патч apply_patch не разбирается ({error})."
-        ) from None
+        raise Refusal(adapter.REASON, adapter.detail(error)) from None
     for op in ops:
         check_patch_op(op)
 
@@ -571,9 +569,7 @@ def check_bash_patch(payload: object, command: str, cwd: str, root: str) -> None
     try:
         ops = adapter.bash_operations(payload)
     except adapter.PatchError as error:
-        raise Refusal(
-            DEFAULT_REASON, f"патч apply_patch не разбирается ({error})."
-        ) from None
+        raise Refusal(adapter.REASON, adapter.detail(error)) from None
     if ops is not None:
         for op in ops:
             check_patch_op(op)

@@ -222,9 +222,7 @@ def test_bash_operations_join_the_cd_directory(tmp_path: Path) -> None:
 
     ops = ap.bash_operations(payload)
     assert ops is not None
-    assert _paths(ops) == [
-        ("add", str(tmp_path / ".codex" / "notes" / "a.md"), None)
-    ]
+    assert _paths(ops) == [("add", str(tmp_path / ".codex" / "notes" / "a.md"), None)]
     assert ap.bash_operations({"tool_input": {"command": "ls"}, "cwd": "/"}) is None
 
 
@@ -277,3 +275,39 @@ def test_fanout_feeds_one_write_payload_per_path_and_stops_at_the_first_block(
     assert all(
         call["tool_name"] == "Write" and call["session_id"] == "s1" for call in calls
     )
+
+
+def test_remedy_names_the_reason_the_hook_and_the_expected_form() -> None:
+    line = ap.remedy("protect-hook-policy", ap.PatchError("no header"))
+
+    assert line.startswith("[apply-patch-unparseable] protect-hook-policy: ")
+    assert "(no header)" in line and "*** Begin Patch" in line
+
+
+@pytest.mark.parametrize(
+    "stdin",
+    [
+        "not json",
+        json.dumps({"tool_name": "apply_patch", "tool_input": {"command": "rm -rf x"}}),
+    ],
+)
+def test_fanout_blocks_an_unparsable_payload_without_running_the_guard(
+    stdin: str, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(stdin.encode())))
+
+    code = ap.main(
+        ["fanout", "--", sys.executable, "-c", "raise SystemExit(0)", "guard.sh"]
+    )
+
+    err = capfd.readouterr().err
+    assert code == 2
+    assert err.startswith("[apply-patch-unparseable] guard: ")
+    assert "rm -rf" not in err
+
+
+def test_fanout_rejects_a_malformed_invocation(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    assert ap.main(["fanout", "guard.sh"]) == 2
+    assert "usage" in capfd.readouterr().err

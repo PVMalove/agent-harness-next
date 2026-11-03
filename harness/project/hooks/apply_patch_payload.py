@@ -46,6 +46,7 @@ SHELL_LINE = re.compile(
     r"[ \t]*&&[ \t]*)?(?:apply_patch|applypatch)[ \t]*<<[ \t]*(?P<q>['\"]?)"
     r"(?P<delim>[A-Za-z_][A-Za-z0-9_]*)(?P=q)[ \t]*$"
 )
+REASON = "apply-patch-unparseable"
 PATCH_WORD = re.compile(r"(?<![\w./-])(?:apply_patch|applypatch)(?![\w./-])")
 
 
@@ -138,7 +139,7 @@ class _Parser:
             return
         last = self.ops[-1]
         if not last.chunks and self.mode == "update":
-            raise PatchError(f"Update file hunk for path '{last.path}' is empty")
+            raise PatchError("an Update File hunk is empty")
         if last.chunks and _empty(last.chunks[-1]):
             raise PatchError("Update hunk does not contain any lines")
 
@@ -460,6 +461,20 @@ def apply_update(text: str, chunks: Sequence[Chunk]) -> Optional[str]:
     return "".join(line + "\n" for line in lines)
 
 
+def detail(error: PatchError) -> str:
+    """Причина отказа и remedy без префикса: что не так и какой патч прислать."""
+    return (
+        f"патч apply_patch не разбирается ({error}), правку нельзя проверить. Пришли патч "
+        "в формате *** Begin Patch … *** End Patch с заголовками *** Add File:/"
+        "*** Update File:/*** Delete File: и непустыми путями."
+    )
+
+
+def remedy(hook: str, error: PatchError) -> str:
+    """Строка stderr guard-а: префикс `[apply-patch-unparseable]`, id hook-а и remedy."""
+    return f"[{REASON}] {hook}: {detail(error)}"
+
+
 def _fanout(command: Sequence[str]) -> int:
     try:
         try:
@@ -468,7 +483,10 @@ def _fanout(command: Sequence[str]) -> int:
             raise PatchError("the payload is not JSON") from None
         paths = targets(operations(payload))
     except PatchError as error:
-        sys.stderr.write(f"apply_patch: патч не разбирается ({error}).\n")
+        hook = os.path.basename(command[-1])
+        sys.stderr.write(
+            remedy(hook[:-3] if hook.endswith(".sh") else hook, error) + "\n"
+        )
         return 2
     env = dict(os.environ)
     env.setdefault("CLAUDE_PROJECT_DIR", os.getcwd())

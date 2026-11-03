@@ -75,6 +75,10 @@ sys.stdout.write(value.replace("\\", "/"))
 case $? in
   0) ;;
   7)
+    if [ ! -f "$(dirname "$0")/apply_patch_payload.py" ]; then
+      echo "[apply-patch-unparseable] block-scratch-outside-docs-tasks: адаптер apply_patch_payload.py не установлен, пути патча нельзя проверить — переустанови hooks." >&2
+      exit 2
+    fi
     printf '%s' "$INPUT" | "$PY" "$(dirname "$0")/apply_patch_payload.py" fanout -- "${BASH:-bash}" "$0"
     exit $?
     ;;

@@ -20,7 +20,8 @@ Guard разрешает ровно три вида вызовов:
 - `apply_patch` второго runtime — каждый путь патча из заголовков `*** Add File:`,
   `*** Update File:`, `*** Delete File:` и `*** Move to:` (абсолютный от `cwd` payload, разбор
   адаптера `apply_patch_payload.py`) проходит ту же проверку, что путь `Write`/`Edit`; патч с хоть
-  одним путём вне `test_paths` получает `write_outside_test_paths`;
+  одним путём вне `test_paths` получает `write_outside_test_paths`, а неразбираемый патч —
+  `patch_unparseable` с подсказкой, какой формат патча прислать;
 - `Bash` — один вызов `.claude/hooks/run-test.sh <test-id>` (допускается эквивалентный вызов через
   доверенный системный `bash`); shell-метасимволы, `--probe`, дополнительные аргументы и другие
   команды отклоняются.
@@ -44,7 +45,7 @@ Guard разрешает ровно три вида вызовов:
 - **Вход:** JSON `PreToolUse` на stdin с `agent_type`, `tool_name`, `tool_input`; корень проекта
   берётся из `CLAUDE_PROJECT_DIR`, а не из пути в вызове.
 - **Причины отказа (закрытый набор):** `malformed_payload`, `write_outside_test_paths`,
-  `write_path_invalid`, `runner_only`, `test_id_invalid`, `tool_not_allowed`, `guard_unavailable`
+  `write_path_invalid`, `patch_unparseable`, `runner_only`, `test_id_invalid`, `tool_not_allowed`, `guard_unavailable`
   и причины проверки активации: `agent_missing`, `scoped_hook_unsupported`, `config_invalid`,
   `test_paths_missing`, `test_runner_missing`, `write_zone_rejected`.
 - **Код выхода:** всегда `0`.
