@@ -357,16 +357,10 @@ def test_standalone_run_says_that_drift_was_not_checked(repo: Path) -> None:
     assert re.search(r"дрейф не проверен", result.message)
 
 
+PROJECT_JSON = ".harness/project.json"
 POLICY_FILE = ".harness/hook-policy.json"
 POLICY_MISSING = f"{POLICY_FILE} отсутствует"
 POLICY_DRIFT = f"дрейф: {POLICY_FILE} не совпадает с effective policy"
-
-
-def set_hook_policy(repo: Path, value: object) -> None:
-    project_json = repo / ".harness/project.json"
-    data = json.loads(project_json.read_text(encoding="utf-8"))
-    data["hook_policy"] = value
-    project_json.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def test_an_installed_policy_file_is_not_reported(repo: Path) -> None:
@@ -387,7 +381,9 @@ def test_a_missing_policy_file_warns_with_the_update_fix(repo: Path) -> None:
 
 
 def test_a_hook_policy_change_without_update_is_drift(repo: Path) -> None:
-    set_hook_policy(repo, {"profile": "strict"})
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = {"profile": "strict"}
+    save(repo, PROJECT_JSON, project)
 
     result = check(repo)
 
@@ -417,7 +413,9 @@ def test_the_same_policy_with_crlf_line_ends_is_not_drift(repo: Path) -> None:
 
 
 def test_update_clears_the_policy_file_drift(repo: Path) -> None:
-    set_hook_policy(repo, {"profile": "strict"})
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = {"profile": "strict"}
+    save(repo, PROJECT_JSON, project)
     assert POLICY_DRIFT in check(repo)["message"]
 
     updated = harness("update", str(repo))
