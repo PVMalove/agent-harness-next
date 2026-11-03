@@ -11,9 +11,11 @@ the commands in this guide, and the harness only runs the image ids that `dispat
 
 ## Verified and unverified environments
 
-A real smoke in CI covers one environment only: rootful Docker on a Linux GitHub Actions runner.
-That smoke drives the public coordinator commands with a real Git worktree, a real runtime store
-and real containers. It checks these results:
+Real smokes in CI cover two environments: rootful Docker on a Linux GitHub Actions runner
+(job `docker-smoke`), and rootless Podman on Fedora with SELinux enforcing and cgroup v2.
+The Podman host delegates cpu, memory and pids to the user. Its `podman-smoke` workflow runs on
+the repository owner's self-hosted runner. Both smokes drive the public coordinator commands
+with a real Git worktree, a real runtime store and real containers. They check these results:
 
 - A worker dispatch (`dispatch propose`, `dispatch create`, `dispatch send`) runs its adapter in a
   container, and the files the worker writes belong to the host user.
@@ -26,9 +28,9 @@ and real containers. It checks these results:
 These environments are not verified by a real smoke. Only the engine argv matrix and a scripted
 engine check them, so treat them as unverified on a live engine:
 
-- Podman, rootful and rootless.
+- Rootful Podman.
 - Rootless Docker.
-- Hosts with SELinux enforcing.
+- Docker on a host with SELinux enforcing.
 
 These environments are not supported. `dispatch preflight` reports each one as a blocker:
 

@@ -38,13 +38,12 @@ exclude = ["^harness/repo_map/tree_sitter_worker\\.py$"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The real container smoke (#710) needs a Docker engine and network: every default run deselects
-# it, and only the CI docker-smoke job selects it with an explicit `-m docker_smoke`.
-# The fault_injection marker is not deselected: every run keeps the matrix, and the CI
-# fault-injection job selects it again with `-m fault_injection` and the require flags.
-addopts = ["-m", "not docker_smoke"]
+# Real container smokes require their dedicated workflows; default runs deselect both.
+# Fault-injection tests remain in the default run and also have a dedicated CI job.
+addopts = ["-m", "not docker_smoke and not podman_smoke"]
 markers = [
     "docker_smoke: real Docker smoke of the container executor; run only with -m docker_smoke",
+    "podman_smoke: real rootless Podman smoke on Fedora with SELinux enforcing; run only with -m podman_smoke",
     "fault_injection: a scenario of the fault-injection and security matrix at seam 1 (tests/orchestration/fault_injection_matrix.py)",
 ]
 

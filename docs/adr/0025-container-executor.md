@@ -107,6 +107,7 @@ QA (#810) монтирует план суженно: каталог clean-room 
   `pytest -m docker_smoke` с `HARNESS_REQUIRE_RUNTIME=1` и `HARNESS_REQUIRE_DOCKER_SMOKE=1` и
   отдаёт отчёт `junit-docker-smoke` в dashboard. Smoke зависит от внешней сети (`github.com`,
   `example.com`, реестры базовых образов).
-- **Граница проверки.** Настоящий smoke покрывает только rootful Docker на runner GitHub Actions.
-  Podman (rootful и rootless), rootless Docker и SELinux остаются проверенными лишь argv-матрицей и
-  scripted-движком.
+- **Граница проверки.** Настоящие smoke покрывают rootful Docker на runner GitHub Actions и
+  rootless Podman на Fedora с SELinux enforcing (`podman-smoke`, #811). Rootful Podman,
+  rootless Docker и Docker на хосте с SELinux enforcing остаются проверенными лишь argv-матрицей
+  и scripted-движком.

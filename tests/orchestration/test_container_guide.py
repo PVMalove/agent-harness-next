@@ -45,14 +45,19 @@ class ContainerGuideTests(unittest.TestCase):
                         f"{engine} build -f .harness/container/{dockerfile}", text
                     )
 
-    def test_the_guide_marks_podman_and_rootless_docker_as_unverified(self) -> None:
+    def test_the_guide_marks_rootless_podman_on_selinux_as_verified_and_the_rest_as_unverified(
+        self,
+    ) -> None:
         text = SOURCE.read_text(encoding="utf-8")
         section = text.split("## Verified and unverified environments", 1)[1]
-        after = section.split("not verified by a real smoke", 1)[1]
+        verified, after = section.split("not verified by a real smoke", 1)
         unverified = after.split("\n\n")[1]
 
-        self.assertIn("Podman, rootful and rootless", unverified)
+        self.assertIn("rootless Podman", verified)
+        self.assertIn("SELinux enforcing", verified)
+        self.assertIn("Rootful Podman", unverified)
         self.assertIn("Rootless Docker", unverified)
+        self.assertNotIn("Podman, rootful and rootless", unverified)
 
     def test_the_example_adapter_keeps_native_approval(self) -> None:
         text = SOURCE.read_text(encoding="utf-8")
