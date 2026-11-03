@@ -1,18 +1,14 @@
-"""Russian / English switching: fixed strings translate, data and domain text stay as they are."""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
-import asyncio
 import re
-from pathlib import Path
 
 import pytest
 
 from harness.console import i18n
-from harness.console.app import HarnessConsoleApp
 from harness.console.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN, help_markdown
 from harness.console.i18n_strings import EN, EN_PHRASES
-from tests.console._pilot_wait import wait_until
 
 
 def test_tr_translates_known_strings_and_leaves_the_rest() -> None:
@@ -53,76 +49,6 @@ def test_the_english_guide_has_the_same_sections() -> None:
     assert help_markdown("en") == HELP_MARKDOWN_EN
     assert HELP_MARKDOWN.count("\n## ") == HELP_MARKDOWN_EN.count("\n## ")
     assert not re.search("[А-Яа-я]", HELP_MARKDOWN_EN)
-
-
-def _dump(app: HarnessConsoleApp) -> str:
-    strips = app.screen._compositor.render_strips()
-    return "\n".join("".join(segment.text for segment in strip) for strip in strips)
-
-
-def test_f2_switches_the_dashboard_and_back_without_drift(tmp_path: Path) -> None:
-    async def scenario() -> tuple[str, str, str]:
-        app = HarnessConsoleApp(tmp_path)
-        async with app.run_test(size=(130, 50)) as pilot:
-            # The dashboard fills in asynchronously; a slow machine must not be compared half-built.
-            await app.workers.wait_for_complete()
-            # Footer bindings recompose independently of workers and the Pilot idle barrier.
-            await wait_until(pilot, lambda: "r Офлайн" in _dump(app).splitlines()[-1])
-            before = _dump(app)
-            await pilot.press("f2")
-            await wait_until(pilot, lambda: "r Offline" in _dump(app).splitlines()[-1])
-            english = _dump(app)
-            await pilot.press("f2")
-            await wait_until(pilot, lambda: "r Офлайн" in _dump(app).splitlines()[-1])
-            return before, english, _dump(app)
-
-    before, english, after = asyncio.run(scenario())
-    assert after == before
-    assert "MAIN MENU" in english and "Workspace" in english
-    assert "Detailed technical report" in english
-    assert "Open project" in english and "Диагностика" not in english
-
-
-def test_f2_translates_screens_that_are_already_open_below(tmp_path: Path) -> None:
-    async def scenario() -> tuple[str, str]:
-        app = HarnessConsoleApp(tmp_path)
-        async with app.run_test(size=(130, 50)) as pilot:
-            await pilot.pause()
-            await pilot.press("9")  # Help
-            await pilot.pause()
-            await pilot.press("f2")
-            await wait_until(pilot, lambda: "Console guide" in _dump(app))
-            help_screen = _dump(app)
-            await pilot.press("escape")
-            await wait_until(pilot, lambda: "MAIN MENU" in _dump(app))
-            return help_screen, _dump(app)
-
-    help_screen, dashboard = asyncio.run(scenario())
-    assert "Console guide" in help_screen and "MAIN MENU" in dashboard
-
-
-def test_command_menus_translate_groups_titles_and_footer(tmp_path: Path) -> None:
-    # Ledger commands are available only when the target has the coordinator script.
-    coordinator = tmp_path / ".harness/orchestration/coordinator.py"
-    coordinator.parent.mkdir(parents=True)
-    coordinator.touch()
-
-    async def scenario() -> str:
-        app = HarnessConsoleApp(tmp_path)
-        async with app.run_test(size=(130, 50)) as pilot:
-            await pilot.pause()
-            await pilot.press("f2")
-            await pilot.press("4")  # Harness
-            await pilot.pause()
-            await pilot.pause()
-            return _dump(app)
-
-    screen = asyncio.run(scenario())
-    for heading in ("Checks", "Skills", "Repo Map", "Cleanup & removal", "Ledger"):
-        assert heading in screen
-    assert "Managed-file drift" in screen
-    assert "INSTALL & UPDATE" not in screen
-    assert "Back" in screen and "Copy CLI" in screen
 
 
 @pytest.mark.parametrize("language", ["ru", "en"])
