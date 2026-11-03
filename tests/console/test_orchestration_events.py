@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,8 @@ import pytest
 from harness.console.orchestration_events import (
     POLL_INTERVAL_SECONDS,
     OrchestrationEvents,
+    ProjectReader,
+    SourceUnavailable,
 )
 from harness.console.server import MAX_SUBSCRIPTIONS, ConsoleServer
 from harness.console.snapshots import SnapshotService
@@ -54,10 +57,10 @@ def _ledger(project: Path) -> LifecycleLedger:
     return ledger
 
 
-def _server(project: Path) -> ConsoleServer:
+def _server(project: Path, reader: ProjectReader | None = None) -> ConsoleServer:
     return ConsoleServer(
         project,
-        events=OrchestrationEvents(project, interval=INTERVAL),
+        events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
         snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
     )
 
@@ -534,3 +537,129 @@ def test_an_unavailable_journal_is_a_typed_state(project: Path) -> None:
             await server.close()
 
     asyncio.run(scenario())
+
+
+def _store_epoch(project: Path) -> None:
+    state = project / STATE_REL
+    state.mkdir(parents=True)
+    (state / "ledger.json").write_text(json.dumps({"version": 4}), encoding="utf-8")
+
+
+class FakeStore:
+    """`state.read` of a runtime store: the records by path and the store revision."""
+
+    def __init__(self) -> None:
+        self.revision = 1
+        self.records: dict[str, dict[str, object]] = {
+            "batches/batch-a.json": {
+                "batch_id": "batch-a",
+                "ticket": "#7",
+                "state": "awaiting-approval",
+                "dispatches": [],
+            }
+        }
+        self.calls: list[tuple[list[str], list[str]]] = []
+        self.down = False
+
+    def __call__(
+        self, collections: Sequence[str], paths: Sequence[str]
+    ) -> tuple[Mapping[str, object], int | None]:
+        if self.down:
+            raise SourceUnavailable(
+                "runtime_unavailable", "The runtime is not running."
+            )
+        self.calls.append((list(collections), list(paths)))
+        if not collections and not paths:
+            return {}, self.revision
+        found = {
+            path: record
+            for path, record in self.records.items()
+            if path in paths or path.split("/", 1)[0] in collections
+        }
+        return found, self.revision
+
+    def change(self, path: str, record: dict[str, object]) -> None:
+        self.records[path] = record
+        self.revision += 1
+
+
+def test_the_store_epoch_is_polled_by_revision(project: Path) -> None:
+    _store_epoch(project)
+    store = FakeStore()
+
+    async def scenario() -> None:
+        server = _server(project, ProjectReader(project, store_fetch=store))
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(_subscribe("live"))
+                source = await _next_source(client)
+                assert (source["state"], source["store"]) == (
+                    "available",
+                    "runtime-store",
+                )
+                store.calls.clear()
+                await asyncio.sleep(3 * INTERVAL)
+                assert store.calls
+                assert all(call == ([], []) for call in store.calls)
+
+                store.change(
+                    "batches/batch-a.json",
+                    {**store.records["batches/batch-a.json"], "state": "active"},
+                )
+                (event,) = await _events(client, 1)
+                assert (event["event"], event["from"], event["to"]) == (
+                    "batch.transition",
+                    "awaiting-approval",
+                    "active",
+                )
+
+                store.down = True
+                source = await _next_source(client)
+                assert (source["state"], source["reason"]) == (
+                    "unavailable",
+                    "runtime_unavailable",
+                )
+                assert await _home_answers(client)
+                store.change(
+                    "batches/batch-b.json",
+                    {"batch_id": "batch-b", "ticket": "#8", "state": "planned"},
+                )
+                store.down = False
+                source = await _next_source(client)
+                assert (source["state"], source["store"]) == (
+                    "available",
+                    "runtime-store",
+                )
+                (event,) = await _events(client, 1)
+                assert (event["batch_id"], event["from"], event["to"]) == (
+                    "batch-b",
+                    None,
+                    "planned",
+                )
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+
+def test_an_unavailable_runtime_is_the_runtime_unavailable_reason(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.orchestration import runtime_client
+
+    _store_epoch(project)
+    codes = iter(["runtime_unavailable", "store_busy"])
+
+    def call(self: object, operation: str, **fields: object) -> object:
+        assert operation == "state.read"
+        raise runtime_client.RuntimeClientError(
+            next(codes), "no answer", remedy="start it", domain="transport"
+        )
+
+    monkeypatch.setattr(runtime_client.RuntimeClient, "call", call)
+    reader = ProjectReader(project)
+    for reason in ("runtime_unavailable", "unreadable"):
+        with pytest.raises(SourceUnavailable) as raised:
+            reader.read()
+        assert raised.value.reason == reason

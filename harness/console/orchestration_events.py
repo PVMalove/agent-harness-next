@@ -3,7 +3,8 @@
 A poller compares the orchestration source with the last view it read, about once per second,
 and appends the differences as events with a monotonic ``seq``. The console only reads: the file
 ledger is read without the ledger lock, like the Reports section reads it, and the ``audit/``
-directory is never read.
+directory is never read. In the runtime-store epoch a poll first probes the store revision with an
+empty ``state.read`` and reads the collections only when the revision moved.
 
 Request: ``{id, type: "orchestration.subscribe", cursor?}``. Without a cursor the stream starts at
 the head. Replies carry ``kind``: ``source`` (always first, then on every change of the source
@@ -20,7 +21,8 @@ Standard library and harness only: nothing here imports ``h11`` or ``websockets`
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, Callable, Mapping
+import uuid
+from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +33,7 @@ from harness.orchestration.ledger.lifecycle import (
     POINTER_NAME,
     JsonObject,
     LifecycleLedger,
+    store_is_authority,
 )
 
 from .discovery import discovery_path
@@ -52,6 +55,8 @@ ORCHESTRATION_SUBSCRIBE = "orchestration.subscribe"
 POLL_INTERVAL_SECONDS = 1.0
 _BATCH_EVENTS = 32
 _FIELDS = frozenset({"id", "type", "cursor"})
+STORE_READ_TIMEOUT_SECONDS = 2
+_STORE_COLLECTIONS = ("batches", "dispatch-status", "qa-lane")
 JOURNAL_NAME = "orchestration-events.jsonl"
 _JOURNAL_UNAVAILABLE = "journal_unavailable"
 _JOURNAL_MESSAGE = "The console event journal cannot be read or written."
@@ -87,6 +92,12 @@ class SourceUnavailable(Exception):
     def __init__(self, reason: str, message: str) -> None:
         super().__init__(message)
         self.reason, self.message = reason, message
+
+
+# ``state.read`` of the runtime store: the records by path and the store revision.
+type StoreFetch = Callable[
+    [Sequence[str], Sequence[str]], tuple[Mapping[str, object], int | None]
+]
 
 
 class OrchestrationReader(Protocol):
@@ -162,10 +173,79 @@ class ProjectReader:
     """Reads the project's orchestration state. Unchanged files are not read again: a record is
     cached by its file signature, and a record that cannot be read keeps its last value."""
 
-    def __init__(self, repo: Path) -> None:
+    def __init__(self, repo: Path, *, store_fetch: StoreFetch | None = None) -> None:
         self.repo = repo
+        self._store_fetch = store_fetch or self._runtime_fetch
         self._records: dict[Path, tuple[tuple[int, int, int], JsonObject]] = {}
         self._outcomes: dict[str, str] = {}
+        self._store_revision: int | None = None
+        self._store_view: Observation | None = None
+
+    def _runtime_fetch(
+        self, collections: Sequence[str], paths: Sequence[str]
+    ) -> tuple[Mapping[str, object], int | None]:
+        """``state.read`` of the runtime; the console never starts the runtime itself."""
+        from harness.orchestration.runtime_client import (
+            RuntimeClient,
+            RuntimeClientError,
+        )
+
+        try:
+            reply = RuntimeClient(self.repo).call(
+                "state.read",
+                operation_id=f"console.events-{uuid.uuid4().hex}",
+                payload={"collections": list(collections), "paths": list(paths)},
+                timeout_seconds=STORE_READ_TIMEOUT_SECONDS,
+            )
+        except RuntimeClientError as exc:
+            reason = (
+                "runtime_unavailable"
+                if exc.code == "runtime_unavailable"
+                else "unreadable"
+            )
+            raise SourceUnavailable(
+                reason, f"The runtime store did not answer state.read ({exc.code})."
+            ) from exc
+        records = reply.result.get("records")
+        return (records if isinstance(records, dict) else {}), reply.revision
+
+    def _read_store(self) -> Observation:
+        """One probe of the store revision; the collections are read only when it moved."""
+        _, revision = self._store_fetch([], [])
+        if (
+            self._store_view is not None
+            and revision is not None
+            and revision == self._store_revision
+        ):
+            return self._store_view
+        records, read_revision = self._store_fetch(_STORE_COLLECTIONS, [])
+
+        def section(prefix: str) -> dict[str, JsonObject]:
+            return {
+                path: record
+                for path, record in records.items()
+                if path.startswith(prefix) and isinstance(record, dict)
+            }
+
+        def outcome(dispatch_id: str) -> str | None:
+            if dispatch_id not in self._outcomes:
+                path = f"reports/{dispatch_id}.json"
+                report = self._store_fetch([], [path])[0].get(path)
+                if not isinstance(report, dict):
+                    return None
+                self._outcomes[dispatch_id] = text(report.get("outcome"), "unknown")
+            return self._outcomes[dispatch_id]
+
+        observation = _observation(
+            "runtime-store",
+            section("batches/"),
+            section("dispatch-status/"),
+            section("qa-lane/attempts/"),
+            outcome,
+        )
+        self._store_revision = read_revision if read_revision is not None else revision
+        self._store_view = observation
+        return observation
 
     def _directory(self, directory: Path) -> dict[str, JsonObject]:
         found: dict[str, JsonObject] = {}
@@ -205,6 +285,8 @@ class ProjectReader:
             raise SourceUnavailable(
                 "missing", "The project has no orchestration ledger."
             )
+        if store_is_authority(state):
+            return self._read_store()
         root = LifecycleLedger(state).records_root_lenient()
         if root is None:
             if not (state / POINTER_NAME).exists():
