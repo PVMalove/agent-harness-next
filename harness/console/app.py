@@ -54,7 +54,9 @@ class HarnessConsoleApp(App[None]):
     commands (Harness, Orchestration, Repo Map), so a Pilot test never spawns a real process.
 
     `home_client` is the connection to the project's console server the home screen reads; without
-    one the app looks for a running server (`launcher.discover_console`) and starts none."""
+    one the app looks for a running server (`launcher.discover_console`) and starts none. A failed
+    first Home request ends the app with `home_error` set; `run` raises it for the launcher's
+    fallback."""
 
     TITLE = " Harness console "
     BINDINGS = [
@@ -178,17 +180,25 @@ class HarnessConsoleApp(App[None]):
         self.home_client: HomeClient | None = (
             home_client if home_client is not None else launcher.discover_console(repo)
         )
+        self.home_error: ConsoleClientError | None = None
 
     def on_mount(self) -> None:
         self.register_theme(HARNESS_THEME)
         self.theme = brand.THEME_NAME
         # Home reads the console server: without a client there is no home screen to show.
         if self.home_client is not None:
+            try:
+                snapshot = self.home_client.home()
+            except ConsoleClientError as exc:
+                self.home_error = exc
+                self.exit(return_code=1)
+                return
             self.push_screen(
                 DashboardScreen(
                     self.repo,
                     home_client=self.home_client,
                     command_runner=self.command_runner,
+                    snapshot=snapshot,
                 )
             )
 
@@ -218,11 +228,22 @@ class HarnessConsoleApp(App[None]):
                 f"Не удалось подключиться к серверу консоли: {exc}", severity="error"
             )
             return
+        try:
+            snapshot = client.home()
+        except ConsoleClientError as exc:
+            client.close()
+            self.notify(
+                f"Сервер консоли не отдал Главную проекта: {exc}", severity="error"
+            )
+            return
         previous, self.home_client = self.home_client, client
         self.repo = repo
         self.switch_screen(
             DashboardScreen(
-                repo, home_client=client, command_runner=self.command_runner
+                repo,
+                home_client=client,
+                command_runner=self.command_runner,
+                snapshot=snapshot,
             )
         )
         if previous is not None:
@@ -324,6 +345,9 @@ def run(
     if app.home_client is not None:
         # The client of the selected project; the launcher closes the first one it opened.
         app.home_client.close()
+    if app.home_error is not None:
+        # Raised after Textual has restored the terminal; the launcher prints the fallback.
+        raise app.home_error
     if app.restart_requested:
         try:
             restart_console(app.repo)

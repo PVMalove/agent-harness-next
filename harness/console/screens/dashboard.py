@@ -418,6 +418,7 @@ class DashboardScreen(ConsoleShell):
         command_runner: CommandRunner = capturing_runner,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         collect_titles: task_titles.TaskTitlesLoader | None = None,
+        snapshot: HomeSnapshot | None = None,
     ) -> None:
         super().__init__()
         self.repo = repo
@@ -432,7 +433,8 @@ class DashboardScreen(ConsoleShell):
         self._titles: dict[str, str] = {}
         self._title_generation = 0
         self._command_runner = command_runner
-        self._snapshot: HomeSnapshot | None = None
+        # The first snapshot, when the opener already read it to handle a failed first request.
+        self._snapshot: HomeSnapshot | None = snapshot
         self._language = "ru"
         self._data: DashboardData | None = None
         self._online = False
@@ -502,7 +504,8 @@ class DashboardScreen(ConsoleShell):
     def _load(self) -> None:
         banner = self._collect_banner(self.repo)
         # The facts come from the console server; only the banner and the sessions are local.
-        self._snapshot = self._home_client.home()
+        if self._snapshot is None:
+            self._snapshot = self._home_client.home()
         data = _dashboard_data(self._snapshot)
         self._publish_counts(data)
         self._language = getattr(self.app, "language", "ru")

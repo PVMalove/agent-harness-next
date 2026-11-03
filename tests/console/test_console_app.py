@@ -2099,3 +2099,80 @@ def test_without_a_console_server_the_app_shows_no_home_and_connects_nowhere(
             return app.home_client, isinstance(app.screen, DashboardScreen)
 
     assert asyncio.run(scenario()) == (None, False)
+
+
+class _FailingHomeClient:
+    """A connected client whose first Home request fails, as when the server dies after connect."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.closed = False
+
+    def home(self, *, force: bool = False, online: bool = False) -> object:
+        raise self.error
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_a_failing_first_home_request_ends_the_app_with_the_reason_instead_of_a_traceback(
+    tmp_path: Path,
+) -> None:
+    from harness.console.client import ServerError
+
+    error = ServerError("collect_failed", "health упал")
+    client = _FailingHomeClient(error)
+
+    async def scenario() -> tuple[object, object, bool]:
+        app = HarnessConsoleApp(tmp_path, home_client=client)  # type: ignore[arg-type]
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            on_home = isinstance(app.screen, DashboardScreen)
+        return app.home_error, app.return_code, on_home
+
+    assert asyncio.run(scenario()) == (error, 1, False)
+
+
+def test_run_raises_the_first_home_failure_for_the_launcher_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import app as console_app
+    from harness.console.client import ConnectionLost
+
+    error = ConnectionLost("соединение с сервером консоли потеряно")
+    client = _FailingHomeClient(error)
+
+    def failed_run(self: HarnessConsoleApp) -> None:
+        self.home_error = error
+
+    monkeypatch.setattr(HarnessConsoleApp, "run", failed_run)
+    with pytest.raises(ConnectionLost) as raised:
+        console_app.run(tmp_path, client)  # type: ignore[arg-type]
+    assert raised.value is error and client.closed
+
+
+def test_a_project_switch_whose_first_home_request_fails_keeps_the_project_and_says_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import launcher
+    from harness.console.client import ConnectionLost
+    from tests.console._home_client import FakeHomeClient
+
+    first = FakeHomeClient(tmp_path)
+    dead = _FailingHomeClient(ConnectionLost("соединение с сервером консоли потеряно"))
+
+    async def scenario() -> list[str]:
+        app = HarnessConsoleApp(tmp_path, home_client=first)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            home = app.screen
+            monkeypatch.setattr(launcher, "connect_console", lambda repo: dead)
+            app.activate_project(tmp_path / "other")
+            await pilot.pause()
+            assert app.repo == tmp_path and app.screen is home
+            assert app.home_client is first and not first.closed
+            return [notice.message for notice in app._notifications]
+
+    messages = asyncio.run(scenario())
+    assert dead.closed
+    assert any("соединение с сервером консоли потеряно" in m for m in messages)

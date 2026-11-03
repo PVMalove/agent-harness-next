@@ -26,6 +26,7 @@ from harness.console import launcher
 from harness.console.client import (
     ConsoleClient,
     HomeClient,
+    ServerError,
     ServerUnavailable,
     TokenRejected,
 )
@@ -192,6 +193,37 @@ def test_a_relaunched_process_without_a_server_prints_the_fallback_and_never_sta
     )
     assert "Итого:" in out
     assert not started.exists() and fallback.is_file()
+
+
+def test_a_relaunched_tui_whose_first_home_request_fails_prints_the_fallback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fallback = tmp_path / "fallback"
+    client = FakeHomeClient(tmp_path / "repo")
+
+    def failed_home(_repo: Path, _client: HomeClient) -> int:
+        raise ServerError("collect_failed", "health упал")
+
+    _init_repo(tmp_path / "repo")
+    environ = {
+        launcher.RELAUNCH_ENV: "1",
+        launcher.STARTED_ENV: str(tmp_path / "started"),
+        launcher.FALLBACK_ENV: str(fallback),
+    }
+    with mock.patch.dict("os.environ", environ):
+        exit_code = launcher.run_console(
+            tmp_path / "repo",
+            app_runner=failed_home,
+            client_connector=lambda _repo: cast(ConsoleClient, client),
+        )
+
+    out = capsys.readouterr().out
+    assert exit_code == 1
+    first = out.splitlines()[0]
+    assert "сервер консоли не отдал Главную" in first
+    assert "collect_failed" in first
+    assert "Итого:" in out
+    assert fallback.is_file() and client.closed
 
 
 def test_the_outer_process_exits_one_without_a_second_message_after_the_fallback(

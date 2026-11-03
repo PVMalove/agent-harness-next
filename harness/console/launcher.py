@@ -280,7 +280,8 @@ def run_console(
     1. Процесс уже перезапущен (установлена переменная окружения `RELAUNCH_ENV`): подключается к
        Серверу консоли через `client_connector` и запускает реальное Textual-приложение внутри
        процесса через `app_runner`. Это единственный путь, импортирующий `textual`. Сбой подключения
-       выводит причину и отчёт health, код 1; TUI не стартует.
+       выводит причину и отчёт health, код 1; TUI не стартует. Сбой первого запроса Главной
+       (`ConsoleClientError` из `app_runner`) завершается тем же фолбэком.
     2. Утилита `uv` не найдена в PATH: выводит причину и переключается на отчёт `harness health`,
        код 1.
     3. `uv` найден: `server_starter` запускает Сервер консоли проекта или находит работающий. Сбой
@@ -302,6 +303,14 @@ def run_console(
         _touch(os.environ.get(STARTED_ENV))
         try:
             return app_runner(repo, client)
+        except ConsoleClientError as exc:
+            # The first Home request failed after connect: the same fallback as a failed connect.
+            _touch(os.environ.get(FALLBACK_ENV))
+            _print_fallback(
+                repo,
+                f"harness console: сервер консоли не отдал Главную: {exc} — показан отчёт harness health",
+            )
+            return 1
         finally:
             client.close()
 
