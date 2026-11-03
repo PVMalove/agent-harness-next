@@ -1228,3 +1228,88 @@ def test_dispatch_approval_proposes_then_creates_with_the_shown_digest(
         assert create_argv[create_argv.index("--transition-digest") + 1] == DIGEST
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("command", "values", "reversibility", "flags"),
+    [
+        (
+            "native-permission-allow",
+            PERMISSION,
+            "external-change",
+            ["--dispatch", "--request-id", "--request-sha256", "--allow"],
+        ),
+        (
+            "native-permission-deny",
+            PERMISSION,
+            "external-change",
+            ["--dispatch", "--request-id", "--request-sha256", "--deny"],
+        ),
+        (
+            "batch-decide",
+            {
+                "batch": "batch-secret-1",
+                "decision": "accept",
+                "approved_by": "reviewer-name",
+                "approved_at": "2026-11-03T00:00:00Z",
+            },
+            "terminal-coordinator-action",
+            ["--batch", "--decision", "--approved-by", "--approved-at"],
+        ),
+        (
+            "dispatch-create",
+            {
+                "batch": "batch-secret-1",
+                "approved_by": "reviewer-name",
+                "approved_at": "2026-11-03T00:00:00Z",
+                "transition_digest": DIGEST,
+            },
+            "terminal-coordinator-action",
+            ["--batch", "--approved-by", "--approved-at", "--transition-digest"],
+        ),
+    ],
+)
+def test_decisions_are_journaled_with_masked_values(
+    project: Path,
+    command: str,
+    values: dict[str, str],
+    reversibility: str,
+    flags: list[str],
+) -> None:
+    async def scenario() -> None:
+        _with_coordinator(project)
+        fake = FakeExecutor()
+        fake.finish.set()
+        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                reply = await start(
+                    client,
+                    command_id=command,
+                    values=values,
+                    confirmed=True,
+                    client="browser",
+                )
+                assert reply["ok"] is True, reply
+                await read_until_done(client, reply["job"]["id"])
+        finally:
+            await server.close()
+        journal = project / ".harness" / "console" / "commands.jsonl"
+        [line] = journal.read_text().splitlines()
+        record = json.loads(line)
+        assert record["command_id"] == command
+        assert record["client"] == "browser"
+        assert record["reversibility"] == reversibility
+        assert record["returncode"] == 7
+        argv = record["argv"]
+        assert all(flag in argv for flag in flags)
+        for flag in flags:
+            if flag not in ("--allow", "--deny"):
+                assert argv[argv.index(flag) + 1] == "••••••"
+        for value in values.values():
+            assert value not in line
+        # The command itself received the real values.
+        assert all(value in fake.calls[0][0] for value in values.values())
+
+    asyncio.run(scenario())
