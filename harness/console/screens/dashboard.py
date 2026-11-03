@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, cast
 
 from rich.markup import escape
 from rich.table import Table
@@ -36,22 +36,19 @@ from ..shell import (
     SectionCard,
     check_route,
     fact_table,
-    repo_map_tier_name,
     section_badges,
 )
 from .. import reports
 from .. import data as console_data
+from ..client import HomeClient
 from ..data import DashboardData
 from ..runner import CommandRunner, capturing_runner
-from ..snapshots import HomeContext as HomeContext, collect_context
+from ..snapshots import HomeContext as HomeContext, HomeSnapshot
+from ...health.model import CheckResult, Status
 from .commands import call_from_worker
 
 DRIFT_LABELS = {"clean": "нет", "drift": "есть", "missing": "не установлен"}
 DRIFT_LABELS_EN = {"clean": "none", "drift": "yes", "missing": "not installed"}
-
-
-class _CollectDashboard(Protocol):
-    def __call__(self, repo: Path, /, *, online: bool = False) -> DashboardData: ...
 
 
 def _status_label(status: str) -> str:
@@ -162,10 +159,37 @@ def _value(text: str, status: str | None = None, language: str = "ru") -> Text:
     return Text(f"{brand.STATUS_ICONS[status]} {text}", style=_color(status))
 
 
-def home_facts(
+def _dashboard_data(snapshot: HomeSnapshot) -> DashboardData:
+    """The dashboard data a Home snapshot carries, for the renderers that read `DashboardData`."""
+    health, state = snapshot.health, snapshot.memory.state
+    return DashboardData(
+        ok=health.ok,
+        warn=health.warn,
+        fail=health.fail,
+        skipped=health.skipped,
+        repo_map_tier=snapshot.repo_map.message,
+        harness_version=snapshot.harness_version,
+        drift_state=snapshot.drift,
+        active_batches=snapshot.active_batches,
+        problems=tuple(
+            (problem.status, problem.id, problem.message)
+            for problem in snapshot.problems
+        ),
+        memory_index=CheckResult(
+            id="memory.index",
+            group="memory",
+            status=cast(Status, state.status),
+            message=state.message,
+        )
+        if state is not None
+        else None,
+    )
+
+
+def _snapshot_facts(
     data: DashboardData,
+    snapshot: HomeSnapshot,
     banner: brand.BannerInfo,
-    context: HomeContext,
     project: str,
     language: str = "ru",
 ) -> list[tuple[str, str, list[tuple[str, Text]]]]:
@@ -201,23 +225,23 @@ def home_facts(
         if data.active_batches is not None
         else plain("не подключено")
     )
-    tier = repo_map_tier_name(data.repo_map_tier)
-    view = context.repo_map
-    if view is None:
+    tier = snapshot.repo_map.tier
+    head_map = snapshot.repo_map.head_map
+    if head_map is None:
         repo_map = [
             ("Уровень", plain(tier) if tier else plain("не установлен")),
             ("Актуальность", _value("нет карты для HEAD", "skipped", language)),
         ]
     else:
         repo_map = [
-            ("Уровень", plain(tier or view.tier)),
+            ("Уровень", plain(tier or "")),
             ("Актуальность", _value("карта для HEAD", "ok", language)),
-            ("Файлов", plain(str(len(view.files)))),
-            ("Связей", plain(str(len(view.edges)))),
-            ("Источник", plain(view.origin)),
-            ("Объём", plain(f"≈{_tokens(language, view.estimated_tokens)}")),
+            ("Файлов", plain(str(head_map.files))),
+            ("Связей", plain(str(head_map.edges))),
+            ("Источник", plain(head_map.origin)),
+            ("Объём", plain(f"≈{_tokens(language, head_map.estimated_tokens)}")),
         ]
-    memory = context.memory
+    memory = snapshot.memory.policy
     check = data.memory_index
     state = (
         _value(check.message, check.status, language) if check is not None else missing
@@ -375,19 +399,18 @@ class DashboardScreen(ConsoleShell):
         self,
         repo: Path,
         *,
-        collect_dashboard: _CollectDashboard = console_data.collect_dashboard,
+        home_client: HomeClient,
         collect_banner: Callable[[Path], brand.BannerInfo] = _default_banner,
         command_runner: CommandRunner = capturing_runner,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
-        collect_context: Callable[[Path], HomeContext] = collect_context,
         collect_titles: task_titles.TaskTitlesLoader | None = None,
+        snapshot: HomeSnapshot | None = None,
     ) -> None:
         super().__init__()
         self.repo = repo
         self._now = now
-        self._collect_dashboard = collect_dashboard
+        self._home_client = home_client
         self._collect_banner = collect_banner
-        self._collect_context = collect_context
         self._collect_titles = (
             collect_titles
             if collect_titles is not None
@@ -396,7 +419,8 @@ class DashboardScreen(ConsoleShell):
         self._titles: dict[str, str] = {}
         self._title_generation = 0
         self._command_runner = command_runner
-        self._home_context = HomeContext()
+        # The first snapshot, when the opener already read it to handle a failed first request.
+        self._snapshot: HomeSnapshot | None = snapshot
         self._language = "ru"
         self._data: DashboardData | None = None
         self._online = False
@@ -465,8 +489,10 @@ class DashboardScreen(ConsoleShell):
 
     def _load(self) -> None:
         banner = self._collect_banner(self.repo)
-        self._home_context = self._collect_context(self.repo)
-        data = self._collect_dashboard(self.repo)
+        # The facts come from the console server; only the banner and the sessions are local.
+        if self._snapshot is None:
+            self._snapshot = self._home_client.home()
+        data = _dashboard_data(self._snapshot)
         self._publish_counts(data)
         self._language = getattr(self.app, "language", "ru")
         self._data, self._online, self._banner = data, False, banner
@@ -590,11 +616,9 @@ class DashboardScreen(ConsoleShell):
             )
 
     def _facts(self) -> list[tuple[str, str, list[tuple[str, Text]]]]:
-        data, banner = self._data, self._banner
-        assert data is not None and banner is not None
-        return home_facts(
-            data, banner, self._home_context, self.repo.name, self._language
-        )
+        data, banner, snapshot = self._data, self._banner, self._snapshot
+        assert data is not None and banner is not None and snapshot is not None
+        return _snapshot_facts(data, snapshot, banner, self.repo.name, self._language)
 
     def _session_row(self, stage: reports.StageEntry) -> Table:
         return session_row(
@@ -739,17 +763,15 @@ class DashboardScreen(ConsoleShell):
 
     def _apply(
         self,
-        data: DashboardData,
+        snapshot: HomeSnapshot,
         *,
         online: bool,
         banner: brand.BannerInfo | None = None,
-        context: HomeContext | None = None,
     ) -> None:
         if banner is not None:
             self._banner = banner
-        if context is not None:
-            self._home_context = context
-        self._data, self._online = data, online
+        data = _dashboard_data(snapshot)
+        self._snapshot, self._data, self._online = snapshot, data, online
         self._publish_counts(data)
         self._repaint()
         self._render_menu()
@@ -828,9 +850,12 @@ class DashboardScreen(ConsoleShell):
 
         def work() -> None:
             try:
-                data = self._collect_dashboard(self.repo, online=online)
+                snapshot = (
+                    self._home_client.home(online=True)
+                    if online
+                    else self._home_client.home(force=True)
+                )
                 banner = self._collect_banner(self.repo)
-                context = self._collect_context(self.repo)
             except Exception as exc:
                 # An unhandled worker error would exit the whole TUI; show it in the screen instead.
                 text = f"проверки не выполнены: {escape(repr(exc))}"
@@ -844,9 +869,7 @@ class DashboardScreen(ConsoleShell):
                 return
             call_from_worker(
                 self,
-                lambda: self._apply(
-                    data, online=online, banner=banner, context=context
-                ),
+                lambda: self._apply(snapshot, online=online, banner=banner),
             )
 
         self.run_worker(work, thread=True, exclusive=True, group="dashboard-health")

@@ -17,6 +17,7 @@ from threading import Event
 import pytest
 
 pytest.importorskip("textual")
+from rich.text import Text
 from textual.widgets import Button, Collapsible, ListView, Static
 from textual.widgets._collapsible import CollapsibleTitle
 from textual.widgets._footer import FooterKey
@@ -29,6 +30,7 @@ from harness.console.repo_map_settings import MemoryStatus
 from harness.console.screens.dashboard import DashboardScreen, HomeContext
 from harness.console.shell import Breadcrumbs, JumpLink, SectionCard, ShellSidebar
 from harness.health.model import CheckResult
+from tests.console._home_client import fake_home
 from tests.console._pilot_wait import crumb_text, wait_until
 
 WIDE, NARROW = (160, 52), (80, 24)
@@ -166,9 +168,10 @@ def _home(
 ) -> DashboardScreen:
     return DashboardScreen(
         repo,
-        collect_dashboard=lambda _repo, *, online=False: DATA,
+        home_client=fake_home(
+            lambda _repo, *, online=False: DATA, lambda _repo: CONTEXT, repo=repo
+        ),
         collect_banner=lambda _repo: BANNER,
-        collect_context=lambda _repo: CONTEXT,
         now=lambda: NOW,
         collect_titles=collect_titles,
     )
@@ -312,11 +315,14 @@ def test_home_shows_no_demo_data_without_facts(
         async with app.run_test(size=size) as pilot:
             home = DashboardScreen(
                 tmp_path,
-                collect_dashboard=lambda _repo, *, online=False: DATA,
+                home_client=fake_home(
+                    lambda _repo, *, online=False: DATA,
+                    lambda _repo: HomeContext(),
+                    repo=tmp_path,
+                ),
                 collect_banner=lambda _repo: brand.BannerInfo(
                     version="1.4.6", capabilities=(), repo="~/x", branch=None
                 ),
-                collect_context=lambda _repo: HomeContext(),
             )
             await app.switch_screen(home)
             await pilot.pause()
@@ -594,3 +600,75 @@ def test_departed_home_cannot_apply_its_title_response(project: Path) -> None:
             release.set()
 
     asyncio.run(scenario())
+
+
+def test_home_reads_the_server_snapshot_forced_offline_and_online(
+    project: Path,
+) -> None:
+    """The facts come from the console server: the first one as served, `r` rebuilds the offline
+    snapshot, `o` asks for the online checks."""
+    client = fake_home(lambda _repo, *, online=False: DATA, lambda _repo: CONTEXT)
+
+    async def scenario() -> None:
+        app = HarnessConsoleApp(project)
+        async with app.run_test(size=WIDE) as pilot:
+            home = DashboardScreen(
+                project,
+                home_client=client,
+                collect_banner=lambda _repo: BANNER,
+                now=lambda: NOW,
+            )
+            await app.switch_screen(home)
+            await app.workers.wait_for_complete()
+            await pilot.press("r")
+            await app.workers.wait_for_complete()
+            await pilot.press("o")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            mode = str(home.query_one("#dashboard-attention-mode", Static).render())
+            assert mode.startswith("online")
+
+    asyncio.run(scenario())
+    assert client.requests == [(False, False), (True, False), (False, True)]
+
+
+def test_every_problem_is_shown_in_full_however_many_and_however_long(
+    project: Path,
+) -> None:
+    """What the Home screen at 8b5a609 showed for a project with more problems than one server
+    reply lists and a message longer than it carries: every row, each caption and the report in
+    full, and the count of all of them."""
+    long = "сообщение " * 120
+    problems = tuple(
+        ("fail", f"check.{index}", long if index == 120 else "broken")
+        for index in range(130)
+    )
+    data = replace(DATA, fail=130, problems=problems)
+
+    async def scenario() -> tuple[str, list[str], str]:
+        app = HarnessConsoleApp(project)
+        async with app.run_test(size=WIDE) as pilot:
+            home = DashboardScreen(
+                project,
+                home_client=fake_home(lambda _repo, *, online=False: data),
+                collect_banner=lambda _repo: BANNER,
+            )
+            await app.switch_screen(home)
+            await pilot.pause()
+            card = home.query_one("#dashboard-attention-card", SectionCard)
+            captions = [
+                str(row.query_one(".problem-caption", Static).content)
+                for row in home.query(".problem-row")
+            ]
+            summary = Text.from_markup(
+                str(home.query_one("#dashboard-summary", Static).content)
+            ).plain
+            return str(card.border_title), captions, summary
+
+    title, captions, summary = asyncio.run(scenario())
+    assert title == " ТРЕБУЕТ ВНИМАНИЯ  130 "
+    assert len(captions) == 130
+    assert captions[120] == f"check.120 · {long}"
+    assert captions[129] == "check.129 · broken"
+    assert f"check.120 — {long}" in summary
+    assert "check.129 — broken" in summary

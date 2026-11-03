@@ -38,3 +38,14 @@ def offline_home_titles(monkeypatch: pytest.MonkeyPatch) -> None:
     from harness.console import task_titles
 
     monkeypatch.setattr(task_titles, "load_task_titles", lambda repo, tickets: {})
+
+
+@pytest.fixture(autouse=True)
+def fake_console_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The app connects to a fake console server that answers from the real collect seams of
+    the project it is asked about: no test opens a socket or starts a server."""
+    from harness.console import launcher
+    from tests.console._home_client import FakeHomeClient
+
+    monkeypatch.setattr(launcher, "connect_console", FakeHomeClient)
+    monkeypatch.setattr(launcher, "discover_console", FakeHomeClient)

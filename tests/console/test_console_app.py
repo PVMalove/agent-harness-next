@@ -22,6 +22,7 @@ from harness.console.shell import SECTIONS
 from harness.console.screens.diagnostics import DiagnosticsScreen
 from harness.console.screens.harness import HarnessScreen
 from harness.health.model import CheckResult, Fix, Report
+from tests.console._home_client import fake_home
 from tests.console._pilot_wait import wait_until
 
 
@@ -56,7 +57,9 @@ def test_dashboard_keeps_visible_checks_and_project_actions_with_keyboard_shortc
     async def scenario() -> None:
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+            home_client=fake_home(
+                lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+            ),
         )
         app = DashboardHost()
         async with app.run_test(size=size) as pilot:
@@ -137,7 +140,9 @@ def test_dashboard_update_opens_the_update_screen_without_running_a_command(
         app = App[None]()
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+            home_client=fake_home(
+                lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+            ),
             command_runner=runner,
         )
         async with app.run_test(size=(120, 48)) as pilot:
@@ -168,7 +173,9 @@ def test_dashboard_menu_opens_a_section_by_its_number(
         async with app.run_test(size=size) as pilot:
             await pilot.pause()
             await pilot.press("4")
-            await wait_until(pilot, lambda: type(app.screen).__name__ == "HarnessScreen")
+            await wait_until(
+                pilot, lambda: type(app.screen).__name__ == "HarnessScreen"
+            )
             return type(app.screen).__name__
 
     assert asyncio.run(scenario()) == "HarnessScreen"
@@ -186,7 +193,9 @@ def test_dashboard_project_entries_switch_language_without_changing_order(
         app = App[None]()
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+            home_client=fake_home(
+                lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+            ),
         )
         async with app.run_test(size=(120, 36)):
             await app.push_screen(screen)
@@ -219,7 +228,9 @@ def test_configuration_menu_opens_from_keyboard_and_mouse(
         app = App[None]()
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+            home_client=fake_home(
+                lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+            ),
         )
         async with app.run_test(size=(120, 48)) as pilot:
             await app.push_screen(screen)
@@ -314,7 +325,9 @@ def test_dashboard_screen_renders_injected_data_without_touching_the_repo(
 
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+            home_client=fake_home(
+                lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+            ),
         )
 
         class _HostApp(App[None]):
@@ -357,7 +370,9 @@ def test_dashboard_shows_the_mark_and_the_banner_beside_it(tmp_path: Path) -> No
         )
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+            home_client=fake_home(
+                lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+            ),
             collect_banner=lambda _repo: banner,
         )
 
@@ -755,7 +770,9 @@ def test_dashboard_online_checks_action_reruns_with_online_and_updates_summary(
             def on_mount(self) -> None:
                 """Смонтировать тестируемый экран."""
                 self.push_screen(
-                    DashboardScreen(tmp_path, collect_dashboard=fake_collect)
+                    DashboardScreen(
+                        tmp_path, home_client=fake_home(fake_collect, repo=tmp_path)
+                    )
                 )
 
         app = _HostApp()
@@ -834,7 +851,7 @@ def test_offline_checks_buttons_rerun_health_offline(tmp_path: Path) -> None:
             return _fake_report(online=online)
 
         screens = [
-            DashboardScreen(tmp_path, collect_dashboard=fake_dashboard),
+            DashboardScreen(tmp_path, home_client=fake_home(fake_dashboard, repo=tmp_path)),
             DiagnosticsScreen(tmp_path, collect_diagnostics=fake_diagnostics),
         ]
 
@@ -1033,7 +1050,9 @@ def test_dashboard_captures_command_output_by_default(tmp_path: Path) -> None:
 
     screen = DashboardScreen(
         tmp_path,
-        collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+        home_client=fake_home(
+            lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+        ),
     )
 
     assert screen._command_runner is capturing_runner
@@ -1060,7 +1079,11 @@ def test_dashboard_shows_why_the_checks_failed_instead_of_running_forever(
 
             def on_mount(self) -> None:
                 """Смонтировать тестируемый экран."""
-                self.push_screen(DashboardScreen(tmp_path, collect_dashboard=collect))
+                self.push_screen(
+                    DashboardScreen(
+                        tmp_path, home_client=fake_home(collect, repo=tmp_path)
+                    )
+                )
 
         app = _HostApp()
         async with app.run_test(size=(120, 40)) as pilot:
@@ -1148,7 +1171,9 @@ def test_dashboard_checks_live_in_the_attention_frame_and_have_no_diagnostics_bu
     async def scenario() -> list[str | None]:
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+            home_client=fake_home(
+                lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+            ),
         )
         from textual.app import App
 
@@ -1176,7 +1201,9 @@ def test_home_uses_workspace_shell_and_keeps_technical_report_collapsed(
         async with app.run_test(size=(180, 52)) as pilot:
             screen = DashboardScreen(
                 tmp_path,
-                collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+                home_client=fake_home(
+                    lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+                ),
             )
             await app.push_screen(screen)
             await pilot.pause()
@@ -1241,9 +1268,9 @@ def test_dashboard_session_list_shows_role_labels_and_status_captions(
             await app.switch_screen(
                 DashboardScreen(
                     tmp_path,
-                    collect_dashboard=lambda _repo,
+                    home_client=fake_home(lambda _repo,
                     *,
-                    online=False: _fake_dashboard_data(),
+                    online=False: _fake_dashboard_data(), repo=tmp_path),
                     now=lambda: now,
                 )
             )
@@ -1326,7 +1353,9 @@ def test_home_check_block_sessions_and_report_follow_each_other(
             await app.switch_screen(
                 DashboardScreen(
                     tmp_path,
-                    collect_dashboard=lambda _repo, *, online=False: _attention_data(),
+                    home_client=fake_home(
+                        lambda _repo, *, online=False: _attention_data(), repo=tmp_path
+                    ),
                 )
             )
             await pilot.pause()
@@ -1514,8 +1543,9 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
     from harness.console.screens.dashboard import (
         HomeContext,
         _render_summary,
-        home_facts,
+        _snapshot_facts,
     )
+    from harness.console.snapshots import build_home_snapshot
 
     data = replace(
         _fake_dashboard_data(),
@@ -1538,7 +1568,9 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
     )
     cards = {
         card_id: dict(rows)
-        for card_id, _title, rows in home_facts(data, banner, HomeContext(), "app")
+        for card_id, _title, rows in _snapshot_facts(
+            data, build_home_snapshot(data, HomeContext()), banner, "app"
+        )
     }
     assert cards["card-harness"]["Дрейф"].plain == "✔ нет"
     assert cards["card-memory"]["Состояние"].plain == "✔ индекс готов"
@@ -1605,7 +1637,9 @@ def test_home_path_line_ends_with_the_open_another_project_action(
             await app.switch_screen(
                 DashboardScreen(
                     repo,
-                    collect_dashboard=lambda _repo, *, online=False: _attention_data(),
+                    home_client=fake_home(
+                        lambda _repo, *, online=False: _attention_data(), repo=repo
+                    ),
                 )
             )
             await pilot.pause()
@@ -1652,7 +1686,9 @@ def test_home_requires_attention_lists_every_problem_with_a_jump_to_its_section(
             await app.switch_screen(
                 DashboardScreen(
                     tmp_path,
-                    collect_dashboard=lambda _repo, *, online=False: _attention_data(),
+                    home_client=fake_home(
+                        lambda _repo, *, online=False: _attention_data(), repo=tmp_path
+                    ),
                 )
             )
             await pilot.pause()
@@ -1737,7 +1773,9 @@ def test_a_jump_from_requires_attention_opens_the_section_and_runs_no_command(
             await app.switch_screen(
                 DashboardScreen(
                     tmp_path,
-                    collect_dashboard=lambda _repo, *, online=False: _attention_data(),
+                    home_client=fake_home(
+                        lambda _repo, *, online=False: _attention_data(), repo=tmp_path
+                    ),
                     command_runner=runner,
                 )
             )
@@ -1804,12 +1842,14 @@ _BANNER = brand.BannerInfo(
 
 @pytest.mark.parametrize("language", ["ru", "en"])
 def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> None:
-    from harness.console.screens.dashboard import HomeContext, home_facts
+    from harness.console.screens.dashboard import HomeContext, _snapshot_facts
+    from harness.console.snapshots import build_home_snapshot
 
-    cards = home_facts(
-        _context_data(),
+    data = _context_data()
+    cards = _snapshot_facts(
+        data,
+        build_home_snapshot(data, _home_context()),  # type: ignore[arg-type]
         _BANNER,
-        _home_context(),  # type: ignore[arg-type]
         "claude-agent-harness",
         language,
     )
@@ -1865,10 +1905,10 @@ def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> 
     # Without a cached map or a memory policy nothing is invented: unknown facts are a dash.
     bare = {
         title: dict((label, value.plain) for label, value in rows)
-        for _id, title, rows in home_facts(
+        for _id, title, rows in _snapshot_facts(
             _fake_dashboard_data(),
+            build_home_snapshot(_fake_dashboard_data(), HomeContext()),
             brand.BannerInfo(version="1", capabilities=(), repo="~/x", branch=None),
-            HomeContext(),
             "x",
             language,
         )
@@ -1902,9 +1942,12 @@ def test_home_right_panel_is_cards_of_facts_and_folds_on_a_narrow_terminal(
             await app.switch_screen(
                 DashboardScreen(
                     tmp_path,
-                    collect_dashboard=lambda _repo, *, online=False: _context_data(),
+                    home_client=fake_home(
+                        lambda _repo, *, online=False: _context_data(),
+                        lambda _repo: _home_context(),  # type: ignore[arg-type,return-value]
+                        repo=tmp_path,
+                    ),
                     collect_banner=lambda _repo: _BANNER,
-                    collect_context=lambda _repo: _home_context(),  # type: ignore[arg-type,return-value]
                 )
             )
             await pilot.pause()
@@ -1994,3 +2037,147 @@ def test_home_right_panel_is_cards_of_facts_and_folds_on_a_narrow_terminal(
         assert (
             seen["collapsed"] and seen["fold_on_screen"] and seen["fold_under_report"]
         )
+
+
+def test_a_project_switch_that_cannot_connect_keeps_the_project_and_says_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import launcher
+    from harness.console.client import ServerUnavailable
+    from tests.console._home_client import FakeHomeClient
+
+    def unreachable(repo: Path) -> FakeHomeClient:
+        raise ServerUnavailable("uv не найден в PATH")
+
+    first = FakeHomeClient(tmp_path)
+
+    async def scenario() -> list[str]:
+        app = HarnessConsoleApp(tmp_path, home_client=first)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            home = app.screen
+            monkeypatch.setattr(launcher, "connect_console", unreachable)
+            app.activate_project(tmp_path / "other")
+            await pilot.pause()
+            assert app.repo == tmp_path and app.screen is home
+            assert app.home_client is first and not first.closed
+            return [notice.message for notice in app._notifications]
+
+    messages = asyncio.run(scenario())
+    assert any("uv не найден в PATH" in message for message in messages)
+
+
+def test_a_project_switch_connects_to_the_new_project_and_closes_the_old_client(
+    tmp_path: Path,
+) -> None:
+    from tests.console._home_client import FakeHomeClient
+
+    first = FakeHomeClient(tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+
+    async def scenario() -> object:
+        app = HarnessConsoleApp(tmp_path, home_client=first)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.activate_project(other)
+            await pilot.pause()
+            assert app.repo == other
+            return app.home_client
+
+    client = asyncio.run(scenario())
+    assert isinstance(client, FakeHomeClient) and client.repo == other
+    assert first.closed
+
+
+def test_without_a_console_server_the_app_shows_no_home_and_connects_nowhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import launcher
+
+    monkeypatch.setattr(launcher, "discover_console", lambda repo: None)
+
+    async def scenario() -> tuple[object, bool]:
+        app = HarnessConsoleApp(tmp_path)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            return app.home_client, isinstance(app.screen, DashboardScreen)
+
+    assert asyncio.run(scenario()) == (None, False)
+
+
+class _FailingHomeClient:
+    """A connected client whose first Home request fails, as when the server dies after connect."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.closed = False
+
+    def home(self, *, force: bool = False, online: bool = False) -> object:
+        raise self.error
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_a_failing_first_home_request_ends_the_app_with_the_reason_instead_of_a_traceback(
+    tmp_path: Path,
+) -> None:
+    from harness.console.client import ServerError
+
+    error = ServerError("collect_failed", "health упал")
+    client = _FailingHomeClient(error)
+
+    async def scenario() -> tuple[object, object, bool]:
+        app = HarnessConsoleApp(tmp_path, home_client=client)  # type: ignore[arg-type]
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            on_home = isinstance(app.screen, DashboardScreen)
+        return app.home_error, app.return_code, on_home
+
+    assert asyncio.run(scenario()) == (error, 1, False)
+
+
+def test_run_raises_the_first_home_failure_for_the_launcher_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import app as console_app
+    from harness.console.client import ConnectionLost
+
+    error = ConnectionLost("соединение с сервером консоли потеряно")
+    client = _FailingHomeClient(error)
+
+    def failed_run(self: HarnessConsoleApp) -> None:
+        self.home_error = error
+
+    monkeypatch.setattr(HarnessConsoleApp, "run", failed_run)
+    with pytest.raises(ConnectionLost) as raised:
+        console_app.run(tmp_path, client)  # type: ignore[arg-type]
+    assert raised.value is error and client.closed
+
+
+def test_a_project_switch_whose_first_home_request_fails_keeps_the_project_and_says_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import launcher
+    from harness.console.client import ConnectionLost
+    from tests.console._home_client import FakeHomeClient
+
+    first = FakeHomeClient(tmp_path)
+    dead = _FailingHomeClient(ConnectionLost("соединение с сервером консоли потеряно"))
+
+    async def scenario() -> list[str]:
+        app = HarnessConsoleApp(tmp_path, home_client=first)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            home = app.screen
+            monkeypatch.setattr(launcher, "connect_console", lambda repo: dead)
+            app.activate_project(tmp_path / "other")
+            await pilot.pause()
+            assert app.repo == tmp_path and app.screen is home
+            assert app.home_client is first and not first.closed
+            return [notice.message for notice in app._notifications]
+
+    messages = asyncio.run(scenario())
+    assert dead.closed
+    assert any("соединение с сервером консоли потеряно" in m for m in messages)

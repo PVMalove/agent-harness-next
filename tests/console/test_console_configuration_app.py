@@ -25,6 +25,7 @@ from harness.console.screens.configuration import ConfigurationScreen
 if TYPE_CHECKING:
     from harness.console.app import HarnessConsoleApp
 
+from tests.console._home_client import fake_home
 from tests.console._pilot_wait import crumb_text, press, wait_until
 
 
@@ -260,7 +261,9 @@ def test_dashboard_refreshes_after_applied_configuration_is_closed(
 
     class DashboardHost(App[None]):
         def on_mount(self) -> None:
-            self.push_screen(DashboardScreen(tmp_path, collect_dashboard=collect))
+            self.push_screen(
+                DashboardScreen(tmp_path, home_client=fake_home(collect, repo=tmp_path))
+            )
 
     async def scenario() -> None:
         app = DashboardHost()
@@ -919,7 +922,7 @@ def _dashboard_host(repo: Path) -> App[None]:
 
     class DashboardHost(App[None]):
         def on_mount(self) -> None:
-            self.push_screen(DashboardScreen(repo, collect_dashboard=collect))
+            self.push_screen(DashboardScreen(repo, home_client=fake_home(collect, repo=repo)))
 
     return DashboardHost()
 

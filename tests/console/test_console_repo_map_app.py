@@ -24,6 +24,7 @@ from tests.console._console_repo_map_fixture import (
     build_repo_map_fixture,
     map_payload,
 )
+from tests.console._home_client import fake_home
 from harness.console import repo_map as console_repo_map
 from harness.console.data import DashboardData
 from harness.console.screens.dashboard import DashboardScreen
@@ -92,8 +93,11 @@ def test_dashboard_repo_map_section_opens_the_repo_map_screen(tmp_path: Path) ->
     async def scenario() -> bool:
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: DashboardData(
-                0, 0, 0, 0, "-", "0", "-", None
+            home_client=fake_home(
+                lambda _repo, *, online=False: DashboardData(
+                    0, 0, 0, 0, "-", "0", "-", None
+                ),
+                repo=tmp_path,
             ),
             command_runner=_RecordingRunner(),
         )

@@ -22,6 +22,7 @@ from harness.console.data import DashboardData
 from harness.console.screens.dashboard import DashboardScreen
 from harness.console.crumbs import Crumb
 from harness.console.wrap import SEPARATORS
+from tests.console._home_client import fake_home
 from tests.console._pilot_wait import crumb_text
 from harness.console.shell import (
     SECTIONS,
@@ -236,7 +237,10 @@ def _home_data() -> DashboardData:
 
 def _home(tmp_path: Path) -> DashboardScreen:
     return DashboardScreen(
-        tmp_path, collect_dashboard=lambda _repo, *, online=False: _home_data()
+        tmp_path,
+        home_client=fake_home(
+            lambda _repo, *, online=False: _home_data(), repo=tmp_path
+        ),
     )
 
 
@@ -646,7 +650,9 @@ def test_a_narrow_footer_shows_the_mockup_keys_and_hidden_keys_still_work(
     async def scenario() -> set[str]:
         app = HarnessConsoleApp(tmp_path)
         async with app.run_test(size=size) as pilot:
-            home = DashboardScreen(tmp_path, collect_dashboard=collect)
+            home = DashboardScreen(
+                tmp_path, home_client=fake_home(collect, repo=tmp_path)
+            )
             await app.switch_screen(home)
             await pilot.pause()
             keys = set(_footer_keys(home)) - {app.COMMAND_PALETTE_BINDING}
@@ -728,7 +734,9 @@ def test_a_jump_link_opens_its_section_and_runs_no_command(
             await app.switch_screen(
                 DashboardScreen(
                     tmp_path,
-                    collect_dashboard=lambda _repo, *, online=False: _home_data(),
+                    home_client=fake_home(
+                        lambda _repo, *, online=False: _home_data(), repo=tmp_path
+                    ),
                     command_runner=recorder,
                 )
             )

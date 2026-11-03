@@ -25,6 +25,7 @@ from harness.console import reports
 from harness.console.app import HarnessConsoleApp
 from harness.orchestration.core.utils import JsonObject
 from harness.console.screens.dashboard import DashboardScreen
+from tests.console._home_client import fake_home
 
 SIZES = [(160, 52), (120, 40), (80, 24)]
 LANGUAGES = ["ru", "en"]
@@ -243,9 +244,12 @@ def test_home_with_problems_sessions_and_context_layout(
         async with app.run_test(size=size) as pilot:
             home = DashboardScreen(
                 tmp_path,
-                collect_dashboard=lambda _repo, *, online=False: DATA,
+                home_client=fake_home(
+                    lambda _repo, *, online=False: DATA,
+                    lambda _repo: CONTEXT,
+                    repo=tmp_path,
+                ),
                 collect_banner=lambda _repo: BANNER,
-                collect_context=lambda _repo: CONTEXT,
             )
             await app.switch_screen(home)
             screen = await _open(app, pilot, None, language)
