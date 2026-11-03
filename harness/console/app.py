@@ -19,8 +19,9 @@ from textual.screen import Screen
 from textual.scrollbar import ScrollBar
 from textual.theme import Theme
 
-from . import brand, clipboard, i18n, translate
+from . import brand, clipboard, i18n, launcher, translate
 from .chrome import HealthCounts
+from .client import ConsoleClientError, HomeClient
 from .launcher import restart_console
 from .runner import CommandRunner, capturing_runner
 from .screens.dashboard import DashboardScreen
@@ -50,7 +51,10 @@ HARNESS_THEME = Theme(
 
 class HarnessConsoleApp(App[None]):
     """Accepts an injected `command_runner`, threaded through to the screens that run catalog
-    commands (Harness, Orchestration, Repo Map), so a Pilot test never spawns a real process."""
+    commands (Harness, Orchestration, Repo Map), so a Pilot test never spawns a real process.
+
+    `home_client` is the connection to the project's console server the home screen reads; without
+    one the app looks for a running server (`launcher.discover_console`) and starts none."""
 
     TITLE = " Harness console "
     BINDINGS = [
@@ -153,7 +157,11 @@ class HarnessConsoleApp(App[None]):
     """
 
     def __init__(
-        self, repo: Path, *, command_runner: CommandRunner = capturing_runner
+        self,
+        repo: Path,
+        *,
+        command_runner: CommandRunner = capturing_runner,
+        home_client: HomeClient | None = None,
     ) -> None:
         super().__init__()
         ScrollBar.renderer = ThinScrollBarRender
@@ -167,6 +175,9 @@ class HarnessConsoleApp(App[None]):
         self._command_lock = Lock()
         self._runner = command_runner
         self.command_runner = self._tracked_runner
+        self.home_client: HomeClient | None = (
+            home_client if home_client is not None else launcher.discover_console(repo)
+        )
 
     def on_mount(self) -> None:
         self.register_theme(HARNESS_THEME)
@@ -192,8 +203,18 @@ class HarnessConsoleApp(App[None]):
         if self.commands_running:
             self.notify("Дождитесь окончания команды", severity="warning")
             return
+        try:
+            client = launcher.connect_console(repo)
+        except ConsoleClientError as exc:
+            self.notify(
+                f"Не удалось подключиться к серверу консоли: {exc}", severity="error"
+            )
+            return
+        previous, self.home_client = self.home_client, client
         self.repo = repo
         self.switch_screen(DashboardScreen(repo, command_runner=self.command_runner))
+        if previous is not None:
+            previous.close()
 
     def action_open_help(self) -> None:
         from .screens.help import HelpScreen
@@ -277,10 +298,20 @@ class HarnessConsoleApp(App[None]):
         self.exit()
 
 
-def run(repo: Path, *, command_runner: CommandRunner = capturing_runner) -> int:
-    """harness.console.launcher.run_console's entry point once relaunched."""
-    app = HarnessConsoleApp(repo, command_runner=command_runner)
+def run(
+    repo: Path,
+    home_client: HomeClient,
+    *,
+    command_runner: CommandRunner = capturing_runner,
+) -> int:
+    """harness.console.launcher.run_console's entry point once relaunched and connected."""
+    app = HarnessConsoleApp(
+        repo, command_runner=command_runner, home_client=home_client
+    )
     app.run()
+    if app.home_client is not None:
+        # The client of the selected project; the launcher closes the first one it opened.
+        app.home_client.close()
     if app.restart_requested:
         try:
             restart_console(app.repo)

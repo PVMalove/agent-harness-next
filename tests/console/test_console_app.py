@@ -168,7 +168,9 @@ def test_dashboard_menu_opens_a_section_by_its_number(
         async with app.run_test(size=size) as pilot:
             await pilot.pause()
             await pilot.press("4")
-            await wait_until(pilot, lambda: type(app.screen).__name__ == "HarnessScreen")
+            await wait_until(
+                pilot, lambda: type(app.screen).__name__ == "HarnessScreen"
+            )
             return type(app.screen).__name__
 
     assert asyncio.run(scenario()) == "HarnessScreen"
@@ -1994,3 +1996,54 @@ def test_home_right_panel_is_cards_of_facts_and_folds_on_a_narrow_terminal(
         assert (
             seen["collapsed"] and seen["fold_on_screen"] and seen["fold_under_report"]
         )
+
+
+def test_a_project_switch_that_cannot_connect_keeps_the_project_and_says_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import launcher
+    from harness.console.client import ServerUnavailable
+    from tests.console._home_client import FakeHomeClient
+
+    def unreachable(repo: Path) -> FakeHomeClient:
+        raise ServerUnavailable("uv не найден в PATH")
+
+    first = FakeHomeClient(tmp_path)
+
+    async def scenario() -> list[str]:
+        app = HarnessConsoleApp(tmp_path, home_client=first)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            home = app.screen
+            monkeypatch.setattr(launcher, "connect_console", unreachable)
+            app.activate_project(tmp_path / "other")
+            await pilot.pause()
+            assert app.repo == tmp_path and app.screen is home
+            assert app.home_client is first and not first.closed
+            return [notice.message for notice in app._notifications]
+
+    messages = asyncio.run(scenario())
+    assert any("uv не найден в PATH" in message for message in messages)
+
+
+def test_a_project_switch_connects_to_the_new_project_and_closes_the_old_client(
+    tmp_path: Path,
+) -> None:
+    from tests.console._home_client import FakeHomeClient
+
+    first = FakeHomeClient(tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+
+    async def scenario() -> object:
+        app = HarnessConsoleApp(tmp_path, home_client=first)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.activate_project(other)
+            await pilot.pause()
+            assert app.repo == other
+            return app.home_client
+
+    client = asyncio.run(scenario())
+    assert isinstance(client, FakeHomeClient) and client.repo == other
+    assert first.closed

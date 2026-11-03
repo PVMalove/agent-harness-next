@@ -23,8 +23,19 @@ from unittest import mock
 import pytest
 
 from harness.console import launcher
+from harness.console.client import (
+    ConsoleClient,
+    HomeClient,
+    ServerUnavailable,
+    TokenRejected,
+)
 from harness.console.discovery import ServerEndpoint, discovery_path
-from harness.console.pin import TEXTUAL_PIN
+from harness.console.pin import TEXTUAL_PIN, WEBSOCKETS_PIN
+from tests.console._home_client import FakeHomeClient
+
+# The real functions: tests/console/conftest.py replaces the module attributes with a fake.
+CONNECT_CONSOLE = launcher.connect_console
+DISCOVER_CONSOLE = launcher.discover_console
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BIN_HARNESS = _REPO_ROOT / "harness" / "bin" / "harness.py"
@@ -46,6 +57,10 @@ def uv_at(monkeypatch: pytest.MonkeyPatch) -> UvAt:
 
 def _ready_server(_repo: Path, _uv: str) -> ServerEndpoint:
     return ServerEndpoint(port=1, token="00" * 32)
+
+
+def _fake_client(repo: Path) -> ConsoleClient:
+    return cast(ConsoleClient, FakeHomeClient(repo))
 
 
 def test_find_uv_uses_shutil_which() -> None:
@@ -77,6 +92,12 @@ def test_build_relaunch_argv_forwards_extra_argv() -> None:
     repo = Path("/tmp/some-repo")
     argv = launcher.build_relaunch_argv("/usr/local/bin/uv", repo, ["--foo", "bar"])
     assert argv[-2:] == ["--foo", "bar"]
+
+
+def test_build_relaunch_argv_adds_the_websockets_pin_for_the_server_client() -> None:
+    argv = launcher.build_relaunch_argv("/usr/local/bin/uv", Path("/tmp/some-repo"))
+    pins = [argv[index + 1] for index, arg in enumerate(argv) if arg == "--with"]
+    assert pins == [f"textual=={TEXTUAL_PIN}", f"websockets=={WEBSOCKETS_PIN}"]
 
 
 def test_build_server_argv_pins_the_server_requirements_and_never_touches_the_project() -> (
@@ -120,19 +141,186 @@ def test_run_console_already_relaunched_runs_the_injected_app_runner() -> None:
     `app_runner` - injected here instead of monkeypatching `sys.modules["harness.console.app"]`,
     which is never safe to do in a process that may also run real textual Pilot tests."""
     repo = Path("/tmp/some-repo")
-    calls: list[Path] = []
+    calls: list[tuple[Path, HomeClient]] = []
+    client = FakeHomeClient(repo)
 
-    def fake_app_runner(passed_repo: Path) -> int:
-        calls.append(passed_repo)
+    def fake_app_runner(passed_repo: Path, passed_client: HomeClient) -> int:
+        calls.append((passed_repo, passed_client))
         return 0
 
     with mock.patch.dict("os.environ", {launcher.RELAUNCH_ENV: "1"}):
         with mock.patch.object(launcher, "find_uv") as find_uv:
-            exit_code = launcher.run_console(repo, app_runner=fake_app_runner)
+            exit_code = launcher.run_console(
+                repo,
+                app_runner=fake_app_runner,
+                client_connector=lambda _repo: cast(ConsoleClient, client),
+            )
             find_uv.assert_not_called()
 
     assert exit_code == 0
-    assert calls == [repo]
+    assert calls == [(repo, client)]
+    assert client.closed
+
+
+def test_a_relaunched_process_without_a_server_prints_the_fallback_and_never_starts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    started, fallback = tmp_path / "started", tmp_path / "fallback"
+
+    def unreachable(_repo: Path) -> ConsoleClient:
+        raise ServerUnavailable("сервер консоли недоступен (ConnectionRefusedError)")
+
+    def no_app(_repo: Path, _client: HomeClient) -> int:
+        raise AssertionError("the TUI must not start without a server")
+
+    _init_repo(tmp_path / "repo")
+    environ = {
+        launcher.RELAUNCH_ENV: "1",
+        launcher.STARTED_ENV: str(started),
+        launcher.FALLBACK_ENV: str(fallback),
+    }
+    with mock.patch.dict("os.environ", environ):
+        exit_code = launcher.run_console(
+            tmp_path / "repo", app_runner=no_app, client_connector=unreachable
+        )
+
+    out = capsys.readouterr().out
+    assert exit_code == 1
+    assert (
+        "не удалось подключиться к серверу консоли: сервер консоли недоступен"
+        in out.splitlines()[0]
+    )
+    assert "Итого:" in out
+    assert not started.exists() and fallback.is_file()
+
+
+def test_the_outer_process_exits_one_without_a_second_message_after_the_fallback(
+    capsys: pytest.CaptureFixture[str], uv_at: UvAt
+) -> None:
+    def fell_back(
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> "subprocess.CompletedProcess[str]":
+        assert env is not None
+        Path(env[launcher.FALLBACK_ENV]).touch()
+        return subprocess.CompletedProcess(list(argv), 1, "", "")
+
+    uv_at("/usr/local/bin/uv")
+    exit_code = launcher.run_console(
+        Path("/tmp/some-repo"), runner=fell_back, server_starter=_ready_server
+    )
+
+    out = capsys.readouterr().out
+    assert exit_code == 1
+    assert "не удалось запустить textual" not in out and "Итого:" not in out
+
+
+class _Connects:
+    """The connect seam: records the endpoints and fails on chosen calls."""
+
+    def __init__(self, *failures: Exception) -> None:
+        self.endpoints: list[ServerEndpoint] = []
+        self._failures = list(failures)
+
+    def __call__(self, endpoint: ServerEndpoint) -> ConsoleClient:
+        self.endpoints.append(endpoint)
+        if self._failures:
+            raise self._failures.pop(0)
+        return _fake_client(Path("."))
+
+
+def _no_start(_repo: Path, _uv: str) -> ServerEndpoint:
+    raise AssertionError("a reachable server must not be started again")
+
+
+def _published(repo: Path, port: int, token: str) -> ServerEndpoint:
+    _init_repo(repo)
+    path = discovery_path(repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"port": port, "token": token, "pid": 1}))
+    return ServerEndpoint(port, token)
+
+
+def test_connect_console_uses_a_published_server_without_starting_one(
+    tmp_path: Path,
+) -> None:
+    record = _published(tmp_path / "repo", 4321, "ab" * 32)
+    connects = _Connects()
+    CONNECT_CONSOLE(tmp_path / "repo", starter=_no_start, connect=connects)
+    assert connects.endpoints == [record]
+
+
+def test_connect_console_starts_a_server_without_a_record(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    connects = _Connects()
+    started: list[tuple[Path, str]] = []
+
+    def starter(passed: Path, uv: str) -> ServerEndpoint:
+        started.append((passed, uv))
+        return ServerEndpoint(5555, "cd" * 32)
+
+    CONNECT_CONSOLE(repo, find=lambda: "/bin/uv", starter=starter, connect=connects)
+    assert started == [(repo, "/bin/uv")]
+    assert connects.endpoints == [ServerEndpoint(5555, "cd" * 32)]
+
+
+def test_connect_console_replaces_a_stale_record_by_starting_a_server(
+    tmp_path: Path,
+) -> None:
+    stale = _published(tmp_path / "repo", 4321, "ab" * 32)
+    fresh = ServerEndpoint(5555, "cd" * 32)
+    connects = _Connects(ServerUnavailable("closed port"))
+    CONNECT_CONSOLE(
+        tmp_path / "repo",
+        find=lambda: "/bin/uv",
+        starter=lambda _repo, _uv: fresh,
+        connect=connects,
+    )
+    assert connects.endpoints == [stale, fresh]
+
+
+def test_connect_console_without_uv_is_server_unavailable(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    with pytest.raises(ServerUnavailable, match="uv не найден"):
+        CONNECT_CONSOLE(repo, find=lambda: None, starter=_no_start, connect=_Connects())
+
+
+def test_connect_console_turns_a_failed_start_into_server_unavailable(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+
+    def failing(_repo: Path, _uv: str) -> ServerEndpoint:
+        raise launcher.ServerStartError("сервер не ответил за 30 с")
+
+    with pytest.raises(ServerUnavailable, match="сервер не ответил за 30 с"):
+        CONNECT_CONSOLE(
+            repo, find=lambda: "/bin/uv", starter=failing, connect=_Connects()
+        )
+
+
+def test_connect_console_does_not_retry_a_rejected_token(tmp_path: Path) -> None:
+    _published(tmp_path / "repo", 4321, "ab" * 32)
+    connects = _Connects(TokenRejected("сервер консоли не принял токен"))
+    with pytest.raises(TokenRejected):
+        CONNECT_CONSOLE(tmp_path / "repo", starter=_no_start, connect=connects)
+    assert len(connects.endpoints) == 1
+
+
+def test_discover_console_never_starts_a_server(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    connects = _Connects()
+    assert DISCOVER_CONSOLE(repo, connect=connects) is None
+    assert connects.endpoints == []
+    record = _published(repo, 4321, "ab" * 32)
+    assert DISCOVER_CONSOLE(repo, connect=connects) is not None
+    assert connects.endpoints == [record]
 
 
 def test_run_console_relaunches_via_the_injected_runner_when_uv_is_found(
@@ -228,7 +416,14 @@ def test_the_relaunched_process_marks_that_the_tui_started(tmp_path: Path) -> No
     with mock.patch.dict(
         "os.environ", {launcher.RELAUNCH_ENV: "1", launcher.STARTED_ENV: str(marker)}
     ):
-        assert launcher.run_console(tmp_path, app_runner=lambda _repo: 0) == 0
+        assert (
+            launcher.run_console(
+                tmp_path,
+                app_runner=lambda _repo, _client: 0,
+                client_connector=_fake_client,
+            )
+            == 0
+        )
     assert marker.is_file()
 
 
