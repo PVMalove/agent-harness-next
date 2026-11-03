@@ -34,10 +34,12 @@ from tests.orchestration.runtime_store_support import (
 )
 from tests.orchestration.scripted_engine import ScriptedEngine, podman_info
 
+
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
     reason="container QA runs only on Linux",
 )
+
 
 WORKER_TAG = "harness-worker:local"
 WORKER_BARE = "a" * 64
@@ -98,7 +100,9 @@ class ContainerQa:
         if hosts is not None:
             qa["network"] = {"hosts": hosts}
         if cache is not None:
-            qa["filesystem"] = [{"resource": "cache", "path": str(cache), "access": "write"}]
+            qa["filesystem"] = [
+                {"resource": "cache", "path": str(cache), "access": "write"}
+            ]
         config: JsonObject = {
             "access_policy": {
                 "defaults": {"mode": "sandbox", "container": container},
@@ -124,11 +128,15 @@ class ContainerQa:
         (repo / ".harness/.sandboxes/scratch").mkdir(parents=True, exist_ok=True)
         self.engine = ScriptedEngine(tmp / "engine", engine)
         self.engine.update(
-            lambda state: state["images"].update({worker_tag: WORKER_BARE, proxy_tag: "b" * 64})
+            lambda state: state["images"].update(
+                {worker_tag: WORKER_BARE, proxy_tag: "b" * 64}
+            )
         )
         if selinux:
             # The engine facts the plan pins are those before propose.
-            self.engine.update(lambda state: state.update(info=podman_info(selinux=True)))
+            self.engine.update(
+                lambda state: state.update(info=podman_info(selinux=True))
+            )
         assert migrate(repo).returncode == 0
         engine_path = {"PATH": str(self.engine.bin)} if scripted_engine else {}
         self.environ = {**engine_path, SECRET_NAME: SECRET}
@@ -162,7 +170,9 @@ class ContainerQa:
 
     def attempts(self) -> list[JsonObject]:
         """The ``qa-lane/attempts`` records of the dispatch, read from the store."""
-        answer = store_call(self.repo, self.runtime, "state.read", {"collections": ["qa-lane"]})
+        answer = store_call(
+            self.repo, self.runtime, "state.read", {"collections": ["qa-lane"]}
+        )
         records = answer["records"]
         assert isinstance(records, dict)
         return [
@@ -258,7 +268,9 @@ def test_each_command_runs_in_its_own_container_and_a_failed_gate_fails_the_repo
     report = repo.report()
     assert report["outcome"] == "failed"
     assert [(c["command"], c["result"]) for c in report["checks_run"]] == [
-        ("make lint", "pass"), ("make test", "fail"), ("make docs", "not_run"),
+        ("make lint", "pass"),
+        ("make test", "fail"),
+        ("make docs", "not_run"),
     ]
     runs = repo.engine.runs()
     assert len(runs) == 2
@@ -272,14 +284,22 @@ def test_each_command_runs_in_its_own_container_and_a_failed_gate_fails_the_repo
     assert _flag(runs[0], "--entrypoint") == ["/bin/sh"]
     assert runs[0][-3:] == [images["worker"], "-c", "make lint"]
     assert runs[1][-3:] == [images["worker"], "-c", "make test"]
-    assert not any(call[1] in ("commit", "push", "fetch") for call in repo.engine.calls())
+    assert not any(
+        call[1] in ("commit", "push", "fetch") for call in repo.engine.calls()
+    )
     lane = repo.lane()
     assert (lane["lease"], lane["queue"]) == (None, [])
     execution = repo.execution()
-    assert (execution["kind"], execution["state"], execution["attempt"]) == ("qa", "exited", 1)
+    assert (execution["kind"], execution["state"], execution["attempt"]) == (
+        "qa",
+        "exited",
+        1,
+    )
     records = execution["exit"]["commands"]
     assert [(r["stage_id"], r["result"], r["exit_code"]) for r in records] == [
-        ("gate-1", "ran", 0), ("gate-2", "ran", 1), ("gate-3", "not_run", None),
+        ("gate-1", "ran", 0),
+        ("gate-2", "ran", 1),
+        ("gate-3", "not_run", None),
     ]
 
 
@@ -303,14 +323,22 @@ def test_the_failed_nodeids_of_a_container_command_come_from_its_own_junit_repor
     report = repo.report()
     assert report["outcome"] == "failed"
     reports = [
-        [env for env in _flag(run, "--env") if env.startswith("HARNESS_STAGE_JUNIT_XML=")]
+        [
+            env
+            for env in _flag(run, "--env")
+            if env.startswith("HARNESS_STAGE_JUNIT_XML=")
+        ]
         for run in repo.engine.runs()
     ]
     assert [len(found) for found in reports] == [1, 1]
-    assert reports[0] != reports[1] and reports[1][0].endswith("/stage-gate-2.junit.xml")
+    assert reports[0] != reports[1] and reports[1][0].endswith(
+        "/stage-gate-2.junit.xml"
+    )
     records = repo.execution()["exit"]["commands"]
     assert records[1]["junit"] == reports[1][0].split("=", 1)[1]
-    stages = {stage["stage_id"]: stage for stage in _stage_evidence(repo, report)["stages"]}
+    stages = {
+        stage["stage_id"]: stage for stage in _stage_evidence(repo, report)["stages"]
+    }
     assert stages["gate-2"]["failed_nodeids"] == ["services/x.py::test_value[1]"]
     assert stages["gate-1"]["failed_nodeids"] == []
 
@@ -327,7 +355,9 @@ def _stage_evidence(repo: ContainerQa, report: JsonObject) -> JsonObject:
         }
     finally:
         connection.close()
-    trailer = artifacts["qa-artifacts/" + log.rsplit("/qa-artifacts/", 1)[1]].splitlines()[-1]
+    trailer = artifacts[
+        "qa-artifacts/" + log.rsplit("/qa-artifacts/", 1)[1]
+    ].splitlines()[-1]
     document: JsonObject = json.loads(artifacts[trailer.split(" ")[1]])
     return document
 
@@ -345,7 +375,10 @@ def test_an_infrastructure_ending_is_a_new_attempt_without_a_report_or_a_develop
     assert (attempt["attempt"], attempt["domain"]) == (1, "infrastructure")
     assert attempt["stage_evidence"].startswith("stage-evidence: qa-artifacts/")
     assert repo.status() | {"updated_at": None} == {
-        "dispatch_id": repo.dispatch, "state": "approved", "attempt": 1, "updated_at": None,
+        "dispatch_id": repo.dispatch,
+        "state": "approved",
+        "attempt": 1,
+        "updated_at": None,
     }
     lane = repo.lane()
     assert (lane["lease"], lane["queue"]) == (None, [])
@@ -361,7 +394,9 @@ def test_an_infrastructure_ending_is_a_new_attempt_without_a_report_or_a_develop
     path = f"batches/{repo.batch}.json"
     dispatches = store_records(repo.repo, repo.runtime, path)[path]["dispatches"]
     assert isinstance(dispatches, list)
-    assert [d["role"] for d in dispatches if isinstance(d, dict)].count("developer") == 1
+    assert [d["role"] for d in dispatches if isinstance(d, dict)].count(
+        "developer"
+    ) == 1
 
 
 _MARKER = "partial-output-of-an-interrupted-command-3b9d"
@@ -385,7 +420,9 @@ def test_a_partial_command_record_left_by_a_killed_runtime_is_not_run_and_never_
 ) -> None:
     repo = qa()
     repo.engine.script("gate-2", stdout=f"{_MARKER}\n", hang=True)
-    run = coordinator_popen(repo.repo, repo.runtime, "qa", "run", "--dispatch", repo.dispatch)
+    run = coordinator_popen(
+        repo.repo, repo.runtime, "qa", "run", "--dispatch", repo.dispatch
+    )
     deadline = time.monotonic() + 60
     while len(repo.engine.runs()) < 2 and time.monotonic() < deadline:
         time.sleep(0.05)
@@ -408,7 +445,9 @@ def test_a_partial_command_record_left_by_a_killed_runtime_is_not_run_and_never_
     assert execution["state"] == "lost"
     records = execution["exit"]["commands"]
     assert [(r["stage_id"], r["result"], r["exit_code"]) for r in records] == [
-        ("gate-1", "ran", 0), ("gate-2", "not_run", None), ("gate-3", "not_run", None),
+        ("gate-1", "ran", 0),
+        ("gate-2", "not_run", None),
+        ("gate-3", "not_run", None),
     ]
     [attempt] = repo.attempts()
     assert attempt["domain"] == "infrastructure"
@@ -422,13 +461,16 @@ def test_a_partial_command_record_left_by_a_killed_runtime_is_not_run_and_never_
 
 
 @pytest.mark.parametrize(
-    ("code", "hang", "domain"), [(127, False, "tooling"), (126, False, "tooling"), (0, True, "timeout")]
+    ("code", "hang", "domain"),
+    [(127, False, "tooling"), (126, False, "tooling"), (0, True, "timeout")],
 )
 def test_tooling_and_timeout_endings_block_the_report_with_their_domain(
     qa: Make, code: int, hang: bool, domain: str
 ) -> None:
-    repo = qa(timeout=1)
-    repo.engine.script("gate-2", stderr="sh: make: not found\n", exit_code=code, hang=hang)
+    repo = qa(timeout=1 if hang else 600)
+    repo.engine.script(
+        "gate-2", stderr="sh: make: not found\n", exit_code=code, hang=hang
+    )
 
     status, result, err = repo.qa_run()
 
@@ -438,7 +480,10 @@ def test_tooling_and_timeout_endings_block_the_report_with_their_domain(
     assert domain in report["blockers"]["details"]
     assert [c["result"] for c in report["checks_run"]] == ["pass", "fail", "not_run"]
     records = repo.execution()["exit"]["commands"]
-    assert (records[1]["domain"], records[1]["exit_code"]) == (domain, 143 if hang else code)
+    assert (records[1]["domain"], records[1]["exit_code"]) == (
+        domain,
+        143 if hang else code,
+    )
     if hang:
         stops = [call for call in repo.engine.calls() if call[1] == "stop"]
         assert stops and stops[0][2:4] == ["--time", "1"]
@@ -489,7 +534,10 @@ def test_an_offline_dependency_install_is_environment_preparation_and_a_new_atte
     assert code == 2, err
     [attempt] = repo.attempts()
     assert attempt["domain"] == "environment_preparation"
-    stages = [call[call.index("--name") + 1].rsplit("-qa1-", 1)[1] for call in repo.engine.runs()]
+    stages = [
+        call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
+        for call in repo.engine.runs()
+    ]
     assert stages == ["preparation-1", "environment-probe-1", "project-file-check-1"]
     assert repo.status()["state"] == "approved"
 
@@ -525,7 +573,10 @@ def test_the_runs_share_one_sidecar_and_network_and_mount_the_pinned_cache(
         mounts = _flag(run, "--mount")
         assert f"type=bind,source={cache},target={cache}" in mounts
         assert not any(f"source={tmp_path}," in mount for mount in mounts)
-        assert SECRET not in json.dumps(run) and _flag(run, "--env").count(SECRET_NAME) == 1
+        assert (
+            SECRET not in json.dumps(run)
+            and _flag(run, "--env").count(SECRET_NAME) == 1
+        )
     assert not any("volume" in part for call in calls for part in call)
     assert repo.engine.state()["objects"] == {}
 

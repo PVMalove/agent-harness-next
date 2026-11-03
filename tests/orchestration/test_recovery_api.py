@@ -4,9 +4,11 @@ refusals, on every platform."""
 from __future__ import annotations
 
 import json
+import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -230,10 +232,17 @@ def _check(document: Document, name: str) -> Document:
 
 
 def _status(recovery: Recovery, *extra: str, python: str | None = None) -> Document:
-    result, document = recovery.recovery("status", *extra, python=python)
-    assert result.returncode == 0, result.stderr
-    assert document is not None
-    return document
+    # Process and alternate-runtime wiring have dedicated smoke cases. The
+    # diagnostic matrix uses the shared API against the same real store.
+    if extra or python is not None:
+        result, document = recovery.recovery("status", *extra, python=python)
+        assert result.returncode == 0, result.stderr
+        assert document is not None
+        return document
+    with mock.patch.dict(os.environ, recovery.runtime.environ):
+        return recovery_api.status(
+            recovery.repo, recovery.repo / ".harness/orchestration/state", recovery.batch
+        )
 
 
 def _edit_batch(recovery: Recovery, **changes: object) -> None:
@@ -245,7 +254,9 @@ def _edit_batch(recovery: Recovery, **changes: object) -> None:
 def test_status_of_a_healthy_batch_is_resumable_and_read_only(recovery: Recovery) -> None:
     before = recovery.audit_records()
 
-    document = _status(recovery)
+    result, document = recovery.recovery("status")
+    assert result.returncode == 0, result.stderr
+    assert document is not None
 
     assert document["resumable"] is True
     assert {item["status"] for item in document["checks"]} == {"passed"}

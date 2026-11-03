@@ -25,6 +25,7 @@ from tests.orchestration.runtime_store_support import (
     store_records,
 )
 
+
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
     reason="the runtime supervises processes on Linux",
@@ -647,7 +648,7 @@ def test_a_launch_the_os_refuses_is_a_failed_operation_and_blocks_the_dispatch(
 def test_a_cancel_of_a_running_execution_is_refused_until_its_stop_is_proven(
     supervised: Factory,
 ) -> None:
-    repo = supervised(timeout=3, grace=1)
+    repo = supervised()
     sent(repo.send())
     cancel = (
         "dispatch",
@@ -667,6 +668,7 @@ def test_a_cancel_of_a_running_execution_is_refused_until_its_stop_is_proven(
 
     assert refused.returncode == 2
     assert repo.status()["state"] == "dispatched"
+    repo.release()
     repo.wait_execution("exited", timeout=20)
     accepted = repo.run(*cancel)
     assert accepted.returncode == 0, accepted.stderr

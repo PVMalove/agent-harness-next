@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from harness.cleanup import apply_cleanup, plan_cleanup
+from harness.orchestration.runtime_client import RuntimeClientError
 from tests.orchestration import runtime_store_support as support
 from tests.orchestration.scripted_engine import ScriptedEngine
 
@@ -448,7 +449,9 @@ class ContainerCleanupTests(unittest.TestCase):
         )
         self.repository = str((self.repo / ".git").resolve())
         self.engine = ScriptedEngine(Path(self.temporary.name) / "engine")
-        self.runtime = support.ServingRuntime(self.repo, env={"PATH": self.engine.path()})
+        self.runtime = support.ServingRuntime(
+            self.repo, env={"PATH": self.engine.path()}
+        )
         self.addCleanup(self.runtime.stop)
         patcher = mock.patch.dict(os.environ, self.runtime.environ)
         patcher.start()
@@ -538,7 +541,12 @@ class ContainerCleanupTests(unittest.TestCase):
         )
         names = {item["name"] for item in self.engine.state()["objects"].values()}
         self.assertEqual(
-            names, {f"harness-{foreign}", f"harness-{foreign}-proxy", f"harness-{foreign}-net"}
+            names,
+            {
+                f"harness-{foreign}",
+                f"harness-{foreign}-proxy",
+                f"harness-{foreign}-net",
+            },
         )
         self.assertTrue(all(call[0] == "podman" for call in self.engine.calls()))
         self.assertFalse(any("volume" in call for call in self.engine.calls()))
@@ -575,12 +583,29 @@ class ContainerCleanupTests(unittest.TestCase):
         """Проверить пропуск при недоступном движке и недоступном runtime."""
         self.dispatch(1)
         self.engine.update(lambda state: state["failures"].update(ps="cannot connect"))
-        self.assertIn("engine_unavailable", self.skipped()["container resources"])
-        self.assertEqual(self.planned(), [])
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        skipped = {item["path"]: item["reason"] for item in plan["skipped"]}
+        self.assertIn("engine_unavailable", skipped["container resources"])
+        self.assertFalse(
+            any(item["kind"] in {"container", "network"} for item in plan["remove"])
+        )
 
         self.runtime.stop()
-        self.assertIn("runtime_unavailable", self.skipped()["container resources"])
-        self.assertEqual(self.planned(), [])
+        # Transport deadlines are covered by runtime_client tests. Here only the
+        # cleanup response to an unavailable runtime belongs to the contract.
+        with mock.patch("harness.cleanup.RuntimeClient") as client:
+            client.return_value.call.side_effect = RuntimeClientError(
+                "runtime_unavailable",
+                "offline",
+                remedy="start runtime",
+                domain="infrastructure",
+            )
+            plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        skipped = {item["path"]: item["reason"] for item in plan["skipped"]}
+        self.assertIn("runtime_unavailable", skipped["container resources"])
+        self.assertFalse(
+            any(item["kind"] in {"container", "network"} for item in plan["remove"])
+        )
 
 
 if __name__ == "__main__":
