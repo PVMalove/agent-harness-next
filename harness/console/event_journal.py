@@ -91,6 +91,11 @@ def _int(value: object) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
 
+def _line(value: object) -> bytes:
+    """One journal line; ASCII escapes keep a lone surrogate of a ledger field encodable."""
+    return json.dumps(value, ensure_ascii=True).encode() + b"\n"
+
+
 class EventJournal:
     """One journal file and its kept events. ``load`` and ``write`` do file work and run in a
     thread; ``record``, ``accept``, ``checkpoint`` and ``compacted`` run on the event loop."""
@@ -246,7 +251,7 @@ class EventJournal:
         try:
             fd = _private_file(temporary)
             with os.fdopen(fd, "wb") as stream:
-                stream.write(json.dumps(header, ensure_ascii=False).encode() + b"\n")
+                stream.write(_line(header))
                 stream.flush()
                 os.fsync(stream.fileno())
             # Windows refuses to replace a file this process still holds open; when the
@@ -268,8 +273,7 @@ class EventJournal:
         if not events and not delta:
             return None
         line = {"head": self.head + len(events), "events": events, "delta": delta}
-        # ASCII escapes keep a lone surrogate of a ledger field encodable.
-        return json.dumps(line, ensure_ascii=True).encode() + b"\n"
+        return _line(line)
 
     def write(self, line: bytes) -> None:
         """Append and sync one commit line."""

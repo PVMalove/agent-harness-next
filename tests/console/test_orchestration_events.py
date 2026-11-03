@@ -655,6 +655,42 @@ def test_a_failing_poll_is_a_typed_state_and_the_poller_keeps_polling(
     asyncio.run(scenario())
 
 
+def test_compaction_keeps_a_lone_surrogate_and_bounds_the_journal(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console import event_journal
+
+    monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
+    _ledger(project)
+    reader = ScriptedReader(_one_batch("planned"))
+
+    async def scenario() -> None:
+        server = ConsoleServer(
+            project,
+            events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
+            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+        )
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(_subscribe("live"))
+                assert (await _next_source(client))["state"] == "available"
+                previous = "planned"
+                for index in range(6):
+                    state = f"step-{index}\ud800"
+                    reader.observation = _one_batch(state)
+                    message = await _receive(client)
+                    assert message["kind"] == "events", message
+                    (event,) = message["events"]
+                    assert (event["from"], event["to"]) == (previous, state)
+                    previous = state
+        finally:
+            await server.close()
+        assert len(_journal(project).read_bytes().splitlines()) <= 1 + 2 * 2
+
+    asyncio.run(scenario())
+
+
 def _store_epoch(project: Path) -> None:
     state = project / STATE_REL
     state.mkdir(parents=True)
