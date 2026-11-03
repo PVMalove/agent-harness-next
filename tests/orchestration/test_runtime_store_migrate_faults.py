@@ -48,6 +48,18 @@ STEPS = (
     "pointer",
 )
 
+# Rollback hooks belong to the same Rust registry, but PausedMigrate exercises only migration.
+ROLLBACK_STEPS = (
+    "rollback-locked",
+    "rollback-checked",
+    "rollback-archive",
+    "rollback-generation",
+    "rollback-audit",
+    "rollback-authority",
+    "rollback-pointer-replace",
+    "rollback-pointer",
+)
+
 
 def _legacy(repo: Path) -> dict[str, bytes]:
     """The legacy generations and the lock audit: migrate never rewrites or deletes them."""
@@ -74,7 +86,8 @@ def test_the_steps_the_tests_stop_at_are_the_steps_the_hooks_name() -> None:
     block = source.split("pub const STEPS")[1].split("];")[0]
 
     assert (
-        tuple(part.split('"')[1] for part in block.split(",") if '"' in part) == STEPS
+        tuple(part.split('"')[1] for part in block.split(",") if '"' in part)
+        == STEPS + ROLLBACK_STEPS
     )
 
 

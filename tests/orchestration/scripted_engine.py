@@ -74,7 +74,9 @@ class ScriptedEngine:
             change(state)
 
     def state(self) -> State:
-        return cast("State", json.loads(self.state_file.read_text(encoding="utf-8")))
+        with self.state_file.open(encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_SH)
+            return cast("State", json.load(handle))
 
     def calls(self) -> list[list[str]]:
         return list(self.state()["calls"])
