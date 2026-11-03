@@ -9,6 +9,8 @@
 
 Перед TUI и для `--web` модуль запускает или находит Сервер консоли проекта (`start_server`, ADR 0028):
 отдельный процесс `harness console-server` под `uv run --with` с пинами сервера из `pin.py`.
+Перезапущенный процесс TUI подключается к нему клиентом (`connect_console`) до старта приложения;
+без сервера TUI не стартует, и команда показывает отчёт `harness health`.
 """
 
 from __future__ import annotations
@@ -25,8 +27,9 @@ import webbrowser
 from pathlib import Path
 from typing import BinaryIO, Callable, NoReturn, Sequence
 
+from .client import ConsoleClient, ConsoleClientError, HomeClient, ServerUnavailable
 from .discovery import ServerEndpoint, read_record
-from .pin import CONSOLE_SERVER_REQUIREMENTS, TEXTUAL_PIN
+from .pin import CONSOLE_SERVER_REQUIREMENTS, TEXTUAL_PIN, WEBSOCKETS_PIN
 from .runner import CommandRunner, default_runner
 
 # Set on the relaunched `uv run` subprocess's own environment so it knows not to relaunch again.
@@ -34,6 +37,9 @@ RELAUNCH_ENV = "HARNESS_CONSOLE_RELAUNCHED"
 # A marker file the relaunched process creates once it reaches the TUI: a non-zero exit after that
 # is the TUI's own failure, not a failed `uv run --with textual` start, so it gets no fallback.
 STARTED_ENV = "HARNESS_CONSOLE_STARTED_FILE"
+# A marker file the relaunched process creates when it could not connect to the console server and
+# already printed the fallback: the outer process then exits 1 without a second message.
+FALLBACK_ENV = "HARNESS_CONSOLE_FALLBACK_FILE"
 
 BIN_HARNESS_PATH = Path(__file__).resolve().parent.parent / "bin" / "harness.py"
 
@@ -57,7 +63,7 @@ def build_relaunch_argv(
     """Формирует точную команду перезапуска: флаг `--no-project` исключает установку зависимостей
     окружающего проекта или изменение lock-файла, `--with textual==<pin>` изолирует зависимость TUI
     в одноразовом окружении, а `--python <текущий интерпретатор>` повторно использует интерпретатор,
-    уже прошедший проверку Python >= 3.12."""
+    уже прошедший проверку Python >= 3.12. `--with websockets==<pin>` нужен клиенту Сервера консоли."""
     return [
         uv,
         "run",
@@ -66,6 +72,8 @@ def build_relaunch_argv(
         sys.executable,
         "--with",
         f"textual=={TEXTUAL_PIN}",
+        "--with",
+        f"websockets=={WEBSOCKETS_PIN}",
         "python",
         str(BIN_HARNESS_PATH),
         "console",
@@ -198,11 +206,61 @@ def start_server(
         raise ServerStartError(f"сервер не ответил за {timeout:g} с")
 
 
-def _default_app_runner(repo: Path) -> int:
+ClientConnector = Callable[[ServerEndpoint], ConsoleClient]
+
+
+def connect_console(
+    repo: Path,
+    *,
+    find: Callable[[], str | None] = find_uv,
+    starter: ServerStarter = start_server,
+    connect: ClientConnector = ConsoleClient.connect,
+) -> ConsoleClient:
+    """Подключается к Серверу консоли проекта; если записи нет или она устарела, запускает сервер
+    через `uv` и подключается к нему. Сбой — `ConsoleClientError`; отказ в токене не повторяется."""
+    record = read_record(repo)
+    if record is not None:
+        try:
+            return connect(record)
+        except ServerUnavailable:
+            pass  # a stale record: start a server below
+    uv = find()
+    if uv is None:
+        raise ServerUnavailable("uv не найден в PATH")
+    try:
+        endpoint = starter(repo, uv)
+    except ServerStartError as exc:
+        raise ServerUnavailable(str(exc)) from None
+    return connect(endpoint)
+
+
+def discover_console(
+    repo: Path, *, connect: ClientConnector = ConsoleClient.connect
+) -> ConsoleClient | None:
+    """Подключается к уже работающему Серверу консоли проекта, ничего не запуская: без записи или
+    при устаревшей записи — None."""
+    record = read_record(repo)
+    if record is None:
+        return None
+    try:
+        return connect(record)
+    except ServerUnavailable:
+        return None
+
+
+def _default_app_runner(repo: Path, client: HomeClient) -> int:
     """Запускает приложение Textual по умолчанию для указанного репозитория."""
     from . import app as console_app
 
-    return console_app.run(repo)
+    return console_app.run(repo, client)
+
+
+def _touch(marker: str | None) -> None:
+    if marker:
+        try:
+            Path(marker).touch()
+        except OSError:
+            pass
 
 
 def run_console(
@@ -212,15 +270,18 @@ def run_console(
     web: bool = False,
     no_open: bool = False,
     runner: CommandRunner = default_runner,
-    app_runner: Callable[[Path], int] = _default_app_runner,
+    app_runner: Callable[[Path, HomeClient], int] = _default_app_runner,
+    client_connector: Callable[[Path], ConsoleClient] = connect_console,
     server_starter: ServerStarter = start_server,
     browser_opener: Callable[[str], object] = webbrowser.open,
 ) -> int:
     """Точка входа, вызываемая `cmd_console`. Реализует четыре сценария:
 
-    1. Процесс уже перезапущен (установлена переменная окружения `RELAUNCH_ENV`): запускает реальное
-       Textual-приложение внутри процесса через `app_runner`. Это единственный путь, импортирующий
-       `textual`.
+    1. Процесс уже перезапущен (установлена переменная окружения `RELAUNCH_ENV`): подключается к
+       Серверу консоли через `client_connector` и запускает реальное Textual-приложение внутри
+       процесса через `app_runner`. Это единственный путь, импортирующий `textual`. Сбой подключения
+       выводит причину и отчёт health, код 1; TUI не стартует. Сбой первого запроса Главной
+       (`ConsoleClientError` из `app_runner`) завершается тем же фолбэком.
     2. Утилита `uv` не найдена в PATH: выводит причину и переключается на отчёт `harness health`,
        код 1.
     3. `uv` найден: `server_starter` запускает Сервер консоли проекта или находит работающий. Сбой
@@ -230,13 +291,28 @@ def run_console(
        выводит отчёт health и возвращает 1, ненулевой код после старта TUI возвращается как есть.
     """
     if os.environ.get(RELAUNCH_ENV) == "1":
-        started = os.environ.get(STARTED_ENV)
-        if started:
-            try:
-                Path(started).touch()
-            except OSError:
-                pass
-        return app_runner(repo)
+        try:
+            client = client_connector(repo)
+        except ConsoleClientError as exc:
+            _touch(os.environ.get(FALLBACK_ENV))
+            _print_fallback(
+                repo,
+                f"harness console: не удалось подключиться к серверу консоли: {exc} — показан отчёт harness health",
+            )
+            return 1
+        _touch(os.environ.get(STARTED_ENV))
+        try:
+            return app_runner(repo, client)
+        except ConsoleClientError as exc:
+            # The first Home request failed after connect: the same fallback as a failed connect.
+            _touch(os.environ.get(FALLBACK_ENV))
+            _print_fallback(
+                repo,
+                f"harness console: сервер консоли не отдал Главную: {exc} — показан отчёт harness health",
+            )
+            return 1
+        finally:
+            client.close()
 
     uv = find_uv()
     if uv is None:
@@ -267,11 +343,17 @@ def run_console(
     # A process-liveness marker, not a task artifact: it lives only for this call.
     with tempfile.TemporaryDirectory(prefix="harness-console-") as marker_dir:
         marker = Path(marker_dir) / "started"
+        fallback = Path(marker_dir) / "fallback"
         env[STARTED_ENV] = str(marker)
+        env[FALLBACK_ENV] = str(fallback)
         result = runner(argv, env=env)
         tui_started = marker.exists()
+        fell_back = fallback.exists()
     if result.returncode == 0:
         return 0
+    if fell_back:
+        # The relaunched process already printed the reason and the health report.
+        return 1
     if tui_started:
         print(f"harness console завершился с кодом {result.returncode}")
         return result.returncode
