@@ -182,7 +182,15 @@ class HarnessConsoleApp(App[None]):
     def on_mount(self) -> None:
         self.register_theme(HARNESS_THEME)
         self.theme = brand.THEME_NAME
-        self.push_screen(DashboardScreen(self.repo, command_runner=self.command_runner))
+        # Home reads the console server: without a client there is no home screen to show.
+        if self.home_client is not None:
+            self.push_screen(
+                DashboardScreen(
+                    self.repo,
+                    home_client=self.home_client,
+                    command_runner=self.command_runner,
+                )
+            )
 
     def _tracked_runner(
         self,
@@ -212,7 +220,11 @@ class HarnessConsoleApp(App[None]):
             return
         previous, self.home_client = self.home_client, client
         self.repo = repo
-        self.switch_screen(DashboardScreen(repo, command_runner=self.command_runner))
+        self.switch_screen(
+            DashboardScreen(
+                repo, home_client=client, command_runner=self.command_runner
+            )
+        )
         if previous is not None:
             previous.close()
 

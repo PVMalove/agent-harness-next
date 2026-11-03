@@ -25,6 +25,7 @@ from harness.console.screens.dashboard import DashboardScreen
 from harness.console.screens.project_setup import ProjectSetupScreen
 from harness.console.shell import Fold
 
+from tests.console._home_client import fake_home
 from tests.console._pilot_wait import press, wait_until
 
 
@@ -191,13 +192,19 @@ def test_late_results_of_the_previous_project_do_not_reach_the_new_dashboard(
 
     class Host(App[None]):
         def on_mount(self) -> None:
-            self.push_screen(DashboardScreen(first, collect_dashboard=slow_first))
+            self.push_screen(
+                DashboardScreen(first, home_client=fake_home(slow_first, repo=first))
+            )
 
     async def scenario() -> str:
         app = Host()
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            app.switch_screen(DashboardScreen(second, collect_dashboard=marked_second))
+            app.switch_screen(
+                DashboardScreen(
+                    second, home_client=fake_home(marked_second, repo=second)
+                )
+            )
             await pilot.pause()
             release.set()
             await pilot.pause(0.5)

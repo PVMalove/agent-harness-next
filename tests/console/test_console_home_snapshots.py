@@ -14,6 +14,7 @@ from textual.screen import Screen
 
 from harness.console import reports
 from harness.console.screens.dashboard import DashboardScreen
+from tests.console._home_client import fake_home
 from tests.console._svg_snapshot import (
     PROJECT,
     SIZES,
@@ -35,9 +36,10 @@ def _screen(repo: Path) -> Screen[object]:
         Screen[object],
         DashboardScreen(
             repo,
-            collect_dashboard=lambda _repo, *, online=False: DATA,
+            home_client=fake_home(
+                lambda _repo, *, online=False: DATA, lambda _repo: CONTEXT, repo=repo
+            ),
             collect_banner=lambda _repo: BANNER,
-            collect_context=lambda _repo: CONTEXT,
             now=lambda: NOW,
         ),
     )

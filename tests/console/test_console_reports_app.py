@@ -18,6 +18,7 @@ from textual.widgets import Button, Input, ListView, Select, Static
 
 from tests.console._pilot_wait import wait_until
 from tests.console._console_ledger_fixture import QA_LOG_SHA256, build_reports_fixture
+from tests.console._home_client import fake_home
 from harness.console.app import HarnessConsoleApp
 from harness.console.data import DashboardData
 from harness.console.screens.dashboard import DashboardScreen
@@ -72,8 +73,11 @@ def test_dashboard_reports_section_opens_the_reports_screen(tmp_path: Path) -> N
     async def scenario() -> bool:
         screen = DashboardScreen(
             tmp_path,
-            collect_dashboard=lambda _repo, *, online=False: DashboardData(
-                0, 0, 0, 0, "-", "0", "-", None
+            home_client=fake_home(
+                lambda _repo, *, online=False: DashboardData(
+                    0, 0, 0, 0, "-", "0", "-", None
+                ),
+                repo=tmp_path,
             ),
         )
 

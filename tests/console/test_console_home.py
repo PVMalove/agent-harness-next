@@ -29,6 +29,7 @@ from harness.console.repo_map_settings import MemoryStatus
 from harness.console.screens.dashboard import DashboardScreen, HomeContext
 from harness.console.shell import Breadcrumbs, JumpLink, SectionCard, ShellSidebar
 from harness.health.model import CheckResult
+from tests.console._home_client import fake_home
 from tests.console._pilot_wait import crumb_text, wait_until
 
 WIDE, NARROW = (160, 52), (80, 24)
@@ -166,9 +167,10 @@ def _home(
 ) -> DashboardScreen:
     return DashboardScreen(
         repo,
-        collect_dashboard=lambda _repo, *, online=False: DATA,
+        home_client=fake_home(
+            lambda _repo, *, online=False: DATA, lambda _repo: CONTEXT, repo=repo
+        ),
         collect_banner=lambda _repo: BANNER,
-        collect_context=lambda _repo: CONTEXT,
         now=lambda: NOW,
         collect_titles=collect_titles,
     )
@@ -312,11 +314,14 @@ def test_home_shows_no_demo_data_without_facts(
         async with app.run_test(size=size) as pilot:
             home = DashboardScreen(
                 tmp_path,
-                collect_dashboard=lambda _repo, *, online=False: DATA,
+                home_client=fake_home(
+                    lambda _repo, *, online=False: DATA,
+                    lambda _repo: HomeContext(),
+                    repo=tmp_path,
+                ),
                 collect_banner=lambda _repo: brand.BannerInfo(
                     version="1.4.6", capabilities=(), repo="~/x", branch=None
                 ),
-                collect_context=lambda _repo: HomeContext(),
             )
             await app.switch_screen(home)
             await pilot.pause()
@@ -594,3 +599,57 @@ def test_departed_home_cannot_apply_its_title_response(project: Path) -> None:
             release.set()
 
     asyncio.run(scenario())
+
+
+def test_home_reads_the_server_snapshot_forced_offline_and_online(
+    project: Path,
+) -> None:
+    """The facts come from the console server: the first one as served, `r` rebuilds the offline
+    snapshot, `o` asks for the online checks."""
+    client = fake_home(lambda _repo, *, online=False: DATA, lambda _repo: CONTEXT)
+
+    async def scenario() -> None:
+        app = HarnessConsoleApp(project)
+        async with app.run_test(size=WIDE) as pilot:
+            home = DashboardScreen(
+                project,
+                home_client=client,
+                collect_banner=lambda _repo: BANNER,
+                now=lambda: NOW,
+            )
+            await app.switch_screen(home)
+            await app.workers.wait_for_complete()
+            await pilot.press("r")
+            await app.workers.wait_for_complete()
+            await pilot.press("o")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            mode = str(home.query_one("#dashboard-attention-mode", Static).render())
+            assert mode.startswith("online")
+
+    asyncio.run(scenario())
+    assert client.requests == [(False, False), (True, False), (False, True)]
+
+
+def test_the_attention_count_is_the_total_beyond_the_listed_problems(
+    project: Path,
+) -> None:
+    problems = tuple(("fail", f"check.{index}", "broken") for index in range(130))
+    data = replace(DATA, fail=130, problems=problems)
+
+    async def scenario() -> tuple[str, int]:
+        app = HarnessConsoleApp(project)
+        async with app.run_test(size=WIDE) as pilot:
+            home = DashboardScreen(
+                project,
+                home_client=fake_home(lambda _repo, *, online=False: data),
+                collect_banner=lambda _repo: BANNER,
+            )
+            await app.switch_screen(home)
+            await pilot.pause()
+            card = home.query_one("#dashboard-attention-card", SectionCard)
+            return str(card.border_title), len(home.query(".problem-row"))
+
+    title, rows = asyncio.run(scenario())
+    assert title == " ТРЕБУЕТ ВНИМАНИЯ  130 "
+    assert rows <= 100
