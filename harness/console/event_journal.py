@@ -268,7 +268,8 @@ class EventJournal:
         if not events and not delta:
             return None
         line = {"head": self.head + len(events), "events": events, "delta": delta}
-        return json.dumps(line, ensure_ascii=False).encode() + b"\n"
+        # ASCII escapes keep a lone surrogate of a ledger field encodable.
+        return json.dumps(line, ensure_ascii=True).encode() + b"\n"
 
     def write(self, line: bytes) -> None:
         """Append and sync one commit line."""

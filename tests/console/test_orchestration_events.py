@@ -13,6 +13,8 @@ import pytest
 
 from harness.console.orchestration_events import (
     POLL_INTERVAL_SECONDS,
+    BatchFacts,
+    Observation,
     OrchestrationEvents,
     ProjectReader,
     SourceUnavailable,
@@ -584,6 +586,69 @@ def test_an_unavailable_journal_is_a_typed_state(project: Path) -> None:
                 _Batch(ledger, "batch-a", "#7")
                 (event,) = await _events(client, 1)
                 assert event["event"] == "batch.transition"
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+
+class ScriptedReader:
+    """Returns whatever observation the test set last."""
+
+    def __init__(self, observation: Observation) -> None:
+        self.observation = observation
+
+    def read(self) -> Observation:
+        return self.observation
+
+
+def _one_batch(state: str) -> Observation:
+    return Observation(
+        store="ledger",
+        batches={
+            "batch-a": BatchFacts(ticket="#7", state=state, dispatches=(), decisions=())
+        },
+    )
+
+
+def test_a_failing_poll_is_a_typed_state_and_the_poller_keeps_polling(
+    project: Path,
+) -> None:
+    _ledger(project)
+    reader = ScriptedReader(_one_batch("planned"))
+
+    async def scenario() -> None:
+        server = ConsoleServer(
+            project,
+            events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
+            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+        )
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(_subscribe("live"))
+                assert (await _next_source(client))["state"] == "available"
+                # A record the view cannot be built from fails after the read succeeded.
+                reader.observation = Observation(
+                    store="ledger",
+                    batches={"batch-a": "not batch facts"},  # type: ignore[dict-item]
+                )
+                source = await _next_source(client)
+                assert (source["state"], source["reason"]) == (
+                    "unavailable",
+                    "unreadable",
+                )
+                assert source["message"]
+                assert await _home_answers(client)
+                # A lone surrogate in a ledger field must not stop the journal either.
+                reader.observation = _one_batch("active\ud800x")
+                assert (await _next_source(client))["state"] == "available"
+                (event,) = await _events(client, 1)
+                assert (event["event"], event["from"], event["to"]) == (
+                    "batch.transition",
+                    "planned",
+                    "active\ud800x",
+                )
         finally:
             await server.close()
 

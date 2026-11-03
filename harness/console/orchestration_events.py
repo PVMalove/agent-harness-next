@@ -562,16 +562,21 @@ class OrchestrationEvents:
         except Exception as exc:
             self._unavailable("unreadable", type(exc).__name__)
             return
-        view = compact(observation)
-        observed_at = _now()
-        events = [
-            {"seq": journal.head + offset, "observed_at": observed_at, **event}
-            for offset, event in enumerate(
-                diff(journal.view, observation) if journal.view is not None else [],
-                start=1,
-            )
-        ]
-        line = journal.record(events, view)
+        try:
+            view = compact(observation)
+            observed_at = _now()
+            events = [
+                {"seq": journal.head + offset, "observed_at": observed_at, **event}
+                for offset, event in enumerate(
+                    diff(journal.view, observation) if journal.view is not None else [],
+                    start=1,
+                )
+            ]
+            line = journal.record(events, view)
+        except Exception as exc:
+            # Nothing was written: the view stays at the last persisted state.
+            self._unavailable("unreadable", type(exc).__name__)
+            return
         if line is not None:
             try:
                 await asyncio.to_thread(journal.write, line)
@@ -598,7 +603,11 @@ class OrchestrationEvents:
 
     async def _run(self) -> None:
         while True:
-            await self._poll()
+            try:
+                await self._poll()
+            except Exception as exc:
+                # The poller never dies: an unexpected failure is a typed source state.
+                self._unavailable("unreadable", type(exc).__name__)
             self._first_poll.set()
             await asyncio.sleep(self._interval)
 
