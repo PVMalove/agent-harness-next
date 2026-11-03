@@ -957,6 +957,44 @@ def test_a_snapshot_no_longer_kept_is_expired_and_the_cached_one_still_pages() -
     assert problems_from_text(_page_all(service, kept_id)[1]) == snapshot.problems
 
 
+def test_online_snapshots_never_expire_the_cached_one_while_it_is_handed_out() -> None:
+    snapshot = build_home_snapshot(_many_problems(150, "x"), HomeContext())
+    online = build_home_snapshot(_many_problems(150, "y"), HomeContext())
+    service = SnapshotService(
+        Path("."),
+        clock=FakeClock(),
+        collect=lambda _: snapshot,
+        collect_online=lambda _: online,
+    )
+
+    async def scenario() -> tuple[dict[str, object], dict[str, object]]:
+        await respond('{"type": "home.snapshot"}', service)
+        for _ in range(KEPT_SNAPSHOTS):
+            await respond('{"type": "home.snapshot", "online": true}', service)
+        cached = json.loads(await respond('{"type": "home.snapshot"}', service))
+        page = json.loads(
+            await respond(
+                json.dumps(
+                    {
+                        "id": 5,
+                        "type": "home.problems",
+                        "snapshot_id": cached["problems_snapshot_id"],
+                        "offset": 0,
+                    }
+                ),
+                service,
+            )
+        )
+        return cached, page
+
+    cached, page = asyncio.run(scenario())
+    kept_id = cached["problems_snapshot_id"]
+    assert isinstance(kept_id, int)
+    assert cached["cached"] is True
+    assert page["ok"] is True
+    assert problems_from_text(_page_all(service, kept_id)[1]) == snapshot.problems
+
+
 @pytest.mark.parametrize(
     "fields",
     [

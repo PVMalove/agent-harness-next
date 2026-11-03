@@ -35,7 +35,8 @@ MESSAGE_BYTES = 300
 ID_BYTES = 100
 # A `home.problems` page: the problems beyond what one Home reply lists, in wire bytes.
 PAGE_BYTES = 32768
-# How many rebuilt snapshots keep their problems for paging, the cached one among them.
+# How many rebuilt snapshots keep their problems for paging. The cached snapshot is never
+# evicted while it is cached, so a Home reply that hands it out can always be paged.
 KEPT_SNAPSHOTS = 4
 
 _TIER = re.compile(r"tier=(\w+)")
@@ -454,11 +455,12 @@ class SnapshotService:
         return Served(self._snapshot, True, age, self._snapshot_id)
 
     def _keep(self, snapshot: HomeSnapshot) -> int:
-        """Keep a rebuilt snapshot for `problems_page`; the oldest beyond the limit goes."""
+        """Keep a rebuilt snapshot for `problems_page`; beyond the limit the oldest goes, but
+        never the cached one, which the service still hands out."""
         self._last_id += 1
         self._kept[self._last_id] = snapshot
         while len(self._kept) > KEPT_SNAPSHOTS:
-            del self._kept[next(iter(self._kept))]
+            del self._kept[next(key for key in self._kept if key != self._snapshot_id)]
         return self._last_id
 
     async def _rebuild(self) -> Served:
