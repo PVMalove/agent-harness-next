@@ -1543,8 +1543,9 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
     from harness.console.screens.dashboard import (
         HomeContext,
         _render_summary,
-        home_facts,
+        _snapshot_facts,
     )
+    from harness.console.snapshots import build_home_snapshot
 
     data = replace(
         _fake_dashboard_data(),
@@ -1567,7 +1568,9 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
     )
     cards = {
         card_id: dict(rows)
-        for card_id, _title, rows in home_facts(data, banner, HomeContext(), "app")
+        for card_id, _title, rows in _snapshot_facts(
+            data, build_home_snapshot(data, HomeContext()), banner, "app"
+        )
     }
     assert cards["card-harness"]["Дрейф"].plain == "✔ нет"
     assert cards["card-memory"]["Состояние"].plain == "✔ индекс готов"
@@ -1839,12 +1842,14 @@ _BANNER = brand.BannerInfo(
 
 @pytest.mark.parametrize("language", ["ru", "en"])
 def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> None:
-    from harness.console.screens.dashboard import HomeContext, home_facts
+    from harness.console.screens.dashboard import HomeContext, _snapshot_facts
+    from harness.console.snapshots import build_home_snapshot
 
-    cards = home_facts(
-        _context_data(),
+    data = _context_data()
+    cards = _snapshot_facts(
+        data,
+        build_home_snapshot(data, _home_context()),  # type: ignore[arg-type]
         _BANNER,
-        _home_context(),  # type: ignore[arg-type]
         "claude-agent-harness",
         language,
     )
@@ -1900,10 +1905,10 @@ def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> 
     # Without a cached map or a memory policy nothing is invented: unknown facts are a dash.
     bare = {
         title: dict((label, value.plain) for label, value in rows)
-        for _id, title, rows in home_facts(
+        for _id, title, rows in _snapshot_facts(
             _fake_dashboard_data(),
+            build_home_snapshot(_fake_dashboard_data(), HomeContext()),
             brand.BannerInfo(version="1", capabilities=(), repo="~/x", branch=None),
-            HomeContext(),
             "x",
             language,
         )

@@ -43,7 +43,7 @@ from .. import data as console_data
 from ..client import HomeClient
 from ..data import DashboardData
 from ..runner import CommandRunner, capturing_runner
-from ..snapshots import HomeContext as HomeContext, HomeSnapshot, build_home_snapshot
+from ..snapshots import HomeContext as HomeContext, HomeSnapshot
 from ...health.model import CheckResult, Status
 from .commands import call_from_worker
 
@@ -183,20 +183,6 @@ def _dashboard_data(snapshot: HomeSnapshot) -> DashboardData:
         )
         if state is not None
         else None,
-    )
-
-
-def home_facts(
-    data: DashboardData,
-    banner: brand.BannerInfo,
-    context: HomeContext,
-    project: str,
-    language: str = "ru",
-) -> list[tuple[str, str, list[tuple[str, Text]]]]:
-    """The context cards of the home screen for the dashboard data and the Home context, through
-    the one mapping the console server uses (`build_home_snapshot`)."""
-    return _snapshot_facts(
-        data, build_home_snapshot(data, context), banner, project, language
     )
 
 
