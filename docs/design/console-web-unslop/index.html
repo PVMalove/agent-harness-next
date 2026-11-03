@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Консоль · сравнение макетов</title>
+<link rel="stylesheet" href="review.css">
+<header class="review-header">
+  <div><h1>Консоль <span>до / после</span></h1><p>Веб-варианты для просмотра · оригиналы #720 сохранены · команды не выполняются</p></div>
+  <a href="../console-web-ux-audit-879.md">Отчёт аудита ↗</a>
+</header>
+<form class="review-toolbar" aria-label="Просмотр макетов">
+  <label>Экран <select id="screen">
+    <option value="home">0 · Главная</option><option value="open-project">1 · Открыть проект</option>
+    <option value="update-harness">2 · Обновить Harness</option><option value="diagnostics">3 · Диагностика</option>
+    <option value="harness">4 · Harness</option><option value="orchestration">5 · Оркестрация</option>
+    <option value="reports">6 · Отчёты</option><option value="repo-map">7 · Repo Map</option>
+    <option value="configuration">8 · Настройка</option><option value="help">9 · Справка</option>
+    <option value="recovery">Восстановление</option><option value="container-route">Контейнерный запуск</option>
+  </select></label>
+  <label>Сравнение <select id="mode"><option value="after">После</option><option value="both">Рядом</option><option value="before">До</option></select></label>
+  <label>Ширина <select id="width"><option value="auto">По окну</option><option value="390">390 px</option><option value="768">768 px</option><option value="1440">1440 px</option></select></label>
+  <span id="review-status" role="status">Загрузка макета…</span>
+</form>
+<main class="review-grid" data-mode="after">
+  <section class="review-pane before"><h2>До <span>Исходный HTML без изменений</span></h2><div class="frame-wrap"><iframe id="before" title="Исходный макет" sandbox></iframe></div></section>
+  <section class="review-pane after"><h2>После <span>Точечный проход · палитра и функции сохранены</span></h2><div class="frame-wrap"><iframe id="after" title="Веб-вариант макета" sandbox="allow-scripts"></iframe></div></section>
+</main>
+<details class="review-notes"><summary>Что изменено и как проверять</summary>
+  <p>Одна адаптивная страница вместо двух вариантов фиксированной ширины. Компактное меню, единый фон, ровные отступы, обычный регистр заголовков, читаемые статусы, видимый фокус. Исторические дополнительные состояния находятся под основным экраном в раскрывающихся блоках.</p>
+  <p>Меню и крошки переключают демонстрационные экраны. Действия открывают пояснение без запуска команды; недоступные действия остаются недоступными. Это варианты для согласования оформления, а не реализация веб-консоли и не замена макетов #880/#881.</p>
+  <p>При выбранной ширине шире окна прокручивается только область сравнения. Для исходника это сохраняет его фиксированную компоновку; в веб-варианте можно проверить перестройку на 390 px.</p>
+  <p>Направление: спокойный, точный, собранный пульт наблюдения. Акценты — выбранная сессия и действие, требующее внимания. Изображения, графики и декоративная анимация не добавлены.</p>
+  <p>Методика <a href="https://github.com/heydamir/unslop">unslop · Damir Sokolovsky</a>, CC BY 4.0, revision a6f121e. Шрифты системные; внешние ресурсы не загружаются.</p>
+</details>
+<script src="review.js"></script>
+</html>
