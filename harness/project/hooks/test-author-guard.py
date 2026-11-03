@@ -16,6 +16,7 @@ import shutil
 import stat
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 sys.dont_write_bytecode = True
 
@@ -294,6 +295,22 @@ def _write_allowed(repo: Path, value: object, paths: list[str]) -> bool:
     return any(fnmatch.fnmatchcase(relative, pattern) for pattern in normalized)
 
 
+def _patch_targets(payload: dict[str, object]) -> list[str]:
+    """Absolute paths of an apply_patch payload; an unparsable patch is refused."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    if TYPE_CHECKING:
+        from harness.project.hooks import apply_patch_payload
+    else:
+        import apply_patch_payload  # sibling in the installed hooks directory
+
+    try:
+        return apply_patch_payload.targets(apply_patch_payload.operations(payload))
+    except apply_patch_payload.PatchError:
+        raise GuardRefusal("malformed_payload") from None
+
+
 def _valid_test_id(value: object) -> bool:
     """Keep the runner argument to one bounded test identifier."""
     return isinstance(value, str) and TEST_ID_PATTERN.fullmatch(value) is not None
@@ -392,6 +409,13 @@ def main() -> int:
 
     try:
         paths, _ = _activation_config(repo)
+        if tool == "apply_patch":
+            if not all(
+                _write_allowed(repo, target, paths)
+                for target in _patch_targets(payload)
+            ):
+                _deny("write_outside_test_paths")
+            return 0
         if tool in {"Write", "Edit"}:
             if not _write_allowed(repo, tool_input.get("file_path"), paths):
                 _deny("write_outside_test_paths")

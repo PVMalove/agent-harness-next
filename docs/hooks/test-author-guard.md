@@ -13,10 +13,14 @@ frontmatter агента `.claude/agents/test-author.md`. Поэтому guard �
 test-author, а project-wide hooks (`block-scratch-outside-docs-tasks.sh`, `require-bounded-check.sh`
 и остальные) остаются в силе и срабатывают так же, как для любого агента.
 
-Guard разрешает ровно два вида вызовов:
+Guard разрешает ровно три вида вызовов:
 
 - `Write` и `Edit` — путь после нормализации лежит внутри `test_paths`; symlink, ведущий за
   пределы зоны, и пути под `.git`, `.harness`, `.claude`, `.agents`, `.codex` отклоняются;
+- `apply_patch` второго runtime — каждый путь патча из заголовков `*** Add File:`,
+  `*** Update File:`, `*** Delete File:` и `*** Move to:` (абсолютный от `cwd` payload, разбор
+  адаптера `apply_patch_payload.py`) проходит ту же проверку, что путь `Write`/`Edit`; патч с хоть
+  одним путём вне `test_paths` получает `write_outside_test_paths`;
 - `Bash` — один вызов `.claude/hooks/run-test.sh <test-id>` (допускается эквивалентный вызов через
   доверенный системный `bash`); shell-метасимволы, `--probe`, дополнительные аргументы и другие
   команды отклоняются.
