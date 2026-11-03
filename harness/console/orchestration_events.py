@@ -27,7 +27,11 @@ from pathlib import Path
 from typing import Protocol
 
 from harness.orchestration.core.constants import STATE_REL
-from harness.orchestration.ledger.lifecycle import JsonObject, LifecycleLedger
+from harness.orchestration.ledger.lifecycle import (
+    POINTER_NAME,
+    JsonObject,
+    LifecycleLedger,
+)
 
 from .discovery import discovery_path
 from .event_journal import Event, EventJournal, JournalUnavailable, View
@@ -49,6 +53,8 @@ POLL_INTERVAL_SECONDS = 1.0
 _BATCH_EVENTS = 32
 _FIELDS = frozenset({"id", "type", "cursor"})
 JOURNAL_NAME = "orchestration-events.jsonl"
+_JOURNAL_UNAVAILABLE = "journal_unavailable"
+_JOURNAL_MESSAGE = "The console event journal cannot be read or written."
 _EXPIRED = (
     "The cursor is older than the kept events: read the snapshot and subscribe again."
 )
@@ -74,7 +80,18 @@ class Observation:
     qa_attempts: dict[str, JsonObject] = field(default_factory=dict)
 
 
+class SourceUnavailable(Exception):
+    """The orchestration source cannot be read as a whole: ``reason`` is ``missing``,
+    ``unreadable`` or ``runtime_unavailable``."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason, self.message = reason, message
+
+
 class OrchestrationReader(Protocol):
+    """Runs in a thread and raises ``SourceUnavailable``."""
+
     def read(self) -> Observation: ...
 
 
@@ -85,6 +102,10 @@ def _list_records(directory: Path) -> list[Path]:
         )
     except FileNotFoundError:
         return []
+    except OSError as exc:
+        raise SourceUnavailable(
+            "unreadable", f"{directory.name}: {type(exc).__name__}"
+        ) from exc
 
 
 def _observation(
@@ -179,9 +200,20 @@ class ProjectReader:
         return self._outcomes[dispatch_id]
 
     def read(self) -> Observation:
-        root = LifecycleLedger(self.repo / STATE_REL).records_root_lenient()
+        state = self.repo / STATE_REL
+        if not state.is_dir():
+            raise SourceUnavailable(
+                "missing", "The project has no orchestration ledger."
+            )
+        root = LifecycleLedger(state).records_root_lenient()
         if root is None:
-            raise OSError("the orchestration ledger is not readable")
+            if not (state / POINTER_NAME).exists():
+                raise SourceUnavailable(
+                    "missing", "The project has no orchestration ledger."
+                )
+            raise SourceUnavailable(
+                "unreadable", "The ledger pointer or its generation is not readable."
+            )
         return _observation(
             "ledger",
             self._directory(root / "batches"),
@@ -387,17 +419,28 @@ class OrchestrationEvents:
         previous, self._next_change = self._next_change, asyncio.Event()
         previous.set()
 
-    def _set_source(self, state: str, store: str | None) -> None:
-        if (self._source["state"], self._source["store"]) == (state, store):
+    def _set_source(
+        self,
+        state: str,
+        store: str | None,
+        reason: str | None = None,
+        message: str = "",
+    ) -> None:
+        """Record the source state; subscribers get a ``source`` message when it changed."""
+        current = (self._source["state"], self._source["store"], self._source["reason"])
+        if current == (state, store, reason):
             return
         self._source = {
             "state": state,
             "store": store,
-            "reason": None,
-            "message": "",
+            "reason": reason,
+            "message": _clip(message, MESSAGE_BYTES),
             "since": _now(),
         }
         self._notify()
+
+    def _unavailable(self, reason: str, message: str) -> None:
+        self._set_source("unavailable", None, reason, message)
 
     def _path(self) -> Path:
         if self._journal_path is None:
@@ -411,7 +454,13 @@ class OrchestrationEvents:
                 path = await asyncio.to_thread(self._path)
                 journal = EventJournal(path, str((self.repo / STATE_REL).resolve()))
                 await asyncio.to_thread(journal.load)
-            except (JournalUnavailable, OSError, ValueError):
+            except (JournalUnavailable, OSError, ValueError) as exc:
+                detail = (
+                    exc if isinstance(exc, JournalUnavailable) else type(exc).__name__
+                )
+                self._unavailable(
+                    _JOURNAL_UNAVAILABLE, f"{_JOURNAL_MESSAGE} ({detail})"
+                )
                 return None
             self._journal = journal
             self._notify()
@@ -423,7 +472,13 @@ class OrchestrationEvents:
             return
         try:
             observation = await asyncio.to_thread(self._reader.read)
-        except Exception:
+        except SourceUnavailable as exc:
+            # The view stays at the last readable state: once the source is readable again, the
+            # changes made meanwhile are delivered as events.
+            self._unavailable(exc.reason, exc.message)
+            return
+        except Exception as exc:
+            self._unavailable("unreadable", type(exc).__name__)
             return
         view = compact(observation)
         observed_at = _now()
@@ -438,9 +493,10 @@ class OrchestrationEvents:
         if line is not None:
             try:
                 await asyncio.to_thread(journal.write, line)
-            except JournalUnavailable:
+            except JournalUnavailable as exc:
                 # The view stays where it was, so the next poll writes the same events again.
                 self._drop(journal)
+                self._unavailable(_JOURNAL_UNAVAILABLE, f"{_JOURNAL_MESSAGE} ({exc})")
                 return
             journal.accept(events, view)
             if journal.needs_compaction():
@@ -500,10 +556,22 @@ class OrchestrationEvents:
             if set(body) - _FIELDS or not isinstance(body.get("cursor", ""), str):
                 raise _Subscribe("bad_request")
             await self._started()
-            while (journal := self._journal) is None:
-                await self._next_change.wait()
-            position = self._position(journal, body.get("cursor"))
             sent_source: dict[str, object] | None = None
+            while (journal := self._journal) is None:
+                # Without the journal no cursor can be checked: only the source state is sent.
+                next_change = self._next_change
+                if self._source is not sent_source:
+                    sent_source = self._source
+                    yield encode(
+                        {
+                            **envelope,
+                            "kind": "source",
+                            "cursor": body.get("cursor"),
+                            "source": sent_source,
+                        }
+                    )
+                await next_change.wait()
+            position = self._position(journal, body.get("cursor"))
             while True:
                 next_change = self._next_change
                 current = self._journal

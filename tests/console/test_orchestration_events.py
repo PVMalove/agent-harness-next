@@ -410,3 +410,127 @@ def test_a_cursor_below_the_kept_window_expires_after_compaction(
             await second.close()
 
     asyncio.run(scenario())
+
+
+async def _home_answers(client: ClientConnection) -> bool:
+    await client.send(json.dumps({"id": "home", "type": "home.snapshot"}))
+    while True:
+        reply = await _receive(client)
+        if reply["id"] == "home":
+            return bool(reply["ok"])
+
+
+async def _next_source(client: ClientConnection):  # type: ignore[no-untyped-def]
+    while True:
+        message = await _receive(client)
+        assert message["ok"] is True, message
+        if message["kind"] == "source":
+            return message["source"]
+
+
+def test_a_missing_ledger_is_a_typed_state_and_delivery_resumes(project: Path) -> None:
+    async def scenario() -> None:
+        server = _server(project)
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(_subscribe("live"))
+                source = await _next_source(client)
+                assert (source["state"], source["reason"], source["store"]) == (
+                    "unavailable",
+                    "missing",
+                    None,
+                )
+                assert source["message"]
+                assert await _home_answers(client)
+                ledger = _ledger(project)
+                source = await _next_source(client)
+                assert (source["state"], source["reason"], source["store"]) == (
+                    "available",
+                    None,
+                    "ledger",
+                )
+                _Batch(ledger, "batch-a", "#7")
+                (event,) = await _events(client, 1)
+                assert (event["event"], event["batch_id"], event["to"]) == (
+                    "batch.transition",
+                    "batch-a",
+                    "planned",
+                )
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+
+def test_an_unreadable_ledger_delivers_its_changes_once_readable(
+    project: Path,
+) -> None:
+    ledger = _ledger(project)
+    batch = _Batch(ledger, "batch-a", "#7")
+    batch.save("awaiting-approval")
+    pointer = project / STATE_REL / "ledger.json"
+    readable = pointer.read_bytes()
+
+    async def scenario() -> None:
+        server = _server(project)
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(_subscribe("live"))
+                assert (await _next_source(client))["state"] == "available"
+                pointer.write_text("{not json", encoding="utf-8")
+                source = await _next_source(client)
+                assert (source["state"], source["reason"]) == (
+                    "unavailable",
+                    "unreadable",
+                )
+                assert await _home_answers(client)
+                # The coordinator changes the batch while the console cannot read the ledger.
+                changed = {**batch.record, "state": "active"}
+                (batch.root / "batches" / "batch-a.json").write_text(
+                    json.dumps(changed), encoding="utf-8"
+                )
+                pointer.write_bytes(readable)
+                assert (await _next_source(client))["state"] == "available"
+                (event,) = await _events(client, 1)
+                assert (event["event"], event["from"], event["to"]) == (
+                    "batch.transition",
+                    "awaiting-approval",
+                    "active",
+                )
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+
+def test_an_unavailable_journal_is_a_typed_state(project: Path) -> None:
+    ledger = _ledger(project)
+
+    async def scenario() -> None:
+        server = _server(project)
+        await server.start()
+        journal = _journal(project)
+        target = journal.with_name("elsewhere.jsonl")
+        target.write_text("", encoding="utf-8")
+        journal.symlink_to(target)
+        try:
+            async with _connect(server, project) as client:
+                await client.send(_subscribe("live"))
+                source = await _next_source(client)
+                assert (source["state"], source["reason"], source["store"]) == (
+                    "unavailable",
+                    "journal_unavailable",
+                    None,
+                )
+                assert await _home_answers(client)
+                journal.unlink()
+                assert (await _next_source(client))["state"] == "available"
+                _Batch(ledger, "batch-a", "#7")
+                (event,) = await _events(client, 1)
+                assert event["event"] == "batch.transition"
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
