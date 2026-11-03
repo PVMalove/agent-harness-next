@@ -121,9 +121,21 @@ Hooks ставятся в проект, поэтому действуют для
 
 ### 3. Исполнение и привязка к approval
 
-- Python resolver (`harness health` и установка) вычисляет effective policy: профиль, эскалации,
-  набор критических guard-ов, версии hooks. Результат пишется в сгенерированный
-  `.harness/hook-policy.json`, его digest — `hook_policy_sha256`.
+- Python resolver (`harness/orchestration/hook_policy.py`) вычисляет effective policy: профиль,
+  эскалации, набор критических guard-ов, версии hooks. Единственный писатель сгенерированного
+  `.harness/hook-policy.json` — установка (`harness init`, `adopt`, `update`); файл содержит
+  `{schema, policy, hook_policy_sha256, critical_guards, hook_versions}`.
+- Уточнение (2026-11-03, #829): `hook_policy_sha256` файла — digest только раздела `policy`
+  (нормализованные профиль и эскалации `hook_policy`), посчитанный той же функцией, которой
+  `dispatch create` закрепляет brief. Поэтому digest файла равен `hook_policy_sha256` brief-а для
+  той же конфигурации, а формула, пересчёт закреплённой политики в Python и Rust и уже выданные
+  brief-ы не меняются. `critical_guards` (hook_id критических строк матрицы 2a) и
+  `hook_versions` (SHA-256 байтов шаблонов `.claude/hooks/`) — факты установки вне digest: Rust
+  пересчитывает digest только из `hook_policy` снимка brief-а, а ни одно решение файл не читает.
+- Некорректный `hook_policy` останавливает установку с кодом 2; существующий файл не меняется.
+  Повторный `update` без изменения конфигурации оставляет файл байт-в-байт. `harness health`
+  (`hooks.policy`) файл не пишет: отсутствие и расхождение с effective policy текущей конфигурации
+  он сообщает как `warn`, исправляет их `harness update`.
 - `hook_policy_sha256` входит в `OPTIONAL_TRANSITION_FIELDS`, а `allowed_tools` добавляется в
   transition digest. Поэтому изменение конфига после approval не меняет запущенный dispatch и его
   QA-evidence.
@@ -153,7 +165,7 @@ Hooks ставятся в проект, поэтому действуют для
 - Повторный `update` идемпотентен и выдаёт отчёт о миграции и проверке.
 - `harness health` получает проверку `hooks.policy`: effective profile и его источник,
   эскалации, присутствие, исполняемость и подключение каждого критического hook-а, расхождение с
-  шаблоном.
+  шаблоном, отсутствие и дрейф `.harness/hook-policy.json` (раздел 3).
 
 ## Операционные последствия
 

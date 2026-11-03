@@ -117,6 +117,17 @@ class UninstallTests(unittest.TestCase):
         )
         self.assertEqual(plan_uninstall(self.repo)["remove"], [])
 
+    def test_the_generated_hook_policy_file_is_removed_without_a_backup(self) -> None:
+        """Проверить, что пересоздаваемый `.harness/hook-policy.json` удаляется без резервной копии."""
+        self.assertTrue((self.repo / ".harness" / "hook-policy.json").is_file())
+
+        plan = plan_uninstall(self.repo)
+        self.assertNotIn(".harness/hook-policy.json", plan["backup"])
+        result = apply_uninstall(self.repo, plan, confirm=CONFIRM_WORD)
+
+        self.assertEqual(result["failed"], [])
+        self.assertFalse((self.repo / ".harness" / "hook-policy.json").exists())
+
     def test_uninstall_refuses_without_confirmation_or_with_a_stale_plan(self) -> None:
         """Проверить отказ без слова подтверждения и при изменившемся плане."""
         plan = plan_uninstall(self.repo)

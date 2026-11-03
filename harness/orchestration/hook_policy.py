@@ -9,6 +9,9 @@
 ``dispatch propose`` и ``create`` для code-review и QA, ``qa run`` и ``dispatch publish`` отказывают
 ``strict_impact_unknown``, пока VerificationPlan не доказывает ImpactSet чувствительного изменения.
 Запущенный dispatch решает по политике, которую закрепил его ``hook_policy_sha256``.
+
+Здесь же — документ генерируемого ``.harness/hook-policy.json`` (ADR 0024, раздел 3, issue #829):
+его пишет только установка, ни одно решение его не читает.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 
 from ..errors import PolicyError
+from ..health.hook_settings import HOOK_CATALOG
 from ..health.project_files import HOOK_PROFILES, hook_policy_problems
 from .contract import ContractError
 from .core.system_fields import enum_problem, enum_remedy, load_registry
@@ -41,7 +45,8 @@ def normalize_policy(value: object) -> dict[str, object]:
 
     ``None`` (ключ отсутствует) даёт профиль по умолчанию без эскалаций. Пути и роли эскалаций
     сортируются без повторов, сами эскалации упорядочиваются, поэтому смена порядка в файле не
-    меняет хеш. Некорректное значение — ``PolicyError``.
+    меняет хеш. Некорректное значение — ``PolicyError``, в том числе текст без UTF-8 формы
+    (одиночный суррогат), у которого нет хеша.
     """
     if value is None:
         return {"profile": DEFAULT_PROFILE, "escalations": []}
@@ -58,7 +63,14 @@ def normalize_policy(value: object) -> dict[str, object]:
         for item in value.get("escalations", [])
     ]
     escalations.sort(key=lambda item: json.dumps(item, sort_keys=True))
-    return {"profile": value["profile"], "escalations": escalations}
+    policy: dict[str, object] = {"profile": value["profile"], "escalations": escalations}
+    try:
+        _canonical_bytes(policy)
+    except UnicodeEncodeError as exc:
+        raise _fail(
+            f"{PROJECT_JSON_REL} hook_policy text cannot be encoded as UTF-8: {exc.reason}"
+        ) from exc
+    return policy
 
 
 def load_policy(repo: Path) -> dict[str, object]:
@@ -335,17 +347,56 @@ def dispatch_policy(dispatch: Mapping[str, object]) -> dict[str, object]:
     return policy
 
 
-def hook_policy_sha256(policy: Mapping[str, object]) -> str:
-    """Стабильный SHA-256 канонического документа политики."""
+def _canonical_bytes(policy: Mapping[str, object]) -> bytes:
     canonical = json.dumps(
         policy, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical.encode("utf-8")
+
+
+def hook_policy_sha256(policy: Mapping[str, object]) -> str:
+    """Стабильный SHA-256 канонического документа политики."""
+    return hashlib.sha256(_canonical_bytes(policy)).hexdigest()
 
 
 def project_hook_policy_sha256(repo: Path) -> str:
     """Хеш политики проекта ``repo``, прочитанной только из ``.harness/project.json``."""
     return hook_policy_sha256(load_policy(repo))
+
+
+POLICY_FILE_SCHEMA = 1
+_HOOK_SCRIPTS_PREFIX = ".claude/hooks/"
+
+
+def effective_policy(
+    policy: Mapping[str, object], hook_templates: Mapping[str, bytes]
+) -> dict[str, object]:
+    """Документ ``.harness/hook-policy.json`` (ADR 0024, раздел 3) для нормализованной политики.
+
+    ``policy`` — результат ``load_policy``. ``hook_policy_sha256`` — digest только раздела
+    ``policy``, той же функцией, которой dispatch create пинует brief. ``critical_guards`` и
+    ``hook_versions`` (SHA-256 байтов шаблонов ``.claude/hooks/`` из ``hook_templates``) — факты
+    установки вне digest: ни одно решение их не читает.
+    """
+    return {
+        "schema": POLICY_FILE_SCHEMA,
+        "policy": dict(policy),
+        "hook_policy_sha256": hook_policy_sha256(policy),
+        "critical_guards": sorted(
+            {spec.hook_id for spec in HOOK_CATALOG if spec.critical}
+        ),
+        "hook_versions": {
+            relative: hashlib.sha256(content).hexdigest()
+            for relative, content in sorted(hook_templates.items())
+            if relative.startswith(_HOOK_SCRIPTS_PREFIX)
+        },
+    }
+
+
+def render_policy_file(document: Mapping[str, object]) -> bytes:
+    """Байты файла политики: JSON с отступом 2 и сортировкой ключей, UTF-8 без BOM, LF в конце."""
+    text = json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    return text.encode("utf-8")
 
 
 HOOK_RESPONSE_FIELDS = (

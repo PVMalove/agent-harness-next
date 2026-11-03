@@ -24,6 +24,7 @@ from ..hook_settings import (
 from ..model import CheckResult, Fix, Status
 from ..project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
+    HOOK_POLICY_REL,
     HOOK_PROFILES,
     INTEGRATIONS_REL,
     JSON_READ_ERRORS,
@@ -70,7 +71,9 @@ def _result(
     """Собрать результат: fail важнее warn, warn важнее ok; части сообщения разделены `; `.
 
     `advisory` — предупреждения, которые `harness update` не исправляет (у runtime нет события):
-    они дают статус warn, но не подсказку исправления. Первая заметка — профиль."""
+    они дают статус warn, но не подсказку исправления. Первая заметка — профиль. Символ без
+    UTF-8 формы (одиночный суррогат из project.json) попадает в сообщение как escape `\\udXXX`,
+    чтобы вывод отчёта не падал."""
     status: Status = "fail" if fails else "warn" if warns or advisory else "ok"
     fix = None
     if fails or warns:
@@ -83,7 +86,9 @@ def _result(
         id=CHECK_ID,
         group=GROUP,
         status=status,
-        message="; ".join([notes[0], *fails, *warns, *advisory, *notes[1:]]),
+        message="; ".join([notes[0], *fails, *warns, *advisory, *notes[1:]])
+        .encode("utf-8", "backslashreplace")
+        .decode("utf-8"),
         fix=fix,
     )
 
@@ -283,6 +288,48 @@ def _script_drift(context: HealthContext, warns: list[str]) -> None:
             )
 
 
+def _policy_file(
+    context: HealthContext, policy_reported: bool, fails: list[str], warns: list[str]
+) -> None:
+    """Сгенерированный `.harness/hook-policy.json`: отказ резолвера, отсутствие и дрейф.
+
+    Health только сообщает, файл пишет установка (`harness init|adopt|update`). При шаблонах hooks
+    политику считает тот же резолвер, что и установка; его `PolicyError` даёт fail с текстом
+    ошибки, если `_profile_part` не сообщил о hook_policy сам (`policy_reported` ложно: так
+    проходит, например, путь эскалации без UTF-8 формы), и сверка тогда пропускается. Содержимое
+    сверяется по разобранному JSON (CRLF после клона — не дрейф)."""
+    path = context.repo / HOOK_POLICY_REL
+    relative = HOOK_POLICY_REL.as_posix()
+    expected: dict[str, object] | None = None
+    if context.hook_templates is not None:
+        from harness.errors import PolicyError
+        from harness.orchestration.hook_policy import effective_policy, load_policy
+
+        try:
+            expected = effective_policy(
+                load_policy(context.repo), context.hook_templates
+            )
+        except PolicyError as exc:
+            if not policy_reported:
+                fails.append(
+                    f"резолвер политики отклоняет hook_policy ({exc.message}): "
+                    "harness init|adopt|update и dispatch create отказывают"
+                )
+    if not path.is_file():
+        warns.append(f"{relative} отсутствует: effective policy hooks не записана")
+        return
+    if expected is None:
+        return
+    try:
+        actual: object = json.loads(path.read_text(encoding="utf-8"))
+    except JSON_READ_ERRORS:
+        actual = None
+    if actual != expected:
+        warns.append(
+            f"дрейф: {relative} не совпадает с effective policy текущей конфигурации"
+        )
+
+
 def check_policy(context: HealthContext) -> CheckResult:
     """Профиль hooks и его источник, эскалации, скрипты, проводка по runtime, нехватка событий и дрейф."""
     if context.lock is None:
@@ -330,4 +377,5 @@ def check_policy(context: HealthContext) -> CheckResult:
         notes.append("дрейф не проверен (нет шаблонов проекта)")
     else:
         _script_drift(context, warns)
+    _policy_file(context, problem is not None, fails, warns)
     return _result(context, fails, warns, advisory, notes)

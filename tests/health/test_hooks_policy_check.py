@@ -357,6 +357,129 @@ def test_standalone_run_says_that_drift_was_not_checked(repo: Path) -> None:
     assert re.search(r"дрейф не проверен", result.message)
 
 
+PROJECT_JSON = ".harness/project.json"
+POLICY_FILE = ".harness/hook-policy.json"
+POLICY_MISSING = f"{POLICY_FILE} отсутствует"
+POLICY_DRIFT = f"дрейф: {POLICY_FILE} не совпадает с effective policy"
+
+
+def test_an_installed_policy_file_is_not_reported(repo: Path) -> None:
+    message = check(repo)["message"]
+
+    assert POLICY_FILE not in message
+
+
+def test_a_missing_policy_file_warns_with_the_update_fix(repo: Path) -> None:
+    (repo / POLICY_FILE).unlink()
+
+    result = check(repo)
+
+    assert result["status"] == "warn"
+    assert f"{POLICY_MISSING}: effective policy hooks не записана" in result["message"]
+    assert result["fix"] is not None
+    assert "update" in result["fix"]["command"]
+
+
+def test_a_hook_policy_change_without_update_is_drift(repo: Path) -> None:
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = {"profile": "strict"}
+    save(repo, PROJECT_JSON, project)
+
+    result = check(repo)
+
+    assert POLICY_DRIFT in result["message"]
+    assert result["status"] == "warn"
+
+
+def test_a_replaced_hook_version_is_drift(repo: Path) -> None:
+    document = load(repo, POLICY_FILE)
+    document["hook_versions"][".claude/hooks/block-pr-merge.sh"] = "0" * 64
+    save(repo, POLICY_FILE, document)
+
+    assert POLICY_DRIFT in check(repo)["message"]
+
+
+def test_an_unparsable_policy_file_is_drift(repo: Path) -> None:
+    (repo / POLICY_FILE).write_text("{not json", encoding="utf-8")
+
+    assert POLICY_DRIFT in check(repo)["message"]
+
+
+def test_the_same_policy_with_crlf_line_ends_is_not_drift(repo: Path) -> None:
+    path = repo / POLICY_FILE
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+
+    assert POLICY_FILE not in check(repo)["message"]
+
+
+def test_update_clears_the_policy_file_drift(repo: Path) -> None:
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = {"profile": "strict"}
+    save(repo, PROJECT_JSON, project)
+    assert POLICY_DRIFT in check(repo)["message"]
+
+    updated = harness("update", str(repo))
+
+    assert updated.returncode == 0, updated.stderr
+    assert POLICY_FILE not in check(repo)["message"]
+
+
+# A lone surrogate passes hook_policy_problems and JSON, but has no UTF-8 form: the resolver
+# refuses it (PolicyError), and the hooks keep the configured profile.
+UNENCODABLE_POLICY: JsonObject = {
+    "profile": "minimal",
+    "escalations": [{"profile": "standard", "paths": ["a\ud800b"]}],
+}
+UNENCODABLE_PROBLEM = (
+    ".harness/project.json hook_policy text cannot be encoded as UTF-8: "
+    "surrogates not allowed"
+)
+
+
+@pytest.mark.parametrize("policy_file", ["kept", "removed"])
+def test_a_hook_policy_without_a_utf8_form_fails_with_the_resolver_problem(
+    repo: Path, policy_file: str
+) -> None:
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = UNENCODABLE_POLICY
+    save(repo, PROJECT_JSON, project)
+    if policy_file == "removed":
+        (repo / POLICY_FILE).unlink()
+
+    result = check(repo)
+
+    message = result["message"]
+    assert result["status"] == "fail"
+    assert UNENCODABLE_PROBLEM in message
+    assert "применяют strict" not in message
+    assert "профиль standard (.harness/project.json; базовый minimal)" in message
+    assert "эскалации: standard: paths=a\\ud800b" in message
+
+
+def test_a_standalone_run_message_has_a_utf8_form(repo: Path) -> None:
+    from harness.health import registry
+
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = UNENCODABLE_POLICY
+    save(repo, PROJECT_JSON, project)
+
+    report = registry.run(repo)
+
+    result = next(c for c in report.checks if c.id == "hooks.policy")
+    result.message.encode("utf-8")
+
+
+def test_standalone_run_reports_a_missing_policy_file(repo: Path) -> None:
+    from harness.health import registry
+
+    (repo / POLICY_FILE).unlink()
+
+    report = registry.run(repo)
+
+    result = next(c for c in report.checks if c.id == "hooks.policy")
+    assert POLICY_MISSING in result.message
+
+
 def test_console_route_of_the_policy_warn_does_not_promise_that_update_fixes_it() -> None:
     from harness.console import i18n
     from harness.console.shell import check_route
