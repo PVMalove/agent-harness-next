@@ -1383,6 +1383,13 @@ class RecoveryTests(unittest.TestCase):
     def test_early_429_resumes_known_startup_without_fabricating_checkpoint(
         self,
     ) -> None:
+        class RetryClock(datetime):
+            current = datetime.now().astimezone()
+
+            @classmethod
+            def now(cls, tz: tzinfo | None = None) -> RetryClock:
+                return cls.fromtimestamp(cls.current.timestamp(), tz)
+
         batch = self._create_batch()
         self._accepted_architect(batch["batch_id"])
         brief = self._dispatch(batch["batch_id"], "developer")["brief"]
@@ -1395,9 +1402,10 @@ class RecoveryTests(unittest.TestCase):
                 worktree=str(self.worktree),
             )
         )
-        coordinator.rate_limited_dispatch(
-            self._args(dispatch=brief["dispatch_id"], retry_after_seconds=1)
-        )
+        with mock.patch("harness.orchestration.workflow.reports.datetime", RetryClock):
+            coordinator.rate_limited_dispatch(
+                self._args(dispatch=brief["dispatch_id"], retry_after_seconds=1)
+            )
         args = self._args(
             dispatch=brief["dispatch_id"],
             termination_reason="429",
@@ -1408,17 +1416,10 @@ class RecoveryTests(unittest.TestCase):
             approved_at=None,
             note=None,
         )
-        with self.assertRaises(coordinator.CoordinatorError):
-            coordinator.resume_dispatch(args)
-
-        class Later(datetime):
-            @classmethod
-            def now(cls, tz: tzinfo | None = None) -> Later:
-                return cls.fromtimestamp(
-                    (datetime.now(tz) + timedelta(seconds=2)).timestamp(), tz
-                )
-
-        with mock.patch("harness.orchestration.workflow.reports.datetime", Later):
+        with mock.patch("harness.orchestration.workflow.reports.datetime", RetryClock):
+            with self.assertRaises(coordinator.CoordinatorError):
+                coordinator.resume_dispatch(args)
+            RetryClock.current += timedelta(seconds=2)
             resumed = coordinator.resume_dispatch(args)
         self.assertEqual(resumed["state"], "dispatched")
         self.assertEqual(
