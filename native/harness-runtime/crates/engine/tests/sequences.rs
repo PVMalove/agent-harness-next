@@ -101,8 +101,8 @@ fn objects_returns_only_this_repository_even_when_the_filter_narrows_nothing() {
         .answer(
             &["podman", "network", "inspect"],
             Answer::success(
-                json!([{"Id": NET, "Name": "harness-d1-net",
-                        "Labels": {"harness.dispatch": "d1", "harness.repository": "/elsewhere/.git"}}])
+                json!([{"id": NET, "name": "harness-d1-net",
+                        "labels": {"harness.dispatch": "d1", "harness.repository": "/elsewhere/.git"}}])
                 .to_string(),
             ),
         );
@@ -131,6 +131,64 @@ fn objects_returns_only_this_repository_even_when_the_filter_narrows_nothing() {
     no_volume(&engine);
     engine.answer(&["podman", "ps"], Answer::failure("cannot connect"));
     assert_eq!(ops::objects(&engine, REPO, None), None);
+}
+
+#[test]
+fn native_network_inspection_only_removes_the_requested_dispatchs_owned_network() {
+    let fixtures = [
+        (
+            Kind::Docker,
+            json!([
+                {"Id": NET, "Name": "harness-d1-qa2-net", "Labels": {
+                    "harness.dispatch": "d1", "harness.repository": REPO, "harness.execution": "qa-op"}},
+                {"Id": "foreign-repo", "Name": "harness-d1-qa2-net", "Labels": {
+                    "harness.dispatch": "d1", "harness.repository": "/elsewhere/.git"}},
+                {"Id": "foreign-dispatch", "Name": "harness-d2-net", "Labels": {
+                    "harness.dispatch": "d2", "harness.repository": REPO}},
+                {"Id": "foreign-name", "Name": "another-network", "Labels": {
+                    "harness.dispatch": "d1", "harness.repository": REPO}}
+            ]),
+        ),
+        (
+            Kind::Podman,
+            json!([
+                {"id": NET, "name": "harness-d1-qa2-net", "labels": {
+                    "harness.dispatch": "d1", "harness.repository": REPO, "harness.execution": "qa-op"}},
+                {"id": "foreign-repo", "name": "harness-d1-qa2-net", "labels": {
+                    "harness.dispatch": "d1", "harness.repository": "/elsewhere/.git"}},
+                {"id": "foreign-dispatch", "name": "harness-d2-net", "labels": {
+                    "harness.dispatch": "d2", "harness.repository": REPO}},
+                {"id": "foreign-name", "name": "another-network", "labels": {
+                    "harness.dispatch": "d1", "harness.repository": REPO}}
+            ]),
+        ),
+    ];
+    for (kind, inspected) in fixtures {
+        let binary = kind.as_str();
+        let engine = Scripted::new(kind);
+        engine
+            .answer(&[binary, "ps"], Answer::success(""))
+            .answer(&[binary, "network", "ls"], Answer::success(NET))
+            .answer(
+                &[binary, "network", "inspect"],
+                Answer::success(inspected.to_string()),
+            )
+            .answer(&[binary, "network", "rm"], Answer::success(""));
+
+        let found = ops::objects(&engine, REPO, Some("d1")).expect("objects");
+
+        assert_eq!(found.len(), 1, "{kind:?}: {found:?}");
+        assert_eq!(found[0].id, NET);
+        assert_eq!(found[0].name, "harness-d1-qa2-net");
+        assert_eq!(found[0].role, "network");
+        assert_eq!(found[0].execution.as_deref(), Some("qa-op"));
+        let removal = ops::remove(&engine, &found);
+        assert_eq!(removal.removed, ["network harness-d1-qa2-net"]);
+        assert_eq!(
+            engine.calls().last().expect("removal"),
+            &[binary, "network", "rm", NET]
+        );
+    }
 }
 
 #[test]
@@ -237,14 +295,15 @@ fn a_failed_stage_rolls_back_every_attempted_object_newest_first() {
     );
     let calls = engine.calls();
     assert_eq!(
-        calls[calls.len() - 3..],
+        calls[calls.len() - 4..],
         [
             vec!["podman", "rm", "--force", "harness-d1"],
             vec!["podman", "rm", "--force", "harness-d1-proxy"],
+            vec!["podman", "network", "rm", "harness-d1-egress-net"],
             vec!["podman", "network", "rm", "harness-d1-net"],
         ]
     );
-    assert_eq!(failure.removals.len(), 3);
+    assert_eq!(failure.removals.len(), 4);
     no_volume(&engine);
 }
 

@@ -79,6 +79,7 @@ from harness.health.project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
     canonical_capability,
     DISCOVERY_LINKS,
+    HOOK_POLICY_REL,
     INTEGRATIONS_REL,
     JSON_READ_ERRORS,
     LOCK_REL,
@@ -981,6 +982,35 @@ def _install_hook_config(
     return written
 
 
+def _install_hook_policy(repo: Path) -> list[str]:
+    """Записать `.harness/hook-policy.json` — effective policy hooks (ADR 0024, раздел 3).
+
+    Единственный писатель файла. Байты вычисляются до записи: некорректный hook_policy даёт
+    PolicyError (код 2), и существующий файл не меняется. Те же байты на диске — файл не трогается."""
+    from harness.orchestration.hook_policy import (
+        effective_policy,
+        load_policy,
+        render_policy_file,
+    )
+
+    document = effective_policy(load_policy(repo), hook_template_files())
+    content = render_policy_file(document)
+    target = repo / HOOK_POLICY_REL
+    written: list[str] = []
+    if target.is_file() and target.read_bytes() == content:
+        state = "unchanged"
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        written.append(str(target))
+        state = "written"
+    print(
+        f"hooks policy: {HOOK_POLICY_REL.as_posix()}: {state} "
+        f"hook_policy_sha256={document['hook_policy_sha256']}"
+    )
+    return written
+
+
 def scaffold_engineering_extras(
     repo: Path, args: argparse.Namespace, *, orchestration_enabled: bool = False
 ) -> list[str]:
@@ -1130,6 +1160,7 @@ def scaffold_engineering_extras(
             "Используйте --force-seed-files, чтобы перезаписать их (внимание: локальные изменения будут потеряны).\n"
         )
 
+    written.extend(_install_hook_policy(repo))
     return written
 
 

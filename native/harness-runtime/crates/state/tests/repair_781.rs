@@ -36,7 +36,14 @@ fn broken(batch: &mut serde_json::Map<String, Value>) {
 fn run(scratch: &Scratch) -> Connection {
     let legacy = scratch.read();
     legacy.validate().unwrap();
-    import(&legacy, &scratch.db(), "store-under-test", AT).unwrap();
+    import(
+        &legacy,
+        &scratch.db(),
+        "store-under-test",
+        AT,
+        &common::approval(),
+    )
+    .unwrap();
     parity::check(&legacy, &scratch.db()).unwrap();
     Connection::open(scratch.db()).unwrap()
 }

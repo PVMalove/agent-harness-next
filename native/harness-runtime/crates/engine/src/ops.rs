@@ -179,6 +179,12 @@ pub fn planned_objects(plan: &Plan, dispatch_id: &str) -> Vec<(ObjectKind, Strin
     let mut objects = Vec::new();
     if !plan.hosts.is_empty() {
         objects.push((ObjectKind::Network, argv::network_name(dispatch_id)));
+        if plan.engine == Kind::Podman {
+            objects.push((
+                ObjectKind::Network,
+                argv::egress_network_name(&argv::container_name(dispatch_id)),
+            ));
+        }
         objects.push((ObjectKind::Container, argv::proxy_name(dispatch_id)));
     }
     objects.push((ObjectKind::Container, argv::container_name(dispatch_id)));
@@ -266,7 +272,7 @@ pub struct Sidecar {
 }
 
 /// The sidecar stage of the objects named after `base`, only when the plan has hosts: the
-/// internal network, the sidecar on it, the default network, its start.
+/// internal network, the sidecar on it, its external network, its start.
 fn stage_sidecar(
     staged: &mut Staged<'_>,
     spec: &Spec<'_>,
@@ -283,6 +289,20 @@ fn stage_sidecar(
         Some((ObjectKind::Network, argv::internal_network_name(base))),
         false,
     )?;
+    // The default Podman bridge has DNS disabled. A proxy attached only to that bridge and an
+    // internal network would query the internal-only DNS and fail to resolve allowed hosts.
+    let external_network = if engine.kind() == Kind::Podman {
+        let network = argv::egress_network_name(base);
+        staged.run(
+            &format!("{name} network create (egress)"),
+            &argv::egress_network_argv(spec, base),
+            Some((ObjectKind::Network, network.clone())),
+            false,
+        )?;
+        network
+    } else {
+        engine.kind().default_network().to_owned()
+    };
     let id = staged.run(
         &format!("{name} create (egress proxy)"),
         &argv::proxy_argv(spec, base),
@@ -291,13 +311,7 @@ fn stage_sidecar(
     )?;
     staged.run(
         &format!("{name} network connect"),
-        &strings(&[
-            name,
-            "network",
-            "connect",
-            engine.kind().default_network(),
-            &id,
-        ]),
+        &strings(&[name, "network", "connect", &external_network, &id]),
         None,
         false,
     )?;
@@ -530,13 +544,16 @@ fn role_of(name: &str, dispatch: &str) -> Option<&'static str> {
     if name == argv::network_name(dispatch) {
         return Some("network");
     }
+    if name == argv::egress_network_name(&worker) {
+        return Some("network");
+    }
     let rest = name.strip_prefix(&worker)?.strip_prefix("-qa")?;
     let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
     let suffix = rest[digits..].strip_prefix('-')?;
     match (digits, suffix) {
         (0, _) | (_, "") => None,
         (_, "proxy") => Some("proxy"),
-        (_, "net") => Some("network"),
+        (_, "net" | "egress-net") => Some("network"),
         _ => Some("worker"),
     }
 }
@@ -558,12 +575,17 @@ fn labelled(
         .then(|| serde_json::from_str::<Value>(&output).ok())
         .flatten()?;
     let container = kind == ObjectKind::Container;
+    let (name_key, id_key, labels_key) = if !container && engine.kind() == Kind::Podman {
+        ("name", "id", "labels")
+    } else {
+        ("Name", "Id", "Labels")
+    };
     let mut found = Vec::new();
     for item in inspected.as_array()? {
         let labels = if container {
             item.get("Config").and_then(|c| c.get("Labels"))
         } else {
-            item.get("Labels")
+            item.get(labels_key)
         };
         let Some(labels) = labels.and_then(Value::as_object) else {
             continue;
@@ -572,7 +594,7 @@ fn labelled(
             continue;
         };
         let name = item
-            .get("Name")
+            .get(name_key)
             .and_then(Value::as_str)
             .unwrap_or_default()
             .trim_start_matches('/');
@@ -599,7 +621,7 @@ fn labelled(
             engine: engine.kind(),
             kind,
             id: item
-                .get("Id")
+                .get(id_key)
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned(),

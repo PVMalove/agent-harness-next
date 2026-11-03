@@ -16,6 +16,7 @@ from harness.health.hook_settings import (
     HOOK_CATALOG,
     is_wired,
     script_name,
+    supported_tools,
 )
 from harness.json_types import JsonObject
 from tests.core.test_uninstall import git, harness
@@ -66,26 +67,26 @@ def test_installed_project_reports_profile_source_and_wiring(repo: Path) -> None
     result = check(repo)
 
     assert result["group"] == "hooks"
-    assert result["status"] == "warn"
+    assert result["status"] == "ok"
     message = result["message"]
     assert "профиль standard" in message
     assert ".harness/project.json" in message
     assert "claude: критических hooks подключено 9/9" in message
-    assert "codex: критических hooks подключено 7/7" in message
+    assert "codex: критических hooks подключено 8/8" in message
 
 
-def test_events_the_second_runtime_lacks_are_listed_and_a_missing_out_of_hook_check_warns(
+def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_not(
     repo: Path,
 ) -> None:
     result = check(repo)
 
-    assert result["status"] == "warn"
     message = result["message"]
-    assert "ограничение адаптера codex:" in message
+    assert "ограничение адаптера codex:" not in message
+    assert "block-scratch-outside-docs-tasks" not in message
     assert (
-        "codex: нет события или payload: block-scratch-outside-docs-tasks "
-        "(нет проверки вне hook)"
-    ) in message
+        "protect-hook-policy (MultiEdit, NotebookEdit; вне hook: hook_policy_sha256 в brief)"
+        in message
+    )
     assert (
         "check-worktree-branch-name (вне hook: batch create по branch_pattern)"
         in message
@@ -187,11 +188,26 @@ def test_hook_catalog_agrees_with_the_templates() -> None:
     for spec in settings_specs:
         for tool in spec.tools:
             assert is_wired(first, spec, tool), (spec.hook_id, tool)
-            # The second runtime wires exactly what it delivers.
-            assert is_wired(second, spec, tool) == ((spec.event, tool) in CODEX_SUPPORT), (
+            # The second runtime wires exactly what it delivers, Write/Edit via apply_patch.
+            assert is_wired(second, spec, tool) == (
+                tool in supported_tools(spec, CODEX_SUPPORT)
+            ), (
                 spec.hook_id,
                 tool,
             )
+
+
+def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards() -> None:
+    catalog = {(spec.hook_id, spec.event): spec for spec in HOOK_CATALOG}
+
+    def delivered(hook_id: str) -> tuple[str, ...]:
+        return supported_tools(catalog[(hook_id, "PreToolUse")], CODEX_SUPPORT)
+
+    assert delivered("protect-hook-policy") == ("Bash", "Write", "Edit")
+    assert delivered("block-scratch-outside-docs-tasks") == ("Write", "Edit")
+    assert delivered("test-author-guard") == ("Write", "Edit", "Bash")
+    for advisory in ("impact-first-touch", "sensitive-path-recheck", "targeted-check-reminder"):
+        assert delivered(advisory) == ()
 
 
 def test_profile_without_hook_policy_key_comes_from_the_default_source(
@@ -217,9 +233,10 @@ def test_legacy_project_keeps_the_standard_wiring_after_update(repo: Path) -> No
 
     result = check(repo)
 
-    assert result["status"] == "warn"
+    assert result["status"] == "ok"
     assert "профиль standard (по умолчанию)" in result["message"]
     assert "claude: критических hooks подключено 9/9" in result["message"]
+    assert "codex: критических hooks подключено 8/8" in result["message"]
     assert "hook_policy" not in json.loads(project_json.read_text(encoding="utf-8"))
 
 
@@ -355,6 +372,129 @@ def test_standalone_run_says_that_drift_was_not_checked(repo: Path) -> None:
 
     result = next(c for c in report.checks if c.id == "hooks.policy")
     assert re.search(r"дрейф не проверен", result.message)
+
+
+PROJECT_JSON = ".harness/project.json"
+POLICY_FILE = ".harness/hook-policy.json"
+POLICY_MISSING = f"{POLICY_FILE} отсутствует"
+POLICY_DRIFT = f"дрейф: {POLICY_FILE} не совпадает с effective policy"
+
+
+def test_an_installed_policy_file_is_not_reported(repo: Path) -> None:
+    message = check(repo)["message"]
+
+    assert POLICY_FILE not in message
+
+
+def test_a_missing_policy_file_warns_with_the_update_fix(repo: Path) -> None:
+    (repo / POLICY_FILE).unlink()
+
+    result = check(repo)
+
+    assert result["status"] == "warn"
+    assert f"{POLICY_MISSING}: effective policy hooks не записана" in result["message"]
+    assert result["fix"] is not None
+    assert "update" in result["fix"]["command"]
+
+
+def test_a_hook_policy_change_without_update_is_drift(repo: Path) -> None:
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = {"profile": "strict"}
+    save(repo, PROJECT_JSON, project)
+
+    result = check(repo)
+
+    assert POLICY_DRIFT in result["message"]
+    assert result["status"] == "warn"
+
+
+def test_a_replaced_hook_version_is_drift(repo: Path) -> None:
+    document = load(repo, POLICY_FILE)
+    document["hook_versions"][".claude/hooks/block-pr-merge.sh"] = "0" * 64
+    save(repo, POLICY_FILE, document)
+
+    assert POLICY_DRIFT in check(repo)["message"]
+
+
+def test_an_unparsable_policy_file_is_drift(repo: Path) -> None:
+    (repo / POLICY_FILE).write_text("{not json", encoding="utf-8")
+
+    assert POLICY_DRIFT in check(repo)["message"]
+
+
+def test_the_same_policy_with_crlf_line_ends_is_not_drift(repo: Path) -> None:
+    path = repo / POLICY_FILE
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+
+    assert POLICY_FILE not in check(repo)["message"]
+
+
+def test_update_clears_the_policy_file_drift(repo: Path) -> None:
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = {"profile": "strict"}
+    save(repo, PROJECT_JSON, project)
+    assert POLICY_DRIFT in check(repo)["message"]
+
+    updated = harness("update", str(repo))
+
+    assert updated.returncode == 0, updated.stderr
+    assert POLICY_FILE not in check(repo)["message"]
+
+
+# A lone surrogate passes hook_policy_problems and JSON, but has no UTF-8 form: the resolver
+# refuses it (PolicyError), and the hooks keep the configured profile.
+UNENCODABLE_POLICY: JsonObject = {
+    "profile": "minimal",
+    "escalations": [{"profile": "standard", "paths": ["a\ud800b"]}],
+}
+UNENCODABLE_PROBLEM = (
+    ".harness/project.json hook_policy text cannot be encoded as UTF-8: "
+    "surrogates not allowed"
+)
+
+
+@pytest.mark.parametrize("policy_file", ["kept", "removed"])
+def test_a_hook_policy_without_a_utf8_form_fails_with_the_resolver_problem(
+    repo: Path, policy_file: str
+) -> None:
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = UNENCODABLE_POLICY
+    save(repo, PROJECT_JSON, project)
+    if policy_file == "removed":
+        (repo / POLICY_FILE).unlink()
+
+    result = check(repo)
+
+    message = result["message"]
+    assert result["status"] == "fail"
+    assert UNENCODABLE_PROBLEM in message
+    assert "применяют strict" not in message
+    assert "профиль standard (.harness/project.json; базовый minimal)" in message
+    assert "эскалации: standard: paths=a\\ud800b" in message
+
+
+def test_a_standalone_run_message_has_a_utf8_form(repo: Path) -> None:
+    from harness.health import registry
+
+    project = load(repo, PROJECT_JSON)
+    project["hook_policy"] = UNENCODABLE_POLICY
+    save(repo, PROJECT_JSON, project)
+
+    report = registry.run(repo)
+
+    result = next(c for c in report.checks if c.id == "hooks.policy")
+    result.message.encode("utf-8")
+
+
+def test_standalone_run_reports_a_missing_policy_file(repo: Path) -> None:
+    from harness.health import registry
+
+    (repo / POLICY_FILE).unlink()
+
+    report = registry.run(repo)
+
+    result = next(c for c in report.checks if c.id == "hooks.policy")
+    assert POLICY_MISSING in result.message
 
 
 def test_console_route_of_the_policy_warn_does_not_promise_that_update_fixes_it() -> None:

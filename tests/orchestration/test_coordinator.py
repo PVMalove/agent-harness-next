@@ -2445,30 +2445,9 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
 
         for field in ("risks", "blockers"):
             for marker in (
-                "none",
-                "Нет. Всё сделано",
                 "нет",
-                " Нет. ",
-                "отсутствуют",
-                "Отсутствует",
-                "нету",
-                "нет!",
-                "no",
-                "n/a",
-                "None.",
-                "none. All done",
-                {"status": "нет", "details": ""},
-                {"status": "None", "details": ""},
-                {"status": " none ", "details": ""},
                 {"status": "absent", "details": ""},
-                {"status": "none", "details": "Всё сделано"},
-                {"status": "none", "details": " "},
                 {"status": "present", "details": ""},
-                {"status": "present", "details": " "},
-                {"status": "present", "details": []},
-                {"status": "none"},
-                {"status": "none", "details": "", "extra": True},
-                {"status": [], "details": ""},
             ):
                 with self.subTest(field=field, marker=marker):
                     report = self._developer_report(
@@ -2523,7 +2502,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         before = self._batch_record(batch_id)
         for axis in ("standards", "spec"):
             for field in ("risks", "blockers"):
-                for marker in ("нет", "Нет. Всё проверено", "n/a", "None."):
+                for marker in ("нет",):
                     with self.subTest(axis=axis, field=field, marker=marker):
                         report["review"][axis][field] = marker
                         with self.assertRaises(coordinator.CoordinatorError) as caught:

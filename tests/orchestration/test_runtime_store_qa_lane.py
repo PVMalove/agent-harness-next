@@ -196,6 +196,7 @@ def test_a_holder_killed_by_sigkill_is_reaped_by_the_next_admission_without_forc
     assert store.validate()["valid"] is True
 
 
+@pytest.mark.fault_injection
 def test_a_stopped_owner_keeps_its_expired_lease_and_the_next_admission_is_lease_held(
     store: Store,
 ) -> None:
@@ -264,6 +265,59 @@ def test_a_lease_cleared_by_an_operator_makes_the_old_owner_release_a_fencing_mi
     assert len(clear) == 1
     assert clear[0]["decision"]["approved_by"] == "Malove"
     assert (store.repo / STATE_REL / "runtime.db").is_file()
+
+
+RELEASER = """
+import json, sys
+from pathlib import Path
+from harness.errors import HarnessError, print_and_exit
+from harness.orchestration import qa_lane
+from harness.orchestration.core.constants import STATE_REL
+from harness.orchestration.ledger.ledger_ops import _ledger_lock
+from harness.orchestration.ledger.lifecycle import LifecycleLedger
+
+repo, lease = Path(sys.argv[1]), json.loads(sys.argv[2])
+ledger = LifecycleLedger(repo / STATE_REL)
+try:
+    with _ledger_lock(ledger):
+        qa_lane.release(ledger, lease)
+    print("released", flush=True)
+except HarnessError as exc:
+    sys.exit(print_and_exit(exc))
+"""
+
+
+@pytest.mark.fault_injection
+def test_a_release_by_another_holder_is_fencing_mismatch_and_the_owner_keeps_the_lane(
+    store: Store,
+) -> None:
+    owner = Holder(store, _owner(), 60)
+    held = owner.admission()
+    assert held["state"] == "acquired"
+    lease = held["lease"]
+    assert isinstance(lease, dict)
+    # Another coordinator process presents the fencing token of the owner under its own id.
+    foreign = {**lease, "owner_id": _owner()}
+
+    refused = subprocess.run(
+        [sys.executable, "-c", RELEASER, str(store.repo), json.dumps(foreign)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PYTHONPATH": str(ROOT), **store.runtime.environ},
+    )
+    status = _qa_status(store)
+    removals = {op: _audit(store, op) for op in ("release", "clear", "reap")}
+    stdout, stderr = owner.finish()
+
+    assert refused.returncode == 2, refused.stderr
+    assert _remedy(refused.stderr).startswith("REMEDY: [fencing_mismatch] ")
+    assert "released" not in refused.stdout
+    assert status["lease"]["owner_id"] == owner.owner
+    assert removals == {"release": [], "clear": [], "reap": []}
+    assert owner.process.returncode == 0, stderr
+    assert "released" in stdout
+    assert _qa_status(store)["lease"] is None
 
 
 def test_a_heartbeating_owner_never_shows_a_stale_heartbeat_past_its_lifetime(

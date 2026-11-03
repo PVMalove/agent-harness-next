@@ -1,10 +1,8 @@
-"""harness.console.catalog: каталог команд консоли на основе стандартной библиотеки.
-Тесты выполняются без textual и проверяют корректность формирования аргументов CLI."""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
 import runpy
-import subprocess
 import sys
 from pathlib import Path
 
@@ -20,7 +18,9 @@ from harness.console.catalog import (
 from harness.console.launcher import BIN_HARNESS_PATH
 
 ROOT = Path(__file__).resolve().parents[2]
+
 REPO = Path("/work/project")
+
 ENTRIES = {entry.key: entry for entry in HARNESS_COMMANDS}
 
 
@@ -196,19 +196,6 @@ def test_worktree_removal_uses_the_guarded_cli_boundary() -> None:
         "wt",
     ]
     assert process_argv(entry.cli_argv(REPO, {"worktree": "wt"}))[0] == sys.executable
-
-
-def test_catalog_imports_without_textual() -> None:
-    """Проверить, что каталог команд импортируется без установленного textual."""
-    code = "import sys; sys.modules['textual'] = None; import harness.console.catalog"
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 def test_repo_map_commands_dispatch_to_their_cli_functions() -> None:

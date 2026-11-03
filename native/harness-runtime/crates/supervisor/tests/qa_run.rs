@@ -71,7 +71,7 @@ impl Repo {
         fs::remove_file(generation.join("qa-lane/lease.json")).unwrap();
         fs::remove_file(generation.join("qa-lane/queue/00000000000000000001-dispatch.json"))
             .unwrap();
-        state::migrate::run(&root).unwrap();
+        state::migrate::run(&root, &common::approval()).unwrap();
         let root = root.canonicalize().unwrap();
         for dir in [
             ".git",
@@ -624,6 +624,7 @@ fn the_run_wide_sidecar_and_network_serve_every_command_and_go_after_the_exit() 
     repo.attach("gate-1", Run::finish("", "", 0));
     repo.attach("gate-2", Run::finish("", "", 0));
     let net = format!("harness-{DISPATCH}-qa1-net");
+    let egress = format!("harness-{DISPATCH}-qa1-egress-net");
     let proxy = format!("harness-{DISPATCH}-qa1-proxy");
     let labels = |id: &str| {
         json!({"harness.dispatch": DISPATCH, "harness.repository": repo.git_common,
@@ -634,7 +635,7 @@ fn the_run_wide_sidecar_and_network_serve_every_command_and_go_after_the_exit() 
     let id = repo.operation_id(1);
     repo.engine
         .answer(&["podman", "ps"], Answer::success(PROXY_ID))
-        .answer(&["podman", "network", "ls"], Answer::success(NET_ID))
+        .answer(&["podman", "network", "ls"], Answer::success(format!("{NET_ID}\negress-network")))
         .answer(
             &["podman", "container", "inspect"],
             Answer::success(
@@ -645,7 +646,10 @@ fn the_run_wide_sidecar_and_network_serve_every_command_and_go_after_the_exit() 
         )
         .answer(
             &["podman", "network", "inspect"],
-            Answer::success(json!([{"Id": NET_ID, "Name": net, "Labels": labels(&id)}]).to_string()),
+            Answer::success(json!([
+                {"id": NET_ID, "name": net, "labels": labels(&id)},
+                {"id": "egress-network", "name": egress, "labels": labels(&id)}
+            ]).to_string()),
         );
     repo.run(
         &supervisor,
@@ -661,7 +665,7 @@ fn the_run_wide_sidecar_and_network_serve_every_command_and_go_after_the_exit() 
             .filter(|argv| argv.starts_with(&strings(prefix)))
             .count()
     };
-    assert_eq!(count(&["podman", "network", "create"]), 1);
+    assert_eq!(count(&["podman", "network", "create"]), 2);
     assert_eq!(count(&["podman", "create"]), 1, "one sidecar for the run");
     for run in repo.runs() {
         let at = run.iter().position(|part| part == "--network").unwrap();
@@ -682,6 +686,7 @@ fn the_run_wide_sidecar_and_network_serve_every_command_and_go_after_the_exit() 
     assert_eq!(teardown["complete"], true, "{teardown}");
     assert!(calls.contains(&strings(&["podman", "rm", "--force", PROXY_ID])));
     assert!(calls.contains(&strings(&["podman", "network", "rm", NET_ID])));
+    assert!(calls.contains(&strings(&["podman", "network", "rm", "egress-network"])));
 }
 
 #[test]

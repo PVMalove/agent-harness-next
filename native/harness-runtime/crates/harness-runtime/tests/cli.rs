@@ -124,12 +124,88 @@ fn an_unknown_command_prints_the_malformed_request_code_first() {
     );
 }
 
+fn migrate_args(repo: &Scratch, approved_by: &str) -> Vec<String> {
+    [
+        "migrate",
+        "--repo",
+        repo.0.to_str().unwrap(),
+        "--approved-by",
+        approved_by,
+        "--approved-at",
+        "2026-10-27T09:00:00+00:00",
+        "--reason",
+        "cut the fixture over to the runtime store",
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+
+/// Every file below `root` and its bytes.
+fn files(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut found = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                found.push((path.clone(), fs::read(&path).unwrap()));
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// A refused migrate of the fixture without its QA lease: its exit code and remedy line; the
+/// state directory is byte for byte what it was, and neither a snapshot nor a store exists.
+fn refused_migrate(name: &str, args: impl FnOnce(&Scratch) -> Vec<String>) -> (i32, String) {
+    let repo = Scratch::repo_with_ledger(name).without_qa_lane_entries();
+    let before = files(&repo.state());
+
+    let refused = refusal(&run_owned(&args(&repo)));
+
+    assert_eq!(files(&repo.state()), before);
+    assert!(!repo.state().join("runtime.db").exists());
+    assert!(
+        !repo
+            .0
+            .join(".harness/orchestration/state-snapshots")
+            .exists()
+    );
+    refused
+}
+
+#[test]
+fn migrate_without_an_approval_prints_the_malformed_request_code_and_changes_nothing() {
+    let (code, remedy) = refused_migrate("no-approval", |repo| {
+        ["migrate", "--repo", repo.0.to_str().unwrap()]
+            .map(str::to_owned)
+            .to_vec()
+    });
+
+    assert_eq!(code, 2);
+    assert!(
+        remedy.starts_with("REMEDY: [malformed_request] "),
+        "{remedy}"
+    );
+}
+
+#[test]
+fn migrate_of_a_policy_approver_prints_the_policy_denied_code_and_changes_nothing() {
+    let (code, remedy) = refused_migrate("policy", |repo| migrate_args(repo, "policy:auto"));
+
+    assert_eq!(code, 2);
+    assert!(remedy.starts_with("REMEDY: [policy_denied] "), "{remedy}");
+}
+
 #[test]
 fn migrate_without_a_ledger_prints_the_not_found_code_first() {
     let repo = Scratch::repo("no-ledger");
     fs::create_dir_all(repo.state()).unwrap();
 
-    let (code, remedy) = refusal(&run(&["migrate", "--repo", repo.0.to_str().unwrap()]));
+    let (code, remedy) = refusal(&run_owned(&migrate_args(&repo, "human:operator")));
 
     assert_eq!(code, 2);
     assert!(remedy.starts_with("REMEDY: [not_found] "), "{remedy}");
@@ -142,7 +218,7 @@ fn migrate_while_the_ledger_lock_is_held_prints_the_store_busy_code_first() {
     // until it is stale.
     fs::create_dir(repo.state().join(".coordinator.lock")).unwrap();
 
-    let output = run(&["migrate", "--repo", repo.0.to_str().unwrap()]);
+    let output = run_owned(&migrate_args(&repo, "human:operator"));
     let (code, remedy) = refusal(&output);
 
     assert_eq!(code, 2);
@@ -158,7 +234,7 @@ fn migrate_while_the_ledger_lock_is_held_prints_the_store_busy_code_first() {
 fn migrate_while_the_qa_lane_holds_a_lease_prints_the_lease_held_code_first() {
     let repo = Scratch::repo_with_ledger("lease");
 
-    let (code, remedy) = refusal(&run(&["migrate", "--repo", repo.0.to_str().unwrap()]));
+    let (code, remedy) = refusal(&run_owned(&migrate_args(&repo, "human:operator")));
 
     assert_eq!(code, 2);
     assert!(remedy.starts_with("REMEDY: [lease_held] "), "{remedy}");
@@ -171,7 +247,7 @@ fn migrate_of_a_newer_ledger_prints_the_protocol_unsupported_code_first() {
     let text = fs::read_to_string(&pointer).unwrap();
     fs::write(&pointer, text.replace("\"version\": 3", "\"version\": 9")).unwrap();
 
-    let (code, remedy) = refusal(&run(&["migrate", "--repo", repo.0.to_str().unwrap()]));
+    let (code, remedy) = refusal(&run_owned(&migrate_args(&repo, "human:operator")));
 
     assert_eq!(code, 2);
     assert!(
@@ -193,7 +269,7 @@ fn serve_in_a_directory_that_is_no_repository_prints_the_not_found_code_first() 
 /// A cut-over repository (the fixture without its QA lease), and the path of its store.
 fn cut_over(name: &str) -> (Scratch, PathBuf) {
     let repo = Scratch::repo_with_ledger(name).without_qa_lane_entries();
-    let output = run(&["migrate", "--repo", repo.0.to_str().unwrap()]);
+    let output = run_owned(&migrate_args(&repo, "human:operator"));
     assert!(output.status.success(), "{:?}", stderr_lines(&output));
     let store = repo.state().join("runtime.db");
     (repo, store)
@@ -325,8 +401,8 @@ fn every_error_line_is_followed_by_a_remedy_with_a_known_code() {
         run(&["serve", "--socket", "x"]),
         run(&["serve", "--repo"]),
         run(&["serve", "--repo", plain.0.to_str().unwrap()]),
-        run(&["migrate", "--repo", plain.0.to_str().unwrap()]),
-        run(&["migrate", "--repo", ledger.0.to_str().unwrap()]),
+        run_owned(&migrate_args(&plain, "human:operator")),
+        run_owned(&migrate_args(&ledger, "human:operator")),
         run(&["rollback", "--repo", ledger.0.to_str().unwrap()]),
         run(&[
             "rollback",

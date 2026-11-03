@@ -177,7 +177,7 @@ fn spec<'a>(plan: &'a Plan, labels: &'a Labels) -> Spec<'a> {
 }
 
 #[test]
-fn the_run_sidecar_is_one_network_and_one_proxy_named_after_the_run() {
+fn the_podman_sidecar_has_dns_egress_separate_from_the_internal_network() {
     let plan = plan(&["pypi.org"]);
     let labels = labels();
     let engine = Scripted::new(Kind::Podman);
@@ -193,11 +193,12 @@ fn the_run_sidecar_is_one_network_and_one_proxy_named_after_the_run() {
         sidecar.objects,
         vec![
             (ObjectKind::Network, "harness-d1-qa2-net".to_owned()),
+            (ObjectKind::Network, "harness-d1-qa2-egress-net".to_owned()),
             (ObjectKind::Container, "harness-d1-qa2-proxy".to_owned()),
         ]
     );
     let calls = engine.calls();
-    assert_eq!(calls.len(), 4, "{calls:?}");
+    assert_eq!(calls.len(), 5, "{calls:?}");
     assert_eq!(
         calls[0][..4],
         strings(&["podman", "network", "create", "--internal"])
@@ -206,8 +207,14 @@ fn the_run_sidecar_is_one_network_and_one_proxy_named_after_the_run() {
         calls[0].last().map(String::as_str),
         Some("harness-d1-qa2-net")
     );
+    assert_eq!(calls[1][..3], strings(&["podman", "network", "create"]));
+    assert!(!calls[1].contains(&"--internal".to_owned()));
     assert_eq!(
-        calls[1][..6],
+        calls[1].last().map(String::as_str),
+        Some("harness-d1-qa2-egress-net")
+    );
+    assert_eq!(
+        calls[2][..6],
         strings(&[
             "podman",
             "create",
@@ -217,12 +224,18 @@ fn the_run_sidecar_is_one_network_and_one_proxy_named_after_the_run() {
             "harness-d1-qa2-proxy"
         ])
     );
-    assert!(calls[1].contains(&"HARNESS_EGRESS_ALLOWED_HOSTS=pypi.org".to_owned()));
+    assert!(calls[2].contains(&"HARNESS_EGRESS_ALLOWED_HOSTS=pypi.org".to_owned()));
     assert_eq!(
-        calls[2],
-        strings(&["podman", "network", "connect", "podman", ID])
+        calls[3],
+        strings(&[
+            "podman",
+            "network",
+            "connect",
+            "harness-d1-qa2-egress-net",
+            ID
+        ])
     );
-    assert_eq!(calls[3], strings(&["podman", "start", ID]));
+    assert_eq!(calls[4], strings(&["podman", "start", ID]));
 }
 
 #[test]
@@ -245,12 +258,13 @@ fn an_offline_run_has_no_sidecar_and_a_failed_sidecar_is_rolled_back() {
         .answer(&["podman", "rm"], Answer::success(""));
     let failure =
         ops::sidecar(&engine, &spec(&online, &labels), "harness-d1-qa2").expect_err("start fails");
-    assert_eq!(failure.removals.len(), 2);
+    assert_eq!(failure.removals.len(), 3);
     let calls = engine.calls();
     assert_eq!(
-        calls[calls.len() - 2..],
+        calls[calls.len() - 3..],
         [
             strings(&["podman", "rm", "--force", "harness-d1-qa2-proxy"]),
+            strings(&["podman", "network", "rm", "harness-d1-qa2-egress-net"]),
             strings(&["podman", "network", "rm", "harness-d1-qa2-net"]),
         ]
     );
@@ -267,7 +281,7 @@ fn the_object_listing_names_the_roles_of_a_qa_run() {
     };
     engine
         .answer(&["podman", "ps"], Answer::success(format!("{ID}\n{NET}")))
-        .answer(&["podman", "network", "ls"], Answer::success("n1"))
+        .answer(&["podman", "network", "ls"], Answer::success("n1\nn2"))
         .answer(
             &["podman", "container", "inspect"],
             Answer::success(
@@ -281,8 +295,11 @@ fn the_object_listing_names_the_roles_of_a_qa_run() {
         .answer(
             &["podman", "network", "inspect"],
             Answer::success(
-                json!([{"Id": "n1", "Name": "harness-d1-qa2-net",
-                        "Labels": {"harness.dispatch": "d1", "harness.repository": repo,
+                json!([{"id": "n1", "name": "harness-d1-qa2-net",
+                        "labels": {"harness.dispatch": "d1", "harness.repository": repo,
+                                   "harness.execution": "qa-op"}},
+                       {"id": "n2", "name": "harness-d1-qa2-egress-net",
+                        "labels": {"harness.dispatch": "d1", "harness.repository": repo,
                                    "harness.execution": "qa-op"}}])
                 .to_string(),
             ),
@@ -300,6 +317,7 @@ fn the_object_listing_names_the_roles_of_a_qa_run() {
             ("harness-d1-qa2-gate-1", "worker"),
             ("harness-d1-qa2-proxy", "proxy"),
             ("harness-d1-qa2-net", "network"),
+            ("harness-d1-qa2-egress-net", "network"),
         ]
     );
 }

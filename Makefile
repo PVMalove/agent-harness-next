@@ -40,11 +40,11 @@ lint: typecheck $(HARNESS_ENV_STAMP) ## Линтинг кода (ruff check + my
 verify: $(HARNESS_ENV_STAMP) ## Запустить полный набор проверок проекта (sanity checks, mypy, tests, clean-room)
 	$(HARNESS_PYTHON) scripts/verify.py $(VERIFY_ARGS)
 
-test: $(HARNESS_ENV_STAMP) ## Запустить только unit-тесты (pytest)
+test: $(HARNESS_ENV_STAMP) ## Запустить все уровни тестов (pytest)
 	$(HARNESS_PYTHON) -m pytest -n 4 tests
 
 coverage: $(HARNESS_ENV_STAMP) ## Запустить тесты с проверкой покрытия (pytest-cov)
-	$(HARNESS_PYTHON) -m pytest --cov=harness --cov-report=term --cov-report=html tests
+	$(HARNESS_PYTHON) -m pytest -n 4 --cov=harness --cov-fail-under=70 --cov-report=term --cov-report=html tests
 
 typecheck: $(HARNESS_ENV_STAMP) ## Запустить mypy (проверка типов)
 	$(HARNESS_PYTHON) -m mypy

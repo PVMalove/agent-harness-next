@@ -10,6 +10,7 @@ use std::path::Path;
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
+use crate::approval::Approval;
 use crate::audit;
 use crate::canonical::{canonical_json, sha256_hex};
 use crate::error::Result;
@@ -170,8 +171,16 @@ fn insert_audit(connection: &Connection, legacy: &LegacyState) -> Result<()> {
 }
 
 /// Import `legacy` into a new store file at `db_path`. The file must not exist. The store is left
-/// sealed in WAL mode and closed; the caller checks parity and moves it into place.
-pub fn import(legacy: &LegacyState, db_path: &Path, store_id: &str, at: &str) -> Result<Imported> {
+/// sealed in WAL mode and closed; the caller checks parity and moves it into place. The
+/// `legacy-import` record, the anchor of the audit chain, names the human `approval` of the
+/// cutover.
+pub fn import(
+    legacy: &LegacyState,
+    db_path: &Path,
+    store_id: &str,
+    at: &str,
+    approval: &Approval,
+) -> Result<Imported> {
     let mut connection = schema::create(db_path)?;
     let (manifest_json, manifest_sha256) = manifest(legacy);
     {
@@ -200,6 +209,9 @@ pub fn import(legacy: &LegacyState, db_path: &Path, store_id: &str, at: &str) ->
                 "generation": legacy.pointer.generation,
                 "manifest_sha256": manifest_sha256,
                 "files": manifest_entries(legacy).len(),
+                "approved_by": approval.approved_by,
+                "approved_at": approval.approved_at,
+                "reason": approval.reason,
             }),
         )?;
         for repair in &repairs {

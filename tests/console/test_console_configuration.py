@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from harness.console.configuration import ConfigurationDraft
 
 
@@ -31,11 +33,13 @@ def test_editing_and_validating_a_draft_preserves_the_active_file(
     assert path.read_bytes() == before
 
 
-def test_a_missing_project_file_starts_from_a_valid_default(tmp_path: Path) -> None:
-    # The template gained test-field placeholders; the default fills them as `harness init`
-    # does without test flags, so no placeholder text breaks the JSON.
-    draft = ConfigurationDraft.load(tmp_path, ("project.json",))
+def test_a_missing_project_file_starts_from_a_valid_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.health import project_tracker
 
+    monkeypatch.setattr(project_tracker, "_origin_url", lambda _repo: None)
+    draft = ConfigurationDraft.load(tmp_path, ("project.json",))
     document = draft.documents["project.json"]
     assert document["qa_gate_commands"] == []
     assert "test_paths" not in document
@@ -89,9 +93,9 @@ def test_mask_secrets_changes_a_value_exactly_when_reject_secrets_refuses_it() -
         "token": SECRET_MASK,
         "name": "x",
     }
-    assert mask_secrets(
-        {"tracker": {"url": "https://u:p@h/x", "type": "g"}}
-    ) == {"tracker": {"url": SECRET_MASK, "type": "g"}}
+    assert mask_secrets({"tracker": {"url": "https://u:p@h/x", "type": "g"}}) == {
+        "tracker": {"url": SECRET_MASK, "type": "g"}
+    }
     assert mask_secrets("abc", "token") == SECRET_MASK
     assert mask_secrets({"a": "b"}, "token") == SECRET_MASK
     assert mask_secrets("abc", "name") == "abc"
@@ -127,7 +131,9 @@ def test_bundle_diff_is_unchanged_without_secrets_and_masks_a_stored_secret() ->
     assert diff.count("изменены только скрытые значения") == 0
 
 
-def test_bundle_diff_says_when_only_hidden_values_changed_and_hides_unparsed_files() -> None:
+def test_bundle_diff_says_when_only_hidden_values_changed_and_hides_unparsed_files() -> (
+    None
+):
     from harness.console.configuration import bundle_diff
 
     old = _bundle(**{"project.json": {"token": "ONE"}})

@@ -1,6 +1,7 @@
 #!/bin/bash
-# PreToolUse(Write|Edit): task artifacts belong in docs/tasks/, while one-shot PR metadata belongs
-# only in .harness/.sandboxes/pr_body/ (docs/agents/artifacts.md and git-workflow.md §1).
+# PreToolUse(Write|Edit, apply_patch of the second runtime): task artifacts belong in docs/tasks/,
+# while one-shot PR metadata belongs only in .harness/.sandboxes/pr_body/ (docs/agents/artifacts.md
+# and git-workflow.md §1).
 # Verdict envelope (hook_response.py): reruns this script, answers with the JSON verdict and the
 # exit code of the hook policy. Without Python or the helper the script below decides alone.
 if [ -z "${HARNESS_HOOK_ENVELOPE:-}" ]; then
@@ -26,6 +27,8 @@ from pathlib import Path
 
 try:
     payload = json.load(sys.stdin)
+    if isinstance(payload, dict) and payload.get("tool_name") == "apply_patch":
+        raise SystemExit(7)
     value = payload["tool_input"]["file_path"]
 except (json.JSONDecodeError, KeyError, TypeError):
     raise SystemExit(1)
@@ -67,9 +70,18 @@ sys.stdout.write(value.replace("\\", "/"))
 ')"
 # Exit codes: 0 — project-relative path on stdout; 2 — path outside the project (on stdout);
 # 3 — runtime memory; 5 — bound project session scratchpad; 6 — wrong session;
-# 4 — path cannot be resolved; 1 — no file_path in the payload.
+# 4 — path cannot be resolved; 1 — no file_path in the payload; 7 — apply_patch payload of the
+# second runtime: apply_patch_payload.py reruns this script as Write for every path of the patch.
 case $? in
   0) ;;
+  7)
+    if [ ! -f "$(dirname "$0")/apply_patch_payload.py" ]; then
+      echo "[apply-patch-unparseable] block-scratch-outside-docs-tasks: адаптер apply_patch_payload.py не установлен, пути патча нельзя проверить — переустанови hooks." >&2
+      exit 2
+    fi
+    printf '%s' "$INPUT" | "$PY" "$(dirname "$0")/apply_patch_payload.py" fanout -- "${BASH:-bash}" "$0"
+    exit $?
+    ;;
   2)
     echo "artifacts.md: путь Write/Edit вне проекта ${CLAUDE_PROJECT_DIR} — артефакты задач пишем в docs/tasks/ внутри проекта: $FILE_PATH" >&2
     exit 2

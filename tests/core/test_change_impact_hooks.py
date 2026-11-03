@@ -284,7 +284,14 @@ def test_a_path_outside_a_git_checkout_is_allowed(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     project = _project(tmp_path / "project")
-    outside = _write(tmp_path / "elsewhere" / "pyproject.toml", "")
+    # tmp_path can lie inside a checkout: CI puts the run root under .harness/.sandboxes. So the
+    # path hangs off the filesystem root. The hook reads only `.git` of the ancestors, so the test
+    # does not create the file.
+    outside = (
+        Path(tmp_path.anchor) / "outside-any-checkout" / "elsewhere" / "pyproject.toml"
+    )
+    checkouts = [parent for parent in outside.parents if (parent / ".git").exists()]
+    assert not checkouts, checkouts
 
     for hook_id in (FIRST_TOUCH, SENSITIVE, REMINDER):
         code, out, err = _body(project, hook_id, _edit(outside), monkeypatch, capsys)

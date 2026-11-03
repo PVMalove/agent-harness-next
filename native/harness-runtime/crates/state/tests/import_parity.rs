@@ -17,7 +17,14 @@ const AT: &str = "2026-10-22T07:10:19.972174+00:00";
 fn imported(scratch: &Scratch) -> state::import::Imported {
     let legacy = scratch.read();
     legacy.validate().unwrap();
-    import(&legacy, &scratch.db(), "store-under-test", AT).unwrap()
+    import(
+        &legacy,
+        &scratch.db(),
+        "store-under-test",
+        AT,
+        &common::approval(),
+    )
+    .unwrap()
 }
 
 fn count(connection: &Connection, table: &str) -> i64 {

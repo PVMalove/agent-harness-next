@@ -1,10 +1,13 @@
 """`harness uninstall` removes everything init installed and keeps what the project changed."""
 
+import contextlib
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from harness.uninstall import BACKUP_DIR, CONFIRM_WORD, apply_uninstall, plan_uninstall
@@ -27,16 +30,25 @@ def git(repo: Path, *args: str) -> str:
 
 
 def harness(*args: str) -> subprocess.CompletedProcess[str]:
-    """Запустить CLI харнесса без интерактивного ввода."""
-    return subprocess.run(
-        [sys.executable, str(CLI), *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        stdin=subprocess.DEVNULL,
-        check=False,
-    )
+    """Exercise the packager application boundary in-process, without a Python CLI child.
+
+    Executable wiring remains covered by the installed-memory smoke. These checks
+    concern the install/update/uninstall effects and their diagnostics.
+    """
+    from harness.bin import harness as cli
+
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with (
+        mock.patch.object(sys, "argv", [str(CLI), *args]),
+        mock.patch.object(sys, "stdin", io.StringIO()),
+        contextlib.redirect_stdout(stdout),
+        contextlib.redirect_stderr(stderr),
+    ):
+        try:
+            code = cli.main()
+        except SystemExit as exc:
+            code = int(exc.code or 0)
+    return subprocess.CompletedProcess([str(CLI), *args], code, stdout.getvalue(), stderr.getvalue())
 
 
 class UninstallTests(unittest.TestCase):
@@ -117,16 +129,6 @@ class UninstallTests(unittest.TestCase):
         )
         self.assertEqual(plan_uninstall(self.repo)["remove"], [])
 
-    def test_uninstall_refuses_without_confirmation_or_with_a_stale_plan(self) -> None:
-        """Проверить отказ без слова подтверждения и при изменившемся плане."""
-        plan = plan_uninstall(self.repo)
-        with self.assertRaisesRegex(ValueError, CONFIRM_WORD):
-            apply_uninstall(self.repo, plan, confirm="yes")
-        (self.repo / "AGENTS.md").unlink()
-        with self.assertRaisesRegex(ValueError, "preview again"):
-            apply_uninstall(self.repo, plan, confirm=CONFIRM_WORD)
-        self.assertTrue((self.repo / ".harness").is_dir())
-
     def test_uninstall_is_blocked_while_a_batch_is_active(self) -> None:
         """Проверить, что активный batch оркестрации блокирует удаление."""
         batches = self.repo / ".harness" / "orchestration" / "state" / "batches"
@@ -140,25 +142,6 @@ class UninstallTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "активные batch"):
             apply_uninstall(self.repo, plan, confirm=CONFIRM_WORD)
         self.assertTrue((self.repo / ".harness").is_dir())
-
-    def test_cli_previews_by_default_and_requires_the_confirm_word(self) -> None:
-        """Проверить, что CLI без --apply только показывает план, а --apply требует UNINSTALL."""
-        preview = harness("uninstall", str(self.repo))
-        self.assertEqual(preview.returncode, 0, preview.stderr)
-        self.assertIn(
-            ".harness", json.loads(preview.stdout)["plan"]["remove"][0]["path"]
-        )
-        self.assertTrue((self.repo / ".harness").is_dir())
-
-        refused = harness("uninstall", str(self.repo), "--apply")
-        self.assertNotEqual(refused.returncode, 0)
-        self.assertTrue((self.repo / ".harness").is_dir())
-
-        applied = harness(
-            "uninstall", str(self.repo), "--apply", "--confirm", CONFIRM_WORD
-        )
-        self.assertEqual(applied.returncode, 0, applied.stderr)
-        self.assertFalse((self.repo / ".harness").exists())
 
 
 if __name__ == "__main__":

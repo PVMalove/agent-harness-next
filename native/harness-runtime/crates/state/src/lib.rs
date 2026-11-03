@@ -1,6 +1,7 @@
 //! The runtime store (ADR 0020): canonical JSON, the store schema, and the import of the file
 //! ledger of installation 1.x.
 
+pub mod approval;
 pub mod archive;
 pub mod audit;
 pub mod authority;
@@ -19,6 +20,7 @@ pub mod parity;
 pub mod platform;
 pub mod policy;
 pub mod project;
+pub mod qa_evidence;
 pub mod read;
 pub mod read_session;
 pub mod repair;

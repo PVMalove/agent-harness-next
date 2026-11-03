@@ -1,7 +1,9 @@
-//! `harness-runtime migrate --repo <repo>` (ADR 0020, section 5): the cutover from the file ledger
-//! of installation 1.x to the runtime store, in one operation.
+//! `harness-runtime migrate --repo <repo> --approved-by <human> --approved-at <time> --reason
+//! <text>` (ADR 0020, section 5): the cutover from the file ledger of installation 1.x to the
+//! runtime store, in one operation with a human approval.
 //!
-//! 1. Preconditions: nothing that the import would have to guess, and nothing running.
+//! 1. The approval, checked first as the rollback checks its own (`approval::check`), then the
+//!    preconditions: nothing that the import would have to guess, and nothing running.
 //! 2. The legacy lock, with `owner.json` and a held `flock`.
 //! 3. A snapshot of the state directory, flushed to disk.
 //! 4. The import into `state/runtime.db.importing`.
@@ -11,7 +13,7 @@
 //!
 //! Until step 6 writes the pointer, the file ledger is the authority and every failure leaves it so.
 //! The pointer is the commit point, so a repeated migrate after a crash at any step either starts
-//! again or, after the pointer, answers `already_cut_over`.
+//! again or, after the pointer, answers `already_cut_over`. A repeat needs an approval too.
 
 use std::fs;
 use std::io;
@@ -20,6 +22,7 @@ use std::path::{Path, PathBuf};
 use contracts::ErrorCode;
 use serde_json::json;
 
+use crate::approval::{self, Approval};
 use crate::authority::{
     AUTHORITY_NAME, Authority, Epoch, IMPORTING_NAME, RUNTIME_STORE, STORE_NAME, STORE_VERSION,
     epoch,
@@ -255,18 +258,18 @@ fn commit(state: &Path, legacy: &LegacyState, authority: &Authority) -> Result<(
 
 /// Steps 1 to 6, under the lock. What an attempt leaves of the store goes with it, unless the
 /// pointer was replaced: then the cutover is done.
-fn locked(repo: &Path, state: &Path) -> Result<Authority> {
+fn locked(repo: &Path, state: &Path, approval: &Approval) -> Result<Authority> {
     refuse_a_rolled_back_store(state)?;
     remove_store_leftovers(state)?;
-    let outcome = import_and_commit(repo, state);
+    let outcome = import_and_commit(repo, state, approval);
     if outcome.is_err() && matches!(epoch(state), Epoch::FileLedger) {
         let _ = remove_store_leftovers(state);
     }
     outcome
 }
 
-/// Steps 3 to 6.
-fn import_and_commit(repo: &Path, state: &Path) -> Result<Authority> {
+/// Steps 3 to 6; the approval goes into the `legacy-import` record and into `AUTHORITY.json`.
+fn import_and_commit(repo: &Path, state: &Path, approval: &Approval) -> Result<Authority> {
     let legacy = preconditions(state)?;
     let snapshot = snapshot::create(&repo.join(SNAPSHOTS_REL), state)?;
     legacy_matches_snapshot(&legacy, &snapshot)?;
@@ -278,7 +281,7 @@ fn import_and_commit(repo: &Path, state: &Path) -> Result<Authority> {
         manifest_json,
         manifest_sha256,
         ..
-    } = import(&legacy, &importing, &store_id, &at)?;
+    } = import(&legacy, &importing, &store_id, &at, approval)?;
     snapshot::write_import_manifest(&snapshot, &manifest_json)?;
     parity::check(&legacy, &importing)?;
     snapshot::verify_unchanged(state, &snapshot)?;
@@ -288,6 +291,7 @@ fn import_and_commit(repo: &Path, state: &Path) -> Result<Authority> {
         manifest_sha256,
         snapshot: snapshot_relative(repo, &snapshot.dir),
         cutover_at: iso_now(),
+        approval: approval.clone(),
     };
     commit(state, &legacy, &authority)?;
     Ok(authority)
@@ -301,7 +305,8 @@ fn snapshot_relative(repo: &Path, snapshot: &Path) -> String {
 }
 
 /// The state is cut over already: the only change allowed is the removal of the lock a dead
-/// migrate left behind.
+/// migrate left behind. The approval of the repeat is checked but not recorded: the store and
+/// `AUTHORITY.json` keep the approval of the cutover.
 fn already_cut_over(state: &Path, authority: Authority) -> Outcome {
     let _ = lock::release_if_dead(state);
     Outcome {
@@ -310,14 +315,15 @@ fn already_cut_over(state: &Path, authority: Authority) -> Outcome {
     }
 }
 
-/// Run the migration of the repository at `repo`.
+/// Run the migration of the repository at `repo` with the human `approval`.
 ///
 /// # Errors
-/// `Error::Refused` (exit code 2): a precondition failed, nothing was changed. `Error::Interrupted`
-/// (3): the operation failed after it began; the partial store was removed and the file ledger is
-/// still the authority. `Error::Invariant` (4): the legacy state changed during the operation or
-/// the parity check failed; an operator must look.
-pub fn run(repo: &Path) -> Result<Outcome> {
+/// `Error::Refused` (exit code 2): the approval or a precondition refused it, nothing was
+/// changed. `Error::Interrupted` (3): the operation failed after it began; the partial store was
+/// removed and the file ledger is still the authority. `Error::Invariant` (4): the legacy state
+/// changed during the operation or the parity check failed; an operator must look.
+pub fn run(repo: &Path, approval: &Approval) -> Result<Outcome> {
+    approval::check(approval, "migration")?;
     let state: PathBuf = repo.join(STATE_REL);
     match epoch(&state) {
         Epoch::Store(authority) => return Ok(already_cut_over(&state, authority)),
@@ -331,7 +337,7 @@ pub fn run(repo: &Path) -> Result<Outcome> {
     preconditions(&state)?;
     hooks::reach("preconditions")?;
     let held: LegacyLock = lock::acquire(&state, lock::OPERATION)?;
-    let outcome = hooks::reach("locked").and_then(|()| locked(repo, &state));
+    let outcome = hooks::reach("locked").and_then(|()| locked(repo, &state, approval));
     let released = held.release();
     let authority = outcome?;
     // A lock that cannot be removed after the commit point is no failure: the next migrate

@@ -170,10 +170,26 @@ def build_state(
     return ledger
 
 
-def migrate(repo: Path, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    """``harness-runtime migrate --repo <repo>`` as its own process."""
+# The human approval of a cutover, as ``harness-runtime migrate`` takes it.
+MIGRATE_APPROVAL = (
+    "--approved-by",
+    "Malove",
+    "--approved-at",
+    "2026-09-17T00:00:00+00:00",
+    "--reason",
+    "cut the scratch state over to the runtime store",
+)
+
+
+def migrate(
+    repo: Path,
+    *,
+    env: dict[str, str] | None = None,
+    approval: tuple[str, ...] = MIGRATE_APPROVAL,
+) -> subprocess.CompletedProcess[str]:
+    """``harness-runtime migrate --repo <repo>`` with ``approval`` as its own process."""
     return subprocess.run(
-        [str(runtime_binary()), "migrate", "--repo", str(repo)],
+        [str(runtime_binary()), "migrate", "--repo", str(repo), *approval],
         capture_output=True,
         text=True,
         check=False,
@@ -221,7 +237,7 @@ class PausedMigrate:
     def __init__(self, repo: Path, step: str, *, env: dict[str, str] | None = None) -> None:
         self.step = step
         self.process = subprocess.Popen(
-            [str(runtime_binary()), "migrate", "--repo", str(repo)],
+            [str(runtime_binary()), "migrate", "--repo", str(repo), *MIGRATE_APPROVAL],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -576,6 +592,7 @@ class ServingRuntime:
         lines: queue.Queue[str] = queue.Queue()
         threading.Thread(target=lambda: lines.put(stdout.readline()), daemon=True).start()
         self._paused: queue.Queue[str] = queue.Queue()
+        self._injected: queue.Queue[str] = queue.Queue()
         threading.Thread(target=self._read_stderr, daemon=True).start()
         try:
             text = lines.get(timeout=30)
@@ -590,6 +607,17 @@ class ServingRuntime:
         for line in stderr:
             if line.startswith("PAUSED:"):
                 self._paused.put(line.strip().removeprefix("PAUSED:"))
+            elif line.startswith("INJECTED:"):
+                self._injected.put(line.strip().removeprefix("INJECTED:"))
+
+    def wait_injected(self, step: str, timeout: float = 30.0) -> None:
+        """Wait until the runtime reports that the debug failure ``step`` fired
+        (``HARNESS_RUNTIME_TEST_FAIL_AT``): a hook that never fires fails the test."""
+        try:
+            reached = self._injected.get(timeout=timeout)
+        except queue.Empty:
+            pytest.fail(f"the runtime did not inject {step!r} within {timeout} seconds")
+        assert reached == step
 
     def wait_paused(self, step: str, timeout: float = 30.0) -> None:
         """Wait until the runtime stops at the debug hook ``step`` (``HARNESS_RUNTIME_TEST_PAUSE_AT``)."""

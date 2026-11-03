@@ -6,6 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use state::approval::Approval;
 use state::legacy::{self, LegacyState};
 
 pub const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/legacy_v3");
@@ -20,6 +21,15 @@ fn copy_tree(from: &Path, to: &Path) {
         } else {
             fs::copy(entry.path(), target).unwrap();
         }
+    }
+}
+
+/// The human approval of a cutover, as `migrate::run` takes it.
+pub fn approval() -> Approval {
+    Approval {
+        approved_by: "human:operator".to_owned(),
+        approved_at: "2026-10-27T09:00:00+00:00".to_owned(),
+        reason: "cut the fixture over to the runtime store".to_owned(),
     }
 }
 
@@ -130,3 +140,5 @@ impl Drop for Repo {
         let _ = fs::remove_dir_all(&self.root);
     }
 }
+
+pub mod qa_store;

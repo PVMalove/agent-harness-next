@@ -5,8 +5,18 @@
 #![allow(dead_code)]
 
 use serde_json::{Map, Value, json};
+use state::approval::Approval;
 use state::canonical::{canonical_json, compact_sha256, sha256_hex};
 use supervisor::hook_policy;
+
+/// The human approval of the cutover of a test repository, as `state::migrate::run` takes it.
+pub fn approval() -> Approval {
+    Approval {
+        approved_by: "human:operator".to_owned(),
+        approved_at: "2026-10-27T09:00:00+00:00".to_owned(),
+        reason: "cut the test repository over to the runtime store".to_owned(),
+    }
+}
 
 /// Pin `project_hook_policy`, the `hook_policy` key of the pinned project (`Value::Null` for a
 /// project without one), into `brief`, and bind the approval to the result.

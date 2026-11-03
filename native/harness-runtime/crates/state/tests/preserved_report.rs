@@ -116,7 +116,7 @@ fn edit_report(repo: &Repo, edit: impl FnOnce(&mut Value)) {
 fn assert_refused_without_changes(repo: &Repo) {
     let before = repo.tree();
 
-    let error = migrate::run(&repo.root).unwrap_err();
+    let error = migrate::run(&repo.root, &common::approval()).unwrap_err();
 
     assert_eq!(error.exit_code(), 2);
     assert!(
@@ -132,7 +132,7 @@ fn migrate_preserves_a_blocked_report_without_accepting_or_rewriting_it() {
     let repo = blocked_rewind();
     let before = repo.tree();
 
-    let outcome = migrate::run(&repo.root).unwrap();
+    let outcome = migrate::run(&repo.root, &common::approval()).unwrap();
 
     assert!(!outcome.already_cut_over);
     assert_eq!(read(&repo.state().join("ledger.json"))["version"], 4);
@@ -152,7 +152,7 @@ fn migrate_preserves_a_retired_blocked_writer() {
         batch["recovery_events"][0]["evidence"]["retired_dispatches"] = json!([FIRST]);
     });
 
-    assert!(migrate::run(&repo.root).is_ok());
+    assert!(migrate::run(&repo.root, &common::approval()).is_ok());
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn migrate_still_preserves_a_cancelled_writer_without_a_report() {
         entry.insert("cancellation".into(), json!({"runtime_stopped": true}));
     });
 
-    assert!(migrate::run(&repo.root).is_ok());
+    assert!(migrate::run(&repo.root, &common::approval()).is_ok());
 }
 
 #[test]

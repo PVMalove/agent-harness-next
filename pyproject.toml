@@ -38,13 +38,13 @@ exclude = ["^harness/repo_map/tree_sitter_worker\\.py$"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The real container smokes need an engine and network: every default run deselects them. Only the
-# CI docker-smoke job selects `-m docker_smoke` (#710), and only the podman-smoke workflow on the
-# self-hosted Fedora runner selects `-m podman_smoke` (#811).
+# Real container smokes require their dedicated workflows; default runs deselect both.
+# Fault-injection tests remain in the default run and also have a dedicated CI job.
 addopts = ["-m", "not docker_smoke and not podman_smoke"]
 markers = [
     "docker_smoke: real Docker smoke of the container executor; run only with -m docker_smoke",
     "podman_smoke: real rootless Podman smoke on Fedora with SELinux enforcing; run only with -m podman_smoke",
+    "fault_injection: a scenario of the fault-injection and security matrix at seam 1 (tests/orchestration/fault_injection_matrix.py)",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -60,8 +60,6 @@ markers = [
 "tests/orchestration/test_advisory.py" = ["E402"]
 "tests/console/test_console_app.py" = ["E402"]
 "tests/console/test_console_harness.py" = ["E402"]
-"tests/console/test_console_orchestration.py" = ["E402"]
-"tests/console/test_console_repo_map_app.py" = ["E402"]
 "tests/console/test_console_reports_app.py" = ["E402"]
 
 [dependency-groups]
@@ -72,7 +70,7 @@ dev = [
     "pytest-cov==7.1.0",
     "pytest-xdist==3.8.0",
     "ruff==0.8.6",
-    # harness console TUI tests (tests/console/test_console_app.py) - same pin as
+    # Console widget/formatting unit tests use the same pin as
     # harness/console/pin.py (ADR 0009); tests/console/test_console_pin.py keeps them equal. Dev-only:
     # `harness console` itself gets textual through `uv run --with`, never a project dependency.
     "textual==6.5.0",

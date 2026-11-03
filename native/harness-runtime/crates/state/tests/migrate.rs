@@ -30,7 +30,7 @@ fn migrate_cuts_the_state_over_to_the_store() {
     let repo = Repo::new("cutover");
     let before = repo.tree();
 
-    let outcome = run(&repo.root).unwrap();
+    let outcome = run(&repo.root, &common::approval()).unwrap();
 
     assert!(!outcome.already_cut_over);
     let state = repo.state();
@@ -74,7 +74,7 @@ fn the_snapshot_is_a_verified_copy_with_its_manifests() {
     let repo = Repo::new("snapshot");
     let before = repo.tree();
 
-    let outcome = run(&repo.root).unwrap();
+    let outcome = run(&repo.root, &common::approval()).unwrap();
 
     let snapshot = repo.root.join(&outcome.authority.snapshot);
     assert!(snapshot.starts_with(repo.snapshots()));
@@ -97,7 +97,7 @@ fn the_snapshot_is_a_verified_copy_with_its_manifests() {
 #[test]
 fn the_store_has_the_parity_of_the_snapshot() {
     let repo = Repo::new("parity");
-    let outcome = run(&repo.root).unwrap();
+    let outcome = run(&repo.root, &common::approval()).unwrap();
     let copy = repo.root.join(&outcome.authority.snapshot).join("state");
     let pointer = legacy::read_pointer(&copy).unwrap().unwrap();
     let legacy = LegacyState::read(&copy, pointer).unwrap();
@@ -109,11 +109,11 @@ fn the_store_has_the_parity_of_the_snapshot() {
 #[test]
 fn a_repeat_after_the_commit_point_reports_already_cut_over_and_changes_nothing() {
     let repo = Repo::new("repeat");
-    let first = run(&repo.root).unwrap();
+    let first = run(&repo.root, &common::approval()).unwrap();
     let before = repo.tree();
     let snapshots = fs::read_dir(repo.snapshots()).unwrap().count();
 
-    let second = run(&repo.root).unwrap();
+    let second = run(&repo.root, &common::approval()).unwrap();
 
     assert!(second.already_cut_over);
     assert_eq!(second.authority, first.authority);
@@ -138,7 +138,7 @@ fn assert_refused_and_untouched(
     before: &std::collections::BTreeMap<String, Vec<u8>>,
     text: &str,
 ) {
-    let result = run(&repo.root);
+    let result = run(&repo.root, &common::approval());
     assert_eq!(code(&result), 2, "{result:?}");
     let message = result.unwrap_err().to_string();
     assert!(message.contains(text), "{message}");
@@ -185,7 +185,7 @@ fn a_ledger_older_than_version_3_names_the_ledger_migrate_remedy() {
     fs::write(&pointer, text.replace("\"version\": 3", "\"version\": 2")).unwrap();
     let before = repo.tree();
 
-    let result = run(&repo.root);
+    let result = run(&repo.root, &common::approval());
 
     match &result {
         Err(Error::Refused { remedy, .. }) => {
@@ -202,7 +202,7 @@ fn an_empty_state_has_nothing_to_migrate() {
     fs::remove_dir_all(repo.state()).unwrap();
     fs::create_dir_all(repo.state()).unwrap();
 
-    let result = run(&repo.root);
+    let result = run(&repo.root, &common::approval());
 
     assert_eq!(code(&result), 2);
     let error = result.unwrap_err();
@@ -246,7 +246,7 @@ fn a_live_lock_owner_is_never_removed() {
     );
     let before = repo.tree();
 
-    let result = run(&repo.root);
+    let result = run(&repo.root, &common::approval());
 
     assert_eq!(code(&result), 2, "{result:?}");
     assert!(result.unwrap_err().to_string().contains("locked"));
@@ -319,7 +319,7 @@ fn a_lock_that_its_verdict_keeps_is_refused_with_the_verdict() {
         write_owner(&repo, &owner);
         let before = repo.tree();
 
-        let result = run(&repo.root);
+        let result = run(&repo.root, &common::approval());
 
         assert_eq!(code(&result), 2, "{owner}: {result:?}");
         let message = result.unwrap_err().to_string();
@@ -342,7 +342,7 @@ fn a_stale_lock_whose_owner_cannot_be_checked_is_removed_with_its_verdict() {
         let repo = Repo::new("stale");
         write_owner(&repo, &owner);
 
-        let outcome = run(&repo.root).unwrap();
+        let outcome = run(&repo.root, &common::approval()).unwrap();
 
         assert!(!outcome.already_cut_over);
         let release = release_records(&repo);
@@ -380,7 +380,7 @@ fn a_dead_owner_is_removed_with_a_lock_audit_record_and_the_migration_goes_on() 
         }),
     );
 
-    let outcome = run(&repo.root).unwrap();
+    let outcome = run(&repo.root, &common::approval()).unwrap();
 
     assert!(!outcome.already_cut_over);
     let audit: Vec<Value> = fs::read_dir(repo.state().join("lock-audit"))
@@ -426,7 +426,7 @@ fn what_an_interrupted_attempt_left_of_the_store_is_removed() {
     fs::write(state.join("runtime.db"), b"renamed but never committed").unwrap();
     fs::write(state.join("AUTHORITY.json"), b"{}").unwrap();
 
-    let outcome = run(&repo.root).unwrap();
+    let outcome = run(&repo.root, &common::approval()).unwrap();
 
     assert!(!outcome.already_cut_over);
     assert!(!state.join("runtime.db.importing").exists());
@@ -444,7 +444,7 @@ fn a_store_kept_after_a_rollback_is_not_deleted() {
     )
     .unwrap();
 
-    let result = run(&repo.root);
+    let result = run(&repo.root, &common::approval());
 
     assert_eq!(code(&result), 2, "{result:?}");
     assert_eq!(
@@ -456,10 +456,10 @@ fn a_store_kept_after_a_rollback_is_not_deleted() {
 #[test]
 fn a_cut_over_state_whose_store_does_not_match_is_an_invariant_failure() {
     let repo = Repo::new("inconsistent");
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     fs::write(repo.state().join("AUTHORITY.json"), "{\"authority\": \"runtime-store\", \"store_id\": \"x\", \"manifest_sha256\": \"y\", \"snapshot\": \"s\", \"cutover_at\": \"t\"}\n").unwrap();
 
-    let result = run(&repo.root);
+    let result = run(&repo.root, &common::approval());
 
     assert_eq!(code(&result), 4, "{result:?}");
 }
@@ -468,7 +468,7 @@ fn a_cut_over_state_whose_store_does_not_match_is_an_invariant_failure() {
 fn the_pointer_after_the_cutover_is_refused_by_a_version_1_x_installation() {
     // A 1.x LifecycleLedger accepts only versions 1, 2 and 3 (ADR 0020, section 1).
     let repo = Repo::new("fence");
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
 
     let pointer = read_json(&repo.state().join("ledger.json"));
 
