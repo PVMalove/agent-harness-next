@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "engine": "sqlite3 FTS5 bm25, path tie-break",
   "corpus": "Tracked ADRs and CONTEXT.md; excludes task archives and tracker snapshots",
   "k_values": [
@@ -10,12 +10,12 @@
   "noise_window": 5,
   "min_recall_at_5": 0.6,
   "max_noise_ratio": 0.7,
-  "dataset_hash": "315f9903467b695f11d2662824dc47437c225091832026e397d6fd1ff5f70af1",
+  "dataset_hash": "27ae576158e8a67a0524831467f2e4d157f5beb707d8c7bf2ed5c24c04060d17",
   "source_hashes": {
-    "CONTEXT.md": "0c787590880a83c7417b632b332efed79821b40b12cdc766da24a4612fff17d0",
-    "docs/adr/0001-portable-capability-delivery.md": "5254f06b516ee14371422ba9cbca9947ced09067edf167bcef09fc9b446d805b",
+    "CONTEXT.md": "af125419a7a7c5432daaf52e7ca0a5665fefa106ece3924c4b51120e1eb60d66",
+    "docs/adr/0001-portable-capability-delivery.md": "7f35b9513f2a9b63ad081ef5ade53b971a39aa94743167b426b6e7be5611c602",
     "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
-    "docs/adr/0003-orchestration-core.md": "f5a323619678f23617b6c1e500c4327f70467e61cdf022decd2e6bdd851d4dc0",
+    "docs/adr/0003-orchestration-core.md": "3e4e61af72ab7701013cba42f1faa8cdc2b3f4b9c23e7f2d0fc884f03f957854",
     "docs/adr/0004-role-assignments.md": "3721543a888daea209f74e3ca92ea920074213b0b758cbc6c1497b53ba782bd0",
     "docs/adr/0005-implement-pipeline.md": "21ec43eadc8428a7fe665adfe335cb82b3bef89279ca0f8bb39b5da2a53bb3c9",
     "docs/adr/0006-scratch-artifacts.md": "67fea598a768ec5513a0818654e98b7e9c3bc9605161a33d85b2e66ab98c870f",
@@ -32,7 +32,7 @@
       "3": 0.95,
       "5": 0.95
     },
-    "mean_noise_ratio": 0.61,
+    "mean_noise_ratio": 0.6,
     "query_results": [
       {
         "ticket_id": 165,
@@ -42,7 +42,7 @@
           "CONTEXT.md",
           "docs/adr/0008-repo-map.md",
           "docs/adr/0007-python-quality.md",
-          "docs/adr/0003-orchestration-core.md"
+          "docs/adr/0010-project-memory.md"
         ],
         "expected": [
           "docs/adr/0005-implement-pipeline.md",
@@ -83,8 +83,8 @@
         "query": "Цель: Проверять каталоги харнесса и права записи в harness health с локальным --fix. DoD: Отсутствующий каталог с записываемым родителем получает ok; незаписываемый — fail; fix создаёт каталоги и registry, не меняя машинных настроек.",
         "retrieved": [
           "CONTEXT.md",
-          "docs/adr/0005-implement-pipeline.md",
           "docs/adr/0010-project-memory.md",
+          "docs/adr/0005-implement-pipeline.md",
           "docs/adr/0001-portable-capability-delivery.md",
           "docs/adr/0003-orchestration-core.md"
         ],
@@ -128,9 +128,9 @@
         "retrieved": [
           "CONTEXT.md",
           "docs/adr/0010-project-memory.md",
+          "docs/adr/0003-orchestration-core.md",
           "docs/adr/0005-implement-pipeline.md",
-          "docs/adr/0006-scratch-artifacts.md",
-          "docs/adr/0009-harness-console.md"
+          "docs/adr/0006-scratch-artifacts.md"
         ],
         "expected": [
           "docs/adr/0007-python-quality.md",
@@ -193,10 +193,10 @@
         "query": "Цель: Устранить зависание console launcher e2e на Windows при поиске uv через PATHEXT. DoD: Отсутствующий и неработающий uv дают health fallback; тесты не запускают настоящий Textual TUI и не оставляют процессов.",
         "retrieved": [
           "docs/adr/0009-harness-console.md",
-          "docs/adr/0010-project-memory.md",
           "CONTEXT.md",
-          "docs/adr/0008-repo-map.md",
-          "docs/adr/0003-orchestration-core.md"
+          "docs/adr/0010-project-memory.md",
+          "docs/adr/0003-orchestration-core.md",
+          "docs/adr/0008-repo-map.md"
         ],
         "expected": [
           "docs/adr/0009-harness-console.md",
@@ -355,7 +355,7 @@
           "CONTEXT.md",
           "docs/adr/0003-orchestration-core.md",
           "docs/adr/0005-implement-pipeline.md",
-          "docs/adr/0008-repo-map.md"
+          "docs/adr/0001-portable-capability-delivery.md"
         ],
         "expected": [
           "docs/adr/0010-project-memory.md",
@@ -366,7 +366,7 @@
           "3": 1.0,
           "5": 1.0
         },
-        "noise_ratio": 0.8,
+        "noise_ratio": 0.6,
         "search_status": "ok"
       },
       {
