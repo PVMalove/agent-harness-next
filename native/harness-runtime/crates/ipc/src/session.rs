@@ -822,7 +822,12 @@ mod tests {
         for entry in fs::read_dir(generation.join("qa-lane/queue")).unwrap() {
             fs::remove_file(entry.unwrap().path()).unwrap();
         }
-        let outcome = state::migrate::run(&root).unwrap();
+        let approval = state::approval::Approval {
+            approved_by: "human:operator".to_owned(),
+            approved_at: "2026-10-27T09:00:00+00:00".to_owned(),
+            reason: "cut the test repository over to the runtime store".to_owned(),
+        };
+        let outcome = state::migrate::run(&root, &approval).unwrap();
         let mut shared = shared_for(&root);
         shared.state_dir = Some(state_dir);
         (shared, root, outcome.authority.store_id)

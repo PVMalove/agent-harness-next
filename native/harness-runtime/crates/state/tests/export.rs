@@ -17,7 +17,7 @@ use common::Repo;
 
 fn cut_over(name: &str) -> Repo {
     let repo = Repo::new(name);
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     repo
 }
 

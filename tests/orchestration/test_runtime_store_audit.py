@@ -279,6 +279,21 @@ def test_a_row_that_breaks_a_check_constraint_is_found_by_the_integrity_check(
     assert "integrity_check" in stderr
 
 
+def test_full_validation_fails_when_authority_json_names_another_approval(store: Store) -> None:
+    marker = store.repo / STATE_REL / "AUTHORITY.json"
+    authority = json.loads(marker.read_text(encoding="utf-8"))
+    marker.write_text(_canonical({**authority, "approved_by": "Mallory"}), encoding="utf-8")
+    before = tree(store.repo / STATE_REL, skip=("runtime.db",))
+    dump = _dump(store)
+
+    code, stderr = _full(store)
+
+    assert code == 2
+    assert "import_approval" in stderr
+    assert tree(store.repo / STATE_REL, skip=("runtime.db",)) == before
+    assert _dump(store) == dump
+
+
 def test_the_status_of_the_store_names_its_authority_and_the_audit_records(store: Store) -> None:
     result = store.run("ledger", "status")
 

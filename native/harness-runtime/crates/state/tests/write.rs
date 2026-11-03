@@ -22,7 +22,7 @@ const SECOND: &str = "dispatch-22222222-0000-4000-8000-000000000002";
 
 fn cut_over(name: &str) -> Repo {
     let repo = Repo::new(name);
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     repo
 }
 

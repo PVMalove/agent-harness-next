@@ -170,10 +170,26 @@ def build_state(
     return ledger
 
 
-def migrate(repo: Path, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    """``harness-runtime migrate --repo <repo>`` as its own process."""
+# The human approval of a cutover, as ``harness-runtime migrate`` takes it.
+MIGRATE_APPROVAL = (
+    "--approved-by",
+    "Malove",
+    "--approved-at",
+    "2026-09-17T00:00:00+00:00",
+    "--reason",
+    "cut the scratch state over to the runtime store",
+)
+
+
+def migrate(
+    repo: Path,
+    *,
+    env: dict[str, str] | None = None,
+    approval: tuple[str, ...] = MIGRATE_APPROVAL,
+) -> subprocess.CompletedProcess[str]:
+    """``harness-runtime migrate --repo <repo>`` with ``approval`` as its own process."""
     return subprocess.run(
-        [str(runtime_binary()), "migrate", "--repo", str(repo)],
+        [str(runtime_binary()), "migrate", "--repo", str(repo), *approval],
         capture_output=True,
         text=True,
         check=False,
@@ -221,7 +237,7 @@ class PausedMigrate:
     def __init__(self, repo: Path, step: str, *, env: dict[str, str] | None = None) -> None:
         self.step = step
         self.process = subprocess.Popen(
-            [str(runtime_binary()), "migrate", "--repo", str(repo)],
+            [str(runtime_binary()), "migrate", "--repo", str(repo), *MIGRATE_APPROVAL],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

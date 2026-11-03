@@ -14,6 +14,8 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+import pytest
+
 from harness.orchestration.core.constants import DispatchState
 from harness.orchestration.ledger.lifecycle import JsonObject, LifecycleLedger, _canonical
 
@@ -104,6 +106,59 @@ def test_a_repeated_migrate_reports_already_cut_over_and_changes_no_byte(
     assert tree(tmp_path / STATE_REL, skip=("runtime.db-",)) == before
 
 
+def test_the_cutover_records_the_approval_in_the_anchor_and_in_authority(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+    approval = _approval(
+        approved_by="Rina", approved_at="2026-10-30T08:15:00+00:00", reason="release 2.0 cutover"
+    )
+    expected = {
+        "approved_by": "Rina",
+        "approved_at": "2026-10-30T08:15:00+00:00",
+        "reason": "release 2.0 cutover",
+    }
+
+    result = migrate(tmp_path, approval=approval)
+
+    assert result.returncode == 0, result.stderr
+    with closing(_store(tmp_path)) as store:
+        (details,) = store.execute(
+            "SELECT details_json FROM audit WHERE seq = 1 AND action = 'legacy-import'"
+        ).fetchone()
+    anchor = json.loads(details)
+    assert {key: anchor[key] for key in expected} == expected
+    authority = load(tmp_path / STATE_REL / "AUTHORITY.json")
+    assert {key: authority[key] for key in expected} == expected
+
+
+def test_a_repeat_with_another_approval_is_already_cut_over_and_records_nothing(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+    first = migrate(tmp_path)
+    assert first.returncode == 0, first.stderr
+    before = tree(tmp_path / STATE_REL, skip=("runtime.db-",))
+    with closing(_store(tmp_path)) as store:
+        audit_before = store.execute("SELECT * FROM audit ORDER BY seq").fetchall()
+
+    again = migrate(
+        tmp_path,
+        approval=_approval(approved_by="Rina", reason="a second cutover of the same state"),
+    )
+    unapproved = migrate(tmp_path, approval=())
+
+    assert again.returncode == 0, again.stderr
+    report = json.loads(again.stdout)
+    assert report["already_cut_over"] is True
+    assert unapproved.returncode == 2
+    assert "[malformed_request]" in unapproved.stderr
+    assert load(tmp_path / STATE_REL / "AUTHORITY.json")["approved_by"] == "Malove"
+    with closing(_store(tmp_path)) as store:
+        assert store.execute("SELECT * FROM audit ORDER BY seq").fetchall() == audit_before
+    assert tree(tmp_path / STATE_REL, skip=("runtime.db-",)) == before
+
+
 def test_a_working_dispatch_refuses_with_exit_code_2_and_a_remedy(tmp_path: Path) -> None:
     build_state(tmp_path, second_status=DispatchState.WORKING)
     before = tree(tmp_path / STATE_REL)
@@ -116,6 +171,75 @@ def test_a_working_dispatch_refuses_with_exit_code_2_and_a_remedy(tmp_path: Path
     assert "REMEDY:" in result.stderr
     assert tree(tmp_path / STATE_REL) == before
     assert not (tmp_path / ".harness/orchestration/state-snapshots").exists()
+
+
+def _approval(**fields: str | None) -> tuple[str, ...]:
+    """The approval flags of a cutover; a field set to ``None`` is left out."""
+    values: dict[str, str | None] = {
+        "--approved-by": "Malove",
+        "--approved-at": "2026-09-17T00:00:00+00:00",
+        "--reason": "cut the scratch state over to the runtime store",
+    }
+    values.update({f"--{name.replace('_', '-')}": value for name, value in fields.items()})
+    return tuple(word for flag, value in values.items() if value is not None for word in (flag, value))
+
+
+def _assert_refused_without_a_change(
+    repo: Path, approval: tuple[str, ...], code: str, named: str
+) -> None:
+    state = repo / STATE_REL
+    before = tree(state)
+
+    result = migrate(repo, approval=approval)
+
+    assert result.returncode == 2, result.stderr
+    assert result.stdout == ""
+    error, remedy = result.stderr.splitlines()[:2]
+    assert error.startswith("ERROR: ") and named in error, error
+    assert "unknown argument" not in error, error
+    assert remedy.startswith(f"REMEDY: [{code}] "), remedy
+    assert tree(state) == before
+    assert not (state / "runtime.db").exists()
+    assert not (repo / ".harness/orchestration/state-snapshots").exists()
+
+
+def test_migrate_without_an_approval_refuses_with_exit_code_2_and_changes_nothing(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+
+    _assert_refused_without_a_change(tmp_path, (), "malformed_request", "--approved-by")
+
+
+@pytest.mark.parametrize(
+    ("fields", "named"),
+    [
+        ({"approved_by": None}, "--approved-by"),
+        ({"approved_at": None}, "--approved-at"),
+        ({"reason": None}, "--reason"),
+        ({"approved_by": "  "}, "--approved-by"),
+        ({"approved_at": ""}, "--approved-at"),
+        ({"reason": " "}, "--reason"),
+        ({"approved_at": "yesterday"}, "--approved-at"),
+        ({"approved_at": "2999-01-01T00:00:00+00:00"}, "--approved-at"),
+    ],
+)
+def test_migrate_with_a_missing_blank_or_impossible_approval_field_refuses_and_changes_nothing(
+    tmp_path: Path, fields: dict[str, str | None], named: str
+) -> None:
+    build_state(tmp_path)
+
+    _assert_refused_without_a_change(tmp_path, _approval(**fields), "malformed_request", named)
+
+
+def test_migrate_approved_by_a_policy_actor_is_denied_and_changes_nothing(
+    tmp_path: Path,
+) -> None:
+    build_state(tmp_path)
+
+    _assert_refused_without_a_change(
+        tmp_path, _approval(approved_by="policy:auto"), "policy_denied", "policy:auto"
+    )
 
 
 def test_an_empty_repository_has_nothing_to_migrate(tmp_path: Path) -> None:

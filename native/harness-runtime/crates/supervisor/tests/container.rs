@@ -79,7 +79,7 @@ impl Repo {
         fs::remove_file(generation.join("qa-lane/lease.json")).unwrap();
         fs::remove_file(generation.join("qa-lane/queue/00000000000000000001-dispatch.json"))
             .unwrap();
-        state::migrate::run(&root).unwrap();
+        state::migrate::run(&root, &common::approval()).unwrap();
         let root = root.canonicalize().unwrap();
         for dir in [".git", "worktree", ".harness/.sandboxes/artifacts"] {
             fs::create_dir_all(root.join(dir)).unwrap();

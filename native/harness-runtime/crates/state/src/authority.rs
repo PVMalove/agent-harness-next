@@ -12,6 +12,7 @@ use std::path::Path;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
+use crate::approval::Approval;
 use crate::canonical::canonical_json;
 use crate::legacy::read_pointer;
 
@@ -32,6 +33,8 @@ pub struct Authority {
     /// The snapshot directory, relative to the repository root.
     pub snapshot: String,
     pub cutover_at: String,
+    /// The human approval of the cutover, as the `legacy-import` record of the store names it.
+    pub approval: Approval,
 }
 
 impl Authority {
@@ -43,6 +46,9 @@ impl Authority {
             "manifest_sha256": self.manifest_sha256,
             "snapshot": self.snapshot,
             "cutover_at": self.cutover_at,
+            "approved_by": self.approval.approved_by,
+            "approved_at": self.approval.approved_at,
+            "reason": self.approval.reason,
         }))
     }
 }
@@ -80,6 +86,11 @@ pub fn read(state: &Path) -> io::Result<Option<(String, Authority)>> {
             manifest_sha256: text(&record, "manifest_sha256").unwrap_or_default(),
             snapshot: text(&record, "snapshot").unwrap_or_default(),
             cutover_at: text(&record, "cutover_at").unwrap_or_default(),
+            approval: Approval {
+                approved_by: text(&record, "approved_by").unwrap_or_default(),
+                approved_at: text(&record, "approved_at").unwrap_or_default(),
+                reason: text(&record, "reason").unwrap_or_default(),
+            },
         },
     );
     Ok(Some(authority))

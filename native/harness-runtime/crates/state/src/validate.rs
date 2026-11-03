@@ -3,7 +3,8 @@
 //!
 //! An ordinary check verifies the audit records after the checkpoint, as every command does. The
 //! full check starts from nothing: it recomputes the whole audit chain from its genesis and
-//! compares it with the import anchor, recomputes the manifest of the legacy audit from its rows,
+//! compares it with the import anchor, checks the human approval of the cutover that the anchor
+//! names against `AUTHORITY.json`, recomputes the manifest of the legacy audit from its rows,
 //! checks every legacy audit record and generation byte against its hash, runs SQLite's own
 //! integrity and foreign-key checks, and compares every row that a command wrote with the last
 //! audit record of its path. It detects a deleted, an inserted and a reordered record, and a row
@@ -18,6 +19,7 @@ use contracts::{ErrorBody, ErrorCode, FailureDomain};
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
 
+use crate::approval::{self, Approval};
 use crate::audit::{self, Broken, Verified};
 use crate::authority::{Authority, Epoch, STORE_NAME, epoch};
 use crate::canonical::sha256_hex;
@@ -85,6 +87,30 @@ fn check_manifest(connection: &Connection, authority: &Authority) -> Result<(), 
         return Err(broken(
             "import_manifest",
             "the rows of import_manifest are not the manifest the import anchored",
+        ));
+    }
+    Ok(())
+}
+
+/// The anchor names the human approval of the cutover, and `AUTHORITY.json` names the same one.
+fn check_approval(connection: &Connection, authority: &Authority) -> Result<(), Broken> {
+    let anchor = anchor_details(connection)?;
+    let text = |key: &str| anchor[key].as_str().unwrap_or_default().to_owned();
+    let anchored = Approval {
+        approved_by: text("approved_by"),
+        approved_at: text("approved_at"),
+        reason: text("reason"),
+    };
+    if approval::check(&anchored, "migration").is_err() {
+        return Err(broken(
+            "import_approval",
+            "the legacy-import record names no human approval",
+        ));
+    }
+    if anchored != authority.approval {
+        return Err(broken(
+            "import_approval",
+            "the approval of the legacy-import record and of AUTHORITY.json differ",
         ));
     }
     Ok(())
@@ -272,6 +298,7 @@ fn full_check(connection: &Connection, authority: &Authority) -> Result<Verified
         return Err(broken("audit_anchor", "the audit chain is empty"));
     }
     check_manifest(connection, authority)?;
+    check_approval(connection, authority)?;
     check_legacy(connection)?;
     check_sqlite(connection)?;
     check_rows(connection)?;

@@ -20,7 +20,7 @@ const BATCH: &str = "batch-aaaaaaaa-0000-4000-8000-000000000001";
 
 fn cut_over(name: &str) -> Repo {
     let repo = Repo::new(name);
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     repo
 }
 
@@ -37,7 +37,7 @@ fn repaired_store(name: &str) -> Repo {
         .unwrap()
         .remove("risk_reassessment_triggers");
     std::fs::write(path, canonical_json(&record)).unwrap();
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     repo
 }
 
@@ -356,6 +356,55 @@ fn an_inserted_record_with_a_recomputed_hash_is_found() {
     let error = full(&repo).unwrap_err();
 
     assert_eq!(broken_check(&error), ("audit_chain", Some(3)));
+}
+
+/// Rewrite the details of the `legacy-import` anchor and recompute every record and link from it,
+/// as an attacker who knows the hash rules can: only the content of the anchor tells.
+fn forge_anchor(repo: &Repo, change: impl FnOnce(&mut Value)) {
+    let connection = store(repo);
+    let rows: Vec<(i64, String, String, String)> = connection
+        .prepare("SELECT seq, at, action, details_json FROM audit ORDER BY seq")
+        .unwrap()
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let mut change = Some(change);
+    let mut prev = GENESIS_CHAIN.to_owned();
+    for (seq, at, action, details) in rows {
+        let mut details: Value = serde_json::from_str(&details).unwrap();
+        if seq == 1 {
+            (change.take().unwrap())(&mut details);
+        }
+        let record = record_sha256(&at, &action, &details);
+        let chain = chain_sha256(&prev, &record);
+        connection
+            .execute(
+                "UPDATE audit SET details_json = ?1, record_sha256 = ?2, prev_chain_sha256 = ?3,
+                                  chain_sha256 = ?4 WHERE seq = ?5",
+                rusqlite::params![details.to_string(), record, prev, chain, seq],
+            )
+            .unwrap();
+        prev = chain;
+    }
+    connection
+        .execute("DELETE FROM audit_checkpoint", [])
+        .unwrap();
+}
+
+#[test]
+fn an_anchor_forged_to_a_policy_approver_with_a_recomputed_chain_is_found() {
+    let repo = cut_over("policy-anchor");
+    add_report(&repo, "a");
+    forge_anchor(&repo, |details| {
+        details["approved_by"] = json!("policy:auto");
+    });
+
+    let error = full(&repo).unwrap_err();
+
+    assert_eq!(broken_check(&error).0, "import_approval");
 }
 
 #[test]

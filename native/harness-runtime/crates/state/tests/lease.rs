@@ -16,7 +16,7 @@ const LEASE: &str = "qa-lane/lease.json";
 
 fn cut_over(name: &str) -> Repo {
     let repo = Repo::new(name);
-    run(&repo.root).unwrap();
+    run(&repo.root, &common::approval()).unwrap();
     repo
 }
 
