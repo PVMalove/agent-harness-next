@@ -443,7 +443,11 @@ def test_native_and_browser_websocket_credentials(
         server = ConsoleServer(project)
         await server.start()
         token = json.loads(discovery_path(project).read_text())["token"]
-        origin = Origin(f"http://127.0.0.1:{server.port}") if credential != "native" else None
+        origin = (
+            Origin(f"http://127.0.0.1:{server.port}")
+            if credential != "native"
+            else None
+        )
         headers = (
             {"Cookie": "console_token=" + token}
             if credential == "browser-cookie"
@@ -1359,3 +1363,50 @@ def test_a_server_without_an_injected_decision_service_reads_its_own_project(
 ) -> None:
     server = ConsoleServer(project)
     assert server._decisions.repo == project.resolve()
+
+
+def test_an_online_home_request_runs_the_online_checks_on_the_websocket(
+    project: Path,
+) -> None:
+    seen: list[bool] = []
+
+    def dashboard(repo: Path, *, online: bool = False) -> DashboardData:
+        seen.append(online)
+        return DATA
+
+    def collect(repo: Path, *, online: bool = False) -> HomeSnapshot:
+        return collect_home(
+            repo, online=online, dashboard=dashboard, context=lambda repo: HomeContext()
+        )
+
+    service = SnapshotService(
+        project,
+        clock=FakeClock(),
+        collect=collect,
+        collect_online=functools.partial(collect, online=True),
+    )
+
+    async def scenario() -> list[dict[str, object]]:
+        server = ConsoleServer(project, snapshots=service)
+        await server.start()
+        replies: list[dict[str, object]] = []
+        try:
+            async with _connect(server, project) as client:
+                for step, online in (
+                    ("offline", False),
+                    ("online", True),
+                    ("again", False),
+                ):
+                    await client.send(_request(step, online=online))
+                    replies.append(json.loads(await asyncio.wait_for(client.recv(), 5)))
+        finally:
+            await server.close()
+        return replies
+
+    offline, online, again = asyncio.run(scenario())
+    assert seen == [False, True]
+    assert [reply["cached"] for reply in (offline, online, again)] == [
+        False,
+        False,
+        True,
+    ]

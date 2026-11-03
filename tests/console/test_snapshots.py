@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,7 @@ from harness.console.snapshots import (
     SnapshotService,
     build_home_snapshot,
     busy,
+    collect_home,
     respond,
 )
 from harness.health.model import CheckResult
@@ -237,7 +239,9 @@ def test_the_whole_reply_stays_below_the_message_limit_whatever_the_text(
         drift_state=text,
         active_batches=None,
         problems=tuple((text, text, text) for _ in range(250)),
-        memory_index=CheckResult(id="memory.index", group="memory", status="ok", message=text),
+        memory_index=CheckResult(
+            id="memory.index", group="memory", status="ok", message=text
+        ),
     )
     memory = MemoryStatus(
         True, False, (text,) * 40, 3, problem=text, inactive=text, top_k=5, max_tokens=9
@@ -554,6 +558,8 @@ def test_text_that_is_not_json_is_bad_json(raw: str) -> None:
         ('{"id": "q", "type": null}', "q"),
         ('{"id": "q", "type": "home.snapshot", "force": "yes"}', "q"),
         ('{"id": "q", "type": "home.snapshot", "force": 1}', "q"),
+        ('{"id": "q", "type": "home.snapshot", "online": "yes"}', "q"),
+        ('{"id": "q", "type": "home.snapshot", "online": 1}', "q"),
         ('{"id": true, "type": "home.snapshot"}', None),
         ('{"id": 1.5, "type": "home.snapshot"}', None),
         ('{"id": null, "type": "home.snapshot"}', None),
@@ -666,3 +672,148 @@ def test_busy_is_an_error_reply_that_echoes_the_request_id() -> None:
         "Too many unfinished requests.",
     )
     assert _failure(json.loads(busy("garbage")))[2] == "busy"
+
+
+def test_from_payload_is_the_inverse_of_to_payload_with_and_without_a_map() -> None:
+    for context in (HomeContext(repo_map=VIEW, memory=MEMORY), HomeContext()):
+        snapshot = build_home_snapshot(DATA, context)
+        assert HomeSnapshot.from_payload(_wire(snapshot)) == snapshot
+
+
+def _broken(change: dict[str, object]) -> dict[str, object]:
+    payload = _wire(
+        build_home_snapshot(DATA, HomeContext(repo_map=VIEW, memory=MEMORY))
+    )
+    for path, value in change.items():
+        *parents, last = path.split(".")
+        node: object = payload
+        for key in parents:
+            node = node[int(key)] if isinstance(node, list) else node[key]  # type: ignore[index]
+        if isinstance(node, list):
+            node[int(last)] = value
+        elif value is _DROP:
+            del node[last]  # type: ignore[attr-defined]
+        else:
+            node[last] = value  # type: ignore[index]
+    return payload
+
+
+_DROP = object()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"version": 2},
+        {"version": True},
+        {"health.ok": True},
+        {"health.warn": "1"},
+        {"health.fail": _DROP},
+        {"problems": "none"},
+        {"problems.0": ["fail", "a", "b"]},
+        {"problems.0.message": None},
+        {"problems_total": None},
+        {"harness_version": 1},
+        {"drift": None},
+        {"active_batches": "3"},
+        {"active_batches": False},
+        {"repo_map.tier": 1},
+        {"repo_map.head_map.files": 1.5},
+        {"repo_map.head_map": []},
+        {"memory.state.status": None},
+        {"memory.policy.enabled": 1},
+        {"memory.policy.source_types": "adr"},
+        {"memory.policy.source_types.0": 1},
+        {"memory.policy.indexed": "18"},
+        {"memory": None},
+        {"extra": 1},
+    ],
+    ids=lambda change: ",".join(change),
+)
+def test_from_payload_refuses_a_payload_that_breaks_the_schema(
+    change: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        HomeSnapshot.from_payload(_broken(change))
+
+
+@pytest.mark.parametrize("payload", [None, [], "snapshot", 1])
+def test_from_payload_refuses_a_payload_that_is_not_an_object(payload: object) -> None:
+    with pytest.raises(ValueError):
+        HomeSnapshot.from_payload(payload)
+
+
+def test_collect_home_runs_the_online_checks_only_when_asked() -> None:
+    seen: list[object] = []
+
+    def dashboard(repo: Path, **options: object) -> DashboardData:
+        seen.append(options)
+        return DATA
+
+    collect_home(Path("."), dashboard=dashboard, context=lambda repo: HomeContext())
+    collect_home(
+        Path("."),
+        online=True,
+        dashboard=dashboard,
+        context=lambda repo: HomeContext(),
+    )
+    assert seen == [{}, {"online": True}]
+
+
+def test_an_online_request_rebuilds_with_the_online_collect_and_leaves_the_cache() -> (
+    None
+):
+    online_snapshot = build_home_snapshot(
+        replace(DATA, ok=99), HomeContext(repo_map=VIEW)
+    )
+    online_calls: list[Path] = []
+
+    def collect_online(repo: Path) -> HomeSnapshot:
+        online_calls.append(repo)
+        return online_snapshot
+
+    async def scenario() -> list[dict[str, object]]:
+        collect = CountingCollect()
+        service = SnapshotService(
+            Path("."), clock=FakeClock(), collect=collect, collect_online=collect_online
+        )
+        replies = [
+            json.loads(await respond(raw, service))
+            for raw in (
+                '{"type": "home.snapshot"}',
+                '{"type": "home.snapshot", "online": true}',
+                '{"type": "home.snapshot", "online": true}',
+                '{"type": "home.snapshot", "online": false}',
+            )
+        ]
+        assert collect.calls == 1
+        return replies
+
+    offline, online, again, cached = asyncio.run(scenario())
+    assert len(online_calls) == 2
+    for reply in (online, again):
+        assert (reply["cached"], reply["age_seconds"]) == (False, 0.0)
+        assert reply["snapshot"] == _wire(online_snapshot)
+    assert cached["cached"] is True
+    assert cached["snapshot"] == offline["snapshot"]
+
+
+def test_a_failed_online_collect_is_an_error_reply() -> None:
+    def collect_online(repo: Path) -> HomeSnapshot:
+        raise TimeoutError("network")
+
+    service = SnapshotService(
+        Path("."),
+        clock=FakeClock(),
+        collect=CountingCollect(),
+        collect_online=collect_online,
+    )
+    raw = asyncio.run(
+        respond('{"id": 1, "type": "home.snapshot", "online": true}', service)
+    )
+    assert _failure(json.loads(raw)) == (
+        1,
+        "home.snapshot",
+        "collect_failed",
+        "TimeoutError",
+    )

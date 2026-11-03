@@ -7,12 +7,14 @@ values; the Home screen of the TUI shows the same facts. Nothing here imports `r
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import re
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
+from typing import Protocol, TypeVar, cast
 
 from .data import DashboardData, collect_dashboard
 from .repo_map import RepoMapView, cached_map, head_commit
@@ -125,6 +127,132 @@ class HomeSnapshot:
     def to_payload(self) -> dict[str, object]:
         return asdict(self)
 
+    @classmethod
+    def from_payload(cls, payload: object) -> HomeSnapshot:
+        """The snapshot a `to_payload` result (read back from JSON) describes. Every field must be
+        present with its schema type and nothing else may be there; any mismatch is `ValueError`."""
+        found = _fields(payload, cls)
+        version = _int(found["version"])
+        if version != SCHEMA_VERSION:
+            raise ValueError(f"unsupported snapshot version: {version!r}")
+        return cls(
+            version=version,
+            health=_health_from(found["health"]),
+            problems=tuple(_problem_from(item) for item in _list(found["problems"])),
+            problems_total=_int(found["problems_total"]),
+            harness_version=_str(found["harness_version"]),
+            drift=_str(found["drift"]),
+            active_batches=_optional(found["active_batches"], _int),
+            repo_map=_repo_map_from(found["repo_map"]),
+            memory=_memory_from(found["memory"]),
+        )
+
+
+_T = TypeVar("_T")
+
+
+def _fields(payload: object, kind: type) -> dict[str, object]:
+    """The object's fields when its keys are exactly those of the dataclass `kind`."""
+    if not isinstance(payload, dict):
+        raise ValueError(f"{kind.__name__}: not an object")
+    if set(payload) != {field.name for field in fields(kind)}:
+        raise ValueError(f"{kind.__name__}: fields {sorted(map(str, payload))}")
+    return {str(key): value for key, value in payload.items()}
+
+
+def _int(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"not an integer: {value!r}")
+    return value
+
+
+def _str(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"not a string: {value!r}")
+    return value
+
+
+def _bool(value: object) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"not a boolean: {value!r}")
+    return value
+
+
+def _list(value: object) -> list[object]:
+    if not isinstance(value, list):
+        raise ValueError(f"not a list: {value!r}")
+    return value
+
+
+def _optional(value: object, parse: Callable[[object], _T]) -> _T | None:
+    return None if value is None else parse(value)
+
+
+def _health_from(value: object) -> HealthCounters:
+    found = _fields(value, HealthCounters)
+    return HealthCounters(
+        ok=_int(found["ok"]),
+        warn=_int(found["warn"]),
+        fail=_int(found["fail"]),
+        skipped=_int(found["skipped"]),
+    )
+
+
+def _problem_from(value: object) -> Problem:
+    found = _fields(value, Problem)
+    return Problem(
+        status=_str(found["status"]),
+        id=_str(found["id"]),
+        message=_str(found["message"]),
+    )
+
+
+def _head_map_from(value: object) -> HeadMap:
+    found = _fields(value, HeadMap)
+    return HeadMap(
+        origin=_str(found["origin"]),
+        commit=_str(found["commit"]),
+        files=_int(found["files"]),
+        edges=_int(found["edges"]),
+        estimated_tokens=_int(found["estimated_tokens"]),
+    )
+
+
+def _repo_map_from(value: object) -> RepoMapCard:
+    found = _fields(value, RepoMapCard)
+    return RepoMapCard(
+        tier=_optional(found["tier"], _str),
+        message=_str(found["message"]),
+        head_map=_optional(found["head_map"], _head_map_from),
+    )
+
+
+def _memory_state_from(value: object) -> MemoryState:
+    found = _fields(value, MemoryState)
+    return MemoryState(status=_str(found["status"]), message=_str(found["message"]))
+
+
+def _memory_policy_from(value: object) -> MemoryPolicy:
+    found = _fields(value, MemoryPolicy)
+    return MemoryPolicy(
+        enabled=_bool(found["enabled"]),
+        active=_bool(found["active"]),
+        source_types=tuple(_str(item) for item in _list(found["source_types"])),
+        indexed=_optional(found["indexed"], _int),
+        problem=_str(found["problem"]),
+        inactive=_str(found["inactive"]),
+        top_k=_optional(found["top_k"], _int),
+        max_tokens=_optional(found["max_tokens"], _int),
+    )
+
+
+def _memory_from(value: object) -> MemoryCard:
+    found = _fields(value, MemoryCard)
+    return MemoryCard(
+        state=_optional(found["state"], _memory_state_from),
+        policy=_optional(found["policy"], _memory_policy_from),
+    )
+
 
 _SHORT_ESCAPES = frozenset('"\\\b\f\n\r\t')
 # json.loads accepts "\ud800"; the str cannot be encoded as UTF-8, so a reply carries it escaped.
@@ -181,7 +309,8 @@ def _memory_card(data: DashboardData, status: MemoryStatus | None) -> MemoryCard
             enabled=status.enabled,
             active=status.active,
             source_types=tuple(
-                _clip(name, ID_BYTES) for name in status.source_types[:SOURCE_TYPES_LIMIT]
+                _clip(name, ID_BYTES)
+                for name in status.source_types[:SOURCE_TYPES_LIMIT]
             ),
             indexed=status.indexed,
             problem=_clip(status.problem, MESSAGE_BYTES),
@@ -217,14 +346,30 @@ def build_home_snapshot(data: DashboardData, context: HomeContext) -> HomeSnapsh
     )
 
 
+class _CollectDashboard(Protocol):
+    def __call__(self, repo: Path, /) -> DashboardData: ...
+
+
+class _CollectOnlineDashboard(Protocol):
+    def __call__(self, repo: Path, /, *, online: bool) -> DashboardData: ...
+
+
 def collect_home(
     repo: Path,
     *,
-    dashboard: Callable[[Path], DashboardData] = collect_dashboard,
+    online: bool = False,
+    dashboard: _CollectDashboard | _CollectOnlineDashboard = collect_dashboard,
     context: Callable[[Path], HomeContext] = collect_context,
 ) -> HomeSnapshot:
-    """Run the offline checks and read the context cards; blocks until both are done."""
-    return build_home_snapshot(dashboard(repo), context(repo))
+    """Run the offline checks (with `online`, the online ones too) and read the context cards;
+    blocks until both are done. `dashboard` gets `online=True` only for an online collect."""
+    # An offline seam takes the repository only; the online flag goes to an online collect alone.
+    data = (
+        cast(_CollectOnlineDashboard, dashboard)(repo, online=True)
+        if online
+        else cast(_CollectDashboard, dashboard)(repo)
+    )
+    return build_home_snapshot(data, context(repo))
 
 
 @dataclass(frozen=True)
@@ -247,11 +392,15 @@ class SnapshotService:
         ttl: float = HOME_TTL_SECONDS,
         clock: Callable[[], float] = time.monotonic,
         collect: Callable[[Path], HomeSnapshot] = collect_home,
+        collect_online: Callable[[Path], HomeSnapshot] = functools.partial(
+            collect_home, online=True
+        ),
     ) -> None:
         self._repo = repo
         self._ttl = ttl
         self._clock = clock
         self._collect = collect
+        self._collect_online = collect_online
         self._building: asyncio.Task[HomeSnapshot] | None = None
         self._snapshot: HomeSnapshot | None = None
         self._stamp = 0.0
@@ -289,6 +438,12 @@ class SnapshotService:
         await asyncio.wait({task})
         return Served(task.result(), False, 0.0)
 
+    async def home_online(self) -> Served:
+        """A snapshot with the online checks, always rebuilt and never cached: the cache keeps
+        the offline facts the TTL is about."""
+        snapshot = await asyncio.to_thread(self._collect_online, self._repo)
+        return Served(snapshot, False, 0.0)
+
 
 _ERRORS = {
     "bad_json": "Request is not valid JSON.",
@@ -305,6 +460,7 @@ class _Request:
     id: str | int | None
     type: str
     force: bool
+    online: bool
 
 
 class Rejected(Exception):
@@ -344,9 +500,10 @@ def _parse(raw: str) -> _Request:
     if kind != HOME_REQUEST:
         raise Rejected("unknown_type", request_id, kind[:MAX_ID_CHARS])
     force = body.get("force", False)
-    if not isinstance(force, bool):
+    online = body.get("online", False)
+    if not isinstance(force, bool) or not isinstance(online, bool):
         raise Rejected("bad_request", request_id, kind)
-    return _Request(request_id, kind, force)
+    return _Request(request_id, kind, force, online)
 
 
 def encode(reply: dict[str, object]) -> str:
@@ -392,7 +549,11 @@ async def respond(raw: str, snapshots: SnapshotService) -> str:
     except Rejected as rejected:
         return error_reply(rejected.code, rejected.id, rejected.type)
     try:
-        served = await snapshots.home(force=request.force)
+        served = await (
+            snapshots.home_online()
+            if request.online
+            else snapshots.home(force=request.force)
+        )
     except Exception as exc:
         return error_reply(
             "collect_failed", request.id, request.type, type(exc).__name__
