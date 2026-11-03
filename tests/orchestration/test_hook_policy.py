@@ -177,33 +177,75 @@ def test_python_normalizes_and_hashes_the_rust_golden_vectors() -> None:
 def test_the_brief_pins_the_digest_of_the_installed_policy_file(tmp_path: Path) -> None:
     """``dispatch create`` and ``harness update`` compute ``hook_policy_sha256`` from the same
     ``hook_policy`` key with the same function, so the pinned digest equals the file's digest."""
+    from argparse import Namespace
+
+    from harness.orchestration import coordinator
     from tests.core.test_uninstall import git, harness
-    from tests.orchestration import test_coordinator as coordinator_tests
 
     cases = {case["name"]: case for case in _rust_golden()["normalized"] if isinstance(case, dict)}
     value = cases["reordered-and-duplicated-escalations"]["policy"]
-    fixture = coordinator_tests.CoordinatorLedgerMigrationTests()
-    fixture.setUp()
-    try:
-        fixture._set_project_hook_policy(value)
-        batch = fixture._create_batch()
-        fixture._approve_batch(batch["batch_id"])
-        brief = fixture._create_architect_dispatch(batch["batch_id"])["brief"]
-    finally:
-        fixture.tearDown()
-    installed = tmp_path / "installed"
-    installed.mkdir()
-    git(installed, "init", "-b", "main")
-    assert harness("init", str(installed), "--capability", "engineering-suite").returncode == 0
-    project_json = installed / ".harness" / "project.json"
+    origin = tmp_path / "origin.git"
+    git(tmp_path, "init", "--bare", str(origin))
+    repo = tmp_path / "project"
+    repo.mkdir()
+    git(repo, "init", "-b", "master")
+    git(repo, "config", "user.email", "test@example.invalid")
+    git(repo, "config", "user.name", "Test")
+    assert harness("init", str(repo), "--capability", "engineering-suite").returncode == 0
+    project_json = repo / ".harness" / "project.json"
     project = json.loads(project_json.read_text(encoding="utf-8"))
     project["hook_policy"] = value
     project_json.write_text(json.dumps(project), encoding="utf-8")
 
-    updated = harness("update", str(installed))
+    updated = harness("update", str(repo))
 
     assert updated.returncode == 0, updated.stderr
-    document = json.loads((installed / ".harness" / "hook-policy.json").read_text(encoding="utf-8"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "seed")
+    git(repo, "remote", "add", "origin", str(origin))
+    git(repo, "push", "origin", "master")
+    branch = "feature/issue-829-thing"
+    worktree = tmp_path / "worktree"
+    git(repo, "worktree", "add", "-b", branch, str(worktree), "master")
+    state = {"repo": str(repo), "state_dir": str(tmp_path / "state")}
+    approval = {"approved_by": "Malove", "approved_at": "2026-11-03T00:00:00+00:00"}
+    batch = coordinator.create_batch(
+        Namespace(
+            **state,
+            ticket="#829",
+            goal=None,
+            branch=branch,
+            worktree=str(worktree),
+            allowed_path=["**"],
+            integration_ref="master",
+            definition_of_done=["do the thing"],
+            prohibited_change=["secrets"],
+            required_gate=None,
+            dependency=None,
+            expected_file=["services/x.py"],
+            expected_service=["core"],
+            expected_changed_lines=10,
+            expected_context_tokens=None,
+        )
+    )
+    coordinator.approve_batch(Namespace(**state, batch=batch["batch_id"], **approval))
+    fields = {
+        **state,
+        "batch": batch["batch_id"],
+        "role": "architect",
+        "runtime": "claude",
+        "purpose": "work",
+        "candidate_commit": None,
+        "delta_review_of": None,
+        "model": "sonnet",
+        "effort": "high",
+    }
+    proposal = coordinator.create_dispatch(Namespace(propose=True, **fields))
+    brief = coordinator.create_dispatch(
+        Namespace(transition_digest=proposal["transition_digest"], **approval, **fields)
+    )["brief"]
+
+    document = json.loads((repo / ".harness" / "hook-policy.json").read_text(encoding="utf-8"))
     assert brief["hook_policy_sha256"] == document["hook_policy_sha256"]
     assert document["hook_policy_sha256"] == hook_policy.hook_policy_sha256(document["policy"])
     assert document["hook_policy_sha256"] != hook_policy.hook_policy_sha256(
