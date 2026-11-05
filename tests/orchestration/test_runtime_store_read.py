@@ -1,10 +1,11 @@
 """The coordinator read commands after the cutover (ADR 0020, sections 1 and 3).
 
-A state the real coordinator wrote answers ``batch list``, ``dispatch status``, ``batch
-decision-packet`` and ``qa status`` once from the file ledger and once, after ``harness-runtime
-migrate``, from the runtime store through ``runtime_client``. The two answers are the same JSON,
-and the second run never opens the file ledger or ``runtime.db`` (an audit hook of the Python
-process proves it). The real Rust process serves the second run; CI builds it first.
+A state the real coordinator wrote answers ``batch list``, ``dispatch status`` (with and without
+``--batch``/``--dispatch``), ``batch decision-packet`` and ``qa status`` once from the file ledger
+and once, after ``harness-runtime migrate``, from the runtime store through ``runtime_client``.
+The two answers are the same JSON, and the second run never opens the file ledger or ``runtime.db``
+(an audit hook of the Python process proves it). The real Rust process serves the second run; CI
+builds it first.
 """
 
 from __future__ import annotations
@@ -42,6 +43,13 @@ def _commands(ids: dict[str, str]) -> dict[str, list[str]]:
     return {
         "batch list": ["batch", "list"],
         "dispatch status": ["dispatch", "status"],
+        "dispatch status --batch": ["dispatch", "status", "--batch", ids["batch_id"]],
+        "dispatch status --dispatch": [
+            "dispatch",
+            "status",
+            "--dispatch",
+            ids["dispatch_id"],
+        ],
         "batch decision-packet": ["batch", "decision-packet", "--batch", ids["batch_id"]],
         "qa status": ["qa", "status"],
     }
@@ -57,7 +65,7 @@ def _answer(repo: Path, runtime: ServingRuntime | None, *command: str) -> dict[s
 def _comparable(name: str, answer: dict[str, object]) -> dict[str, object]:
     """The answer without what differs by construction: elapsed time, and the address of the report."""
     comparable = json.loads(json.dumps(answer))
-    if name == "dispatch status":
+    if name.startswith("dispatch status"):
         for entry in comparable["dispatches"]:
             entry.pop("silent_seconds")
             entry["startup"].pop("startup_elapsed_seconds")
@@ -79,7 +87,7 @@ def states(tmp_path: Path) -> Iterator[tuple[Path, dict[str, str], dict[str, dic
     yield repo, ids, before
 
 
-def test_the_four_commands_answer_the_same_json_from_the_store(
+def test_the_read_commands_answer_the_same_json_from_the_store(
     states: tuple[Path, dict[str, str], dict[str, dict[str, object]]],
 ) -> None:
     repo, ids, before = states
@@ -164,16 +172,25 @@ class _CountingStore:
 
     def __init__(self, count: int, *, too_large: bool = False) -> None:
         self.records = {
-            f"dispatches/dispatch-{number}.json": {"dispatch_id": f"dispatch-{number}"}
+            f"dispatches/dispatch-{number}.json": {
+                "dispatch_id": f"dispatch-{number}",
+                "batch_id": "batch-a",
+            }
             for number in range(count)
         }
         self.too_large = too_large
         self.requests: list[tuple[list[str], list[str]]] = []
+        self.filters: list[state_view.Filter | None] = []
 
     def fetch(
-        self, collections: Sequence[str], paths: Sequence[str], revision: int | None
+        self,
+        collections: Sequence[str],
+        paths: Sequence[str],
+        revision: int | None,
+        filter_: state_view.Filter | None = None,
     ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]:
         self.requests.append((list(collections), list(paths)))
+        self.filters.append(filter_)
         if collections and self.too_large:
             raise state_view.AnswerTooLarge("the answer would not fit one frame")
         found = {
@@ -181,6 +198,16 @@ class _CountingStore:
             for path, record in self.records.items()
             if path in paths or path.split("/")[0] in collections
         }
+        if filter_ is not None:
+            found = {
+                path: record
+                for path, record in found.items()
+                if (
+                    filter_.dispatch_id is None
+                    or record.get("dispatch_id") == filter_.dispatch_id
+                )
+                and (filter_.batch_id is None or record.get("batch_id") == filter_.batch_id)
+            }
         return found, 7, {}
 
 
@@ -203,6 +230,28 @@ def test_a_view_asks_for_a_whole_collection_after_a_few_point_reads(tmp_path: Pa
     ]
     assert view.revision == 7
     assert view.read("dispatches/dispatch-none.json") is None
+
+
+def test_a_filtered_collection_is_one_request_for_the_same_filter(tmp_path: Path) -> None:
+    store = _CountingStore(50)
+    view = _view(store, tmp_path)
+
+    first = view.collection("dispatches", batch_id="batch-a")
+    second = view.collection("dispatches", batch_id="batch-a")
+    other = view.collection("dispatches", dispatch_id="dispatch-0")
+
+    assert first == second
+    assert set(first) == {f"dispatches/dispatch-{number}.json" for number in range(50)}
+    assert set(other) == {"dispatches/dispatch-0.json"}
+    # The filter reaches the store in the request; a repeat of the same filter is not asked again.
+    assert store.requests == [
+        (["dispatches"], []),
+        (["dispatches"], []),
+    ]
+    assert store.filters == [
+        state_view.Filter(batch_id="batch-a"),
+        state_view.Filter(dispatch_id="dispatch-0"),
+    ]
 
 
 def test_a_view_that_is_refused_a_whole_collection_goes_on_with_point_reads(

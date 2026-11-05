@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
 
@@ -69,6 +70,7 @@ from harness.orchestration.ledger.ledger_ops import (
     read_state,
     store_is_authority,
     LedgerBusyError,
+    _ledger_errors,
     _ledger_lock,
     _load_batch,
     _load_dispatch,
@@ -868,6 +870,81 @@ def respond_native_permission(
     return respond(repo, dispatch, status, request_id, expected_sha256, allow=allow)
 
 
+def _status_records(
+    args: argparse.Namespace, root: Path, *, from_store: bool
+) -> Iterator[tuple[JsonObject, JsonObject, JsonObject]]:
+    """The status, the dispatch and the batch of every entry the flags select.
+
+    In the runtime-store epoch ``--dispatch`` and ``--batch`` are the store-side filter (ADR 0020,
+    section 3): the store selects the rows in one read transaction, so a command that names one
+    batch neither reads nor validates the records of the other batches, and each matching batch
+    record is read and validated once per call. The file epoch keeps the file reads it had: the
+    cutover moved no file-ledger code (epic invariant)."""
+    if from_store:
+        view = state_view.current_view()
+        if view is None:
+            raise CoordinatorError(
+                f"the runtime store of {root} is not bound to this command",
+                remedy="read it inside the command's read_state block",
+            )
+        batch_id = args.batch or None
+        dispatch_id = args.dispatch or None
+        statuses = view.collection(
+            "dispatch-status", batch_id=batch_id, dispatch_id=dispatch_id
+        )
+        dispatches = view.collection(
+            "dispatches", batch_id=batch_id, dispatch_id=dispatch_id
+        )
+        batches = view.collection("batches", batch_id=batch_id, dispatch_id=dispatch_id)
+        with _ledger_errors():
+            statuses_by_path = {
+                path: DispatchStatusRecord.from_dict(dict(record)).to_dict()
+                for path, record in statuses.items()
+            }
+            dispatches_by_id = {
+                cast(str, record["dispatch_id"]): record
+                for record in (
+                    DispatchRecord.from_dict(dict(item)).to_dict()
+                    for item in dispatches.values()
+                )
+            }
+            batches_by_id = {
+                cast(str, record["batch_id"]): record
+                for record in (
+                    BatchRecord.from_dict(dict(item)).to_dict()
+                    for item in batches.values()
+                )
+            }
+        for relative in sorted(statuses_by_path):
+            status = statuses_by_path[relative]
+            identifier = cast(str, status.get("dispatch_id"))
+            dispatch = dispatches_by_id.get(identifier)
+            if dispatch is None:
+                raise CoordinatorError(
+                    f"the store holds no dispatch record for the status {identifier}",
+                    remedy="run 'coordinator.py ledger validate --full' to inspect the store",
+                )
+            batch = batches_by_id.get(cast(str, dispatch["batch_id"]))
+            if batch is None:
+                raise CoordinatorError(
+                    f"the store holds no batch record for the dispatch {identifier}",
+                    remedy="run 'coordinator.py ledger validate --full' to inspect the store",
+                )
+            yield status, dispatch, batch
+        return
+    for path in state_view.glob(
+        _records_root(root) / DispatchStatusRecord.directory, "dispatch-*.json"
+    ):
+        status = _read_object(path, "dispatch status")
+        if args.dispatch and status.get("dispatch_id") != args.dispatch:
+            continue
+        dispatch = _load_dispatch(root, cast(str, status.get("dispatch_id")))
+        if args.batch and dispatch.get("batch_id") != args.batch:
+            continue
+        batch = _load_batch(root, cast(str, dispatch["batch_id"]))
+        yield status, dispatch, batch
+
+
 def dispatch_status(args: argparse.Namespace) -> JsonObject:
     """Liveness view the coordinator session polls; a stale entry is a blocker to surface, never a
     reason for the coordinator to change state on its own.
@@ -917,16 +994,9 @@ def dispatch_status(args: argparse.Namespace) -> JsonObject:
 
         lane = qa_lane.lane_summary(ledger)
         entries = []
-        for path in state_view.glob(
-            _records_root(root) / DispatchStatusRecord.directory, "dispatch-*.json"
+        for status, dispatch, batch in _status_records(
+            args, root, from_store=from_store
         ):
-            status = _read_object(path, "dispatch status")
-            if args.dispatch and status.get("dispatch_id") != args.dispatch:
-                continue
-            dispatch = _load_dispatch(root, cast(str, status.get("dispatch_id")))
-            if args.batch and dispatch.get("batch_id") != args.batch:
-                continue
-            batch = _load_batch(root, dispatch["batch_id"])
             telemetry = [
                 record
                 for record in batch.get("telemetry", [])

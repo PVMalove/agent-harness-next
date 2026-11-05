@@ -35,6 +35,7 @@ from .runtime_store_support import (
     coordinator_repository,
     coordinator_with,
     migrate,
+    _git,
 )
 
 
@@ -125,6 +126,43 @@ class Batches:
     def heartbeat(self, number: int) -> subprocess.CompletedProcess[str]:
         return self.run("dispatch", "heartbeat", "--dispatch", self.dispatches[number])
 
+    def batch_create(self, number: int) -> subprocess.CompletedProcess[str]:
+        """Create another batch of this repository through the CLI, while another command reads."""
+        worktree = self.repo.parent / f"worktree-new-{number}"
+        _git(
+            self.repo,
+            "worktree",
+            "add",
+            "-b",
+            f"feature/issue-{990 + number}-parallel",
+            str(worktree),
+            "master",
+        )
+        return self.run(
+            "batch",
+            "create",
+            "--ticket",
+            f"#{990 + number}",
+            "--branch",
+            f"feature/issue-{990 + number}-parallel",
+            "--worktree",
+            str(worktree),
+            "--integration-ref",
+            "master",
+            "--allowed-path",
+            "**",
+            "--definition-of-done",
+            "read from the store",
+            "--prohibited-change",
+            "secrets",
+            "--expected-file",
+            "services/x.py",
+            "--expected-service",
+            "core",
+            "--expected-changed-lines",
+            "10",
+        )
+
     def dispatch_create(self, number: int) -> list[str]:
         """The arguments of ``dispatch create`` of an architect in batch ``number``."""
         fields = [
@@ -187,6 +225,46 @@ def test_two_batches_commit_while_one_command_reads_from_a_paused_snapshot(
     assert json.loads(stdout)["dispatch_id"] == two_working.dispatches[0]
 
 
+def test_a_read_only_command_keeps_its_snapshot_while_other_processes_write(
+    two_working: Batches,
+) -> None:
+    """A paused read transaction of ``dispatch status --batch`` does not block a writer, and the
+    reader answers the state of the moment it opened its snapshot (ADR 0020, section 3)."""
+    before = two_working.run(
+        "dispatch", "status", "--batch", two_working.batches[0]
+    )
+    assert before.returncode == 0, before.stderr
+    (before_entry,) = json.loads(before.stdout)["dispatches"]
+
+    two_working.arm(IN_SNAPSHOT)
+    reader = two_working.start(
+        "dispatch", "status", "--batch", two_working.batches[0]
+    )
+    two_working.runtime.wait_paused(IN_SNAPSHOT)
+
+    lock = two_working.run("ledger", "lock-status")
+    heartbeat = two_working.heartbeat(0)
+    created = two_working.batch_create(0)
+    two_working.runtime.resume()
+    stdout, stderr = reader.communicate(timeout=60)
+
+    assert lock.returncode == 0, lock.stderr
+    # A read-only command takes no writer lease while it reads.
+    assert json.loads(lock.stdout)["locked"] is False
+    assert heartbeat.returncode == 0, heartbeat.stderr
+    assert created.returncode == 0, created.stderr
+    assert reader.returncode == 0, stderr
+    for output in (heartbeat.stderr, created.stderr, stderr):
+        assert "ledger_busy" not in output and "store_busy" not in output
+    (after_entry,) = json.loads(stdout)["dispatches"]
+    assert after_entry["heartbeat_at"] == before_entry["heartbeat_at"]
+    # A fresh read sees the writes that happened while the reader held its snapshot.
+    fresh = two_working.run("dispatch", "status", "--batch", two_working.batches[0])
+    assert fresh.returncode == 0, fresh.stderr
+    (fresh_entry,) = json.loads(fresh.stdout)["dispatches"]
+    assert fresh_entry["heartbeat_at"] != before_entry["heartbeat_at"]
+
+
 @pytest.fixture
 def auto_working(tmp_path: Path) -> Iterator[Batches]:
     # ``batch auto-report`` reports on a batch planned under ``approval_policy: auto``.
@@ -209,9 +287,12 @@ def test_read_commands_answer_the_state_before_a_writer_paused_in_its_transactio
     reads = {}
     for name, command in (
         ("dispatch status", ("dispatch", "status", "--dispatch", dispatch)),
+        ("batch list", ("batch", "list")),
         ("auto-report", ("batch", "auto-report", "--batch", batch)),
         ("decision-packet", ("batch", "decision-packet", "--batch", batch)),
         ("qa status", ("qa", "status")),
+        ("lock-status", ("ledger", "lock-status")),
+        ("validate", ("ledger", "validate")),
     ):
         reads[name] = auto_working.run(*command)
     auto_working.runtime.resume()
@@ -220,6 +301,8 @@ def test_read_commands_answer_the_state_before_a_writer_paused_in_its_transactio
 
     for name, result in reads.items():
         assert result.returncode == 0, f"{name}: {result.stderr}"
+    # A read-only command reports the ledger as free while it runs.
+    assert json.loads(reads["lock-status"].stdout)["locked"] is False
     # The readers see the state before the transaction in flight, never half of it.
     assert '"state": "working"' in reads["dispatch status"].stdout
     assert '"state": "reported"' not in reads["dispatch status"].stdout

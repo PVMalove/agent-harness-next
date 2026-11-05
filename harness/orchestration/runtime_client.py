@@ -70,8 +70,11 @@ EXECUTION_STATES = ("launching", "running", "stopping", "exited", "lost", "unkno
 # container executor in the runtime (ADR 0022, section 4); minor 5 adds the writable recovery records
 # of a batch, the feature ``state.recovery`` (ADR 0026); minor 6 adds the read-only
 # ``qa.evidence.verify`` (``qa_evidence_verify`` of ADR 0021, section 7), the verdict on the stored QA
-# evidence of a Release Gate pair.
-PROTOCOL_VERSION = (1, 6)
+# evidence of a Release Gate pair; minor 7 adds the ``filter`` field of ``state.read``, the
+# store-side selection of one batch or dispatch (ADR 0020, section 3).
+PROTOCOL_VERSION = (1, 7)
+# The protocol minor a filtered ``state.read`` needs (ADR 0020, section 3).
+FILTER_PROTOCOL_MINOR = 7
 # The runtime operation that judges the stored QA evidence of a Release Gate pair.
 QA_EVIDENCE_VERIFY = "qa.evidence.verify"
 MAX_FRAME_BYTES = 16 * 1024 * 1024
@@ -555,6 +558,27 @@ def _typed_error(response: Mapping[str, object]) -> RuntimeClientError:
     )
 
 
+def _require_minor(greeting: JsonObject, requires_minor: int) -> None:
+    """Refuse a request that needs a protocol minor the runtime did not negotiate.
+
+    A runtime older than the request would answer ``malformed_request`` for the field it never
+    learned; the negotiated minor turns that into ``protocol_unsupported`` with the remedy to
+    update the runtime (ADR 0020, section 3)."""
+    if requires_minor <= 0:
+        return
+    hello = greeting.get("result")
+    protocol = hello.get("protocol") if isinstance(hello, dict) else None
+    minor = protocol.get("minor") if isinstance(protocol, dict) else None
+    if isinstance(minor, int) and minor < requires_minor:
+        raise RuntimeClientError(
+            "protocol_unsupported",
+            f"the runtime negotiated protocol 1.{minor}, but this request needs 1.{requires_minor}",
+            remedy="update harness-runtime to the release that serves this request, then run it again",
+            domain="tooling",
+            facts={"negotiated_minor": minor, "required_minor": requires_minor},
+        )
+
+
 def _check_directory(directory: Path) -> None:
     """Trust the runtime directory before its token: a directory of this user that no one else
     may open. Another user could create ``/tmp/harness-<uid>`` first and pose as the runtime
@@ -614,13 +638,16 @@ class RuntimeClient:
         batch_id: str | None = None,
         fencing_token: str | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        requires_minor: int = 0,
     ) -> RuntimeReply:
         """Send one request until it is answered or its ``request_deadline`` passes.
 
         Every attempt carries the same ``operation_id`` and the same ``request_deadline``. Only a
         lost transport is repeated, with a delay from 100 ms to 5 s; an error the runtime answered
         with is raised as it is. ``batch_id`` names the batch of a mutation, ``fencing_token`` the
-        QA lane lease a QA run holds.
+        QA lane lease a QA run holds. ``requires_minor`` is the protocol minor the request needs: a
+        runtime that negotiated an older minor is refused with ``protocol_unsupported`` before the
+        request is sent, instead of answering ``malformed_request`` for a field it never learned.
         """
         deadline = self._clock() + timeout_seconds
         request: JsonObject = {
@@ -643,7 +670,7 @@ class RuntimeClient:
         delay = BACKOFF_START_SECONDS
         while True:
             try:
-                return self._attempt(request, deadline)
+                return self._attempt(request, deadline, requires_minor)
             except _TransportFailure as failure:
                 remaining = deadline - self._clock()
                 if remaining <= 0:
@@ -660,7 +687,9 @@ class RuntimeClient:
             retryable=True,
         )
 
-    def _attempt(self, request: JsonObject, deadline: float) -> RuntimeReply:
+    def _attempt(
+        self, request: JsonObject, deadline: float, requires_minor: int = 0
+    ) -> RuntimeReply:
         """One connection: ``hello`` with the token, then the request."""
         if sys.platform != "win32" and not hasattr(socket, "AF_UNIX"):
             raise RuntimeClientError(
@@ -685,6 +714,7 @@ class RuntimeClient:
             greeting = _exchange(connection, self._hello(request, token))
             if greeting.get("status") != "ok":
                 raise _typed_error(greeting)
+            _require_minor(greeting, requires_minor)
             answer = _exchange(connection, request)
         except OSError as exc:
             raise _TransportFailure(str(exc)) from exc

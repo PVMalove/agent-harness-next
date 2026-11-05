@@ -183,6 +183,198 @@ fn the_store_id_of_a_cut_over_state_is_the_one_migrate_reported() {
     assert_eq!(store_id(&repo.state()), Some(outcome.authority.store_id));
 }
 
+mod filter {
+    //! The store-side filter of a read: a command that names a batch or a dispatch reads only the
+    //! records the filter selects, and never the records of another batch (ADR 0020, section 3).
+
+    use rusqlite::Connection;
+    use serde_json::json;
+    use state::read::{Answer, ReadError, read};
+
+    use super::migrated;
+
+    const BATCH: &str = "batch-aaaaaaaa-0000-4000-8000-000000000001";
+    const FIRST: &str = "dispatch-11111111-0000-4000-8000-000000000001";
+    const SECOND: &str = "dispatch-22222222-0000-4000-8000-000000000002";
+
+    fn paths(answer: &Answer) -> Vec<String> {
+        let mut paths: Vec<String> = answer.records.keys().cloned().collect();
+        paths.sort();
+        paths
+    }
+
+    /// A second batch with one dispatch and its status, written as another command's commit would.
+    fn add_second_batch(state: &std::path::Path) {
+        let connection = Connection::open(state.join("runtime.db")).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO batch (id, state, body_json)
+                 VALUES ('batch-b', 'active', '{\"batch_id\":\"batch-b\",\"state\":\"active\"}');
+                 INSERT INTO dispatch (id, batch_id, state, body_json)
+                 VALUES ('dispatch-b', 'batch-b', 'working',
+                         '{\"dispatch_id\":\"dispatch-b\",\"batch_id\":\"batch-b\",\"state\":\"working\"}');
+                 INSERT INTO dispatch_status (id, state, body_json)
+                 VALUES ('dispatch-b', 'working', '{\"dispatch_id\":\"dispatch-b\",\"state\":\"working\"}');",
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn a_filter_by_batch_answers_only_the_records_of_that_batch() {
+        let (repo, _) = migrated("filter-batch");
+        let state = repo.state();
+        add_second_batch(&state);
+
+        let answer = read(
+            &state,
+            Some(&json!({
+                "collections": ["batches", "dispatches", "dispatch-status"],
+                "filter": {"batch_id": BATCH},
+            })),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            paths(&answer),
+            [
+                format!("batches/{BATCH}.json"),
+                format!("dispatch-status/{FIRST}.json"),
+                format!("dispatch-status/{SECOND}.json"),
+                format!("dispatches/{FIRST}.json"),
+                format!("dispatches/{SECOND}.json"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_filter_by_dispatch_answers_its_batch_its_dispatch_and_its_status_only() {
+        let (repo, _) = migrated("filter-dispatch");
+        let state = repo.state();
+        add_second_batch(&state);
+
+        let answer = read(
+            &state,
+            Some(&json!({
+                "collections": ["batches", "dispatches", "dispatch-status"],
+                "filter": {"dispatch_id": FIRST},
+            })),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            paths(&answer),
+            [
+                format!("batches/{BATCH}.json"),
+                format!("dispatch-status/{FIRST}.json"),
+                format!("dispatches/{FIRST}.json"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_filter_by_dispatch_of_another_batch_reads_that_batch() {
+        let (repo, _) = migrated("filter-other-batch");
+        let state = repo.state();
+        add_second_batch(&state);
+
+        let answer = read(
+            &state,
+            Some(&json!({
+                "collections": ["batches", "dispatches", "dispatch-status"],
+                "filter": {"dispatch_id": "dispatch-b"},
+            })),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            paths(&answer),
+            [
+                "batches/batch-b.json".to_owned(),
+                "dispatch-status/dispatch-b.json".to_owned(),
+                "dispatches/dispatch-b.json".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_batch_and_a_dispatch_of_the_filter_are_anded() {
+        let (repo, _) = migrated("filter-and");
+        let state = repo.state();
+        add_second_batch(&state);
+
+        let answer = read(
+            &state,
+            Some(&json!({
+                "collections": ["batches", "dispatches", "dispatch-status"],
+                "filter": {"batch_id": BATCH, "dispatch_id": SECOND},
+            })),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            paths(&answer),
+            [
+                format!("batches/{BATCH}.json"),
+                format!("dispatch-status/{SECOND}.json"),
+                format!("dispatches/{SECOND}.json"),
+            ]
+        );
+        let excluded = read(
+            &state,
+            Some(&json!({
+                "collections": ["dispatch-status"],
+                "filter": {"batch_id": "batch-b", "dispatch_id": SECOND},
+            })),
+            None,
+        )
+        .unwrap();
+        assert!(excluded.records.is_empty());
+    }
+
+    #[test]
+    fn a_filter_that_names_no_record_answers_an_empty_collection() {
+        let (repo, _) = migrated("filter-missing");
+
+        let answer = read(
+            &repo.state(),
+            Some(&json!({
+                "collections": ["batches", "dispatches", "dispatch-status"],
+                "filter": {"batch_id": "batch-nobody"},
+            })),
+            None,
+        )
+        .unwrap();
+
+        assert!(answer.records.is_empty());
+    }
+
+    #[test]
+    fn a_filter_the_protocol_does_not_define_is_refused() {
+        let (repo, _) = migrated("filter-malformed");
+        for payload in [
+            json!({"collections": ["batches"], "paths": ["batches/x.json"],
+                   "filter": {"batch_id": BATCH}}),
+            json!({"collections": ["reports"], "filter": {"batch_id": BATCH}}),
+            json!({"collections": [], "filter": {"batch_id": BATCH}}),
+            json!({"collections": ["batches"], "filter": {}}),
+            json!({"collections": ["batches"], "filter": {"batch_id": ""}}),
+            json!({"collections": ["batches"], "filter": {"batch_id": 1}}),
+            json!({"collections": ["batches"], "filter": {"surprise": BATCH}}),
+            json!({"collections": ["batches"], "filter": "batch"}),
+        ] {
+            let result = read(&repo.state(), Some(&payload), None);
+            assert!(
+                matches!(result, Err(ReadError::Malformed(_))),
+                "{payload}: {result:?}"
+            );
+        }
+    }
+}
+
 mod snapshots {
     //! Read snapshots that span the requests of one command (ADR 0020, section 3).
 

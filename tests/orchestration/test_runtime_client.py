@@ -507,13 +507,13 @@ def test_a_request_says_hello_with_the_token_then_asks(
     (hello,) = runtime.operations("hello")
     assert hello["payload"]["token"] == TOKEN
     assert hello["payload"]["protocol"] == {
-        "min": {"major": 1, "minor": 6},
-        "max": {"major": 1, "minor": 6},
+        "min": {"major": 1, "minor": 7},
+        "max": {"major": 1, "minor": 7},
     }
     assert hello["payload"]["repo_root"] == str(dirs.repo)
     (status,) = runtime.operations("status")
     assert status["operation_id"] == "op-1"
-    assert status["protocol_version"] == {"major": 1, "minor": 6}
+    assert status["protocol_version"] == {"major": 1, "minor": 7}
 
 
 def test_a_lost_transport_repeats_the_request_with_the_same_operation_id(
@@ -1305,6 +1305,23 @@ def test_an_error_of_the_runtime_exits_2_with_its_code_in_the_remedy(
     )
 
 
+def test_a_request_that_needs_a_newer_protocol_minor_is_protocol_unsupported() -> None:
+    greeting: JsonObject = {
+        "status": "ok",
+        "result": {"protocol": {"major": 1, "minor": 6}},
+    }
+
+    with pytest.raises(runtime_client.RuntimeClientError) as refused:
+        runtime_client._require_minor(greeting, 7)
+
+    assert refused.value.code == "protocol_unsupported"
+    assert refused.value.facts == {"negotiated_minor": 6, "required_minor": 7}
+    # A request that needs no newer minor is not refused, and neither is one against a peer that
+    # answered no protocol at all.
+    runtime_client._require_minor(greeting, 6)
+    runtime_client._require_minor({}, 0)
+
+
 def test_a_busy_store_read_prints_the_store_busy_code_first(
     dirs: Directories,
     runtimes: list[ScriptedRuntime],
@@ -1472,7 +1489,7 @@ def test_the_coordinator_cli_reads_the_state_of_a_real_runtime(
 
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)
-    assert report["protocol"] == {"major": 1, "minor": 6}
+    assert report["protocol"] == {"major": 1, "minor": 7}
     assert report["features"] == ["status"]
     assert report["store_id"] is None
     assert report["runtime"]["state"] == "serving"

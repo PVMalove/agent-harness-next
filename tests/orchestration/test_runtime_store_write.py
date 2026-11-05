@@ -330,7 +330,11 @@ class _FakeStore:
         self.commits: list[tuple[str | None, int | None, list[JsonObject]]] = []
 
     def fetch(
-        self, collections: Sequence[str], paths: Sequence[str], revision: int | None
+        self,
+        collections: Sequence[str],
+        paths: Sequence[str],
+        revision: int | None,
+        filter_: state_view.Filter | None = None,
     ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]:
         found = {
             path: record
@@ -688,12 +692,17 @@ class _SnapshotStore(_FakeStore):
         return self._open
 
     def __call__(
-        self, collections: Sequence[str], paths: Sequence[str], revision: int | None, /
+        self,
+        collections: Sequence[str],
+        paths: Sequence[str],
+        revision: int | None,
+        filter_: state_view.Filter | None = None,
+        /,
     ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]:
         if self._open is None:
             self.opened += 1
             self._open = self.generation
-        return self.fetch(collections, paths, revision)
+        return self.fetch(collections, paths, revision, filter_)
 
     def close(self) -> None:
         if self._open is not None:

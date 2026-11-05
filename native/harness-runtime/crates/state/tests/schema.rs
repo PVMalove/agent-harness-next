@@ -1,4 +1,4 @@
-//! The schema of the store, version 6: what `create` writes, what its CHECKs refuse, and how a
+//! The schema of the store, version 7: what `create` writes, what its CHECKs refuse, and how a
 //! store of version 1, 2 or 3 is brought forward (ADR 0020, sections 3, 4 and 7; ADR 0021, sections
 //! 4 and 6).
 
@@ -88,17 +88,39 @@ fn is_check_violation(error: &rusqlite::Error) -> bool {
 }
 
 #[test]
-fn a_new_store_has_the_schema_version_six_and_its_generation_row() {
+fn a_new_store_has_the_schema_version_seven_and_its_generation_row() {
     let connection = fresh();
 
-    assert_eq!(SCHEMA_VERSION, 6);
-    assert_eq!(version(&connection), 6);
+    assert_eq!(SCHEMA_VERSION, 7);
+    assert_eq!(version(&connection), 7);
     let generation: i64 = connection
         .query_row("SELECT revision FROM generation WHERE id = 1", [], |row| {
             row.get(0)
         })
         .unwrap();
     assert_eq!(generation, 1);
+}
+
+/// The named indexes of one table (the implicit primary-key indexes are not named by the schema).
+fn indexes(connection: &Connection, table: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(&format!(
+            "SELECT name FROM pragma_index_list('{table}') ORDER BY name"
+        ))
+        .unwrap();
+    statement
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|name: &String| !name.starts_with("sqlite_autoindex_"))
+        .collect()
+}
+
+#[test]
+fn a_new_store_indexes_the_batch_of_a_dispatch() {
+    let connection = fresh();
+
+    assert_eq!(indexes(&connection, "dispatch"), ["dispatch_batch_id"]);
 }
 
 #[test]
@@ -383,6 +405,50 @@ fn store_of_version_two(lease: Option<&str>) -> Connection {
     )
     .unwrap();
     connection
+}
+
+#[test]
+fn a_store_of_version_six_gains_the_batch_index_and_keeps_its_rows() {
+    let path = tempdir("v6").join("runtime.db");
+    let mut old = create(&path).unwrap();
+    // The shape a version 6 store has: the index is what version 7 adds.
+    old.execute_batch(
+        "DROP INDEX dispatch_batch_id;
+         INSERT INTO batch (id, state, body_json) VALUES ('b', 'active', '{\"a\":1}');
+         INSERT INTO dispatch (id, batch_id, state, body_json) VALUES ('d', 'b', 'working', '{}');
+         PRAGMA user_version = 6;",
+    )
+    .unwrap();
+    state::audit::append(
+        &old,
+        "2026-10-01T00:00:00+00:00",
+        "legacy-import",
+        &serde_json::json!({}),
+    )
+    .unwrap();
+
+    assert!(upgrade(&mut old).unwrap());
+
+    assert_eq!(version(&old), 7);
+    assert_eq!(indexes(&old, "dispatch"), ["dispatch_batch_id"]);
+    let body: String = old
+        .query_row("SELECT body_json FROM dispatch WHERE id = 'd'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(body, "{}");
+    let (action, details): (String, String) = old
+        .query_row(
+            "SELECT action, details_json FROM audit ORDER BY seq DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(action, "schema-migrate");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&details).unwrap(),
+        serde_json::json!({"from": 6, "to": SCHEMA_VERSION})
+    );
 }
 
 #[test]

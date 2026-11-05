@@ -74,9 +74,12 @@ def test_stale_dispatch_status_is_read_before_the_ipc_view_closes(
         fetch = original(repo)
 
         def read(
-            collections: Sequence[str], paths: Sequence[str], revision: int | None
+            collections: Sequence[str],
+            paths: Sequence[str],
+            revision: int | None,
+            filter_: state_view.Filter | None = None,
         ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]:
-            records, snapshot, revisions = fetch(collections, paths, revision)
+            records, snapshot, revisions = fetch(collections, paths, revision, filter_)
             key = f"dispatch-status/{DISPATCH_IDS[1]}.json"
             if key in records:
                 records[key] = {

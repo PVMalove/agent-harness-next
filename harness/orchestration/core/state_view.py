@@ -81,14 +81,33 @@ class AnswerTooLarge(Exception):
     """The runtime refused an answer that would not fit one frame."""
 
 
-# One ``state.read`` request: the collections and the paths it asks for, and the revision of the
-# store the view already saw. The answer holds the records by path, the revision of the store and
-# the revision of every row that has one.
+# The store-side filter of one collection read (ADR 0020, section 3): the batch and/or the
+# dispatch a command asks for. The store selects the matching rows, so a command that reads one
+# batch never reads or validates the records of the other batches.
+@dataclass(frozen=True)
+class Filter:
+    """The batch and/or dispatch a filtered collection read selects; both are ANDed."""
+
+    batch_id: str | None = None
+    dispatch_id: str | None = None
+
+    def payload(self) -> JsonObject:
+        """The ``filter`` field of a ``state.read`` payload."""
+        found: JsonObject = {}
+        if self.batch_id is not None:
+            found["batch_id"] = self.batch_id
+        if self.dispatch_id is not None:
+            found["dispatch_id"] = self.dispatch_id
+        return found
+
+
+# One ``state.read`` request: the collections and the paths it asks for, the revision of the
+# store the view already saw and, for a filtered collection read, its filter. The answer holds the
+# records by path, the revision of the store and the revision of every row that has one.
 type Fetch = Callable[
-    [Sequence[str], Sequence[str], int | None],
+    [Sequence[str], Sequence[str], int | None, Filter | None],
     tuple[dict[str, JsonObject], int | None, dict[str, int]],
 ]
-
 
 
 @runtime_checkable
@@ -96,7 +115,12 @@ class SnapshotFetch(Protocol):
     """A ``Fetch`` that answers from one read snapshot of the store until it is closed."""
 
     def __call__(
-        self, collections: Sequence[str], paths: Sequence[str], revision: int | None, /
+        self,
+        collections: Sequence[str],
+        paths: Sequence[str],
+        revision: int | None,
+        filter_: Filter | None = None,
+        /,
     ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]: ...
 
     @property
@@ -150,6 +174,9 @@ class StateView:
         self._fetch = fetch
         self._records: dict[str, JsonObject] = {}
         self._collections: set[str] = set()
+        # The answer of every filtered collection read, by ``(collection, filter)``: a command that
+        # asks twice for the same filter reads it once.
+        self._filtered: dict[tuple[str, str | None, str | None], dict[str, JsonObject]] = {}
         self._asked: set[str] = set()
         self._point_reads: dict[str, int] = {}
         self._too_large: set[str] = set()
@@ -191,23 +218,60 @@ class StateView:
         while no store unit is open."""
         self._records.clear()
         self._collections.clear()
+        self._filtered.clear()
         self._asked.clear()
         self._point_reads.clear()
         self.revisions.clear()
         self.revision = None
         self.close()
 
-    def _load(self, collections: Sequence[str], paths: Sequence[str]) -> None:
-        records, revision, revisions = self._fetch(collections, paths, self.revision)
+    def _load(
+        self,
+        collections: Sequence[str],
+        paths: Sequence[str],
+        filter_: Filter | None = None,
+    ) -> dict[str, JsonObject]:
+        records, revision, revisions = self._fetch(collections, paths, self.revision, filter_)
         if revision is not None:
             self.revision = revision
         self._records.update(records)
         self.revisions.update(revisions)
+        return records
 
     def _collection(self, name: str) -> None:
         if name not in self._collections:
             self._load([name], [])
             self._collections.add(name)
+
+    def collection(
+        self,
+        name: str,
+        *,
+        batch_id: str | None = None,
+        dispatch_id: str | None = None,
+    ) -> dict[str, JsonObject]:
+        """The records of one collection, the store selecting by ``batch_id``/``dispatch_id``.
+
+        Without a filter this is the whole collection, read once. With a filter it is one
+        ``state.read`` request carrying the filter, remembered for the same filter, so a command
+        that names one batch neither reads nor validates the records of the others and reads each
+        matching record at most once (ADR 0020, section 3)."""
+        if batch_id is None and dispatch_id is None:
+            self._collection(name)
+            prefix = f"{name}/"
+            return {
+                path: record
+                for path, record in self._records.items()
+                if path.startswith(prefix)
+            }
+        key = (name, batch_id, dispatch_id)
+        if key not in self._filtered:
+            records = self._load([name], [], Filter(batch_id, dispatch_id))
+            prefix = f"{name}/"
+            self._filtered[key] = {
+                path: record for path, record in records.items() if path.startswith(prefix)
+            }
+        return dict(self._filtered[key])
 
     def read(self, relative: str) -> JsonObject | None:
         """The record at ``relative``, or ``None`` when the store holds none."""

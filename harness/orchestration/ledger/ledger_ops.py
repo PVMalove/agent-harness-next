@@ -156,6 +156,7 @@ class _LazyClient:
         expected_revision: int | None = None,
         batch_id: str | None = None,
         timeout_seconds: float,
+        requires_minor: int = 0,
     ) -> RuntimeReply:
         if self._client is None:
             from harness.orchestration.runtime_client import RuntimeClient
@@ -168,6 +169,7 @@ class _LazyClient:
             expected_revision=expected_revision,
             batch_id=batch_id,
             timeout_seconds=timeout_seconds,
+            requires_minor=requires_minor,
         )
 
 
@@ -285,20 +287,29 @@ class _SnapshotRead:
         return self._generation
 
     def __call__(
-        self, collections: Sequence[str], paths: Sequence[str], revision: int | None, /
+        self,
+        collections: Sequence[str],
+        paths: Sequence[str],
+        revision: int | None,
+        filter_: state_view.Filter | None = None,
+        /,
     ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]:
-        from harness.orchestration.runtime_client import RuntimeClientError
+        from harness.orchestration.runtime_client import FILTER_PROTOCOL_MINOR, RuntimeClientError
 
+        payload: JsonObject = {
+            "collections": list(collections),
+            "paths": list(paths),
+            "snapshot": self._snapshot or "open",
+        }
+        if filter_ is not None:
+            payload["filter"] = filter_.payload()
         try:
             reply = self._client.call(
                 "state.read",
                 operation_id=f"state.read-{uuid.uuid4().hex}",
-                payload={
-                    "collections": list(collections),
-                    "paths": list(paths),
-                    "snapshot": self._snapshot or "open",
-                },
+                payload=payload,
                 timeout_seconds=READ_TIMEOUT_SECONDS,
+                requires_minor=FILTER_PROTOCOL_MINOR if filter_ is not None else 0,
             )
         except RuntimeClientError as exc:
             if exc.facts.get("reason") in {"snapshot_expired", "snapshot_limit"}:
@@ -345,7 +356,7 @@ class _SnapshotRead:
             pass
 
 
-def _runtime_fetch(repo: Path) -> state_view.Fetch:
+def _runtime_fetch(repo: Path) -> state_view.SnapshotFetch:
     """``state.read`` through ``runtime_client`` from one snapshot; a busy store, or a snapshot
     the runtime no longer holds, reads as a busy ledger."""
     return _SnapshotRead(repo)

@@ -136,7 +136,7 @@ impl Session {
                 ),
                 close: false,
             },
-            "state.read" => state_read(shared, &request),
+            "state.read" => state_read(shared, &request, negotiated.minor),
             "state.write" => state_write(shared, &request, self.peer_pid),
             "qa.lane.inspect" => qa_lane_inspect(shared, &request),
             "qa.evidence.verify" => qa_evidence_verify(shared, &request),
@@ -277,9 +277,34 @@ fn answer(request: &Request, outcome: Result<Value, ErrorBody>) -> Reply {
     }
 }
 
+/// The protocol minor a filtered read needs: version 7 added the `filter` payload field of
+/// `state.read` (ADR 0020, section 3). A peer that negotiated an older minor gets a typed
+/// `protocol_unsupported` instead of a `malformed_request` for a field it never learned.
+const FILTER_MINOR: u32 = 7;
+
 /// `state.read`: records of the runtime store in the form of the legacy ledger files.
-fn state_read(shared: &Shared, request: &Request) -> Reply {
+fn state_read(shared: &Shared, request: &Request, negotiated_minor: u32) -> Reply {
     let id = &request.operation_id;
+    let filtered = request
+        .payload
+        .as_ref()
+        .and_then(|payload| payload.get("filter"))
+        .is_some_and(|filter| !filter.is_null());
+    if filtered && negotiated_minor < FILTER_MINOR {
+        return failure(
+            id,
+            ErrorBody::new(
+                ErrorCode::ProtocolUnsupported,
+                FailureDomain::Tooling,
+                false,
+                "the filter of state.read needs a newer protocol minor",
+                "update harness or harness-runtime so that both speak protocol 1.7, then read again",
+            )
+            .with_fact("negotiated_minor", negotiated_minor)
+            .with_fact("required_minor", FILTER_MINOR),
+            false,
+        );
+    }
     let Some(state_dir) = shared.state_dir.as_deref() else {
         return failure(
             id,
@@ -656,7 +681,7 @@ mod tests {
 
         assert_eq!(code(&reply), ErrorCode::ProtocolUnsupported);
         let error = reply.response.error.unwrap();
-        assert_eq!(error.facts["server"], json!({"major": 1, "minor": 6}));
+        assert_eq!(error.facts["server"], json!({"major": 1, "minor": 7}));
         assert!(error.remedy.contains("update harness"));
         assert!(reply.close);
     }

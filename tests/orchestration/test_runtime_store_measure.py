@@ -1,21 +1,31 @@
-"""The cost of ``dispatch status`` and ``dispatch heartbeat`` before and after the cutover, on a ledger
-the size of this repository's (ADR 0020; criterion carried from #778).
+"""The cost of ``dispatch status`` (with and without ``--batch``) and ``dispatch heartbeat`` before
+and after the cutover, on a ledger the size of this repository's (ADR 0020, section 3; criterion
+carried from #778).
 
 The test is optional: it runs only when ``HARNESS_MEASURE_STATE_DIR`` names a copy of a state
-directory that was taken while no dispatch was live. The directory is read, never changed: it is
-copied twice into the temporary directory of the test. In the first copy the file ledger answers; the
-second is cut over with ``harness-runtime migrate`` and served by a real runtime. Each command runs
+directory that was taken while no dispatch was live. The directory is read, never changed. A
+file-ledger source is copied twice into the temporary directory of the test: in the first copy the
+file ledger answers; the second is cut over with ``harness-runtime migrate`` and served by a real
+runtime. A runtime-store source has already been cut over, so it is copied in place — ``runtime.db``
+through the SQLite backup API, the small JSON pointers beside it — and served without a migrate
+phase; its size is counted from the store instead of the file ledger. Each command runs
 ``HARNESS_MEASURE_RUNS`` times (30 by default; ``HARNESS_MEASURE_FILE_RUNS`` sets the runs of the
 file ledger, whose commands read the whole history and take minutes) as the CLI process that a user
-starts, and the wall clock of each run gives the percentiles. The result is printed as one JSON
-document, and written to the file named by ``HARNESS_MEASURE_OUT`` when it is set.
+starts, and the wall clock of each run gives the percentiles. ``dispatch status`` must answer within
+2 s and ``dispatch status --batch`` within 0.5 s (``BUDGETS``). A file-ledger source must hold at
+least 478 dispatches (``MIN_DISPATCHES``); a runtime-store source records the store's actual size,
+because that threshold is the ticket's 2026-11-03 figure and not a property of the store. The result
+is printed as one JSON document, with the file-ledger and runtime-store numbers side by side, and
+written to the file named by ``HARNESS_MEASURE_OUT`` when it is set.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -25,6 +35,7 @@ import pytest
 from .runtime_store_support import (
     STATE_REL,
     ServingRuntime,
+    coordinator_repository,
     coordinator_with,
     migrate,
     write_coordinator_state,
@@ -78,16 +89,30 @@ def _working_dispatch(repo: Path, runtime: ServingRuntime | None, dispatch: str)
     assert reported.returncode == 0, reported.stderr
 
 
+# The budget of ADR 0020, section 3: the whole liveness view, and the same view of one batch.
+BUDGETS = {"dispatch status": 2.0, "dispatch status --batch": 0.5}
+# The size of the ledger this repository had when the budgets were accepted (T26 base #795).
+MIN_DISPATCHES = 478
+
+
 def _measure(
-    repo: Path, runtime: ServingRuntime | None, dispatch: str, runs: int
+    repo: Path,
+    runtime: ServingRuntime | None,
+    dispatch: str | None,
+    batch: str,
+    runs: int,
 ) -> dict[str, dict[str, float]]:
     """The wall clock of each command, ``runs`` times. A runtime-store command runs once before
     the measured runs, so the first request of the runtime does not count; the file ledger has no
-    process to warm up, and each of its runs reads the whole history anyway."""
+    process to warm up, and each of its runs reads the whole history anyway. ``dispatch`` names the
+    working dispatch of ``dispatch heartbeat``; a store-epoch copy measures the read commands only,
+    because no worker of the copy is live."""
     commands = {
         "dispatch status": ["dispatch", "status"],
-        "dispatch heartbeat": ["dispatch", "heartbeat", "--dispatch", dispatch],
+        "dispatch status --batch": ["dispatch", "status", "--batch", batch],
     }
+    if dispatch is not None:
+        commands["dispatch heartbeat"] = ["dispatch", "heartbeat", "--dispatch", dispatch]
     found: dict[str, dict[str, float]] = {}
     for name, arguments in commands.items():
         if runtime is not None:
@@ -120,9 +145,90 @@ def _size(state: Path) -> dict[str, int]:
     }
 
 
-def test_dispatch_status_and_heartbeat_before_and_after_the_cutover(tmp_path: Path) -> None:
-    assert STATE_DIR is not None
-    source = Path(STATE_DIR)
+def _epoch(state: Path) -> str:
+    """The epoch the state directory selects: ``ledger.json`` is its selector (ADR 0020, section 1)."""
+    pointer = json.loads((state / "ledger.json").read_text(encoding="utf-8"))
+    return "runtime-store" if pointer.get("version") == 4 else "file-ledger"
+
+
+def _copy_store_state(source: Path, state: Path) -> None:
+    """A consistent read-only copy of a runtime-store state directory.
+
+    The SQLite backup API takes the ``runtime.db`` snapshot, WAL included, of the live store; the
+    small JSON files beside it are the epoch pointers, not records, and are copied as they are. The
+    source is opened ``mode=ro`` and is never written."""
+    state.mkdir(parents=True)
+    for name in ("ledger.json", "AUTHORITY.json"):
+        (state / name).write_bytes((source / name).read_bytes())
+    with (
+        contextlib.closing(
+            sqlite3.connect(f"file:{source / 'runtime.db'}?mode=ro", uri=True)
+        ) as live,
+        contextlib.closing(sqlite3.connect(state / "runtime.db")) as copy,
+    ):
+        live.backup(copy)
+
+
+def _store_size(database: Path) -> dict[str, int]:
+    """What the store holds: the rows of its record tables and the bytes of the database."""
+
+    def count(store: sqlite3.Connection, table: str) -> int:
+        return int(store.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+
+    with contextlib.closing(sqlite3.connect(database)) as store:
+        return {
+            "batches": count(store, "batch"),
+            "dispatches": count(store, "dispatch"),
+            "statuses": count(store, "dispatch_status"),
+            "audit_records": count(store, "audit"),
+            "bytes": database.stat().st_size,
+        }
+
+
+def _largest_batch(database: Path) -> str:
+    """The batch of the store with the most dispatches: the ``--batch`` view of the measurement."""
+    with contextlib.closing(sqlite3.connect(database)) as store:
+        row = store.execute(
+            "SELECT batch_id FROM dispatch GROUP BY batch_id "
+            "ORDER BY count(*) DESC, batch_id LIMIT 1"
+        ).fetchone()
+    assert row is not None, "the store holds no dispatch"
+    return str(row[0])
+
+
+def _check_budgets(after: dict[str, dict[str, float]]) -> None:
+    """The accepted budgets of ADR 0020, section 3, on the p95 of the measured runs."""
+    for name, budget in BUDGETS.items():
+        assert after[name]["p95"] <= budget, f"{name}: {after[name]} exceeds {budget} s"
+
+
+def _measure_store_epoch(tmp_path: Path, source: Path) -> None:
+    """A store-epoch copy measured where it stands: the cutover already ran, so this phase has no
+    migrate step and records the store's own size instead of the file ledger's."""
+    repo = coordinator_repository(tmp_path / "store")
+    state = repo / STATE_REL
+    _copy_store_state(source, state)
+    batch = _largest_batch(state / "runtime.db")
+    runtime = ServingRuntime(repo)
+    try:
+        after = _measure(repo, runtime, None, batch, RUNS)
+    finally:
+        runtime.stop()
+    result: dict[str, object] = {
+        "source_epoch": "runtime-store",
+        "runs": {"runtime_store": RUNS},
+        "ledger": _store_size(state / "runtime.db"),
+        "budgets": BUDGETS,
+        "seconds": {"runtime_store": after},
+    }
+    _write(result)
+    _check_budgets(after)
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def _measure_file_epoch(tmp_path: Path, source: Path) -> None:
+    """A file-ledger copy: the file ledger answers first, the second copy is cut over and served
+    by a real runtime, and both are measured side by side."""
     (tmp_path / "file").mkdir()
     (tmp_path / "store").mkdir()
     file_repo, file_ids = write_coordinator_state(
@@ -132,9 +238,12 @@ def test_dispatch_status_and_heartbeat_before_and_after_the_cutover(tmp_path: Pa
         tmp_path / "store", report=False, ticket="#99902", state_from=source
     )
     size = _size(file_repo / STATE_REL)
+    assert size["dispatches"] >= MIN_DISPATCHES, size
     result: dict[str, object] = {
+        "source_epoch": "file-ledger",
         "runs": {"file_ledger": FILE_RUNS, "runtime_store": RUNS},
         "ledger": size,
+        "budgets": BUDGETS,
     }
 
     started = time.perf_counter()
@@ -144,17 +253,37 @@ def test_dispatch_status_and_heartbeat_before_and_after_the_cutover(tmp_path: Pa
     runtime = ServingRuntime(store_repo)
     try:
         _working_dispatch(store_repo, runtime, store_ids["dispatch_id"])
-        after = _measure(store_repo, runtime, store_ids["dispatch_id"], RUNS)
+        after = _measure(
+            store_repo,
+            runtime,
+            store_ids["dispatch_id"],
+            store_ids["batch_id"],
+            RUNS,
+        )
     finally:
         runtime.stop()
     result["seconds"] = {"runtime_store": after}
     _write(result)
+    _check_budgets(after)
 
     _working_dispatch(file_repo, None, file_ids["dispatch_id"])
-    before = _measure(file_repo, None, file_ids["dispatch_id"], FILE_RUNS)
+    before = _measure(
+        file_repo, None, file_ids["dispatch_id"], file_ids["batch_id"], FILE_RUNS
+    )
     result["seconds"] = {"file_ledger": before, "runtime_store": after}
     _write(result)
     print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def test_dispatch_status_before_and_after_the_cutover_is_within_its_budget(
+    tmp_path: Path,
+) -> None:
+    assert STATE_DIR is not None
+    source = Path(STATE_DIR)
+    if _epoch(source) == "runtime-store":
+        _measure_store_epoch(tmp_path, source)
+    else:
+        _measure_file_epoch(tmp_path, source)
 
 
 def _write(document: dict[str, object]) -> None:
