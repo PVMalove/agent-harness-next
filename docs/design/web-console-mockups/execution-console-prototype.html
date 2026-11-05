@@ -26,10 +26,13 @@
       <span id="project" class="where mono">claude-agent-harness</span>
       <span id="branch" class="where mono muted">⑂ integration/harness-runtime-reliability</span>
       <div class="top-actions">
+        <button id="connection-state" class="conn-chip connected" type="button" data-connection-cycle aria-label="Демо: переключить состояние соединения" title="Демо: переключить состояние соединения"><i></i><span>online</span></button>
         <span class="where muted demo-note">данные симулируются</span>
         <a class="icon-btn" href="#help" aria-label="Справка" title="Справка">?</a>
       </div>
     </header>
+
+    <div id="connection-banner" class="connection-banner" role="status" aria-live="polite" hidden></div>
 
     <div class="layout">
       <nav id="navigation" aria-label="Разделы консоли"></nav>
