@@ -22,22 +22,20 @@ import os
 import secrets
 import stat
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
-from ...kernel.discovery import _private_file
+from harness.orchestration.core.constants import STATE_REL
 
+from ...kernel.discovery import _private_file, discovery_path
+from ..application.ports import JournalUnavailable
+from ..domain.events import Event, View
+
+JOURNAL_NAME = "orchestration-events.jsonl"
 FORMAT = 1
 _KEPT_EVENTS = 4096
 _MAPS = ("batches", "dispatch_states", "qa_outcomes", "qa_attempts")
 _JOURNAL_ID_HEX = 16
-
-type View = dict[str, object]
-type Event = dict[str, object]
-
-
-class JournalUnavailable(Exception):
-    """The journal cannot be read or written."""
-
 
 def _changes(value: object) -> dict[str, object]:
     return value if isinstance(value, dict) else {}
@@ -306,3 +304,13 @@ class EventJournal:
         if self._fd is not None:
             fd, self._fd = self._fd, None
             os.close(fd)
+
+
+def opener(repo: Path, path: Path | None = None) -> Callable[[], EventJournal]:
+    """Open the journal of `repo`'s orchestration events, by default beside its discovery record."""
+
+    def open_journal() -> EventJournal:
+        where = path if path is not None else discovery_path(repo).with_name(JOURNAL_NAME)
+        return EventJournal(where, str((repo / STATE_REL).resolve()))
+
+    return open_journal

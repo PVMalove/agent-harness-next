@@ -11,14 +11,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from harness.console.backend.application.events import (
-    POLL_INTERVAL_SECONDS,
-    BatchFacts,
-    Observation,
-    OrchestrationEvents,
-    ProjectReader,
-    SourceUnavailable,
-)
+from harness.console.backend.application.events import POLL_INTERVAL_SECONDS
+from harness.console.backend.application.ports import SourceUnavailable
+from harness.console.backend.domain.events import BatchFacts, Observation
+from harness.console.backend.infrastructure.orchestration_reader import ProjectReader
 from harness.console.backend.server import MAX_SUBSCRIPTIONS, ConsoleServer
 from harness.console.backend import composition
 from harness.orchestration.core.constants import STATE_REL
@@ -62,7 +58,7 @@ def _ledger(project: Path) -> LifecycleLedger:
 def _server(project: Path, reader: ProjectReader | None = None) -> ConsoleServer:
     return ConsoleServer(
         project,
-        events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
+        events=composition.orchestration_events(project, interval=INTERVAL, reader=reader),
         snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
     )
 
@@ -620,7 +616,7 @@ def test_a_failing_poll_is_a_typed_state_and_the_poller_keeps_polling(
     async def scenario() -> None:
         server = ConsoleServer(
             project,
-            events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
+            events=composition.orchestration_events(project, interval=INTERVAL, reader=reader),
             snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
         )
         await server.start()
@@ -667,7 +663,7 @@ def test_compaction_keeps_a_lone_surrogate_and_bounds_the_journal(
     async def scenario() -> None:
         server = ConsoleServer(
             project,
-            events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
+            events=composition.orchestration_events(project, interval=INTERVAL, reader=reader),
             snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
         )
         await server.start()

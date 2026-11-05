@@ -52,7 +52,7 @@ class ConsoleServer:
         self._snapshots = snapshots or composition.snapshot_service(self.repo)
         self._jobs = jobs or composition.job_service(self.repo)
         self._decisions = decisions or composition.decision_service(self.repo)
-        self._events = events or OrchestrationEvents(self.repo)
+        self._events = events or composition.orchestration_events(self.repo)
         self._router = RequestRouter(
             self._snapshots, self._jobs, self._decisions, self._events
         )

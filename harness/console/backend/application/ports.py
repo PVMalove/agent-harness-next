@@ -10,6 +10,7 @@ from typing import Protocol
 
 from ...kernel.catalog import Reversibility
 from ...kernel.home_snapshot import HomeSnapshot
+from ..domain.events import Event, Observation, View
 
 
 class Clock(Protocol):
@@ -82,3 +83,65 @@ class WallClock(Protocol):
     """The current UTC time as an ISO 8601 string."""
 
     def __call__(self) -> str: ...
+
+
+class SourceUnavailable(Exception):
+    """The orchestration source cannot be read as a whole: ``reason`` is ``missing``,
+    ``unreadable`` or ``runtime_unavailable``."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason, self.message = reason, message
+
+
+class OrchestrationReader(Protocol):
+    """Runs in a thread and raises ``SourceUnavailable``."""
+
+    def read(self) -> Observation: ...
+
+
+class JournalUnavailable(Exception):
+    """The event journal cannot be read or written."""
+
+
+class EventJournal(Protocol):
+    """The durable journal of orchestration events. ``load``, ``write`` and ``rewrite`` do file
+    work, run in a thread and raise ``JournalUnavailable``; the rest runs on the event loop."""
+
+    @property
+    def journal_id(self) -> str: ...
+
+    @property
+    def head(self) -> int: ...
+
+    @property
+    def floor(self) -> int: ...
+
+    @property
+    def view(self) -> View | None: ...
+
+    def load(self) -> None: ...
+
+    def events_after(self, seq: int, limit: int) -> list[Event]: ...
+
+    def record(self, events: list[Event], view: View) -> bytes | None: ...
+
+    def write(self, line: bytes) -> None: ...
+
+    def accept(self, events: list[Event], view: View) -> None: ...
+
+    def needs_compaction(self) -> bool: ...
+
+    def checkpoint(self) -> dict[str, object]: ...
+
+    def rewrite(self, header: dict[str, object]) -> None: ...
+
+    def compacted(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class OpenJournal(Protocol):
+    """The project's event journal, not loaded yet; runs in a thread."""
+
+    def __call__(self) -> EventJournal: ...

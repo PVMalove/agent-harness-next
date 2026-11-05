@@ -16,7 +16,9 @@ from .protocol.decisions import respond as respond_decisions
 from ..application.jobs import JobService
 from .protocol.jobs import job_request_type
 from .protocol.jobs import replies as job_replies
-from ..application.events import OrchestrationEvents, is_orchestration_request
+from ..application.events import OrchestrationEvents
+from .protocol.events import is_orchestration_request
+from .protocol.events import replies as event_replies
 from ..application.snapshots import SnapshotService
 from .protocol.snapshots import busy, respond
 
@@ -80,7 +82,7 @@ class RouterConnection:
                 async with contextlib.aclosing(job_replies(raw, router.jobs)) as replies:
                     await self._stream(replies)
             elif is_orchestration_request(raw):
-                async with contextlib.aclosing(router.events.replies(raw)) as replies:
+                async with contextlib.aclosing(event_replies(raw, router.events)) as replies:
                     await self._stream(replies)
             elif is_decisions_request(raw):
                 await self._reply(await respond_decisions(raw, router.decisions))
