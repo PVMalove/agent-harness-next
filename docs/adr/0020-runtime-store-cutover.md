@@ -102,9 +102,22 @@ Operational state живёт ровно в одной эпохе:
   Набор записей и форма ответа `dispatch status` без флагов не меняются (golden-паритет с #803).
 - Поле `filter` — minor 7 протокола. Клиент передаёт `requires_minor=7` вместе с фильтром; runtime,
   согласовавший более старый minor, отвечает `protocol_unsupported` с указанием обновить runtime, а
-  не `malformed_request`. Бюджеты на копии state этого репозитория (≥478 dispatch): `dispatch status`
-  без фильтра ≤ 2 с, с `--batch` ≤ 0.5 с; `tests/orchestration/test_runtime_store_measure.py`
-  печатает замеры file-ledger и runtime-store рядом и проверяет бюджеты.
+  не `malformed_request`. Бюджеты `dispatch status` на копии state этого репозитория: без фильтра
+  ≤ 2 с, с `--batch` ≤ 0.5 с по p95; `tests/orchestration/test_runtime_store_measure.py` проверяет
+  их на источнике любой эпохи (следующие два пункта).
+- **Замер 2026-11-05** на консистентной копии живого store: 190 dispatch, 53 batch, 190 записей
+  `dispatch-status`, 418 записей audit, `runtime.db` 45 346 816 байт. При 30 прогонах каждой
+  команды `dispatch status` дал p50 0,954 с, p95 1,104 с, p99 1,108 с, а `dispatch status
+  --batch` — p50 0,330 с, p95 0,407 с, p99 0,452 с; оба бюджета выполнены. До cutover, 2026-11-03
+  на файловом ledger при 478 dispatch, `dispatch status` удерживал замок ledger 398 с (тикет #946,
+  T26 base #795): бюджет 2 с в той эпохе не выполнялся. Порог ≥478 dispatch относится к файловому
+  ledger этой даты и в store не воспроизводится: store содержит меньше dispatch, поэтому копия
+  измеряется в фактическом размере, а не догоняется до 478.
+- Измерение принимает источник любой эпохи. Копию file-ledger тест по-прежнему прогоняет через
+  `harness-runtime migrate` и проверяет порог ≥478 dispatch, так что замер «до и после» на одной
+  legacy-копии остаётся. Копию эпохи store тест измеряет напрямую: `runtime.db` снимается через
+  SQLite backup API вместе с указателями `ledger.json` и `AUTHORITY.json`, фаза `migrate`
+  пропускается, а размер берётся из таблиц store, а не из файлового поколения.
 - QA-lane — singleton-строка `qa_lane(id=1, owner_kind, owner_id, fencing_token, expires_at)`.
   Допуск, постановка в очередь и снятие — по одной транзакции; `fencing_token` монотонно растёт.
   Снятие и откат требуют совпадения `(owner, fencing_token)`, что обобщает правило #780: lease
