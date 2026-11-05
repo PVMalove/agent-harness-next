@@ -429,6 +429,16 @@ def test_blocked_preflight_lists_every_core_blocker_verbatim_with_its_remedy() -
     assert next(r for r in view.rows if r.label == "Запуск").state is State.BLOCKED
 
 
+def test_a_reported_in_process_transport_is_not_labelled_not_reported() -> None:
+    document = preflight_document(
+        verified=verification(
+            "unverified", environment=blocked_facts(transport="in-process")
+        )
+    )
+    row = next(r for r in run_preflight(document).rows if r.label == "Транспорт")
+    assert row.value == "in-process" and row.state is State.WARN
+
+
 def test_dependent_checks_without_an_observation_read_not_checked_never_ok() -> None:
     document = preflight_document(
         verified=verification("unverified", environment=blocked_facts())

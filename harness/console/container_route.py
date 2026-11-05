@@ -528,7 +528,11 @@ def preflight_view(result: ApiResult | None, selection: Selection) -> StageView:
         Row(
             "Транспорт",
             transport or "не сообщается",
-            State.OK if transport == "external" else State.NOT_REPORTED,
+            State.OK
+            if transport == "external"
+            else State.WARN
+            if transport
+            else State.NOT_REPORTED,
             "Движок",
         )
     )
