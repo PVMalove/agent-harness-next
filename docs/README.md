@@ -1,30 +1,30 @@
-# Документация Agent Harness
+# Документация Agent Harness Next
 
-Корневой `docs/` — документация для разработчика исходного репозитория. Она не устанавливается в
-целевые проекты, включая справочник харнесса и руководство по backend-оркестрации. Агентам
-доставляются только их собственные контракты: проектные руководства из `harness/project/docs-agents/`,
-контракты `harness/docs/project-memory.md` и `harness/docs/technical-english.md`, роли и playbook
-оркестрации, скиллы и hooks. Даже когда текст проектного руководства совпадает с документом здесь,
-корневой файл не становится источником установки.
+Публичная документация живёт на сайте: [pvmalove.github.io/claude-agent-harness](https://pvmalove.github.io/claude-agent-harness/).
+Исходники сайта — `site/`, локальный предпросмотр — `make docs-serve`.
 
-Публичный сайт собирается из `site/`: локальный предпросмотр — `make docs-serve`.
+Корневой `docs/` — внутренняя документация исходного репозитория. Она не устанавливается в целевые
+проекты; агентам доставляются проектные руководства из `harness/project/docs-agents/`, контракты
+`harness/docs/` и роли оркестрации из `harness/orchestration/`.
 
-| Раздел | Содержимое |
+| Публичная страница | Содержимое |
 | --- | --- |
-| [Архитектура](./ARCHITECTURE.md) | Слои, discovery, backend-оркестрация и границы процессов. |
-| [ADR](./adr/) | Девять действующих архитектурных контрактов по доменам. |
-| [Диаграммы](./diagrams/README.md) | Archify JSON, интерактивные HTML и PNG. |
-| [Справочник харнесса](./harness-guide.md) | Установка, команды CLI, `health`, `console`, skills и hooks. |
-| [Настройка в консоли](./console-configuration.md) | Выбор целевого проекта, мастер JSON, версии, откат и необязательные CLI-подсказки. |
-| [Backend-оркестрация](./backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
-| [Technical English](../harness/docs/technical-english.md) | Общий контракт английской координации агентов, доставляемый в каждую установку. |
-| [Technical Russian](./technical-russian.md) | Правила технического русского языка и формат Keep a Changelog. |
-| [Руководства и агенты](./agents/README.md) | Git, тикеты, артефакты, worktrees, релизы и русские описания агентов code-review-spec, code-review-standards, pr-composer и test-author. |
-| [Skills](./skills/README.md) | Русские описания first-party, global, role и vendor skills. |
-| [Hooks](./hooks/) | Русские описания проектных hooks и вспомогательных скриптов, включая `run-test.sh`, `test-author-guard.py` и `test-author-preflight.sh`. |
-| [Runtime discovery](./runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
+| [Быстрый старт](../site/docs/getting-started/index.md) | Требования, установка, init/adopt, health |
+| [Архитектура](../site/docs/architecture/index.md) | Слои, ownership, Rust runtime, store, безопасность |
+| [Справочник](../site/docs/reference/index.md) | CLI, конфигурация, hooks, агенты |
+| [Демо](../site/docs/demo/index.md) | Веб-консоль, ключевые экраны |
 
-[releases.md](./agents/releases.md) описывает порядок выпуска версии, а также проверку приватных
-терминов мейнтейнера: локальный файл `.private-terms.txt` и секрет репозитория
-`HARNESS_PRIVATE_TERMS`. Операционные правила целевого проекта — в
-[harness-guide.md](./harness-guide.md) и [git-workflow.md](./agents/git-workflow.md).
+| Внутренний раздел | Содержимое |
+| --- | --- |
+| [ADR](./adr/) | Действующие архитектурные контракты |
+| [Руководства и агенты](./agents/README.md) | Git, тикеты, артефакты, worktrees, релизы, агенты |
+| [Skills](./skills/README.md) | Русские описания first-party, global, role и vendor skills |
+| [Hooks](./hooks/) | Проектные hooks и вспомогательные скрипты |
+| [Backend-оркестрация](./backend-orchestration.md) | Конфиг, coordinator, роли, lifecycle batch |
+| [Диаграммы](./diagrams/README.md) | Archify JSON, HTML и PNG |
+| [Technical English](../harness/docs/technical-english.md) | Контракт английской координации |
+| [Technical Russian](./technical-russian.md) | Правила русского языка и Keep a Changelog |
+| [Runtime discovery](./runtime-discovery.md) | Обнаружение skills в Claude Code и Codex |
+
+Порядок выпуска и проверка приватных терминов — в [releases.md](./agents/releases.md).
+Правила Git и PR — в [git-workflow.md](./agents/git-workflow.md).
