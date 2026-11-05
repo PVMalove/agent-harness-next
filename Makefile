@@ -15,7 +15,7 @@ PYTHON_BOOTSTRAP ?= python3
 HARNESS_PYTHON := $(HARNESS_VENV)/bin/python
 endif
 
-.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint
+.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint web-install web-build web-test web-e2e
 
 help: ## Показать список команд с описанием
 	@$(PYTHON_BOOTSTRAP) -c "import re, sys; print('Доступные команды:'); lines = open(sys.argv[1], encoding='utf-8').readlines(); matches = [re.match(r'^([a-zA-Z0-9_-]+):.*?## (.*)$$', line) for line in lines]; [print(f'  {m.group(1):<16} - {m.group(2)}') for m in matches if m]" $(MAKEFILE_LIST)
@@ -61,6 +61,20 @@ test-author-probe: export HARNESS_VERIFY_CLAUDE_TEST_AUTHOR := 1
 test-author-probe: export HARNESS_REQUIRE_CLAUDE_TEST_AUTHOR := 1
 test-author-probe: $(HARNESS_ENV_STAMP) ## Подтвердить test-author на реальном Claude Code (нужны claude и вход; тратит квоту)
 	$(HARNESS_PYTHON) scripts/test_clean_room.py
+
+WEB_DIR := harness/console/frontend
+
+web-install: ## Установить зависимости SPA консоли (npm ci) и Chromium для Playwright
+	cd $(WEB_DIR) && npm ci && npx playwright install chromium
+
+web-build: ## Собрать SPA консоли в harness/console/frontend/dist
+	cd $(WEB_DIR) && npm run build
+
+web-test: ## Vitest-тесты SPA консоли из tests/web (нужна сборка: make web-build)
+	cd $(WEB_DIR) && npm test
+
+web-e2e: $(HARNESS_ENV_STAMP) ## Playwright-тесты SPA консоли против настоящего сервера (нужна сборка)
+	cd $(WEB_DIR) && npm run test:e2e
 
 clean: $(HARNESS_ENV_STAMP) ## Удалить временные файлы, стейт оркестратора, кэши и .pyc
 	$(HARNESS_PYTHON) -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['.mypy_cache', '.pytest_cache', '.harness/orchestration/state', '.harness/.sandboxes', '.harness/scratch', '.claude/worktrees', 'htmlcov'] if os.path.exists(p)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True)]"

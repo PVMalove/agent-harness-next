@@ -15,6 +15,9 @@ LANGUAGES = ("ru", "en")
 LANGUAGE_ENV = "HARNESS_CONSOLE_LANG"
 
 _SECTIONS = {
+    "Доска задач": {"ru": "Доска задач", "en": "Task board"},
+    "Ход работы": {"ru": "Ход работы", "en": "Agent activity"},
+    "Публикация": {"ru": "Публикация", "en": "Publish"},
     "Home": {"ru": "Главная", "en": "Home"},
     "Open project": {"ru": "Открыть проект", "en": "Open project"},
     "Update Harness": {"ru": "Обновить Harness", "en": "Update Harness"},
@@ -79,6 +82,11 @@ def default_language() -> str:
 
 def next_language(language: str) -> str:
     return LANGUAGES[(LANGUAGES.index(language) + 1) % len(LANGUAGES)]
+
+
+def sections() -> dict[str, dict[str, str]]:
+    """Every section label by key and language, for the web catalog."""
+    return {key: dict(labels) for key, labels in _SECTIONS.items()}
 
 
 def section_label(language: str, key: str) -> str:

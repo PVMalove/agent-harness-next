@@ -1,0 +1,72 @@
+/* The production build (npm run build) ships only local files and the mockup stylesheet as is. */
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { describe, expect, test } from "vitest";
+
+const REPO = resolve(__dirname, "../..");
+const DIST = join(REPO, "harness/console/frontend/dist");
+const MOCKUP_CSS = join(REPO, "docs/design/web-console-mockups/execution-console.css");
+
+/** URL-like strings in the bundle that are identifiers, never loaded: XML namespaces, React's
+ * error-decoder link and React Router's URL-parsing base and doc link in a warning text. */
+const NOT_LOADED = [
+  /^http:\/\/www\.w3\.org\//,
+  /^https:\/\/react\.dev\/errors\//,
+  /^http:\/\/localhost$/,
+  /^https:\/\/reactrouter\.com\//,
+];
+const URL_PATTERN = /https?:\/\/[^\s"'`)<>]*/g;
+
+function files(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)],
+  );
+}
+
+describe("the build in harness/console/frontend/dist", () => {
+  test("exists: run `npm run build` in harness/console/frontend first", () => {
+    expect(existsSync(join(DIST, "index.html"))).toBe(true);
+  });
+
+  const all = existsSync(DIST) ? files(DIST) : [];
+  const ofType = (extension: string) => all.filter((path) => path.endsWith(extension));
+  const text = (path: string) => readFileSync(path, "utf-8");
+
+  test("holds the page, a script, styles, local fonts and the icon", () => {
+    expect(ofType(".js").length).toBeGreaterThan(0);
+    expect(ofType(".css").length).toBeGreaterThan(1);
+    expect(ofType(".woff2").length).toBeGreaterThanOrEqual(6);
+    expect(existsSync(join(DIST, "favicon.svg"))).toBe(true);
+  });
+
+  test("ships the mockup stylesheet byte for byte", () => {
+    expect(readFileSync(join(DIST, "execution-console.css")).equals(readFileSync(MOCKUP_CSS))).toBe(
+      true,
+    );
+  });
+
+  test("index.html links local files only, with no inline script or style", () => {
+    const page = text(join(DIST, "index.html"));
+    expect(page.match(URL_PATTERN)).toBeNull();
+    expect(page).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
+    expect(page).not.toMatch(/\sstyle=/);
+    expect(page).not.toMatch(/<style/);
+    expect(page.indexOf("/execution-console.css")).toBeLessThan(page.indexOf("/assets/"));
+  });
+
+  test("stylesheets reference no remote URL and no data: font", () => {
+    for (const path of ofType(".css")) {
+      expect(text(path).match(URL_PATTERN), path).toBeNull();
+      expect(text(path), path).not.toMatch(/url\(\s*["']?data:/);
+    }
+  });
+
+  test("scripts contain no URL outside the not-loaded allowlist", () => {
+    for (const path of ofType(".js")) {
+      const foreign = (text(path).match(URL_PATTERN) ?? []).filter(
+        (url) => !NOT_LOADED.some((allowed) => allowed.test(url)),
+      );
+      expect(foreign, path).toEqual([]);
+    }
+  });
+});

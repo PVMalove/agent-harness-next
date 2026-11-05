@@ -12,6 +12,22 @@ Headers = Sequence[tuple[bytes, bytes]]
 
 ALLOWED_METHODS = b"GET, HEAD"
 UPGRADE_PATH = "/ws"
+BOOTSTRAP_PATH = "/"
+LEGACY_COOKIE = b"console_token"
+
+# RFC 6265 section 4.1.1: cookie-name is an RFC 2616 token, cookie-value is cookie-octets.
+_NAME_OCTETS = frozenset(
+    b"!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+)
+_VALUE_OCTETS = frozenset(
+    [
+        0x21,
+        *range(0x23, 0x2C),
+        *range(0x2D, 0x3B),
+        *range(0x3C, 0x5C),
+        *range(0x5D, 0x7F),
+    ]
+)
 
 
 def _values(headers: Headers, name: bytes) -> list[bytes]:
@@ -41,16 +57,64 @@ def page_status(path: str, query: bytes, pages: Collection[str]) -> int:
     return 200 if path in pages and not query else 404
 
 
+def cookie_name(port: int) -> bytes:
+    """The port-scoped cookie, so consoles of two projects never overwrite each other."""
+    return LEGACY_COOKIE + b"_" + str(port).encode()
+
+
+def parse_cookies(header: bytes) -> dict[bytes, bytes] | None:
+    """The pairs of one Cookie header, or None for a malformed header or a repeated name."""
+    cookies: dict[bytes, bytes] = {}
+    for pair in header.split(b"; "):
+        name, separator, value = pair.partition(b"=")
+        if len(value) >= 2 and value[:1] == value[-1:] == b'"':
+            value = value[1:-1]
+        if (
+            not separator
+            or not name
+            or not _NAME_OCTETS.issuperset(name)
+            or not _VALUE_OCTETS.issuperset(value)
+            or name in cookies
+        ):
+            return None
+        cookies[name] = value
+    return cookies
+
+
 def authenticated(headers: Headers, port: int, token: str) -> bool:
-    """One bearer header, or one cookie together with the loopback Origin."""
+    """One bearer header, or one cookie header together with the loopback Origin."""
     auth = _values(headers, b"authorization")
     cookies = _values(headers, b"cookie")
     origin = _values(headers, b"origin")
     if len(auth) == 1 and not cookies:
         return secrets.compare_digest(auth[0], b"Bearer " + token.encode())
     if len(cookies) == 1 and not auth and origin == [b"http://" + _loopback(port)]:
-        return secrets.compare_digest(cookies[0], b"console_token=" + token.encode())
+        parsed = parse_cookies(cookies[0])
+        if parsed is None:
+            return False
+        value = parsed.get(cookie_name(port), parsed.get(LEGACY_COOKIE))
+        return value is not None and secrets.compare_digest(value, token.encode())
     return False
+
+
+def bootstrap_status(
+    headers: Headers, method: bytes, path: str, query: bytes, token: str
+) -> int | None:
+    """303 when GET / carries exactly the session token as its only query parameter, 401 for a
+    wrong token there, None for any other request with a query (the caller answers 404)."""
+    name, separator, value = query.partition(b"=")
+    if (
+        method != b"GET"
+        or path != BOOTSTRAP_PATH
+        or name != b"token"
+        or not separator
+        or b"&" in value
+        or b";" in value
+        or _values(headers, b"authorization")
+        or _has_body(headers)
+    ):
+        return None
+    return 303 if secrets.compare_digest(value, token.encode()) else 401
 
 
 def _has_body(headers: Headers) -> bool:

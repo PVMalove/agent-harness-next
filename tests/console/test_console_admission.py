@@ -139,3 +139,85 @@ def test_pages_are_exact_paths_without_a_query() -> None:
     assert admission.page_status("/", b"", ("/",)) == 200
     assert admission.page_status("/", b"x=1", ("/",)) == 404
     assert admission.page_status("/unknown", b"", ("/",)) == 404
+
+
+def _cookie_upgrade(cookie: str) -> list[tuple[str, str]]:
+    headers = _upgrade()
+    headers[-1] = ("Cookie", cookie)
+    headers.append(("Origin", ORIGIN))
+    return headers
+
+
+@pytest.mark.parametrize(
+    "cookie",
+    [
+        f"console_token_{PORT}={TOKEN}",
+        f'console_token_{PORT}="{TOKEN}"',
+        f"theme=dark; console_token_{PORT}={TOKEN}; other=1",
+        f"console_token_1={'cd' * 32}; console_token_{PORT}={TOKEN}",
+        f"console_token={TOKEN}",
+    ],
+)
+def test_the_port_cookie_or_the_legacy_cookie_is_admitted(cookie: str) -> None:
+    assert _admit(_cookie_upgrade(cookie)) is None
+
+
+@pytest.mark.parametrize(
+    "cookie",
+    [
+        f"console_token_{PORT}=wrong",
+        f"console_token_1={TOKEN}",
+        f"console_token_{PORT}={TOKEN}; console_token_{PORT}={TOKEN}",
+        f"console_token_{PORT}={TOKEN};other=1",
+        f"console_token_{PORT}={TOKEN}; ",
+        f"console_token_{PORT}={TOKEN}; other=a b",
+        f"console_token_{PORT}={TOKEN}; bad name=1",
+        f"console_token_{PORT}={TOKEN}; novalue",
+        "",
+    ],
+)
+def test_a_wrong_foreign_duplicate_or_malformed_cookie_is_rejected(cookie: str) -> None:
+    assert _admit(_cookie_upgrade(cookie)) == 401
+
+
+def test_cookie_parsing_keeps_foreign_cookies_and_rejects_repeats() -> None:
+    assert admission.parse_cookies(b'a=1; b="2"; c=') == {
+        b"a": b"1",
+        b"b": b"2",
+        b"c": b"",
+    }
+    assert admission.parse_cookies(b"a=1; a=2") is None
+    assert admission.parse_cookies(b"a=1,2") is None
+    assert admission.cookie_name(PORT) == f"console_token_{PORT}".encode()
+
+
+@pytest.mark.parametrize(
+    "method,path,query,extra,status",
+    [
+        (b"GET", "/", "token=" + TOKEN, [], 303),
+        (b"GET", "/", "token=wrong", [], 401),
+        (b"GET", "/", "token=", [], 401),
+        (b"HEAD", "/", "token=" + TOKEN, [], None),
+        (b"GET", "/index.html", "token=" + TOKEN, [], None),
+        (b"GET", "/", "token=" + TOKEN + "&lang=en", [], None),
+        (b"GET", "/", "token=" + TOKEN + "&token=" + TOKEN, [], None),
+        (b"GET", "/", "lang=en", [], None),
+        (b"GET", "/", "token", [], None),
+        (b"GET", "/", "token=" + TOKEN, [("authorization", "Bearer " + TOKEN)], None),
+        (b"GET", "/", "token=" + TOKEN, [("content-length", "1")], None),
+    ],
+)
+def test_bootstrap_redeems_only_one_exact_token_query(
+    method: bytes,
+    path: str,
+    query: str,
+    extra: list[tuple[str, str]],
+    status: int | None,
+) -> None:
+    headers = [(b"host", HOST.encode())] + [
+        (name.encode(), value.encode()) for name, value in extra
+    ]
+    assert (
+        admission.bootstrap_status(headers, method, path, query.encode(), TOKEN)
+        == status
+    )

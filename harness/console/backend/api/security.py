@@ -6,6 +6,7 @@ import asyncio
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from ...kernel.i18n import default_language
 from . import admission
 from . import CLOSE_TIMEOUT, HEADER_LIMIT, Runtime
 
@@ -44,6 +45,19 @@ async def _drain(receive: Receive) -> None:
                     return
     except TimeoutError:
         pass
+
+
+def redeem_headers(runtime: Runtime) -> list[tuple[bytes, bytes]]:
+    """The 303 that trades the launch URL token for the HttpOnly cookie and a clean URL."""
+    cookie = admission.cookie_name(runtime.port) + b"=" + runtime.token.encode()
+    return [
+        *SECURITY_HEADERS,
+        (b"Referrer-Policy", b"no-referrer"),
+        (b"Location", f"/#/?lang={default_language()}".encode()),
+        (b"Set-Cookie", cookie + b"; HttpOnly; SameSite=Strict; Path=/"),
+        (b"Content-Length", b"0"),
+        (b"Connection", b"close"),
+    ]
 
 
 def _oversized(headers: admission.Headers) -> bool:
@@ -91,7 +105,26 @@ class SecurityMiddleware:
             else admission.request_status(headers, method, self.runtime.port)
         )
         if status is None and scope["query_string"]:
-            status = 404
+            status = (
+                admission.bootstrap_status(
+                    headers,
+                    method,
+                    str(scope["path"]),
+                    scope["query_string"],
+                    self.runtime.token,
+                )
+                or 404
+            )
+        if status == 303:
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 303,
+                    "headers": redeem_headers(self.runtime),
+                }
+            )
+            await send({"type": "http.response.body", "body": b""})
+            return
         if status is not None:
             # The final status precedes the body: no 100 Continue, the body is drained after.
             await send(

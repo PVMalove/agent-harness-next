@@ -1,0 +1,78 @@
+/* Home against the real console server: launch URL, cookie, CSP and the live WebSocket. */
+import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+const base = () => process.env.CONSOLE_BASE_URL!;
+const token = () => process.env.CONSOLE_TOKEN!;
+
+const RU_BLOCKS = ["Требует внимания", "Контекст", "Последние задачи", "Здоровье", "Контур Harness 2.0.0"];
+const EN_BLOCKS = ["Requires attention", "Context", "Recent tasks", "Health", "Harness 2.0.0 outline"];
+
+async function watch(page: Page) {
+  const errors: string[] = [];
+  const requests: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => requests.push(request.url()));
+  await page.addInitScript(() => {
+    const violations: string[] = [];
+    (window as unknown as { __csp: string[] }).__csp = violations;
+    document.addEventListener("securitypolicyviolation", (event) =>
+      violations.push(`${event.violatedDirective} ${event.blockedURI}`),
+    );
+  });
+  return { errors, requests };
+}
+
+const blocks = (page: Page) => page.locator("#home h2");
+
+test("the launch URL opens Home over the cookie and switches language in place", async ({ page, context }) => {
+  const seen = await watch(page);
+  await page.goto(`${base()}/?token=${token()}`);
+  await expect(page).toHaveURL(`${base()}/#/?lang=ru`);
+  const cookies = await context.cookies(base());
+  const port = new URL(base()).port;
+  expect(cookies.map(({ name, httpOnly, sameSite, path }) => ({ name, httpOnly, sameSite, path }))).toEqual([
+    { name: `console_token_${port}`, httpOnly: true, sameSite: "Strict", path: "/" },
+  ]);
+
+  await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected", { timeout: 60000 });
+  await expect(blocks(page)).toHaveText(RU_BLOCKS);
+  await expect(page.locator("#home h1")).toHaveText("Состояние харнесса");
+  await expect(page.locator("#home h3")).toHaveText([
+    "Проект",
+    "Harness",
+    "Runtime store",
+    "Repo Map",
+    "Память",
+    "По областям",
+    "Проверки",
+  ]);
+  await expect(page.locator("#health-ok")).toHaveText(/^\d+$/);
+  await expect(page.locator("#problems-limit")).toContainText("Показано");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ru");
+
+  await page.evaluate(() => {
+    (window as unknown as { __marker: number }).__marker = 1;
+  });
+  await page.getByRole("button", { name: "Английский язык" }).click();
+  await expect(blocks(page)).toHaveText(EN_BLOCKS);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("navigation", { name: "Console sections" })).toBeVisible();
+  await page.getByRole("button", { name: "Russian language" }).click();
+  await expect(blocks(page)).toHaveText(RU_BLOCKS);
+  expect(await page.evaluate(() => (window as unknown as { __marker?: number }).__marker)).toBe(1);
+
+  expect(await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)).toEqual([]);
+  expect(seen.errors).toEqual([]);
+  expect(seen.requests.filter((url) => !url.startsWith(`${base()}/`))).toEqual([]);
+  expect(page.url()).not.toContain(token());
+});
+
+test("a wrong token answers 401 and sets no cookie", async ({ page, context }) => {
+  const response = await page.goto(`${base()}/?token=wrong`);
+  expect(response?.status()).toBe(401);
+  expect(await context.cookies(base())).toEqual([]);
+});

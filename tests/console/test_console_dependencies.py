@@ -218,8 +218,15 @@ FAILING_SAMPLES = {
 }
 
 
+def _python_files(root: Path) -> list[Path]:
+    """Python modules under `root`; npm packages in a `node_modules` are not ours."""
+    return sorted(
+        path for path in root.rglob("*.py") if "node_modules" not in path.parts
+    )
+
+
 def _console_files() -> list[Path]:
-    return sorted(CONSOLE.rglob("*.py"))
+    return _python_files(CONSOLE)
 
 
 def layout_violations(console: Path) -> list[str]:
@@ -237,7 +244,7 @@ def layout_violations(console: Path) -> list[str]:
         )
     problems.extend(
         f"Python in frontend: {path.relative_to(console)}"
-        for path in (console / "frontend").rglob("*.py")
+        for path in _python_files(console / "frontend")
     )
     launcher = console / "launcher.py"
     if launcher.is_file():
@@ -289,13 +296,13 @@ def test_the_scanner_resolves_relative_imports() -> None:
 
 
 def test_harness_modules_outside_api_never_import_the_web_framework() -> None:
-    paths = [path for path in HARNESS.rglob("*.py") if API not in path.parents]
+    paths = [path for path in _python_files(HARNESS) if API not in path.parents]
     assert len(paths) > 20
     assert _scan(paths, FRAMEWORK) == []
 
 
 def test_no_harness_module_imports_h11_or_jinja2() -> None:
-    paths = list(HARNESS.rglob("*.py"))
+    paths = _python_files(HARNESS)
     assert _scan(paths, RETIRED) == []
 
 
@@ -346,6 +353,11 @@ def test_the_layout_check_refuses_a_left_over_module(tmp_path: Path) -> None:
         (console / name).write_text("", encoding="utf-8")
     (console / "screens" / "home.py").write_text("", encoding="utf-8")
     (console / "frontend" / "build.py").write_text("", encoding="utf-8")
+    # An npm package may ship Python; node_modules is never part of the console.
+    (console / "frontend" / "node_modules" / "pkg").mkdir(parents=True)
+    (console / "frontend" / "node_modules" / "pkg" / "gyp.py").write_text(
+        "", encoding="utf-8"
+    )
     (console / "launcher.py").write_text(
         "from .backend.server import run\n", encoding="utf-8"
     )
