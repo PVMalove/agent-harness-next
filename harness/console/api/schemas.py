@@ -1,0 +1,265 @@
+"""Pydantic models of the console WebSocket protocol and the exported schema documents.
+
+The models describe the protocol the services already speak; the /ws route never parses frames
+with them, so every reply stays byte-identical. Regenerate the committed documents with
+`python -m harness.console.api.schemas`.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
+
+from ..request_router import RequestRouter
+
+REGENERATE = "python -m harness.console.api.schemas"
+HERE = Path(__file__).resolve().parent
+OPENAPI_PATH = HERE / "openapi.json"
+WS_SCHEMA_PATH = HERE / "ws-schema.json"
+
+RequestId = Annotated[str, Field(max_length=64)] | int | None
+
+
+# Pydantic's synthesized model signatures carry Any; as in harness/json_types.py the explicit-any
+# rule is waived only on these model classes.
+class _Strict(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+
+# Requests: one model per type, with the field sets the services accept.
+
+
+class HomeSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["home.snapshot"]
+    force: bool = False
+    online: bool = False
+
+
+class HomeProblemsRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["home.problems"]
+    snapshot_id: int
+    offset: Annotated[int, Field(ge=0)]
+
+
+class JobStartRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["job.start"]
+    command_id: str
+    values: dict[str, JsonValue] = {}
+    confirmed: bool = False
+    confirmation: str | None = None
+    plan_digest: Annotated[str, Field(pattern="^[0-9a-f]{64}$")] | None = None
+    client: str = "unknown"
+
+
+class JobGetRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["job.get"]
+    job_id: str
+    cursor: Annotated[int, Field(ge=0)] = 0
+
+
+class JobSubscribeRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["job.subscribe"]
+    job_id: str
+    cursor: Annotated[int, Field(ge=0)] = 0
+
+
+class JobCancelRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["job.cancel"]
+    job_id: str
+    confirmed: bool = False
+
+
+class JobListRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["job.list"]
+
+
+class DecisionsSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["decisions.snapshot"]
+
+
+class OrchestrationSubscribeRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["orchestration.subscribe"]
+    cursor: str | None = None
+
+
+ConsoleRequest = Annotated[
+    HomeSnapshotRequest
+    | HomeProblemsRequest
+    | JobStartRequest
+    | JobGetRequest
+    | JobSubscribeRequest
+    | JobCancelRequest
+    | JobListRequest
+    | DecisionsSnapshotRequest
+    | OrchestrationSubscribeRequest,
+    Field(discriminator="type"),
+]
+
+
+# Replies: the envelope v, id, type, ok, then either the payload fields or an error.
+
+
+class _Envelope(_Strict):  # type: ignore[explicit-any]
+    v: Literal[1]
+    id: RequestId
+
+
+class ErrorBody(_Strict):  # type: ignore[explicit-any]
+    code: str
+    message: str
+    job_id: str | None = None
+
+
+class ErrorReply(_Envelope):  # type: ignore[explicit-any]
+    type: str | None
+    ok: Literal[False]
+    error: ErrorBody
+
+
+class HomeSnapshotReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["home.snapshot"]
+    ok: Literal[True]
+    cached: bool
+    age_seconds: float
+    snapshot: dict[str, JsonValue]
+    problems_snapshot_id: int | None = None
+
+
+class HomeProblemsReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["home.problems"]
+    ok: Literal[True]
+    text: str
+    next: int
+    done: bool
+
+
+class JobSummary(_Strict):  # type: ignore[explicit-any]
+    id: str
+    command_id: str
+    phase: Literal["running", "completed", "failed", "cancelled"]
+    cursor: int
+    done: bool
+    truncated: bool
+    returncode: int | None
+    error: str | None
+
+
+class JobListReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["job.list"]
+    ok: Literal[True]
+    jobs: list[JobSummary]
+
+
+class JobReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["job.start", "job.get", "job.subscribe", "job.cancel"]
+    ok: Literal[True]
+    job: dict[str, JsonValue]
+
+
+class DecisionsSnapshotReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["decisions.snapshot"]
+    ok: Literal[True]
+    snapshot: dict[str, JsonValue]
+
+
+class OrchestrationSourceReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["orchestration.subscribe"]
+    ok: Literal[True]
+    kind: Literal["source"]
+    cursor: str | None
+    source: dict[str, JsonValue] | None
+
+
+class OrchestrationEventsReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["orchestration.subscribe"]
+    ok: Literal[True]
+    kind: Literal["events"]
+    cursor: str
+    events: list[JsonValue]
+
+
+ConsoleReply = (
+    ErrorReply
+    | HomeSnapshotReply
+    | HomeProblemsReply
+    | JobListReply
+    | JobReply
+    | DecisionsSnapshotReply
+    | OrchestrationSourceReply
+    | OrchestrationEventsReply
+)
+
+REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)
+REPLIES: TypeAdapter[ConsoleReply] = TypeAdapter(ConsoleReply)
+
+
+def _text(document: object) -> str:
+    return json.dumps(document, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+
+
+def websocket_schema() -> dict[str, JsonValue]:
+    requests = REQUESTS.json_schema(ref_template="#/$defs/{model}")
+    replies = REPLIES.json_schema(ref_template="#/$defs/{model}")
+    definitions: dict[str, JsonValue] = {}
+    for schema in (requests, replies):
+        found = schema.pop("$defs", {})
+        assert isinstance(found, dict)
+        definitions.update(found)
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Console WebSocket protocol",
+        "description": "Text frames on /ws: one request object per frame, replies by id.",
+        "$defs": {
+            **definitions,
+            "ConsoleRequest": requests,
+            "ConsoleReply": replies,
+        },
+    }
+
+
+class _StubRuntime:
+    """Enough of a server for app.openapi(); nothing is served."""
+
+    port = 1
+    token = ""
+    closing = False
+    static_root = HERE / "no-build"
+
+    @property
+    def router(self) -> RequestRouter:
+        raise RuntimeError("the schema stub serves no requests")
+
+    def client_opened(self) -> None:
+        raise RuntimeError("the schema stub serves no requests")
+
+    def client_closed(self) -> None:
+        raise RuntimeError("the schema stub serves no requests")
+
+
+def render_schemas() -> tuple[str, str]:
+    """The OpenAPI document and the WebSocket JSON Schema as deterministic text."""
+    from .app import create_app
+
+    return _text(create_app(_StubRuntime()).openapi()), _text(websocket_schema())
+
+
+def main() -> None:
+    openapi, websocket = render_schemas()
+    OPENAPI_PATH.write_text(openapi, encoding="utf-8")
+    WS_SCHEMA_PATH.write_text(websocket, encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()

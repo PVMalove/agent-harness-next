@@ -15,7 +15,14 @@ PAGE = "Console server\n"
 
 
 def create_app(runtime: Runtime) -> FastAPI:
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, debug=False)
+    app = FastAPI(
+        title="Harness console server",
+        version="1",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        debug=False,
+    )
 
     @app.exception_handler(HTTPException)
     async def rejected(request: Request, exc: HTTPException) -> PlainTextResponse:
@@ -25,8 +32,14 @@ def create_app(runtime: Runtime) -> FastAPI:
         return PlainTextResponse(PAGE)
 
     app.add_api_route(
-        "/health/live", page, methods=["GET", "HEAD"], include_in_schema=False
+        "/health/live",
+        page,
+        methods=["GET"],
+        response_class=PlainTextResponse,
+        summary="Liveness of the console server",
+        operation_id="health_live",
     )
+    app.add_api_route("/health/live", page, methods=["HEAD"], include_in_schema=False)
     register_websocket(app, runtime)
     # Registered last: /health/live and /ws keep priority over the build mounted at "/".
     if not mount_static(app, runtime):
