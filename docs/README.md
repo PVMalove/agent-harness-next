@@ -12,8 +12,7 @@
 | [Архитектура](./ARCHITECTURE.md) | Слои, discovery, backend-оркестрация и границы процессов. |
 | [ADR](./adr/) | Девять действующих архитектурных контрактов по доменам. |
 | [Диаграммы](./diagrams/README.md) | Archify JSON, интерактивные HTML и PNG. |
-| [HTML-макеты консоли](./design/console-mockups/README.md) | Принятые интерактивные макеты Harness console (дизайн-источник эпика #720). |
-| [Аудит макетов для веб-консоли](./design/console-web-ux-audit-879.md) | Существующие решения, избыточность и пробелы с приоритетами для #880/#881; исходные макеты сохранены; [сравнение до/после](./design/console-web-unslop/README.md). |
+| [Веб-макеты консоли](./design/web-console-mockups/README.md) | Интерактивный макет Harness Console 2.0.0: 12 экранов, навигация, состояния и демонстрационные данные. |
 | [Справочник харнесса](./harness-guide.md) | Установка, команды CLI, `health`, `console`, skills и hooks. |
 | [Настройка в консоли](./console-configuration.md) | Выбор целевого проекта, мастер JSON, версии, откат и необязательные CLI-подсказки. |
 | [Backend-оркестрация](./backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
