@@ -7,10 +7,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from harness.console.kernel import data as console_data
 from harness.console.backend.infrastructure import home_facts
+from harness.console.kernel import data as console_data
 from harness.console.kernel.data import DashboardData
-from harness.console.kernel.home_snapshot import HomeContext, HomeSnapshot, build_home_snapshot
+from harness.console.kernel.home_snapshot import (
+    HomeContext,
+    HomeSnapshot,
+    build_home_snapshot,
+)
 
 
 class CollectDashboard(Protocol):

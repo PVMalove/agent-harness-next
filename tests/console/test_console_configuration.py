@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from harness.console.kernel.configuration import ConfigurationDraft
-from harness.console.kernel.configuration import ConfigurationDraft
 
 
 def test_editing_and_validating_a_draft_preserves_the_active_file(
@@ -135,8 +134,6 @@ def test_bundle_diff_is_unchanged_without_secrets_and_masks_a_stored_secret() ->
 def test_bundle_diff_says_when_only_hidden_values_changed_and_hides_unparsed_files() -> (
     None
 ):
-    from harness.console.kernel.configuration import bundle_diff
-def test_bundle_diff_says_when_only_hidden_values_changed_and_hides_unparsed_files() -> None:
     from harness.console.kernel.configuration import bundle_diff
 
     old = _bundle(**{"project.json": {"token": "ONE"}})

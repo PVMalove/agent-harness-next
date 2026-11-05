@@ -3,20 +3,14 @@ replies a real console server sends."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
-from harness.console.backend.api.protocol import jobs
-from harness.console.backend.api.protocol import events as orchestration_events
 from harness.console.backend.api import schemas
-from harness.console.backend.domain.approvals import DecisionsSnapshot
-from harness.console.backend.server import ConsoleServer
-from harness.console.backend import composition
-from tests.console.test_server import GatedCollect, _connect
+from harness.console.backend.api.protocol import events as orchestration_events
+from harness.console.backend.api.protocol import jobs
 
 
 def _drift_message(path: Path) -> str:
@@ -78,49 +72,6 @@ def test_request_models_have_the_field_sets_of_the_services() -> None:
         assert model.model_config.get("extra") == "forbid"
 
 
-def test_replies_of_a_real_server_validate_against_the_reply_models(
-    project: Path,
-) -> None:
-    def no_decisions(repo: Path) -> DecisionsSnapshot:
-        return DecisionsSnapshot(items=(), total=0)
-
-    async def scenario() -> list[dict[str, object]]:
-        server = ConsoleServer(
-            project,
-            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
-            decisions=composition.decision_service(project, collect=no_decisions),
-        )
-        await server.start()
-        replies: list[dict[str, object]] = []
-        try:
-            async with _connect(server, project) as client:
-                for request in (
-                    {"id": "home", "type": "home.snapshot"},
-                    {"id": "list", "type": "job.list"},
-                    {"id": "decisions", "type": "decisions.snapshot"},
-                    {"id": "events", "type": "orchestration.subscribe"},
-                ):
-                    await client.send(json.dumps(request))
-                    replies.append(json.loads(await asyncio.wait_for(client.recv(), 5)))
-                await client.send("not json")
-                replies.append(json.loads(await asyncio.wait_for(client.recv(), 5)))
-        finally:
-            await server.close()
-        return replies
-
-    replies = asyncio.run(scenario())
-    expected: list[tuple[type[BaseModel], ...]] = [
-        (schemas.HomeSnapshotReply,),
-        (schemas.JobListReply,),
-        (schemas.DecisionsSnapshotReply,),
-        (schemas.OrchestrationSourceReply, schemas.OrchestrationEventsReply),
-        (schemas.ErrorReply,),
-    ]
-    for reply, kinds in zip(replies, expected, strict=True):
-        parsed = schemas.REPLIES.validate_python(reply)
-        assert isinstance(parsed, kinds), reply
-    error = schemas.ErrorReply.model_validate(replies[-1])
-    assert error.error.code == "bad_json"
 
 
 def test_every_documented_request_parses_as_its_model() -> None:

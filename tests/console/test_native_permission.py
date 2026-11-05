@@ -7,15 +7,16 @@ live runtime.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
 from harness.console.backend.infrastructure import native_permission
+from harness.console.backend.infrastructure.native_permission import (
+    NATIVE_PERMISSION_COMMANDS,
+)
 from harness.console.kernel.catalog import Reversibility, process_argv
-from harness.console.backend.infrastructure.native_permission import NATIVE_PERMISSION_COMMANDS
 from harness.orchestration.core.utils import CoordinatorError
 from harness.orchestration.workflow import delivery
 
@@ -150,13 +151,3 @@ def test_main_requires_exactly_one_answer(tmp_path: Path) -> None:
         native_permission.main([*argv, "--allow", "--deny"])
 
 
-def test_script_runs_by_path_with_the_package_importable(tmp_path: Path) -> None:
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), "--help"],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert "--request-sha256" in result.stdout

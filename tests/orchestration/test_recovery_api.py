@@ -12,19 +12,19 @@ from unittest import mock
 
 import pytest
 
-from harness.json_types import JsonObject as Document
 from harness.errors import HarnessError
+from harness.json_types import JsonObject as Document
 from harness.orchestration import recovery_api
 from harness.orchestration.core.system_fields import load_registry
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger.ledger_ops import LedgerBusyError
+from harness.orchestration.ledger.lifecycle import _canonical
 from harness.orchestration.operational_hold import OperationalHoldError
 from harness.orchestration.recovery_api import (
     RecoveryDiagnostic,
     RecoveryInternalError,
     RecoverySession,
 )
-from harness.orchestration.ledger.lifecycle import _canonical
 from harness.orchestration.runtime_client import RuntimeClientError
 from tests.orchestration.runtime_store_support import ORCHESTRATION_ROOT, Recovery
 

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.health import project_files
 from harness.configuration_schema import value_problems
+from harness.health import project_files
 
 _SCHEMA = (
     Path(project_files.__file__).resolve().parents[1]

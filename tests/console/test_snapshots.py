@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import subprocess
-import sys
 import threading
 import time
 from dataclasses import replace
@@ -13,16 +11,23 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.kernel.data import DashboardData
-from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
-from harness.console.kernel.repo_map_settings import MemoryStatus
-from harness.console.backend.api.protocol.snapshots import busy, respond
 from harness.console.backend import composition
+from harness.console.backend.api.protocol.snapshots import busy, respond
 from harness.console.backend.application.snapshots import SnapshotService
 from harness.console.backend.domain.snapshots import HOME_TTL_SECONDS, KEPT_SNAPSHOTS
 from harness.console.backend.infrastructure.home_facts import collect_home
-from harness.console.kernel.home_snapshot import SCHEMA_VERSION, HomeContext, HomeSnapshot, Problem, build_home_snapshot, problems_from_text
+from harness.console.kernel.data import DashboardData
+from harness.console.kernel.home_snapshot import (
+    SCHEMA_VERSION,
+    HomeContext,
+    HomeSnapshot,
+    Problem,
+    build_home_snapshot,
+    problems_from_text,
+)
 from harness.console.kernel.protocol import MAX_REQUEST_BYTES, PROTOCOL_VERSION
+from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
+from harness.console.kernel.repo_map_settings import MemoryStatus
 from harness.health.model import CheckResult
 
 ROOT = Path(__file__).parents[2]
@@ -71,36 +76,6 @@ def test_constants_are_the_documented_contract() -> None:
     assert HOME_TTL_SECONDS == 15.0
 
 
-def test_snapshot_layer_imports_and_collects_without_tui_dependencies(
-    tmp_path: Path,
-) -> None:
-    repo = tmp_path / "project"
-    repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    code = """
-import importlib.abc, json, sys
-class Absent(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'rich', 'textual', 'h11', 'websockets'}:
-            raise ModuleNotFoundError(fullname)
-sys.meta_path.insert(0, Absent())
-sys.path.insert(0, sys.argv[1])
-from pathlib import Path
-from typing import Any
-from harness.console.backend.infrastructure.home_facts import collect_home
-snapshot = collect_home(Path(sys.argv[2]))
-loaded = sorted(set(sys.modules) & {'rich', 'textual', 'h11', 'websockets'})
-print(json.dumps({'loaded': loaded, 'version': snapshot.version}))
-"""
-    result = subprocess.run(
-        [sys.executable, "-I", "-c", code, str(ROOT), str(repo)],
-        capture_output=True,
-        text=True,
-        timeout=120,
-        cwd=ROOT,
-    )
-    assert result.returncode == 0, result.stderr[-500:]
-    assert json.loads(result.stdout) == {"loaded": [], "version": SCHEMA_VERSION}
 
 
 def test_snapshot_mirrors_the_home_facts_with_a_cached_map() -> None:

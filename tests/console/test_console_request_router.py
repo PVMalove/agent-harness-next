@@ -10,14 +10,14 @@ from typing import cast
 import pytest
 
 from harness.console.backend.api import request_router
-from harness.console.backend.application.decisions import DecisionService
-from harness.console.backend.application.jobs import JobService
-from harness.console.backend.application.events import OrchestrationEvents
 from harness.console.backend.api.request_router import (
     MAX_SUBSCRIPTIONS,
     MAX_UNFINISHED_REQUESTS,
     RequestRouter,
 )
+from harness.console.backend.application.decisions import DecisionService
+from harness.console.backend.application.events import OrchestrationEvents
+from harness.console.backend.application.jobs import JobService
 from harness.console.backend.application.snapshots import SnapshotService
 
 

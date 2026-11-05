@@ -6,9 +6,6 @@ from rich.text import Text
 
 from harness.console.kernel import brand
 from harness.console.tui.logtext import colorize_diff, colorize_log, colorize_overview
-from harness.console.kernel import brand
-from harness.console.tui.logtext import colorize_diff, colorize_log, colorize_overview
-from harness.console.tui.widgets import CHECKED, UNCHECKED, CheckBox, CheckList
 
 
 def _styles(text: Text) -> dict[str, str]:

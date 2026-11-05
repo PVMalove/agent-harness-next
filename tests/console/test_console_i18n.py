@@ -7,13 +7,8 @@ import re
 import pytest
 
 from harness.console.kernel import i18n
-from harness.console.tui.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN, help_markdown
-from harness.console.i18n_strings import EN, EN_PHRASES
-from harness.console.kernel import i18n
-from harness.console.tui.app import HarnessConsoleApp
-from harness.console.tui.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN, help_markdown
 from harness.console.kernel.i18n_strings import EN, EN_PHRASES
-from tests.console._pilot_wait import wait_until
+from harness.console.tui.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN, help_markdown
 
 
 def test_tr_translates_known_strings_and_leaves_the_rest() -> None:
@@ -69,8 +64,8 @@ def test_the_default_language_comes_from_the_environment(
 # ----------------------------------------------------------------------------- container route (#711)
 
 import ast  # noqa: E402
-from collections.abc import Callable  # noqa: E402
 import inspect  # noqa: E402
+from collections.abc import Callable  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from harness.console.kernel import container_route as route_model  # noqa: E402

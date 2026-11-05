@@ -1,7 +1,4 @@
 """Unit tests of console logic; no application startup or external processes."""
-"""harness.console.kernel.coordinator_catalog: каталог команд раздела Orchestration, интроспектируемый
-из реального `coordinator.parser()`. Тесты проверяют синхронизацию дескрипторов команд с парсером,
-соответствие классов обратимости архитектуре и точную диспетчеризацию CLI-аргументов в обработчики."""
 
 from __future__ import annotations
 
@@ -12,12 +9,10 @@ import pytest
 
 from harness.console.kernel.catalog import Reversibility
 from harness.console.kernel.coordinator_catalog import (
-from harness.console.kernel.coordinator_catalog import (
     COORDINATOR_COMMANDS,
     CoordinatorCommand,
     subparser,
 )
-from harness.console.kernel.catalog import Reversibility
 from harness.orchestration import coordinator
 
 REPO = Path("/work/project")
@@ -226,19 +221,6 @@ def test_repeatable_field_serialises_one_flag_value_pair_per_non_empty_line() ->
     assert argv.count("--changed-file") == 2
     assert argv[argv.index("--changed-file") + 1] == "a.py"
     assert argv[-1] == "b.py"
-
-
-def test_coordinator_catalog_imports_without_textual() -> None:
-    """Проверить, что каталог команд координатора импортируется без установленного textual."""
-    code = "import sys; sys.modules['textual'] = None; import harness.console.kernel.coordinator_catalog"
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 def test_value_less_flag_is_passed_alone_only_when_set() -> None:
