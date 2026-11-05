@@ -24,7 +24,7 @@
       </div>
     </header>
     <div class="layout">
-      <div id="connection-banner" class="connection-banner" role="status" aria-live="polite"><div><b id="connection-message">{{ tr('Ожидание снимка') }}</b><small id="snapshot-status">{{ unavailable }}</small></div><button id="connection-retry" type="button">{{ tr('Повторить') }}</button></div>
+      <div id="connection-banner" class="connection-banner" role="status" aria-live="polite"><div><b id="connection-message">{{ tr('Ожидание снимка') }}</b><small id="snapshot-stale" hidden>{{ tr('Последний снимок устарел') }}</small><small id="snapshot-status">{{ unavailable }}</small></div><button id="connection-retry" type="button">{{ tr('Повторить') }}</button></div>
       <nav id="navigation" aria-label="{{ tr('Разделы консоли') }}">
       {% for group, items in navigation %}
         <div class="nav-group"><div class="nav-group-label">{{ tr(group) }}</div>

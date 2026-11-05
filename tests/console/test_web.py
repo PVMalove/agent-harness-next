@@ -240,3 +240,32 @@ def test_invalid_bootstrap_requests_do_not_consume_browser_issuance(project: Pat
             await server.close()
 
     asyncio.run(scenario())
+
+
+def test_browser_reconnect_restores_snapshot_with_stale_warning(project: Path) -> None:
+    from websockets.asyncio.client import connect
+    from websockets.typing import Origin
+
+    async def scenario() -> None:
+        server = ConsoleServer(project)
+        await server.start()
+        try:
+            issued = await http(server, '/?token=' + token_for(project))
+            cookie = issued[1]['Set-Cookie'].split(';', 1)[0]
+            page = (await http(server, headers={'Cookie': cookie}))[2].decode()
+            assert 'id="snapshot-stale"' in page
+            assert 'Последний снимок устарел' in page
+            for request_id in ('before-disconnect', 'after-reconnect'):
+                async with connect(
+                    f'ws://127.0.0.1:{server.port}/ws', proxy=None,
+                    origin=Origin(f'http://127.0.0.1:{server.port}'),
+                    additional_headers={'Cookie': cookie}, open_timeout=2, close_timeout=1,
+                ) as client:
+                    await client.send(json.dumps({'id': request_id, 'type': 'home.snapshot'}))
+                    reply = json.loads(await asyncio.wait_for(client.recv(), 3))
+                    assert reply['id'] == request_id and reply['ok'] is True
+                    assert reply['snapshot']['version'] == 1
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())

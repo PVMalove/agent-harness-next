@@ -95,13 +95,19 @@
   let online = false;
   let refreshTimer = null;
   let requestTimer = null;
+  let reconnectTimer = null;
+  let generation = 0;
+  let attempts = 0;
+  let received = false;
+  let stopped = false;
   function state(value) {
     document.body.dataset.connection = value;
     $('connection-state').className = `conn-chip ${value === 'unavailable' ? 'offline' : value}`;
     $('connection-state').querySelector('span').textContent = {connected: 'Подключено', reconnecting: 'Переподключение', unavailable: 'Недоступно'}[value];
     $('connection-banner').hidden = value === 'connected';
     text('connection-message', value === 'unavailable' ? 'Сервер недоступен' : 'Ожидание снимка');
-    $('home-refresh').disabled = pending !== null;
+    $('snapshot-stale').hidden = !received || value === 'connected';
+    $('home-refresh').disabled = pending !== null || value !== 'connected';
   }
   function request(force = false) {
     if (!socket || socket.readyState !== WebSocket.OPEN || pending !== null) return;
@@ -112,13 +118,20 @@
     requestTimer = setTimeout(() => socket.close(), 30000);
   }
   function connect() {
+    if (stopped) return;
+    clearTimeout(reconnectTimer);
     clearTimeout(refreshTimer);
     clearTimeout(requestTimer);
     pending = null;
-    state('reconnecting');
-    socket = new WebSocket(`ws://${location.host}/ws`);
-    socket.onopen = () => request();
-    socket.onmessage = event => {
+    const current = ++generation;
+    const previous = socket;
+    state(received && attempts < 5 ? 'reconnecting' : 'unavailable');
+    const connection = new WebSocket(`ws://${location.host}/ws`);
+    socket = connection;
+    if (previous) previous.close();
+    connection.onopen = () => { if (current === generation) { clearTimeout(requestTimer); request(); } };
+    connection.onmessage = event => {
+      if (current !== generation || stopped) return;
       let reply;
       try { reply = JSON.parse(event.data); } catch { socket.close(); return; }
       if (!object(reply) || reply.id !== pending) return;
@@ -129,14 +142,26 @@
       clearTimeout(requestTimer);
       pending = null;
       render(reply.snapshot, reply);
+      received = true;
+      attempts = 0;
       state('connected');
       if (!online) refreshTimer = setTimeout(() => request(), 15000);
     };
-    socket.onclose = () => { clearTimeout(requestTimer); clearTimeout(refreshTimer); pending = null; state('unavailable'); };
-    socket.onerror = () => socket.close();
+    connection.onclose = () => {
+      if (current !== generation || stopped) return;
+      clearTimeout(requestTimer);
+      clearTimeout(refreshTimer);
+      pending = null;
+      attempts += 1;
+      state(received && attempts < 5 ? 'reconnecting' : 'unavailable');
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, Math.min(8000, 500 * 2 ** Math.min(attempts - 1, 4)));
+    };
+    connection.onerror = () => connection.close();
+    requestTimer = setTimeout(() => connection.close(), 30000);
   }
   $('home-refresh').addEventListener('click', () => request(true));
-  $('connection-retry').addEventListener('click', () => { if (socket) socket.close(); connect(); });
+  $('connection-retry').addEventListener('click', () => { attempts = 0; connect(); });
   document.querySelectorAll('[data-health-mode]').forEach(button => button.addEventListener('click', () => {
     if (pending !== null) return;
     online = button.dataset.healthMode === 'online';
@@ -185,7 +210,7 @@
     const routes = {'g': 'home', 'd': 'diagnostics', 'o': 'orchestration', '?': 'help'};
     if (routes[event.key]) location.hash = routes[event.key];
   });
-  window.addEventListener('pagehide', () => { clearTimeout(requestTimer); clearTimeout(refreshTimer); if (socket) socket.close(); });
+  window.addEventListener('pagehide', () => { stopped = true; generation += 1; clearTimeout(reconnectTimer); clearTimeout(requestTimer); clearTimeout(refreshTimer); if (socket) socket.close(); });
   navigate();
   connect();
 })();
