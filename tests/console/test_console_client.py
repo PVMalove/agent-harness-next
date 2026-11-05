@@ -427,7 +427,12 @@ def _job(phase: str, cursor: int, output: list[dict[str, str]], **rest: object) 
     }
 
 
-def test_a_job_is_started_and_followed_until_done() -> None:
+def test_a_job_is_started_and_followed_until_done(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from harness.console.tui import client as console_client
+
+    monkeypatch.setattr(console_client, "JOB_POLL_SECONDS", 0.01)
     requests: list[dict[str, object]] = []
 
     def answer(request: dict[str, object]) -> str | list[str]:
@@ -436,15 +441,12 @@ def test_a_job_is_started_and_followed_until_done() -> None:
             return _ok(
                 request, job=_job("running", 1, [{"channel": "stdout", "text": '{"a"'}])
             )
-        return [
-            _ok(request, job=_job("running", 2, [{"channel": "stderr", "text": "w"}])),
-            _ok(
-                request,
-                job=_job(
-                    "completed", 3, [{"channel": "stdout", "text": ": 1}"}], returncode=0
-                ),
-            ),
-        ]
+        if request["cursor"] == 1:
+            return _ok(request, job=_job("running", 2, [{"channel": "stderr", "text": "w"}]))
+        return _ok(
+            request,
+            job=_job("completed", 3, [{"channel": "stdout", "text": ": 1}"}], returncode=0),
+        )
 
     with _fake_server(answer) as endpoint:
         client = ConsoleClient.connect(endpoint)
@@ -462,7 +464,49 @@ def test_a_job_is_started_and_followed_until_done() -> None:
         "confirmed": False,
         "client": "tui",
     }
-    assert requests[1] == {"id": 2, "type": "job.subscribe", "job_id": "job-1", "cursor": 1}
+    assert requests[1:] == [
+        {"id": 2, "type": "job.get", "job_id": "job-1", "cursor": 1},
+        {"id": 3, "type": "job.get", "job_id": "job-1", "cursor": 2},
+    ]
+
+
+def test_a_quiet_running_job_neither_blocks_other_requests_nor_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from harness.console.tui import client as console_client
+
+    monkeypatch.setattr(console_client, "REPLY_TIMEOUT", 0.3)
+    monkeypatch.setattr(console_client, "JOB_POLL_SECONDS", 0.01)
+    following, finish = threading.Event(), threading.Event()
+
+    def answer(request: dict[str, object]) -> str | list[str]:
+        if request["type"] in {"job.get", "job.subscribe"}:
+            following.set()
+        if request["type"] == "orchestration.lock":
+            return _ok(request, lock={"locked": False}, error=None)
+        if request["type"] == "job.subscribe":
+            return []  # a quiet job: nothing to stream yet
+        if request["type"] == "job.get" and finish.is_set():
+            return _ok(request, job=_job("completed", 1, [], returncode=0))
+        return _ok(request, job=_job("running", 1, []))
+
+    results: list[object] = []
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            job = threading.Thread(
+                target=lambda: results.append(client.run_job("recovery-reload", {}))
+            )
+            job.start()
+            assert following.wait(5)
+            assert client.ledger_lock() == {"locked": False}
+            threading.Event().wait(0.6)
+            assert job.is_alive()
+            finish.set()
+            job.join(5)
+        finally:
+            client.close()
+    assert [getattr(result, "phase", result) for result in results] == ["completed"]
 
 
 def test_a_refused_job_start_surfaces_its_code() -> None:

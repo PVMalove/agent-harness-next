@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol, cast
@@ -50,6 +51,8 @@ OPEN_TIMEOUT = 5.0
 # The online checks wait for the network; a reply may take minutes.
 REPLY_TIMEOUT = 300.0
 CLOSE_TIMEOUT = 1.0
+# A running job is polled with `job.get`, never waited on under the connection lock.
+JOB_POLL_SECONDS = 0.5
 
 
 class ConsoleClientError(Exception):
@@ -338,7 +341,9 @@ class ConsoleClient:
         self, command_id: str, values: Mapping[str, str], *, confirmed: bool = False
     ) -> JobResult:
         """Start the catalog command `command_id` as a server job and follow it to its end. A
-        refused start (for example `confirmation_required`) is a `ServerError` with its code."""
+        refused start (for example `confirmation_required`) is a `ServerError` with its code.
+        The running job is polled with `job.get` every `JOB_POLL_SECONDS`, one short request at
+        a time, so other requests go in between and a quiet job never hits `REPLY_TIMEOUT`."""
         with self._lock:
             job = self._job(
                 self._request(
@@ -351,23 +356,22 @@ class ConsoleClient:
                     }
                 )
             )
-            outputs = [job]
-            if not job.get("done"):
-                outputs += self._subscribe(job)
+        outputs = [job]
+        while not outputs[-1]["done"]:
+            time.sleep(JOB_POLL_SECONDS)
+            with self._lock:
+                outputs.append(
+                    self._job(
+                        self._request(
+                            {
+                                "type": "job.get",
+                                "job_id": job["id"],
+                                "cursor": outputs[-1]["cursor"],
+                            }
+                        )
+                    )
+                )
         return self._job_result(outputs)
-
-    def _subscribe(self, job: dict[str, object]) -> list[dict[str, object]]:
-        """Every further batch of a running job, from its cursor until it is done."""
-        request_id = self._send(
-            {"type": "job.subscribe", "job_id": job.get("id"), "cursor": job.get("cursor")}
-        )
-        batches: list[dict[str, object]] = []
-        while True:
-            reply = self._checked(self._receive(), request_id, "job.subscribe")
-            batch = self._job(reply)
-            batches.append(batch)
-            if batch["done"]:
-                return batches
 
     @staticmethod
     def _job(reply: dict[str, object]) -> dict[str, object]:
