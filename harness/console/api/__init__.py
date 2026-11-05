@@ -3,6 +3,7 @@ Starlette, Uvicorn or Pydantic. ConsoleServer imports it lazily at startup."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -23,6 +24,9 @@ class Runtime(Protocol):
 
     @property
     def router(self) -> RequestRouter: ...
+
+    @property
+    def static_root(self) -> Path: ...
 
     def client_opened(self) -> None: ...
 

@@ -69,7 +69,7 @@ def websocket_status(
 
 
 class SecurityMiddleware:
-    """Rejects before routing; adds the security headers to every HTTP response."""
+    """Rejects before routing; adds the security headers a response does not set itself."""
 
     def __init__(self, app: ASGIApp, runtime: Runtime) -> None:
         self.app = app
@@ -108,25 +108,17 @@ class SecurityMiddleware:
 
         async def secured(message: Message) -> None:
             if message["type"] == "http.response.start":
-                extra = self.response_headers(scope)
-                names = {name.lower() for name, _ in extra}
-                message = {
-                    **message,
-                    "headers": [
-                        *extra,
-                        *(
-                            (name, value)
-                            for name, value in message.get("headers", [])
-                            if name.lower() not in names
-                        ),
-                    ],
-                }
+                own = message.get("headers", [])
+                names = {name.lower() for name, _ in own}
+                extra = [
+                    (name, value)
+                    for name, value in [*SECURITY_HEADERS, (b"Connection", b"close")]
+                    if name.lower() not in names
+                ]
+                message = {**message, "headers": [*extra, *own]}
             await send(message)
 
         await self.app(scope, receive, secured)
-
-    def response_headers(self, scope: Scope) -> list[tuple[bytes, bytes]]:
-        return [*SECURITY_HEADERS, (b"Connection", b"close")]
 
     async def _websocket(self, scope: Scope, receive: Receive, send: Send) -> None:
         status = websocket_status(

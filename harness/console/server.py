@@ -26,6 +26,7 @@ HEADER_LIMIT = 16384
 CLOSE_TIMEOUT = 0.5
 MESSAGE_LIMIT = 65536
 _STARTUP_POLL = 0.01
+DEFAULT_STATIC_ROOT = Path(__file__).resolve().parent / "web" / "dist"
 
 
 class ConsoleServer:
@@ -40,8 +41,10 @@ class ConsoleServer:
         jobs: JobService | None = None,
         decisions: DecisionService | None = None,
         events: OrchestrationEvents | None = None,
+        static_root: Path = DEFAULT_STATIC_ROOT,
     ) -> None:
         self.repo = repo.resolve()
+        self._static_root = static_root
         self._snapshots = snapshots or SnapshotService(self.repo)
         self._jobs = jobs or JobService(self.repo)
         self._decisions = decisions or DecisionService(self.repo)
@@ -81,6 +84,11 @@ class ConsoleServer:
     @property
     def router(self) -> RequestRouter:
         return self._router
+
+    @property
+    def static_root(self) -> Path:
+        """The React build directory; served at "/" when it holds index.html."""
+        return self._static_root
 
     def client_opened(self) -> None:
         self._clients += 1
