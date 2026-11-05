@@ -88,9 +88,12 @@ class Clock:
         return self.now
 
 
-def service(facts: Facts, clock: Clock | None = None) -> ScreenService:
+def service(
+    facts: Facts, clock: Clock | None = None, *, ttl: float = 15.0
+) -> ScreenService:
     return ScreenService(
         Path("/work/project"),
+        ttl=ttl,
         clock=clock or Clock(),
         ledger=facts.ledger,
         ledger_online=facts.ledger_online,

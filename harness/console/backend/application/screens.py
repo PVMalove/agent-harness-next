@@ -43,26 +43,40 @@ class _Ledger:
 
 
 class _Source(Generic[T]):
-    """One cached value: fresh for the TTL, rebuilt one collect at a time off the loop. A failed
-    collect raises and leaves the cache as it was; a cancelled waiter never cancels a collect."""
+    """One cached value: fresh for the TTL, rebuilt one collect at a time off the loop. The value
+    is released when its TTL expires and before every rebuild, so at most one is ever held. A
+    failed collect raises and leaves the cache empty; a cancelled waiter never cancels a collect."""
 
     def __init__(self, ttl: float, clock: Clock) -> None:
         self._ttl = ttl
         self._clock = clock
         self._value: T | None = None
         self._stamp = 0.0
+        self._generation = 0
         self._building: asyncio.Task[tuple[T, bool, float]] | None = None
 
     def _fresh(self) -> tuple[T, bool, float] | None:
         if self._value is None:
             return None
         age = self._clock() - self._stamp
-        return (self._value, True, age) if age < self._ttl else None
+        if age < self._ttl:
+            return self._value, True, age
+        self._value = None
+        return None
+
+    def _release(self, generation: int) -> None:
+        if self._generation == generation:
+            self._value = None
 
     async def _rebuild(self, collect: Callable[[], T]) -> tuple[T, bool, float]:
+        self._value = None
         try:
             value = await asyncio.to_thread(collect)
             self._value, self._stamp = value, self._clock()
+            self._generation += 1
+            asyncio.get_running_loop().call_later(
+                self._ttl, self._release, self._generation
+            )
             return value, False, 0.0
         finally:
             self._building = None

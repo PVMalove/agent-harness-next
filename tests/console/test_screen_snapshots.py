@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
+import weakref
+from pathlib import Path
 
 import pytest
 
@@ -14,9 +17,13 @@ from harness.console.kernel.batch_history import History
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult
 from harness.console.kernel.protocol import MESSAGE_LIMIT
-from harness.console.kernel.reports import ledger_from_payload, timeline_from_payload
+from harness.console.kernel.reports import (
+    LedgerView,
+    ledger_from_payload,
+    timeline_from_payload,
+)
 
-from ._screen_facts import BODY, Clock, Facts, service
+from ._screen_facts import BODY, Clock, Facts, ledger, service
 
 
 def _ask(screens: ScreenService, **request: object) -> dict[str, object]:
@@ -77,6 +84,34 @@ def test_the_reports_snapshot_carries_the_ledger_without_bodies_and_is_cached() 
     clock.now += 60
     assert _ask(screens, type="reports.snapshot")["cached"] is False
     assert facts.calls["ledger"] == 3
+
+
+def test_the_cached_ledger_is_released_on_expiry_and_never_held_twice() -> None:
+    facts, clock = Facts(), Clock()
+    views: list[weakref.ref[LedgerView]] = []
+    held_during_collect: list[bool] = []
+
+    def tracked(repo: Path, /) -> LedgerView:
+        gc.collect()
+        held_during_collect.append(any(ref() is not None for ref in views))
+        view = ledger()
+        views.append(weakref.ref(view))
+        return view
+
+    facts.ledger = tracked  # type: ignore[method-assign]
+    screens = service(facts, clock, ttl=0.05)
+
+    async def scenario() -> bool:
+        await screens.reports()
+        await screens.reports(force=True)
+        clock.now += 1
+        await screens.reports()
+        await asyncio.sleep(0.3)
+        gc.collect()
+        return views[-1]() is None
+
+    assert asyncio.run(scenario()) is True
+    assert held_during_collect == [False, False, False]
 
 
 def test_an_online_reports_snapshot_is_always_rebuilt_and_never_cached() -> None:
