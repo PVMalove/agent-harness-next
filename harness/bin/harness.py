@@ -43,7 +43,7 @@ sys.path[:] = [
 ]
 sys.path.insert(0, str(ROOT))
 from harness.errors import HarnessError, print_and_exit
-from harness.cleanup import apply_cleanup, plan_cleanup
+from harness.cleanup import apply_cleanup, plan_cleanup, plan_digest, remove_worktree
 from harness.uninstall import (
     CLAUDE_MD_SEED,
     CONFIRM_WORD,
@@ -65,10 +65,21 @@ from harness.seed_links import propose_contract_links, print_contract_proposals
 from harness.health import registry as health_registry
 from harness.health import render as health_render
 from harness.health import report_json as health_report_json
+from harness.health.checks.hooks import recorded_managed_entries
+from harness.health.hook_settings import (
+    ADAPTERS,
+    RuntimeAdapter,
+    canonical_integration_id,
+    critical_wiring,
+    merge_hooks,
+    template_digests,
+)
 from harness.health.model import JsonObject
 from harness.health.project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
+    canonical_capability,
     DISCOVERY_LINKS,
+    HOOK_POLICY_REL,
     INTEGRATIONS_REL,
     JSON_READ_ERRORS,
     LOCK_REL,
@@ -170,7 +181,7 @@ def capabilities() -> dict[str, JsonObject]:
 
 def selected_capabilities(names: list[str] | None) -> list[str]:
     """Нормализовать и проверить переданный список возможностей."""
-    selected = names or [DEFAULT_CAPABILITY]
+    selected = [canonical_capability(name) for name in names or [DEFAULT_CAPABILITY]]
     catalog = capabilities()
     unknown = [name for name in selected if name not in catalog]
     if unknown:
@@ -201,6 +212,7 @@ def resolve_capability_skills(
 
     Обрабатывает наследование `extends`, переопределения `overrides` и дополнения `additions`.
     """
+    name = canonical_capability(name)
     if name in _stack:
         fail(f"capability cycle: {' -> '.join(_stack + (name,))}")
     definition = catalog[name]
@@ -241,6 +253,7 @@ def resolve_capability_resources(
 
     Ресурсы сохраняют свой относительный путь при развёртывании в проектной директории `.harness/`.
     """
+    name = canonical_capability(name)
     if name in _stack:
         fail(f"capability cycle: {' -> '.join(_stack + (name,))}")
     definition = catalog[name]
@@ -502,8 +515,12 @@ def record_integration(
     config: Path,
     secret_refs: list[str],
     verify: str,
+    managed_entries: list[str] | None = None,
 ) -> None:
-    """Зарегистрировать или обновить запись интеграции в .harness/integrations.json."""
+    """Зарегистрировать или обновить запись интеграции в .harness/integrations.json.
+
+    `managed_entries` — отсортированные отпечатки managed hook-записей, которые harness записал
+    в `config`: по ним слияние отличает устаревшую запись от правки пользователя."""
     path = repo / INTEGRATIONS_REL
     data: object = {}
     if path.is_file():
@@ -521,19 +538,23 @@ def record_integration(
     entries = [
         entry
         for entry in existing
-        if not (isinstance(entry, dict) and entry.get("id") == identifier)
+        if not (
+            isinstance(entry, dict)
+            and canonical_integration_id(entry.get("id")) == identifier
+        )
     ]
-    entries.append(
-        {
-            "id": identifier,
-            "kind": kind,
-            "runtimes": runtimes,
-            "config": config.as_posix(),
-            "sha256": digest((repo / config).read_bytes()),
-            "secret_refs": secret_refs,
-            "verify": verify,
-        }
-    )
+    entry: JsonObject = {
+        "id": identifier,
+        "kind": kind,
+        "runtimes": runtimes,
+        "config": config.as_posix(),
+        "sha256": digest((repo / config).read_bytes()),
+        "secret_refs": secret_refs,
+        "verify": verify,
+    }
+    if managed_entries is not None:
+        entry["managed_entries"] = sorted(managed_entries)
+    entries.append(entry)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps({"schema": 1, "integrations": entries}, indent=2, ensure_ascii=False)
@@ -623,7 +644,7 @@ def print_diff(result: JsonObject) -> None:
             print(f"  {key}: {path}")
 
 
-PVMALOVE_CAPABILITY = "pvmalove-suite"
+ENGINEERING_CAPABILITY = "engineering-suite"
 PROJECT_TEMPLATE_DIR = PACKAGE / "project"
 HARNESS_RUNTIME_GITIGNORE = """# Generated harness runtime data
 .sandboxes/
@@ -841,9 +862,8 @@ def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str,
         PROJECT_TEMPLATE_DIR / "scratch/.gitignore"
     ).read_bytes()
     files[".harness/.gitignore"] = HARNESS_RUNTIME_GITIGNORE.encode("utf-8")
-    files[".claude/settings.local.json"] = (
-        PROJECT_TEMPLATE_DIR / "settings.local.json.tmpl"
-    ).read_bytes()
+    for adapter in ADAPTERS:
+        files[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
     files[".harness/project.schema.json"] = (
         PROJECT_TEMPLATE_DIR / "project.schema.json"
     ).read_bytes()
@@ -851,6 +871,20 @@ def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str,
         files[".harness/orchestration.json"] = (
             PACKAGE / "orchestration.example.json"
         ).read_bytes()
+    return files
+
+
+def hook_template_files() -> dict[str, bytes]:
+    """Эталоны hooks проекта для проверки дрейфа: скрипты `.claude/hooks/` и файлы hooks runtime."""
+    files: dict[str, bytes] = {}
+    for folder, target, suffixes in SEED_FOLDERS:
+        if folder != "hooks":
+            continue
+        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
+            if source.is_file() and source.suffix in suffixes:
+                files[f"{target}/{source.name}"] = source.read_bytes()
+    for adapter in ADAPTERS:
+        files[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
     return files
 
 
@@ -867,10 +901,120 @@ def seed_differing(repo: Path) -> list[str]:
     return sorted(differing)
 
 
-def scaffold_pvmalove_extras(
+def _install_hook_config(
+    repo: Path, adapter: RuntimeAdapter, *, forced: bool, differing: list[Path]
+) -> list[str]:
+    """Записать или слить файл hooks runtime, напечатать отчёт и зарегистрировать интеграцию.
+
+    Нет файла или он forced — байты шаблона. Иначе managed hook-записи сливаются по пути команды
+    скрипта, записи пользователя не меняются; файл, который нельзя разобрать, остаётся как есть."""
+    config = Path(adapter.config)
+    template_bytes = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
+    template_document = json.loads(template_bytes.decode("utf-8"))
+    target = repo / config
+    written: list[str] = []
+    recorded = recorded_managed_entries(repo, adapter.integration_id)
+    baseline = set(template_digests(template_document)) | set(recorded or [])
+    if not target.exists() or forced:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(template_bytes)
+        written.append(str(target))
+        print(f"hooks merge: {adapter.config}: installed from template")
+    else:
+        try:
+            document: object = json.loads(target.read_text(encoding="utf-8"))
+        except JSON_READ_ERRORS:
+            document = None
+        merge = merge_hooks(document, template_document, baseline)
+        if merge.problem is not None or merge.document is None:
+            print(
+                f"hooks merge: {adapter.config}: cannot merge: "
+                f"{merge.problem or 'not valid JSON'}"
+            )
+        else:
+            if merge.changed:
+                if merge.document == template_document:
+                    content = template_bytes
+                else:
+                    content = (
+                        json.dumps(merge.document, indent=2, ensure_ascii=False) + "\n"
+                    ).encode("utf-8")
+                target.write_bytes(content)
+                written.append(str(target))
+            print(
+                f"hooks merge: {adapter.config}: added={merge.added} "
+                f"replaced={merge.replaced} current={merge.current} "
+                f"user={merge.user} conflicts={len(merge.conflicts)}"
+            )
+            if merge.conflicts:
+                print(
+                    "[WARNING] Managed hook-записи изменены локально и оставлены без изменений:"
+                )
+                for conflict in merge.conflicts:
+                    print(
+                        f"hooks conflict: {adapter.config}: {conflict.event} "
+                        f"[{conflict.matcher}] {conflict.script}"
+                    )
+                print(
+                    f"После просмотра: --force-seed-file {adapter.config} "
+                    "(заменит весь файл шаблоном)"
+                )
+        if target.read_bytes() != template_bytes:
+            differing.append(target)
+    try:
+        final: object = json.loads(target.read_text(encoding="utf-8"))
+    except JSON_READ_ERRORS:
+        final = None
+    if isinstance(final, dict):
+        wired, total, missing = critical_wiring(final, adapter.support)
+        gaps = f"; missing: {', '.join(missing)}" if missing else ""
+        print(f"hooks check: {adapter.config}: critical wired {wired}/{total}{gaps}")
+    record_integration(
+        repo,
+        identifier=adapter.integration_id,
+        kind="hook",
+        runtimes=[adapter.runtime],
+        config=config,
+        secret_refs=[],
+        verify=adapter.verify,
+        managed_entries=sorted(baseline),
+    )
+    return written
+
+
+def _install_hook_policy(repo: Path) -> list[str]:
+    """Записать `.harness/hook-policy.json` — effective policy hooks (ADR 0024, раздел 3).
+
+    Единственный писатель файла. Байты вычисляются до записи: некорректный hook_policy даёт
+    PolicyError (код 2), и существующий файл не меняется. Те же байты на диске — файл не трогается."""
+    from harness.orchestration.hook_policy import (
+        effective_policy,
+        load_policy,
+        render_policy_file,
+    )
+
+    document = effective_policy(load_policy(repo), hook_template_files())
+    content = render_policy_file(document)
+    target = repo / HOOK_POLICY_REL
+    written: list[str] = []
+    if target.is_file() and target.read_bytes() == content:
+        state = "unchanged"
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        written.append(str(target))
+        state = "written"
+    print(
+        f"hooks policy: {HOOK_POLICY_REL.as_posix()}: {state} "
+        f"hook_policy_sha256={document['hook_policy_sha256']}"
+    )
+    return written
+
+
+def scaffold_engineering_extras(
     repo: Path, args: argparse.Namespace, *, orchestration_enabled: bool = False
 ) -> list[str]:
-    """Развернуть дополнительные файлы и настройки для набора возможностей pvmalove-suite."""
+    """Развернуть дополнительные файлы и настройки для набора возможностей engineering-suite."""
     written: list[str] = []
     differing: list[Path] = []
     force_seed = getattr(args, "force_seed_files", False) or getattr(
@@ -933,30 +1077,15 @@ def scaffold_pvmalove_extras(
         root_gitignore.write_text(root_gitignore_text, encoding="utf-8", newline="\n")
         written.append(str(root_gitignore))
 
-    settings = repo / ".claude/settings.local.json"
-    template_text = (PROJECT_TEMPLATE_DIR / "settings.local.json.tmpl").read_text(
-        encoding="utf-8"
-    )
-    if settings.exists() and not forced(settings):
-        if settings.read_text(encoding="utf-8") != template_text:
-            differing.append(settings)
-    if not settings.exists() or forced(settings):
-        settings.parent.mkdir(parents=True, exist_ok=True)
-        settings.write_text(template_text, encoding="utf-8", newline="\n")
-        written.append(str(settings))
-
-    record_integration(
-        repo,
-        identifier="pvmalove-suite-hooks",
-        kind="hook",
-        runtimes=["claude"],
-        config=Path(".claude/settings.local.json"),
-        secret_refs=[],
-        verify=(
-            "Open a fresh Claude Code session and confirm a guarded action "
-            "(e.g. a direct commit to the base branch) is blocked by the wired hooks."
-        ),
-    )
+    for adapter in ADAPTERS:
+        written.extend(
+            _install_hook_config(
+                repo,
+                adapter,
+                forced=forced(repo / adapter.config),
+                differing=differing,
+            )
+        )
     written.append(str(repo / INTEGRATIONS_REL))
 
     project_json = repo / ".harness/project.json"
@@ -1031,19 +1160,20 @@ def scaffold_pvmalove_extras(
             "Используйте --force-seed-files, чтобы перезаписать их (внимание: локальные изменения будут потеряны).\n"
         )
 
+    written.extend(_install_hook_policy(repo))
     return written
 
 
 def seed_capability_extras(
     repo: Path, args: argparse.Namespace, selected: list[str]
 ) -> list[str]:
-    """Развернуть seed-файлы pvmalove-suite или backend-orchestration; [] — ни одна не выбрана."""
+    """Развернуть seed-файлы engineering-suite или backend-orchestration; [] — ни одна не выбрана."""
     if (
-        PVMALOVE_CAPABILITY not in selected
+        ENGINEERING_CAPABILITY not in selected
         and BACKEND_ORCHESTRATION_CAPABILITY not in selected
     ):
         return []
-    return scaffold_pvmalove_extras(
+    return scaffold_engineering_extras(
         repo,
         args,
         orchestration_enabled=BACKEND_ORCHESTRATION_CAPABILITY in selected,
@@ -1299,6 +1429,7 @@ def cmd_health(args: argparse.Namespace) -> int:
         fix=getattr(args, "fix", False),
         online=getattr(args, "online", False),
         harness_cli=HARNESS_CLI,
+        hook_templates=hook_template_files(),
     )
     if args.json:
         print(json.dumps(health_report_json.to_json(report), ensure_ascii=False))
@@ -1325,58 +1456,58 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _add_pvmalove_args(sub: argparse.ArgumentParser) -> None:
-    """Добавить аргументы командной строки, специфичные для набора возможностей pvmalove-suite."""
+def _add_engineering_args(sub: argparse.ArgumentParser) -> None:
+    """Добавить аргументы командной строки, специфичные для набора возможностей engineering-suite."""
     sub.add_argument(
         "--language",
         choices=["ru", "en"],
         default=None,
-        help="pvmalove-suite: .harness/project.json language",
+        help="engineering-suite: .harness/project.json language",
     )
     sub.add_argument(
         "--pr-base-branch",
         default=None,
-        help="pvmalove-suite: release/base branch for epic integration branches (default: --base-branch)",
+        help="engineering-suite: release/base branch for epic integration branches (default: --base-branch)",
     )
     sub.add_argument(
-        "--branch-pattern", default=None, help="pvmalove-suite: branch name regex"
+        "--branch-pattern", default=None, help="engineering-suite: branch name regex"
     )
     sub.add_argument(
         "--qa-gate-command",
         action="append",
         default=None,
-        help="pvmalove-suite: repeatable, in run order",
+        help="engineering-suite: repeatable, in run order",
     )
     sub.add_argument(
         "--tracker-type",
         choices=TRACKER_TYPES,
         default=None,
-        help="pvmalove-suite: .harness/project.json tracker type (default: derived from origin)",
+        help="engineering-suite: .harness/project.json tracker type (default: derived from origin)",
     )
     sub.add_argument(
         "--tracker-host",
         type=_matching_arg(TRACKER_HOST_PATTERN, TRACKER_HOST_RULE),
         default=None,
-        help="pvmalove-suite: tracker web host with an optional :port (default: from origin)",
+        help="engineering-suite: tracker web host with an optional :port (default: from origin)",
     )
     sub.add_argument(
         "--tracker-project",
         type=_matching_arg(TRACKER_PROJECT_PATTERN, TRACKER_PROJECT_RULE),
         default=None,
-        help="pvmalove-suite: full tracker project path with subgroups (default: from origin)",
+        help="engineering-suite: full tracker project path with subgroups (default: from origin)",
     )
     sub.add_argument(
         "--test-path",
         action="append",
         type=_matching_arg(TEST_PATH_PATTERN, TEST_PATH_RULE),
         default=None,
-        help="pvmalove-suite: repeatable test_paths glob, the test author's write zone (default: none)",
+        help="engineering-suite: repeatable test_paths glob, the test author's write zone (default: none)",
     )
     sub.add_argument(
         "--test-runner-command",
         type=_test_runner_command,
         default=None,
-        help="pvmalove-suite: test_runner command, split without a shell; one argument is "
+        help="engineering-suite: test_runner command, split without a shell; one argument is "
         "{test_id} (default: none)",
     )
 
@@ -1399,6 +1530,8 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         plan = plan_cleanup(
             Path(args.repo), args.mode, min_age_hours=args.min_age_hours
         )
+        if args.plan_digest and plan_digest(plan) != args.plan_digest:
+            fail("cleanup plan changed; preview again before applying")
         print(json.dumps({"plan": plan}, ensure_ascii=False, indent=2))
         if args.apply:
             result = apply_cleanup(Path(args.repo), plan, confirm=args.confirm)
@@ -1407,6 +1540,16 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         return 0
     except ValueError as exc:
         fail(str(exc))
+
+
+def cmd_worktree_remove(args: argparse.Namespace) -> int:
+    """Remove a managed checkout after refreshing its safety facts, without force."""
+    try:
+        remove_worktree(Path(args.repo), Path(args.worktree))
+    except ValueError as exc:
+        fail(str(exc))
+    print(f"Removed worktree: {args.worktree}")
+    return 0
 
 
 def cmd_uninstall(args: argparse.Namespace) -> int:
@@ -1523,7 +1666,8 @@ def parser() -> argparse.ArgumentParser:
     commands = root.add_subparsers(dest="command", required=True)
 
     cleanup = commands.add_parser(
-        "cleanup", help="preview or remove disposable .harness data"
+        "cleanup",
+        help="preview or remove disposable .harness data and orphaned container resources",
     )
     cleanup.add_argument("repo")
     cleanup.add_argument("--mode", choices=("soft", "hard"), default="soft")
@@ -1532,7 +1676,17 @@ def parser() -> argparse.ArgumentParser:
         "--apply", action="store_true", help="apply the printed cleanup plan"
     )
     cleanup.add_argument("--confirm", help="pass HARD when applying hard cleanup")
+    cleanup.add_argument(
+        "--plan-digest", help="require the exact previously approved deletion set"
+    )
     cleanup.set_defaults(func=cmd_cleanup)
+
+    worktree = commands.add_parser(
+        "worktree-remove", help="safely remove a managed worktree, keeping its branch"
+    )
+    worktree.add_argument("repo")
+    worktree.add_argument("worktree")
+    worktree.set_defaults(func=cmd_worktree_remove)
 
     uninstall = commands.add_parser(
         "uninstall", help="preview or remove everything the harness installed"
@@ -1554,7 +1708,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--stack", action="append", help="informational project stack")
     init.add_argument("--capability", action="append")
     init.add_argument("--base-branch", default="main")
-    _add_pvmalove_args(init)
+    _add_engineering_args(init)
     init.set_defaults(func=cmd_init)
 
     diff = commands.add_parser("diff")
@@ -1567,7 +1721,7 @@ def parser() -> argparse.ArgumentParser:
     adopt.add_argument("repo")
     adopt.add_argument("--capability", action="append")
     adopt.add_argument("--replace-conflicts", action="store_true")
-    _add_pvmalove_args(adopt)
+    _add_engineering_args(adopt)
     adopt.set_defaults(func=cmd_adopt)
 
     update = commands.add_parser("update")
@@ -1591,7 +1745,7 @@ def parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="overwrite only this seed file (path from the project root); repeatable",
     )
-    _add_pvmalove_args(update)
+    _add_engineering_args(update)
     update.set_defaults(func=cmd_update)
 
     registry = commands.add_parser("registry")

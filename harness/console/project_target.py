@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Literal
 
 from harness.configuration_schema import PACKAGE
+from harness.health.model import JsonObject
+from harness.health.project_files import canonical_capability
 
 from .catalog import CatalogEntry, Reversibility
 
@@ -21,10 +23,29 @@ class ProjectTarget:
     action: Literal["init", "adopt", "update"]
     capabilities: tuple[str, ...]
     conflicts: tuple[str, ...]
+    # The project's own files the installation meets: instruction files and discovery paths.
+    found: tuple[str, ...] = ()
 
 
 # A cold, busy machine (a Windows CI runner starting its first git.exe) needs more than a few seconds.
 GIT_TIMEOUT_SECONDS = 30
+
+
+# The status line shows the first line; the hint below it names the next step.
+LOCK_BROKEN = (
+    "harness.lock повреждён\n"
+    "Сначала проверьте существующую установку: «Диагностика» (3)."
+)
+
+
+def _read_lock(repo: Path) -> JsonObject | None:
+    """The CLI's lock reader, whose `fail()` exits the process: here a broken lock is an error."""
+    from harness.bin.harness import load_lock
+
+    try:
+        return load_lock(repo)
+    except SystemExit:
+        raise ValueError(LOCK_BROKEN) from None
 
 
 def inspect_target(value: str) -> ProjectTarget:
@@ -32,7 +53,10 @@ def inspect_target(value: str) -> ProjectTarget:
         raise ValueError("Выберите каталог проекта")
     repo = Path(value).expanduser().resolve()
     if not repo.is_dir():
-        raise ValueError("Каталог проекта не существует")
+        raise ValueError(
+            "Каталог проекта не существует\n"
+            "Проверьте путь или выберите папку через «Обзор папок»."
+        )
     try:
         result = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
@@ -41,31 +65,34 @@ def inspect_target(value: str) -> ProjectTarget:
             timeout=GIT_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired):
-        raise ValueError("Git недоступен или не отвечает") from None
+        raise ValueError(
+            "Git недоступен или не отвечает\n"
+            "Проверьте, что git установлен и доступен в PATH."
+        ) from None
     if result.returncode != 0:
         raise ValueError(
-            "Это не Git-проект. Сначала выполните git init в выбранном каталоге"
+            "Это не Git-проект\n"
+            "Сначала выполните в каталоге: git init (y — копировать команду)"
         )
     repo = Path(result.stdout.strip()).resolve()
-    from harness.bin.harness import load_lock
-
     selected: tuple[str, ...] = ()
     try:
-        lock = load_lock(repo)
+        lock = _read_lock(repo)
         if lock is not None:
             capabilities = lock["capabilities"]
             known = dict(capability_options())
             if (
-                not isinstance(capabilities, list)
+                not isinstance(lock.get("files", {}), dict)
+                or not isinstance(capabilities, list)
                 or not all(isinstance(x, str) for x in capabilities)
-                or any(name not in known for name in capabilities)
+                or any(canonical_capability(name) not in known for name in capabilities)
             ):
                 raise ValueError
-            selected = tuple(capabilities)
-    except (SystemExit, ValueError, KeyError, TypeError):
-        raise ValueError(
-            "harness.lock повреждён; сначала проверьте существующую установку"
-        ) from None
+            selected = tuple(
+                dict.fromkeys(canonical_capability(name) for name in capabilities)
+            )
+    except (ValueError, KeyError, TypeError):
+        raise ValueError(LOCK_BROKEN) from None
     conflicts = tuple(
         str(path.relative_to(repo))
         for path in (
@@ -75,21 +102,23 @@ def inspect_target(value: str) -> ProjectTarget:
         )
         if path.exists() or path.is_symlink()
     )
-    existing = conflicts or any(
-        (repo / name).exists() for name in ("AGENTS.md", "CLAUDE.md")
+    found = (
+        tuple(name for name in ("AGENTS.md", "CLAUDE.md") if (repo / name).exists())
+        + conflicts
     )
     return ProjectTarget(
         repo,
-        "update" if lock is not None else ("adopt" if existing else "init"),
+        "update" if lock is not None else ("adopt" if found else "init"),
         selected,
         conflicts,
+        found,
     )
 
 
 _LABELS = {
     "project-foundation": "Основа — небольшой набор инструкций и навыков",
     "mattpocock-suite": "Upstream — полный закреплённый набор навыков",
-    "pvmalove-suite": "Workflow — задачи, QA и ручная настройка project.json",
+    "engineering-suite": "Workflow — задачи, QA и ручная настройка project.json",
     "backend-orchestration": "Backend — workflow и роли; добавляет orchestration.json",
 }
 
@@ -104,10 +133,24 @@ def capability_options() -> tuple[tuple[str, str], ...]:
     )
 
 
+def capability_title(name: str) -> str:
+    """The short name of a capability (`Workflow`); one without a curated label is its id."""
+    head, separator, _ = dict(capability_options()).get(name, name).partition(" — ")
+    return head if separator else name
+
+
+def capability_summary(name: str) -> str:
+    """The one-line description of a capability, as a sentence."""
+    label = dict(capability_options()).get(name, name)
+    _, separator, tail = label.partition(" — ")
+    text = tail if separator else label
+    return text[:1].upper() + text[1:]
+
+
 _DETAILS = {
     "project-foundation": "Добавляет инструкции и базовые навыки. Не создаёт project.json и orchestration.json; подходит, когда нужен только общий каркас.",
     "mattpocock-suite": "Полный закреплённый upstream-набор навыков. Не содержит workflow project.json; подходит, когда нужны только навыки.",
-    "pvmalove-suite": "Workflow задач, QA и code-review; создаёт project.json. Нужен для мастера project.json; без ролей оркестрации.",
+    "engineering-suite": "Workflow задач, QA и code-review; создаёт project.json. Нужен для мастера project.json; без ролей оркестрации.",
     "backend-orchestration": "Всё из workflow плюс роли и координатор; добавляет orchestration.json. Выбирайте для backend-проекта с автоматизацией этапов.",
 }
 
@@ -136,7 +179,7 @@ def installation_plan(target: ProjectTarget, capability: str) -> list[str]:
 
 def installation_blockers(target: ProjectTarget, capability: str) -> tuple[str, ...]:
     """Use the same snapshot comparison as the CLI, before any installation writes."""
-    from harness.bin.harness import load_lock, package_files, snapshot_diff
+    from harness.bin.harness import package_files, snapshot_diff
     from harness.health.project_files import DISCOVERY_LINKS, native_link_target
 
     blocked: set[str] = set()
@@ -148,10 +191,10 @@ def installation_blockers(target: ProjectTarget, capability: str) -> tuple[str, 
                 expected
             ):
                 blocked.add(relative)
-    lock = load_lock(repo)
+    lock = _read_lock(repo)
     owned = (lock or {}).get("files", {})
     if not isinstance(owned, dict):
-        raise ValueError("Повреждённый список управляемых файлов в harness.lock")
+        raise ValueError(LOCK_BROKEN)
     for relative in package_files([capability]):
         path = repo / relative
         if (path.exists() and relative not in owned) or path.is_symlink():
@@ -162,7 +205,10 @@ def installation_blockers(target: ProjectTarget, capability: str) -> tuple[str, 
             if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
                 blocked.add(str(parent.relative_to(repo)))
     if lock:
-        diff = snapshot_diff(repo, [capability])
+        try:
+            diff = snapshot_diff(repo, [capability])
+        except SystemExit:
+            raise ValueError(LOCK_BROKEN) from None
         blocked.update(diff.get("local_changed", []))
         blocked.update(diff.get("conflict", []))
     return tuple(sorted(blocked))

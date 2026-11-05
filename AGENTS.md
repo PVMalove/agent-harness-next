@@ -1,4 +1,4 @@
-# Agent Harness contributor instructions
+# Harness next contributor instructions
 
 This repository is the canonical public source of a portable, runtime-native coding-agent
 harness. Skills remain ordinary `SKILL.md` packages, project discovery uses runtime-supported
@@ -16,7 +16,9 @@ logs.
 - `README.md` — overview and CLI usage; `CONTEXT.md` — project glossary;
   `CHANGELOG.md` — release notes and `LICENSE` — project license.
 - `harness/` — packager CLI, capability catalog, version, and target-project templates.
-- `skills/vendor/` — pinned upstream snapshot; `skills/first-party/pvmalove/` — maintained skills.
+- `native/harness-runtime/` — Rust workspace of the runtime process (`harness-runtime serve`); safe Rust only,
+  checked by `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` in that directory.
+- `skills/vendor/` — pinned upstream snapshot; `skills/first-party/engineering/` — maintained skills.
 - `global/` — seed template for the target project's global agent profile; `global-skills/` and
   `bin/` — global entry skills and installer; `scripts/` — registry, drift, verification, and
   clean-room checks.

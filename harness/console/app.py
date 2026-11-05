@@ -52,15 +52,14 @@ class HarnessConsoleApp(App[None]):
     """Accepts an injected `command_runner`, threaded through to the screens that run catalog
     commands (Harness, Orchestration, Repo Map), so a Pilot test never spawns a real process."""
 
-    TITLE = " Harness console "
+    TITLE = f" {brand.PRODUCT} "
     BINDINGS = [
         Binding("f1", "open_help", "Справка"),
         Binding("f2", "toggle_language", "RU/EN"),
     ]
     # Thin rounded frames and warm accents shared by every screen. Only the screen itself is
-    # filled: every widget is transparent and set apart by its frame; a selected item or a hovered
-    # button is marked by colour, never by a fill. Modal dialogs keep the screen colour so the
-    # screen behind them does not show through.
+    # filled by default. Informational panes stay transparent; selected data rows and primary
+    # actions may use a fill. Modal dialogs mask the screen behind them.
     CSS = """
     Screen { background: $background; }
     Screen * { background: transparent; }
@@ -133,9 +132,6 @@ class HarnessConsoleApp(App[None]):
         border: round $panel-lighten-2; background: transparent; padding: 0 1;
     }
     Select:focus > SelectCurrent { border: round $primary; }
-    ReportsScreen #report-order Select > SelectCurrent {
-        border: none; height: 1; padding: 0 1;
-    }
     SelectOverlay { border: round $primary; background: $background; }
     Checkbox, Checkbox:focus, RadioButton, RadioButton:focus {
         border: none; padding: 0; background: transparent;
@@ -163,6 +159,8 @@ class HarnessConsoleApp(App[None]):
         ScrollBar.renderer = ThinScrollBarRender
         self.repo = repo
         self.health_counts: HealthCounts | None = None
+        # Menu badges per section, published by the home screen and shown by every shell screen.
+        self.section_badges: dict[str, tuple[str, str]] = {}
         self.language = i18n.default_language()
         self.restart_requested = False
         self.commands_running = 0

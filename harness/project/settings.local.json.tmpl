@@ -18,6 +18,7 @@
       {
         "matcher": "Bash",
         "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/protect-hook-policy.sh\"" },
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block-public-attribution.sh\"" },
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block-direct-master.sh\"" },
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block-pr-merge.sh\"" },
@@ -28,9 +29,18 @@
         ]
       },
       {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/protect-hook-policy.sh\"" }
+        ]
+      },
+      {
         "matcher": "Write|Edit",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block-scratch-outside-docs-tasks.sh\"" }
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block-scratch-outside-docs-tasks.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/impact-first-touch.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/sensitive-path-recheck.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/targeted-check-reminder.sh\"" }
         ]
       },
       {
@@ -51,6 +61,20 @@
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/mark-qa-gate-passed.sh\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/targeted-check-reminder.sh\"" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/targeted-check-reminder.sh\"" }
         ]
       }
     ]

@@ -25,6 +25,7 @@ from harness.orchestration.core.git_utils import (
     git_environment,
     git_failure,
 )
+from harness.orchestration.core import state_view
 from harness.orchestration.core.utils import (
     CoordinatorError,
     JsonObject,
@@ -44,7 +45,7 @@ from harness.orchestration.ledger.lifecycle import (
     IntegrationRefreshRecord,
     LifecycleLedger,
 )
-from harness.orchestration.workflow import integration
+from harness.orchestration.workflow import integration, release_gate
 
 REFRESH_RECORD_CONTRACT = 1
 # One fetch, push or rebase of the refresh: the route holds the ledger lock, so a hung remote or
@@ -58,7 +59,7 @@ def refresh_records(root: Path, record_id: str) -> list[JsonObject]:
     directory = _records_root(root) / IntegrationRefreshRecord.directory
     found = [
         _read_object(path, "integration refresh record")
-        for path in sorted(directory.glob("*.json") if directory.is_dir() else [])
+        for path in state_view.glob(directory, "*.json")
     ]
     found = [item for item in found if item.get("integration_record_id") == record_id]
     identity = integration._load_record(root, record_id)["identity"]
@@ -359,6 +360,8 @@ def write_refresh_record(
         / IntegrationRefreshRecord.directory
         / f"{document['refresh_id']}.json"
     )
+    # The new pair of the Release Gate: a refresh and an accepted resolution move the candidate.
+    release_gate.record_pair(ledger, repo, new_candidate, tip)
     if recorded.is_file():
         return _read_object(recorded, "integration refresh record")
     _write_record(ledger, IntegrationRefreshRecord.from_dict(document))

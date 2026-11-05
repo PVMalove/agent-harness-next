@@ -1,5 +1,8 @@
 # Переносимое ядро оркестрации
 
+> Harness Next (ADR 0020, ADR 0021): после cutover в релизе 2.0.0 operational state пишет только
+> Rust runtime store. Python-ядро остаётся владельцем решений lifecycle, approval и публикации.
+
 ## Контекст системы
 
 Backend-работа несколькими ролями нуждается в едином lifecycle, approval и доказательствах,
@@ -8,7 +11,7 @@ Backend-работа несколькими ролями нуждается в �
 
 ## Действующий контракт
 
-`backend-orchestration` — явная capability поверх `pvmalove-suite`. Она поставляет роли,
+`backend-orchestration` — явная capability поверх `engineering-suite`. Она поставляет роли,
 конфигурацию, coordinator, ledger, Context Builder и clean-room QA. Ядро в
 `harness/orchestration/` владеет batch, dispatch, approval, immutable audit, проверкой policy,
 очередью QA и решением о публикации. Ledger хранит versioned lifecycle и не переписывает
@@ -31,6 +34,13 @@ Dispatch имеет отдельные состояния отправки и о
 Runtime adapter доставляет только утверждённый brief во внешний или in-process транспорт
 и не решает судьбу отчёта или batch.
 
+Единственная поставляемая реализация доступа worker-а — контейнерный исполнитель `docker`
+(ADR 0025): `harness-runtime` запускает в контейнере утверждённый external dispatch и, при
+заданном `operations.qa.container`, команды QA. Харнесс образы не собирает и не скачивает; он
+поставляет только payload `.harness/container/` с необязательным базовым образом и proxy, а также
+руководство `.harness/docs/container-executor.md`. Настоящий smoke Docker — отдельный CI job вне
+`make verify`, и он проверяет только rootful Docker.
+
 Проект задаёт provider profiles, budgets, зоны и allowed tools. Ядро сверяет фактически
 используемую модель с immutable assignment и наблюдает живость dispatch. Self-report роли
 служит доказательством назначения, но не источником token usage: метрики принимаются только
@@ -44,3 +54,14 @@ Runtime adapter доставляет только утверждённый brief
 изменения команд и execution policy — с gate runner. Сбой adapter или отсутствие telemetry
 отражаются как отдельные наблюдаемые факты, а не меняют правила approval и не подменяются
 оценкой роли.
+
+## Наблюдение worker и native permissions (#716)
+
+Ядро сохраняет receipt и startup evidence, а adapter владеет запуском и исходным native-каналом.
+Handoff резервируется под ledger lock; вызов внешнего или native runtime выполняется после его
+освобождения. Self-report не теряется при возврате адаптера. Наблюдение — локальное чтение
+существующих событий, без дополнительных LLM-вызовов и сообщений в контекст агентов.
+Native permission request передаётся человеку через control protocol того же runtime; ответ
+разрешает только исходный запрос один раз и не заменяет dispatch approval. Консоль использует
+существующие тему и навигацию, не создаёт вторую lifecycle-модель. Exit code, ledger, готовность
+отчёта и его приёмка отображаются отдельно.
