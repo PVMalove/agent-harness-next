@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.coordinator_api import (
+from harness.console.kernel.coordinator_api import (
     ALLOWED_PATHS,
     ArgvError,
     CoordinatorApi,
@@ -195,7 +195,7 @@ def test_cleanup_is_always_soft_and_apply_is_bound_to_a_digest() -> None:
 
 
 def test_every_command_the_client_can_build_is_free_of_forbidden_flags() -> None:
-    from harness.console.coordinator_api import _fields_of
+    from harness.console.kernel.coordinator_api import _fields_of
 
     for path in sorted(ALLOWED_PATHS):
         required = {
@@ -226,7 +226,7 @@ def test_the_argv_helpers_never_carry_a_value_a_screen_could_leak() -> None:
 
 
 def test_the_client_module_names_no_container_engine_or_runtime_protocol() -> None:
-    import harness.console.coordinator_api as client
+    import harness.console.kernel.coordinator_api as client
 
     source = Path(client.__file__).read_text(encoding="utf-8")
     for token in (

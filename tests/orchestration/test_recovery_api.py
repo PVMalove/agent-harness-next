@@ -474,7 +474,7 @@ def test_a_secret_in_the_configuration_is_never_echoed(recovery: Recovery) -> No
 def test_fix_previews_then_applies_through_the_transaction_without_resuming(
     recovery: Recovery,
 ) -> None:
-    from harness.console.configuration import default_document
+    from harness.console.kernel.configuration import default_document
 
     (recovery.repo / ".harness/project.json").write_text(
         json.dumps(default_document(recovery.repo, "project.json")), encoding="utf-8"

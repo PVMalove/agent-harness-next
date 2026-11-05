@@ -7,9 +7,9 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from harness.console.container_route import State
-from harness.console.coordinator_api import CoordinatorApi
-from harness.console.recovery_view import (
+from harness.console.kernel.container_route import State
+from harness.console.kernel.coordinator_api import CoordinatorApi
+from harness.console.kernel.recovery_view import (
     NO_ENGINE_RESPONSE,
     UNKNOWN_OUTCOME_TITLE,
     RecoveryView,
@@ -506,7 +506,7 @@ def test_a_known_outcome_shows_neither_the_banner_nor_a_resend_action() -> None:
 
 # ----------------------------------------------------------------------------- the action planner
 
-from harness.console.recovery_view import (  # noqa: E402
+from harness.console.kernel.recovery_view import (  # noqa: E402
     FixChoice,
     FixPreview,
     RecoverySession,
@@ -910,7 +910,7 @@ def test_a_failed_action_is_shown_verbatim_and_is_a_blocker() -> None:
 
 # ----------------------------------------------------------------------------- contract (#711)
 
-from harness.console.coordinator_api import forbidden_in  # noqa: E402
+from harness.console.kernel.coordinator_api import forbidden_in  # noqa: E402
 
 
 def test_no_recovery_call_carries_a_forbidden_flag_and_none_abandons_or_kills() -> None:

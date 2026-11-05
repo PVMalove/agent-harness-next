@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.console import ledger_lock
+from harness.console.tui import ledger_lock
 from harness.json_types import JsonObject
 from harness.orchestration.core.constants import LEDGER_LOCK_STALE_SECONDS
 
@@ -117,3 +117,139 @@ def test_an_unreadable_state_is_shown_not_raised(tmp_path: Path) -> None:
     text = ledger_lock.current_lock_text(tmp_path, broken)
 
     assert text == "Lock ledger: состояние недоступно: state is unreadable"
+
+
+textual = pytest.importorskip("textual")
+
+from textual.app import App  # noqa: E402
+from textual.widgets import Checkbox, ListItem, ListView, Static  # noqa: E402
+
+from harness.console.kernel.coordinator_catalog import (  # noqa: E402
+    COORDINATOR_COMMANDS,
+    process_argv,
+)
+from harness.console.tui.screens.orchestration import (  # noqa: E402
+    CoordinatorCommandFormScreen,
+    OrchestrationScreen,
+)
+
+
+class _RecordingRunner:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(
+        self,
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> "subprocess.CompletedProcess[str]":
+        self.calls.append(list(argv))
+        return subprocess.CompletedProcess(list(argv), 0, "done\n", "")
+
+
+class _HostApp(App[None]):
+    def __init__(self, screen: OrchestrationScreen) -> None:
+        super().__init__()
+        self._orchestration_screen = screen
+
+    def on_mount(self) -> None:
+        self.push_screen(self._orchestration_screen)
+
+
+class _Ticking:
+    """A lock whose age grows by one second on every read, like a lock still held."""
+
+    def __init__(self) -> None:
+        self.held = 200
+        self.served: list[int] = []
+
+    def __call__(self, _repo: Path) -> JsonObject:
+        self.held += 1
+        self.served.append(self.held)
+        return _status(held_seconds=self.held, remaining_seconds=STALE - self.held)
+
+    def held_shown_in(self, text: str) -> int:
+        """The age a panel text shows, among the ages this loader served."""
+        shown = [
+            held
+            for held in self.served
+            if f"Держится: {ledger_lock.duration(held)} · до снятия по таймауту: "
+            f"{ledger_lock.duration(STALE - held)}" in text
+        ]
+        assert shown, text
+        return shown[-1]
+
+
+@pytest.mark.parametrize("size", [(64, 30), (160, 50)], ids=["narrow", "wide"])
+def test_the_lock_panel_counts_on_the_live_screen(
+    tmp_path: Path, size: tuple[int, int]
+) -> None:
+    ticking = _Ticking()
+
+    async def scenario() -> tuple[str, str]:
+        screen = OrchestrationScreen(
+            tmp_path,
+            command_runner=_RecordingRunner(),
+            load_lock=ticking,
+            lock_refresh_seconds=0.05,
+        )
+        app = _HostApp(screen)
+        async with app.run_test(size=size) as pilot:
+            await pilot.pause()
+            first = str(app.screen.query_one("#ledger-lock", Static).content)
+            await pilot.pause(0.3)
+            later = str(app.screen.query_one("#ledger-lock", Static).content)
+        return first, later
+
+    first, later = asyncio.run(scenario())
+    assert "Lock ledger занят: report submit" in first
+    # The timer may read the lock again after a snapshot, so each text is matched against the
+    # ages the loader actually served rather than its latest one.
+    assert ticking.held_shown_in(later) > ticking.held_shown_in(first)
+
+
+@pytest.mark.parametrize("size", [(64, 40), (160, 50)], ids=["narrow", "wide"])
+def test_the_forced_release_asks_and_runs_with_the_exact_argv(
+    tmp_path: Path, size: tuple[int, int]
+) -> None:
+    runner = _RecordingRunner()
+    values = {
+        "force": "1",
+        "approved_by": "dev",
+        "approved_at": "2026-10-18T00:00:00Z",
+        "reason": "orphaned worker",
+    }
+
+    async def scenario() -> bool:
+        screen = OrchestrationScreen(
+            tmp_path,
+            command_runner=runner,
+            load_lock=lambda _repo: _status(),
+            lock_refresh_seconds=60,
+        )
+        app = _HostApp(screen)
+        async with app.run_test(size=size) as pilot:
+            menu = app.screen.query_one("#command-menu", ListView)
+            menu.index = [item.name for item in menu.query(ListItem)].index(
+                "ledger-release-lock"
+            )
+            await pilot.press("enter")
+            await pilot.pause()
+            asked = isinstance(app.screen, CoordinatorCommandFormScreen) and bool(
+                app.screen.query("#confirmation-reason")
+            )
+            app.screen.query_one("#input-force", Checkbox).value = True
+            for dest in ("approved_by", "approved_at", "reason"):
+                app.screen.query_one(f"#input-{dest}").value = values[dest]  # type: ignore[attr-defined]
+            app.screen.query_one("#run").press()  # type: ignore[attr-defined]
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+        return asked
+
+    asked = asyncio.run(scenario())
+    entry = next(e for e in COORDINATOR_COMMANDS if e.key == "ledger-release-lock")
+    assert asked
+    assert runner.calls == [process_argv(entry.cli_argv(tmp_path, values))]

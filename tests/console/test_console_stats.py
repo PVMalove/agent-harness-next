@@ -5,7 +5,44 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from harness.console import reports, stats
+from harness.console.tui import reports, stats
+from harness.console.tui import reports, stats
+from tests.console._console_ledger_fixture import build_reports_fixture
+
+
+def test_pipeline_stats_count_runs_states_roles_and_outcomes(tmp_path: Path) -> None:
+    build_reports_fixture(tmp_path)
+    view = reports.load_ledger_view(tmp_path)
+
+    result = stats.pipeline_stats(view)
+
+    assert (result.batches, result.tickets) == (2, 2)
+    assert result.by_state == {"blocked": 1, "completed": 1}
+    assert result.dispatches_by_role == {"developer": 2, "code-review": 1, "qa": 1}
+    assert result.reports_by_outcome == {"completed": 3, "blocked": 1}
+    text = stats.pipeline_stats_text(result)
+    assert "Запусков (batch): 2, тикетов: 2" in text
+    assert "заблокирован 1" in text and "завершён 1" in text
+    assert "запусков 2" in stats.usage_text(view)
+
+
+def test_state_filter_lists_every_lifecycle_state_and_filters_batches(
+    tmp_path: Path,
+) -> None:
+    build_reports_fixture(tmp_path)
+    view = reports.load_ledger_view(tmp_path)
+
+    items = dict(stats.state_filter_items(view))
+
+    assert list(items)[0] == stats.ALL_STATES
+    assert set(stats.BATCH_STATES) <= set(items)
+    assert items["blocked"] == "заблокирован (1)"
+    assert items["planned"] == "запланирован (0)"
+    assert [b.batch_id for b in stats.batches_in_state(view, "blocked")] == [
+        "batch-stuck"
+    ]
+    assert len(stats.batches_in_state(view, stats.ALL_STATES)) == 2
+    assert stats.batches_in_state(view, "active") == []
 
 
 def test_empty_and_missing_ledgers_are_explained(tmp_path: Path) -> None:

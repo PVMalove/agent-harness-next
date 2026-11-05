@@ -9,7 +9,8 @@ import pytest
 
 pytest.importorskip("textual")
 
-from harness.console import brand, shell
+from harness.console.kernel import brand
+from harness.console.tui import shell
 
 SURFACE = brand.PALETTE["surface"]
 
@@ -88,3 +89,22 @@ def test_the_shell_draws_component_borders_with_the_component_token() -> None:
                 allowed.add(TOKENS["border-subtle"])
             assert color in allowed, selector.strip()
     assert TOKENS["component-border"] in css
+
+
+def test_a_shell_button_is_drawn_with_the_component_border(tmp_path: Path) -> None:
+    from textual.color import Color
+    from textual.widgets import Button
+
+    from harness.console.tui.app import HarnessConsoleApp
+    from harness.console.tui.screens.worker_observation import WorkerObservationScreen
+
+    async def scenario() -> Color:
+        app = HarnessConsoleApp(tmp_path)
+        async with app.run_test(size=(160, 52)) as pilot:
+            await app.push_screen(
+                WorkerObservationScreen(tmp_path, observer=lambda *_: {})
+            )
+            await pilot.pause()
+            return app.screen.query_one("#worker-details", Button).styles.border_top[1]
+
+    assert asyncio.run(scenario()) == Color.parse(TOKENS["component-border"])

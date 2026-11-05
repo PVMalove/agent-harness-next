@@ -311,3 +311,26 @@ def test_health_worktree_inspects_main_memory_and_recommends_main_rebuild(
     assert str(main) in index["fix"]["command"]
     assert str(linked) not in index["fix"]["command"]
     assert not (linked / ".harness/.sandboxes").exists()
+
+
+def test_console_diagnostics_include_the_same_memory_health_report(
+    tmp_path: Path,
+) -> None:
+    """Console collection and its display/export document retain all memory diagnostics."""
+    pytest.importorskip("textual")
+    from harness.console.kernel.data import collect_diagnostics
+    from harness.console.tui.screens.diagnostics import health_document
+
+    _init_repo(tmp_path)
+    _enable_memory(tmp_path)
+    report = collect_diagnostics(tmp_path)
+    memory = {c.id: c for c in report.checks if c.group == "memory"}
+    assert memory["memory.index"].status == "warn"
+    assert memory["memory.model"].status == "skipped"
+    document = health_document(report)
+    body = "\n".join(section.body for section in document.sections)
+    for check in memory.values():
+        assert check.id in body
+        assert check.message in body
+    assert "memory rebuild" in body
+    assert not (tmp_path / ".harness/.sandboxes").exists()

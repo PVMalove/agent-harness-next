@@ -7,15 +7,15 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from harness.console.batch_history import (
+from harness.console.kernel.batch_history import (
     BatchHistorySource,
     HistoryBatch,
     load_history,
     recovery_reason,
 )
-from harness.console import i18n
-from harness.console.container_route import State
-from harness.console.coordinator_api import CoordinatorApi
+from harness.console.kernel import i18n
+from harness.console.kernel.container_route import State
+from harness.console.kernel.coordinator_api import CoordinatorApi
 
 REPO = Path("/work/project")
 

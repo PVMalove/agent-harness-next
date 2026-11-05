@@ -4,7 +4,7 @@
 
 Этот модуль и его точка входа `run_console` могут импортироваться без установленного пакета `textual`:
 сам перезапуск только формирует список аргументов подпроцесса и запускает его через переданный
-`CommandRunner`. Модуль `harness.console.app` (собственно UI на `textual`) импортируется отложенно,
+`CommandRunner`. Модуль `harness.console.tui.app` (собственно UI на `textual`) импортируется отложенно,
 только когда `run_console` подтверждает, что процесс уже выполняется внутри перезапущенного подпроцесса.
 
 Перед TUI и для `--web` модуль запускает или находит Сервер консоли проекта (`start_server`, ADR 0028):
@@ -27,10 +27,10 @@ import webbrowser
 from pathlib import Path
 from typing import BinaryIO, Callable, NoReturn, Sequence
 
-from .client import ConsoleClient, ConsoleClientError, HomeClient, ServerUnavailable
-from .discovery import ServerEndpoint, read_record
+from .tui.client import ConsoleClient, ConsoleClientError, HomeClient, ServerUnavailable
+from .kernel.discovery import ServerEndpoint, read_record
 from .pin import CONSOLE_SERVER_REQUIREMENTS, TEXTUAL_PIN, WEBSOCKETS_PIN
-from .runner import CommandRunner, default_runner
+from .kernel.runner import CommandRunner, default_runner
 
 # Set on the relaunched `uv run` subprocess's own environment so it knows not to relaunch again.
 RELAUNCH_ENV = "HARNESS_CONSOLE_RELAUNCHED"
@@ -84,7 +84,8 @@ def build_relaunch_argv(
 
 def build_server_argv(uv: str, repo: Path) -> list[str]:
     """Команда запуска Сервера консоли: как у перезапуска TUI, но с зависимостями сервера
-    (`h11`, `websockets`, `jinja2`) и подкомандой `console-server` (ADR 0028)."""
+    (`fastapi`, `starlette`, `uvicorn`, `pydantic`, `websockets`) и подкомандой `console-server`
+    (ADR 0028, ADR 0029)."""
     with_requirements = [
         arg for pin in CONSOLE_SERVER_REQUIREMENTS for arg in ("--with", pin)
     ]
@@ -114,10 +115,10 @@ _SERVER_POLL_SECONDS = 0.1
 
 
 def _serves_console(port: int) -> bool:
-    """Порт отвечает как Сервер консоли (`GET /` даёт 200 «Console server»), а не просто принимает
-    соединения: устаревшая запись может указывать на порт постороннего процесса."""
+    """Порт отвечает как Сервер консоли (`GET /health/live` даёт 200 «Console server»), а не просто
+    принимает соединения: устаревшая запись может указывать на порт постороннего процесса."""
     request = (
-        f"GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+        f"GET /health/live HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
     ).encode()
     reply = b""
     try:
@@ -250,7 +251,7 @@ def discover_console(
 
 def _default_app_runner(repo: Path, client: HomeClient) -> int:
     """Запускает приложение Textual по умолчанию для указанного репозитория."""
-    from . import app as console_app
+    from .tui import app as console_app
 
     return console_app.run(repo, client)
 
@@ -369,6 +370,6 @@ def _print_fallback(repo: Path, reason: str) -> None:
     """Выводит причину сбоя и текстовый отчёт, аналогичный выводу `harness health`."""
     print(reason)
     from ..health import render as health_render
-    from .data import run_health
+    from .kernel.data import run_health
 
     print(health_render.render_text(run_health(repo)), end="")

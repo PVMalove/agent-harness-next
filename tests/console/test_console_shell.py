@@ -11,13 +11,18 @@ pytest.importorskip("textual")
 
 from textual.binding import Binding
 
-from harness.console.data import DashboardData
-from harness.console.screens.dashboard import DashboardScreen
-from harness.console.crumbs import Crumb
-from harness.console.wrap import SEPARATORS
+from harness.console.kernel.data import DashboardData
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.crumbs import Crumb
+from harness.console.tui.wrap import SEPARATORS
+from harness.console.tui.app import HarnessConsoleApp
+from harness.console.kernel.data import DashboardData
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.crumbs import Crumb
+from harness.console.tui.wrap import SEPARATORS
 from tests.console._home_client import fake_home
 from tests.console._pilot_wait import crumb_text
-from harness.console.shell import (
+from harness.console.tui.shell import (
     SECTIONS,
     ConsoleShell,
 )
@@ -79,7 +84,7 @@ LONG_BRANCH = "feature/issue-721-console-design-system-with-a-long-tail"
 
 
 def test_where_text_never_leaves_a_dangling_separator() -> None:
-    from harness.console.chrome import where_text
+    from harness.console.tui.chrome import where_text
 
     assert where_text("project", None, 160) == "project"
     assert where_text("project", "", 80) == "project"
@@ -88,21 +93,157 @@ def test_where_text_never_leaves_a_dangling_separator() -> None:
     assert len(where_text("project", LONG_BRANCH, 80)) <= (80 - 4) // 2
 
 
+def _color(widget: object) -> str:
+    from textual.color import Color
+
+    return Color.from_rich_color(widget.rich_style.color).hex.lower()  # type: ignore[attr-defined]
+
+
+def test_shell_text_uses_the_foreground_token(tmp_path: Path) -> None:
+    from harness.console.kernel import brand
+
+    async def scenario() -> list[str]:
+        app = HarnessConsoleApp(tmp_path)
+        async with app.run_test(size=(160, 52)) as pilot:
+            home = _home(tmp_path)
+            await app.switch_screen(home)
+            await pilot.pause()
+            colors = [
+                _color(home.query_one("#topbar-left")),
+                _color(home.query_one("#dashboard-offline")),
+                _color(home.query_one("#dashboard-online")),
+            ]
+            screen = await _open(app, pilot)
+            colors.append(_color(screen.query_one(".crumb-current")))
+            return colors
+
+    top, offline, online, crumb = asyncio.run(scenario())
+    assert top == online == crumb == brand.PALETTE["foreground"].lower()
+    # The current mode of the Offline | Online toggle is drawn in the selection colours.
+    assert offline == brand.SHELL_TOKENS["selection-foreground"]
+
+
 def test_the_shell_css_has_no_default_text_token() -> None:
     import re
 
-    from harness.console import brand
-    from harness.console.chrome import WorkspaceHeader
-    from harness.console.shell import SHELL_CSS
+    from harness.console.kernel import brand
+    from harness.console.tui.chrome import WorkspaceHeader
+    from harness.console.tui.shell import SHELL_CSS
 
     for css in (SHELL_CSS, WorkspaceHeader.DEFAULT_CSS, DashboardScreen.CSS):
         assert not re.search(r"\$text(?![\w-])", brand.shell_css(css))
 
 
+@pytest.mark.parametrize("size", [(160, 52), (80, 24)])
+def test_the_crumb_row_starts_with_the_menu_toggle_and_home_has_one_crumb(
+    tmp_path: Path, size: tuple[int, int]
+) -> None:
+    async def scenario() -> tuple[str, bool, bool, str, str]:
+        app = HarnessConsoleApp(tmp_path)
+        async with app.run_test(size=size) as pilot:
+            home = _home(tmp_path)
+            await app.switch_screen(home)
+            await pilot.pause()
+            row = home.query_one(".crumb-row")
+            toggle = row.children[0]
+            crumbs = home.query_one(Breadcrumbs)
+            assert isinstance(toggle, Button) and toggle.id == "dashboard-menu"
+            left_of_crumbs = toggle.region.right <= crumbs.region.x
+            ru = crumb_text(crumbs)
+            await pilot.press("f2")
+            await pilot.pause()
+            await pilot.pause()
+            return (
+                str(toggle.label),
+                toggle.display and left_of_crumbs,
+                not home.query(".context-strip .menu-toggle"),
+                ru,
+                crumb_text(crumbs),
+            )
+
+    label, toggle_first, strip_free, ru, en = asyncio.run(scenario())
+    assert label == "≡"
+    assert toggle_first == (size[0] < 100)
+    assert strip_free
+    assert (ru, en) == ("Главная", "Home")
+
+
+def _region_text(app: HarnessConsoleApp, widget: object) -> list[str]:
+    """The cells `widget` occupies on screen, row by row, as plain text."""
+    region = widget.region  # type: ignore[attr-defined]
+    strips = app.screen._compositor.render_strips()
+    lines = ["".join(segment.text for segment in strip) for strip in strips]
+    return [line[region.x : region.right] for line in lines[region.y : region.bottom]]
+
+
+def _menu_text(item: ListItem) -> str:
+    """The number and name of a menu entry, without its badge."""
+    label = item.query_one(Static).content
+    return str(label.columns[0]._cells[0])  # type: ignore[union-attr]
+
+
+def _menu_item(screen: ConsoleShell, name: str) -> ListItem:
+    return next(
+        item
+        for item in screen.query("ShellSidebar ListItem").results(ListItem)
+        if item.name == name
+    )
+
+
+@pytest.mark.parametrize("language", ["ru", "en"])
+@pytest.mark.parametrize("size", [(160, 52), (100, 30), (80, 24)])
+def test_the_main_menu_fits_update_harness_and_its_badge_on_one_line(
+    tmp_path: Path, size: tuple[int, int], language: str
+) -> None:
+    from harness.console.kernel import brand
+
+    async def scenario() -> tuple[int, str, list[str], list[str], object]:
+        app = HarnessConsoleApp(tmp_path)
+        async with app.run_test(size=size) as pilot:
+            home = _home(tmp_path)
+            await app.switch_screen(home)
+            await pilot.pause()
+            if language == "en":
+                await pilot.press("f2")
+                await pilot.pause()
+            if size[0] < 100:
+                await pilot.click("#dashboard-menu")
+                await pilot.pause()
+            sidebar = home.query_one(ShellSidebar)
+            update = _menu_item(home, "Update Harness").query_one(Static)
+            selected = _menu_item(home, "Home")
+            return (
+                sidebar.region.width,
+                str(sidebar.query_one(".menu-heading", Static).render()),
+                _region_text(app, update),
+                _region_text(app, selected.query_one(Static)),
+                selected.styles,
+            )
+
+    width, heading, update, selected, styles = asyncio.run(scenario())
+    # 27 columns between 100 and 140 columns, where the content needs the room.
+    assert width == (27 if 100 <= size[0] < 140 else 30)
+    assert heading == ("ГЛАВНОЕ МЕНЮ" if language == "ru" else "MAIN MENU")
+    label = "2 Обновить Harness" if language == "ru" else "2 Update Harness"
+    assert len(update) == 1
+    assert update[0].startswith(label) and update[0].rstrip().endswith("⚠")
+    assert selected[0].startswith("0 ")
+    # The selected entry: the selection fill, an outline on a wide terminal, no left bar.
+    tokens = brand.SHELL_TOKENS
+    assert styles.background.hex.lower() == tokens["selection-background"]  # type: ignore[attr-defined]
+    assert styles.border_left[0] in ("", "none")  # type: ignore[attr-defined]
+    outline = styles.outline_top  # type: ignore[attr-defined]
+    if size[1] >= 38:
+        assert outline[0] == "round"
+        assert outline[1].hex.lower() == tokens["selection-outline"]
+    else:
+        assert outline[0] in ("", "none")
+
+
 def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
     from rich.text import Text
 
-    from harness.console.shell import menu_label
+    from harness.console.tui.shell import menu_label
 
     label = menu_label(2, "Update Harness", ("⚠", "#E5A04B"))
     name, badge = (column._cells[0] for column in label.columns)
@@ -112,8 +253,8 @@ def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
 
 
 def test_section_badges_come_from_the_health_facts() -> None:
-    from harness.console import brand
-    from harness.console.shell import section_badges
+    from harness.console.kernel import brand
+    from harness.console.tui.shell import section_badges
 
     badges = section_badges(_home_data())
     assert badges == {
@@ -139,8 +280,40 @@ def test_section_badges_come_from_the_health_facts() -> None:
     }
 
 
+def test_the_menu_badges_are_shown_on_another_shell_screen(tmp_path: Path) -> None:
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
+    from harness.health.model import Report
+
+    report = Report(schema_version=1, repo=str(tmp_path), online=False, checks=[])
+
+    async def scenario() -> tuple[list[str], list[str]]:
+        app = HarnessConsoleApp(tmp_path)
+        async with app.run_test(size=(160, 52)) as pilot:
+            await app.switch_screen(_home(tmp_path))
+            await pilot.pause()
+            diagnostics = DiagnosticsScreen(
+                tmp_path, collect_diagnostics=lambda _repo, *, online=False: report
+            )
+            await app.push_screen(diagnostics)
+            await pilot.pause()
+            await pilot.pause()
+            return (
+                _region_text(
+                    app, _menu_item(diagnostics, "Diagnostics").query_one(Static)
+                ),
+                _region_text(
+                    app, _menu_item(diagnostics, "Orchestration").query_one(Static)
+                ),
+            )
+
+    diagnostics, orchestration = asyncio.run(scenario())
+    assert diagnostics[0].startswith("3 Диагностика")
+    assert diagnostics[0].rstrip().endswith("✖ 2")
+    assert orchestration[0].rstrip().endswith("3")
+
+
 def test_a_section_title_is_in_capitals_with_its_note_after_it() -> None:
-    from harness.console import brand, i18n
+    from harness.console.kernel import brand, i18n
 
     assert brand.section_title("Требует внимания", "2") == " ТРЕБУЕТ ВНИМАНИЯ  2 "
     assert brand.section_title(" Действия ") == " ДЕЙСТВИЯ "
@@ -173,7 +346,7 @@ def test_section_cards_and_folds_follow_the_language_with_muted_titles(
 ) -> None:
     from textual.widgets._collapsible import CollapsibleTitle
 
-    from harness.console import brand
+    from harness.console.kernel import brand
 
     async def scenario() -> tuple[list[str], list[str], str, bool]:
         app = HarnessConsoleApp(tmp_path)
@@ -215,8 +388,8 @@ def test_section_cards_and_folds_follow_the_language_with_muted_titles(
 
 
 def test_frame_titles_of_shell_screens_are_muted_capitals(tmp_path: Path) -> None:
-    from harness.console import brand
-    from harness.console.screens.diagnostics import DiagnosticsScreen
+    from harness.console.kernel import brand
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
     from harness.health.model import Report
 
     report = Report(schema_version=1, repo=str(tmp_path), online=False, checks=[])
@@ -292,8 +465,8 @@ def test_the_footer_follows_a_resize_across_the_narrow_threshold(
 
 
 def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
-    from harness.console import i18n
-    from harness.console.shell import CHECK_ROUTES, check_route
+    from harness.console.kernel import i18n
+    from harness.console.tui.shell import CHECK_ROUTES, check_route
     from harness.health.registry import REGISTRY
 
     ids = [check_id for check_id, _check in REGISTRY]
@@ -310,7 +483,7 @@ def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
 
 
 def test_a_jump_is_labelled_by_its_section_or_its_action() -> None:
-    from harness.console import i18n
+    from harness.console.kernel import i18n
 
     assert i18n.jump_label("ru", "Update Harness") == "Обновить Harness"
     assert i18n.jump_label("en", "Update Harness") == "Update Harness"
@@ -328,7 +501,7 @@ class JumpShell(StubShell):
 def test_a_jump_link_opens_its_section_and_runs_no_command(
     tmp_path: Path, how: str
 ) -> None:
-    from harness.console.screens.update_harness import UpdateHarnessScreen
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
 
     recorder = _Recorder()
 
@@ -441,12 +614,15 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
     only Esc binding)."""
     import re
 
-    from harness.console.screens.configuration import ConfigurationScreen
-    from harness.console.screens.configuration_versions import (
+    from harness.console.tui.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration_versions import (
         ConfigurationVersionsScreen,
     )
-    from harness.console.screens.project_setup import ProjectSetupScreen
-    from harness.console.screens.update_harness import UpdateHarnessScreen
+    from harness.console.tui.screens.project_setup import ProjectSetupScreen
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
+
+    from harness.console.tui.screens.project_setup import ProjectSetupScreen
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
 
     for screen_class in (
         ConfigurationScreen,
@@ -459,7 +635,7 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
         keys = [b.key if isinstance(b, Binding) else b[0] for b in own]
         assert "escape" not in keys, screen_class
 
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     names = (
         "dashboard",
         "harness",
@@ -490,7 +666,7 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
 def test_reports_and_repo_map_leave_back_and_breakpoints_to_the_shell() -> None:
     """Esc and the narrow layout belong to the shell: these screens add neither a back key nor
     breakpoints of their own (the build confirmation is a modal, with its own cancel)."""
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     for name, modals in (("reports", 0), ("repo_map", 1), ("repo_map_settings", 0)):
         source = (screens / f"{name}.py").read_text(encoding="utf-8")
         assert source.count('Binding("escape"') == modals, f"{name}: an Esc binding"
@@ -500,7 +676,7 @@ def test_reports_and_repo_map_leave_back_and_breakpoints_to_the_shell() -> None:
 
 def test_reports_and_repo_map_show_no_demo_data_from_the_mockups() -> None:
     """The mockups' sample values (ids, commits, paths, counts) are not in the screens' sources."""
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     demo = (
         "85abd57e",
         "generation-1e1684b3",
@@ -516,3 +692,68 @@ def test_reports_and_repo_map_show_no_demo_data_from_the_mockups() -> None:
         source = (screens / f"{name}.py").read_text(encoding="utf-8")
         for value in demo:
             assert value not in source, f"{name}: the mockup's sample {value!r}"
+
+
+def test_the_mockup_legend_functions_are_not_on_the_reports_screens(
+    tmp_path: Path,
+) -> None:
+    """The section table of contents, the event-type filter and “Сбросить” are the mockup's own
+    suggestions, left for a follow-up ticket: no screen of Reports has them."""
+    from textual.widgets import Input, Select
+
+    from harness.console.tui.screens.reports import (
+        BatchTimelineScreen,
+        QaLogsScreen,
+        ReportScreen,
+        ReportsScreen,
+    )
+    from tests.console._console_ledger_fixture import build_reports_fixture
+
+    build_reports_fixture(tmp_path)
+    from harness.console.tui.reports import load_ledger_view
+
+    view = load_ledger_view(tmp_path)
+    entry = view.reports[0]
+    timeline = view.timeline(entry.batch_id)
+    assert timeline is not None
+    forbidden = ("Сбросить", "Reset", "Разделы", "Оглавление", "Типы событий")
+
+    async def scenario() -> dict[str, tuple[str, int, int, int]]:
+        found: dict[str, tuple[str, int, int, int]] = {}
+        for name, make in (
+            ("list", lambda: ReportsScreen(tmp_path)),
+            ("report", lambda: ReportScreen(entry, view, tmp_path)),
+            ("timeline", lambda: BatchTimelineScreen(timeline, tmp_path)),
+            ("qa", lambda: QaLogsScreen(view)),
+        ):
+            screen = make()
+
+            class Host(App[None]):
+                def on_mount(self) -> None:
+                    self.push_screen(screen)
+
+            app = Host()
+            async with app.run_test(size=(160, 52)) as pilot:
+                await pilot.pause()
+                text = "\n".join(
+                    [str(w.content) for w in app.screen.query(Static)]
+                    + [str(b.label) for b in app.screen.query(Button)]
+                    + [str(c.border_title) for c in app.screen.query(SectionCard)]
+                )
+                found[name] = (
+                    text,
+                    len(app.screen.query(Input)),
+                    len(app.screen.query(Select)),
+                    len(app.screen.query(Button)),
+                )
+        return found
+
+    found = asyncio.run(scenario())
+    for name, (text, _, _, _) in found.items():
+        for word in forbidden:
+            assert word not in text, f"{name}: {word!r}"
+    # Only the list has filters (five texts, three choices); the other screens have none.
+    assert found["list"][1:3] == (5, 3)
+    assert found["report"][1:3] == (0, 0)
+    assert found["timeline"][1:3] == (0, 0)
+    assert found["qa"][1:3] == (0, 0)

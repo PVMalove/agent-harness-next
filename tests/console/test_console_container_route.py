@@ -7,7 +7,7 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from harness.console.container_route import (
+from harness.console.kernel.container_route import (
     NEED_BATCH,
     Authored,
     RouteSession,
@@ -1733,7 +1733,7 @@ def test_cleanup_apply_needs_confirmation_and_preview_does_not() -> None:
 
 # ----------------------------------------------------------------------------- contract (#711)
 
-from harness.console.coordinator_api import forbidden_in  # noqa: E402
+from harness.console.kernel.coordinator_api import forbidden_in  # noqa: E402
 
 
 def full_route() -> tuple[RouteSession, ScriptedCoordinator]:

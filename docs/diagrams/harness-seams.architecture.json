@@ -370,7 +370,7 @@
       ],
       "sources": [
         {
-          "path": "harness/console/reports.py",
+          "path": "harness/console/tui/reports.py",
           "line": 167,
           "end_line": 169,
           "label": "records_root_lenient"

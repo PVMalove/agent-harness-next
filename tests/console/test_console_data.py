@@ -1,12 +1,15 @@
 """Unit tests of console logic; no application startup or external processes."""
+"""harness.console.kernel.data: сбор данных для консоли на базе стандартной библиотеки без импорта textual."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+from harness.console.kernel import data as console_data
 
-from harness.console import data as console_data
+
+from harness.console.kernel import data as console_data
 
 
 def test_harness_version_reads_the_package_version_file() -> None:

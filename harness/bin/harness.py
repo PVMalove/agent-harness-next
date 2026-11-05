@@ -1448,7 +1448,7 @@ def cmd_console(args: argparse.Namespace) -> int:
 
 def cmd_console_server(args: argparse.Namespace) -> int:
     """Запустить Сервер консоли проекта; его стартует `harness console` под `uv run --with`."""
-    from harness.console.server import run
+    from harness.console.backend.server import run
 
     run(Path(args.repo).expanduser().resolve())
     return 0

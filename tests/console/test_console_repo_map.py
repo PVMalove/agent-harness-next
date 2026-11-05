@@ -1,4 +1,6 @@
 """Unit tests of console logic; no application startup or external processes."""
+"""harness.console.kernel.repo_map: Repo Map facts for the console on a real repository and cache fixture
+(tests/_console_repo_map_fixture.py). No textual needed."""
 
 from __future__ import annotations
 
@@ -10,13 +12,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from harness.console import repo_map as console_repo_map
-from harness.console.export import export_text, render_markdown
-from harness.console.repo_map import RepoMapView
+from harness.console.kernel import repo_map as console_repo_map
+from harness.console.kernel.export import export_text, render_markdown
+from harness.console.kernel.repo_map import RepoMapView
 from tests.console._console_repo_map_fixture import (
     HUB,
     map_payload,
 )
+from harness.console.kernel import repo_map as console_repo_map
+from harness.console.kernel.export import export_text, render_markdown
+from harness.console.kernel.repo_map import RepoMapView
+from harness.console.kernel.runner import capturing_runner
 
 
 class _RecordingRunner:
