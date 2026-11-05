@@ -957,7 +957,7 @@ def test_silence_is_shown_as_a_fact_and_never_as_a_stop() -> None:
     silent = next(
         r for r in session.view(Stage.WORKER).rows if r.label == "Тишина worker"
     )
-    assert silent.state is State.WARN and silent.value == "9000 с; stale"
+    assert silent.state is State.WARN and silent.value == "9000 сек; stale"
 
 
 def test_a_reaction_error_is_a_blocker_shown_verbatim() -> None:

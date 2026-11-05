@@ -971,7 +971,7 @@ def worker_view(result: ApiResult | None, selection: Selection) -> StageView:
     rows.append(
         Row(
             "Тишина worker",
-            f"{silent} с" + ("; stale" if entry.get("stale") else "")
+            f"{silent} сек" + ("; stale" if entry.get("stale") else "")
             if silent is not None
             else "не сообщается",
             State.WARN if entry.get("stale") else None,
