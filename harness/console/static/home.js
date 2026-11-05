@@ -6,7 +6,12 @@
   const unavailable = home.dataset.unavailable;
   const labels = JSON.parse(home.dataset.labels);
   const label = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), labels[key]);
-  const text = (id, value) => { $(id).textContent = value ?? unavailable; };
+  const text = (id, value) => {
+    const target = $(id);
+    target.textContent = value ?? (target.closest('#home-context') ? '—' : unavailable);
+    if (value == null) target.title = unavailable;
+    else target.removeAttribute('title');
+  };
   const number = value => Number.isSafeInteger(value) && value >= 0;
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
   const nullable = (value, check) => value === null || check(value);
@@ -32,15 +37,22 @@
   }) && snapshot.problems.length <= snapshot.problems_total;
 
   function problemList(id, problems) {
+    const attention = id === 'attention-list';
     const rows = problems.map(problem => {
       const row = document.createElement('div');
-      row.className = 'check-row';
+      row.className = attention ? 'it' : 'check-row';
       const icon = document.createElement('span');
-      icon.className = 'check-icon';
-      if (['ok', 'warn', 'fail', 'skipped'].includes(problem.status)) icon.classList.add(problem.status);
-      icon.textContent = problem.status;
+      icon.className = attention ? 'home-alert-icon' : 'check-icon';
+      const statuses = {ok: ['check', home.dataset.passed], warn: ['warning', home.dataset.warning],
+        fail: ['x', home.dataset.failed], skipped: ['clock', home.dataset.skipped]};
+      const status = Object.hasOwn(statuses, problem.status) ? statuses[problem.status] : ['info', problem.status];
+      if (Object.hasOwn(statuses, problem.status)) icon.classList.add(attention && problem.status === 'fail' ? 'err' : problem.status);
+      icon.setAttribute('role', 'img');
+      icon.setAttribute('aria-label', status[1]);
+      const svg = new DOMParser().parseFromString(window.HarnessIcons.get(status[0]).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '), 'image/svg+xml').documentElement;
+      icon.append(document.importNode(svg, true));
       const main = document.createElement('span');
-      main.className = 'check-main';
+      main.className = attention ? 't' : 'check-main';
       const title = document.createElement('b');
       title.textContent = problem.id;
       const detail = document.createElement('small');
@@ -136,7 +148,7 @@
       if (current !== generation || stopped) return;
       let reply;
       try { reply = JSON.parse(event.data); } catch { socket.close(); return; }
-      if (!object(reply) || reply.id !== pending) return;
+      if (pending === null || !object(reply) || reply.id !== pending) return;
       if (reply.v !== 1 || reply.type !== 'home.snapshot' || reply.ok !== true || typeof reply.cached !== 'boolean' || typeof reply.age_seconds !== 'number' || !Number.isFinite(reply.age_seconds) || reply.age_seconds < 0 || !validSnapshot(reply.snapshot)) {
         socket.close();
         return;

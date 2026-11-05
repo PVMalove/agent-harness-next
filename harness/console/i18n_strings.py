@@ -416,6 +416,10 @@ EN: dict[str, str] = {
 # Labels of the facts in the home screen's context cards. Kept apart from `EN`: a label such as
 # `Состояние` reads differently here than as a frame title.
 FACT_LABELS_EN: dict[str, str] = {
+    "Имя": "Name",
+    "Трекер": "Tracker",
+    "Пакет": "Package",
+    "Скиллы": "Skills",
     "Подтвердить фиксы": "Confirm fixes",
     "нечего экспортировать: отчёт ещё строится": "Nothing to export: the report is still building",
     "нечего экспортировать: отчёт не построен": "Nothing to export: no report was built",

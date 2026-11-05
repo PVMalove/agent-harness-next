@@ -68,6 +68,6 @@
 
 // Only fixed, package-owned icon paths are parsed; project data never enters SVG markup.
 document.querySelectorAll('[data-icon]').forEach(element => {
-  const svg = new DOMParser().parseFromString(window.HarnessIcons.get(element.dataset.icon), 'image/svg+xml').documentElement;
+  const svg = new DOMParser().parseFromString(window.HarnessIcons.get(element.dataset.icon).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '), 'image/svg+xml').documentElement;
   element.replaceChildren(document.importNode(svg, true));
 });

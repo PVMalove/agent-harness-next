@@ -26,7 +26,7 @@
       </div>
     </header>
     <div class="layout">
-      <div id="connection-banner" class="connection-banner" role="status" aria-live="polite"><div><b id="connection-message">{{ tr('Ожидание снимка') }}</b><small id="snapshot-stale" hidden>{{ tr('Последний снимок устарел') }}</small><small id="snapshot-status">{{ unavailable }}</small></div><button id="connection-retry" type="button">{{ tr('Повторить') }}</button></div>
+      <div id="connection-banner" class="connection-banner" role="status" aria-live="polite"><div><b id="connection-message">{{ tr('Ожидание снимка') }}</b><span id="snapshot-stale" hidden><small>{{ tr('Последний снимок устарел') }}</small></span><small id="snapshot-status">{{ unavailable }}</small></div><button id="connection-retry" type="button">{{ tr('Повторить') }}</button></div>
       <nav id="navigation" aria-label="{{ tr('Разделы консоли') }}">
       {% for group, items in navigation %}
         <div class="nav-group"><div class="nav-group-label">{{ tr(group) }}</div>
@@ -39,7 +39,7 @@
       <div id="nav-scrim" class="nav-scrim" hidden></div>
       <main id="content">
         {% include 'home.html' %}
-        <section id="section-unavailable" class="connection-page" hidden><h1 id="section-title"></h1><p>{{ tr('Этот раздел ещё недоступен в веб-консоли') }}</p><a href="#home">{{ section('Home') }}</a></section>
+        <div id="section-unavailable" hidden><section class="connection-page"><h1 id="section-title"></h1><p>{{ tr('Этот раздел ещё недоступен в веб-консоли') }}</p><a href="#home">{{ section('Home') }}</a></section></div>
       </main>
     </div>
     <footer class="foot"><div class="keys"><span><b class="k">?</b> {{ section('Help') }}</span><span><b class="k">g</b> {{ section('Home') }}</span><span><b class="k">Esc</b> {{ tr('Закрыть меню') }}</span></div><span id="foot-status" class="r">{{ tr('Только чтение') }}</span></footer>

@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import importlib
 import logging
+import re
 import secrets
 
 from .decisions import DecisionService, is_decisions_request
@@ -157,6 +158,13 @@ class ConsoleServer:
                 await self._http(connection, request, reader, writer, status)
                 return
             if request.target != b"/ws":
+                if any(
+                    name == b"transfer-encoding"
+                    or (name == b"content-length" and int(value) != 0)
+                    for name, value in request.headers
+                ):
+                    await self._http(connection, request, reader, writer, 400)
+                    return
                 status, body, mime, headers = self._page(request)
                 await self._http(
                     connection,
@@ -216,6 +224,34 @@ class ConsoleServer:
             return 405
         return None
 
+    @property
+    def _cookie_name(self) -> bytes:
+        # Cookie scope has no port component; each project listener needs its own name.
+        return f"console_token_{self.port}".encode()
+
+    @staticmethod
+    def _cookie_values(request: h11.Request) -> dict[bytes, bytes] | None:
+        headers = [value for name, value in request.headers if name == b"cookie"]
+        if not headers:
+            return {}
+        if len(headers) != 1:
+            return None
+        values: dict[bytes, bytes] = {}
+        for part in headers[0].split(b";"):
+            name, separator, value = part.strip().partition(b"=")
+            if (
+                not separator
+                or not re.fullmatch(rb"[!#$%&'*+\-.^_`|~0-9A-Za-z]+", name)
+                or name in values
+            ):
+                return None
+            if value.startswith(b'"') and value.endswith(b'"'):
+                value = value[1:-1]
+            if not re.fullmatch(rb"[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]*", value):
+                return None
+            values[name] = value
+        return values
+
     def _authenticated(
         self, request: h11.Request, *, browser_page: bool = False
     ) -> bool:
@@ -229,9 +265,11 @@ class ConsoleServer:
             and not auth
             and (browser_page or origin == [f"http://127.0.0.1:{self.port}".encode()])
         ):
-            return secrets.compare_digest(
-                cookies[0], b"console_token=" + self._token.encode()
-            )
+            values = self._cookie_values(request)
+            if values is None:
+                return False
+            token = values.get(self._cookie_name, values.get(b"console_token", b""))
+            return secrets.compare_digest(token, self._token.encode())
         return False
 
     def _page(
@@ -271,14 +309,16 @@ class ConsoleServer:
                 if name in (b"cookie", b"authorization")
             ]
             authenticated = self._authenticated(request, browser_page=True)
-            if credentials and (credentials != [b"cookie"] or not authenticated):
+            if credentials and (
+                credentials != [b"cookie"] or self._cookie_values(request) is None
+            ):
                 return rejected
             if not authenticated:
                 if self._browser_issued or request.method != b"GET":
                     return rejected
                 self._browser_issued = True
                 cookie = (
-                    f"console_token={self._token}; HttpOnly; SameSite=Strict; Path=/"
+                    f"{self._cookie_name.decode()}={self._token}; HttpOnly; SameSite=Strict; Path=/"
                 )
                 headers = [(b"Set-Cookie", cookie.encode())]
             else:
