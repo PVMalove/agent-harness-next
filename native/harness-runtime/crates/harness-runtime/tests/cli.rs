@@ -291,6 +291,7 @@ fn downgrade_to_version_one(store: &Path) {
              ALTER TABLE dispatch_status DROP COLUMN revision;
              ALTER TABLE qa_queue DROP COLUMN revision;
              ALTER TABLE record DROP COLUMN revision;
+             DROP INDEX dispatch_batch_id;
              DROP TABLE operations;
              DROP TABLE audit_checkpoint;
              CREATE TABLE audit_checkpoint (seq INTEGER NOT NULL, chain_sha256 TEXT NOT NULL) STRICT;

@@ -1,4 +1,4 @@
-//! Schema version 6: an execution is a `process`, a `container` or a `qa` run of an engine; a QA
+//! Schema version 7: an execution is a `process`, a `container` or a `qa` run of an engine; a QA
 //! dispatch has one execution per attempt, and the latest attempt is the one a dispatch shows
 //! (ADR 0022, section 3; ADR 0023, section 5).
 
@@ -167,12 +167,12 @@ const EXECUTIONS_V5: &str = "CREATE TABLE executions (
 ) STRICT;";
 
 #[test]
-fn a_store_of_version_five_keeps_its_container_executions_at_version_six() {
+fn a_store_of_version_five_keeps_its_container_executions_at_the_current_schema() {
     let path = tempdir("v5").join("runtime.db");
     let mut old = create(&path).unwrap();
     old.execute_batch(
         "DROP TRIGGER executions_transition; DROP TRIGGER executions_terminal;
-         DROP TABLE executions; PRAGMA user_version = 5;",
+         DROP TABLE executions; DROP INDEX dispatch_batch_id; PRAGMA user_version = 5;",
     )
     .unwrap();
     old.execute_batch(EXECUTIONS_V5).unwrap();
@@ -199,7 +199,7 @@ fn a_store_of_version_five_keeps_its_container_executions_at_version_six() {
     let version: i64 = old
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!((SCHEMA_VERSION, version), (6, 6));
+    assert_eq!((SCHEMA_VERSION, version), (7, 7));
     let kept = executions::load(&old, "op").unwrap().expect("kept");
     assert_eq!(
         (

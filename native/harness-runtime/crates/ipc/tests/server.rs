@@ -183,6 +183,28 @@ fn hello(root: &Path, token: &str, min: u32, max: u32) -> Value {
     )
 }
 
+/// A request that names the protocol minor `minor` it speaks (the envelope of a newer client).
+fn request_minor(operation: &str, payload: Option<Value>, minor: u32) -> Value {
+    let mut body = request(operation, payload);
+    body["protocol_version"] = json!({"major": 1, "minor": minor});
+    body
+}
+
+/// A `hello` that negotiates exactly `minor`.
+fn hello_minor(root: &Path, token: &str, minor: u32) -> Value {
+    request_minor(
+        "hello",
+        Some(json!({
+            "protocol": {"min": {"major": 1, "minor": minor},
+                         "max": {"major": 1, "minor": minor}},
+            "client_version": "test",
+            "repo_root": root,
+            "token": token,
+        })),
+        minor,
+    )
+}
+
 fn exchange(stream: &mut (impl Read + Write), body: &Value) -> Response {
     write_frame(stream, &encode(body).unwrap()).unwrap();
     decode(&read_frame(stream).unwrap()).unwrap()
@@ -515,6 +537,105 @@ fn a_read_snapshot_spans_requests_while_another_connection_commits() {
     assert_eq!(again.result.unwrap()["records"], json!({}));
     assert_eq!(error_code(&closed), ErrorCode::StoreBusy);
     assert_eq!(closed.error.unwrap().facts["reason"], "snapshot_expired");
+}
+
+/// The store-side filter selects one batch in the same read transaction as every other read, and
+/// a commit of another connection does not change the snapshot's answer. The test runs unchanged
+/// on the Unix socket and the Windows named pipe (ADR 0020, section 3).
+#[test]
+fn a_filtered_read_snapshot_spans_requests_while_another_connection_commits() {
+    const BATCH: &str = "batch-aaaaaaaa-0000-4000-8000-000000000001";
+    const BATCH_PATH: &str = "batches/batch-aaaaaaaa-0000-4000-8000-000000000001.json";
+    let fixture = Fixture::new("filtered-snapshot");
+    let state_dir = cut_over(&fixture);
+    let paths = resolve_paths(&fixture.root, &Environment::with_xdg(&fixture.xdg)).unwrap();
+    let runtime = Running::start(Server::bind_serving(paths, Some(state_dir)).unwrap());
+    let mut reader = runtime.connect();
+    let mut writer = runtime.connect();
+    for stream in [&mut reader, &mut writer] {
+        assert_eq!(
+            exchange(stream, &hello_minor(&fixture.root, &runtime.token, 7)).status,
+            Status::Ok
+        );
+    }
+    let filter = json!({"batch_id": BATCH});
+    let collections = json!(["batches", "dispatches", "dispatch-status"]);
+
+    let opened = exchange(
+        &mut reader,
+        &request_minor(
+            "state.read",
+            Some(json!({"snapshot": "open", "collections": collections, "filter": filter})),
+            7,
+        ),
+    );
+    let answer = opened.result.as_ref().unwrap();
+    let snapshot = answer["snapshot"].clone();
+    let records = answer["records"].clone();
+    assert_eq!(records.as_object().unwrap().len(), 5, "{records}");
+    let mut changed = records[BATCH_PATH].clone();
+    changed["ticket"] = json!("#changed");
+    let written = exchange(
+        &mut writer,
+        &request_minor(
+            "state.write",
+            Some(json!({"mutations": [{
+                "op": "replace",
+                "path": BATCH_PATH,
+                "content": state::canonical::canonical_json(&changed),
+                "expected_revision": answer["revisions"][BATCH_PATH].clone(),
+            }]})),
+            7,
+        ),
+    );
+    let again = exchange(
+        &mut reader,
+        &request_minor(
+            "state.read",
+            Some(
+                json!({"snapshot": snapshot, "collections": collections, "filter": filter,
+                        "close": true}),
+            ),
+            7,
+        ),
+    );
+
+    assert_eq!(opened.status, Status::Ok, "{opened:?}");
+    assert!(snapshot.as_str().unwrap().starts_with("snapshot-"));
+    assert_eq!(written.status, Status::Ok, "{written:?}");
+    assert_eq!(again.result.as_ref().unwrap()["records"], records);
+}
+
+/// A filtered read needs protocol minor 7: a peer that negotiated an older minor gets a typed
+/// `protocol_unsupported`, not `malformed_request` for a field it never learned.
+#[test]
+fn a_filtered_read_from_an_older_protocol_minor_is_protocol_unsupported() {
+    let fixture = Fixture::new("filter-minor");
+    let state_dir = cut_over(&fixture);
+    let paths = resolve_paths(&fixture.root, &Environment::with_xdg(&fixture.xdg)).unwrap();
+    let runtime = Running::start(Server::bind_serving(paths, Some(state_dir)).unwrap());
+    let mut stream = runtime.connect();
+    assert_eq!(
+        exchange(&mut stream, &hello_minor(&fixture.root, &runtime.token, 6)).status,
+        Status::Ok
+    );
+
+    let refused = exchange(
+        &mut stream,
+        &request_minor(
+            "state.read",
+            Some(json!({
+                "collections": ["batches"],
+                "filter": {"batch_id": "batch-aaaaaaaa-0000-4000-8000-000000000001"},
+            })),
+            6,
+        ),
+    );
+
+    assert_eq!(error_code(&refused), ErrorCode::ProtocolUnsupported);
+    let facts = refused.error.unwrap().facts;
+    assert_eq!(facts["negotiated_minor"], 6);
+    assert_eq!(facts["required_minor"], 7);
 }
 
 #[test]

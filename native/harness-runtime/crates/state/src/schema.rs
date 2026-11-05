@@ -1,4 +1,4 @@
-//! The schema of the store, version 6 (`PRAGMA user_version = 6`; ADR 0020, sections 3, 4 and 7).
+//! The schema of the store, version 7 (`PRAGMA user_version = 7`; ADR 0020, sections 3, 4 and 7).
 //!
 //! Version 2 adds the `operations` table of the idempotent writes (ADR 0021, section 4), a
 //! `revision` to every row that a command may change, the denormalised `execution_state` of a
@@ -12,9 +12,11 @@
 //! that allows only the transitions of `executions::allowed`. Version 5 makes an execution a
 //! `process` or a `container` of an engine, proven by its container id (ADR 0022, section 4).
 //! Version 6 adds the `qa` run of an engine: one execution per attempt of a QA dispatch, proven by
-//! its receipt, because each command of the run has its own container (ADR 0022, section 3). A
-//! store of version 1 to 5 is upgraded in place by `upgrade` when the runtime starts or before
-//! its first write.
+//! its receipt, because each command of the run has its own container (ADR 0022, section 3).
+//! Version 7 adds the `dispatch_batch_id` index: a read filtered by batch selects the dispatches of
+//! one batch without scanning the table, and a filtered `dispatch-status` joins through it (ADR
+//! 0020, section 3). A store of version 1 to 6 is upgraded in place by `upgrade` when the runtime
+//! starts or before its first write.
 //!
 //! One table holds one kind of record. A column named like a field of the legacy record (`state`,
 //! `batch_id`, the risk fields of a batch) carries that field when the field has the type the
@@ -32,7 +34,7 @@ use crate::error::{Error, Result};
 use crate::time::iso_now;
 
 /// The schema version this build writes and the newest it serves.
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 
 macro_rules! audit_checkpoint_table {
     () => {
@@ -232,6 +234,9 @@ CREATE TABLE dispatch (
     revision  INTEGER NOT NULL DEFAULT 1,
     body_json TEXT NOT NULL
 ) STRICT;
+
+-- A read filtered by batch selects the dispatches of one batch (ADR 0020, section 3).
+CREATE INDEX dispatch_batch_id ON dispatch (batch_id);
 
 CREATE TABLE dispatch_status (
     id        TEXT PRIMARY KEY REFERENCES dispatch (id),
@@ -484,13 +489,18 @@ pub fn upgrade(connection: &mut Connection) -> Result<bool> {
         upgrade_2_to_3(&transaction)?;
     }
     match from {
-        // Version 4 (now 6): the executions of the supervisor; no row of an older store changes.
+        // Version 4 (now 7): the executions of the supervisor; no row of an older store changes.
         ..4 => {
             transaction.execute_batch(executions_table!("executions"))?;
             transaction.execute_batch(executions_triggers!())?;
         }
         4 => rebuild_executions(&transaction, EXECUTIONS_V4_COLUMNS)?,
-        _ => rebuild_executions(&transaction, EXECUTIONS_V5_COLUMNS)?,
+        5 => rebuild_executions(&transaction, EXECUTIONS_V5_COLUMNS)?,
+        // Version 6 already has the executions in the current shape; version 7 adds the index.
+        _ => {}
+    }
+    if from < 7 {
+        transaction.execute_batch("CREATE INDEX dispatch_batch_id ON dispatch (batch_id);")?;
     }
     audit::append(
         &transaction,

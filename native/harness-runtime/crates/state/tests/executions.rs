@@ -1,4 +1,4 @@
-//! The executions of the supervisor in the store, schema version 6: the transition matrix that
+//! The executions of the supervisor in the store, schema version 7: the transition matrix that
 //! the trigger and the runtime share, the terminal states, the lease, the denormalised
 //! `execution_state` of the dispatch and the audit record of every transition (ADR 0021,
 //! section 6; ADR 0022, section 2).
@@ -361,13 +361,14 @@ fn an_observation_maps_the_verdict_on_the_recorded_identity_to_an_execution_stat
 }
 
 #[test]
-fn a_store_of_version_three_is_upgraded_to_version_six_and_keeps_its_rows() {
+fn a_store_of_version_three_is_upgraded_to_the_current_schema_and_keeps_its_rows() {
     let path = tempdir("v3").join("runtime.db");
     let mut old = create(&path).unwrap();
     old.execute_batch(
         "DROP TRIGGER executions_transition;
          DROP TRIGGER executions_terminal;
          DROP TABLE executions;
+         DROP INDEX dispatch_batch_id;
          PRAGMA user_version = 3;
          INSERT INTO batch (id, state, body_json) VALUES ('b', 'active', '{\"a\":1}');
          INSERT INTO dispatch (id, batch_id, state, body_json) VALUES ('d', 'b', 'working', '{}');
@@ -388,7 +389,7 @@ fn a_store_of_version_three_is_upgraded_to_version_six_and_keeps_its_rows() {
     let version: i64 = old
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!((SCHEMA_VERSION, version), (6, 6));
+    assert_eq!((SCHEMA_VERSION, version), (7, 7));
     let body: String = old
         .query_row("SELECT body_json FROM batch WHERE id = 'b'", [], |row| {
             row.get(0)
@@ -400,7 +401,7 @@ fn a_store_of_version_three_is_upgraded_to_version_six_and_keeps_its_rows() {
         (action, details)
     };
     assert_eq!(action, "schema-migrate");
-    assert_eq!(details, json!({"from": 3, "to": 6}));
+    assert_eq!(details, json!({"from": 3, "to": SCHEMA_VERSION}));
     let triggers: i64 = old
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'executions'",

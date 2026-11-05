@@ -6,6 +6,11 @@
 //! The revision of the answer is the sequence number of the last audit record: it moves with every
 //! change of the store. The generation revision of the answer is the one a write expects when its
 //! command decided over every batch (`expected_generation_revision`).
+//!
+//! A request may name a `filter` (`{"batch_id": ...}` and/or `{"dispatch_id": ...}`) beside its
+//! collections: the store then selects those rows itself, so a command that reads one batch never
+//! reads or validates the records of the other batches. The filter is part of the same read
+//! transaction, so a filtered answer comes from the same snapshot as an unfiltered one.
 
 use std::path::Path;
 
@@ -89,11 +94,25 @@ impl std::fmt::Debug for Snapshot {
     }
 }
 
-/// What a request asks a read for: collections and paths, checked.
+/// What a request asks a read for: collections, paths and the filter of a collection read, checked.
 pub struct Wanted {
     collections: Vec<String>,
     paths: Vec<String>,
+    filter: Option<Filter>,
 }
+
+/// The store-side filter of one read: the batch and/or the dispatch a command asks for. Both
+/// fields are ANDed, so the answer holds only the records that belong to that batch and dispatch.
+/// The filter is only defined for the collections that carry those keys, and it never widens a
+/// read.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Filter {
+    pub batch_id: Option<String>,
+    pub dispatch_id: Option<String>,
+}
+
+/// The collections a filter applies to: the records that name their batch or are keyed by it.
+pub const FILTERED_COLLECTIONS: [&str; 4] = ["batches", "plans", "dispatches", "dispatch-status"];
 
 /// The `store_id` of the store when it is the authority of the state directory.
 pub fn store_id(state: &Path) -> Option<String> {
@@ -180,6 +199,110 @@ fn typed_rows(
     Ok(())
 }
 
+/// The `FROM` clause, the conditions and their parameters of a filtered read of `spec`.
+fn filter_query(
+    spec: &Spec,
+    filter: &Filter,
+) -> Result<(String, Vec<String>, Vec<String>), ReadError> {
+    let mut conditions = Vec::new();
+    let mut parameters = Vec::new();
+    let from = match spec.table {
+        "dispatch" => {
+            if let Some(batch_id) = &filter.batch_id {
+                conditions.push("batch_id = ?".to_owned());
+                parameters.push(batch_id.clone());
+            }
+            if let Some(dispatch_id) = &filter.dispatch_id {
+                conditions.push("id = ?".to_owned());
+                parameters.push(dispatch_id.clone());
+            }
+            "dispatch".to_owned()
+        }
+        // The status row names its dispatch, and the dispatch row names its batch: a status is
+        // selected through the batch of its dispatch, never through a second read.
+        "dispatch_status" => {
+            if let Some(batch_id) = &filter.batch_id {
+                conditions.push("dispatch.batch_id = ?".to_owned());
+                parameters.push(batch_id.clone());
+            }
+            if let Some(dispatch_id) = &filter.dispatch_id {
+                conditions.push("dispatch_status.id = ?".to_owned());
+                parameters.push(dispatch_id.clone());
+            }
+            "dispatch_status JOIN dispatch ON dispatch.id = dispatch_status.id".to_owned()
+        }
+        "batch" | "plan" => {
+            if let Some(batch_id) = &filter.batch_id {
+                conditions.push("id = ?".to_owned());
+                parameters.push(batch_id.clone());
+            }
+            if let Some(dispatch_id) = &filter.dispatch_id {
+                conditions.push("id IN (SELECT batch_id FROM dispatch WHERE id = ?)".to_owned());
+                parameters.push(dispatch_id.clone());
+            }
+            spec.table.to_owned()
+        }
+        other => {
+            return Err(ReadError::Malformed(format!(
+                "the collection {other:?} takes no filter"
+            )));
+        }
+    };
+    if conditions.is_empty() {
+        return Err(ReadError::Malformed(
+            "filter needs batch_id or dispatch_id".to_owned(),
+        ));
+    }
+    Ok((from, conditions, parameters))
+}
+
+/// The rows of `spec` that `filter` selects: the store does the selecting, in the same read
+/// transaction as every other read of the answer.
+fn filtered_rows(
+    connection: &Connection,
+    spec: &Spec,
+    filter: &Filter,
+    found: &mut Found,
+) -> Result<(), ReadError> {
+    let prefix = if spec.table == "dispatch_status" {
+        "dispatch_status."
+    } else {
+        ""
+    };
+    let typed: Vec<String> = spec
+        .typed
+        .iter()
+        .map(|(name, _)| format!("{prefix}{name}"))
+        .collect();
+    let names = if typed.is_empty() {
+        String::new()
+    } else {
+        format!("{}, ", typed.join(", "))
+    };
+    let revision = if spec.revisioned() {
+        format!(", {prefix}revision")
+    } else {
+        String::new()
+    };
+    let (from, conditions, parameters) = filter_query(spec, filter)?;
+    let sql = format!(
+        "SELECT {prefix}id, {names}{prefix}body_json{revision} FROM {from} WHERE {} ORDER BY {prefix}id",
+        conditions.join(" AND ")
+    );
+    let mut statement = connection.prepare(&sql)?;
+    let mut rows = statement.query(rusqlite::params_from_iter(parameters.iter()))?;
+    while let Some(row) = rows.next()? {
+        let (id, record) = spec.join(row)?;
+        let revision = if spec.revisioned() {
+            Some(row.get::<_, i64>(spec.typed.len() + 2)?)
+        } else {
+            None
+        };
+        found.add(format!("{}/{id}.json", spec.directory), record, revision);
+    }
+    Ok(())
+}
+
 /// The rows of `sql`, each as `(path, body, revision)`: the third column is optional.
 fn table_rows(
     connection: &Connection,
@@ -245,10 +368,14 @@ fn collection(
     connection: &Connection,
     name: &str,
     selected: &str,
+    filter: Option<&Filter>,
     found: &mut Found,
 ) -> Result<(), ReadError> {
     if let Some(spec) = spec_of(name) {
-        return typed_rows(connection, spec, None, found);
+        return match filter {
+            None => typed_rows(connection, spec, None, found),
+            Some(filter) => filtered_rows(connection, spec, filter, found),
+        };
     }
     if name == "audit" {
         let prefix = format!("generations/{selected}/");
@@ -400,11 +527,51 @@ fn attached(state: &Path) -> Result<(), ReadError> {
     }
 }
 
+/// The filter of a `state.read` payload: absent, or an object with `batch_id` and/or
+/// `dispatch_id`, each a non-empty string.
+fn filter_of(members: &Map<String, Value>) -> Result<Option<Filter>, ReadError> {
+    let value = match members.get("filter") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(value) => value,
+    };
+    let Value::Object(fields) = value else {
+        return Err(ReadError::Malformed("filter must be an object".to_owned()));
+    };
+    if let Some(unknown) = fields
+        .keys()
+        .find(|key| !matches!(key.as_str(), "batch_id" | "dispatch_id"))
+    {
+        return Err(ReadError::Malformed(format!(
+            "unknown filter field {unknown:?}"
+        )));
+    }
+    let text = |key: &str| -> Result<Option<String>, ReadError> {
+        match fields.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(text)) if !text.is_empty() => Ok(Some(text.clone())),
+            Some(_) => Err(ReadError::Malformed(format!(
+                "filter.{key} must be a non-empty string"
+            ))),
+        }
+    };
+    let filter = Filter {
+        batch_id: text("batch_id")?,
+        dispatch_id: text("dispatch_id")?,
+    };
+    if filter.batch_id.is_none() && filter.dispatch_id.is_none() {
+        return Err(ReadError::Malformed(
+            "filter needs batch_id or dispatch_id".to_owned(),
+        ));
+    }
+    Ok(Some(filter))
+}
+
 /// The collections and paths of a `state.read` payload; `extra` names the other fields the
 /// caller reads from it.
 ///
 /// # Errors
-/// `Malformed` for an unknown field, a list that holds no strings, or a bad path.
+/// `Malformed` for an unknown field, a list that holds no strings, a bad path, or a filter that
+/// names a collection it does not apply to, comes with paths, or holds no key.
 pub fn wanted(payload: Option<&Value>, extra: &[&str]) -> Result<Wanted, ReadError> {
     let empty = Value::Object(Map::new());
     let payload = payload.unwrap_or(&empty);
@@ -414,7 +581,8 @@ pub fn wanted(payload: Option<&Value>, extra: &[&str]) -> Result<Wanted, ReadErr
         ));
     };
     if let Some(unknown) = members.keys().find(|key| {
-        !matches!(key.as_str(), "collections" | "paths") && !extra.contains(&key.as_str())
+        !matches!(key.as_str(), "collections" | "paths" | "filter")
+            && !extra.contains(&key.as_str())
     }) {
         return Err(ReadError::Malformed(format!(
             "unknown payload field {unknown:?}"
@@ -432,7 +600,30 @@ pub fn wanted(payload: Option<&Value>, extra: &[&str]) -> Result<Wanted, ReadErr
             "{bad:?} is not a record path"
         )));
     }
-    Ok(Wanted { collections, paths })
+    let filter = filter_of(members)?;
+    if filter.is_some() {
+        if !paths.is_empty() {
+            return Err(ReadError::Malformed(
+                "filter reads collections, not named paths".to_owned(),
+            ));
+        }
+        if collections.is_empty() {
+            return Err(ReadError::Malformed("filter needs a collection".to_owned()));
+        }
+        if let Some(name) = collections
+            .iter()
+            .find(|name| !FILTERED_COLLECTIONS.contains(&name.as_str()))
+        {
+            return Err(ReadError::Malformed(format!(
+                "the collection {name:?} takes no filter"
+            )));
+        }
+    }
+    Ok(Wanted {
+        collections,
+        paths,
+        filter,
+    })
 }
 
 /// Open a read transaction of the store of `state`: a read-only connection, `BEGIN`, and the
@@ -476,7 +667,13 @@ impl Snapshot {
     pub fn answer(&self, wanted: &Wanted) -> Result<Answer, ReadError> {
         let mut found = Found::default();
         for name in &wanted.collections {
-            collection(&self.connection, name, &self.selected, &mut found)?;
+            collection(
+                &self.connection,
+                name,
+                &self.selected,
+                wanted.filter.as_ref(),
+                &mut found,
+            )?;
         }
         for path in &wanted.paths {
             one_path(&self.connection, path, &self.selected, &mut found)?;
@@ -522,9 +719,12 @@ impl Snapshot {
 
 /// Answer one `state.read` request for the store of `state`, in a read transaction of its own.
 ///
-/// The payload is `{"collections": [...], "paths": [...]}`: a collection is a record directory of the
-/// legacy generation (`batches`, `dispatch-status`, `qa-lane`, `audit`, `reports`, ...), and a path
-/// is one record file relative to the generation. A path that holds no record is left out.
+/// The payload is `{"collections": [...], "paths": [...], "filter": {...}}`: a collection is a
+/// record directory of the legacy generation (`batches`, `dispatch-status`, `qa-lane`, `audit`,
+/// `reports`, ...), a path is one record file relative to the generation, and an optional `filter`
+/// (`batch_id` and/or `dispatch_id`, only with `batches`, `plans`, `dispatches` and
+/// `dispatch-status`) makes the store select the rows itself. A path that holds no record is left
+/// out.
 ///
 /// # Errors
 /// See [`ReadError`].

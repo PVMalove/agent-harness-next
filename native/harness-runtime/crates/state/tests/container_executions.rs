@@ -136,12 +136,12 @@ WHEN OLD.state <> NEW.state AND NOT (
 BEGIN SELECT RAISE(ABORT, 'the execution state does not allow this transition'); END;";
 
 #[test]
-fn a_store_of_version_four_keeps_its_process_executions_at_version_six() {
+fn a_store_of_version_four_keeps_its_process_executions_at_the_current_schema() {
     let path = tempdir("v4").join("runtime.db");
     let mut old = create(&path).unwrap();
     old.execute_batch(
         "DROP TRIGGER executions_transition; DROP TRIGGER executions_terminal;
-         DROP TABLE executions; PRAGMA user_version = 4;",
+         DROP TABLE executions; DROP INDEX dispatch_batch_id; PRAGMA user_version = 4;",
     )
     .unwrap();
     old.execute_batch(EXECUTIONS_V4).unwrap();
@@ -167,7 +167,7 @@ fn a_store_of_version_four_keeps_its_process_executions_at_version_six() {
     let version: i64 = old
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!((SCHEMA_VERSION, version), (6, 6));
+    assert_eq!((SCHEMA_VERSION, version), (7, 7));
     let kept = executions::load(&old, "op")
         .unwrap()
         .expect("the row is kept");
@@ -195,7 +195,7 @@ fn a_store_of_version_four_keeps_its_process_executions_at_version_six() {
     assert_eq!(action.0, "schema-migrate");
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&action.1).unwrap(),
-        json!({"from": 4, "to": 6})
+        json!({"from": 4, "to": SCHEMA_VERSION})
     );
     // The rebuilt table still refuses a transition out of a terminal state.
     old.execute(
