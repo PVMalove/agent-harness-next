@@ -7,7 +7,11 @@ from importlib.resources import files
 from . import i18n
 
 # These are fixed package resources, never names supplied to a filesystem reader by a client.
-ASSETS = {"/static/home.js": ("home.js", "text/javascript; charset=utf-8")}
+ASSETS = {
+    "/static/home.js": ("home.js", "text/javascript; charset=utf-8"),
+    "/static/harness-icons.js": ("harness-icons.js", "text/javascript; charset=utf-8"),
+    "/static/execution-console.css": ("execution-console.css", "text/css; charset=utf-8"),
+}
 NAVIGATION = (
     (
         "Обзор",
