@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import importlib
 import logging
 import secrets
 
-from .decisions import DecisionService, is_decisions_request
-from .decisions import respond as respond_decisions
+from . import admission
+from .decisions import DecisionService
 from .discovery import Discovery
-from .jobs import JobService, job_request_type
-from .orchestration_events import OrchestrationEvents, is_orchestration_request
-from .snapshots import SnapshotService, busy, respond
+from .jobs import JobService
+from .orchestration_events import OrchestrationEvents
+from .request_router import (
+    MAX_SUBSCRIPTIONS as MAX_SUBSCRIPTIONS,
+    MAX_UNFINISHED_REQUESTS as MAX_UNFINISHED_REQUESTS,
+    RequestRouter,
+    RouterConnection,
+)
+from .snapshots import SnapshotService
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,10 +31,6 @@ HEADER_TIMEOUT = 5.0
 CLOSE_TIMEOUT = 0.5
 READ_CHUNK = 16384
 MESSAGE_LIMIT = 65536
-MAX_UNFINISHED_REQUESTS = 4
-# A subscription stays unfinished while its job runs or its stream is open, so it never takes a
-# request slot.
-MAX_SUBSCRIPTIONS = 4
 
 # This independent logger never propagates protocol headers, even under root DEBUG.
 _PROTOCOL_LOGGER = logging.Logger("harness.console.protocol")
@@ -65,6 +66,9 @@ class ConsoleServer:
         self._jobs = jobs or JobService(self.repo)
         self._decisions = decisions or DecisionService(self.repo)
         self._events = events or OrchestrationEvents(self.repo)
+        self._router = RequestRouter(
+            self._snapshots, self._jobs, self._decisions, self._events
+        )
         self._idle_grace = idle_grace_seconds
         self._clients = 0
         self._idle_task: asyncio.Task[None] | None = None
@@ -143,7 +147,9 @@ class ConsoleServer:
             if boundary > HEADER_LIMIT:
                 await self._http(connection, request, reader, writer, 431)
                 return
-            status = self._admission(request)
+            status = admission.request_status(
+                request.headers, request.method, self.port
+            )
             if status is not None:
                 await self._http(connection, request, reader, writer, status)
                 return
@@ -153,21 +159,16 @@ class ConsoleServer:
                     request,
                     reader,
                     writer,
-                    200 if request.target == b"/" else 404,
+                    admission.page_status(
+                        request.target.decode("latin-1"), b"", ("/",)
+                    ),
                 )
                 return
-            if request.method != b"GET":
-                await self._http(connection, request, reader, writer, 405)
-                return
-            if not self._authenticated(request):
-                await self._http(connection, request, reader, writer, 401)
-                return
-            if any(
-                name == b"transfer-encoding"
-                or (name == b"content-length" and int(value) != 0)
-                for name, value in request.headers
-            ):
-                await self._http(connection, request, reader, writer, 400)
+            status = admission.upgrade_status(
+                request.headers, request.method, "/ws", b"", self.port, self._token
+            )
+            if status is not None:
+                await self._http(connection, request, reader, writer, status)
                 return
             end = connection.next_event()
             paused = connection.next_event()
@@ -192,32 +193,6 @@ class ConsoleServer:
                     await writer.wait_closed()
             except (TimeoutError, ConnectionError, OSError):
                 pass
-
-    def _admission(self, request: h11.Request) -> int | None:
-        host = [value for name, value in request.headers if name == b"host"]
-        origin = [value for name, value in request.headers if name == b"origin"]
-        expected = f"127.0.0.1:{self.port}".encode()
-        if host != [expected] or origin not in ([], [b"http://" + expected]):
-            return 403
-        if request.method not in (b"GET", b"HEAD"):
-            return 405
-        return None
-
-    def _authenticated(self, request: h11.Request) -> bool:
-        auth = [value for name, value in request.headers if name == b"authorization"]
-        cookies = [value for name, value in request.headers if name == b"cookie"]
-        origin = [value for name, value in request.headers if name == b"origin"]
-        if len(auth) == 1 and not cookies:
-            return secrets.compare_digest(auth[0], b"Bearer " + self._token.encode())
-        if (
-            len(cookies) == 1
-            and not auth
-            and origin == [f"http://127.0.0.1:{self.port}".encode()]
-        ):
-            return secrets.compare_digest(
-                cookies[0], b"console_token=" + self._token.encode()
-            )
-        return False
 
     async def _http(
         self,
@@ -331,9 +306,16 @@ class ConsoleServer:
     ) -> None:
         from websockets.frames import Frame, Opcode
 
-        send_lock = asyncio.Lock()
-        requests: set[asyncio.Task[None]] = set()
-        subscriptions: set[asyncio.Task[None]] = set()
+        async def send(reply: str) -> bool:
+            if protocol.close_expected():
+                return False
+            protocol.send_text(reply.encode())
+            if await self._flush_websocket(protocol, writer):
+                writer.close()
+                return False
+            return True
+
+        connection: RouterConnection = self._router.open(send, writer.close)
         closing_at: float | None = None
         try:
             while True:
@@ -346,24 +328,10 @@ class ConsoleServer:
                         except UnicodeDecodeError:
                             protocol.send_close(1007, "Invalid UTF-8")
                             continue
-                        job_type = job_request_type(raw)
-                        pending, limit = (
-                            (subscriptions, MAX_SUBSCRIPTIONS)
-                            if job_type == "job.subscribe"
-                            or is_orchestration_request(raw)
-                            else (requests, MAX_UNFINISHED_REQUESTS)
-                        )
-                        if len(pending) >= limit:
-                            protocol.send_text(busy(raw).encode())
-                            continue
-                        request = asyncio.create_task(
-                            self._answer(raw, job_type, protocol, writer, send_lock)
-                        )
-                        pending.add(request)
-                        request.add_done_callback(pending.discard)
+                        await connection.submit(raw)
                     elif event.opcode in (Opcode.TEXT, Opcode.BINARY, Opcode.CONT):
                         protocol.send_close(1003, "No application protocol")
-                async with send_lock:
+                async with connection.lock:
                     ended = await self._flush_websocket(protocol, writer)
                 if ended:
                     return
@@ -376,70 +344,12 @@ class ConsoleServer:
                     data = await reader.read(READ_CHUNK)
                 if not data:
                     protocol.receive_eof()
-                    async with send_lock:
+                    async with connection.lock:
                         await self._flush_websocket(protocol, writer)
                     return
                 protocol.receive_data(data)
         finally:
-            unfinished = requests | subscriptions
-            for request in unfinished:
-                request.cancel()
-            await asyncio.gather(*unfinished, return_exceptions=True)
-
-    async def _answer(
-        self,
-        raw: str,
-        job_type: str | None,
-        protocol: ServerProtocol,
-        writer: asyncio.StreamWriter,
-        send_lock: asyncio.Lock,
-    ) -> None:
-        """Answer one request frame beside the pump, so a slow check never stalls Ping or Close."""
-        try:
-            if job_type is not None:
-                async with contextlib.aclosing(self._jobs.replies(raw)) as replies:
-                    async for reply in replies:
-                        if not await self._send_reply(
-                            reply, protocol, writer, send_lock
-                        ):
-                            return
-            elif is_orchestration_request(raw):
-                async with contextlib.aclosing(self._events.replies(raw)) as replies:
-                    async for reply in replies:
-                        if not await self._send_reply(
-                            reply, protocol, writer, send_lock
-                        ):
-                            return
-            elif is_decisions_request(raw):
-                await self._send_reply(
-                    await respond_decisions(raw, self._decisions),
-                    protocol,
-                    writer,
-                    send_lock,
-                )
-            else:
-                await self._send_reply(
-                    await respond(raw, self._snapshots), protocol, writer, send_lock
-                )
-        except Exception:
-            # A reply that cannot be sent ends the connection; the pump sees the closed stream.
-            writer.close()
-
-    async def _send_reply(
-        self,
-        reply: str,
-        protocol: ServerProtocol,
-        writer: asyncio.StreamWriter,
-        send_lock: asyncio.Lock,
-    ) -> bool:
-        async with send_lock:
-            if protocol.close_expected():
-                return False
-            protocol.send_text(reply.encode())
-            if await self._flush_websocket(protocol, writer):
-                writer.close()
-                return False
-        return True
+            await connection.aclose()
 
     async def _exit_when_idle(self) -> None:
         """Close once no client and no job has been present for the grace period."""
