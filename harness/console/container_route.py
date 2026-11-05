@@ -1050,6 +1050,13 @@ class QaState:
     status: ApiResult | None = None
 
 
+_OUTCOME_STATES = {
+    "completed": State.OK,
+    "blocked": State.BLOCKED,
+    "failed": State.FAILED,
+}
+
+
 def _stage_rows(report: JsonObject) -> list[Row]:
     group = "Команды gate"
     rows: list[Row] = []
@@ -1234,7 +1241,9 @@ def qa_view(qa: QaState, selection: Selection) -> StageView:
                     Row(
                         "Исход отчёта",
                         _text(qa.report.get("outcome"), "не сообщается"),
-                        None,
+                        _OUTCOME_STATES.get(
+                            _text(qa.report.get("outcome")), State.NOT_REPORTED
+                        ),
                         "Запуск",
                     )
                 )
@@ -1864,16 +1873,25 @@ class RouteSession:
                 State.FAILED,
                 f"остановилась на стадии {_text(stages.get('failed_stage'))}",
             )
-        if any(
-            _obj(item).get("result") == "fail"
-            for item in _items(self.qa.report.get("checks_run"))
-        ):
+        checks = _items(self.qa.report.get("checks_run"))
+        if any(_obj(item).get("result") == "fail" for item in checks):
             return State.FAILED, "есть проваленная проверка"
-        if any(
-            _obj(item).get("result") == "not_run"
-            for item in _items(self.qa.report.get("checks_run"))
-        ):
+        outcome = _text(self.qa.report.get("outcome"))
+        if outcome == "failed":
+            return State.FAILED, "исход отчёта: failed"
+        if outcome == "blocked":
+            return State.BLOCKED, "исход отчёта: blocked"
+        document = _obj(run.document)
+        if document.get("transition_blocked"):
+            return State.BLOCKED, _text(
+                document.get("diagnostic"), "переход заблокирован ядром"
+            )
+        if any(_obj(item).get("result") == "not_run" for item in checks):
             return State.NOT_CHECKED, "часть проверок не выполнена"
+        if outcome != "completed":
+            return State.NOT_REPORTED, "исход отчёта не сообщается"
+        if not checks:
+            return State.NOT_REPORTED, "в отчёте нет выполненных проверок"
         return State.OK, ""
 
     def _worker_tab_state(self) -> tuple[State, str]:

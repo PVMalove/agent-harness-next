@@ -14,6 +14,7 @@ from harness.console.container_route import (
     Stage,
     State,
     StageView,
+    Tab,
     env_names,
     mark,
 )
@@ -1256,11 +1257,107 @@ def test_an_unreadable_report_is_not_reported_and_a_blocked_transition_is_a_bloc
     ].state is State.NOT_REPORTED
 
 
+def run_qa_with(
+    report: dict[str, object], **run_extra: object
+) -> tuple[RouteSession, Tab]:
+    session, scripted = qa_session(report)
+    session.selection.qa_dispatch = "dispatch-qa-1"
+    scripted.reply(
+        "qa run",
+        {
+            "dispatch_id": "dispatch-qa-1",
+            "state": "reported",
+            "report": "/r.json",
+            **run_extra,
+        },
+    )
+    session.run_qa()
+    return session, {tab.stage: tab for tab in session.tabs()}[Stage.QA]
+
+
+CLEAN_QA_STAGES = {
+    "stages": [
+        {"stage": "gate", "command": "make lint", "result": "pass", "exit_code": 0}
+    ],
+    "failed_stage": "",
+}
+
+
+def test_a_blocked_qa_report_with_passing_checks_is_not_a_green_tab() -> None:
+    session, tab = run_qa_with(
+        qa_report(
+            outcome="blocked",
+            qa_stages=CLEAN_QA_STAGES,
+            checks_run=[{"command": "make lint", "result": "pass", "evidence": ""}],
+        )
+    )
+    assert tab.state is State.BLOCKED and "blocked" in tab.reason
+    outcome = next(r for r in session.view(Stage.QA).rows if r.label == "Исход отчёта")
+    assert outcome.state is State.BLOCKED
+
+
+def test_a_blocked_qa_report_without_checks_is_blocked_not_green() -> None:
+    _, tab = run_qa_with(
+        qa_report(outcome="blocked", qa_stages=CLEAN_QA_STAGES, checks_run=[])
+    )
+    assert tab.state is State.BLOCKED
+
+
+def test_a_failed_qa_report_outcome_is_failed() -> None:
+    session, tab = run_qa_with(
+        qa_report(
+            outcome="failed",
+            qa_stages=CLEAN_QA_STAGES,
+            checks_run=[{"command": "make lint", "result": "pass", "evidence": ""}],
+        )
+    )
+    assert tab.state is State.FAILED
+    outcome = next(r for r in session.view(Stage.QA).rows if r.label == "Исход отчёта")
+    assert outcome.state is State.FAILED
+
+
+def test_a_transition_blocked_qa_run_with_a_clean_report_is_blocked() -> None:
+    _, tab = run_qa_with(
+        qa_report(
+            qa_stages=CLEAN_QA_STAGES,
+            checks_run=[{"command": "make lint", "result": "pass", "evidence": ""}],
+        ),
+        transition_blocked=True,
+        diagnostic="configuration changed since dispatch approval",
+        remedy="review the pending report",
+    )
+    assert tab.state is State.BLOCKED
+    assert "configuration changed" in tab.reason
+
+
+def test_a_completed_qa_report_without_checks_is_not_reported_not_ok() -> None:
+    _, tab = run_qa_with(
+        qa_report(outcome="completed", qa_stages=CLEAN_QA_STAGES, checks_run=[])
+    )
+    assert tab.state is State.NOT_REPORTED
+
+
+def test_a_completed_qa_report_with_all_checks_passing_stays_ok() -> None:
+    session, tab = run_qa_with(
+        qa_report(
+            outcome="completed",
+            qa_stages=CLEAN_QA_STAGES,
+            checks_run=[{"command": "make lint", "result": "pass", "evidence": ""}],
+        )
+    )
+    assert tab.state is State.OK
+    outcome = next(r for r in session.view(Stage.QA).rows if r.label == "Исход отчёта")
+    assert outcome.state is State.OK
+
+
 def test_a_failed_qa_run_keeps_stderr_and_an_auto_acceptance_is_labelled_the_cores() -> (
     None
 ):
     session, scripted = qa_session(
-        qa_report(qa_stages={"stages": [], "failed_stage": None}, checks_run=[])
+        qa_report(
+            qa_stages={"stages": [], "failed_stage": None},
+            checks_run=[{"command": "make lint", "result": "pass", "evidence": ""}],
+        )
     )
     session.selection.qa_dispatch = "dispatch-qa-1"
     scripted.reply("qa run", None, stderr="ERROR: lane is leased", code=2)
