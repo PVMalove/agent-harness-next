@@ -368,6 +368,46 @@ body {
   gap: 0.6rem;
 }
 
+.ah-cards--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ah-install {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 36rem;
+  margin: 0 0 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--ah-edge);
+  border-radius: 8px;
+  background: #101419;
+  overflow-x: auto;
+}
+
+.ah-install-label {
+  color: var(--ah-muted);
+  font: 0.55rem/1.5 var(--ah-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ah-install code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c8d2de;
+  font: 0.64rem/1.6 var(--ah-mono);
+  white-space: nowrap;
+}
+
+.ah-install-note {
+  margin: 0.55rem 0 0;
+  color: var(--ah-muted);
+  font-size: 0.62rem;
+}
+
 .ah-card {
   display: block;
   padding: 0.9rem;
@@ -499,6 +539,9 @@ body {
   .ah-arch {
     grid-template-columns: 1fr;
   }
+  .ah-cards--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .ah-status {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -511,6 +554,9 @@ body {
 }
 
 @media (max-width: 600px) {
+  .ah-cards--four {
+    grid-template-columns: 1fr;
+  }
   .ah-hero h1 {
     font-size: clamp(1.9rem, 9vw, 2.8rem);
   }
@@ -540,4 +586,16 @@ body {
   border: 1px solid var(--ah-edge);
   border-radius: 9px;
   background: #101419;
+}
+
+.ah-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ah-footer-brand img {
+  width: 1.1rem;
+  height: auto;
+  box-shadow: none;
 }
