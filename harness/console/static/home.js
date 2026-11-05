@@ -4,6 +4,8 @@
   const $ = id => document.getElementById(id);
   const home = $('home');
   const unavailable = home.dataset.unavailable;
+  const labels = JSON.parse(home.dataset.labels);
+  const label = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), labels[key]);
   const text = (id, value) => { $(id).textContent = value ?? unavailable; };
   const number = value => Number.isSafeInteger(value) && value >= 0;
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -50,7 +52,7 @@
     if (!rows.length) {
       const empty = document.createElement('p');
       empty.className = 'muted';
-      empty.textContent = 'В списке нет проблем; это не подтверждает полноту проверок';
+      empty.textContent = labels.empty;
       rows.push(empty);
     }
     $(id).replaceChildren(...rows);
@@ -69,24 +71,24 @@
     }
     $('health-strip').setAttribute('aria-label', `${home.dataset.passed}: ${health.ok}; ${home.dataset.warning}: ${health.warn}; ${home.dataset.failed}: ${health.fail}; ${home.dataset.skipped}: ${health.skipped}`);
     text('home-facts', `${home.dataset.passed}: ${health.ok} · ${home.dataset.warning}: ${health.warn} · ${home.dataset.failed}: ${health.fail} · ${home.dataset.skipped}: ${health.skipped}`);
-    text('home-checked', `${new Intl.DateTimeFormat(document.documentElement.lang, {timeStyle: 'medium'}).format(new Date())} · ${total} проверок`);
+    text('home-checked', `${new Intl.DateTimeFormat(document.documentElement.lang, {timeStyle: 'medium'}).format(new Date())} · ${label('checks', {count: total})}`);
     text('problem-count', `${snapshot.problems.length} / ${snapshot.problems_total}`);
-    text('problems-limit', `Показано ${snapshot.problems.length} из ${snapshot.problems_total} · Полный каталог проверок недоступен`);
+    text('problems-limit', label('problems', {shown: snapshot.problems.length, total: snapshot.problems_total}));
     problemList('attention-list', snapshot.problems);
     problemList('home-checks', snapshot.problems);
     text('harness-version', snapshot.harness_version);
     text('harness-drift', snapshot.drift);
     text('repo-map-tier', snapshot.repo_map.tier);
     const map = snapshot.repo_map.head_map;
-    text('repo-map-head', map ? `${map.origin} · ${map.commit}` : 'Нет карты для HEAD');
+    text('repo-map-head', map ? `${map.origin} · ${map.commit}` : labels.noMap);
     text('repo-map-detail', map ? `${snapshot.repo_map.message} · ${map.files} files · ${map.edges} edges · ≈${map.estimated_tokens} tokens` : snapshot.repo_map.message);
     const memory = snapshot.memory;
     text('memory-state', memory.state ? `${memory.state.status}: ${memory.state.message}` : null);
     const policy = memory.policy;
     text('memory-policy', policy ? `enabled=${policy.enabled} · active=${policy.active} · ${policy.source_types.join(', ')} · indexed=${policy.indexed ?? '—'} · top_k=${policy.top_k ?? '—'} · max_tokens=${policy.max_tokens ?? '—'} · ${policy.problem} ${policy.inactive}` : null);
     text('active-batches', snapshot.active_batches);
-    text('health-mode-note', online ? 'Онлайн · обновление только по запросу' : 'Офлайн · обновление каждые 15 секунд');
-    text('snapshot-status', `${reply.cached ? 'Кэш' : 'Новый снимок'} · ${reply.age_seconds} s`);
+    text('health-mode-note', online ? labels.online : labels.offline);
+    text('snapshot-status', `${reply.cached ? labels.cached : labels.fresh} · ${reply.age_seconds} s`);
   }
 
   let socket = null;
@@ -103,9 +105,9 @@
   function state(value) {
     document.body.dataset.connection = value;
     $('connection-state').className = `conn-chip ${value === 'unavailable' ? 'offline' : value}`;
-    $('connection-state').querySelector('span').textContent = {connected: 'Подключено', reconnecting: 'Переподключение', unavailable: 'Недоступно'}[value];
+    $('connection-state').querySelector('span').textContent = labels[value];
     $('connection-banner').hidden = value === 'connected';
-    text('connection-message', value === 'unavailable' ? 'Сервер недоступен' : 'Ожидание снимка');
+    text('connection-message', value === 'unavailable' ? labels.serverUnavailable : labels.waiting);
     $('snapshot-stale').hidden = !received || value === 'connected';
     $('home-refresh').disabled = pending !== null || value !== 'connected';
   }
@@ -187,7 +189,7 @@
   function collapse(value) {
     document.body.classList.toggle('nav-collapsed', value);
     $('nav-collapse').setAttribute('aria-expanded', String(!value));
-    $('nav-collapse').setAttribute('aria-label', value ? 'Развернуть меню' : 'Свернуть меню');
+    $('nav-collapse').setAttribute('aria-label', value ? labels.expand : labels.collapse);
     try { localStorage.setItem('harness-nav-collapsed', value ? '1' : '0'); } catch { /* Storage is optional. */ }
   }
   $('nav-collapse').addEventListener('click', () => collapse(!document.body.classList.contains('nav-collapsed')));

@@ -7,6 +7,8 @@ from http.client import HTTPConnection
 import json
 from pathlib import Path
 
+import pytest
+
 from harness.console.discovery import discovery_path
 from harness.console.server import ConsoleServer
 
@@ -265,6 +267,39 @@ def test_browser_reconnect_restores_snapshot_with_stale_warning(project: Path) -
                     reply = json.loads(await asyncio.wait_for(client.recv(), 3))
                     assert reply['id'] == request_id and reply['ok'] is True
                     assert reply['snapshot']['version'] == 1
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+
+def test_web_language_query_default_and_shared_labels(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.console import i18n
+
+    monkeypatch.setenv('HARNESS_CONSOLE_LANG', 'en')
+
+    async def scenario() -> None:
+        server = ConsoleServer(project)
+        await server.start()
+        try:
+            issued = await http(server, '/?token=' + token_for(project))
+            assert issued[1]['Location'] == '/?lang=en'
+            cookie = issued[1]['Set-Cookie'].split(';', 1)[0]
+            for query, language, title, unavailable in (
+                ('', 'en', 'Harness health', 'Unavailable in the current snapshot'),
+                ('?lang=invalid', 'en', 'Harness health', 'Unavailable in the current snapshot'),
+                ('?lang=en', 'en', 'Harness health', 'Unavailable in the current snapshot'),
+                ('?lang=ru', 'ru', 'Состояние харнесса', 'Недоступно в текущем снимке'),
+            ):
+                status, _, body = await http(server, '/' + query, headers={'Cookie': cookie})
+                page = body.decode()
+                assert status == 200 and f'<html lang="{language}">' in page
+                assert title in page and unavailable in page
+                assert f'aria-label="{i18n.tr(language, "Открыть меню")}"' in page
+                for label in ('Home', 'Diagnostics', 'Update Harness', 'Help'):
+                    assert i18n.section_label(language, label) in page
+                assert 'href="/?lang=ru"' in page and 'href="/?lang=en"' in page
+                assert token_for(project) not in page
         finally:
             await server.close()
 

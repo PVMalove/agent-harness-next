@@ -70,7 +70,8 @@ class WebHome:
                 section=lambda key: i18n.section_label(language, key),
                 tr=lambda text: i18n.tr(language, text),
                 fact=lambda text: i18n.fact_label(language, text),
-                unavailable="Недоступно в текущем снимке",
+                unavailable=i18n.tr(language, "Недоступно в текущем снимке"),
+                labels={key: i18n.tr(language, value) for key, value in WEB_LABELS.items()},
             )
             .encode("utf-8")
         )
@@ -81,3 +82,22 @@ class WebHome:
             return None
         name, mime = asset
         return self._package.joinpath("static", name).read_bytes(), mime
+
+
+WEB_LABELS = {
+    "empty": "В списке нет проблем; это не подтверждает полноту проверок",
+    "checks": "{count} проверок",
+    "problems": "Показано {shown} из {total} · Полный каталог проверок недоступен",
+    "noMap": "Нет карты для HEAD",
+    "online": "Онлайн · обновление только по запросу",
+    "offline": "Офлайн · обновление каждые 15 секунд",
+    "cached": "Кэш",
+    "fresh": "Новый снимок",
+    "connected": "Подключено",
+    "reconnecting": "Переподключение",
+    "unavailable": "Недоступно",
+    "serverUnavailable": "Сервер недоступен",
+    "waiting": "Ожидание снимка",
+    "expand": "Развернуть меню",
+    "collapse": "Свернуть меню",
+}

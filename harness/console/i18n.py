@@ -15,6 +15,9 @@ LANGUAGES = ("ru", "en")
 LANGUAGE_ENV = "HARNESS_CONSOLE_LANG"
 
 _SECTIONS = {
+    "Доска задач": {"ru": "Доска задач", "en": "Task board"},
+    "Ход работы": {"ru": "Ход работы", "en": "Agent activity"},
+    "Публикация": {"ru": "Публикация", "en": "Publish"},
     "Home": {"ru": "Главная", "en": "Home"},
     "Open project": {"ru": "Открыть проект", "en": "Open project"},
     "Update Harness": {"ru": "Обновить Harness", "en": "Update Harness"},

@@ -257,7 +257,11 @@ class ConsoleServer:
             len(values) != 1 for values in query.values()
         ):
             return rejected
-        language = "ru"
+        from . import i18n
+
+        language = query.get("lang", [""])[0]
+        if language not in i18n.LANGUAGES:
+            language = i18n.default_language()
         if "token" in query:
             if not secrets.compare_digest(query["token"][0].encode("utf-8"), self._token.encode()):
                 return rejected
