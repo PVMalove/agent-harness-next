@@ -1,0 +1,71 @@
+site_name: Agent Harness Next
+site_description: Портативный harness для Claude Code и Codex.
+site_url: https://pvmalove.github.io/claude-agent-harness/
+repo_url: https://github.com/PVMalove/claude-agent-harness
+repo_name: PVMalove/claude-agent-harness
+edit_uri: edit/master/site/docs/
+docs_dir: docs
+site_dir: ../site_build
+use_directory_urls: true
+
+theme:
+  name: material
+  language: ru
+  logo: assets/mark.svg
+  favicon: assets/mascot.svg
+  custom_dir: overrides
+  font: false
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Светлая тема
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Тёмная тема
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+extra_css:
+  - assets/docs-site.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - toc:
+      permalink: true
+
+nav:
+  - Начало: index.md
+  - Документация:
+      - Быстрый старт: getting-started/index.md
+      - Архитектура: architecture/index.md
+      - Справочник: reference/index.md
+  - Демо: demo/index.md
+
+copyright: © 2026 Agent Harness Next · MIT
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/PVMalove/claude-agent-harness
+      name: GitHub

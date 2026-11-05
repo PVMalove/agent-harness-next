@@ -15,7 +15,7 @@ PYTHON_BOOTSTRAP ?= python3
 HARNESS_PYTHON := $(HARNESS_VENV)/bin/python
 endif
 
-.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint web-install web-build web-test web-e2e
+.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint web-install web-build web-test web-e2e docs-build docs-serve
 
 help: ## Показать список команд с описанием
 	@$(PYTHON_BOOTSTRAP) -c "import re, sys; print('Доступные команды:'); lines = open(sys.argv[1], encoding='utf-8').readlines(); matches = [re.match(r'^([a-zA-Z0-9_-]+):.*?## (.*)$$', line) for line in lines]; [print(f'  {m.group(1):<16} - {m.group(2)}') for m in matches if m]" $(MAKEFILE_LIST)
@@ -75,6 +75,12 @@ web-test: ## Vitest-тесты SPA консоли из tests/web (нужна с�
 
 web-e2e: $(HARNESS_ENV_STAMP) ## Playwright-тесты SPA консоли против настоящего сервера (нужна сборка)
 	cd $(WEB_DIR) && npm run test:e2e
+
+docs-build: ## Собрать публичный сайт (MkDocs Material)
+	uvx --from mkdocs-material==9.8.0 mkdocs build --strict -f site/mkdocs.yml
+
+docs-serve: ## Локальный предпросмотр публичного сайта
+	uvx --from mkdocs-material==9.8.0 mkdocs serve -f site/mkdocs.yml
 
 clean: $(HARNESS_ENV_STAMP) ## Удалить временные файлы, стейт оркестратора, кэши и .pyc
 	$(HARNESS_PYTHON) -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['.mypy_cache', '.pytest_cache', '.harness/orchestration/state', '.harness/.sandboxes', '.harness/scratch', '.claude/worktrees', 'htmlcov'] if os.path.exists(p)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True)]"
