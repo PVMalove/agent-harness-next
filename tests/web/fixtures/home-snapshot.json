@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "health": { "ok": 42, "warn": 1, "fail": 2, "skipped": 11 },
+  "problems": [
+    { "status": "fail", "id": "integration.config", "message": "Integration configuration is missing the tracker host" },
+    { "status": "fail", "id": "skills.drift", "message": "3 skills differ from the packaged snapshot" },
+    { "status": "warn", "id": "hooks.bash", "message": "Bash for hooks is not found" }
+  ],
+  "problems_total": 5,
+  "harness_version": "2.0.0",
+  "drift": "skills: 3",
+  "active_batches": null,
+  "repo_map": {
+    "tier": "full",
+    "message": "cached for HEAD",
+    "head_map": { "origin": "local", "commit": "b3e4d28", "files": 1204, "edges": 5310, "estimated_tokens": 48000 }
+  },
+  "memory": {
+    "state": { "status": "warn", "message": "index missing" },
+    "policy": null
+  }
+}

@@ -2,11 +2,20 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
+import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
+import { FakeSocket, ManualClock } from "./fake-socket";
 
 function renderApp() {
   return render(
     <LanguageProvider>
-      <App />
+      <App
+        client={createConsoleClient({
+          url: "ws://127.0.0.1:1/ws",
+          WebSocket: FakeSocket,
+          timers: new ManualClock(),
+          probeHealth: async () => false,
+        })}
+      />
     </LanguageProvider>,
   );
 }
