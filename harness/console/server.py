@@ -17,16 +17,22 @@ from .request_router import (
 )
 from .snapshots import SnapshotService
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import uvicorn
+from typing import Protocol
 
 HEADER_LIMIT = 16384
 CLOSE_TIMEOUT = 0.5
 MESSAGE_LIMIT = 65536
 _STARTUP_POLL = 0.01
 DEFAULT_STATIC_ROOT = Path(__file__).resolve().parent / "web" / "dist"
+
+
+class _Serving(Protocol):
+    """The embedded HTTP server as the lifecycle sees it (harness.console.api.host)."""
+
+    started: bool
+    should_exit: bool
+
+    async def serve(self, sockets: list[socket.socket] | None = None) -> None: ...
 
 
 class ConsoleServer:
@@ -56,7 +62,7 @@ class ConsoleServer:
         self._clients = 0
         self._idle_task: asyncio.Task[None] | None = None
         self._socket: socket.socket | None = None
-        self._uvicorn: uvicorn.Server | None = None
+        self._uvicorn: _Serving | None = None
         self._serve_task: asyncio.Task[None] | None = None
         self._discovery: Discovery | None = None
         self._token = ""
