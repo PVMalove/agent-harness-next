@@ -23,7 +23,7 @@ from ..kernel import brand, i18n
 from . import clipboard, translate
 from .. import launcher
 from .chrome import HealthCounts
-from .client import ConsoleClientError, HomeClient
+from .client import ConsoleClientError, HomeClient, ScreenClient
 from ..launcher import restart_console
 from ..kernel.runner import CommandRunner, capturing_runner
 from .screens.dashboard import DashboardScreen
@@ -165,7 +165,7 @@ class HarnessConsoleApp(App[None]):
         repo: Path,
         *,
         command_runner: CommandRunner = capturing_runner,
-        home_client: HomeClient | None = None,
+        home_client: ScreenClient | None = None,
     ) -> None:
         super().__init__()
         ScrollBar.renderer = ThinScrollBarRender
@@ -179,7 +179,7 @@ class HarnessConsoleApp(App[None]):
         self._command_lock = Lock()
         self._runner = command_runner
         self.command_runner = self._tracked_runner
-        self.home_client: HomeClient | None = (
+        self.home_client: ScreenClient | None = (
             home_client if home_client is not None else launcher.discover_console(repo)
         )
         self.home_error: ConsoleClientError | None = None
@@ -340,8 +340,9 @@ def run(
     command_runner: CommandRunner = capturing_runner,
 ) -> int:
     """harness.console.launcher.run_console's entry point once relaunched and connected."""
+    # The launcher hands over its ConsoleClient, which serves every screen, not only Home.
     app = HarnessConsoleApp(
-        repo, command_runner=command_runner, home_client=home_client
+        repo, command_runner=command_runner, home_client=cast(ScreenClient, home_client)
     )
     app.run()
     if app.home_client is not None:

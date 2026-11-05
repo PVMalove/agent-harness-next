@@ -11,6 +11,7 @@ from pydantic import BaseModel, TypeAdapter
 from harness.console.backend.api import schemas
 from harness.console.backend.api.protocol import events as orchestration_events
 from harness.console.backend.api.protocol import jobs
+from harness.console.backend.api.protocol import screens
 
 
 def _drift_message(path: Path) -> str:
@@ -70,6 +71,63 @@ def test_request_models_have_the_field_sets_of_the_services() -> None:
     models: list[type[BaseModel]] = [*by_type.values(), schemas.HomeSnapshotRequest]
     for model in models:
         assert model.model_config.get("extra") == "forbid"
+
+
+def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> None:
+    by_type: dict[str, type[BaseModel]] = {
+        "reports.snapshot": schemas.ReportsSnapshotRequest,
+        "reports.report": schemas.ReportRequest,
+        "reports.timeline": schemas.TimelineRequest,
+        "orchestration.snapshot": schemas.OrchestrationSnapshotRequest,
+        "orchestration.lock": schemas.OrchestrationLockRequest,
+        "recovery.snapshot": schemas.RecoverySnapshotRequest,
+        "container_route.snapshot": schemas.ContainerRouteSnapshotRequest,
+        "snapshot.page": schemas.SnapshotPageRequest,
+    }
+    assert set(by_type) == screens.SCREEN_TYPES
+    for kind, model in by_type.items():
+        assert _fields(model) == {"id", "type"} | screens._FIELDS[kind], kind
+        assert model.model_config.get("extra") == "forbid"
+
+
+def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
+    samples: list[dict[str, object]] = [
+        {"id": 1, "type": "reports.snapshot", "online": True},
+        {"id": 2, "type": "reports.report", "dispatch_id": "d-1"},
+        {"id": 3, "type": "reports.timeline", "batch_id": "b-1"},
+        {"id": 4, "type": "orchestration.snapshot", "force": True},
+        {"id": 5, "type": "orchestration.lock"},
+        {"id": 6, "type": "recovery.snapshot", "batch": "b-1", "skip": ["x"]},
+        {"id": 7, "type": "container_route.snapshot", "batch": "b", "role": "qa"},
+        {"id": 8, "type": "snapshot.page", "snapshot_id": 1, "offset": 10},
+    ]
+    for sample in samples:
+        assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
+    for broken in (
+        {"type": "reports.report", "dispatch_id": ""},
+        {"type": "reports.timeline", "batch_id": "b" * 65},
+        {"type": "recovery.snapshot", "skip": ["x"] * 33},
+        {"type": "orchestration.lock", "force": True},
+        {"type": "snapshot.page", "snapshot_id": 1, "offset": -1},
+    ):
+        with pytest.raises(ValueError):
+            schemas.REQUESTS.validate_python(broken)
+    replies: list[dict[str, object]] = [
+        {
+            "v": 1, "id": 1, "type": "reports.snapshot", "ok": True, "snapshot_id": 1,
+            "text": "{", "next": 1, "done": False, "cached": True, "age_seconds": 0.5,
+        },
+        {
+            "v": 1, "id": 2, "type": "reports.report", "ok": True, "snapshot_id": 2,
+            "text": "{}", "next": 2, "done": True,
+        },
+        {"v": 1, "id": 3, "type": "snapshot.page", "ok": True, "text": "}", "next": 2,
+         "done": True},
+        {"v": 1, "id": 4, "type": "orchestration.lock", "ok": True, "lock": None,
+         "error": "boom"},
+    ]
+    for reply in replies:
+        assert schemas.REPLIES.validate_python(reply).type == reply["type"]
 
 
 

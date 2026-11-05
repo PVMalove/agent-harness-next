@@ -1,6 +1,6 @@
 """Wire constants of the console protocol that the server and the TUI client share: the protocol
 version, the Home request types, the request and message limits and the JSON-string clipping that
-keeps a reply below them. Standard library only."""
+keeps a reply below them, and the screen snapshot request types. Standard library only."""
 
 from __future__ import annotations
 
@@ -11,6 +11,18 @@ MAX_REQUEST_BYTES = 4096
 MAX_ID_CHARS = 64
 HOME_REQUEST = "home.snapshot"
 HOME_PROBLEMS_REQUEST = "home.problems"
+# The screen snapshots of Reports, Orchestration, Recovery and Container route; every reply is the
+# first page of a JSON text the client completes with `snapshot.page`.
+REPORTS_REQUEST = "reports.snapshot"
+REPORT_REQUEST = "reports.report"
+TIMELINE_REQUEST = "reports.timeline"
+ORCHESTRATION_REQUEST = "orchestration.snapshot"
+LOCK_REQUEST = "orchestration.lock"
+RECOVERY_REQUEST = "recovery.snapshot"
+ROUTE_REQUEST = "container_route.snapshot"
+PAGE_REQUEST = "snapshot.page"
+# How many diagnostics one `recovery.snapshot` may skip.
+MAX_SKIPPED = 32
 
 MESSAGE_BYTES = 300
 ID_BYTES = 100

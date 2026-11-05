@@ -26,7 +26,8 @@ from ...kernel.recovery_view import (
     RecoveryView,
     WizardTarget,
 )
-from ...kernel.runner import CommandRunner, capturing_runner
+from ..client import ScreenClient
+from ..server_api import ServerCoordinatorApi
 from ..shell import SHELL_CSS, ConsoleShell, ShellIds
 from ..translate import Translated
 from .commands import call_from_worker
@@ -105,15 +106,15 @@ class RecoveryScreen(ConsoleShell):
     def __init__(
         self,
         repo: Path,
-        *,
+        client: ScreenClient,
         batch: str = "",
-        command_runner: CommandRunner = capturing_runner,
-        source: BatchHistorySource | None = None,
     ) -> None:
         super().__init__()
         self.repo = repo
-        self._command_runner = command_runner
-        self.source = source or BatchHistorySource(repo, command_runner)
+        # History, status and every recovery action go through the console server; nothing
+        # here runs a coordinator process.
+        self._api = ServerCoordinatorApi(repo, client)
+        self.source = BatchHistorySource(repo, api=self._api)
         self.batch_id = batch
         self.session: RecoverySession | None = None
         self._entry: RecoveryEntry | None = None
@@ -213,7 +214,7 @@ class RecoveryScreen(ConsoleShell):
 
     def _open(self, batch: str) -> None:
         self.batch_id = batch
-        self.session = RecoverySession(self.repo, batch, self._command_runner)
+        self.session = RecoverySession(self.repo, batch, api=self._api)
         self._status = ""
         self._run(self.session.refresh)
 
@@ -335,7 +336,8 @@ class RecoveryScreen(ConsoleShell):
                 "Подтвердите Resume",
                 text,
                 lambda: self._run(
-                    lambda: session.resume(approver, note), then_refresh=True
+                    lambda: session.resume(approver, note, confirmed=True),
+                    then_refresh=True,
                 ),
             )
         elif key == "skip":

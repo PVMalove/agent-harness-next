@@ -29,7 +29,7 @@ from .container_route import (
     _text,
     _call_failure,
 )
-from .coordinator_api import ApiResult, CoordinatorApi
+from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls
 from .runner import CommandRunner, capturing_runner
 
 CHECK_STATES = {
@@ -535,14 +535,14 @@ class RecoverySession:
         batch: str,
         runner: CommandRunner = capturing_runner,
         *,
-        api: CoordinatorApi | None = None,
+        api: CoordinatorCalls | None = None,
         now: Callable[[], str] = lambda: datetime.now(UTC).isoformat(
             timespec="seconds"
         ),
     ) -> None:
         self.repo = repo
         self.batch = batch
-        self.api = api or CoordinatorApi(repo, runner)
+        self.api: CoordinatorCalls = api or CoordinatorApi(repo, runner)
         self._now = now
         self.status: ApiResult | None = None
         self.skipped: set[str] = set()  # this session only; never persisted
@@ -624,7 +624,9 @@ class RecoverySession:
         if not confirmed:
             raise PermissionError("the write needs an explicit confirmation")
         result = self.api.call(
-            ("recovery", "fix"), {"batch": self.batch, "json": True, "apply": True}
+            ("recovery", "fix"),
+            {"batch": self.batch, "json": True, "apply": True},
+            confirmed=True,
         )
         self.preview = None  # a spent preview is never applied twice
         self.last = ("fix-apply", result)
@@ -666,9 +668,12 @@ class RecoverySession:
             _text(following.get("command") or following.get("reason"), "не сообщается"),
         )
 
-    def resume(self, approved_by: str = "", note: str = "") -> ApiResult:
+    def resume(
+        self, approved_by: str = "", note: str = "", *, confirmed: bool = False
+    ) -> ApiResult:
         """`recovery resume`, enabled only by the core's answer and never past an unknown
-        outcome. A stopped batch needs the human approval, all three values together."""
+        outcome. A stopped batch needs the human approval, all three values together;
+        `confirmed` is the operator's confirmation the console server demands."""
         self._allowed("resume")
         plan = self.resume_plan()
         values: dict[str, str | list[str] | bool] = {"batch": self.batch, "json": True}
@@ -681,7 +686,7 @@ class RecoverySession:
             if not _approval_present(approval):
                 raise ValueError("a stopped batch needs approved_by and a note")
             values.update(approval)
-        result = self.api.call(("recovery", "resume"), values)
+        result = self.api.call(("recovery", "resume"), values, confirmed=confirmed)
         self.last = ("resume", result)
         return result
 
@@ -690,7 +695,7 @@ class RecoverySession:
         worker and cleans no worktree, and the view shows the core's own flags to prove it."""
         self._allowed("abort")
         result = self.api.call(
-            ("recovery", "abort"), {"batch": self.batch, "json": True}
+            ("recovery", "abort"), {"batch": self.batch, "json": True}, confirmed=True
         )
         self.last = ("abort", result)
         return result

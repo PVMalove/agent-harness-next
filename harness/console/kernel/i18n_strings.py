@@ -774,6 +774,9 @@ EN_COMMANDS: dict[str, str] = {
     "Состояние ledger": "Ledger status",
     "Состояние lock ledger": "Ledger lock status",
     "Снять lock ledger": "Release the ledger lock",
+    "Исправления восстановления: превью": "Recovery fixes: preview",
+    "Применить исправления восстановления": "Apply recovery fixes",
+    "Выйти из восстановления batch": "Leave the recovery of a batch",
     "Разрешить запрос native permission": "Allow a native permission request",
     "Отклонить запрос native permission": "Deny a native permission request",
 }
@@ -829,6 +832,25 @@ EN_PHRASES.update(
     }
 )
 EN_PREFIXES["Прогон "] = "Run "
+# Reports and Orchestration read the ledger through the console server.
+EN.update(
+    {
+        "Сервер консоли не отдал данные леджера": "The console server did not return the ledger",
+        "Сервер консоли не нашёл тело этого отчёта": "The console server found no body for this report",
+        "Сервер консоли не отдал данные оркестрации": "The console server did not return the orchestration data",
+        "Загрузка данных оркестрации…": "Loading the orchestration data…",
+        "конфигурация не получена от сервера консоли": "configuration not received from the console server",
+    }
+)
+EN_PREFIXES.update(
+    {
+        "Сервер консоли не отдал данные леджера: ": "The console server did not return the ledger: ",
+        "Сервер консоли не нашёл тело этого отчёта: ": "The console server found no body for this report: ",
+        "Хронология батча недоступна: ": "Batch timeline is unavailable: ",
+        "Сервер консоли не отдал данные оркестрации: ": "The console server did not return the orchestration data: ",
+        "конфигурация не получена от сервера консоли: ": "configuration not received from the console server: ",
+    }
+)
 EN.update(
     {
         "b Собрать карту": "b Build map",

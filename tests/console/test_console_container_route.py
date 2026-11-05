@@ -7,6 +7,8 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import pytest
+
 from harness.console.kernel.container_route import (
     NEED_BATCH,
     Authored,
@@ -1846,3 +1848,49 @@ def test_a_long_digest_path_and_log_line_are_kept_whole_in_every_stage() -> None
     session.refresh_worker()
     text = render(session.view(Stage.WORKER))
     assert long_path in text and digest in text and "…" not in text
+
+
+def test_authored_round_trips_through_its_payload() -> None:
+    for authored in (Authored({"roles": {"qa": {}}}), Authored(None, "не прочитана")):
+        payload = json.loads(json.dumps(authored.to_payload()))
+        assert Authored.from_payload(payload) == authored
+    with pytest.raises(ValueError):
+        Authored.from_payload({"document": [], "problem": ""})
+
+
+def test_setup_and_preflight_come_from_the_server_and_effects_stay_local() -> None:
+    from harness.console.kernel.coordinator_api import ApiResult, CoordinatorApi, Outcome
+    from harness.console.tui.client import RouteFacts, ServerUnavailable
+    from harness.console.tui.screens.container_route import (
+        AUTHORED_MISSING,
+        server_authored,
+    )
+    from harness.console.tui.server_api import ServerCoordinatorApi
+
+    from ._home_client import FakeHomeClient
+
+    runner = ScriptedCoordinator()
+    runner.reply("qa status", {"lease": None})
+    client = FakeHomeClient(REPO)
+    preflight = ApiResult(Outcome.REFUSED, ("preflight",), ({"verified": False},), 2)
+    client.route_facts = RouteFacts(Authored({"roles": {}}), preflight)
+    session = RouteSession(
+        REPO,
+        api=ServerCoordinatorApi(REPO, client, fallback=CoordinatorApi(REPO, runner)),
+        load_authored=lambda repo: server_authored(client),
+    )
+    session.select("batch-1", "qa", "rt")
+    assert session.recheck() == preflight
+    assert server_authored(client) == Authored({"roles": {}})
+    assert runner.calls == []
+    assert ("route", "batch-1", "qa", "rt") in client.screen_requests
+    assert session.refresh_qa().ok
+    assert runner.commands() == ["qa status"]
+
+    def down(*args: object, **kwargs: object) -> object:
+        raise ServerUnavailable("нет сервера")
+
+    client.container_route = down  # type: ignore[method-assign,assignment]
+    missing = server_authored(client)
+    assert missing.document is None and missing.problem.startswith(AUTHORED_MISSING)
+    assert session.recheck().outcome is Outcome.UNAVAILABLE

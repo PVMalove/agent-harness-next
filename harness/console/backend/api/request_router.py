@@ -19,6 +19,9 @@ from .protocol.jobs import replies as job_replies
 from ..application.events import OrchestrationEvents
 from .protocol.events import is_orchestration_request
 from .protocol.events import replies as event_replies
+from ..application.screens import ScreenService
+from .protocol.screens import is_screen_request
+from .protocol.screens import respond as respond_screens
 from ..application.snapshots import SnapshotService
 from .protocol.snapshots import busy, respond
 
@@ -86,6 +89,8 @@ class RouterConnection:
                     await self._stream(replies)
             elif is_decisions_request(raw):
                 await self._reply(await respond_decisions(raw, router.decisions))
+            elif is_screen_request(raw):
+                await self._reply(await respond_screens(raw, router.screens))
             else:
                 await self._reply(await respond(raw, router.snapshots))
         except Exception:
@@ -110,11 +115,13 @@ class RequestRouter:
         jobs: JobService,
         decisions: DecisionService,
         events: OrchestrationEvents,
+        screens: ScreenService,
     ) -> None:
         self.snapshots = snapshots
         self.jobs = jobs
         self.decisions = decisions
         self.events = events
+        self.screens = screens
 
     def open(
         self, send: Send, on_failure: Callable[[], None] | None = None

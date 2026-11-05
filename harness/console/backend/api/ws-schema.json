@@ -25,12 +25,25 @@
         },
         {
           "$ref": "#/$defs/OrchestrationEventsReply"
+        },
+        {
+          "$ref": "#/$defs/ScreenSnapshotReply"
+        },
+        {
+          "$ref": "#/$defs/PagedReply"
+        },
+        {
+          "$ref": "#/$defs/SnapshotPageReply"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationLockReply"
         }
       ]
     },
     "ConsoleRequest": {
       "discriminator": {
         "mapping": {
+          "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "home.problems": "#/$defs/HomeProblemsRequest",
           "home.snapshot": "#/$defs/HomeSnapshotRequest",
@@ -39,7 +52,14 @@
           "job.list": "#/$defs/JobListRequest",
           "job.start": "#/$defs/JobStartRequest",
           "job.subscribe": "#/$defs/JobSubscribeRequest",
-          "orchestration.subscribe": "#/$defs/OrchestrationSubscribeRequest"
+          "orchestration.lock": "#/$defs/OrchestrationLockRequest",
+          "orchestration.snapshot": "#/$defs/OrchestrationSnapshotRequest",
+          "orchestration.subscribe": "#/$defs/OrchestrationSubscribeRequest",
+          "recovery.snapshot": "#/$defs/RecoverySnapshotRequest",
+          "reports.report": "#/$defs/ReportRequest",
+          "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
+          "reports.timeline": "#/$defs/TimelineRequest",
+          "snapshot.page": "#/$defs/SnapshotPageRequest"
         },
         "propertyName": "type"
       },
@@ -70,8 +90,82 @@
         },
         {
           "$ref": "#/$defs/OrchestrationSubscribeRequest"
+        },
+        {
+          "$ref": "#/$defs/ReportsSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ReportRequest"
+        },
+        {
+          "$ref": "#/$defs/TimelineRequest"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationLockRequest"
+        },
+        {
+          "$ref": "#/$defs/RecoverySnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ContainerRouteSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/SnapshotPageRequest"
         }
       ]
+    },
+    "ContainerRouteSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "role": {
+          "default": "developer",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "runtime": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Runtime",
+          "type": "string"
+        },
+        "type": {
+          "const": "container_route.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ContainerRouteSnapshotRequest",
+      "type": "object"
     },
     "DecisionsSnapshotReply": {
       "additionalProperties": false,
@@ -927,6 +1021,143 @@
       "title": "OrchestrationEventsReply",
       "type": "object"
     },
+    "OrchestrationLockReply": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lock"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "orchestration.lock",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "lock",
+        "error"
+      ],
+      "title": "OrchestrationLockReply",
+      "type": "object"
+    },
+    "OrchestrationLockRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "orchestration.lock",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OrchestrationLockRequest",
+      "type": "object"
+    },
+    "OrchestrationSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "orchestration.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OrchestrationSnapshotRequest",
+      "type": "object"
+    },
     "OrchestrationSourceReply": {
       "additionalProperties": false,
       "properties": {
@@ -1044,6 +1275,423 @@
         "type"
       ],
       "title": "OrchestrationSubscribeRequest",
+      "type": "object"
+    },
+    "PagedReply": {
+      "additionalProperties": false,
+      "description": "The first page of a report body or a batch chronology as JSON text.",
+      "properties": {
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "next": {
+          "title": "Next",
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "reports.report",
+            "reports.timeline"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "snapshot_id",
+        "text",
+        "next",
+        "done"
+      ],
+      "title": "PagedReply",
+      "type": "object"
+    },
+    "RecoverySnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "skip": {
+          "default": [],
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Skip",
+          "type": "array"
+        },
+        "type": {
+          "const": "recovery.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "RecoverySnapshotRequest",
+      "type": "object"
+    },
+    "ReportRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "reports.report",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "dispatch_id"
+      ],
+      "title": "ReportRequest",
+      "type": "object"
+    },
+    "ReportsSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "online": {
+          "default": false,
+          "title": "Online",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "reports.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ReportsSnapshotRequest",
+      "type": "object"
+    },
+    "ScreenSnapshotReply": {
+      "additionalProperties": false,
+      "description": "The first page of a screen snapshot's JSON text; `snapshot.page` reads the rest.",
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "next": {
+          "title": "Next",
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "reports.snapshot",
+            "orchestration.snapshot",
+            "recovery.snapshot",
+            "container_route.snapshot"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "snapshot_id",
+        "text",
+        "next",
+        "done",
+        "cached",
+        "age_seconds"
+      ],
+      "title": "ScreenSnapshotReply",
+      "type": "object"
+    },
+    "SnapshotPageReply": {
+      "additionalProperties": false,
+      "properties": {
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "next": {
+          "title": "Next",
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "snapshot.page",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "text",
+        "next",
+        "done"
+      ],
+      "title": "SnapshotPageReply",
+      "type": "object"
+    },
+    "SnapshotPageRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "minimum": 0,
+          "title": "Snapshot Id",
+          "type": "integer"
+        },
+        "type": {
+          "const": "snapshot.page",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "snapshot_id",
+        "offset"
+      ],
+      "title": "SnapshotPageRequest",
+      "type": "object"
+    },
+    "TimelineRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "reports.timeline",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "batch_id"
+      ],
+      "title": "TimelineRequest",
       "type": "object"
     }
   },

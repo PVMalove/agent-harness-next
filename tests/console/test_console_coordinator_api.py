@@ -237,3 +237,42 @@ def test_the_client_module_names_no_container_engine_or_runtime_protocol() -> No
         "RuntimeClient",
     ):
         assert token not in source
+
+
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "code"),
+    [
+        (json.dumps({"batches": []}), "", 0),
+        (json.dumps({"outcome": "refused"}), "", 2),
+        ("", "boom\n", 2),
+        ("not json", "", 0),
+        ('{"a": 1} trailing', "", 1),
+        ('{"a": 1}{"b": 2}', "warn", 0),
+    ],
+)
+def test_classify_gives_the_same_answer_as_a_run(stdout: str, stderr: str, code: int) -> None:
+    from harness.console.kernel.coordinator_api import classify
+
+    runner = FakeRunner(stdout, stderr, code)
+    result = _call(runner, ("batch", "list"))
+    assert classify(runner.calls[0][0], code, stdout, stderr) == result
+
+
+def test_an_api_result_round_trips_through_its_payload() -> None:
+    from harness.console.kernel.coordinator_api import ApiResult
+
+    result = ApiResult(
+        Outcome.REFUSED, ("python", "x"), ({"a": [1]},), 2, "err", "out"
+    )
+    payload = json.loads(json.dumps(result.to_payload()))
+    assert ApiResult.from_payload(payload) == result
+    empty = ApiResult(Outcome.UNAVAILABLE, ())
+    assert ApiResult.from_payload(json.loads(json.dumps(empty.to_payload()))) == empty
+    for broken in (
+        {**payload, "outcome": "maybe"},
+        {**payload, "documents": [1]},
+        {**payload, "argv": "x"},
+        {**payload, "extra": 0},
+    ):
+        with pytest.raises(ValueError):
+            ApiResult.from_payload(broken)

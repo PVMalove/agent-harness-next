@@ -17,9 +17,11 @@ from harness.console.kernel.home_snapshot import (
     HomeContext,
     build_home_snapshot,
 )
+from harness.console.kernel import reports
 from harness.console.tui.client import (
     ConnectionLost,
     ConsoleClient,
+    LockUnavailable,
     MalformedReply,
     ServerError,
 )
@@ -64,7 +66,7 @@ class _Loop:
 
 
 
-Answer = Callable[[dict[str, object]], str | bytes]
+Answer = Callable[[dict[str, object]], str | bytes | list[str]]
 
 
 @contextmanager
@@ -74,7 +76,9 @@ def _fake_server(answer: Answer) -> Iterator[ServerEndpoint]:
 
     async def handler(connection: ServerConnection) -> None:
         async for raw in connection:
-            await connection.send(answer(json.loads(raw)))
+            replies = answer(json.loads(raw))
+            for reply in replies if isinstance(replies, list) else [replies]:
+                await connection.send(reply)
 
     loop = _Loop()
 
@@ -174,7 +178,7 @@ _PAGED = build_home_snapshot(
 )
 
 
-def _paged(**page: object) -> Answer:
+def _paged(**page: object) -> Callable[[dict[str, object]], str]:
     """A server whose Home reply names a problem page and whose page reply is `page`."""
 
     def answer(request: dict[str, object]) -> str:
@@ -290,3 +294,227 @@ def test_no_reply_within_the_reply_timeout_is_connection_lost(
         server.close()  # type: ignore[attr-defined]
         loop.run(server.wait_closed())  # type: ignore[attr-defined]
         loop.stop()
+
+
+def _ok(request: dict[str, object], **fields: object) -> str:
+    return json.dumps(
+        {"v": 1, "id": request["id"], "type": request["type"], "ok": True, **fields}
+    )
+
+
+def _failed(request: dict[str, object], code: str) -> str:
+    return json.dumps(
+        {
+            "v": 1,
+            "id": request["id"],
+            "type": request["type"],
+            "ok": False,
+            "error": {"code": code, "message": code},
+        }
+    )
+
+
+def _pages(text: str, size: int) -> Callable[[dict[str, object]], str]:
+    """A server that hands `text` out in pages of `size` characters under snapshot id 5."""
+
+    def answer(request: dict[str, object]) -> str:
+        offset = request.get("offset", 0)
+        assert isinstance(offset, int)
+        if request["type"] == "snapshot.page":
+            assert request["snapshot_id"] == 5
+        end = min(offset + size, len(text))
+        return _ok(
+            request, snapshot_id=5, text=text[offset:end], next=end, done=end == len(text)
+        )
+
+    return answer
+
+
+def _ledger_text() -> str:
+    view = reports.LedgerView(
+        batches=[reports.BatchSummary("b-1", "#1", "active", "t" * 300)]
+    )
+    return json.dumps(reports.ledger_payload(view))
+
+
+def test_a_snapshot_is_read_across_several_pages_and_parsed_once() -> None:
+    requests: list[dict[str, object]] = []
+    pages = _pages(_ledger_text(), 50)
+
+    def answer(request: dict[str, object]) -> str:
+        requests.append(request)
+        return pages(request)
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            view = client.reports(online=True)
+        finally:
+            client.close()
+    assert view.batches[0].batch_id == "b-1"
+    assert requests[0] == {"id": 1, "type": "reports.snapshot", "force": False, "online": True}
+    assert len(requests) > 3
+    assert all(item["type"] == "snapshot.page" for item in requests[1:])
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        lambda request: _ok(request, snapshot_id=5, text="{", next=0, done=False),
+        lambda request: _ok(request, snapshot_id="5", text="{}", next=2, done=True),
+        lambda request: _ok(request, snapshot_id=5, text="[]", next=2, done=True),
+        lambda request: _ok(request, snapshot_id=5, text="{]", next=2, done=True),
+        lambda request: _ok(request, snapshot_id=5, text="{}", next=2),
+    ],
+    ids=["page-does-not-move-on", "id-string", "not-object", "not-json", "no-done"],
+)
+def test_a_malformed_snapshot_page_is_refused(answer: Answer) -> None:
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            with pytest.raises(MalformedReply):
+                client.orchestration()
+        finally:
+            client.close()
+
+
+def test_an_unknown_report_or_batch_is_none_and_other_errors_raise() -> None:
+    def answer(request: dict[str, object]) -> str:
+        if request["type"] == "reports.timeline" and request["batch_id"] == "b-2":
+            return _failed(request, "collect_failed")
+        return _failed(request, "not_found")
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            assert client.report("d-9") is None
+            assert client.timeline("b-9") is None
+            with pytest.raises(ServerError):
+                client.timeline("b-2")
+        finally:
+            client.close()
+
+
+def test_the_ledger_lock_poll_and_its_unavailable_reason() -> None:
+    answers: Iterator[dict[str, object]] = iter(
+        [{"lock": {"locked": False}, "error": None}, {"lock": None, "error": "занят"}]
+    )
+
+    def answer(request: dict[str, object]) -> str:
+        return _ok(request, **next(answers))
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            assert client.ledger_lock() == {"locked": False}
+            with pytest.raises(LockUnavailable, match="занят"):
+                client.ledger_lock()
+        finally:
+            client.close()
+
+
+def _job(phase: str, cursor: int, output: list[dict[str, str]], **rest: object) -> dict[str, object]:
+    return {
+        "id": "job-1",
+        "command_id": "recovery-reload",
+        "phase": phase,
+        "cursor": cursor,
+        "done": phase != "running",
+        "truncated": False,
+        "returncode": rest.get("returncode"),
+        "error": None,
+        "output": output,
+    }
+
+
+def test_a_job_is_started_and_followed_until_done(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from harness.console.tui import client as console_client
+
+    monkeypatch.setattr(console_client, "JOB_POLL_SECONDS", 0.01)
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> str | list[str]:
+        requests.append(request)
+        if request["type"] == "job.start":
+            return _ok(
+                request, job=_job("running", 1, [{"channel": "stdout", "text": '{"a"'}])
+            )
+        if request["cursor"] == 1:
+            return _ok(request, job=_job("running", 2, [{"channel": "stderr", "text": "w"}]))
+        return _ok(
+            request,
+            job=_job("completed", 3, [{"channel": "stdout", "text": ": 1}"}], returncode=0),
+        )
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            result = client.run_job("recovery-reload", {"batch": "b-1"})
+        finally:
+            client.close()
+    assert result.phase == "completed" and result.returncode == 0
+    assert (result.stdout, result.stderr) == ('{"a": 1}', "w")
+    assert requests[0] == {
+        "id": 1,
+        "type": "job.start",
+        "command_id": "recovery-reload",
+        "values": {"batch": "b-1"},
+        "confirmed": False,
+        "client": "tui",
+    }
+    assert requests[1:] == [
+        {"id": 2, "type": "job.get", "job_id": "job-1", "cursor": 1},
+        {"id": 3, "type": "job.get", "job_id": "job-1", "cursor": 2},
+    ]
+
+
+def test_a_quiet_running_job_neither_blocks_other_requests_nor_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from harness.console.tui import client as console_client
+
+    monkeypatch.setattr(console_client, "REPLY_TIMEOUT", 0.3)
+    monkeypatch.setattr(console_client, "JOB_POLL_SECONDS", 0.01)
+    following, finish = threading.Event(), threading.Event()
+
+    def answer(request: dict[str, object]) -> str | list[str]:
+        if request["type"] in {"job.get", "job.subscribe"}:
+            following.set()
+        if request["type"] == "orchestration.lock":
+            return _ok(request, lock={"locked": False}, error=None)
+        if request["type"] == "job.subscribe":
+            return []  # a quiet job: nothing to stream yet
+        if request["type"] == "job.get" and finish.is_set():
+            return _ok(request, job=_job("completed", 1, [], returncode=0))
+        return _ok(request, job=_job("running", 1, []))
+
+    results: list[object] = []
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            job = threading.Thread(
+                target=lambda: results.append(client.run_job("recovery-reload", {}))
+            )
+            job.start()
+            assert following.wait(5)
+            assert client.ledger_lock() == {"locked": False}
+            threading.Event().wait(0.6)
+            assert job.is_alive()
+            finish.set()
+            job.join(5)
+        finally:
+            client.close()
+    assert [getattr(result, "phase", result) for result in results] == ["completed"]
+
+
+def test_a_refused_job_start_surfaces_its_code() -> None:
+    with _fake_server(lambda request: _failed(request, "confirmation_required")) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            with pytest.raises(ServerError) as refused:
+                client.run_job("recovery-fix-apply", {"batch": "b"})
+        finally:
+            client.close()
+    assert refused.value.code == "confirmation_required"

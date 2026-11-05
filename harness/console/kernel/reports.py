@@ -16,7 +16,7 @@ harness/orchestration/workflow/reports.py), поэтому его датой с�
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -25,9 +25,10 @@ from ...gate_runner.gate_runner import parse_command_log
 from ...orchestration.core.constants import STATE_REL
 from ...orchestration.core.report_evidence import evidence_is_none
 from ...orchestration.ledger.lifecycle import JsonObject, JsonValue, LifecycleLedger
-from ..kernel.export import MarkdownDocument, MarkdownSection
-from ..kernel.json_fields import strings, text
-from ..kernel.status import Status
+from .export import MarkdownDocument, MarkdownSection
+from .home_snapshot import _fields, _int, _list, _optional, _str
+from .json_fields import strings, text
+from .status import Status
 
 REPORT_SECTIONS = ("Output", "Checks", "Risks", "Blockers", "Next action")
 QA_LOG_TAIL_LINES = 15
@@ -862,4 +863,177 @@ def timeline_document(timeline: BatchTimeline) -> MarkdownDocument:
             ("Маршрут", role_flow_text(timeline)),
         ],
         sections=[MarkdownSection("События", "\n".join(rows))],
+    )
+
+
+# The wire codec of the Reports and Orchestration snapshots: the view without report bodies and raw
+# ledger records, small enough to page over the console server. A body and a chronology are read
+# with their own requests.
+LEDGER_PAYLOAD_VERSION = 1
+
+_LEDGER_KEYS = frozenset(
+    {
+        "version",
+        "batches",
+        "reports",
+        "stages",
+        "qa_runs",
+        "qa_attempts",
+        "unavailable",
+        "dispatches",
+    }
+)
+
+
+def _report_head(entry: ReportEntry) -> dict[str, object]:
+    head = asdict(entry)
+    del head["report"]
+    return head
+
+
+def _stage_head(stage: StageEntry) -> dict[str, object]:
+    head = {item.name: getattr(stage, item.name) for item in fields(StageEntry)}
+    head["report"] = stage.report.dispatch_id if stage.report else None
+    return head
+
+
+def ledger_payload(view: LedgerView) -> dict[str, object]:
+    """The JSON-safe projection of `view`: report bodies dropped, a stage names its report by
+    dispatch id, and every dispatch record is reduced to its role."""
+    return {
+        "version": LEDGER_PAYLOAD_VERSION,
+        "batches": [asdict(batch) for batch in view.batches],
+        "reports": [_report_head(entry) for entry in view.reports],
+        "stages": [_stage_head(stage) for stage in view.stages],
+        "qa_runs": [
+            {**asdict(run), "commands": [[name, code] for name, code in run.commands]}
+            for run in view.qa_runs
+        ],
+        "qa_attempts": [asdict(attempt) for attempt in view.qa_attempts],
+        "unavailable": view.unavailable,
+        "dispatches": {
+            dispatch_id: (
+                {"role": record["role"]} if isinstance(record.get("role"), str) else {}
+            )
+            for dispatch_id, record in view._dispatches.items()
+        },
+    }
+
+
+def _strings_of(
+    value: object, kind: type, optional: frozenset[str] = frozenset()
+) -> dict[str, str | None]:
+    """The fields of a dataclass `kind` whose fields are all strings (`optional` ones may be
+    null)."""
+    found = _fields(value, kind)
+    return {
+        name: _optional(item, _str) if name in optional else _str(item)
+        for name, item in found.items()
+    }
+
+
+def _batch_from(value: object) -> BatchSummary:
+    return BatchSummary(**cast(dict[str, str], _strings_of(value, BatchSummary)))
+
+
+def _report_from(value: object) -> ReportEntry:
+    if not isinstance(value, dict) or "report" in value:
+        raise ValueError("ReportEntry: not a report head")
+    found = cast(dict[str, str], _strings_of({**value, "report": ""}, ReportEntry))
+    del found["report"]
+    return ReportEntry(**found, report={})
+
+
+def _stage_from(value: object, reports: dict[str, ReportEntry]) -> StageEntry:
+    found = _fields(value, StageEntry)
+    reference = _optional(found.pop("report"), _str)
+    if reference is not None and reference not in reports:
+        raise ValueError(f"StageEntry: unknown report {reference!r}")
+    return StageEntry(
+        **{name: _str(item) for name, item in found.items()},
+        report=reports[reference] if reference is not None else None,
+    )
+
+
+def _command_from(value: object) -> tuple[str, int]:
+    pair = _list(value)
+    if len(pair) != 2:
+        raise ValueError(f"not a command pair: {value!r}")
+    return _str(pair[0]), _int(pair[1])
+
+
+def _qa_run_from(value: object) -> QaRun:
+    found = _fields(value, QaRun)
+    return QaRun(
+        artifact=_str(found["artifact"]),
+        logged_at=_str(found["logged_at"]),
+        dispatch_id=_optional(found["dispatch_id"], _str),
+        ticket=_str(found["ticket"]),
+        outcome=_str(found["outcome"]),
+        commands=[_command_from(item) for item in _list(found["commands"])],
+        tail=[_str(item) for item in _list(found["tail"])],
+        total_lines=_int(found["total_lines"]),
+    )
+
+
+def _attempt_from(value: object) -> QaAttempt:
+    return QaAttempt(**cast(dict[str, str], _strings_of(value, QaAttempt)))
+
+
+def _dispatches_from(value: object) -> dict[str, JsonObject]:
+    if not isinstance(value, dict):
+        raise ValueError("dispatches: not an object")
+    found: dict[str, JsonObject] = {}
+    for dispatch_id, record in value.items():
+        if not isinstance(record, dict) or set(record) - {"role"}:
+            raise ValueError(f"dispatches: bad record {record!r}")
+        found[_str(dispatch_id)] = (
+            {"role": _str(record["role"])} if "role" in record else {}
+        )
+    return found
+
+
+def ledger_from_payload(payload: object) -> LedgerView:
+    """The view a `ledger_payload` result (read back from JSON) describes: report bodies are empty
+    and only the dispatch roles are known. Any schema break is `ValueError`."""
+    if not isinstance(payload, dict) or set(payload) != _LEDGER_KEYS:
+        raise ValueError("ledger payload: unexpected fields")
+    version = _int(payload["version"])
+    if version != LEDGER_PAYLOAD_VERSION:
+        raise ValueError(f"unsupported ledger payload version: {version!r}")
+    view = LedgerView(
+        reports=[_report_from(item) for item in _list(payload["reports"])],
+        batches=[_batch_from(item) for item in _list(payload["batches"])],
+        qa_runs=[_qa_run_from(item) for item in _list(payload["qa_runs"])],
+        qa_attempts=[_attempt_from(item) for item in _list(payload["qa_attempts"])],
+        unavailable=_optional(payload["unavailable"], _str),
+        _dispatches=_dispatches_from(payload["dispatches"]),
+    )
+    by_id = {entry.dispatch_id: entry for entry in view.reports}
+    view.stages.extend(_stage_from(item, by_id) for item in _list(payload["stages"]))
+    return view
+
+
+def timeline_payload(timeline: BatchTimeline) -> dict[str, object]:
+    """The JSON-safe form of one batch chronology."""
+    return asdict(timeline)
+
+
+def _event_from(value: object) -> TimelineEvent:
+    found = _strings_of(value, TimelineEvent, frozenset({"role"}))
+    return TimelineEvent(
+        at=cast(str, found["at"]),
+        kind=cast(str, found["kind"]),
+        text=cast(str, found["text"]),
+        role=found["role"],
+    )
+
+
+def timeline_from_payload(payload: object) -> BatchTimeline:
+    """The chronology a `timeline_payload` result describes; any schema break is `ValueError`."""
+    found = _fields(payload, BatchTimeline)
+    return BatchTimeline(
+        batch=_batch_from(found["batch"]),
+        role_flow=[_str(item) for item in _list(found["role_flow"])],
+        events=[_event_from(item) for item in _list(found["events"])],
     )

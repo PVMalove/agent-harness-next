@@ -18,6 +18,7 @@ from textual.widgets import Button, Input, Static
 from ...kernel import brand, i18n
 from ...kernel.container_route import (
     Action,
+    Authored,
     Effect,
     RouteSession,
     Row,
@@ -26,8 +27,10 @@ from ...kernel.container_route import (
     Tab,
     mark,
 )
-from ...kernel.coordinator_api import ArgvError
+from ...kernel.coordinator_api import ArgvError, CoordinatorApi
 from ...kernel.runner import CommandRunner, capturing_runner
+from ..client import ConsoleClientError, ScreenClient
+from ..server_api import ServerCoordinatorApi
 from ..shell import SHELL_CSS, ConsoleShell, ShellIds
 from ..translate import Translated
 from .commands import call_from_worker
@@ -157,6 +160,17 @@ _EFFECT_TITLES = {
 }
 
 
+AUTHORED_MISSING = "конфигурация не получена от сервера консоли"
+
+
+def server_authored(client: ScreenClient) -> Authored:
+    """The authored configuration from the console server; a client failure is its problem."""
+    try:
+        return client.container_route().authored
+    except ConsoleClientError as exc:
+        return Authored(None, f"{AUTHORED_MISSING}: {exc}")
+
+
 class ContainerRouteScreen(ConsoleShell):
     """Setup, Preflight, Plan / approval, Worker, QA and Cleanup of one container dispatch."""
 
@@ -195,15 +209,23 @@ class ContainerRouteScreen(ConsoleShell):
     def __init__(
         self,
         repo: Path,
-        *,
+        client: ScreenClient,
         batch: str = "",
+        *,
         command_runner: CommandRunner = capturing_runner,
-        session: RouteSession | None = None,
     ) -> None:
         super().__init__()
         self.repo = repo
         self._command_runner = command_runner
-        self.session = session or RouteSession(repo, command_runner)
+        # Setup and Preflight read the console server; the explicit effects (propose, create,
+        # status, QA, cleanup) are not server jobs and keep the local client.
+        self.session = RouteSession(
+            repo,
+            api=ServerCoordinatorApi(
+                repo, client, fallback=CoordinatorApi(repo, command_runner)
+            ),
+            load_authored=lambda _repo: server_authored(client),
+        )
         if batch:
             self.session.select(batch)
         self.stage = Stage.SETUP

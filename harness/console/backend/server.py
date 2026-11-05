@@ -14,6 +14,7 @@ from .api.request_router import (
     MAX_UNFINISHED_REQUESTS as MAX_UNFINISHED_REQUESTS,
     RequestRouter,
 )
+from .application.screens import ScreenService
 from .application.snapshots import SnapshotService
 from . import composition
 from pathlib import Path
@@ -55,6 +56,7 @@ class ConsoleServer:
         jobs: JobService | None = None,
         decisions: DecisionService | None = None,
         events: OrchestrationEvents | None = None,
+        screens: ScreenService | None = None,
         static_root: Path = DEFAULT_STATIC_ROOT,
     ) -> None:
         self.repo = repo.resolve()
@@ -65,6 +67,7 @@ class ConsoleServer:
             jobs=jobs,
             decisions=decisions,
             events=events,
+            screens=screens,
         )
         self._snapshots = parts.snapshots
         self._jobs = parts.jobs

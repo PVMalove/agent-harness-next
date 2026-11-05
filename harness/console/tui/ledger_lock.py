@@ -16,6 +16,8 @@ from pathlib import Path
 from harness.errors import HarnessError
 from harness.json_types import JsonObject
 
+from .client import ConsoleClientError
+
 LockLoader = Callable[[Path], JsonObject]
 
 
@@ -212,8 +214,9 @@ def lock_text(status: JsonObject, language: str = "ru") -> str:
 def current_lock_text(
     repo: Path, load: LockLoader = load_lock_status, language: str = "ru"
 ) -> str:
-    """Текст панели для ``repo``; ошибка чтения состояния тоже показывается оператору."""
+    """Текст панели для ``repo``; ошибка чтения состояния, в том числе ответ или сбой сервера
+    консоли, тоже показывается оператору."""
     try:
         return lock_text(load(repo), language)
-    except (HarnessError, OSError) as exc:
+    except (HarnessError, OSError, ConsoleClientError) as exc:
         return _words(language).unavailable.format(error=exc)

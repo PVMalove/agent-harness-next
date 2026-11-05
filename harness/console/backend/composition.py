@@ -19,8 +19,13 @@ from .application.ports import (
     CommandSpec,
     HomeCollector,
     JobExecutor,
+    LedgerCollector,
+    LockReader,
     OrchestrationReader,
+    RecoveryReader,
+    RouteReader,
 )
+from .application.screens import ScreenService
 from .application.snapshots import SnapshotService
 from .domain.approvals import DecisionsSnapshot
 from .domain.snapshots import HOME_TTL_SECONDS
@@ -34,6 +39,12 @@ from .infrastructure.ledger import collect_decisions
 from .infrastructure.native_permission import NATIVE_PERMISSION_COMMANDS
 from .infrastructure.orchestration_reader import ProjectReader
 from .infrastructure.processes import run_command
+from .infrastructure.screen_facts import (
+    CoordinatorFacts,
+    collect_ledger,
+    collect_ledger_online,
+    read_lock,
+)
 
 
 def snapshot_service(
@@ -55,6 +66,31 @@ def snapshot_service(
             if collect_online is None
             else collect_online
         ),
+    )
+
+
+def screen_service(
+    repo: Path,
+    *,
+    ttl: float = HOME_TTL_SECONDS,
+    clock: Clock | None = None,
+    ledger: LedgerCollector | None = None,
+    ledger_online: LedgerCollector | None = None,
+    lock: LockReader | None = None,
+    recovery: RecoveryReader | None = None,
+    route: RouteReader | None = None,
+) -> ScreenService:
+    """The screen snapshot service; a port left out gets its infrastructure adapter."""
+    facts = CoordinatorFacts()
+    return ScreenService(
+        repo,
+        ttl=ttl,
+        clock=monotonic if clock is None else clock,
+        ledger=collect_ledger if ledger is None else ledger,
+        ledger_online=collect_ledger_online if ledger_online is None else ledger_online,
+        lock=read_lock if lock is None else lock,
+        recovery=facts if recovery is None else recovery,
+        route=facts if route is None else route,
     )
 
 
@@ -114,6 +150,7 @@ class Composition:
     jobs: JobService
     decisions: DecisionService
     events: OrchestrationEvents
+    screens: ScreenService
     router: RequestRouter
     discovery: Callable[[Path], Discovery]
 
@@ -125,17 +162,20 @@ def compose(
     jobs: JobService | None = None,
     decisions: DecisionService | None = None,
     events: OrchestrationEvents | None = None,
+    screens: ScreenService | None = None,
 ) -> Composition:
     """The services of one console server, with the given ones kept, and its request router."""
     snapshots = snapshots or snapshot_service(repo)
     jobs = jobs or job_service(repo)
     decisions = decisions or decision_service(repo)
     events = events or orchestration_events(repo)
+    screens = screens or screen_service(repo)
     return Composition(
         snapshots,
         jobs,
         decisions,
         events,
-        RequestRouter(snapshots, jobs, decisions, events),
+        screens,
+        RequestRouter(snapshots, jobs, decisions, events, screens),
         Discovery,
     )
