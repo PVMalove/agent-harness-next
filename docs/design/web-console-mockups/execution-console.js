@@ -9,6 +9,7 @@ const navGroups=[
     {id:'open-project',label:'Проект',icon:'folder'},
   ]},
   {label:'Работа',items:[
+    {id:'board',label:'Доска задач',icon:'board'},
     {id:'agent-activity',label:'Ход работы',icon:'activity'},
     {id:'orchestration',label:'Оркестрация',icon:'orchestration'},
     {id:'reports',label:'Отчёты',icon:'reports'},
@@ -23,7 +24,7 @@ const navGroups=[
 ];
 const hiddenRoutes=['recovery','container-route','navigation'];
 const routes=new Set([...navGroups.flatMap(g=>g.items.map(i=>i.id)),...hiddenRoutes]);
-let route='home',project='claude-agent-harness',branch='integration/harness-runtime-reliability',configText='{\n  "name": "claude-agent-harness",\n  "runtime": "native",\n  "stale_seconds": 120\n}',versions=[],readerText='',actor='all',file='project.json',homeFilter='all',healthMode='offline',diagFilter='all',diagQuery='',diagSelected='skills.drift',updateMode='normal',updateSelected='implement/SKILL.md',seedSelected={},projectSelectedId='harness',projectPath='',projectPathStatus='',projectManual=null,projectCapability='workflow',workFilter='all',workRole='all',workSelected='#716',workTab='overview',workUpdatedAt=new Date(),reportFilter='all',reportStatus='all',reportQuery='',reportSelected='r-716-qa',reportTab='list',reportUpdatedAt=new Date(),orchRole='all',orchStatus='all',orchUpdatedAt=new Date(),orchTab='map',harnessTab='overview',harnessUpdatedAt=new Date(),repoTab='overview',repoModule='all',repoKind='all',repoQuery='',repoSelected='runtime::serve',repoExpanded={'tests':false},repoFile='utils',repoUpdatedAt=new Date(),settingsTab='overview',settingsParamIndex=5,settingsAiAdvice='',settingsCheckedAt=new Date(),helpTab='start',publishTab='overview',connectionState='connected',publishCheckedAt=new Date(),updateCheckedAt=new Date(),checkedAt=new Date();
+let route='home',project='claude-agent-harness',branch='integration/harness-runtime-reliability',configText='{\n  "name": "claude-agent-harness",\n  "runtime": "native",\n  "stale_seconds": 120\n}',versions=[],readerText='',actor='all',file='project.json',homeFilter='all',healthMode='offline',diagFilter='all',diagQuery='',diagSelected='skills.drift',updateMode='normal',updateSelected='implement/SKILL.md',seedSelected={},projectSelectedId='harness',projectPath='',projectPathStatus='',projectManual=null,projectCapability='workflow',workFilter='all',workRole='all',workSelected='#716',workTab='overview',workUpdatedAt=new Date(),reportFilter='all',reportStatus='all',reportQuery='',reportSelected='r-716-qa',reportTab='list',reportUpdatedAt=new Date(),orchRole='all',orchStatus='all',orchUpdatedAt=new Date(),orchTab='map',harnessTab='overview',harnessUpdatedAt=new Date(),repoTab='overview',repoModule='all',repoKind='all',repoQuery='',repoSelected='runtime::serve',repoExpanded={'tests':false},repoFile='utils',repoUpdatedAt=new Date(),settingsTab='overview',settingsParamIndex=5,settingsAiAdvice='',settingsCheckedAt=new Date(),helpTab='start',publishTab='overview',connectionState='connected',boardSpecId=862,boardQuery='',boardPriorityFilter='all',boardOnlyFree=false,boardDemo='ok',boardSelected=912,boardTab='context',boardSnapshotAt=new Date(),publishCheckedAt=new Date(),updateCheckedAt=new Date(),checkedAt=new Date();
 const panel=(title,body,extra='')=>`<section class="panel"><div class="panel-head"><h2>${title}</h2>${extra}</div>${body}</section>`;
 const body=s=>`<div class="body">${s}</div>`;
 const btn=(name,action,cls='')=>`<button class="${cls}" data-action="${action}">${name}</button>`;
@@ -121,6 +122,7 @@ function render(){
     main.innerHTML=connectionPage(connectionState);closeNav();updateFoot(parsed);return;
   }
   if(route==='home'){main.innerHTML=homePage();bindHome();closeNav();updateFoot(parsed);return}
+  if(route==='board'){main.className='board-main';main.innerHTML=boardPage();bindBoard();closeNav();updateFoot(parsed);return}
   if(route==='navigation'){main.innerHTML=navMapPage();closeNav();updateFoot(parsed);return}
   if(route==='diagnostics'){
     main.innerHTML=diagPage();bindDiag();closeNav();updateFoot(parsed);return;
@@ -597,12 +599,15 @@ const HELP={
     {id:'diagnostics',label:'Диагностика',icon:'pulse',desc:'56 проверок, причины, пропуски и план исправления.'},
     {id:'update-harness',label:'Обновление',icon:'refresh',desc:'1.5.1 → 2.0.0, diff, seed-файлы и миграция runtime-store.'},
     {id:'open-project',label:'Проект',icon:'folder',desc:'Текущий проект, установка, capability и проверки.'},
+    {id:'board',label:'Доска задач',icon:'board',desc:'Спеки, пять колонок, фильтры, карточки и переносы.'},
     {id:'agent-activity',label:'Ход работы',icon:'activity',desc:'Сессии, таймлайн, события и статистика по ролям.'},
     {id:'orchestration',label:'Оркестрация',icon:'orchestration',desc:'Пайплайн, батчи, dispatch, QA lane и аналитика.'},
     {id:'reports',label:'Отчёты',icon:'reports',desc:'Evidence, версии отчётов, findings и Release Gate.'},
+    {id:'publish',label:'Публикация',icon:'github',desc:'Candidate, gate, preflight, PR/MR и evidence.'},
     {id:'harness',label:'Harness',icon:'harness',desc:'Runtime, адаптеры, Docker-контейнеры и команды.'},
     {id:'repo-map',label:'Repo Map',icon:'map',desc:'Иерархия файлов и содержимое, символы и связи.'},
-    {id:'configuration',label:'Настройки',icon:'settings',desc:'Обзор конфигурации, мастер параметров и история.'}
+    {id:'configuration',label:'Настройки',icon:'settings',desc:'Обзор конфигурации, мастер параметров и история.'},
+    {id:'help',label:'Справка',icon:'help',desc:'Экраны, команды, горячие клавиши и границы.'}
   ],
   faqs:[
     {q:'Почему «пропущено» не считается успехом?',a:'Пропуск означает, что проверка не выполнялась. Он не доказывает ни успех, ни ошибку, поэтому показывается отдельно.'},
@@ -625,6 +630,24 @@ const HELP={
   ]
 };
 
+
+const BOARD_SPECS=[
+  {n:862,title:'Harness web console: макеты и каркас',branch:'integration/web-console',tickets:[
+    {n:912,title:'Макет доски задач веб-консоли',what:'HTML-макет доски задач в каркасе веб-консоли: пять колонок, фильтры, карточки, модальное окно и переносы.',criteria:['Макет открывается локально без внешних ресурсов','Покрыты широкая и узкая ширина, модальное окно и состояния переносов','Выбор статуса в модальном окне доступен с клавиатуры','Человек принял макет'],labels:['hitl','type::chore','status::in-progress','priority::p0'],sp:5,batch:'b-912',dispatch:'architect',files:[{path:'docs/rfc/web-console-task-board.html',why:'референс доски и правил'},{path:'docs/design/web-console-mockups/',why:'каркас для встраивания'}]},
+    {n:882,title:'Веб — каркас и Главная',what:'Страницы Jinja2 по принятым макетам: каркас, навигация, Главная и состояние соединения.',criteria:['Главная открывается по URL с токеном','WebSocket обновляет снимок','Поддерживается переподключение','Копия CSS совпадает с макетом'],labels:['afk','status::ready','priority::p0'],sp:8,files:[{path:'harness/console/',why:'каркас веб-клиента'}]},
+    {n:885,title:'Веб — live-лист шагов агентов',what:'Лист живых шагов Claude и Codex с фильтрами по dispatch и роли.',criteria:['Шаги появляются без перезагрузки','Codex показывает «структура недоступна»','Нет thinking и raw JSON'],labels:['afk','status::blocked','priority::p1'],sp:8,blockers:[{n:882,why:'нужен каркас и Главная'}],files:[{path:'harness/console/screens/worker_observation.py',why:'наблюдение шагов'}]},
+    {n:886,title:'Веб — Диагностика и Harness',what:'Страницы Диагностики и Harness по принятым макетам.',criteria:['Факты совпадают с TUI','Команды требуют подтверждения'],labels:['afk','status::in-progress','priority::p1'],sp:5,dispatch:'code-review',pr:'#958',files:[{path:'harness/console/screens/diagnostics.py',why:'проверки'}]},
+    {n:880,title:'Макеты веб-консоли: каркас и Главная',what:'Каркас и базовые экраны веб-консоли.',criteria:['Широкая и узкая ширина','Пустые и ошибочные состояния','Приёмка человеком'],labels:['hitl','type::chore','priority::p0'],sp:8,closed:true,files:[{path:'docs/design/web-console-mockups/',why:'принятый макет'}]},
+    {n:881,title:'Макеты остальных экранов и live-листа',what:'Все экраны и live-лист шагов агентов.',criteria:['Все экраны рядом с ядром','Codex unavailable','Приёмка человеком'],labels:['hitl','type::chore','priority::p1'],sp:8,closed:true,files:[{path:'docs/design/web-console-mockups/',why:'принятый макет'}]}
+  ]},
+  {n:784,title:'Harness Next: Rust runtime и ledger',branch:'integration/harness-runtime-reliability',tickets:[
+    {n:790,title:'systemFields.v1 без runtime-словарей',what:'Импорт реестра systemFields.v1 и нормализатора без Python store.',criteria:['Реестр совпадает с Rust','Нет runtime.*','Полный verify зелёный'],labels:['afk','status::ready','priority::p0'],sp:8,files:[{path:'harness/orchestration/contract.py',why:'контракт'}]},
+    {n:792,title:'Rust workspace и runtime_client',what:'UDS IPC и типизированный клиент для coordinator.',criteria:['Unix socket и peer check','Коды ошибок','Seam 1 тесты'],labels:['afk','status::blocked','priority::p0'],sp:8,blockers:[{n:790,why:'нужен реестр systemFields'}],files:[{path:'native/harness-runtime/',why:'Rust runtime'}]},
+    {n:801,title:'Запись lifecycle через store',what:'CAS, идемпотентность и audit-цепочка для batch и dispatch.',criteria:['BEGIN IMMEDIATE','operations state','audit checkpoint'],labels:['afk','status::in-progress','priority::p0'],sp:8,batch:'b-801',dispatch:'developer',files:[{path:'harness/orchestration/ledger/lifecycle.py',why:'запись store'}]},
+    {n:814,title:'Cutover и релиз 2.0.0',what:'Релиз из integration-ветки в master после полного QA.',criteria:['Rehearsal migrate','Release Gate','Полный QA'],labels:['hitl','status::blocked','priority::p0'],sp:3,blockers:[{n:801,why:'нужен store'},{n:812,why:'нужен Release Gate'}],files:[{path:'docs/adr/0020-runtime-store-cutover.md',why:'cutover'}]},
+    {n:803,title:'Откат в legacy и паритет CLI',what:'Экспорт store в поколение v3 и golden-паритет.',criteria:['human approval','v3 читается 1.x','Только прямые миграции'],labels:['afk','priority::p1'],sp:8,files:[{path:'harness/orchestration/ledger/lifecycle.py',why:'формат v3'}]}
+  ]}
+];
 const PUBLISH={
   candidate:{sha:'6a7f74807b10',short:'6a7f748',session:'#716',branch:'integration/harness-runtime-reliability',target:'master',title:'Harness Next — Rust runtime, transactional recovery, hardened QA'},
   gate:{verdict:'blocked',tree:'match',qa:'full',reason:'checks evidence incomplete',detail:'candidate/target pair not ready for merge'},
@@ -1253,7 +1276,7 @@ function workRoute(){
     const edge=s.steps[i+1]?.state==='current'?'active':(step.state==='done'&&s.steps[i+1]?.state==='done'?'done':'');
     return `<div class="work-flow-node ${step.state} ${step.state==='current'?s.tone:''}"><span class="work-flow-icon">${icon(step.icon||step.name.toLowerCase())}</span><b>${step.name}</b><small>${step.label}</small></div>${i<s.steps.length-1?`<div class="work-flow-edge ${edge} ${edge==='active'?s.tone:''}"></div>`:''}`;
   }).join('');
-  return `<section class="panel work-route-panel"><div class="panel-head"><h2>Маршрут сессии ${s.id}</h2><span class="work-status ${s.tone}">${esc(s.statusLabel)}</span></div><div class="work-route-body"><div class="work-task-meta"><span>${icon(s.role)} ${WORK_ROLES[s.role]}</span><span>${icon('branch')} ${esc(s.branch)}</span><span>${icon('clock')} ${esc(s.elapsed)} · старт ${esc(s.started)}</span></div><div class="work-flow-scroll"><div class="work-flow">${flow}</div></div><div class="work-current ${s.tone}"><span>Текущий шаг</span><b>${current.name}</b><small>${current.label}</small></div><div class="work-route-actions"><button class="btn" type="button" data-work-open>Открыть задачу</button><a class="btn" href="#orchestration">Оркестрация ${icon('chevron')}</a></div></div></section>`;
+  return `<section class="panel work-route-panel"><div class="panel-head"><h2>Маршрут сессии ${s.id}</h2><span class="work-status ${s.tone}">${esc(s.statusLabel)}</span></div><div class="work-route-body"><div class="work-task-meta"><span>${icon(s.role)} ${WORK_ROLES[s.role]}</span><span class="branch-inline">${icon('branch')}<b>${esc(s.branch)}</b></span><span>${icon('clock')} ${esc(s.elapsed)} · старт ${esc(s.started)}</span></div><div class="work-flow-scroll"><div class="work-flow">${flow}</div></div><div class="work-current ${s.tone}"><span>Текущий шаг</span><b>${current.name}</b><small>${current.label}</small></div><div class="work-route-actions"><button class="btn" type="button" data-work-open>Открыть задачу</button><a class="btn" href="#orchestration">Оркестрация ${icon('chevron')}</a></div></div></section>`;
 }
 function workEvents(){
   const s=workSession();
@@ -2014,6 +2037,177 @@ function refreshPublishView(){
   const view=$('#publish-view');if(!view)return;
   view.innerHTML=publishTab==='overview'?publishOverview():publishTab==='preflight'?publishPreflight():publishTab==='pr'?publishPR():publishEvidence();
   bindPublish();
+}
+
+const BOARD_COLUMNS=[
+  {id:'backlog',name:'Бэклог',hint:'blocked / без статуса'},
+  {id:'ready',name:'Готово к работе',hint:'status::ready'},
+  {id:'progress',name:'В работе',hint:'status::in-progress'},
+  {id:'review',name:'Review / QA',hint:'dispatch или PR'},
+  {id:'done',name:'Готово',hint:'закрыт после merge'}
+];
+function boardSpec(){return BOARD_SPECS.find(s=>s.n===boardSpecId)||BOARD_SPECS[0]}
+function boardTickets(){return boardDemo==='empty'?[]:boardSpec().tickets}
+function boardFind(n){return BOARD_SPECS.flatMap(s=>s.tickets).find(t=>t.n===n)}
+function boardStatus(t){return (t.labels||[]).find(l=>l.startsWith('status::'))||''}
+function boardPriority(t){return (t.labels||[]).find(l=>l.startsWith('priority::'))||''}
+function boardColumn(t){
+  if(t.closed)return 'done';
+  const s=boardStatus(t);
+  if(s==='status::in-progress')return (t.dispatch==='code-review'||t.dispatch==='qa'||t.pr)?'review':'progress';
+  return s==='status::ready'?'ready':'backlog';
+}
+function boardColumnName(id){return (BOARD_COLUMNS.find(c=>c.id===id)||{}).name||id}
+function boardOpenBlockers(t){return (t.blockers||[]).filter(b=>{const x=boardFind(b.n);return x&&!x.closed})}
+function boardVisible(t){
+  if(boardPriorityFilter!=='all'&&boardPriority(t)!==boardPriorityFilter)return false;
+  if(boardOnlyFree&&boardOpenBlockers(t).length)return false;
+  const q=boardQuery.trim().toLowerCase();
+  if(!q)return true;
+  return (['#'+t.n,t.title,t.what,(t.labels||[]).join(' '),(t.blockers||[]).map(b=>'#'+b.n+' '+b.why).join(' '),(t.files||[]).map(f=>f.path).join(' ')].join(' ')).toLowerCase().includes(q);
+}
+function boardCommand(t){return (t.labels||[]).includes('hitl')?'/to-guide':(t.labels||[]).includes('pipeline::fast')?'/fast-implement':'/implement'}
+function boardTransition(t,to){
+  const from=boardColumn(t);
+  if(from===to)return {ok:false,same:true};
+  if(to==='review')return {ok:false,reason:'«Review / QA» вычисляют dispatch и PR; карточку туда не переносят'};
+  if(to==='done')return {ok:false,reason:'«Готово» заполняет закрытие тикета после подтверждённого merge'};
+  if(from==='done')return {ok:false,reason:'Закрытый тикет не переносится'};
+  if(from==='review')return {ok:false,reason:'У тикета активный batch или PR'};
+  if(from==='backlog'&&to==='ready'){
+    const ob=boardOpenBlockers(t);
+    return ob.length?{ok:false,reason:'Открыты блокеры: '+ob.map(b=>'#'+b.n).join(', ')}:{ok:true};
+  }
+  if(from==='ready'&&to==='progress')return {ok:true};
+  if(from==='progress'&&to==='ready')return t.batch?{ok:false,reason:'Активный batch '+t.batch}:{ok:true};
+  return {ok:false,reason:'Переход идёт через «Готово к работе»'};
+}
+function boardPrompt(t){
+  const s=boardSpec();
+  const blockers=(t.blockers||[]).length?t.blockers.map(b=>`- #${b.n} — ${b.why}`).join('\n'):'- None';
+  return [boardCommand(t)+' #'+t.n,'',`TICKET: #${t.n} — ${t.title}`,`EPIC: #${s.n} — ${s.title}`,`BRANCH: ${s.branch}`,'', 'WHAT TO BUILD:',t.what,'','ACCEPTANCE:',...(t.criteria||[]).map((c,i)=>`${i+1}. ${c}`),'','BLOCKERS:',blockers,'','DISCOVERY:',...(t.files||[]).map(f=>`- ${f.path}${f.why?' — '+f.why:''}`)].join('\n');
+}
+function boardKpis(){
+  const ts=boardTickets(),open=ts.filter(t=>!t.closed).length,blocked=ts.filter(t=>boardOpenBlockers(t).length).length,active=ts.filter(t=>t.batch).length;
+  return `<div class="board-kpis"><div><span>Открыто</span><b class="cyan">${open}</b><small>из ${ts.length} задач</small></div><div><span>С блокерами</span><b class="lavender">${blocked}</b><small>нельзя перенести</small></div><div><span>Активный batch</span><b class="violet">${active}</b><small>занято</small></div><div><span>Снимок</span><b class="blue">2 мин</b><small>${boardDemo==='down'?'трекер недоступен':'обновлено'}</small></div></div>`;
+}
+function boardState(kind){
+  const map={
+    nospecs:['Спек пока нет','Спека появляется после /to-spec и /to-tickets. Доска покажет её после обновления.'],
+    empty:['На доске нет задач','В выбранной спеке пока нет тикетов. Разбейте спеку через /to-tickets.'],
+    loading:['Обновление доски','Читаем трекер и статусы. Показан последний подтверждённый снимок; карточки временно недоступны.']
+  };
+  const [h,p]=map[kind]||map.empty;
+  return `<section class="panel board-state"><div class="board-state-icon">${icon(kind==='loading'?'refresh':'board')}</div><span class="eyebrow">ДОСКА · ${kind==='loading'?'LOADING':'EMPTY'}</span><h2>${h}</h2><p>${p}</p><div class="actions"><button class="btn primary" type="button" data-board-refresh>${icon('refresh')} Обновить</button><a class="btn" href="#help">${icon('help')} Справка</a></div></section>`;
+}
+function boardToolbar(){
+  return `<div class="board-toolbar"><label class="board-search">${icon('search')}<input id="board-search" type="search" value="${esc(boardQuery)}" placeholder="Найти задачу" aria-label="Поиск задач"></label><select id="board-priority" aria-label="Приоритет"><option value="all">Все приоритеты</option><option value="priority::p0" ${boardPriorityFilter==='priority::p0'?'selected':''}>P0</option><option value="priority::p1" ${boardPriorityFilter==='priority::p1'?'selected':''}>P1</option><option value="priority::p2" ${boardPriorityFilter==='priority::p2'?'selected':''}>P2</option></select><label class="board-free"><input id="board-free" type="checkbox" ${boardOnlyFree?'checked':''}> Без блокеров</label><button class="btn" type="button" data-board-reset>Сбросить</button></div>`;
+}
+function boardBanner(){
+  if(boardDemo==='down')return `<div class="board-banner down">${icon('warning')}<span><b>Трекер недоступен.</b> gh: authentication required. Показан снимок 2 мин назад; перенос карточек недоступен.</span></div>`;
+  if(boardDemo==='busy')return `<div class="board-banner busy">${icon('clock')}<span><b>Идёт мутирующая команда:</b> harness update (запущен из TUI). Чтение работает, перенос получит отказ «занято».</span></div>`;
+  return '';
+}
+function boardCard(t){
+  const ob=boardOpenBlockers(t),prio=boardPriority(t).replace('priority::','').toUpperCase();
+  return `<article class="board-card" tabindex="0" draggable="true" data-board-ticket="${t.n}" aria-label="#${t.n} ${esc(t.title)}"><div class="board-card-meta"><span>#${t.n}</span>${prio?`<em class="board-prio ${prio.toLowerCase()}">${prio}</em>`:''}</div><h3>${esc(t.title)}</h3><p>${esc(t.what.split('\n')[0])}</p><div class="board-card-chips"><span class="board-chip command">${esc(boardCommand(t))}</span>${t.dispatch?`<span class="board-chip role">dispatch: ${esc(t.dispatch)}</span>`:''}${t.closed?'':ob.length?`<span class="board-chip blocker">блокеров: ${ob.length}</span>`:'<span class="board-chip free">без блокеров</span>'}</div><div class="board-card-foot"><span>критериев: ${(t.criteria||[]).length}</span><a href="https://github.com/PVMalove/claude-agent-harness/issues/${t.n}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Открыть ${icon('external')}</a></div></article>`;
+}
+function boardColumns(){
+  const shown=boardTickets().filter(boardVisible);
+  return `<div class="board-columns">${BOARD_COLUMNS.map(c=>{const items=shown.filter(t=>boardColumn(t)===c.id).sort((a,b)=>(boardPriority(a)||'priority::p9').localeCompare(boardPriority(b)||'priority::p9')||a.n-b.n);return `<section class="board-col" data-board-col="${c.id}"><header><div><b>${c.name}</b><small>${c.hint}</small></div><span>${items.length}</span></header><div class="board-cards">${items.length?items.map(boardCard).join(''):'<div class="board-empty">пусто</div>'}</div></section>`}).join('')}</div>`;
+}
+function boardPage(){
+  const s=boardSpec();
+  let body;
+  if(boardDemo==='nospecs')body=boardState('nospecs');
+  else if(boardDemo==='loading')body=boardState('loading');
+  else if(boardDemo==='empty')body=boardState('empty');
+  else body=`${boardKpis()}${boardBanner()}${boardToolbar()}<div class="board-count" id="board-count">${boardTickets().filter(boardVisible).length} из ${boardTickets().length}</div><div id="board-columns">${boardColumns()}</div>`;
+  return `<div class="board-page"><div class="page-title board-title"><div><h1>Доска задач</h1><p>Одна доска на спеку. Колонки, блокеры и переносы соответствуют трекеру.</p><div class="home-facts"><span>${esc(s.title)}</span><span>${esc(s.branch)}</span><span>${boardTickets().length} задач</span><span id="board-snapshot">${fmtClock(boardSnapshotAt)}</span></div></div><div class="actions"><button class="btn" type="button" data-board-refresh>${icon('refresh')} Обновить</button><a class="btn" href="#orchestration">${icon('orchestration')} Оркестрация</a></div></div><div class="board-specbar"><label>Спека<select id="board-spec" aria-label="Выбрать спеку">${BOARD_SPECS.map(x=>`<option value="${x.n}" ${x.n===s.n?'selected':''}>#${x.n} · ${esc(x.title)} — ${x.tickets.length} задач</option>`).join('')}</select></label><span class="board-spec-meta">${s.tickets.length} задач · ${s.tickets.filter(t=>!t.closed).length} открыто</span><select id="board-demo" class="board-demo" aria-label="Демо-состояние доски"><option value="ok" ${boardDemo==='ok'?'selected':''}>Состояние: норма</option><option value="down" ${boardDemo==='down'?'selected':''}>трекер недоступен</option><option value="busy" ${boardDemo==='busy'?'selected':''}>занято</option><option value="error" ${boardDemo==='error'?'selected':''}>ошибка записи</option><option value="nospecs" ${boardDemo==='nospecs'?'selected':''}>нет спек</option><option value="empty" ${boardDemo==='empty'?'selected':''}>пустая доска</option><option value="loading" ${boardDemo==='loading'?'selected':''}>обновление</option></select></div>${body}<dialog id="board-ticket" class="board-dialog"><div class="board-modal" id="board-modal"></div></dialog><dialog id="board-confirm" class="board-dialog board-confirm"><div id="board-confirm-body"></div></dialog>`;
+}
+let boardDragging=null;
+function bindBoardCards(){
+  document.querySelectorAll('[data-board-ticket]').forEach(card=>{
+    const n=Number(card.dataset.boardTicket);
+    card.addEventListener('click',e=>{if(e.target.closest('a'))return;boardOpen(n)});
+    card.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();boardOpen(n)}});
+    card.addEventListener('dragstart',e=>{const t=boardFind(n);if(!t)return;boardDragging=t;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(n));card.classList.add('dragging');boardMarkTargets(t)});
+    card.addEventListener('dragend',()=>{card.classList.remove('dragging');boardDragging=null;document.querySelectorAll('[data-board-col]').forEach(c=>c.classList.remove('drop-ok','drop-no'))});
+  });
+  document.querySelectorAll('[data-board-col]').forEach(col=>{
+    col.addEventListener('dragover',e=>{if(boardDragging)e.preventDefault()});
+    col.addEventListener('drop',e=>{e.preventDefault();if(boardDragging)requestBoardMove(boardDragging,col.dataset.boardCol)});
+  });
+}
+function bindBoard(){
+  const spec=$('#board-spec');if(spec)spec.addEventListener('change',()=>{boardSpecId=Number(spec.value);boardSnapshotAt=new Date();refreshBoard()});
+  const demo=$('#board-demo');if(demo)demo.addEventListener('change',()=>{boardDemo=demo.value;refreshBoard()});
+  const search=$('#board-search');if(search)search.addEventListener('input',()=>{boardQuery=search.value;refreshBoardColumns()});
+  const prio=$('#board-priority');if(prio)prio.addEventListener('change',()=>{boardPriorityFilter=prio.value;refreshBoardColumns()});
+  const free=$('#board-free');if(free)free.addEventListener('change',()=>{boardOnlyFree=free.checked;refreshBoardColumns()});
+  const reset=$('[data-board-reset]');if(reset)reset.addEventListener('click',()=>{boardQuery='';boardPriorityFilter='all';boardOnlyFree=false;refreshBoard()});
+  const refresh=$('[data-board-refresh]');if(refresh)refresh.addEventListener('click',()=>{if(boardDemo==='down'){toast('Трекер недоступен: показан прежний снимок','err');return}boardSnapshotAt=new Date();refreshBoard();toast('Доска обновлена (демонстрация)')});
+  bindBoardCards();
+}
+function refreshBoard(){
+  const main=$('#content');if(!main)return;
+  main.innerHTML=boardPage();bindBoard();
+}
+function refreshBoardColumns(){
+  const box=$('#board-columns');if(box)box.outerHTML=boardColumns();
+  const count=$('#board-count');if(count)count.textContent=`${boardTickets().filter(boardVisible).length} из ${boardTickets().length}`;
+  bindBoardCards();
+}
+
+function boardModalContent(){
+  const t=boardFind(boardSelected);if(!t)return '';
+  const ob=boardOpenBlockers(t),s=boardSpec();
+  const status=boardColumn(t);
+  const tabs=[['context','Контекст'],['acceptance',`Acceptance (${(t.criteria||[]).length})`],['prompt','Промпт']];
+  const tabBody=boardTab==='context'?`<div class="board-context"><h4>Блокеры</h4>${t.blockers?.length?t.blockers.map(b=>{const x=boardFind(b.n);return `<div class="board-blocker"><b>#${b.n}</b><span>${esc(b.why)}</span><em class="orch-pill ${x?.closed?'mint':'lavender'}">${x?.closed?'closed':'open'}</em></div>`}).join(''):'<p class="muted">Блокеров нет.</p>'}<h4>Discovery Context</h4>${(t.files||[]).length?t.files.map(f=>`<div class="board-file"><code>${esc(f.path)}</code><span>${esc(f.why)}</span></div>`).join(''):'<p class="muted">Файлы не указаны.</p>'}</div>`:boardTab==='acceptance'?`<ol class="board-acceptance">${(t.criteria||[]).map(c=>`<li>${esc(c)}</li>`).join('')}</ol>`:`<pre class="board-prompt">${esc(boardPrompt(t))}</pre>`;
+  return `<div class="board-modal-head"><div><span class="eyebrow">#${t.n} · ${esc(s.title)}</span><h2>${esc(t.title)}</h2><div class="board-modal-labels">${(t.labels||[]).map(l=>`<em class="orch-pill ${l.includes('p0')?'violet':l.includes('p1')?'blue':'muted'}">${esc(l)}</em>`).join('')}<em class="orch-pill mint">${t.sp||'—'} SP</em></div></div><button class="icon-btn" type="button" data-board-close aria-label="Закрыть">✕</button></div><div class="board-modal-links"><a href="https://github.com/PVMalove/claude-agent-harness/issues/${t.n}" target="_blank" rel="noopener noreferrer">issue #${t.n} ${icon('external')}</a>${t.pr?`<a href="https://github.com/PVMalove/claude-agent-harness/pull/${t.pr.replace('#','')}" target="_blank" rel="noopener noreferrer">PR ${esc(t.pr)} ${icon('external')}</a>`:''}<span class="branch-inline">${icon('branch')}<b>${esc(s.branch)}</b></span><span class="board-status-label">${boardColumnName(status)}</span><select id="board-status" aria-label="Сменить статус">${BOARD_COLUMNS.map(c=>`<option value="${c.id}" ${c.id===status?'selected':''}>${c.name}</option>`).join('')}</select></div><div class="board-modal-tabs">${tabs.map(([id,l])=>`<button type="button" class="${boardTab===id?'on':''}" data-board-tab="${id}">${l}</button>`).join('')}<button class="btn" type="button" data-board-copy>${icon('download')} Копировать</button></div><div class="board-modal-body">${tabBody}</div>`;
+}
+function boardOpen(n){
+  boardSelected=n;boardTab='context';
+  const dlg=$('#board-ticket');if(!dlg)return;
+  $('#board-modal').innerHTML=boardModalContent();
+  dlg.showModal();
+  bindBoardModal();
+}
+function bindBoardModal(){
+  const dlg=$('#board-ticket');if(!dlg)return;
+  dlg.querySelectorAll('[data-board-tab]').forEach(btn=>btn.addEventListener('click',()=>{boardTab=btn.dataset.boardTab;dlg.querySelector('#board-modal').innerHTML=boardModalContent();bindBoardModal()}));
+  const close=dlg.querySelector('[data-board-close]');if(close)close.addEventListener('click',()=>dlg.close());
+  const status=dlg.querySelector('#board-status');if(status)status.addEventListener('change',()=>{const t=boardFind(boardSelected);if(t)requestBoardMove(t,status.value);});
+  const copy=dlg.querySelector('[data-board-copy]');if(copy)copy.addEventListener('click',()=>{const x=boardCopyPayload();copyBoardText(x.text,x.label)});
+}
+function boardCopyPayload(){
+  const t=boardFind(boardSelected);if(!t)return {text:'',label:'Текст'};
+  if(boardTab==='acceptance')return {text:(t.criteria||[]).map((c,i)=>`${i+1}. ${c}`).join('\n'),label:'Критерии'};
+  return {text:boardPrompt(t),label:'Промпт'};
+}
+function copyBoardText(text,label){
+  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(text).then(()=>toast(label+' скопирован')).catch(()=>reader(label,text));
+  else reader(label,text);
+}
+function boardMarkTargets(t){
+  document.querySelectorAll('[data-board-col]').forEach(col=>{const r=boardTransition(t,col.dataset.boardCol);col.classList.toggle('drop-ok',!!r.ok);col.classList.toggle('drop-no',!!r.reason);col.dataset.reason=r.reason||''});
+}
+function requestBoardMove(t,to){
+  const r=boardTransition(t,to);
+  if(r.same)return;
+  if(!r.ok){toast(`#${t.n} → «${BOARD_COLUMNS.find(c=>c.id===to)?.name||to}»: ${r.reason}`,'err');const s=$('#board-status');if(s)s.value=boardColumn(t);return}
+  if(boardDemo==='down'){toast('Трекер недоступен: смена статуса не записана','err');return}
+  if(boardDemo==='busy'){toast('Занято: harness update','err');return}
+  if(boardDemo==='error'){toast('Ошибка записи в трекер: изменение не сохранено','err');return}
+  const dlg=$('#board-confirm');if(!dlg)return;
+  const from=boardColumn(t),toName=BOARD_COLUMNS.find(c=>c.id===to)?.name||to;
+  $('#board-confirm-body').innerHTML=`<div class="board-modal-head"><div><span class="eyebrow">СМЕНА СТАТУСА</span><h2>#${t.n} → ${esc(toName)}</h2><p>${esc(t.title)}</p></div><button class="icon-btn" type="button" data-board-confirm-close>✕</button></div><div class="board-confirm-diff"><s>${from}</s><b>→</b><ins>${to}</ins></div><p class="board-confirm-note">Сервер запустит смену метки в GitHub как мутирующий job и обновит доску.</p><div class="actions"><button class="btn" type="button" data-board-confirm-close>Отмена</button><button class="btn primary" type="button" id="board-confirm-ok">Сменить статус</button></div>`;
+  dlg.showModal();
+  let moved=false;
+  dlg.addEventListener('close',()=>{if(!moved){const sel=$('#board-status');if(sel)sel.value=boardColumn(t)}},{once:true});
+  dlg.querySelectorAll('[data-board-confirm-close]').forEach(b=>b.addEventListener('click',()=>dlg.close()));
+  const ok=$('#board-confirm-ok');ok?.addEventListener('click',()=>{moved=true;t.labels=(t.labels||[]).filter(l=>!l.startsWith('status::'));t.labels.push(to==='progress'?'status::in-progress':'status::ready');t.closed=false;boardSnapshotAt=new Date();boardSelected=t.n;dlg.close();$('#board-ticket')?.close();refreshBoard();toast(`#${t.n}: статус обновлён (демо)`)});
 }
 
 function contourSvg(){

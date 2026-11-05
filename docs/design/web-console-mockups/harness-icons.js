@@ -14,6 +14,7 @@
     map: '<path d="M9 4.1 3.4 6.2v13.7L9 17.8l6 2.1 5.6-2.1V4.1L15 6.2z"/><path d="M9 4.1v13.7M15 6.2v13.7"/>',
     settings: '<path d="M4 7.2h5M13 7.2h7M4 16.8h7M15 16.8h5"/><circle cx="11" cy="7.2" r="2"/><circle cx="13" cy="16.8" r="2"/>',
     help: '<circle cx="12" cy="12" r="8.6"/><path d="M9.7 9.1a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.2 1-1.2 1.8v.4"/><circle cx="12" cy="16.8" r=".55" fill="currentColor" stroke="none"/>',
+    board: '<rect x="3.2" y="4.2" width="4.2" height="15.6" rx="1"/><rect x="9.9" y="4.2" width="4.2" height="10.2" rx="1"/><rect x="16.6" y="4.2" width="4.2" height="13.2" rx="1"/>',
     activity: '<path d="M3 12h3.1l1.7-4.4 3.6 9 2.4-6.2 1.4 3.2H21"/>',
     architect: '<circle cx="12" cy="12" r="8.6"/><path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5z"/>',
     developer: '<path d="M8.2 8 4.3 12l3.9 4M15.8 8l3.9 4-3.9 4M13.8 5.8l-3.6 12.4"/>',
