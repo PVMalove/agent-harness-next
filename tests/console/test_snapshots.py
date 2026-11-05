@@ -16,7 +16,7 @@ import pytest
 from harness.console.kernel.data import DashboardData
 from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
 from harness.console.kernel.repo_map_settings import MemoryStatus
-from harness.console.snapshots import (
+from harness.console.backend.application.snapshots import (
     HOME_TTL_SECONDS,
     KEPT_SNAPSHOTS,
     MAX_REQUEST_BYTES,
@@ -96,7 +96,7 @@ sys.meta_path.insert(0, Absent())
 sys.path.insert(0, sys.argv[1])
 from pathlib import Path
 from typing import Any
-from harness.console.snapshots import collect_home
+from harness.console.backend.application.snapshots import collect_home
 snapshot = collect_home(Path(sys.argv[2]))
 loaded = sorted(set(sys.modules) & {'rich', 'textual', 'h11', 'websockets'})
 print(json.dumps({'loaded': loaded, 'version': snapshot.version}))
@@ -200,7 +200,7 @@ def test_map_tier_falls_back_to_the_cached_map_when_the_check_names_none() -> No
 
 
 def test_problems_are_capped_and_the_reply_stays_below_the_message_limit() -> None:
-    from harness.console.server import MESSAGE_LIMIT
+    from harness.console.backend.server import MESSAGE_LIMIT
 
     long = "я" * 500
     problems = tuple(("fail", f"check.{index}", long) for index in range(1000))
@@ -234,7 +234,7 @@ def test_the_whole_reply_stays_below_the_message_limit_whatever_the_text(
 ) -> None:
     """JSON escaping inflates quotes, backslashes (x2) and control characters (x6): the limit
     holds for the serialized reply of any text, not for the raw text."""
-    from harness.console.server import MESSAGE_LIMIT
+    from harness.console.backend.server import MESSAGE_LIMIT
 
     text = char * 500
     data = DashboardData(
@@ -848,7 +848,7 @@ def _many_problems(count: int, text: str) -> DashboardData:
 
 def _page_all(service: SnapshotService, snapshot_id: int) -> tuple[list[str], str]:
     """Every `home.problems` reply text for `snapshot_id`, and the joined page texts."""
-    from harness.console.server import MESSAGE_LIMIT
+    from harness.console.backend.server import MESSAGE_LIMIT
 
     async def scenario() -> tuple[list[str], str]:
         raws: list[str] = []

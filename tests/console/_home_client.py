@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Protocol
 
 from harness.console.kernel import data as console_data
-from harness.console import snapshots
+from harness.console.backend.application import snapshots
 from harness.console.kernel.data import DashboardData
-from harness.console.snapshots import HomeContext, HomeSnapshot, build_home_snapshot
+from harness.console.backend.application.snapshots import HomeContext, HomeSnapshot, build_home_snapshot
 
 
 class CollectDashboard(Protocol):

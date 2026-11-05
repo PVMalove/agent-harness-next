@@ -6,7 +6,7 @@ import asyncio
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .. import admission
+from . import admission
 from ..server import CLOSE_TIMEOUT, HEADER_LIMIT
 from . import Runtime
 

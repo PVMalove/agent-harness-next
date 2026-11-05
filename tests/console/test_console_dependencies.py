@@ -1,4 +1,4 @@
-"""Dependency boundary of the console: only harness/console/api imports the web framework, and
+"""Dependency boundary of the console: only harness/console/backend/api imports the web framework, and
 the retired h11 transport and Jinja2 are imported nowhere."""
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 HARNESS = ROOT / "harness"
 CONSOLE = HARNESS / "console"
-API = CONSOLE / "api"
+API = CONSOLE / "backend" / "api"
 
 FRAMEWORK = frozenset({"fastapi", "starlette", "uvicorn", "pydantic"})
 RETIRED = frozenset({"h11", "jinja2"})
@@ -19,11 +19,11 @@ ROUTE_MODULES = ("app.py", "websocket.py", "static.py")
 # Routes reach the services only through the request router.
 SERVICE_INTERNALS = frozenset(
     {
-        "harness.console.jobs",
+        "harness.console.backend.application.jobs",
         "harness.console.kernel.runner",
         "harness.console.kernel.process_tree",
         "harness.console.ledger_lock",
-        "harness.console.event_journal",
+        "harness.console.backend.infrastructure.event_journal",
         "harness.orchestration.coordinator",
     }
 )
@@ -106,9 +106,9 @@ def test_the_scanner_finds_framework_imports_wherever_they_are(source: str) -> N
 
 def test_the_scanner_resolves_relative_imports() -> None:
     found = imported_modules(
-        "from .. import jobs\nfrom ..kernel.runner import run", "harness.console.api"
+        "from ..application import jobs\nfrom ...kernel.runner import run", "harness.console.backend.api"
     )
-    assert {"harness.console.jobs", "harness.console.kernel.runner"} <= found
+    assert {"harness.console.backend.application.jobs", "harness.console.kernel.runner"} <= found
     assert (
         not _roots(imported_modules("import json\nfrom pathlib import Path"))
         & FRAMEWORK

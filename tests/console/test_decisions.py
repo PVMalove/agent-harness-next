@@ -12,14 +12,14 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from harness.console.decisions import (
+from harness.console.backend.application.decisions import (
     MAX_DECISIONS,
     DecisionService,
     DecisionsSnapshot,
     collect_decisions,
     respond,
 )
-from harness.console.server import MESSAGE_LIMIT
+from harness.console.backend.server import MESSAGE_LIMIT
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.worker_observation import PROTOCOL
 from harness.storage import storage_path

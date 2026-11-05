@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from harness.console import jobs as job_module
-from harness.console.jobs import JobService
+from harness.console.backend.application import jobs as job_module
+from harness.console.backend.application.jobs import JobService
 from harness.console.kernel.process_tree import CommandCancelled
-from harness.console.server import MAX_SUBSCRIPTIONS, MESSAGE_LIMIT, ConsoleServer
+from harness.console.backend.server import MAX_SUBSCRIPTIONS, MESSAGE_LIMIT, ConsoleServer
 from tests.console.test_server import _connect
 
 if TYPE_CHECKING:
@@ -1144,7 +1144,7 @@ def test_native_permission_answer_runs_only_confirmed_in_its_project(
         [(argv, cwd)] = fake.calls
         assert cwd == project.resolve()
         assert argv[0] == sys.executable
-        assert argv[1].endswith("harness/console/native_permission.py")
+        assert argv[1].endswith("harness/console/backend/infrastructure/native_permission.py")
         assert argv[2:4] == ["--repo", str(project.resolve())]
         assert argv[-1] == "--allow"
 

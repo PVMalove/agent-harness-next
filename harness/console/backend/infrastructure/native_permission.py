@@ -21,7 +21,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     # Run by path, this file's directory is on sys.path, where console modules could shadow the
     # standard library; the repository root goes first so `harness` resolves to the package.
-    _ROOT = Path(__file__).resolve().parents[2]
+    _ROOT = Path(__file__).resolve().parents[4]
     _OWN_DIR = Path(__file__).resolve().parent
     sys.path[:] = [
         entry

@@ -17,8 +17,8 @@ import pytest
 from harness.console.pin import CONSOLE_SERVER_REQUIREMENTS
 from harness.console.kernel.data import DashboardData
 from harness.console.kernel.data import collect_dashboard
-from harness.console.server import ConsoleServer
-from harness.console.snapshots import (
+from harness.console.backend.server import ConsoleServer
+from harness.console.backend.application.snapshots import (
     HOME_TTL_SECONDS,
     HomeContext,
     HomeSnapshot,
@@ -91,7 +91,7 @@ class Absent(importlib.abc.MetaPathFinder):
             raise ModuleNotFoundError(fullname)
 TRANSPORT = {'h11', 'websockets', 'fastapi', 'starlette', 'uvicorn', 'pydantic'}
 sys.meta_path.insert(0, Absent())
-import harness.console.server, harness.console.launcher, harness.console.pin, harness.health
+import harness.console.backend.server, harness.console.launcher, harness.console.pin, harness.health
 print(json.dumps({'loaded': sorted(set(sys.modules) & TRANSPORT)}))
 """
     result = subprocess.run(
@@ -146,7 +146,7 @@ def test_live_discovery_owner_cannot_be_stolen_by_another_process(
 import asyncio, sys
 from pathlib import Path
 from harness.console.kernel.discovery import DiscoveryBusyError
-from harness.console.server import ConsoleServer
+from harness.console.backend.server import ConsoleServer
 async def main():
     server = ConsoleServer(Path(sys.argv[1]))
     try:
@@ -1306,7 +1306,7 @@ def test_expensive_checks_are_not_rerun_within_the_ttl_and_force_rebuilds(
 def test_pending_decisions_are_answered_beside_the_home_snapshot(
     project: Path,
 ) -> None:
-    from harness.console.decisions import (
+    from harness.console.backend.application.decisions import (
         DecisionItem,
         DecisionService,
         DecisionsSnapshot,

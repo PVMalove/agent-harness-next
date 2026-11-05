@@ -40,12 +40,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, NamedTuple, Protocol, cast
 
-from .kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS, CatalogEntry, process_argv
-from .kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand
-from .native_permission import NATIVE_PERMISSION_COMMANDS, DecisionCommand
-from .kernel.process_tree import CommandCancelled
-from .kernel.discovery import discovery_path
-from .kernel.runner import capturing_runner
+from ...kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS, CatalogEntry, process_argv
+from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand
+from ..infrastructure.native_permission import NATIVE_PERMISSION_COMMANDS, DecisionCommand
+from ...kernel.process_tree import CommandCancelled
+from ...kernel.discovery import discovery_path
+from ...kernel.runner import capturing_runner
 from harness.configuration import SECRET_MASK, mask_secrets
 from .snapshots import (
     MAX_ID_CHARS,

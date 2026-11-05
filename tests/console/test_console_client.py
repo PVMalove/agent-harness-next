@@ -26,8 +26,8 @@ from harness.console.client import (
     TokenRejected,
 )
 from harness.console.kernel.discovery import ServerEndpoint, read_record
-from harness.console.server import ConsoleServer
-from harness.console.snapshots import (
+from harness.console.backend.server import ConsoleServer
+from harness.console.backend.application.snapshots import (
     HomeContext,
     HomeSnapshot,
     SnapshotService,

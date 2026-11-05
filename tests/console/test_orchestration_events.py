@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from harness.console.orchestration_events import (
+from harness.console.backend.application.events import (
     POLL_INTERVAL_SECONDS,
     BatchFacts,
     Observation,
@@ -19,8 +19,8 @@ from harness.console.orchestration_events import (
     ProjectReader,
     SourceUnavailable,
 )
-from harness.console.server import MAX_SUBSCRIPTIONS, ConsoleServer
-from harness.console.snapshots import SnapshotService
+from harness.console.backend.server import MAX_SUBSCRIPTIONS, ConsoleServer
+from harness.console.backend.application.snapshots import SnapshotService
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from tests.console._console_ledger_fixture import _Batch
@@ -374,7 +374,7 @@ def test_foreign_expired_and_invalid_cursors_are_refused(project: Path) -> None:
 def test_a_cursor_below_the_kept_window_expires_after_compaction(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import event_journal
+    from harness.console.backend.infrastructure import event_journal
 
     monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
     ledger = _ledger(project)
@@ -423,7 +423,7 @@ def test_compaction_replaces_the_journal_only_after_closing_it(
     """Windows refuses to replace a file that the process still holds open."""
     import os
 
-    from harness.console import event_journal
+    from harness.console.backend.infrastructure import event_journal
 
     monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
     journal = _journal(project)
@@ -658,7 +658,7 @@ def test_a_failing_poll_is_a_typed_state_and_the_poller_keeps_polling(
 def test_compaction_keeps_a_lone_surrogate_and_bounds_the_journal(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import event_journal
+    from harness.console.backend.infrastructure import event_journal
 
     monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
     _ledger(project)

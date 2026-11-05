@@ -2,7 +2,7 @@
 
 The models describe the protocol the services already speak; the /ws route never parses frames
 with them, so every reply stays byte-identical. Regenerate the committed documents with
-`python -m harness.console.api.schemas`.
+`python -m harness.console.backend.api.schemas`.
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
-from ..request_router import RequestRouter
+from .request_router import RequestRouter
 
-REGENERATE = "python -m harness.console.api.schemas"
+REGENERATE = "python -m harness.console.backend.api.schemas"
 HERE = Path(__file__).resolve().parent
 OPENAPI_PATH = HERE / "openapi.json"
 WS_SCHEMA_PATH = HERE / "ws-schema.json"

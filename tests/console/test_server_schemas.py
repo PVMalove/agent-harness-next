@@ -10,11 +10,11 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
-from harness.console import jobs, orchestration_events
-from harness.console.api import schemas
-from harness.console.decisions import DecisionService, DecisionsSnapshot
-from harness.console.server import ConsoleServer
-from harness.console.snapshots import SnapshotService
+from harness.console.backend.application import jobs, events as orchestration_events
+from harness.console.backend.api import schemas
+from harness.console.backend.application.decisions import DecisionService, DecisionsSnapshot
+from harness.console.backend.server import ConsoleServer
+from harness.console.backend.application.snapshots import SnapshotService
 from tests.console.test_server import GatedCollect, _connect
 
 

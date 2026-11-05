@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from ..request_router import RequestRouter
+    from .request_router import RequestRouter
 
 
 class Runtime(Protocol):

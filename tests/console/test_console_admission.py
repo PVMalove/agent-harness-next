@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from harness.console import admission
+from harness.console.backend.api import admission
 
 PORT = 43210
 TOKEN = "ab" * 32

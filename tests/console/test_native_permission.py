@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from harness.console import native_permission
+from harness.console.backend.infrastructure import native_permission
 from harness.console.kernel.catalog import Reversibility, process_argv
-from harness.console.native_permission import NATIVE_PERMISSION_COMMANDS
+from harness.console.backend.infrastructure.native_permission import NATIVE_PERMISSION_COMMANDS
 from harness.orchestration.core.utils import CoordinatorError
 from harness.orchestration.workflow import delivery
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "harness" / "console" / "native_permission.py"
+SCRIPT = ROOT / "harness" / "console" / "backend" / "infrastructure" / "native_permission.py"
 SHA = "0123456789abcdef" * 4
 DISPATCH = "dispatch-3ab1639f-18a3-4856-93f3-511c5b1c61dd"
 VALUES = {"dispatch": DISPATCH, "request_id": "request-1", "request_sha256": SHA}

@@ -15,7 +15,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 from .kernel.discovery import ServerEndpoint
-from .snapshots import (
+from .backend.application.snapshots import (
     HOME_PROBLEMS_REQUEST,
     HOME_REQUEST,
     PROTOCOL_VERSION,
@@ -87,7 +87,7 @@ class ConsoleClient:
         from websockets.sync.client import connect
 
         # Here, not at the top: the server module imports the catalog, which imports the launcher.
-        from .server import MESSAGE_LIMIT
+        from .backend.server import MESSAGE_LIMIT
 
         try:
             connection = connect(

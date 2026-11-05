@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.server import ConsoleServer
+from harness.console.backend.server import ConsoleServer
 
 INDEX = b"<!doctype html><title>Console</title><script src=/assets/app.js></script>"
 ASSET = b"console.log('console');\n"

@@ -849,7 +849,7 @@ def test_the_liveness_probe_asks_the_console_health_route(tmp_path: Path) -> Non
     """A live Сервер консоли answers /health/live; a port that only serves `/` is not one."""
     import asyncio
 
-    from harness.console.server import ConsoleServer
+    from harness.console.backend.server import ConsoleServer
 
     repo = tmp_path / "project"
     repo.mkdir()

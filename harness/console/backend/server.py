@@ -1,4 +1,4 @@
-"""Project-bound console server; FastAPI and Uvicorn load only at startup (harness.console.api)."""
+"""Project-bound console server; FastAPI and Uvicorn load only at startup (harness.console.backend.api)."""
 
 from __future__ import annotations
 
@@ -6,16 +6,16 @@ import asyncio
 import secrets
 import socket
 
-from .decisions import DecisionService
-from .kernel.discovery import Discovery
-from .jobs import JobService
-from .orchestration_events import OrchestrationEvents
-from .request_router import (
+from .application.decisions import DecisionService
+from ..kernel.discovery import Discovery
+from .application.jobs import JobService
+from .application.events import OrchestrationEvents
+from .api.request_router import (
     MAX_SUBSCRIPTIONS as MAX_SUBSCRIPTIONS,
     MAX_UNFINISHED_REQUESTS as MAX_UNFINISHED_REQUESTS,
     RequestRouter,
 )
-from .snapshots import SnapshotService
+from .application.snapshots import SnapshotService
 from pathlib import Path
 from typing import Protocol
 
@@ -23,11 +23,11 @@ HEADER_LIMIT = 16384
 CLOSE_TIMEOUT = 0.5
 MESSAGE_LIMIT = 65536
 _STARTUP_POLL = 0.01
-DEFAULT_STATIC_ROOT = Path(__file__).resolve().parent / "web" / "dist"
+DEFAULT_STATIC_ROOT = Path(__file__).resolve().parents[1] / "web" / "dist"
 
 
 class _Serving(Protocol):
-    """The embedded HTTP server as the lifecycle sees it (harness.console.api.host)."""
+    """The embedded HTTP server as the lifecycle sees it (harness.console.backend.api.host)."""
 
     started: bool
     should_exit: bool
