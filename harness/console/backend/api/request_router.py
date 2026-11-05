@@ -10,8 +10,9 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 
-from ..application.decisions import DecisionService, is_decisions_request
-from ..application.decisions import respond as respond_decisions
+from ..application.decisions import DecisionService
+from .protocol.decisions import is_decisions_request
+from .protocol.decisions import respond as respond_decisions
 from ..application.jobs import JobService
 from .protocol.jobs import job_request_type
 from .protocol.jobs import replies as job_replies

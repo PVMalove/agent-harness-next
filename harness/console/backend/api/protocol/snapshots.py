@@ -14,7 +14,6 @@ from ...application.snapshots import SnapshotService
 from . import Rejected, encode, error_reply, parse_envelope
 
 _ERRORS = {
-    "collect_failed": "Snapshot collection failed.",
     "snapshot_expired": "The snapshot is no longer kept; request it again.",
 }
 
@@ -76,10 +75,7 @@ async def respond(raw: str, snapshots: SnapshotService) -> str:
         )
     except Exception as exc:
         return error_reply(
-            "collect_failed",
-            request.id,
-            request.type,
-            type(exc).__name__ or _ERRORS["collect_failed"],
+            "collect_failed", request.id, request.type, type(exc).__name__
         )
     reply: dict[str, object] = {
         "v": PROTOCOL_VERSION,

@@ -13,7 +13,7 @@ from pydantic import BaseModel, TypeAdapter
 from harness.console.backend.api.protocol import jobs
 from harness.console.backend.application import events as orchestration_events
 from harness.console.backend.api import schemas
-from harness.console.backend.application.decisions import DecisionService, DecisionsSnapshot
+from harness.console.backend.domain.approvals import DecisionsSnapshot
 from harness.console.backend.server import ConsoleServer
 from harness.console.backend import composition
 from tests.console.test_server import GatedCollect, _connect
@@ -88,7 +88,7 @@ def test_replies_of_a_real_server_validate_against_the_reply_models(
         server = ConsoleServer(
             project,
             snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
-            decisions=DecisionService(project, collect=no_decisions),
+            decisions=composition.decision_service(project, collect=no_decisions),
         )
         await server.start()
         replies: list[dict[str, object]] = []

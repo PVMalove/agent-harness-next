@@ -1303,11 +1303,7 @@ def test_expensive_checks_are_not_rerun_within_the_ttl_and_force_rebuilds(
 def test_pending_decisions_are_answered_beside_the_home_snapshot(
     project: Path,
 ) -> None:
-    from harness.console.backend.application.decisions import (
-        DecisionItem,
-        DecisionService,
-        DecisionsSnapshot,
-    )
+    from harness.console.backend.domain.approvals import DecisionItem, DecisionsSnapshot
 
     item = DecisionItem(
         kind="batch-approval",
@@ -1329,7 +1325,7 @@ def test_pending_decisions_are_answered_beside_the_home_snapshot(
         server = ConsoleServer(
             project,
             snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
-            decisions=DecisionService(project, collect=fake),
+            decisions=composition.decision_service(project, collect=fake),
         )
         await server.start()
         try:

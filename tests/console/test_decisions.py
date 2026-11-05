@@ -12,13 +12,11 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from harness.console.backend.application.decisions import (
-    MAX_DECISIONS,
-    DecisionService,
-    DecisionsSnapshot,
-    collect_decisions,
-    respond,
-)
+from harness.console.backend.api.protocol.decisions import respond
+from harness.console.backend import composition
+from harness.console.backend.application.decisions import DecisionService
+from harness.console.backend.domain.approvals import MAX_DECISIONS, DecisionsSnapshot
+from harness.console.backend.infrastructure.ledger import collect_decisions
 from harness.console.kernel.protocol import MESSAGE_LIMIT
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.worker_observation import PROTOCOL
@@ -256,7 +254,7 @@ def test_a_long_request_preview_is_clipped_below_the_message_limit(
 
 
 def _service(project: Path) -> DecisionService:
-    return DecisionService(project)
+    return composition.decision_service(project)
 
 
 def test_respond_answers_and_rejects_like_the_snapshot_protocol(project: Path) -> None:
@@ -282,7 +280,7 @@ def test_a_failed_collect_names_only_the_exception_type(project: Path) -> None:
         raise OSError("/private/path")
 
     raw = json.dumps({"id": 2, "type": "decisions.snapshot"})
-    reply = asyncio.run(respond(raw, DecisionService(project, collect=fail)))
+    reply = asyncio.run(respond(raw, composition.decision_service(project, collect=fail)))
     assert "private" not in reply
     assert json.loads(reply)["error"] == {
         "code": "collect_failed",

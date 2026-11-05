@@ -4,18 +4,22 @@ adapters into the use cases."""
 from __future__ import annotations
 
 import functools
+from collections.abc import Callable
 from pathlib import Path
 
 from ..kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
+from .application.decisions import DecisionService
 from .application.jobs import JobService
 from .application.ports import Clock, CommandSpec, HomeCollector, JobExecutor
 from .application.snapshots import SnapshotService
+from .domain.approvals import DecisionsSnapshot
 from .domain.snapshots import HOME_TTL_SECONDS
 from .infrastructure import command_journal
 from .infrastructure.clock import monotonic, utc_now_iso
 from .infrastructure.home_facts import collect_home
 from .infrastructure.ids import new_id
+from .infrastructure.ledger import collect_decisions
 from .infrastructure.native_permission import NATIVE_PERMISSION_COMMANDS
 from .infrastructure.processes import run_command
 
@@ -58,4 +62,13 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         journal=command_journal.append,
         new_id=new_id,
         now=utc_now_iso,
+    )
+
+
+def decision_service(
+    repo: Path, *, collect: Callable[[Path], DecisionsSnapshot] | None = None
+) -> DecisionService:
+    """The pending decisions service; without `collect` it reads the project's ledger."""
+    return DecisionService(
+        repo, collect=collect_decisions if collect is None else collect
     )

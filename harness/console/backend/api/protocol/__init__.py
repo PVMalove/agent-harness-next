@@ -18,6 +18,7 @@ _ERRORS = {
     "unknown_type": "Unknown request type.",
     "too_large": "Request is too large.",
     "busy": "Too many unfinished requests.",
+    "collect_failed": "Snapshot collection failed.",
 }
 
 
