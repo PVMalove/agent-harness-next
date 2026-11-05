@@ -14,9 +14,9 @@ pytest.importorskip("textual")
 
 from textual.pilot import Pilot
 
-from harness.console import brand
+from harness.console.kernel import brand
 from harness.console.app import HarnessConsoleApp
-from harness.console.data import DashboardData
+from harness.console.kernel.data import DashboardData
 from harness.console.screens.dashboard import DashboardScreen
 from harness.console.shell import SECTIONS
 from harness.console.screens.diagnostics import DiagnosticsScreen
@@ -360,7 +360,7 @@ def test_dashboard_shows_the_mark_and_the_banner_beside_it(tmp_path: Path) -> No
         from textual.app import App
         from textual.widgets import Static
 
-        from harness.console import brand
+        from harness.console.kernel import brand
 
         banner = brand.BannerInfo(
             version="9.9.9",
@@ -388,7 +388,7 @@ def test_dashboard_shows_the_mark_and_the_banner_beside_it(tmp_path: Path) -> No
         return mark, info, card
 
     mark, info, card = asyncio.run(scenario())
-    from harness.console import brand
+    from harness.console.kernel import brand
 
     assert mark.splitlines() == list(brand.LOGO)
     assert f"{brand.PRODUCT} 9.9.9" in info
@@ -414,7 +414,7 @@ def test_console_registers_and_selects_the_warm_theme(tmp_path: Path) -> None:
         async with app.run_test():
             return app.theme
 
-    from harness.console import brand
+    from harness.console.kernel import brand
 
     assert asyncio.run(scenario()) == brand.THEME_NAME
 
@@ -1046,7 +1046,7 @@ def test_diagnostics_screen_unmount_cancels_workers_without_deadlock(
 def test_dashboard_captures_command_output_by_default(tmp_path: Path) -> None:
     """Проверить, что дашборд без явного runner передаёт разделам перехватывающий runner,
     а не runner со сквозным выводом в терминал, которым владеет TUI."""
-    from harness.console.runner import capturing_runner
+    from harness.console.kernel.runner import capturing_runner
 
     screen = DashboardScreen(
         tmp_path,
@@ -1306,7 +1306,7 @@ def test_dashboard_session_list_shows_role_labels_and_status_captions(
 def test_elapsed_time_and_check_counts_read_naturally() -> None:
     from datetime import UTC, datetime, timedelta
 
-    from harness.console import i18n
+    from harness.console.kernel import i18n
     from harness.console.session_card import elapsed_text
 
     now = datetime(2026, 10, 17, 14, 40, tzinfo=UTC)
@@ -1792,8 +1792,8 @@ def test_a_jump_from_requires_attention_opens_the_section_and_runs_no_command(
 
 
 def _home_context() -> object:
-    from harness.console.repo_map import MapEdge, MapFile, RepoMapView
-    from harness.console.repo_map_settings import MemoryStatus
+    from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
+    from harness.console.kernel.repo_map_settings import MemoryStatus
     from harness.console.screens.dashboard import HomeContext
 
     view = RepoMapView(

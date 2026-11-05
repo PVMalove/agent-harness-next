@@ -22,8 +22,9 @@ from textual.pilot import Pilot
 from textual.screen import Screen
 from textual.widgets import Button, Input, ListView, Static
 
-from harness.console import brand, data, i18n, translate
-from harness.console.catalog import HARNESS_COMMANDS
+from harness.console.kernel import brand, data, i18n
+from harness.console import translate
+from harness.console.kernel.catalog import HARNESS_COMMANDS
 from harness.console.reports import LedgerView
 from harness.console.screens.harness import CommandFormScreen, HarnessScreen
 from harness.console.shell import Fold

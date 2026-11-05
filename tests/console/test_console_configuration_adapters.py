@@ -25,7 +25,7 @@ def project(tmp_path: Path) -> Path:
 
 
 def test_console_adapter_install_requires_preview_confirmation(project: Path) -> None:
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -49,7 +49,7 @@ def test_console_adapter_install_requires_preview_confirmation(project: Path) ->
 def test_console_rejects_stale_preview_and_preserves_local_adapter(
     project: Path,
 ) -> None:
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -76,7 +76,7 @@ def test_console_rejects_stale_preview_and_preserves_local_adapter(
 
 def test_console_does_not_enable_missing_capability(project: Path) -> None:
     import json
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -155,7 +155,7 @@ def test_console_updates_outdated_managed_adapter_after_confirmation(
 ) -> None:
     import hashlib
     import json
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -191,7 +191,7 @@ def _fake_preview(
     blocked: bool = False,
     reason: str = "",
 ) -> object:
-    from harness.console.configuration import RuntimeAdapterPreview
+    from harness.console.kernel.configuration import RuntimeAdapterPreview
 
     return RuntimeAdapterPreview(
         adapters,  # type: ignore[arg-type]
@@ -335,7 +335,7 @@ def test_the_plan_names_changes_with_words_and_the_blocking_line_with_a_warning(
     project: Path,
 ) -> None:
     import json
-    from harness.console.configuration import preview_runtime_adapters
+    from harness.console.kernel.configuration import preview_runtime_adapters
 
     preview = preview_runtime_adapters(project)
     assert "✔ добавится  .harness/adapters/claude_worker.py" in preview.text or (

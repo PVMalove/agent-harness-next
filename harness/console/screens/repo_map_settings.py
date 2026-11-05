@@ -20,17 +20,17 @@ from textual.widgets.selection_list import Selection
 from harness.repo_map.bundle_fetch import ParserStatus, parser_status
 from harness.repo_map.bundle_pins import LANGUAGES
 
-from .. import brand, i18n, repo_map_settings
-from ..catalog import (
+from ..kernel import brand, i18n, repo_map_settings
+from ..kernel.catalog import (
     MEMORY_COMMANDS,
     CatalogEntry,
     parsers_install_entry,
     process_argv,
 )
 from ..logtext import colorize_log
-from ..runner import CommandRunner, capturing_runner
+from ..kernel.runner import CommandRunner, capturing_runner
 from ..shell import SectionCard
-from ..status import Status
+from ..kernel.status import Status
 from ..widgets import CheckList, RoundRadioButton
 from .commands import call_from_worker, render_result
 from .harness import CommandFormScreen

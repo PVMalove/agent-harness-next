@@ -13,7 +13,7 @@ from typing import Literal
 from harness.configuration_schema import PACKAGE
 from harness.health.model import JsonObject
 
-from .catalog import CatalogEntry, Reversibility
+from .kernel.catalog import CatalogEntry, Reversibility
 
 
 @dataclass(frozen=True)

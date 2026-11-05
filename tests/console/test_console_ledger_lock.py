@@ -132,7 +132,7 @@ textual = pytest.importorskip("textual")
 from textual.app import App  # noqa: E402
 from textual.widgets import Checkbox, ListItem, ListView, Static  # noqa: E402
 
-from harness.console.coordinator_catalog import (  # noqa: E402
+from harness.console.kernel.coordinator_catalog import (  # noqa: E402
     COORDINATOR_COMMANDS,
     process_argv,
 )

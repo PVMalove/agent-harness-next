@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from harness.console import native_permission
-from harness.console.catalog import Reversibility, process_argv
+from harness.console.kernel.catalog import Reversibility, process_argv
 from harness.console.native_permission import NATIVE_PERMISSION_COMMANDS
 from harness.orchestration.core.utils import CoordinatorError
 from harness.orchestration.workflow import delivery

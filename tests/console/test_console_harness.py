@@ -18,7 +18,7 @@ from textual.app import App
 from textual.pilot import Pilot
 from textual.widgets import Input, ListItem, ListView, Static
 
-from harness.console.catalog import (
+from harness.console.kernel.catalog import (
     HARNESS_COMMANDS,
     CatalogEntry,
     Reversibility,
@@ -555,7 +555,7 @@ def test_twenty_commands_five_groups_filters_and_catalog_semantics(
     tmp_path: Path,
 ) -> None:
     from collections import Counter
-    from harness.console.catalog import REVERSIBILITY_LABELS
+    from harness.console.kernel.catalog import REVERSIBILITY_LABELS
 
     for path in (
         "scripts/verify.py",

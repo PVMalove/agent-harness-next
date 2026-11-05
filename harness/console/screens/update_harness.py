@@ -23,10 +23,10 @@ from textual.widgets import (
 )
 from textual.widgets.selection_list import Selection
 
-from .. import brand, i18n
-from .. import data as console_data
+from ..kernel import brand, i18n
+from ..kernel import data as console_data
 from .. import stats as console_stats
-from ..catalog import (
+from ..kernel.catalog import (
     CONFIRMATION_REASONS,
     HARNESS_COMMANDS,
     CatalogEntry,
@@ -35,9 +35,9 @@ from ..catalog import (
 )
 from ..crumbs import Crumb
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
-from ..status import Status
+from ..kernel.status import Status
 from ..logtext import colorize_diff, colorize_log
-from ..runner import CommandRunner, capturing_runner
+from ..kernel.runner import CommandRunner, capturing_runner
 from ..widgets import CheckList, ReasonNote, RoundRadioButton
 from .commands import call_from_worker, render_result, short_repo
 from .harness import CommandFormScreen

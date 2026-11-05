@@ -15,7 +15,7 @@ from tests.console._console_ledger_fixture import (
     QA_LOG_SHA256,
     build_reports_fixture,
 )
-from harness.console.export import render_markdown
+from harness.console.kernel.export import render_markdown
 from harness.orchestration.ledger.lifecycle import JsonObject
 from harness.console.reports import (
     QA_LOG_TAIL_LINES,

@@ -192,7 +192,7 @@ def test_a_malformed_subscription_is_a_bad_request(project: Path) -> None:
 
 
 def _journal(project: Path) -> Path:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     return discovery_path(project).with_name("orchestration-events.jsonl")
 

@@ -18,7 +18,7 @@ import pytest
 
 from harness.console import jobs as job_module
 from harness.console.jobs import JobService
-from harness.console.process_tree import CommandCancelled
+from harness.console.kernel.process_tree import CommandCancelled
 from harness.console.server import MAX_SUBSCRIPTIONS, MESSAGE_LIMIT, ConsoleServer
 from tests.console.test_server import _connect
 

@@ -17,7 +17,7 @@ from textual.pilot import Pilot
 from textual.widgets import Button, RadioButton, RadioSet, Static, TextArea
 
 from harness.configuration_schema import PACKAGE
-from harness.console.configuration import ConfigurationDraft
+from harness.console.kernel.configuration import ConfigurationDraft
 from harness.console.configuration_steps import ConfigurationStep
 from harness.console.advisor import Advice, AdvisorUnavailable
 from harness.console.screens.configuration import ConfigurationScreen
@@ -238,7 +238,7 @@ def test_dashboard_refreshes_after_applied_configuration_is_closed(
     tmp_path: Path,
 ) -> None:
     from textual.widgets import ListView
-    from harness.console.data import DashboardData
+    from harness.console.kernel.data import DashboardData
     from harness.console.screens.dashboard import DashboardScreen
     from harness.console.shell import SECTIONS
 
@@ -905,7 +905,7 @@ def test_the_menu_and_the_json_text_edit_the_same_list(tmp_path: Path) -> None:
 
 
 def _dashboard_host(repo: Path) -> App[None]:
-    from harness.console.data import DashboardData
+    from harness.console.kernel.data import DashboardData
     from harness.console.screens.dashboard import DashboardScreen
 
     def collect(repo: Path, *, online: bool = False) -> DashboardData:

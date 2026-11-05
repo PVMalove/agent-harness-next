@@ -11,7 +11,7 @@ from textual.widgets import Footer, Markdown
 from ..chrome import TopBar
 from ..translate import Translated
 from ..help_text import help_markdown
-from .. import brand
+from ..kernel import brand
 
 
 class HelpScreen(Translated, Screen[None]):

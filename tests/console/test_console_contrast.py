@@ -15,7 +15,8 @@ import pytest
 
 pytest.importorskip("textual")
 
-from harness.console import brand, shell
+from harness.console.kernel import brand
+from harness.console import shell
 
 SURFACE = brand.PALETTE["surface"]
 TOKENS = brand.SHELL_TOKENS

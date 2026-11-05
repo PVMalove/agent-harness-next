@@ -24,12 +24,12 @@ from textual.widgets import (
     Static,
 )
 
-from .. import brand, i18n
+from ..kernel import brand, i18n
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
-from ..status import Status
-from .. import data
+from ..kernel.status import Status
+from ..kernel import data
 from ...health.model import Report
-from ..catalog import process_argv
+from ..kernel.catalog import process_argv
 from ..project_target import (
     ProjectTarget,
     capability_details,
@@ -40,7 +40,7 @@ from ..project_target import (
     installation_blockers,
     installation_entry,
 )
-from ..runner import CommandRunner
+from ..kernel.runner import CommandRunner
 from ..translate import retranslate
 from .commands import call_from_worker, render_result
 from .diagnostics import render_report, styled_log

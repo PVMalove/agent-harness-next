@@ -18,7 +18,7 @@ from textual.binding import Binding
 from textual.widgets import Button, ListItem, ListView, Static
 
 from harness.console.app import HarnessConsoleApp
-from harness.console.data import DashboardData
+from harness.console.kernel.data import DashboardData
 from harness.console.screens.dashboard import DashboardScreen
 from harness.console.crumbs import Crumb
 from harness.console.wrap import SEPARATORS
@@ -323,7 +323,7 @@ def _color(widget: object) -> str:
 
 
 def test_shell_text_uses_the_foreground_token(tmp_path: Path) -> None:
-    from harness.console import brand
+    from harness.console.kernel import brand
 
     async def scenario() -> list[str]:
         app = HarnessConsoleApp(tmp_path)
@@ -349,7 +349,7 @@ def test_shell_text_uses_the_foreground_token(tmp_path: Path) -> None:
 def test_the_shell_css_has_no_default_text_token() -> None:
     import re
 
-    from harness.console import brand
+    from harness.console.kernel import brand
     from harness.console.chrome import WorkspaceHeader
     from harness.console.shell import SHELL_CSS
 
@@ -418,7 +418,7 @@ def _menu_item(screen: ConsoleShell, name: str) -> ListItem:
 def test_the_main_menu_fits_update_harness_and_its_badge_on_one_line(
     tmp_path: Path, size: tuple[int, int], language: str
 ) -> None:
-    from harness.console import brand
+    from harness.console.kernel import brand
 
     async def scenario() -> tuple[int, str, list[str], list[str], object]:
         app = HarnessConsoleApp(tmp_path)
@@ -476,7 +476,7 @@ def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
 
 
 def test_section_badges_come_from_the_health_facts() -> None:
-    from harness.console import brand
+    from harness.console.kernel import brand
     from harness.console.shell import section_badges
 
     badges = section_badges(_home_data())
@@ -536,7 +536,7 @@ def test_the_menu_badges_are_shown_on_another_shell_screen(tmp_path: Path) -> No
 
 
 def test_a_section_title_is_in_capitals_with_its_note_after_it() -> None:
-    from harness.console import brand, i18n
+    from harness.console.kernel import brand, i18n
 
     assert brand.section_title("Требует внимания", "2") == " ТРЕБУЕТ ВНИМАНИЯ  2 "
     assert brand.section_title(" Действия ") == " ДЕЙСТВИЯ "
@@ -569,7 +569,7 @@ def test_section_cards_and_folds_follow_the_language_with_muted_titles(
 ) -> None:
     from textual.widgets._collapsible import CollapsibleTitle
 
-    from harness.console import brand
+    from harness.console.kernel import brand
 
     async def scenario() -> tuple[list[str], list[str], str, bool]:
         app = HarnessConsoleApp(tmp_path)
@@ -611,7 +611,7 @@ def test_section_cards_and_folds_follow_the_language_with_muted_titles(
 
 
 def test_frame_titles_of_shell_screens_are_muted_capitals(tmp_path: Path) -> None:
-    from harness.console import brand
+    from harness.console.kernel import brand
     from harness.console.screens.diagnostics import DiagnosticsScreen
     from harness.health.model import Report
 
@@ -688,7 +688,7 @@ def test_the_footer_follows_a_resize_across_the_narrow_threshold(
 
 
 def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
-    from harness.console import i18n
+    from harness.console.kernel import i18n
     from harness.console.shell import CHECK_ROUTES, check_route
     from harness.health.registry import REGISTRY
 
@@ -706,7 +706,7 @@ def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
 
 
 def test_a_jump_is_labelled_by_its_section_or_its_action() -> None:
-    from harness.console import i18n
+    from harness.console.kernel import i18n
 
     assert i18n.jump_label("ru", "Update Harness") == "Обновить Harness"
     assert i18n.jump_label("en", "Update Harness") == "Update Harness"

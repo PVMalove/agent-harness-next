@@ -19,11 +19,12 @@ from textual.screen import Screen
 from textual.scrollbar import ScrollBar
 from textual.theme import Theme
 
-from . import brand, clipboard, i18n, launcher, translate
+from .kernel import brand, i18n
+from . import clipboard, launcher, translate
 from .chrome import HealthCounts
 from .client import ConsoleClientError, HomeClient
 from .launcher import restart_console
-from .runner import CommandRunner, capturing_runner
+from .kernel.runner import CommandRunner, capturing_runner
 from .screens.dashboard import DashboardScreen
 from .style import ThinScrollBarRender
 

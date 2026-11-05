@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.discovery import discovery_path
+from harness.console.kernel.discovery import discovery_path
 from harness.console.jobs import JobService
 from harness.console.server import ConsoleServer
 from tests.console.test_jobs import FakeExecutor, start

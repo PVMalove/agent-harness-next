@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.data import DashboardData
-from harness.console.repo_map import MapEdge, MapFile, RepoMapView
-from harness.console.repo_map_settings import MemoryStatus
+from harness.console.kernel.data import DashboardData
+from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
+from harness.console.kernel.repo_map_settings import MemoryStatus
 from harness.console.snapshots import (
     HOME_TTL_SECONDS,
     KEPT_SNAPSHOTS,

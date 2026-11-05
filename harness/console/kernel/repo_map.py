@@ -19,17 +19,17 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..errors import INTERNAL_INVARIANT_REMEDY, HarnessError
-from ..repo_map.cache import read_cache
-from ..repo_map.contract import validation_error
-from ..storage import storage_path
+from ...errors import INTERNAL_INVARIANT_REMEDY, HarnessError
+from ...repo_map.cache import read_cache
+from ...repo_map.contract import validation_error
+from ...storage import storage_path
 from .export import MarkdownDocument, MarkdownSection
 from .json_fields import strings, text
 from .runner import CommandRunner
 from .status import Status
 
 REPO_MAP_SCRIPT_REL = Path(".harness") / "repo_map" / "repo_map.py"
-_PACKAGE_SCRIPT = Path(__file__).resolve().parents[1] / "repo_map" / "repo_map.py"
+_PACKAGE_SCRIPT = Path(__file__).resolve().parents[2] / "repo_map" / "repo_map.py"
 HUBS_LIMIT = 10
 _ERROR_TAIL_LINES = 20
 

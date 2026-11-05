@@ -25,7 +25,7 @@ from harness.console.client import (
     ServerUnavailable,
     TokenRejected,
 )
-from harness.console.discovery import ServerEndpoint, read_record
+from harness.console.kernel.discovery import ServerEndpoint, read_record
 from harness.console.server import ConsoleServer
 from harness.console.snapshots import (
     HomeContext,

@@ -16,9 +16,9 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Protocol, TypeVar, cast
 
-from .data import DashboardData, collect_dashboard
-from .repo_map import RepoMapView, cached_map, head_commit
-from .repo_map_settings import MemoryStatus, memory_status
+from .kernel.data import DashboardData, collect_dashboard
+from .kernel.repo_map import RepoMapView, cached_map, head_commit
+from .kernel.repo_map_settings import MemoryStatus, memory_status
 
 SCHEMA_VERSION = 1
 HOME_TTL_SECONDS = 15.0

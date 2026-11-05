@@ -28,9 +28,9 @@ from pathlib import Path
 from typing import BinaryIO, Callable, NoReturn, Sequence
 
 from .client import ConsoleClient, ConsoleClientError, HomeClient, ServerUnavailable
-from .discovery import ServerEndpoint, read_record
+from .kernel.discovery import ServerEndpoint, read_record
 from .pin import CONSOLE_SERVER_REQUIREMENTS, TEXTUAL_PIN, WEBSOCKETS_PIN
-from .runner import CommandRunner, default_runner
+from .kernel.runner import CommandRunner, default_runner
 
 # Set on the relaunched `uv run` subprocess's own environment so it knows not to relaunch again.
 RELAUNCH_ENV = "HARNESS_CONSOLE_RELAUNCHED"
@@ -370,6 +370,6 @@ def _print_fallback(repo: Path, reason: str) -> None:
     """Выводит причину сбоя и текстовый отчёт, аналогичный выводу `harness health`."""
     print(reason)
     from ..health import render as health_render
-    from .data import run_health
+    from .kernel.data import run_health
 
     print(health_render.render_text(run_health(repo)), end="")

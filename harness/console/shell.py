@@ -20,10 +20,10 @@ from textual.widget import Widget
 from textual.widgets import Button, Collapsible, Footer, ListItem, ListView, Static
 from typing_extensions import TypeVar
 
-from . import brand, i18n
+from .kernel import brand, i18n
 from .chrome import WorkspaceHeader
 from .crumbs import ELLIPSIS, Crumb, collapse_crumbs, split_path
-from .data import DashboardData
+from .kernel.data import DashboardData
 from .wrap import wrap_value
 from .translate import Translated
 

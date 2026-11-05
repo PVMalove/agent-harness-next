@@ -25,11 +25,12 @@ from textual.widgets import (
 )
 
 from harness.orchestration.core.utils import JsonObject
-from .. import brand, i18n, reports
+from ..kernel import brand, i18n
+from .. import reports
 from ..chrome import TopBar
-from ..runner import CommandRunner
+from ..kernel.runner import CommandRunner
 from ..session_card import session_card, status_caption
-from ..status import PERMISSION_PENDING, process_status, session_status
+from ..kernel.status import PERMISSION_PENDING, process_status, session_status
 from ..crumbs import Crumb
 from ..shell import (
     HOME_SECTION,

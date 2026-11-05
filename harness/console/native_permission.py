@@ -30,7 +30,7 @@ if __package__ in (None, ""):
     ]
     sys.path.insert(0, str(_ROOT))
 
-from harness.console.catalog import Reversibility  # noqa: E402
+from harness.console.kernel.catalog import Reversibility  # noqa: E402
 
 _COORDINATOR_SCRIPT = ".harness/orchestration/coordinator.py"
 _SCRIPT = Path(__file__).resolve()

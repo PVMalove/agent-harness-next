@@ -11,11 +11,11 @@ from textual.widgets import Button, Select, Static
 from harness.configuration import Bundle, read_config_bundle
 from harness.configuration_store import ConfigurationStore, ConfigurationVersion
 from .commands import call_from_worker
-from .. import brand, i18n
+from ..kernel import brand, i18n
 from ..crumbs import Crumb
 from ..shell import SHELL_CSS, ConsoleShell, SectionCard
 from ..logtext import colorize_diff
-from ..configuration import bundle_diff
+from ..kernel.configuration import bundle_diff
 from ..widgets import ComposedPage, ReasonNote
 from .configuration import ConfigurationScreen, ConfirmConfiguration
 

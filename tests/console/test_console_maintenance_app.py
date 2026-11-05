@@ -19,7 +19,7 @@ from harness.console.screens import harness as screen_module
 from harness.console.screens.harness import CommandFormScreen, HarnessScreen
 from harness.console.screens.commands import harness_runs
 from harness.console.shell import Fold
-from harness.console.catalog import CatalogEntry, Reversibility
+from harness.console.kernel.catalog import CatalogEntry, Reversibility
 from tests.console._svg_snapshot import until
 from tests.console.test_console_harness import _RecordingRunner
 from tests.console.harness.snapshots import EvidenceApp

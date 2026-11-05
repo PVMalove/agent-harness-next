@@ -24,7 +24,7 @@ import stat
 import sys
 from pathlib import Path
 
-from .discovery import _private_file
+from .kernel.discovery import _private_file
 
 FORMAT = 1
 _KEPT_EVENTS = 4096

@@ -9,7 +9,7 @@ import re
 
 from rich.text import Text
 
-from . import brand
+from .kernel import brand
 
 _COLORS = brand.STATUS_COLORS
 _MARKERS = {"[OK]": "ok", "[WARN]": "warn", "[FAIL]": "fail"}

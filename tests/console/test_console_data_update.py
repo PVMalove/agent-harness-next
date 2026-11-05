@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console import data
+from harness.console.kernel import data
 
 CLI = Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"
 RULES = ".claude/rules/token-efficiency.md"

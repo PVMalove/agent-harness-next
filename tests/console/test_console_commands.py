@@ -6,7 +6,7 @@ import subprocess
 from threading import Event
 from typing import Mapping, Sequence
 
-from harness.console.runner import HarnessRuns
+from harness.console.kernel.runner import HarnessRuns
 from harness.console.screens.commands import render_result
 
 

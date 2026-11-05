@@ -177,7 +177,7 @@ def test_late_results_of_the_previous_project_do_not_reach_the_new_dashboard(
 
     from textual.app import App
 
-    from harness.console.data import DashboardData
+    from harness.console.kernel.data import DashboardData
     from tests.console.test_console_app import _fake_dashboard_data
 
     release = threading.Event()
@@ -237,7 +237,7 @@ def test_report_summary_separates_checked_skipped_and_failing_checks() -> None:
 def test_online_check_and_local_fixes_target_the_selected_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import data
+    from harness.console.kernel import data
     from harness.health.model import CheckResult, Report
 
     second = tmp_path / "backend"
@@ -336,7 +336,7 @@ def test_capability_change_keeps_install_disabled_during_diagnostics(
 ) -> None:
     import threading
 
-    from harness.console import data
+    from harness.console.kernel import data
     from harness.console.screens.harness import CommandFormScreen
     from harness.health.model import Report
 
@@ -500,7 +500,7 @@ def test_the_section_menu_waits_for_a_running_operation(
 
 
 def test_the_busy_note_has_an_english_text() -> None:
-    from harness.console import i18n
+    from harness.console.kernel import i18n
 
     assert (
         i18n.tr("en", "Дождитесь окончания операции")

@@ -7,7 +7,7 @@ import secrets
 import socket
 
 from .decisions import DecisionService
-from .discovery import Discovery
+from .kernel.discovery import Discovery
 from .jobs import JobService
 from .orchestration_events import OrchestrationEvents
 from .request_router import (

@@ -23,9 +23,9 @@ from textual.widgets import Button, Footer, ListItem, ListView, Static
 from ..chrome import TopBar
 from ..translate import Translated
 from ..logtext import colorize_log, colorize_overview
-from ..catalog import CONFIRMATION_REASONS, Reversibility
-from ..runner import CommandRunner, HarnessRuns
-from .. import brand, i18n
+from ..kernel.catalog import CONFIRMATION_REASONS, Reversibility
+from ..kernel.runner import CommandRunner, HarnessRuns
+from ..kernel import brand, i18n
 
 _OUTPUT_TAIL_LINES = 200
 

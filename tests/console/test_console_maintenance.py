@@ -15,8 +15,8 @@ import pytest
 
 from harness import cleanup
 from harness.console.maintenance import load_maintenance
-from harness.console import process_tree
-from harness.console.runner import HarnessRuns, capturing_runner
+from harness.console.kernel import process_tree
+from harness.console.kernel.runner import HarnessRuns, capturing_runner
 from harness.orchestration.runtime_client import (
     RuntimeClient,
     RuntimeClientError,

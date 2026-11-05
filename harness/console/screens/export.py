@@ -1,4 +1,4 @@
-"""Textual-составляющая модуля harness.console.export: действие экспорта в Markdown, вызываемое экранами
+"""Textual-составляющая модуля harness.console.kernel.export: действие экспорта в Markdown, вызываемое экранами
 для сформированных документов (а также экспорт в JSON для Repo Map), и вывод уведомлений оператору
 о пути созданного файла."""
 
@@ -9,7 +9,7 @@ from typing import Callable
 
 from textual.screen import Screen
 
-from ..export import MarkdownDocument, export_markdown, export_text
+from ..kernel.export import MarkdownDocument, export_markdown, export_text
 
 EXPORT_BINDING_KEY = "e"
 EXPORT_JSON_BINDING_KEY = "j"

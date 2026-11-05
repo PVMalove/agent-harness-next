@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console import brand
+from harness.console.kernel import brand
 from harness.console.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN
 
 

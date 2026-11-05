@@ -24,7 +24,7 @@ from textual.widgets import ListItem, ListView, Static, TextArea
 from tests.console._pilot_wait import crumb_text
 from harness.console.shell import Breadcrumbs
 from harness.console.app import HarnessConsoleApp
-from harness.console.coordinator_catalog import (
+from harness.console.kernel.coordinator_catalog import (
     COORDINATOR_COMMANDS,
     CoordinatorCommand,
     process_argv,
@@ -210,7 +210,7 @@ def test_dispatch_create_confirms_and_runs_with_exact_argv(tmp_path: Path) -> No
 
 
 def test_dispatch_send_confirmation_reason_is_external_change(tmp_path: Path) -> None:
-    from harness.console.catalog import CONFIRMATION_REASONS, Reversibility
+    from harness.console.kernel.catalog import CONFIRMATION_REASONS, Reversibility
 
     runner = _RecordingRunner()
 

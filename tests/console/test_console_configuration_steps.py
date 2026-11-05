@@ -7,7 +7,7 @@ import pytest
 
 from harness.configuration import parse_object
 from harness.configuration_schema import PACKAGE
-from harness.console.configuration import ConfigurationDraft
+from harness.console.kernel.configuration import ConfigurationDraft
 from harness.console.configuration_steps import steps_for
 
 

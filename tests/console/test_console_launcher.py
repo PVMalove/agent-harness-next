@@ -30,7 +30,7 @@ from harness.console.client import (
     ServerUnavailable,
     TokenRejected,
 )
-from harness.console.discovery import ServerEndpoint, discovery_path
+from harness.console.kernel.discovery import ServerEndpoint, discovery_path
 from harness.console.pin import TEXTUAL_PIN, WEBSOCKETS_PIN
 from tests.console._home_client import FakeHomeClient
 

@@ -36,9 +36,9 @@ from harness.orchestration.ledger.lifecycle import (
     store_is_authority,
 )
 
-from .discovery import discovery_path
+from .kernel.discovery import discovery_path
 from .event_journal import Event, EventJournal, JournalUnavailable, View
-from .json_fields import text
+from .kernel.json_fields import text
 from .snapshots import (
     ID_BYTES,
     MAX_ID_CHARS,

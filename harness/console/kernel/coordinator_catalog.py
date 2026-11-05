@@ -4,7 +4,7 @@
 decision packet, dispatch (включая dispatch propose), qa status, risk, context-package, ledger status, ledger lock-status и
 ledger release-lock).
 
-В отличие от `harness/console/catalog.py`, где `CatalogEntry.argv` задан вручную, каждый кортеж
+В отличие от `harness/console/kernel/catalog.py`, где `CatalogEntry.argv` задан вручную, каждый кортеж
 `CoordinatorCommand.fields` строится обходом реального дерева `argparse.ArgumentParser` CLI координатора.
 Поэтому обязательные аргументы, ограничения `choices=`, действие `append` или флаги без значений
 подхватываются автоматически без ручного редактирования данного модуля.

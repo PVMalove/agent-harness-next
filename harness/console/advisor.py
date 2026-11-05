@@ -22,7 +22,7 @@ from threading import Event
 from typing import Callable
 
 from harness.configuration import reject_secrets
-from .configuration import ConfigurationDraft
+from .kernel.configuration import ConfigurationDraft
 from .configuration_steps import ConfigurationStep
 from .project_facts import project_facts
 

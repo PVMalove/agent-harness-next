@@ -20,8 +20,8 @@ ROUTE_MODULES = ("app.py", "websocket.py", "static.py")
 SERVICE_INTERNALS = frozenset(
     {
         "harness.console.jobs",
-        "harness.console.runner",
-        "harness.console.process_tree",
+        "harness.console.kernel.runner",
+        "harness.console.kernel.process_tree",
         "harness.console.ledger_lock",
         "harness.console.event_journal",
         "harness.orchestration.coordinator",
@@ -106,9 +106,9 @@ def test_the_scanner_finds_framework_imports_wherever_they_are(source: str) -> N
 
 def test_the_scanner_resolves_relative_imports() -> None:
     found = imported_modules(
-        "from .. import jobs\nfrom ..runner import run", "harness.console.api"
+        "from .. import jobs\nfrom ..kernel.runner import run", "harness.console.api"
     )
-    assert {"harness.console.jobs", "harness.console.runner"} <= found
+    assert {"harness.console.jobs", "harness.console.kernel.runner"} <= found
     assert (
         not _roots(imported_modules("import json\nfrom pathlib import Path"))
         & FRAMEWORK

@@ -23,7 +23,7 @@ from textual.pilot import Pilot
 from textual.screen import Screen
 from textual.widgets import Button, DirectoryTree, Input
 
-from harness.console import data as console_data
+from harness.console.kernel import data as console_data
 from harness.console import project_target
 from harness.console.project_target import ProjectTarget
 from harness.console.screens import project_setup

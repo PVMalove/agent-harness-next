@@ -19,7 +19,7 @@ from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Button, ListItem, ListView, Static
 
-from .. import brand, i18n
+from ..kernel import brand, i18n
 from .. import task_titles
 from ..chrome import TopBar
 from ..session_card import elapsed_text, session_row
@@ -39,10 +39,10 @@ from ..shell import (
     section_badges,
 )
 from .. import reports
-from .. import data as console_data
+from ..kernel import data as console_data
 from ..client import HomeClient
-from ..data import DashboardData
-from ..runner import CommandRunner, capturing_runner
+from ..kernel.data import DashboardData
+from ..kernel.runner import CommandRunner, capturing_runner
 from ..snapshots import HomeContext as HomeContext, HomeSnapshot
 from ...health.model import CheckResult, Status
 from .commands import call_from_worker

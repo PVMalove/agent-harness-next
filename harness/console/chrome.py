@@ -8,8 +8,8 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Static
 
-from . import brand, i18n
-from . import data as console_data
+from .kernel import brand, i18n
+from .kernel import data as console_data
 
 # Health counters shared through the app: (ok, warn, fail, skipped); None until a check has run.
 HealthCounts = tuple[int, int, int, int]

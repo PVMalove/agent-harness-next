@@ -24,11 +24,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, cast
 
-from ..health import registry as health_registry
-from ..health.context import shell_join
-from ..health.model import CheckResult, JsonObject, Report
+from ...health import registry as health_registry
+from ...health.context import shell_join
+from ...health.model import CheckResult, JsonObject, Report
 
-_PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 VERSION_FILE = _PACKAGE_ROOT / "VERSION"
 BIN_HARNESS_PATH = _PACKAGE_ROOT / "bin" / "harness.py"
 

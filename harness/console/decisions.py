@@ -23,8 +23,8 @@ from harness.orchestration.core.constants import LIVE_DISPATCH_STATES, STATE_REL
 from harness.orchestration.ledger.lifecycle import JsonObject, LifecycleLedger
 from harness.orchestration.ledger.recovery_chain import active_dispatches
 
-from .coordinator_catalog import COORDINATOR_COMMANDS
-from .json_fields import text
+from .kernel.coordinator_catalog import COORDINATOR_COMMANDS
+from .kernel.json_fields import text
 from .native_permission import NATIVE_PERMISSION_COMMANDS
 from .snapshots import (
     ID_BYTES,

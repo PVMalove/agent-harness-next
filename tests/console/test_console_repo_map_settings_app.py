@@ -16,7 +16,7 @@ from textual.app import App
 from textual.pilot import Pilot
 from textual.widgets import Button, RadioButton, SelectionList, Static, TabbedContent
 
-from harness.console import brand
+from harness.console.kernel import brand
 from tests.console._pilot_wait import press
 from harness.console.app import HarnessConsoleApp
 from harness.console.screens.configuration import ConfigurationScreen

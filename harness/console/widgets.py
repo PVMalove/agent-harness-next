@@ -24,8 +24,8 @@ from textual.widgets import (
 )
 from textual.widgets.option_list import OptionDoesNotExist
 
-from . import brand, i18n
-from .status import Status
+from .kernel import brand, i18n
+from .kernel.status import Status
 
 CHECKED = "☑"
 UNCHECKED = "☐"

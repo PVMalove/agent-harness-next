@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .json_fields import strings, text
+from .kernel.json_fields import strings, text
 from .reports import BatchSummary, LedgerView
 
 # The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state.

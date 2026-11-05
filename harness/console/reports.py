@@ -25,9 +25,9 @@ from ..gate_runner.gate_runner import parse_command_log
 from ..orchestration.core.constants import STATE_REL
 from ..orchestration.core.report_evidence import evidence_is_none
 from ..orchestration.ledger.lifecycle import JsonObject, JsonValue, LifecycleLedger
-from .export import MarkdownDocument, MarkdownSection
-from .json_fields import strings, text
-from .status import Status
+from .kernel.export import MarkdownDocument, MarkdownSection
+from .kernel.json_fields import strings, text
+from .kernel.status import Status
 
 REPORT_SECTIONS = ("Output", "Checks", "Risks", "Blockers", "Next action")
 QA_LOG_TAIL_LINES = 15

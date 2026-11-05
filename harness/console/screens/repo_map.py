@@ -3,7 +3,7 @@
 а отмена ничего не запускает. Вкладки: сводка с информацией о происхождении парсера (provenance);
 дерево файлов с сигнатурами и статусом parser_status, поиск символов и связи выбранного файла
 по типам и достоверности; хабы по входящей степени; диагностики. Экспорт карты в Markdown (`e`)
-и JSON (`j`) выполняется через screens/export.py. Все данные берутся из harness.console.repo_map.
+и JSON (`j`) выполняется через screens/export.py. Все данные берутся из harness.console.kernel.repo_map.
 """
 
 from __future__ import annotations
@@ -28,13 +28,13 @@ from textual.widgets import (
 from textual.widgets.tree import TreeNode
 
 from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard
-from ..status import Status
+from ..kernel.status import Status
 from ..translate import Translated
-from .. import repo_map as console_repo_map
-from ..repo_map import RepoMapView
-from ..runner import CommandRunner, capturing_runner
-from .. import brand, i18n
-from .. import repo_map_settings
+from ..kernel import repo_map as console_repo_map
+from ..kernel.repo_map import RepoMapView
+from ..kernel.runner import CommandRunner, capturing_runner
+from ..kernel import brand, i18n
+from ..kernel import repo_map_settings
 from .commands import call_from_worker
 from .repo_map_settings import RepoMapSettings
 from harness.repo_map.bundle_fetch import ParserStatus, parser_status

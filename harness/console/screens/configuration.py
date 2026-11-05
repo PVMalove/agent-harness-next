@@ -34,9 +34,9 @@ from textual.widgets import (
 from harness.configuration import SECRET_MASK, mask_secrets, read_config_bundle
 from harness.configuration_store import ConfigurationStore, StaleConfiguration
 from harness.runtime_adapters import AdapterStatus
-from .. import brand, i18n
+from ..kernel import brand, i18n
 from ..shell import SHELL_CSS, ConsoleShell, SectionCard, WrappedValue
-from ..status import Status
+from ..kernel.status import Status
 from ..translate import Translated
 from ..logtext import colorize_diff
 from ..widgets import (
@@ -48,7 +48,7 @@ from ..widgets import (
     StatusLine,
 )
 from ..advisor import PROVIDERS, Advice, AdvisorUnavailable, advise, availability
-from ..configuration import (
+from ..kernel.configuration import (
     ConfigurationDraft,
     RuntimeAdapterPreview,
     preview_runtime_adapters,

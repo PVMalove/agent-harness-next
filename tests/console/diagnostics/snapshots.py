@@ -13,8 +13,8 @@ from typing import cast
 from textual.screen import Screen
 from textual.widgets import Button
 
-from harness.console import brand
-from harness.console import data as console_data
+from harness.console.kernel import brand
+from harness.console.kernel import data as console_data
 from harness.console.app import HarnessConsoleApp
 from harness.console.screens import diagnostics
 from harness.console.screens.diagnostics import DiagnosticsScreen

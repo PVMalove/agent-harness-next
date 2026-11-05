@@ -416,7 +416,7 @@ PROJECT_SETUP_TITLES = (".breadcrumbs",)
 def test_open_project_layout(
     tmp_path: Path, size: tuple[int, int], language: str
 ) -> None:
-    from harness.console.runner import capturing_runner
+    from harness.console.kernel.runner import capturing_runner
     from harness.console.screens.project_setup import ProjectSetupScreen
 
     async def scenario() -> list[str]:

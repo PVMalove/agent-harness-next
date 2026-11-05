@@ -16,7 +16,7 @@ from pathlib import Path
 from . import json_fields
 
 THEME_NAME = "harness-warm"
-_SOURCE_ROOT = Path(__file__).resolve().parents[2]
+_SOURCE_ROOT = Path(__file__).resolve().parents[3]
 # Terminals narrower than this many columns get the shell's narrow layout.
 NARROW_WIDTH = 100
 

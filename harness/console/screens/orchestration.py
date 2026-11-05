@@ -1,4 +1,4 @@
-"""Раздел Orchestration: команды координатора из `harness.console.coordinator_catalog.COORDINATOR_COMMANDS`,
+"""Раздел Orchestration: команды координатора из `harness.console.kernel.coordinator_catalog.COORDINATOR_COMMANDS`,
 сгруппированные по группам `group` (batch, decide, packet, dispatch, qa, risk, context-package, ledger).
 Каждая команда открывает модальный экран `CoordinatorCommandFormScreen`, запрашивающий аргументы,
 поясняющий причины подтверждения для терминальных действий и валидирующий обязательные поля
@@ -25,12 +25,12 @@ from textual.widgets import (
     TextArea,
 )
 
-from .. import brand, i18n
+from ..kernel import brand, i18n
 from .. import ledger_lock
 from .. import reports as console_reports
 from .. import stats as console_stats
-from ..coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand, process_argv
-from ..runner import CommandRunner, capturing_runner
+from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand, process_argv
+from ..kernel.runner import CommandRunner, capturing_runner
 from ..shell import SHELL_CSS, ConsoleShell, FieldGrid
 from ..widgets import CheckBox
 from .commands import (

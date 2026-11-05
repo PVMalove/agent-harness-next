@@ -14,7 +14,7 @@ import threading
 from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
-from .discovery import ServerEndpoint
+from .kernel.discovery import ServerEndpoint
 from .snapshots import (
     HOME_PROBLEMS_REQUEST,
     HOME_REQUEST,

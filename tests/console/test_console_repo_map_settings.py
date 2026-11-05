@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from harness.configuration_store import ConfigurationStore
-from harness.console.repo_map_settings import (
+from harness.console.kernel.repo_map_settings import (
     DEFAULT_MEMORY_POLICY,
     apply_tier,
     enable_memory,
@@ -125,7 +125,7 @@ def _status(*, ready: bool, languages: tuple[str, ...] = ()) -> ParserStatus:
 
 
 def _checks(**given: object) -> list[tuple[str, str]]:
-    from harness.console.repo_map_settings import (
+    from harness.console.kernel.repo_map_settings import (
         MemoryStatus,
         TierSetting,
         repo_map_checks,
@@ -162,7 +162,7 @@ def test_the_checks_compare_project_languages_with_installed_parsers() -> None:
 
 
 def test_minimal_mode_and_a_missing_head_are_reported() -> None:
-    from harness.console.repo_map_settings import TierSetting
+    from harness.console.kernel.repo_map_settings import TierSetting
 
     lines = _checks(head=None, tier=TierSetting("minimal", True))
     text = "\n".join(f"{level}: {line}" for level, line in lines)
@@ -210,7 +210,7 @@ def test_a_policy_with_no_allow_paths_gets_the_paths_of_the_documents_the_projec
 
 
 def test_enabling_memory_without_any_documents_says_so(tmp_path: Path) -> None:
-    from harness.console.repo_map_settings import plan_memory_enable
+    from harness.console.kernel.repo_map_settings import plan_memory_enable
 
     installed_project(tmp_path)
     path = tmp_path / ".harness/project.json"

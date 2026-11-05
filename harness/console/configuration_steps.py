@@ -11,7 +11,7 @@ from typing import Callable
 from harness.configuration import parse_config_json
 from harness.configuration_schema import load_schema, resolve_ref, value_problems
 from harness.json_types import JsonObject
-from .configuration import ConfigurationDraft
+from .kernel.configuration import ConfigurationDraft
 from .project_facts import ProjectFacts, project_facts
 
 CHOICE_PAGE_SIZE = 4

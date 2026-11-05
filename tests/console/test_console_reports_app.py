@@ -20,7 +20,7 @@ from tests.console._pilot_wait import wait_until
 from tests.console._console_ledger_fixture import QA_LOG_SHA256, build_reports_fixture
 from tests.console._home_client import fake_home
 from harness.console.app import HarnessConsoleApp
-from harness.console.data import DashboardData
+from harness.console.kernel.data import DashboardData
 from harness.console.screens.dashboard import DashboardScreen
 from harness.console.shell import SECTIONS, ConsoleShell, Fold, SectionCard
 from harness.console.screens.reports import (
@@ -660,7 +660,7 @@ def test_status_rows_wrap_instead_of_being_cut_and_name_the_role(
 
 
 def test_role_badge_takes_its_colour_from_the_brand_palette(tmp_path: Path) -> None:
-    from harness.console import brand
+    from harness.console.kernel import brand
     from harness.console.screens.reports import _report_label
 
     build_reports_fixture(tmp_path)

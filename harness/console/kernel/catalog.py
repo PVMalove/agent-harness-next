@@ -18,8 +18,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from ..gate_runner.gate_runner import project_python
-from .launcher import BIN_HARNESS_PATH
+from ...gate_runner.gate_runner import project_python
+from .data import BIN_HARNESS_PATH
 
 
 class Reversibility(Enum):

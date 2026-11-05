@@ -9,7 +9,7 @@ import pytest
 from rich.cells import cell_len
 from rich.text import Text
 
-from harness.console import brand, status
+from harness.console.kernel import brand, status
 
 LEDGER_STATES = (
     "working",
@@ -89,7 +89,7 @@ def test_permission_and_process_states_have_their_own_text() -> None:
 
 
 def test_session_state_labels_are_not_duplicated_in_the_interface_strings() -> None:
-    from harness.console.i18n_strings import EN
+    from harness.console.kernel.i18n_strings import EN
 
     for current in _every_status():
         assert not any(key.partition(" ")[2] == current.ru for key in EN), current.ru

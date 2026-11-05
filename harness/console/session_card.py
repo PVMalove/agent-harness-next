@@ -12,8 +12,8 @@ import unicodedata
 from rich.table import Table
 from rich.text import Text
 
-from . import brand
-from .status import Status, session_status
+from .kernel import brand
+from .kernel.status import Status, session_status
 
 
 def role_label(role: str) -> Text:

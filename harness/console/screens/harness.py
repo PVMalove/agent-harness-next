@@ -1,4 +1,4 @@
-"""Раздел Harness: команды харнесса и обслуживания леджера из `harness.console.catalog.HARNESS_COMMANDS`,
+"""Раздел Harness: команды харнесса и обслуживания леджера из `harness.console.kernel.catalog.HARNESS_COMMANDS`,
 доступные для запуска в текущем репозитории, каждая с отображением эквивалента CLI. Обратимые команды
 без параметров запускаются немедленно; любые другие команды открывают модальный экран `CommandFormScreen`,
 запрашивающий параметры, поясняющий причины подтверждения для необратимых действий и требующий ввода
@@ -22,11 +22,11 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Button, Collapsible, Input, ListItem, ListView, Static
 
-from .. import brand, i18n
-from .. import data as console_data
+from ..kernel import brand, i18n
+from ..kernel import data as console_data
 from .. import reports as console_reports
 from .. import stats as console_stats
-from ..catalog import (
+from ..kernel.catalog import (
     HARNESS_COMMANDS,
     CONFIRMATION_REASONS,
     REVERSIBILITY_LABELS,
@@ -44,7 +44,7 @@ from ..maintenance import (
     format_size,
     path_size,
 )
-from ..runner import CommandRunner, HarnessRun, capturing_runner
+from ..kernel.runner import CommandRunner, HarnessRun, capturing_runner
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from .commands import (
     CommandForm,

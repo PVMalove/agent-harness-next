@@ -36,11 +36,11 @@ from ..shell import (
     check_route,
 )
 from ..logtext import colorize_log
-from .. import brand, i18n
-from .. import data as console_data
+from ..kernel import brand, i18n
+from ..kernel import data as console_data
 from ...health.model import CheckResult, Report
 from ...health.render import GROUP_LABELS_RU
-from ..export import MarkdownDocument, MarkdownSection
+from ..kernel.export import MarkdownDocument, MarkdownSection
 from .commands import call_from_worker, short_repo
 from .export import EXPORT_BINDING_KEY, export_document
 

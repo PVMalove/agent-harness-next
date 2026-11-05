@@ -27,7 +27,7 @@ from harness.console.shell import (
     ConsoleShell,
     Fold,
 )
-from harness.console.catalog import seed_update_entry
+from harness.console.kernel.catalog import seed_update_entry
 from harness.console.screens.harness import CommandFormScreen
 from harness.console.screens.update_harness import (
     SEED_MODE,

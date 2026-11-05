@@ -492,7 +492,8 @@ def test_worker_session_list_uses_the_shared_role_label_and_caption(
     from rich.text import Text
     from textual.widgets import ListView
 
-    from harness.console import brand, reports
+    from harness.console.kernel import brand
+    from harness.console import reports
 
     stages = [
         reports.StageEntry(

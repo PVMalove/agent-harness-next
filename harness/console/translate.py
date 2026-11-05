@@ -22,7 +22,7 @@ from textual.widgets import (
 )
 from textual.widgets._toggle_button import ToggleButton
 
-from . import brand, i18n
+from .kernel import brand, i18n
 from .chrome import TopBar
 
 

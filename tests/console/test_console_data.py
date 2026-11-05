@@ -1,4 +1,4 @@
-"""harness.console.data: сбор данных для консоли на базе стандартной библиотеки без импорта textual."""
+"""harness.console.kernel.data: сбор данных для консоли на базе стандартной библиотеки без импорта textual."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import stat
 import subprocess
 from pathlib import Path
 
-from harness.console import data as console_data
+from harness.console.kernel import data as console_data
 
 
 def _init_repo(path: Path) -> None:

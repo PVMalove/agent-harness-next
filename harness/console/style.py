@@ -5,7 +5,7 @@ from rich.segment import Segment, Segments
 from rich.style import Style
 from textual.scrollbar import ScrollBarRender
 
-from . import brand
+from .kernel import brand
 
 
 class ThinScrollBarRender(ScrollBarRender):

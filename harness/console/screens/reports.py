@@ -19,14 +19,14 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Input, ListItem, ListView, Select, Static
 
 from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard, WrappedValue
-from ..status import Status
+from ..kernel.status import Status
 from ..translate import translate_bindings
 from ..widgets import OpenableList, ScrollingView
 from .. import reports as console_reports
 from ..reports import BatchTimeline, LedgerView, ReportEntry, StageEntry
-from .. import brand
-from .. import i18n
-from ..json_fields import strings, text
+from ..kernel import brand
+from ..kernel import i18n
+from ..kernel.json_fields import strings, text
 from ..pr_timings import load_reports_view
 from .export import EXPORT_BINDING_KEY, export_document
 from .commands import call_from_worker

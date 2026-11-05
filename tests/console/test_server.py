@@ -15,8 +15,8 @@ import tomllib
 import pytest
 
 from harness.console.pin import CONSOLE_SERVER_REQUIREMENTS
-from harness.console.data import DashboardData
-from harness.console.data import collect_dashboard
+from harness.console.kernel.data import DashboardData
+from harness.console.kernel.data import collect_dashboard
 from harness.console.server import ConsoleServer
 from harness.console.snapshots import (
     HOME_TTL_SECONDS,
@@ -145,7 +145,7 @@ def test_live_discovery_owner_cannot_be_stolen_by_another_process(
         code = """
 import asyncio, sys
 from pathlib import Path
-from harness.console.discovery import DiscoveryBusyError
+from harness.console.kernel.discovery import DiscoveryBusyError
 from harness.console.server import ConsoleServer
 async def main():
     server = ConsoleServer(Path(sys.argv[1]))
@@ -178,7 +178,7 @@ asyncio.run(main())
 def test_stale_discovery_is_replaced_atomically_and_cleanup_checks_owner(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import discovery
+    from harness.console.kernel import discovery
     import os
     import stat
 
@@ -218,7 +218,7 @@ def test_stale_discovery_is_replaced_atomically_and_cleanup_checks_owner(
 def test_publication_failure_rolls_back_listener_and_lock(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import discovery
+    from harness.console.kernel import discovery
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -277,7 +277,7 @@ def test_discovery_refuses_symlinks(project: Path, component: str) -> None:
 
 
 def test_linked_worktree_uses_main_project_discovery(project: Path) -> None:
-    from harness.console.discovery import DiscoveryBusyError, discovery_path
+    from harness.console.kernel.discovery import DiscoveryBusyError, discovery_path
 
     subprocess.run(
         [
@@ -319,7 +319,7 @@ def test_linked_worktree_uses_main_project_discovery(project: Path) -> None:
 def test_windows_acl_failure_precedes_any_secret_write(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import discovery
+    from harness.console.kernel import discovery
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -347,7 +347,7 @@ def test_windows_acl_failure_precedes_any_secret_write(
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires a real Windows ACL")
 def test_windows_discovery_has_protected_current_user_only_dacl(project: Path) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -378,7 +378,7 @@ def test_windows_discovery_has_protected_current_user_only_dacl(project: Path) -
 
 
 def test_authenticated_websocket_ping_and_http_method_with_body(project: Path) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
     from websockets.exceptions import InvalidStatus
     import http.client
@@ -435,7 +435,7 @@ async def _raw(port: int, data: bytes) -> bytes:
 def test_native_and_browser_websocket_credentials(
     project: Path, credential: str
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
 
     from websockets.typing import Origin
@@ -496,7 +496,7 @@ def test_native_and_browser_websocket_credentials(
 def test_websocket_admission_fails_closed(
     project: Path, case: str, status: int
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -697,7 +697,7 @@ def test_get_head_headers_and_missing_page(project: Path) -> None:
 def test_fragmented_upgrade_and_coalesced_first_frame_are_consumed_once(
     project: Path,
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.client import ClientProtocol
     from websockets.frames import Frame, Opcode
     from websockets.uri import parse_uri
@@ -784,7 +784,7 @@ def test_header_limits_and_malformed_framing(project: Path) -> None:
 def test_debug_logging_never_contains_credentials(
     project: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     import logging
 
     async def scenario() -> None:
@@ -809,7 +809,7 @@ def test_debug_logging_never_contains_credentials(
 def test_frame_errors_and_unanswered_close_have_bounded_cleanup(
     project: Path, masked: bool, opcode: str, code: int
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.client import ClientProtocol
     from websockets.frames import Close, Frame, Opcode
     from websockets.uri import parse_uri
@@ -846,7 +846,7 @@ def test_frame_errors_and_unanswered_close_have_bounded_cleanup(
 
 
 def test_idle_server_exits_after_grace_and_removes_discovery(project: Path) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project, idle_grace_seconds=0.2)
@@ -861,7 +861,7 @@ def test_idle_server_exits_after_grace_and_removes_discovery(project: Path) -> N
 def test_connected_client_keeps_server_alive_until_it_disconnects(
     project: Path,
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
 
     async def scenario() -> None:
@@ -913,7 +913,7 @@ class GatedCollect:
 
 
 def _connect(server: ConsoleServer, repo: Path):  # type: ignore[no-untyped-def]
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
 
     token = json.loads(discovery_path(repo).read_text())["token"]
@@ -986,7 +986,7 @@ def test_text_that_is_not_json_is_answered_and_the_connection_stays_open(
 def test_malformed_text_frames_close_the_connection(
     project: Path, frames: list[tuple[str, bool, bytes]], code: int
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.client import ClientProtocol
     from websockets.frames import Close, Frame, Opcode
     from websockets.uri import parse_uri

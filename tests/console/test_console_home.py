@@ -22,11 +22,12 @@ from textual.widgets import Button, Collapsible, ListView, Static
 from textual.widgets._collapsible import CollapsibleTitle
 from textual.widgets._footer import FooterKey
 
-from harness.console import brand, reports, task_titles
+from harness.console.kernel import brand
+from harness.console import reports, task_titles
 from harness.console.app import HarnessConsoleApp
-from harness.console.data import DashboardData
-from harness.console.repo_map import MapEdge, MapFile, RepoMapView
-from harness.console.repo_map_settings import MemoryStatus
+from harness.console.kernel.data import DashboardData
+from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
+from harness.console.kernel.repo_map_settings import MemoryStatus
 from harness.console.screens.dashboard import DashboardScreen, HomeContext
 from harness.console.shell import Breadcrumbs, JumpLink, SectionCard, ShellSidebar
 from harness.health.model import CheckResult

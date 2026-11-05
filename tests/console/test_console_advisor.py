@@ -15,7 +15,7 @@ from harness.console.advisor import (
     build_request,
     parse_response,
 )
-from harness.console.configuration import ConfigurationDraft
+from harness.console.kernel.configuration import ConfigurationDraft
 from harness.console.configuration_steps import steps_for
 from tests.console.test_console_configuration_app import installed_project
 
