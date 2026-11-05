@@ -30,6 +30,8 @@ Rust runtime и локальный runtime-store; Python остаётся policy
 скиллы, hooks, агентов и проектные руководства из `harness/project/`; корневой `docs/` в целевой
 проект не переносится.
 
+В `engineering-suite` переопределены в `skills/first-party/engineering/`: `ask-matt`, `code-review`, `diagnosing-bugs`, `grill-me`, `grill-with-docs`, `grilling`, `implement`, `tdd`, `to-spec`, `to-tickets`, `triage`, `wayfinder`; доп. скиллы: `architect`, `delivery-stats`, `fast-implement`, `qa-gate`, `setup-labels`, `to-guide`, `to-pull-requests`.
+
 ## Быстрый старт
 
 Требуются Python 3.12+ и Git. Глобальный слой ставится один раз для выбранных runtime:
@@ -67,14 +69,6 @@ python3 harness/bin/harness.py health /path/to/repository
 Агентские руководства: `docs/agents/{artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`.
 Контракт английской координации — [harness/docs/technical-english.md](./harness/docs/technical-english.md).
 
-## Разработка
-
-```bash
-make bootstrap      # окружение
-make verify         # полный QA
-make docs-serve     # публичный сайт локально
-make docs-build     # строгая сборка сайта
-```
-
+Полный QA — `make verify`; локальный сайт — `make docs-serve`, строгая сборка — `make docs-build`.
 Правила работы с Git, тикетами и PR — в [docs/agents/git-workflow.md](./docs/agents/git-workflow.md).
 Лицензия — [MIT](./LICENSE).
