@@ -6,7 +6,7 @@
 approval. Роли не расширяют свой scope, не выбирают модель и не мержат pull request.
 
 Место capability в системе, её роли, clean-room QA и локальное state-хранилище описывают
-[архитектура](./ARCHITECTURE.md) и [ADR 0003](./adr/0003-orchestration-core.md). Этот документ
+[архитектура](../site/docs/architecture/index.md) и [ADR 0003](./adr/0003-orchestration-core.md). Этот документ
 содержит подробную процедуру настройки и запуска.
 
 Используйте её, когда у задачи есть независимые backend-границы или обязательная независимая
