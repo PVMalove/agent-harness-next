@@ -34,7 +34,7 @@ from harness.orchestration.core.constants import (
 from harness.orchestration.core.git_utils import _candidate_commit
 from harness.orchestration.core.utils import CoordinatorError, JsonObject, _repo
 from harness.orchestration.ledger.ledger_ops import (
-    _ledger_lock,
+    read_state,
     _load_batch,
     _load_dispatch,
     _state_root,
@@ -395,7 +395,7 @@ def auto_report(args: argparse.Namespace) -> JsonObject:
     ledger = LifecycleLedger(root)
     if not root.exists():
         _load_batch(root, args.batch)  # refusal must not create a ledger directory
-    with _ledger_lock(ledger):
+    with read_state(ledger, repo):
         batch = _load_batch(root, args.batch)
         try:
             _validate_batch_integrity(root, batch)
