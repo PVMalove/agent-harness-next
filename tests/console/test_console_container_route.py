@@ -333,3 +333,217 @@ def test_a_verified_preflight_opens_the_plan_tab_and_a_new_selection_drops_it() 
     session.select("batch-2")
     assert session.preflight is None
     assert {tab.stage: tab for tab in session.tabs()}[Stage.PLAN].state is State.BLOCKED
+
+
+# ----------------------------------------------------------------------------- Preflight
+
+
+def blocked_facts(**overrides: object) -> dict[str, object]:
+    facts: dict[str, object] = {
+        "engine": "podman",
+        "engine_mode": "not-probed",
+        "selinux": False,
+        "worker_image": "harness-worker:local",
+        "worker_image_id": None,
+        "proxy_image": "harness-proxy:local",
+        "proxy_image_id": None,
+        "blockers": [
+            {
+                "reason": "the docker executor launches only an external dispatch, not in-process",
+                "remedy": "set the role's assignment_plans transport to external",
+            },
+            {
+                "reason": "environment variable API_TOKEN is not set",
+                "remedy": "export API_TOKEN",
+            },
+        ],
+    }
+    facts.update(overrides)
+    return facts
+
+
+def verified_evidence() -> dict[str, object]:
+    return {
+        "engine": "podman",
+        "engine_mode": "rootless",
+        "selinux": True,
+        "transport": "external",
+        "worker_image": "harness-worker:local",
+        "worker_image_id": "sha256:" + "a" * 64,
+        "proxy_image": "harness-proxy:local",
+        "proxy_image_id": "sha256:" + "b" * 64,
+    }
+
+
+def run_preflight(document: object, **kwargs: object) -> StageView:
+    session, scripted = make_session()
+    scripted.reply("dispatch preflight", document, **kwargs)  # type: ignore[arg-type]
+    session.select("batch-1")
+    session.recheck()
+    return session.view(Stage.PREFLIGHT)
+
+
+def test_preflight_before_any_check_reads_not_checked_and_runs_nothing() -> None:
+    session, scripted = make_session()
+    session.select("batch-1")
+    view = session.view(Stage.PREFLIGHT)
+    assert view.rows[0].state is State.NOT_CHECKED
+    assert scripted.calls == []
+
+
+def test_preflight_without_a_batch_disables_the_check_with_a_visible_reason() -> None:
+    session, _ = make_session()
+    action = session.view(Stage.PREFLIGHT).actions[0]
+    assert not action.enabled and action.reason == NEED_BATCH
+
+
+def test_a_verified_preflight_shows_engine_mode_images_and_full_ids() -> None:
+    document = preflight_document(
+        verified=verification("verified", evidence=verified_evidence())
+    )
+    view = run_preflight(document)
+    assert row_value(view, "Режим движка") == "rootless"
+    assert row_value(view, "Транспорт") == "external"
+    assert "sha256:" + "a" * 64 in row_value(view, "Образ worker")
+    assert "sha256:" + "b" * 64 in row_value(view, "Образ proxy")
+    assert next(r for r in view.rows if r.label == "Статус проверки").state is State.OK
+    assert view.blockers == ()
+    assert "требует отдельного одобрения" in row_value(view, "Запуск")
+
+
+def test_blocked_preflight_lists_every_core_blocker_verbatim_with_its_remedy() -> None:
+    document = preflight_document(
+        verified=verification("unverified", environment=blocked_facts())
+    )
+    view = run_preflight(document)
+    assert view.blockers == (
+        "the docker executor launches only an external dispatch, not in-process"
+        " — set the role's assignment_plans transport to external",
+        "environment variable API_TOKEN is not set — export API_TOKEN",
+    )
+    assert (
+        next(r for r in view.rows if r.label == "Статус проверки").state
+        is State.BLOCKED
+    )
+    assert next(r for r in view.rows if r.label == "Запуск").state is State.BLOCKED
+
+
+def test_dependent_checks_without_an_observation_read_not_checked_never_ok() -> None:
+    document = preflight_document(
+        verified=verification("unverified", environment=blocked_facts())
+    )
+    view = run_preflight(document)
+    by_label = {row.label: row for row in view.rows}
+    assert by_label["Режим движка"].state is State.NOT_CHECKED
+    assert by_label["Образ worker"].state is State.NOT_CHECKED
+    assert "не проверено: образ не наблюдён" in by_label["Образ worker"].value
+    assert by_label["Образ proxy"].state is State.NOT_CHECKED
+    assert by_label["Переменные окружения (имена)"].state is State.NOT_CHECKED
+    assert by_label["Монтирования"].state is not State.OK
+    assert by_label["Сеть"].state is not State.OK
+    assert (
+        by_label["Транспорт"].state is State.NOT_REPORTED
+    )  # in-process facts carry none
+    assert not any(row.state is State.OK for row in view.rows)
+
+
+def test_an_image_without_an_id_is_not_checked_even_when_the_engine_was_probed() -> (
+    None
+):
+    evidence = {**verified_evidence(), "proxy_image_id": None}
+    document = preflight_document(verified=verification("verified", evidence=evidence))
+    view = run_preflight(document)
+    proxy = next(r for r in view.rows if r.label == "Образ proxy")
+    assert proxy.state is State.NOT_CHECKED
+
+
+def test_mounts_and_hosts_are_listed_with_absolute_paths_and_their_check_state() -> (
+    None
+):
+    document = preflight_document(
+        verified=verification(
+            "verified",
+            evidence=verified_evidence(),
+            required={
+                "hosts": ["api.example.com"],
+                "filesystem": [
+                    {"resource": "checkout", "path": "/work/wt", "access": "write"},
+                    {
+                        "resource": "git_common",
+                        "path": "/work/project/.git",
+                        "access": "read",
+                    },
+                ],
+            },
+        )
+    )
+    view = run_preflight(document)
+    mounts = next(r for r in view.rows if r.label == "Монтирования")
+    assert mounts.value == "checkout write /work/wt\ngit_common read /work/project/.git"
+    assert mounts.state is State.OK
+    assert row_value(view, "Сеть") == "api.example.com"
+
+
+def test_no_hosts_means_the_network_check_is_not_applicable_not_a_pass() -> None:
+    document = preflight_document(
+        verified=verification(
+            "verified",
+            evidence=verified_evidence(),
+            required={"hosts": [], "filesystem": []},
+        )
+    )
+    network = next(r for r in run_preflight(document).rows if r.label == "Сеть")
+    assert network.state is State.INFO and "не применимо" in network.value
+
+
+def test_legacy_inherit_is_not_a_container_pass_and_keeps_launch_blocked() -> None:
+    document = preflight_document(
+        verified={
+            "status": "legacy-inherit",
+            "verified": [],
+            "unverified": [],
+            "remedy": None,
+        }
+    )
+    view = run_preflight(document)
+    assert (
+        next(r for r in view.rows if r.label == "Статус проверки").state is State.INFO
+    )
+    assert next(r for r in view.rows if r.label == "Запуск").state is State.BLOCKED
+
+
+def test_missing_verification_is_not_reported_not_verified() -> None:
+    view = run_preflight({"ticket": "#711"})
+    status = next(r for r in view.rows if r.label == "Статус проверки")
+    assert status.state is State.NOT_REPORTED and status.value == "не сообщается"
+    assert next(r for r in view.rows if r.label == "Запуск").state is State.BLOCKED
+
+
+def test_a_failed_preflight_call_is_a_blocker_with_its_stderr_and_no_dependent_success() -> (
+    None
+):
+    view = run_preflight(
+        None, stderr="ERROR: harness-runtime unreachable\nREMEDY: start it", code=2
+    )
+    assert view.blockers == ("ERROR: harness-runtime unreachable\nREMEDY: start it",)
+    assert view.rows[0].state is State.FAILED
+    assert len(view.rows) == 1
+
+
+def test_recheck_is_one_read_only_preflight_call_and_never_starts_a_worker() -> None:
+    session, scripted = make_session()
+    scripted.reply("dispatch preflight", preflight_document())
+    session.select("batch-1", "qa", "claude")
+    session.recheck()
+    session.recheck()
+    assert scripted.commands() == ["dispatch preflight", "dispatch preflight"]
+    assert scripted.calls[0][-6:] == [
+        "--batch",
+        "batch-1",
+        "--role",
+        "qa",
+        "--runtime",
+        "claude",
+    ]
+    recheck = session.view(Stage.PREFLIGHT).actions[0]
+    assert recheck.enabled and not recheck.needs_confirmation
