@@ -1016,3 +1016,316 @@ def test_executor_context_shows_worker_qa_and_labels_without_secrets() -> None:
     assert context["Worker"] == "dispatch-9" and context["QA"] == "не создан"
     assert "harness.repo: project" in context["Метки"]
     assert SECRET not in "".join(context.values())
+
+
+# ----------------------------------------------------------------------------- QA
+
+QA_TRANSITION = "q" * 64
+
+
+def qa_propose_document() -> dict[str, object]:
+    document = propose_document(
+        QA_TRANSITION,
+        plan_document(
+            container={"engine": "podman", "worker_image": "harness-qa:local"},
+            plan_digest="z" * 64,
+        ),
+    )
+    document["runtime_images"] = {"worker": "sha256:" + "e" * 64, "proxy": None}
+    document["qa_execution"] = {
+        "supervisor": "harness-runtime",
+        "command_timeout_seconds": 900,
+        "stop_grace_seconds": 10,
+        "poll_interval_seconds": 2,
+    }
+    return document
+
+
+def qa_report(**overrides: object) -> dict[str, object]:
+    report: dict[str, object] = {
+        "outcome": "completed",
+        "qa_stages": {
+            "stages": [
+                {
+                    "stage": "prepare",
+                    "command": "make bootstrap",
+                    "result": "pass",
+                    "exit_code": 0,
+                },
+                {
+                    "stage": "gate",
+                    "command": "make lint",
+                    "result": "fail",
+                    "exit_code": 2,
+                    "domain": "code",
+                    "diagnostics": "ruff: 3 errors",
+                },
+            ],
+            "failed_stage": "gate",
+            "code_checks_started": "yes",
+        },
+        "checks_run": [
+            {"command": "make lint", "result": "fail", "evidence": "exit 2"},
+            {"command": "make test", "result": "not_run", "evidence": ""},
+        ],
+    }
+    report.update(overrides)
+    return report
+
+
+def qa_session(
+    report: dict[str, object] | None = None,
+) -> tuple[RouteSession, ScriptedCoordinator]:
+    scripted = ScriptedCoordinator()
+    session = RouteSession(
+        REPO,
+        scripted,
+        load_authored=authored(AUTHORED_DOCUMENT),  # type: ignore[arg-type]
+        load_report=lambda path: report,
+    )
+    session.select("batch-1", "developer")
+    return session, scripted
+
+
+def test_qa_has_its_own_proposal_and_worker_approval_does_not_enable_it() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    scripted.reply(
+        "dispatch create", {"dispatch_id": "dispatch-9", "state": "approved"}
+    )
+    session.propose()
+    session.create("operator")
+    assert session.selection.dispatch == "dispatch-9"
+    view = session.view(Stage.QA)
+    actions = {a.key: a for a in view.actions}
+    assert (
+        not actions["qa-run"].enabled
+        and "одобренный dispatch QA" in actions["qa-run"].reason
+    )
+    assert not actions["qa-approve"].enabled
+    assert "не заменяет одобрение QA" in row_value(view, "Одобрение")
+    try:
+        session.run_qa()
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("a worker approval must not run QA")
+    assert "qa run" not in scripted.commands()
+
+
+def test_qa_proposal_is_for_role_qa_and_approval_carries_the_qa_digest_only() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()  # the worker's own proposal stays held
+    scripted.reply("dispatch propose", qa_propose_document())
+    scripted.reply(
+        "dispatch create", {"dispatch_id": "dispatch-qa-1", "state": "approved"}
+    )
+    session.propose_qa()
+    qa_command = scripted.calls[-1]
+    assert qa_command[qa_command.index("--role") + 1] == "qa"
+    session.create_qa("operator")
+    create = scripted.calls[-1]
+    assert create[create.index("--transition-digest") + 1] == QA_TRANSITION
+    assert create[create.index("--role") + 1] == "qa"
+    assert TRANSITION not in create
+    assert session.selection.qa_dispatch == "dispatch-qa-1"
+    assert (
+        session.proposal is not None
+        and session.proposal.transition_digest == TRANSITION
+    )
+
+
+def test_qa_view_shows_the_binding_pinned_image_and_planned_limits() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", qa_propose_document())
+    session.propose_qa()
+    view = session.view(Stage.QA)
+    assert row_value(view, "transition_digest") == QA_TRANSITION
+    assert row_value(view, "plan_digest") == "z" * 64
+    assert row_value(view, "Образ QA") == "harness-qa:local"
+    assert row_value(view, "Digest образа") == "sha256:" + "e" * 64
+    assert row_value(view, "Лимит команды, с (по плану)") == "900"
+    assert row_value(view, "Grace остановки, с (по плану)") == "10"
+
+
+def test_a_refused_qa_approval_makes_the_qa_proposal_stale_without_touching_the_worker() -> (
+    None
+):
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", qa_propose_document())
+    scripted.reply("dispatch create", None, stderr="ERROR: image drifted", code=2)
+    session.propose_qa()
+    session.create_qa("operator")
+    assert session.qa.proposal is not None and session.qa.proposal.stale
+    view = session.view(Stage.QA)
+    assert view.blockers == ("ERROR: image drifted",)
+    assert not next(a for a in view.actions if a.key == "qa-approve").enabled
+
+
+def test_qa_run_shows_each_command_exit_code_domain_diagnostics_and_not_run() -> None:
+    session, scripted = qa_session(qa_report())
+    session.selection.qa_dispatch = "dispatch-qa-1"
+    scripted.reply(
+        "qa run",
+        {"dispatch_id": "dispatch-qa-1", "state": "reported", "report": "/r.json"},
+    )
+    session.run_qa()
+    view = session.view(Stage.QA)
+    rows = {row.label: row for row in view.rows}
+    assert (
+        rows["1. prepare"].state is State.OK
+        and "exit_code: 0" in rows["1. prepare"].value
+    )
+    gate = rows["2. gate"]
+    assert gate.state is State.FAILED
+    assert (
+        "exit_code: 2" in gate.value
+        and "domain: code" in gate.value
+        and "ruff: 3 errors" in gate.value
+    )
+    assert rows["Остановилась на стадии"].value == "gate"
+    checks = [row for row in view.rows if row.label == "Проверка"]
+    assert [row.state for row in checks] == [State.FAILED, State.NOT_CHECKED]
+    assert "not_run" in checks[1].value
+    assert scripted.commands() == ["qa run"]
+    assert {tab.stage: tab for tab in session.tabs()}[Stage.QA].state is State.FAILED
+
+
+def test_a_negative_exit_code_is_a_signal_or_interruption_never_a_pass() -> None:
+    report = qa_report()
+    report["qa_stages"] = {
+        "stages": [
+            {"stage": "gate", "command": "make test", "result": "fail", "exit_code": -9}
+        ],
+        "failed_stage": "gate",
+    }
+    session, scripted = qa_session(report)
+    session.selection.qa_dispatch = "dispatch-qa-1"
+    scripted.reply(
+        "qa run",
+        {"dispatch_id": "dispatch-qa-1", "state": "reported", "report": "/r.json"},
+    )
+    session.run_qa()
+    gate = next(r for r in session.view(Stage.QA).rows if r.label == "1. gate")
+    assert gate.state is State.FAILED and "сигналом или прервана" in gate.value
+
+
+def test_what_the_core_does_not_report_is_not_reported_never_invented() -> None:
+    session, scripted = qa_session(qa_report())
+    session.selection.qa_dispatch = "dispatch-qa-1"
+    scripted.reply(
+        "qa run",
+        {"dispatch_id": "dispatch-qa-1", "state": "reported", "report": "/r.json"},
+    )
+    session.run_qa()
+    view = session.view(Stage.QA)
+    for label in (
+        "Контейнер команды",
+        "stdout и stderr раздельно",
+        "Сигнал, таймаут и grace по факту",
+    ):
+        row = next(r for r in view.rows if r.label == label)
+        assert row.state is State.NOT_REPORTED and row.value == "не сообщается ядром"
+
+
+def test_an_unreadable_report_is_not_reported_and_a_blocked_transition_is_a_blocker() -> (
+    None
+):
+    session, scripted = qa_session(None)
+    session.selection.qa_dispatch = "dispatch-qa-1"
+    scripted.reply(
+        "qa run",
+        {
+            "dispatch_id": "dispatch-qa-1",
+            "state": "reported",
+            "report": "/missing.json",
+            "transition_blocked": True,
+            "diagnostic": "configuration changed since dispatch approval",
+            "remedy": "review the pending report",
+        },
+    )
+    session.run_qa()
+    view = session.view(Stage.QA)
+    assert view.blockers == (
+        "configuration changed since dispatch approval — review the pending report",
+    )
+    assert next(r for r in view.rows if r.label == "Отчёт").state is State.NOT_REPORTED
+    assert {tab.stage: tab for tab in session.tabs()}[
+        Stage.QA
+    ].state is State.NOT_REPORTED
+
+
+def test_a_failed_qa_run_keeps_stderr_and_an_auto_acceptance_is_labelled_the_cores() -> (
+    None
+):
+    session, scripted = qa_session(
+        qa_report(qa_stages={"stages": [], "failed_stage": None}, checks_run=[])
+    )
+    session.selection.qa_dispatch = "dispatch-qa-1"
+    scripted.reply("qa run", None, stderr="ERROR: lane is leased", code=2)
+    session.run_qa()
+    assert session.view(Stage.QA).blockers == ("ERROR: lane is leased",)
+    scripted.reply(
+        "qa run",
+        {
+            "dispatch_id": "dispatch-qa-1",
+            "state": "reported",
+            "report": "/r.json",
+            "auto_accepted": True,
+        },
+    )
+    session.run_qa()
+    row = next(
+        r
+        for r in session.view(Stage.QA).rows
+        if r.label == "Автопринятие по политике ядра"
+    )
+    assert row.state is State.INFO
+    assert {tab.stage: tab for tab in session.tabs()}[Stage.QA].state is State.OK
+
+
+def test_lane_release_follows_the_actual_lease_not_a_guess() -> None:
+    session, scripted = qa_session()
+    view = session.view(Stage.QA)
+    assert next(r for r in view.rows if r.label == "Lane").state is State.NOT_CHECKED
+    scripted.reply("qa status", {"lease": None, "lease_stale": False, "queue": []})
+    session.refresh_qa()
+    lane = next(r for r in session.view(Stage.QA).rows if r.label == "Lane")
+    assert lane.state is State.OK and "свободен" in lane.value
+    scripted.reply(
+        "qa status",
+        {
+            "lease": {"dispatch_id": "dispatch-qa-1", "pid": 7},
+            "lease_stale": True,
+            "queue": [{"d": 1}],
+        },
+    )
+    session.refresh_qa()
+    view = session.view(Stage.QA)
+    lane = next(r for r in view.rows if r.label == "Lane")
+    assert (
+        lane.state is State.WARN
+        and "просрочен" in lane.value
+        and "dispatch-qa-1" in lane.value
+    )
+    assert row_value(view, "Очередь") == "1"
+    scripted.reply("qa status", None, stderr="ERROR: store busy", code=2)
+    session.refresh_qa()
+    assert (
+        next(r for r in session.view(Stage.QA).rows if r.label == "Lane").state
+        is State.FAILED
+    )
+
+
+def test_qa_run_needs_confirmation_and_status_does_not() -> None:
+    session, _ = qa_session()
+    actions = {a.key: a for a in session.view(Stage.QA).actions}
+    assert (
+        actions["qa-run"].needs_confirmation
+        and actions["qa-approve"].needs_confirmation
+    )
+    assert (
+        not actions["qa-status"].needs_confirmation
+        and not actions["qa-propose"].needs_confirmation
+    )
