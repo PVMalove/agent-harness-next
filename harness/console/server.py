@@ -16,10 +16,12 @@ from .orchestration_events import OrchestrationEvents, is_orchestration_request
 from .snapshots import SnapshotService, busy, respond
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qs, urlsplit
 
 if TYPE_CHECKING:
     import h11
     from websockets.server import ServerProtocol
+    from .web import WebHome
 
 HEADER_LIMIT = 16384
 HEADER_TIMEOUT = 5.0
@@ -30,6 +32,7 @@ MAX_UNFINISHED_REQUESTS = 4
 # A subscription stays unfinished while its job runs or its stream is open, so it never takes a
 # request slot.
 MAX_SUBSCRIPTIONS = 4
+PageResponse = tuple[int, bytes | None, str, list[tuple[bytes, bytes]]]
 
 # This independent logger never propagates protocol headers, even under root DEBUG.
 _PROTOCOL_LOGGER = logging.Logger("harness.console.protocol")
@@ -38,6 +41,7 @@ _PROTOCOL_LOGGER.propagate = False
 
 _SECURITY_HEADERS = [
     (b"Cache-Control", b"no-store"),
+    (b"Referrer-Policy", b"no-referrer"),
     (b"X-Content-Type-Options", b"nosniff"),
     (b"X-Frame-Options", b"DENY"),
     (
@@ -71,6 +75,8 @@ class ConsoleServer:
         self._listener: asyncio.Server | None = None
         self._discovery: Discovery | None = None
         self._token = ""
+        self._browser_issued = False
+        self._web: WebHome | None = None
         self._port = 0
         self._started = False
         self._closing = False
@@ -90,6 +96,9 @@ class ConsoleServer:
             raise RuntimeError("console server cannot be restarted")
         importlib.import_module("h11")
         importlib.import_module("websockets.server")
+        from .web import WebHome
+
+        self._web = WebHome()
         self._started = True
         try:
             self._discovery = Discovery(self.repo)
@@ -148,12 +157,16 @@ class ConsoleServer:
                 await self._http(connection, request, reader, writer, status)
                 return
             if request.target != b"/ws":
+                status, body, mime, headers = self._page(request)
                 await self._http(
                     connection,
                     request,
                     reader,
                     writer,
-                    200 if request.target == b"/" else 404,
+                    status,
+                    body=body,
+                    mime=mime,
+                    extra_headers=headers,
                 )
                 return
             if request.method != b"GET":
@@ -203,7 +216,9 @@ class ConsoleServer:
             return 405
         return None
 
-    def _authenticated(self, request: h11.Request) -> bool:
+    def _authenticated(
+        self, request: h11.Request, *, browser_page: bool = False
+    ) -> bool:
         auth = [value for name, value in request.headers if name == b"authorization"]
         cookies = [value for name, value in request.headers if name == b"cookie"]
         origin = [value for name, value in request.headers if name == b"origin"]
@@ -212,12 +227,80 @@ class ConsoleServer:
         if (
             len(cookies) == 1
             and not auth
-            and origin == [f"http://127.0.0.1:{self.port}".encode()]
+            and (browser_page or origin == [f"http://127.0.0.1:{self.port}".encode()])
         ):
             return secrets.compare_digest(
                 cookies[0], b"console_token=" + self._token.encode()
             )
         return False
+
+    def _page(
+        self, request: h11.Request
+    ) -> PageResponse:
+        """Admit a fixed resource and redeem browser bootstrap without an intervening await."""
+        rejected: PageResponse = (401, None, "text/plain; charset=utf-8", [])
+        missing: PageResponse = (404, None, "text/plain; charset=utf-8", [])
+        try:
+            url = urlsplit(request.target.decode("ascii"))
+            if url.scheme or url.netloc or url.fragment:
+                return missing
+            query = parse_qs(url.query, keep_blank_values=True, strict_parsing=True)
+        except (ValueError, UnicodeError):
+            return rejected
+        if url.path != "/" and (
+            self._web is None or url.path not in self._asset_paths()
+        ):
+            return missing
+        if url.path != "/" and query:
+            return missing
+        if set(query) - {"token", "lang"} or any(
+            len(values) != 1 for values in query.values()
+        ):
+            return rejected
+        language = "ru"
+        if "token" in query:
+            if not secrets.compare_digest(query["token"][0].encode("utf-8"), self._token.encode()):
+                return rejected
+            credentials = [
+                name
+                for name, _ in request.headers
+                if name in (b"cookie", b"authorization")
+            ]
+            authenticated = self._authenticated(request, browser_page=True)
+            if credentials and (credentials != [b"cookie"] or not authenticated):
+                return rejected
+            if not authenticated:
+                if self._browser_issued or request.method != b"GET":
+                    return rejected
+                self._browser_issued = True
+                cookie = (
+                    f"console_token={self._token}; HttpOnly; SameSite=Strict; Path=/"
+                )
+                headers = [(b"Set-Cookie", cookie.encode())]
+            else:
+                headers = []
+            headers.append((b"Location", f"/?lang={language}".encode()))
+            return 303, b"", "text/plain; charset=utf-8", headers
+        if not self._authenticated(request, browser_page=True):
+            return rejected
+        assert self._web is not None
+        if url.path == "/":
+            return (
+                200,
+                self._web.render(self.repo.name, language),
+                "text/html; charset=utf-8",
+                [],
+            )
+        asset = self._web.asset(url.path)
+        assert asset is not None
+        body, mime = asset
+        return 200, body, mime, []
+
+    @staticmethod
+    def _asset_paths() -> set[str]:
+        from .web import ASSETS
+
+        return set(ASSETS)
 
     async def _http(
         self,
@@ -226,13 +309,30 @@ class ConsoleServer:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
         status: int,
+        *,
+        body: bytes | None = None,
+        mime: str = "text/plain; charset=utf-8",
+        extra_headers: list[tuple[bytes, bytes]] | None = None,
     ) -> None:
         import h11
 
-        body = b"Console server\n" if status == 200 else b"Request rejected\n"
+        if body is None:
+            body = b"Request rejected\n"
+        security = [
+            (name, value)
+            for name, value in _SECURITY_HEADERS
+            if name != b"Content-Security-Policy"
+        ]
+        policy = (
+            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; "
+            "script-src 'self'; style-src 'self'; img-src 'self'; "
+            f"connect-src ws://127.0.0.1:{self.port}; form-action 'self'"
+        )
         headers = [
-            *_SECURITY_HEADERS,
-            (b"Content-Type", b"text/plain; charset=utf-8"),
+            *security,
+            (b"Content-Security-Policy", policy.encode()),
+            *(extra_headers or []),
+            (b"Content-Type", mime.encode()),
             (b"Content-Length", str(len(body)).encode()),
             (b"Connection", b"close"),
         ]
