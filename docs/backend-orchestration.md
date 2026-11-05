@@ -1090,23 +1090,67 @@ transport failure — это operational evidence (`verification-infrastructure`
 code finding. Context limit даёт `context-pressure`, только если для отчитавшегося dispatch записано
 `critical`-наблюдение `context_pressure` (см. ниже). Голое утверждение даёт `unknown`.
 
+**Домены отказа.** Каждый routing record несёт `failure` — ровно один домен ADR 0019
+(`environment_preparation`, `infrastructure`, `policy`, `tooling`, `code_test`, `timeout`,
+`cancelled`, `unknown`) с доказательством, которое показывает этот домен: `domain`, `method`,
+`matched` и `source`. `method` равен `structured` (поле отчёта, стадии или runtime), `heuristic`
+(текстовый шаблон, который никогда не доказывает `code_test`), `approver` (домен назвал человек
+или политика) или `fallback`, а `fallback` всегда означает `unknown`.
+
+Домен `code_test` доказывают находка в review, severity warning/blocker на оси, явный retry, который
+назначил reviewer, failed check, открытый carried item, подтверждённый дефект проекта при
+подготовке QA, отчёт conflict-resolver-а с `resolver.cause: task-defect` и сдвинутый candidate (он
+изменился после закрепления dispatch). Coordinator считает сдвинутый candidate `code_test`
+намеренно: ledger доказывает, что изменилась сама работа, поэтому маршрут остаётся developer retry
+и тратит бюджет, как до появления доменов. Подсказка `retry_reason_classifier` — не доказательство:
+она не заменяет структурированный факт отчёта, и без такого факта домен остаётся `unknown`.
+
+Остальные домены следуют из фактов. Структурированный `tooling_blocker` даёт `tooling`,
+подтверждённый сбой окружения QA — `environment_preparation`, записанное `critical`-наблюдение
+`context_pressure` — `infrastructure`, `block-bypass` — `policy`. Всё, что не подтверждает ни один
+структурированный факт, — `unknown`, но никогда `code_test`.
+
+Только retry с доменом `code_test` расходует `retry_policy.max_developer_retries`.
+`infrastructure`, `environment_preparation`, `policy`, `tooling`, `timeout`, `cancelled` и `unknown`
+не расходуют его никогда. При подсчёте developer retry для остановки `budget-exhausted`
+учитываются только такие записи.
+
+Coordinator отказывает developer retry по отчёту code-review, qa, verification или publish, если
+домен не `code_test`. Отказ типизирован как `UnprovenFailureError` и несёт `failure`; `batch decide
+--decision retry` возвращает `failure` и remedy и ничего не пишет. При `approval_policy: auto` тот же
+отказ становится остановкой `no-automatic-route`/`unknown-reason`, и её evidence сохраняет `failure`.
+Эта же остановка завершает автоматический developer retry с доменом `unknown`, потому что такой
+retry не тратил бы бюджет и остался бы без ограничения.
+
+Approver доказывает домен `code_test` категориями `--reason-category code`, `requirements` или
+`candidate-change`. Он может запросить developer retry и через `--retry-role developer`, в том числе
+для отчёта code-review, qa или verification, заблокированного инструментом. Оба варианта доказывают
+домен `code_test` как `approver` и расходуют бюджет. Исключение — `tooling-retry`: с
+`--retry-role developer` такой retry стадии developer сохраняет домен `tooling` и ничего не
+расходует; остальные `tooling-retry` тоже не расходуют. Решение, записанное до появления доменов,
+не несёт `failure`, и для него действует прежнее правило.
+
 | Стадия отчёта | `accept` | `retry` | `block` / `fail` | `abandon` |
 | --- | --- | --- | --- | --- |
 | architect | developer | новый architect | terminal | `abandoned` |
-| developer | risk assessment | `developer-retry` продолжает непринятый candidate этого report (`snapshot_commit` — его `commit_sha`); retry создаёт новый candidate, и тот получает новую risk assessment; при непустом закрытом списке перенесённых пунктов маршрут — `fix-forward` | terminal | `abandoned` |
-| code-review | qa | новый code-review на том же `candidate_commit`, если report `blocked`, причина — `verification-infrastructure`/`transport`/`context-pressure`, findings пусты, обе оси без findings, нет failed check и candidate не менялся; иначе `developer-retry`, а при непустом закрытом списке перенесённых пунктов — `fix-forward` | terminal | `abandoned` |
-| qa | publish | новый qa на том же SHA при том же условии (QA остаётся read-only); defect или новый candidate — `developer-retry` | terminal | `abandoned` |
-| publish | `completed` | новый publish на том же принятом SHA при `verification-infrastructure`/`transport`/`context-pressure`; `developer-retry`, если candidate должен измениться | terminal | `abandoned` |
+| developer | risk assessment | `developer-retry` продолжает непринятый candidate этого report (`snapshot_commit` — его `commit_sha`); retry создаёт новый candidate, и тот получает новую risk assessment; бюджет расходуется только при домене `code_test`; при непустом закрытом списке перенесённых пунктов маршрут — `fix-forward` | terminal | `abandoned` |
+| verification | risk assessment | `developer-retry` при домене `code_test`, иначе отказ | terminal | `abandoned` |
+| code-review | qa | новый code-review на том же `candidate_commit`, если report `blocked`, причина — `verification-infrastructure`/`transport`/`context-pressure`, findings пусты, обе оси без findings, нет failed check и candidate не менялся; в остальных случаях `developer-retry` при домене `code_test` (при непустом закрытом списке перенесённых пунктов — `fix-forward`), при другом домене — отказ | terminal | `abandoned` |
+| qa | publish | новый qa на том же SHA при том же условии (QA остаётся read-only); defect или новый candidate — `developer-retry` при домене `code_test`, иначе отказ | terminal | `abandoned` |
+| publish | `completed` | новый publish на том же принятом SHA при `verification-infrastructure`/`transport`/`context-pressure`; `developer-retry` при домене `code_test`, если candidate должен измениться; иначе отказ | terminal | `abandoned` |
 
-`code`, `requirements`, `candidate-change` и `unknown` всегда ведут в `developer-retry`. Повторить
-read-only стадию на том же SHA могут только три operational-категории, и лишь при пустых findings,
-неизменном candidate и отсутствии scope/requirement blocker. Противоречивая или неподтверждённая
-причина всегда даёт безопасный маршрут `developer-retry`. Повтор на том же SHA — это новый
-immutable dispatch: новый dispatch ID, повторная проверка свежести Context Package и собственное
-явное approval при `manual_all`, а прежние brief, report и blocker остаются audit evidence.
-Фиктивные и пустые commit не используются, и новый candidate всегда требует новой risk assessment.
-`block` и `fail` сами retry не запускают. `--retry-role developer` принудительно выбирает developer
-retry там, где coordinator иначе повторил бы ту же роль на том же SHA.
+`code`, `requirements` и `candidate-change` ведут в `developer-retry` при доказанном домене
+`code_test`. `unknown`, противоречивая или неподтверждённая причина не доказывает дефект кода: в
+ручном пути стадия developer повторяется через `developer-retry` без расхода бюджета, а в
+автоматическом политика останавливает такой retry. Стадии code-review, qa, verification и publish
+получают отказ (см. «Домены отказа»). Повторить read-only стадию на том же SHA могут только три
+operational-категории, и лишь при пустых findings, неизменном candidate и отсутствии
+scope/requirement blocker. Повтор на том же SHA — это новый immutable dispatch: новый
+dispatch ID, повторная проверка свежести Context Package и собственное явное approval при
+`manual_all`, а прежние brief, report и blocker остаются audit evidence. Фиктивные и пустые commit
+не используются, и новый candidate всегда требует новой risk assessment. `block` и `fail` сами retry
+не запускают. `--retry-role developer` принудительно выбирает developer retry там, где coordinator
+иначе повторил бы ту же роль на том же SHA.
 
 `tooling` — отдельная операционная категория: hook, классификатор безопасности или ledger
 заблокировал законное действие роли. Coordinator присваивает её только по структурному полю
@@ -1209,8 +1253,9 @@ code-review, qa или publish report; не `tooling-retry` и не `bypass-reru
 (собственный у retry developer-отчёта, иначе последний принятый), ещё не содержит этот tip. Routing
 record дополнительно называет `rebase_target_commit` (новый tip) и `integration_base_commit` (база,
 от которой он ушёл) и сохраняет `retry_item_ids`. `next_action` остаётся `developer-retry`, и такой
-retry расходует один `retry_policy.max_developer_retries`. Ошибка fetch отклоняет
-`batch decide --decision retry` с remedy. `decision-packet` показывает её в `route_preview.retry`.
+retry расходует один `retry_policy.max_developer_retries`, когда его домен отказа — `code_test`.
+Ошибка fetch отклоняет `batch decide --decision retry` с remedy. `decision-packet` показывает её
+в `route_preview.retry`.
 Решение только предлагает target: `integration_base_commit` batch до accept не меняется.
 
 Target попадает в brief только через dispatch с явным approval при любой `approval_policy`, кроме
@@ -1529,6 +1574,10 @@ Coordinator пишет остановку один раз в `batch.auto_stop` �
 а удержание снимает только `recovery resume` (раздел «Удержание batch и команды `recovery`»).
 Остановка не создаёт решения и не ослабляет валидацию. После остановки каждый шаг batch требует `--approved-by`, а вернуться в
 `auto` batch не может.
+
+Остановку `no-automatic-route`/`unknown-reason` политика записывает и при отказе
+`UnprovenFailureError` от read-only стадии или publish (см. «Домены отказа»): решение не
+записывается, а evidence остановки сохраняет `failure`.
 
 Coordinator пишет итоговый отчёт один раз в `batch.auto_report`: при accept отчёта publish или при
 остановке.
