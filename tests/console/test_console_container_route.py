@@ -792,3 +792,227 @@ def test_creating_a_dispatch_needs_confirmation_and_propose_does_not_start_a_wor
         and not actions["propose"].needs_confirmation
     )
     assert scripted.commands() == ["dispatch preflight", "dispatch propose"]
+
+
+# ----------------------------------------------------------------------------- Worker
+
+
+def status_document(
+    execution: dict[str, object] | None = None, **entry: object
+) -> dict[str, object]:
+    item: dict[str, object] = {
+        "dispatch_id": "dispatch-9",
+        "batch_id": "batch-1",
+        "role": "developer",
+        "state": "working",
+        "adapter_receipt": {"launch_id": "launch-123"},
+        "silent_seconds": 12,
+        "stale": False,
+    }
+    if execution is not None:
+        item["execution"] = execution
+    item.update(entry)
+    return {"stale_after_seconds": 7200, "stale": [], "dispatches": [item]}
+
+
+def running_execution(**overrides: object) -> dict[str, object]:
+    execution: dict[str, object] = {
+        "state": "running",
+        "engine": "podman",
+        "container_id": "c" * 12,
+        "launch": {
+            "images": {"worker": WORKER_ID, "proxy": PROXY_ID},
+            "labels": {"harness.repo": "project", "harness.dispatch": "dispatch-9"},
+            "logs": "/work/project/.harness/logs/dispatch-9",
+        },
+        "observation": {"observed_at": "2026-11-05T15:00:00+00:00"},
+    }
+    execution.update(overrides)
+    return execution
+
+
+def worker_session(
+    document: object = None, **kwargs: object
+) -> tuple[RouteSession, ScriptedCoordinator]:
+    session, scripted = make_session()
+    session.select("batch-1")
+    session.selection.dispatch = "dispatch-9"
+    scripted.reply("dispatch status", document, **kwargs)  # type: ignore[arg-type]
+    return session, scripted
+
+
+def test_worker_stage_without_a_dispatch_is_pending_and_actions_say_why() -> None:
+    session, scripted = make_session()
+    view = session.view(Stage.WORKER)
+    assert view.rows[0].state is State.PENDING
+    assert all(not a.enabled and a.reason for a in view.actions)
+    assert scripted.calls == []
+    try:
+        session.refresh_worker()
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("no dispatch, no observation")
+
+
+def test_worker_stage_shows_each_fact_as_its_own_row_and_runs_nothing_on_draw() -> None:
+    session, scripted = worker_session(status_document(running_execution()))
+    drawn = session.view(Stage.WORKER)
+    assert scripted.calls == [] and drawn.rows[1].state is State.NOT_CHECKED
+    session.refresh_worker()
+    view = session.view(Stage.WORKER)
+    assert row_value(view, "Receipt / launch_id") == "launch-123"
+    assert row_value(view, "Движок") == "podman"
+    assert WORKER_ID in row_value(view, "Образы запуска") and PROXY_ID in row_value(
+        view, "Образы запуска"
+    )
+    assert row_value(view, "Liveness (inspect)").startswith("running")
+    assert row_value(view, "Наблюдалось") == "2026-11-05T15:00:00+00:00"
+    assert "harness.dispatch: dispatch-9" in row_value(view, "Метки")
+    assert row_value(view, "Код выхода").startswith("не сообщается")
+    assert row_value(view, "Отчёт") == "не сообщается"
+    assert (
+        row_value(view, "Terminal evidence") == "/work/project/.harness/logs/dispatch-9"
+    )
+    assert scripted.commands() == ["dispatch status"]
+
+
+def test_exit_zero_is_a_code_not_an_accepted_report_or_a_closed_task() -> None:
+    execution = running_execution(
+        state="exited",
+        exit={
+            "exit_code": 0,
+            "stopped_by": None,
+            "source": "inspect",
+            "logs": "/logs/x",
+        },
+    )
+    session, _ = worker_session(status_document(execution))
+    session.refresh_worker()
+    view = session.view(Stage.WORKER)
+    assert row_value(view, "Код выхода") == "0"
+    assert next(r for r in view.rows if r.label == "Код выхода").state is State.INFO
+    assert row_value(view, "Отчёт") == "не сообщается"
+    assert next(r for r in view.rows if r.label == "Отчёт").state is State.NOT_REPORTED
+    assert (
+        row_value(view, "Состояние в ledger") == "working"
+    )  # still not closed or accepted
+    assert any("не принимают отчёт" in note for note in view.notes)
+    assert row_value(view, "Terminal evidence") == "/logs/x"
+
+
+def test_a_held_report_is_a_warning_fact_not_an_acceptance() -> None:
+    session, _ = worker_session(
+        status_document(running_execution(), held_report={"outcome": "completed"})
+    )
+    session.refresh_worker()
+    report = next(r for r in session.view(Stage.WORKER).rows if r.label == "Отчёт")
+    assert report.state is State.WARN and "удержан" in report.value
+
+
+def test_a_detached_launch_without_an_observed_execution_is_not_reported_alive() -> (
+    None
+):
+    session, _ = worker_session(
+        status_document(None, adapter_receipt={"launch_id": "launch-1"})
+    )
+    session.refresh_worker()
+    view = session.view(Stage.WORKER)
+    live = next(r for r in view.rows if r.label == "Liveness (inspect)")
+    assert live.state is State.NOT_REPORTED and "не сообщается" in live.value
+    assert row_value(view, "Receipt / launch_id") == "launch-1"
+
+
+def test_a_missing_receipt_is_not_reported_and_a_lost_execution_is_a_warning() -> None:
+    session, _ = worker_session(
+        status_document(running_execution(state="lost"), adapter_receipt=None)
+    )
+    session.refresh_worker()
+    view = session.view(Stage.WORKER)
+    assert (
+        next(r for r in view.rows if r.label == "Receipt / launch_id").state
+        is State.NOT_REPORTED
+    )
+    assert (
+        next(r for r in view.rows if r.label == "Liveness (inspect)").state
+        is State.WARN
+    )
+    assert {tab.stage: tab for tab in session.tabs()}[Stage.WORKER].state is State.WARN
+
+
+def test_an_unknown_execution_is_unknown_never_alive_or_stopped() -> None:
+    session, _ = worker_session(status_document(running_execution(state="unknown")))
+    session.refresh_worker()
+    live = next(
+        r for r in session.view(Stage.WORKER).rows if r.label == "Liveness (inspect)"
+    )
+    assert live.state is State.UNKNOWN and "не знает" in live.value
+
+
+def test_silence_is_shown_as_a_fact_and_never_as_a_stop() -> None:
+    session, _ = worker_session(
+        status_document(running_execution(), silent_seconds=9000, stale=True)
+    )
+    session.refresh_worker()
+    silent = next(
+        r for r in session.view(Stage.WORKER).rows if r.label == "Тишина worker"
+    )
+    assert silent.state is State.WARN and silent.value == "9000 с; stale"
+
+
+def test_a_reaction_error_is_a_blocker_shown_verbatim() -> None:
+    session, _ = worker_session(
+        status_document(
+            running_execution(state="exited"),
+            reaction_error={
+                "error": "the batch is held",
+                "remedy": "run recovery resume",
+            },
+        )
+    )
+    session.refresh_worker()
+    assert session.view(Stage.WORKER).blockers == (
+        "the batch is held — run recovery resume",
+    )
+
+
+def test_a_busy_ledger_is_pending_and_a_failed_status_keeps_its_stderr() -> None:
+    session, scripted = worker_session(
+        {"ledger_busy": True, "remedy": "repeat dispatch status"}
+    )
+    session.refresh_worker()
+    busy = session.view(Stage.WORKER).rows[-1]
+    assert busy.state is State.PENDING and "repeat dispatch status" in busy.value
+    scripted.reply(
+        "dispatch status", None, stderr="ERROR: runtime down\nREMEDY: start it", code=2
+    )
+    session.refresh_worker()
+    view = session.view(Stage.WORKER)
+    assert view.blockers == ("ERROR: runtime down\nREMEDY: start it",)
+    assert {tab.stage: tab for tab in session.tabs()}[
+        Stage.WORKER
+    ].state is State.FAILED
+
+
+def test_a_dispatch_the_core_did_not_return_is_not_reported() -> None:
+    document = status_document(running_execution())
+    session, _ = worker_session(document)
+    session.selection.dispatch = "dispatch-other"
+    session.refresh_worker()
+    assert session.view(Stage.WORKER).rows[-1].state is State.NOT_REPORTED
+
+
+def test_refresh_is_an_observation_and_send_needs_confirmation() -> None:
+    session, _ = worker_session(status_document(running_execution()))
+    actions = {a.key: a for a in session.view(Stage.WORKER).actions}
+    assert actions["refresh"].enabled and not actions["refresh"].needs_confirmation
+    assert actions["send"].enabled and actions["send"].needs_confirmation
+
+
+def test_executor_context_shows_worker_qa_and_labels_without_secrets() -> None:
+    session, _ = worker_session(status_document(running_execution()))
+    session.refresh_worker()
+    context = dict(session.executor_context())
+    assert context["Worker"] == "dispatch-9" and context["QA"] == "не создан"
+    assert "harness.repo: project" in context["Метки"]
+    assert SECRET not in "".join(context.values())
