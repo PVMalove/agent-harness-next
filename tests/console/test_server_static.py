@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.backend.server import ConsoleServer
+from harness.console.backend.server import DEFAULT_STATIC_ROOT, ConsoleServer
 
 INDEX = b"<!doctype html><title>Console</title><script src=/assets/app.js></script>"
 ASSET = b"console.log('console');\n"
@@ -183,3 +183,8 @@ def test_without_a_build_the_plain_text_page_is_served(
         assert missing[0] == 404
 
     _serve(project, tmp_path / "no-build", check)
+
+
+def test_the_default_build_lives_in_the_frontend_directory() -> None:
+    root = Path(__file__).resolve().parents[2]
+    assert DEFAULT_STATIC_ROOT == root / "harness" / "console" / "frontend" / "dist"

@@ -21,7 +21,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 _STARTUP_POLL = 0.01
-DEFAULT_STATIC_ROOT = Path(__file__).resolve().parents[1] / "web" / "dist"
+DEFAULT_STATIC_ROOT = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 
 class _Discovery(Protocol):
