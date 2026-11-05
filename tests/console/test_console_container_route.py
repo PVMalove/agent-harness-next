@@ -1329,3 +1329,296 @@ def test_qa_run_needs_confirmation_and_status_does_not() -> None:
         not actions["qa-status"].needs_confirmation
         and not actions["qa-propose"].needs_confirmation
     )
+
+
+# ----------------------------------------------------------------------------- Cleanup
+
+
+def cleanup_plan(**overrides: object) -> dict[str, object]:
+    plan: dict[str, object] = {
+        "mode": "soft",
+        "root": "/work/project/.harness",
+        "min_age_hours": 24,
+        "remove": [
+            {
+                "kind": "container",
+                "path": "harness-dispatch-9-worker",
+                "dispatch": "dispatch-9",
+                "engine": "podman",
+                "engine_id": "abc123",
+            },
+            {
+                "kind": "network",
+                "path": "harness-dispatch-9-net",
+                "dispatch": "dispatch-9",
+                "engine": "podman",
+                "engine_id": "net123",
+            },
+            {
+                "kind": "container",
+                "path": "harness-dispatch-old-worker",
+                "dispatch": "dispatch-old",
+                "engine": "podman",
+                "engine_id": "old123",
+            },
+            {"kind": "directory", "path": "/work/project/.harness/.sandboxes/runs/r1"},
+            {"kind": "worktree", "path": "/work/wt-old", "branch": "feature/old"},
+        ],
+        "skipped": [
+            {
+                "path": "harness-dispatch-live",
+                "reason": "worker is not stopped; harness never stops it: stop it explicitly (podman stop x) first",
+            },
+            {
+                "path": "/work/project/.harness/.sandboxes/runs/young",
+                "reason": "too young",
+            },
+        ],
+    }
+    plan.update(overrides)
+    return plan
+
+
+def expected_digest(plan: dict[str, object]) -> str:
+    import hashlib
+
+    payload = {key: plan[key] for key in ("mode", "root", "min_age_hours", "remove")}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def cleanup_session() -> tuple[RouteSession, ScriptedCoordinator]:
+    session, scripted = worker_session(
+        status_document(
+            running_execution(
+                state="exited", exit={"exit_code": 0, "logs": "/logs/dispatch-9"}
+            )
+        )
+    )
+    session.refresh_worker()
+    return session, scripted
+
+
+def test_cleanup_without_a_preview_runs_nothing_and_apply_says_why() -> None:
+    session, scripted = make_session()
+    view = session.view(Stage.CLEANUP)
+    apply = next(a for a in view.actions if a.key == "cleanup-apply")
+    assert not apply.enabled and "превью" in apply.reason
+    assert scripted.calls == []
+    try:
+        session.apply_cleanup()
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("apply needs a preview")
+
+
+def test_cleanup_preview_is_one_soft_dry_run_with_no_apply_flag() -> None:
+    session, scripted = cleanup_session()
+    scripted.reply("cleanup", {"plan": cleanup_plan()})
+    session.preview_cleanup()
+    command = scripted.calls[-1]
+    assert command[-4:] == ["cleanup", str(REPO), "--mode", "soft"]
+    assert "--apply" not in command and "--confirm" not in command
+
+
+def test_cleanup_shows_container_items_marks_the_current_dispatch_and_discloses_the_rest() -> (
+    None
+):
+    session, scripted = cleanup_session()
+    scripted.reply("cleanup", {"plan": cleanup_plan()})
+    session.preview_cleanup()
+    view = session.view(Stage.CLEANUP)
+    assert row_value(view, "К удалению") == "5: контейнеры и сети 3, прочее 2"
+    assert (
+        row_value(view, "Не контейнерные пункты того же плана")
+        == "2: directory 1, worktree 1"
+    )
+    containers = [r for r in view.rows if r.label in ("Контейнер", "Сеть")]
+    assert len(containers) == 3
+    assert (
+        "текущий dispatch" in containers[0].value
+        and "текущий dispatch" in containers[1].value
+    )
+    assert "текущий dispatch" not in containers[2].value
+    assert row_value(view, "plan-digest") == expected_digest(cleanup_plan())
+    assert any(
+        "весь репозиторий" in note or "всего репозитория" in note for note in view.notes
+    )
+    assert any("не останавливается" in note for note in view.notes)
+
+
+def test_protected_resources_keep_the_core_reason_verbatim() -> None:
+    session, scripted = cleanup_session()
+    scripted.reply("cleanup", {"plan": cleanup_plan()})
+    session.preview_cleanup()
+    view = session.view(Stage.CLEANUP)
+    protected = next(r for r in view.rows if r.label == "Защищён")
+    assert protected.state is State.WARN
+    assert protected.value.startswith(
+        "harness-dispatch-live\nworker is not stopped; harness never stops it"
+    )
+    assert row_value(view, "Прочие пропущенные пункты") == "1"
+
+
+def test_saved_terminal_evidence_comes_from_execution_exit() -> None:
+    session, _ = cleanup_session()
+    view = session.view(Stage.CLEANUP)
+    assert (
+        row_value(view, "Сохранённые доказательства (execution.exit)")
+        == "код выхода: 0\n/logs/dispatch-9"
+    )
+    fresh, _ = make_session()
+    row = next(
+        r for r in fresh.view(Stage.CLEANUP).rows if r.label.startswith("Сохранённые")
+    )
+    assert row.state is State.NOT_REPORTED
+
+
+def test_apply_is_bound_to_the_previewed_plan_digest_and_reflects_the_real_result() -> (
+    None
+):
+    session, scripted = cleanup_session()
+    plan = cleanup_plan()
+    scripted.reply("cleanup", {"plan": plan})
+    session.preview_cleanup()
+    scripted.reply(
+        "cleanup",
+        None,
+    )
+    scripted.replies["cleanup"] = (
+        json.dumps({"plan": plan})
+        + json.dumps(
+            {
+                "result": {
+                    "removed": ["a", "b"],
+                    "failed": [{"path": "/x", "reason": "busy"}],
+                    "skipped": [],
+                }
+            }
+        ),
+        "",
+        1,
+    )
+    result = session.apply_cleanup()
+    command = scripted.calls[-1]
+    assert command[-3:] == ["--apply", "--plan-digest", expected_digest(plan)]
+    assert result.section("result") is not None
+    view = session.view(Stage.CLEANUP)
+    assert row_value(view, "Удалено").startswith("2")
+    failed = next(r for r in view.rows if r.label == "Не удалось")
+    assert failed.state is State.FAILED and "busy" in failed.value
+    apply = next(a for a in view.actions if a.key == "cleanup-apply")
+    assert not apply.enabled and "превью" in apply.reason  # the digest is spent
+
+
+def test_a_plan_that_changed_refuses_the_apply_and_needs_a_new_preview() -> None:
+    session, scripted = cleanup_session()
+    scripted.reply("cleanup", {"plan": cleanup_plan()})
+    session.preview_cleanup()
+    scripted.reply(
+        "cleanup",
+        None,
+        stderr="ERROR: cleanup plan changed; preview again before applying",
+        code=2,
+    )
+    session.apply_cleanup()
+    view = session.view(Stage.CLEANUP)
+    assert view.blockers == (
+        "ERROR: cleanup plan changed; preview again before applying",
+    )
+    assert session.cleanup.stale
+    assert sum("cleanup" in call for call in scripted.calls) == 2
+    try:
+        session.apply_cleanup()
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("a spent digest must not be applied twice")
+
+
+def test_a_failed_preview_is_shown_and_enables_no_apply() -> None:
+    session, scripted = cleanup_session()
+    scripted.reply(
+        "cleanup", None, stderr="ERROR: storage root must not be a symlink", code=2
+    )
+    session.preview_cleanup()
+    view = session.view(Stage.CLEANUP)
+    assert view.blockers == ("ERROR: storage root must not be a symlink",)
+    assert not next(a for a in view.actions if a.key == "cleanup-apply").enabled
+    assert {tab.stage: tab for tab in session.tabs()}[
+        Stage.CLEANUP
+    ].state is State.FAILED
+
+
+def test_an_empty_plan_has_nothing_to_apply() -> None:
+    session, scripted = cleanup_session()
+    scripted.reply("cleanup", {"plan": cleanup_plan(remove=[], skipped=[])})
+    session.preview_cleanup()
+    apply = next(
+        a for a in session.view(Stage.CLEANUP).actions if a.key == "cleanup-apply"
+    )
+    assert not apply.enabled and "нечего удалять" in apply.reason
+
+
+def test_apply_is_blocked_until_the_workers_terminal_evidence_is_saved() -> None:
+    session, scripted = worker_session(
+        status_document(running_execution(state="exited"))
+    )
+    session.refresh_worker()  # exit evidence is not reported
+    scripted.reply("cleanup", {"plan": cleanup_plan()})
+    session.preview_cleanup()
+    apply = next(
+        a for a in session.view(Stage.CLEANUP).actions if a.key == "cleanup-apply"
+    )
+    assert not apply.enabled and "доказательства worker не сохранены" in apply.reason
+    scripted.reply(
+        "dispatch status",
+        status_document(
+            running_execution(state="exited", exit={"exit_code": 1, "logs": "/l"})
+        ),
+    )
+    session.refresh_worker()
+    assert next(
+        a for a in session.view(Stage.CLEANUP).actions if a.key == "cleanup-apply"
+    ).enabled
+
+
+def test_a_live_worker_is_never_offered_for_deletion_or_stopped() -> None:
+    session, scripted = worker_session(status_document(running_execution()))
+    session.refresh_worker()
+    scripted.reply(
+        "cleanup",
+        {
+            "plan": cleanup_plan(
+                remove=[],
+                skipped=[
+                    {
+                        "path": "harness-dispatch-9",
+                        "reason": "its execution is running in the runtime",
+                    }
+                ],
+            )
+        },
+    )
+    session.preview_cleanup()
+    view = session.view(Stage.CLEANUP)
+    live = next(r for r in view.rows if r.label == "Worker текущего dispatch")
+    assert live.state is State.WARN and "не будет остановлен" in live.value
+    assert any(
+        "its execution is running" in r.value for r in view.rows if r.label == "Защищён"
+    )
+    assert not any(
+        "stop" in command
+        for call in scripted.calls
+        for command in call
+        if command in ("stop", "kill", "rm")
+    )
+
+
+def test_cleanup_apply_needs_confirmation_and_preview_does_not() -> None:
+    session, _ = make_session()
+    actions = {a.key: a for a in session.view(Stage.CLEANUP).actions}
+    assert (
+        actions["cleanup-apply"].needs_confirmation
+        and not actions["cleanup-preview"].needs_confirmation
+    )
