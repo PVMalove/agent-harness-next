@@ -90,8 +90,21 @@ Operational state живёт ровно в одной эпохе:
   в фиксированном порядке: `batch → qa_lane → generation`. Логические замки между транзакциями не
   удерживаются, поэтому взаимная блокировка невозможна; правило проверяется тестом, который
   запускает обе стороны в противоположном порядке.
-- Чтение (`dispatch status`, `batch auto-report`, `batch decision-packet`, `qa status`) — снимок
-  WAL без writer-блокировки; читатель никогда не видит половину перехода.
+- Чтение (`dispatch status`, `batch list`, `batch auto-report`, `batch decision-packet`,
+  `ledger lock-status`, `ledger validate`) — снимок WAL без writer-блокировки; читатель никогда не
+  видит половину перехода. Read-only команда не берёт store unit, то есть не выполняет ни одной
+  записи; `ledger lock-status` во время такого чтения отвечает `locked: false`.
+- `dispatch status` передаёт `--dispatch` и `--batch` в store как необязательное поле `filter`
+  запроса `state.read` (`batch_id` и/или `dispatch_id`, оба — AND): строки выбирает сам SQLite в той
+  же read-транзакции. Поэтому записи чужих batch не читаются и не валидируются, а каждый batch-запись
+  валидируется не больше одного раза за вызов. Схема 7 добавляет индекс
+  `dispatch_batch_id` на `dispatch(batch_id)`, без которого фильтр по batch сканировал бы таблицу.
+  Набор записей и форма ответа `dispatch status` без флагов не меняются (golden-паритет с #803).
+- Поле `filter` — minor 7 протокола. Клиент передаёт `requires_minor=7` вместе с фильтром; runtime,
+  согласовавший более старый minor, отвечает `protocol_unsupported` с указанием обновить runtime, а
+  не `malformed_request`. Бюджеты на копии state этого репозитория (≥478 dispatch): `dispatch status`
+  без фильтра ≤ 2 с, с `--batch` ≤ 0.5 с; `tests/orchestration/test_runtime_store_measure.py`
+  печатает замеры file-ledger и runtime-store рядом и проверяет бюджеты.
 - QA-lane — singleton-строка `qa_lane(id=1, owner_kind, owner_id, fencing_token, expires_at)`.
   Допуск, постановка в очередь и снятие — по одной транзакции; `fencing_token` монотонно растёт.
   Снятие и откат требуют совпадения `(owner, fencing_token)`, что обобщает правило #780: lease

@@ -1,5 +1,6 @@
-"""The cost of ``dispatch status`` and ``dispatch heartbeat`` before and after the cutover, on a ledger
-the size of this repository's (ADR 0020; criterion carried from #778).
+"""The cost of ``dispatch status`` (with and without ``--batch``) and ``dispatch heartbeat`` before
+and after the cutover, on a ledger the size of this repository's (ADR 0020, section 3; criterion
+carried from #778).
 
 The test is optional: it runs only when ``HARNESS_MEASURE_STATE_DIR`` names a copy of a state
 directory that was taken while no dispatch was live. The directory is read, never changed: it is
@@ -7,8 +8,10 @@ copied twice into the temporary directory of the test. In the first copy the fil
 second is cut over with ``harness-runtime migrate`` and served by a real runtime. Each command runs
 ``HARNESS_MEASURE_RUNS`` times (30 by default; ``HARNESS_MEASURE_FILE_RUNS`` sets the runs of the
 file ledger, whose commands read the whole history and take minutes) as the CLI process that a user
-starts, and the wall clock of each run gives the percentiles. The result is printed as one JSON
-document, and written to the file named by ``HARNESS_MEASURE_OUT`` when it is set.
+starts, and the wall clock of each run gives the percentiles. ``dispatch status`` must answer within
+2 s and ``dispatch status --batch`` within 0.5 s (``BUDGETS``); the ledger must hold at least 478
+dispatches. The result is printed as one JSON document, with the file-ledger and runtime-store
+numbers side by side, and written to the file named by ``HARNESS_MEASURE_OUT`` when it is set.
 """
 
 from __future__ import annotations
@@ -78,14 +81,25 @@ def _working_dispatch(repo: Path, runtime: ServingRuntime | None, dispatch: str)
     assert reported.returncode == 0, reported.stderr
 
 
+# The budget of ADR 0020, section 3: the whole liveness view, and the same view of one batch.
+BUDGETS = {"dispatch status": 2.0, "dispatch status --batch": 0.5}
+# The size of the ledger this repository had when the budgets were accepted (T26 base #795).
+MIN_DISPATCHES = 478
+
+
 def _measure(
-    repo: Path, runtime: ServingRuntime | None, dispatch: str, runs: int
+    repo: Path,
+    runtime: ServingRuntime | None,
+    dispatch: str,
+    batch: str,
+    runs: int,
 ) -> dict[str, dict[str, float]]:
     """The wall clock of each command, ``runs`` times. A runtime-store command runs once before
     the measured runs, so the first request of the runtime does not count; the file ledger has no
     process to warm up, and each of its runs reads the whole history anyway."""
     commands = {
         "dispatch status": ["dispatch", "status"],
+        "dispatch status --batch": ["dispatch", "status", "--batch", batch],
         "dispatch heartbeat": ["dispatch", "heartbeat", "--dispatch", dispatch],
     }
     found: dict[str, dict[str, float]] = {}
@@ -120,7 +134,9 @@ def _size(state: Path) -> dict[str, int]:
     }
 
 
-def test_dispatch_status_and_heartbeat_before_and_after_the_cutover(tmp_path: Path) -> None:
+def test_dispatch_status_before_and_after_the_cutover_is_within_its_budget(
+    tmp_path: Path,
+) -> None:
     assert STATE_DIR is not None
     source = Path(STATE_DIR)
     (tmp_path / "file").mkdir()
@@ -132,9 +148,11 @@ def test_dispatch_status_and_heartbeat_before_and_after_the_cutover(tmp_path: Pa
         tmp_path / "store", report=False, ticket="#99902", state_from=source
     )
     size = _size(file_repo / STATE_REL)
+    assert size["dispatches"] >= MIN_DISPATCHES, size
     result: dict[str, object] = {
         "runs": {"file_ledger": FILE_RUNS, "runtime_store": RUNS},
         "ledger": size,
+        "budgets": BUDGETS,
     }
 
     started = time.perf_counter()
@@ -144,14 +162,24 @@ def test_dispatch_status_and_heartbeat_before_and_after_the_cutover(tmp_path: Pa
     runtime = ServingRuntime(store_repo)
     try:
         _working_dispatch(store_repo, runtime, store_ids["dispatch_id"])
-        after = _measure(store_repo, runtime, store_ids["dispatch_id"], RUNS)
+        after = _measure(
+            store_repo,
+            runtime,
+            store_ids["dispatch_id"],
+            store_ids["batch_id"],
+            RUNS,
+        )
     finally:
         runtime.stop()
     result["seconds"] = {"runtime_store": after}
     _write(result)
+    for name, budget in BUDGETS.items():
+        assert after[name]["p95"] <= budget, f"{name}: {after[name]} exceeds {budget} s"
 
     _working_dispatch(file_repo, None, file_ids["dispatch_id"])
-    before = _measure(file_repo, None, file_ids["dispatch_id"], FILE_RUNS)
+    before = _measure(
+        file_repo, None, file_ids["dispatch_id"], file_ids["batch_id"], FILE_RUNS
+    )
     result["seconds"] = {"file_ledger": before, "runtime_store": after}
     _write(result)
     print(json.dumps(result, indent=2, sort_keys=True))
