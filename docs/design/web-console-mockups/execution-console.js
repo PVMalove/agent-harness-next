@@ -23,7 +23,7 @@ const navGroups=[
 ];
 const hiddenRoutes=['recovery','container-route','navigation'];
 const routes=new Set([...navGroups.flatMap(g=>g.items.map(i=>i.id)),...hiddenRoutes]);
-let route='home',project='claude-agent-harness',branch='integration/harness-runtime-reliability',configText='{\n  "name": "claude-agent-harness",\n  "runtime": "native",\n  "stale_seconds": 120\n}',versions=[],readerText='',actor='all',file='project.json',homeFilter='all',healthMode='offline',diagFilter='all',diagQuery='',diagSelected='skills.drift',updateMode='normal',updateSelected='implement/SKILL.md',seedSelected={},projectSelectedId='harness',projectPath='',projectPathStatus='',projectManual=null,projectCapability='workflow',workFilter='all',workRole='all',workSelected='#716',workTab='overview',workUpdatedAt=new Date(),reportFilter='all',reportStatus='all',reportQuery='',reportSelected='r-716-qa',reportTab='list',reportUpdatedAt=new Date(),orchRole='all',orchStatus='all',orchUpdatedAt=new Date(),orchTab='map',harnessTab='overview',harnessUpdatedAt=new Date(),repoTab='overview',repoModule='all',repoKind='all',repoQuery='',repoSelected='runtime::serve',repoExpanded={'tests':false},repoFile='utils',repoUpdatedAt=new Date(),settingsTab='overview',settingsParamIndex=5,settingsAiAdvice='',settingsCheckedAt=new Date(),helpTab='start',publishTab='overview',publishCheckedAt=new Date(),updateCheckedAt=new Date(),checkedAt=new Date();
+let route='home',project='claude-agent-harness',branch='integration/harness-runtime-reliability',configText='{\n  "name": "claude-agent-harness",\n  "runtime": "native",\n  "stale_seconds": 120\n}',versions=[],readerText='',actor='all',file='project.json',homeFilter='all',healthMode='offline',diagFilter='all',diagQuery='',diagSelected='skills.drift',updateMode='normal',updateSelected='implement/SKILL.md',seedSelected={},projectSelectedId='harness',projectPath='',projectPathStatus='',projectManual=null,projectCapability='workflow',workFilter='all',workRole='all',workSelected='#716',workTab='overview',workUpdatedAt=new Date(),reportFilter='all',reportStatus='all',reportQuery='',reportSelected='r-716-qa',reportTab='list',reportUpdatedAt=new Date(),orchRole='all',orchStatus='all',orchUpdatedAt=new Date(),orchTab='map',harnessTab='overview',harnessUpdatedAt=new Date(),repoTab='overview',repoModule='all',repoKind='all',repoQuery='',repoSelected='runtime::serve',repoExpanded={'tests':false},repoFile='utils',repoUpdatedAt=new Date(),settingsTab='overview',settingsParamIndex=5,settingsAiAdvice='',settingsCheckedAt=new Date(),helpTab='start',publishTab='overview',connectionState='connected',publishCheckedAt=new Date(),updateCheckedAt=new Date(),checkedAt=new Date();
 const panel=(title,body,extra='')=>`<section class="panel"><div class="panel-head"><h2>${title}</h2>${extra}</div>${body}</section>`;
 const body=s=>`<div class="body">${s}</div>`;
 const btn=(name,action,cls='')=>`<button class="${cls}" data-action="${action}">${name}</button>`;
@@ -83,6 +83,31 @@ function updateFoot(parsed){
   const foot=$('#foot-status');if(foot)foot.textContent=`2.0.0 · runtime-store · ${label}${extra}`;
   document.title=`Harness Console · ${label}`;
 }
+
+const CONNECTION_LABELS={connected:'online',reconnecting:'reconnect',offline:'нет сервера',error:'ошибка',empty:'пусто'};
+const CONNECTION_ORDER=['connected','reconnecting','offline','error','empty'];
+function updateConnectionUI(){
+  const chip=$('#connection-state');const banner=$('#connection-banner');
+  const label=CONNECTION_LABELS[connectionState]||connectionState;
+  if(chip){chip.className=`conn-chip ${connectionState}`;const span=chip.querySelector('span');if(span)span.textContent=label;chip.setAttribute('aria-label',`Состояние соединения: ${label}. Переключить демо-состояние`)}
+  document.body.dataset.connection=connectionState;
+  if(banner){
+    if(connectionState==='reconnecting'){
+      banner.hidden=false;
+      banner.innerHTML=`<span class="conn-spinner"></span><div><b>Переподключение к Harness Runtime</b><small>попытка 2 · следующая через 3 с · данные могут быть устаревшими</small></div><button class="btn" type="button" data-connection-retry>Повторить сейчас</button>`;
+    }else banner.hidden=true;
+  }
+}
+function connectionPage(kind){
+  const pages={
+    offline:{icon:'pulse',eyebrow:'СОЕДИНЕНИЕ · НЕТ СЕРВЕРА',title:'Нет связи с Harness Runtime',text:'Сервер не отвечает. Последний снимок мог устареть; действия и approvals недоступны, пока соединение не восстановлено.',facts:[['endpoint','ipc://harness-runtime'],['last snapshot','10:41'],['attempt','2']],action:'Повторить подключение'},
+    error:{icon:'warning',eyebrow:'ЗАГРУЗКА · ОШИБКА',title:'Не удалось загрузить данные',text:'Ответ получен, но снимок не прошёл проверку целостности. Показывать старые данные как актуальные нельзя.',facts:[['read','error'],['reason','integrity check'],['last snapshot','10:41']],action:'Загрузить заново'},
+    empty:{icon:'reports',eyebrow:'ДАННЫЕ · ПУСТО',title:'Данных пока нет',text:'Соединение установлено, но сервер не вернул ни одной сессии или отчёта. Это не ошибка загрузки.',facts:[['connection','online'],['sessions','0'],['reports','0']],action:'Обновить'}
+  };
+  const x=pages[kind]||pages.offline;
+  return `<section class="panel connection-page ${kind}"><div class="connection-page-icon">${icon(x.icon)}</div><span class="eyebrow">${esc(x.eyebrow)}</span><h1>${esc(x.title)}</h1><p>${esc(x.text)}</p><div class="connection-facts">${x.facts.map(([k,v])=>`<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div><div class="connection-page-actions"><button class="btn primary" type="button" data-connection-retry>${esc(x.action)}</button><button class="btn" type="button" data-connection-cycle>Следующее состояние</button><a class="btn" href="#help">${icon('help')} Справка</a></div><small class="connection-demo-note">Демонстрационное состояние; сеть не используется.</small></section>`;
+}
+
 function render(){
   const parsed=parseRoute();route=parsed.route;
   const filter={role:parsed.role,state:parsed.state};
@@ -91,6 +116,10 @@ function render(){
   const branchNode=$('#branch');if(branchNode)branchNode.textContent='⑂ '+branch;
   const main=$('#content');
   main.className='';
+  updateConnectionUI();
+  if(connectionState==='offline'||connectionState==='error'||connectionState==='empty'){
+    main.innerHTML=connectionPage(connectionState);closeNav();updateFoot(parsed);return;
+  }
   if(route==='home'){main.innerHTML=homePage();bindHome();closeNav();updateFoot(parsed);return}
   if(route==='navigation'){main.innerHTML=navMapPage();closeNav();updateFoot(parsed);return}
   if(route==='diagnostics'){
@@ -294,6 +323,11 @@ const WORK_METRICS={
   stageAge:[{stage:'Architect',current:2,p50:4,p95:9},{stage:'Developer',current:14,p50:12,p95:26},{stage:'Review',current:31,p50:18,p95:41}],
   retries:[{label:'code',count:1,tone:'violet'},{label:'infrastructure',count:1,tone:'blue'},{label:'unknown',count:1,tone:'lavender'}]
 };
+
+const WORK_SOURCES=[
+  {name:'Claude Code',kind:'structured',label:'структура доступна',tone:'mint',detail:'Шаги, роли и инструменты приходят структурированными.'},
+  {name:'Codex',kind:'plain',label:'структура недоступна',tone:'violet',detail:'Только plain-хвост лога. Не выдаём его за шаги и не показываем thinking.'}
+];
 const WORK_ROLES={architect:'Architect',developer:'Developer',review:'Review',qa:'QA'};
 const REPORTS=[
   {id:'r-716-qa',type:'qa',typeLabel:'QA',title:'QA · worker readiness',session:'#716',role:'qa',status:'attention',statusLabel:'Требует внимания',created:'22:00',summary:'Второй прогон worker дошёл до readiness, но evidence неполный: нет exit-кода для bounded restart.',conclusion:'Нужен повторный прогон с записью exit evidence; publish блокируется.',evidence:[{name:'qa-report.json',status:'attention',detail:'readiness ok · exit evidence missing'},{name:'worker.log',status:'attention',detail:'restart bounded · last exit unknown'},{name:'receipt.json',status:'passed',detail:'attempt 2 accepted'}]},
@@ -1261,9 +1295,14 @@ function workStats(){
     <article class="orch-chart wide"><div class="orch-chart-head"><h3>Retry</h3><span>${m.retries.reduce((n,x)=>n+x.count,0)} возврата</span></div>${m.retries.map(x=>`<div class="work-stat-row"><span>${esc(x.label)}</span>${orchBar(x.count,maxRetry,x.tone)}<b>${x.count}</b></div>`).join('')}<p class="orch-note">Причины возврата фиксируются только по наблюдаемым данным.</p></article>
   </div></section>`;
 }
+
+function workSources(){
+  return `<section class="panel work-sources"><div class="panel-head"><h2>Источники шагов</h2><span class="small muted">наблюдаемые данные</span></div><div class="work-source-grid">${WORK_SOURCES.map(x=>`<div class="work-source ${x.kind}"><span>${icon(x.kind==='plain'?'terminal':'activity')}</span><div><b>${esc(x.name)}</b><small>${esc(x.detail)}</small></div><em class="orch-pill ${x.tone}">${esc(x.label)}</em>${x.kind==='plain'?`<button class="btn" type="button" data-work-codex>${icon('terminal')} Хвост лога</button>`:''}</div>`).join('')}</div></section>`;
+}
+
 function workOverview(){
   const c=workCounts();
-  return `<div class="work-grid"><section class="panel work-sessions"><div class="panel-head"><h2>Сессии</h2><span class="small muted" id="work-count">${workVisible().length} из ${c.all}</span></div><div class="work-filters"><div class="chips">${workChips()}</div><select id="work-role" aria-label="Фильтр по роли"><option value="all">Все роли</option><option value="architect">Architect</option><option value="developer">Developer</option><option value="review">Review</option><option value="qa">QA</option></select></div><div id="work-list">${workList()}</div><div class="work-note">Только наблюдаемые события; отсутствие события не доказывает остановку.</div></section><div id="work-route">${workRoute()}</div></div><section class="panel work-events-panel"><div class="panel-head"><h2>События сессии <span id="work-events-id">${workSelected||'—'}</span></h2><span class="small muted">наблюдаемые факты</span></div><div id="work-events">${workEvents()}</div></section>`;
+  return `${workSources()}<div class="work-grid"><section class="panel work-sessions"><div class="panel-head"><h2>Сессии</h2><span class="small muted" id="work-count">${workVisible().length} из ${c.all}</span></div><div class="work-filters"><div class="chips">${workChips()}</div><select id="work-role" aria-label="Фильтр по роли"><option value="all">Все роли</option><option value="architect">Architect</option><option value="developer">Developer</option><option value="review">Review</option><option value="qa">QA</option></select></div><div id="work-list">${workList()}</div><div class="work-note">Только наблюдаемые события; отсутствие события не доказывает остановку.</div></section><div id="work-route">${workRoute()}</div></div><section class="panel work-events-panel"><div class="panel-head"><h2>События сессии <span id="work-events-id">${workSelected||'—'}</span></h2><span class="small muted">наблюдаемые факты</span></div><div id="work-events">${workEvents()}</div></section>`;
 }
 function workTabContent(){
   if(workTab==='timeline')return workGantt();
@@ -2215,6 +2254,16 @@ ${ev.detail}
   if(wr){e.preventDefault();workSelected=wr.dataset.workSession;refreshWork();return}
   const wrefresh=e.target.closest('[data-work-refresh]');
   if(wrefresh){e.preventDefault();workUpdatedAt=new Date();const node=$('#work-updated');if(node)node.textContent=fmtClock(workUpdatedAt);toast('События перечитаны (демонстрация)');return}
+  const wcodex=e.target.closest('[data-work-codex]');
+  if(wcodex){e.preventDefault();reader('Codex · plain-хвост',`DEMO · CODEX LOG TAIL
+
+Структура шагов недоступна.
+Показан только хвост plain-лога, без thinking и raw JSON.
+
+[codex] worker attached
+[codex] reading context
+[codex] sandbox policy checked
+[codex] step payload not structured`);return}
   const wopen=e.target.closest('[data-work-open]');
   if(wopen){e.preventDefault();const s=workSession();if(s)reader(`Карточка задачи ${s.id}`, `DEMO · TASK\n\n${s.title}\nРоль: ${WORK_ROLES[s.role]}\nСтатус: ${s.statusLabel}\nВетка: ${s.branch}\nСтарт: ${s.started} · ${s.elapsed}\n\nВнутренние рассуждения не отображаются.`);return}
   const ib=e.target.closest('[data-install-browse]');
@@ -2276,4 +2325,12 @@ document.addEventListener('click',e=>{
   e.preventDefault();
   repoTab=t.dataset.repoTab;
   refreshRepoView();
+});
+
+
+document.addEventListener('click',e=>{
+  const cycle=e.target.closest('[data-connection-cycle]');
+  if(cycle){e.preventDefault();const i=CONNECTION_ORDER.indexOf(connectionState);connectionState=CONNECTION_ORDER[(i+1)%CONNECTION_ORDER.length];render();toast(`Демо-состояние: ${CONNECTION_LABELS[connectionState]}`);return}
+  const retry=e.target.closest('[data-connection-retry]');
+  if(retry){e.preventDefault();connectionState='connected';render();toast('Соединение восстановлено (демонстрация)');return}
 });
