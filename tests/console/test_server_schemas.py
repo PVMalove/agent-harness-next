@@ -14,7 +14,7 @@ from harness.console.backend.application import jobs, events as orchestration_ev
 from harness.console.backend.api import schemas
 from harness.console.backend.application.decisions import DecisionService, DecisionsSnapshot
 from harness.console.backend.server import ConsoleServer
-from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.backend import composition
 from tests.console.test_server import GatedCollect, _connect
 
 
@@ -86,7 +86,7 @@ def test_replies_of_a_real_server_validate_against_the_reply_models(
     async def scenario() -> list[dict[str, object]]:
         server = ConsoleServer(
             project,
-            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
             decisions=DecisionService(project, collect=no_decisions),
         )
         await server.start()

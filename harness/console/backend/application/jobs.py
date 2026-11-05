@@ -47,14 +47,8 @@ from ...kernel.process_tree import CommandCancelled
 from ...kernel.discovery import discovery_path
 from ...kernel.runner import capturing_runner
 from harness.configuration import SECRET_MASK, mask_secrets
-from .snapshots import (
-    MAX_ID_CHARS,
-    PROTOCOL_VERSION,
-    Rejected,
-    encode,
-    error_reply,
-    parse_envelope,
-)
+from ...kernel.protocol import MAX_ID_CHARS, PROTOCOL_VERSION
+from ..api.protocol import Rejected, encode, error_reply, parse_envelope
 
 _FRAGMENT_CHARS = 4096
 # A character takes at most six bytes in an encoded reply (a control character as `\u00XX`),

@@ -20,7 +20,7 @@ from harness.console.backend.application.events import (
     SourceUnavailable,
 )
 from harness.console.backend.server import MAX_SUBSCRIPTIONS, ConsoleServer
-from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.backend import composition
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from tests.console._console_ledger_fixture import _Batch
@@ -63,7 +63,7 @@ def _server(project: Path, reader: ProjectReader | None = None) -> ConsoleServer
     return ConsoleServer(
         project,
         events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
-        snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+        snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
     )
 
 
@@ -621,7 +621,7 @@ def test_a_failing_poll_is_a_typed_state_and_the_poller_keeps_polling(
         server = ConsoleServer(
             project,
             events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
-            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
         )
         await server.start()
         try:
@@ -668,7 +668,7 @@ def test_compaction_keeps_a_lone_surrogate_and_bounds_the_journal(
         server = ConsoleServer(
             project,
             events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
-            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
         )
         await server.start()
         try:

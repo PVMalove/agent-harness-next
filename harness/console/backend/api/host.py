@@ -15,8 +15,8 @@ from uvicorn.protocols.websockets.websockets_sansio_impl import (
 )
 from websockets.http11 import Request
 
-from ..server import CLOSE_TIMEOUT, HEADER_LIMIT, MESSAGE_LIMIT
-from . import Runtime
+from ...kernel.protocol import MESSAGE_LIMIT
+from . import CLOSE_TIMEOUT, HEADER_LIMIT, Runtime
 from .security import CLOSING, REJECTED, rejection_headers, websocket_status
 
 

@@ -16,22 +16,13 @@ import pytest
 from harness.console.kernel.data import DashboardData
 from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
 from harness.console.kernel.repo_map_settings import MemoryStatus
-from harness.console.backend.application.snapshots import (
-    HOME_TTL_SECONDS,
-    KEPT_SNAPSHOTS,
-    MAX_REQUEST_BYTES,
-    PROTOCOL_VERSION,
-    SCHEMA_VERSION,
-    HomeContext,
-    HomeSnapshot,
-    Problem,
-    SnapshotService,
-    build_home_snapshot,
-    busy,
-    collect_home,
-    problems_from_text,
-    respond,
-)
+from harness.console.backend.api.protocol.snapshots import busy, respond
+from harness.console.backend import composition
+from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.backend.domain.snapshots import HOME_TTL_SECONDS, KEPT_SNAPSHOTS
+from harness.console.backend.infrastructure.home_facts import collect_home
+from harness.console.kernel.home_snapshot import SCHEMA_VERSION, HomeContext, HomeSnapshot, Problem, build_home_snapshot, problems_from_text
+from harness.console.kernel.protocol import MAX_REQUEST_BYTES, PROTOCOL_VERSION
 from harness.health.model import CheckResult
 
 ROOT = Path(__file__).parents[2]
@@ -96,7 +87,7 @@ sys.meta_path.insert(0, Absent())
 sys.path.insert(0, sys.argv[1])
 from pathlib import Path
 from typing import Any
-from harness.console.backend.application.snapshots import collect_home
+from harness.console.backend.infrastructure.home_facts import collect_home
 snapshot = collect_home(Path(sys.argv[2]))
 loaded = sorted(set(sys.modules) & {'rich', 'textual', 'h11', 'websockets'})
 print(json.dumps({'loaded': loaded, 'version': snapshot.version}))
@@ -200,7 +191,7 @@ def test_map_tier_falls_back_to_the_cached_map_when_the_check_names_none() -> No
 
 
 def test_problems_are_capped_and_the_reply_stays_below_the_message_limit() -> None:
-    from harness.console.backend.server import MESSAGE_LIMIT
+    from harness.console.kernel.protocol import MESSAGE_LIMIT
 
     long = "я" * 500
     problems = tuple(("fail", f"check.{index}", long) for index in range(1000))
@@ -234,7 +225,7 @@ def test_the_whole_reply_stays_below_the_message_limit_whatever_the_text(
 ) -> None:
     """JSON escaping inflates quotes, backslashes (x2) and control characters (x6): the limit
     holds for the serialized reply of any text, not for the raw text."""
-    from harness.console.backend.server import MESSAGE_LIMIT
+    from harness.console.kernel.protocol import MESSAGE_LIMIT
 
     text = char * 500
     data = DashboardData(
@@ -272,7 +263,7 @@ def test_the_whole_reply_stays_below_the_message_limit_whatever_the_text(
     def collect(repo: Path) -> HomeSnapshot:
         return snapshot
 
-    service = SnapshotService(Path("."), clock=FakeClock(), collect=collect)
+    service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=collect)
     raw = asyncio.run(respond('{"id": "x", "type": "home.snapshot"}', service))
     assert len(raw.encode("utf-8")) < MESSAGE_LIMIT
     reply = json.loads(raw)
@@ -337,7 +328,7 @@ class CountingCollect:
 def _service(
     collect: CountingCollect, clock: FakeClock, ttl: float = 15.0
 ) -> SnapshotService:
-    return SnapshotService(Path("."), ttl=ttl, clock=clock, collect=collect)
+    return composition.snapshot_service(Path("."), ttl=ttl, clock=clock, collect=collect)
 
 
 def test_home_is_collected_once_within_the_ttl_and_again_at_its_boundary() -> None:
@@ -360,7 +351,7 @@ def test_home_is_collected_once_within_the_ttl_and_again_at_its_boundary() -> No
 def test_default_ttl_is_the_documented_constant() -> None:
     async def scenario() -> None:
         clock, collect = FakeClock(), CountingCollect()
-        service = SnapshotService(Path("."), clock=clock, collect=collect)
+        service = composition.snapshot_service(Path("."), clock=clock, collect=collect)
         await service.home()
         clock.advance(HOME_TTL_SECONDS - 0.001)
         assert (await service.home()).cached
@@ -437,7 +428,7 @@ def test_a_cancelled_requester_neither_loses_nor_duplicates_the_collect() -> Non
         return build_home_snapshot(DATA, HomeContext())
 
     async def scenario() -> None:
-        service = SnapshotService(Path("."), clock=FakeClock(), collect=collect)
+        service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=collect)
         owner = asyncio.create_task(service.home())
         assert await asyncio.to_thread(started.wait, 10)
         owner.cancel()
@@ -622,7 +613,7 @@ def test_a_failed_collect_names_only_the_exception_class() -> None:
     def collect(repo: Path) -> HomeSnapshot:
         raise Boom("/secret/path leaked")
 
-    service = SnapshotService(Path("."), clock=FakeClock(), collect=collect)
+    service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=collect)
     raw = asyncio.run(respond('{"id": "z", "type": "home.snapshot"}', service))
     assert "secret" not in raw
     assert _failure(json.loads(raw)) == ("z", "home.snapshot", "collect_failed", "Boom")
@@ -645,7 +636,7 @@ def test_a_lone_surrogate_in_the_text_still_gives_an_encodable_snapshot_reply() 
     def collect(repo: Path) -> HomeSnapshot:
         return snapshot
 
-    service = SnapshotService(Path("."), clock=FakeClock(), collect=collect)
+    service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=collect)
     raw = asyncio.run(respond('{"id": "s", "type": "home.snapshot"}', service))
     reply = json.loads(raw.encode("utf-8"))
     assert reply["ok"] is True
@@ -787,7 +778,7 @@ def test_an_online_request_rebuilds_with_the_online_collect_and_leaves_the_cache
 
     async def scenario() -> list[dict[str, object]]:
         collect = CountingCollect()
-        service = SnapshotService(
+        service = composition.snapshot_service(
             Path("."), clock=FakeClock(), collect=collect, collect_online=collect_online
         )
         replies = [
@@ -815,7 +806,7 @@ def test_a_failed_online_collect_is_an_error_reply() -> None:
     def collect_online(repo: Path) -> HomeSnapshot:
         raise TimeoutError("network")
 
-    service = SnapshotService(
+    service = composition.snapshot_service(
         Path("."),
         clock=FakeClock(),
         collect=CountingCollect(),
@@ -848,7 +839,7 @@ def _many_problems(count: int, text: str) -> DashboardData:
 
 def _page_all(service: SnapshotService, snapshot_id: int) -> tuple[list[str], str]:
     """Every `home.problems` reply text for `snapshot_id`, and the joined page texts."""
-    from harness.console.backend.server import MESSAGE_LIMIT
+    from harness.console.kernel.protocol import MESSAGE_LIMIT
 
     async def scenario() -> tuple[list[str], str]:
         raws: list[str] = []
@@ -885,7 +876,7 @@ def test_problems_beyond_one_reply_are_paged_whole_below_the_message_limit(
 ) -> None:
     data = _many_problems(1000, char * 500)
     snapshot = build_home_snapshot(data, HomeContext())
-    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+    service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
     reply = json.loads(
         asyncio.run(respond('{"id": 1, "type": "home.snapshot"}', service))
     )
@@ -898,7 +889,7 @@ def test_problems_beyond_one_reply_are_paged_whole_below_the_message_limit(
 
 def test_a_long_message_alone_is_paged_whole() -> None:
     snapshot = build_home_snapshot(_many_problems(1, "ё" * 400), HomeContext())
-    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+    service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
     reply = json.loads(asyncio.run(respond('{"type": "home.snapshot"}', service)))
     assert reply["snapshot"]["problems"][0]["message"] != "ё" * 400
     _raws, text = _page_all(service, reply["problems_snapshot_id"])
@@ -912,7 +903,7 @@ def test_a_reply_listing_every_problem_whole_names_no_page() -> None:
 
 def test_an_online_snapshot_is_kept_for_its_problem_pages() -> None:
     online = build_home_snapshot(_many_problems(150, "x"), HomeContext())
-    service = SnapshotService(
+    service = composition.snapshot_service(
         Path("."),
         clock=FakeClock(),
         collect=CountingCollect(),
@@ -927,7 +918,7 @@ def test_an_online_snapshot_is_kept_for_its_problem_pages() -> None:
 
 def test_a_snapshot_no_longer_kept_is_expired_and_the_cached_one_still_pages() -> None:
     snapshot = build_home_snapshot(_many_problems(150, "x"), HomeContext())
-    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+    service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
 
     async def scenario() -> tuple[dict[str, object], dict[str, object]]:
         first = json.loads(await respond('{"type": "home.snapshot"}', service))
@@ -960,7 +951,7 @@ def test_a_snapshot_no_longer_kept_is_expired_and_the_cached_one_still_pages() -
 def test_online_snapshots_never_expire_the_cached_one_while_it_is_handed_out() -> None:
     snapshot = build_home_snapshot(_many_problems(150, "x"), HomeContext())
     online = build_home_snapshot(_many_problems(150, "y"), HomeContext())
-    service = SnapshotService(
+    service = composition.snapshot_service(
         Path("."),
         clock=FakeClock(),
         collect=lambda _: snapshot,
@@ -1012,7 +1003,7 @@ def test_a_problem_page_with_a_missing_or_invalid_field_is_bad_request(
     fields: dict[str, object],
 ) -> None:
     snapshot = build_home_snapshot(_many_problems(150, "x"), HomeContext())
-    service = SnapshotService(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
+    service = composition.snapshot_service(Path("."), clock=FakeClock(), collect=lambda _: snapshot)
 
     async def scenario() -> dict[str, object]:
         await respond('{"type": "home.snapshot"}', service)

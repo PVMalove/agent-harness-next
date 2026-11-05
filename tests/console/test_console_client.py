@@ -27,12 +27,9 @@ from harness.console.tui.client import (
 )
 from harness.console.kernel.discovery import ServerEndpoint, read_record
 from harness.console.backend.server import ConsoleServer
-from harness.console.backend.application.snapshots import (
-    HomeContext,
-    HomeSnapshot,
-    SnapshotService,
-    build_home_snapshot,
-)
+from harness.console.backend import composition
+from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.kernel.home_snapshot import HomeContext, HomeSnapshot, build_home_snapshot
 from tests.console.test_snapshots import DATA, MEMORY, VIEW, FakeClock
 
 SNAPSHOT = build_home_snapshot(DATA, HomeContext(repo_map=VIEW, memory=MEMORY))
@@ -65,7 +62,7 @@ def _server(
     collect_online: Callable[[Path], HomeSnapshot] | None = None,
 ) -> Iterator[tuple[ConsoleServer, _Loop]]:
     loop = _Loop()
-    service = SnapshotService(
+    service = composition.snapshot_service(
         repo,
         clock=FakeClock(),
         collect=collect,

@@ -1545,7 +1545,7 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
         _render_summary,
         _snapshot_facts,
     )
-    from harness.console.backend.application.snapshots import build_home_snapshot
+    from harness.console.kernel.home_snapshot import build_home_snapshot
 
     data = replace(
         _fake_dashboard_data(),
@@ -1843,7 +1843,7 @@ _BANNER = brand.BannerInfo(
 @pytest.mark.parametrize("language", ["ru", "en"])
 def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> None:
     from harness.console.tui.screens.dashboard import HomeContext, _snapshot_facts
-    from harness.console.backend.application.snapshots import build_home_snapshot
+    from harness.console.kernel.home_snapshot import build_home_snapshot
 
     data = _context_data()
     cards = _snapshot_facts(

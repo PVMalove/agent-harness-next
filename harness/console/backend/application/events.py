@@ -39,17 +39,8 @@ from harness.orchestration.ledger.lifecycle import (
 from ...kernel.discovery import discovery_path
 from ..infrastructure.event_journal import Event, EventJournal, JournalUnavailable, View
 from ...kernel.json_fields import text
-from .snapshots import (
-    ID_BYTES,
-    MAX_ID_CHARS,
-    MESSAGE_BYTES,
-    PROTOCOL_VERSION,
-    Rejected,
-    _clip,
-    encode,
-    error_reply,
-    parse_envelope,
-)
+from ...kernel.protocol import ID_BYTES, MAX_ID_CHARS, MESSAGE_BYTES, PROTOCOL_VERSION, _clip
+from ..api.protocol import Rejected, encode, error_reply, parse_envelope
 
 ORCHESTRATION_SUBSCRIBE = "orchestration.subscribe"
 POLL_INTERVAL_SECONDS = 1.0

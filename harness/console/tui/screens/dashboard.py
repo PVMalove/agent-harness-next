@@ -43,7 +43,7 @@ from ...kernel import data as console_data
 from ..client import HomeClient
 from ...kernel.data import DashboardData
 from ...kernel.runner import CommandRunner, capturing_runner
-from ...backend.application.snapshots import HomeContext as HomeContext, HomeSnapshot
+from ...kernel.home_snapshot import HomeContext as HomeContext, HomeSnapshot
 from ....health.model import CheckResult, Status
 from .commands import call_from_worker
 

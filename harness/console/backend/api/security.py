@@ -7,8 +7,7 @@ import asyncio
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import admission
-from ..server import CLOSE_TIMEOUT, HEADER_LIMIT
-from . import Runtime
+from . import CLOSE_TIMEOUT, HEADER_LIMIT, Runtime
 
 REJECTED = b"Request rejected\n"
 CLOSING = b"Console is closing\n"

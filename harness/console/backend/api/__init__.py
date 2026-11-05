@@ -9,6 +9,9 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from .request_router import RequestRouter
 
+HEADER_LIMIT = 16384
+CLOSE_TIMEOUT = 0.5
+
 
 class Runtime(Protocol):
     """What the transport reads from the server that owns it."""

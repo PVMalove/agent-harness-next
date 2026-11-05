@@ -16,12 +16,10 @@ from .api.request_router import (
     RequestRouter,
 )
 from .application.snapshots import SnapshotService
+from . import composition
 from pathlib import Path
 from typing import Protocol
 
-HEADER_LIMIT = 16384
-CLOSE_TIMEOUT = 0.5
-MESSAGE_LIMIT = 65536
 _STARTUP_POLL = 0.01
 DEFAULT_STATIC_ROOT = Path(__file__).resolve().parents[1] / "web" / "dist"
 
@@ -51,7 +49,7 @@ class ConsoleServer:
     ) -> None:
         self.repo = repo.resolve()
         self._static_root = static_root
-        self._snapshots = snapshots or SnapshotService(self.repo)
+        self._snapshots = snapshots or composition.snapshot_service(self.repo)
         self._jobs = jobs or JobService(self.repo)
         self._decisions = decisions or DecisionService(self.repo)
         self._events = events or OrchestrationEvents(self.repo)

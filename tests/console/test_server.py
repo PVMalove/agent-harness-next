@@ -18,14 +18,11 @@ from harness.console.pin import CONSOLE_SERVER_REQUIREMENTS
 from harness.console.kernel.data import DashboardData
 from harness.console.kernel.data import collect_dashboard
 from harness.console.backend.server import ConsoleServer
-from harness.console.backend.application.snapshots import (
-    HOME_TTL_SECONDS,
-    HomeContext,
-    HomeSnapshot,
-    SnapshotService,
-    build_home_snapshot,
-    collect_home,
-)
+from harness.console.backend import composition
+from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.backend.domain.snapshots import HOME_TTL_SECONDS
+from harness.console.backend.infrastructure.home_facts import collect_home
+from harness.console.kernel.home_snapshot import HomeContext, HomeSnapshot, build_home_snapshot
 from tests.console.test_snapshots import FakeClock
 
 
@@ -934,7 +931,7 @@ def test_home_snapshot_is_answered_on_the_websocket(project: Path) -> None:
     async def scenario() -> None:
         collect = GatedCollect(open_gate=True)
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1041,7 +1038,7 @@ def test_ping_is_answered_while_a_slow_check_is_still_running(project: Path) -> 
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1063,7 +1060,7 @@ def test_the_fifth_unfinished_request_gets_busy(project: Path) -> None:
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1098,7 +1095,7 @@ def test_a_lone_surrogate_id_is_echoed_and_the_connection_stays_open(
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1133,7 +1130,7 @@ def test_a_disconnect_with_an_unfinished_request_releases_the_connection(
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1237,7 +1234,7 @@ def test_a_failed_collect_is_an_error_reply_and_the_connection_survives(
 
     async def scenario() -> None:
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=flaky)
+            project, snapshots=composition.snapshot_service(project, collect=flaky)
         )
         await server.start()
         try:
@@ -1270,7 +1267,7 @@ def test_expensive_checks_are_not_rerun_within_the_ttl_and_force_rebuilds(
         return DATA
 
     clock = FakeClock()
-    service = SnapshotService(
+    service = composition.snapshot_service(
         project,
         clock=clock,
         collect=functools.partial(
@@ -1331,7 +1328,7 @@ def test_pending_decisions_are_answered_beside_the_home_snapshot(
     async def scenario() -> None:
         server = ConsoleServer(
             project,
-            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
             decisions=DecisionService(project, collect=fake),
         )
         await server.start()
@@ -1384,7 +1381,7 @@ def test_an_online_home_request_runs_the_online_checks_on_the_websocket(
             repo, online=online, dashboard=dashboard, context=lambda repo: HomeContext()
         )
 
-    service = SnapshotService(
+    service = composition.snapshot_service(
         project,
         clock=FakeClock(),
         collect=collect,

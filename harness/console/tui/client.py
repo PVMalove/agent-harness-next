@@ -15,13 +15,12 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 from ..kernel.discovery import ServerEndpoint
-from ..backend.application.snapshots import (
+from ..kernel.home_snapshot import HomeSnapshot, Problem, problems_from_text
+from ..kernel.protocol import (
     HOME_PROBLEMS_REQUEST,
     HOME_REQUEST,
+    MESSAGE_LIMIT,
     PROTOCOL_VERSION,
-    HomeSnapshot,
-    Problem,
-    problems_from_text,
 )
 
 if TYPE_CHECKING:
@@ -85,9 +84,6 @@ class ConsoleClient:
         `TokenRejected`."""
         from websockets.exceptions import InvalidStatus
         from websockets.sync.client import connect
-
-        # Here, not at the top: the server module imports the catalog, which imports the launcher.
-        from ..backend.server import MESSAGE_LIMIT
 
         try:
             connection = connect(

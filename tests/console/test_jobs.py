@@ -19,7 +19,8 @@ import pytest
 from harness.console.backend.application import jobs as job_module
 from harness.console.backend.application.jobs import JobService
 from harness.console.kernel.process_tree import CommandCancelled
-from harness.console.backend.server import MAX_SUBSCRIPTIONS, MESSAGE_LIMIT, ConsoleServer
+from harness.console.backend.server import MAX_SUBSCRIPTIONS, ConsoleServer
+from harness.console.kernel.protocol import MESSAGE_LIMIT
 from tests.console.test_server import _connect
 
 if TYPE_CHECKING:

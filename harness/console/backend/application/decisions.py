@@ -26,17 +26,8 @@ from harness.orchestration.ledger.recovery_chain import active_dispatches
 from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from ...kernel.json_fields import text
 from ..infrastructure.native_permission import NATIVE_PERMISSION_COMMANDS
-from .snapshots import (
-    ID_BYTES,
-    MAX_ID_CHARS,
-    MESSAGE_BYTES,
-    PROTOCOL_VERSION,
-    Rejected,
-    _clip,
-    encode,
-    error_reply,
-    parse_envelope,
-)
+from ...kernel.protocol import ID_BYTES, MAX_ID_CHARS, MESSAGE_BYTES, PROTOCOL_VERSION, _clip
+from ..api.protocol import Rejected, encode, error_reply, parse_envelope
 
 DECISIONS_REQUEST = "decisions.snapshot"
 SCHEMA_VERSION = 1

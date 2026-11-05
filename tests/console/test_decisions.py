@@ -19,7 +19,7 @@ from harness.console.backend.application.decisions import (
     collect_decisions,
     respond,
 )
-from harness.console.backend.server import MESSAGE_LIMIT
+from harness.console.kernel.protocol import MESSAGE_LIMIT
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.worker_observation import PROTOCOL
 from harness.storage import storage_path
