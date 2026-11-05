@@ -84,6 +84,11 @@ def next_language(language: str) -> str:
     return LANGUAGES[(LANGUAGES.index(language) + 1) % len(LANGUAGES)]
 
 
+def sections() -> dict[str, dict[str, str]]:
+    """Every section label by key and language, for the web catalog."""
+    return {key: dict(labels) for key, labels in _SECTIONS.items()}
+
+
 def section_label(language: str, key: str) -> str:
     return _SECTIONS.get(key, {}).get(language, key)
 
