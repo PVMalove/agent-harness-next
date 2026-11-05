@@ -1072,3 +1072,17 @@ def test_a_session_over_the_console_server_runs_every_action_as_a_job() -> None:
     ]
     reads = [item for item in client.screen_requests if item[0] == "recovery"]
     assert reads == [("recovery", "batch-1", ())] * 2
+
+
+def test_the_orchestration_command_menu_offers_no_recovery_command_to_run_locally() -> None:
+    """Recovery commands run only as server jobs from the Recovery screen: the Orchestration
+    menu, which runs its entries through the local runner, must not offer any of them."""
+    from harness.console.tui.screens.orchestration import OrchestrationScreen
+
+    from ._home_client import FakeHomeClient
+    from ._screen_facts import ledger
+
+    screen = OrchestrationScreen(REPO, client=FakeHomeClient(REPO, load_ledger=lambda repo: ledger()))
+    keys = [key for key, _ in screen.menu_items()]
+    assert "dispatch-send" in keys
+    assert [key for key in keys if key.startswith("recovery")] == []

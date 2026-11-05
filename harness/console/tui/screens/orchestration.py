@@ -200,7 +200,11 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         Состояние lock ledger перечитывается каждые ``lock_refresh_seconds``: время удержания и
         остаток до снятия по таймауту идут на живом экране без перезапуска."""
         super().__init__(repo, command_runner=command_runner)
-        self._entries = {entry.key: entry for entry in catalog}
+        # Recovery commands run only as confirmed server jobs from the Recovery screen; this
+        # menu runs its entries through the local runner, so it never offers them.
+        self._entries = {
+            entry.key: entry for entry in catalog if entry.path[0] != "recovery"
+        }
         self._client = client
         found = read_orchestration(client)
         self._view = found.ledger
