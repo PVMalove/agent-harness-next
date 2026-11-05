@@ -4,7 +4,7 @@
 
 Этот модуль и его точка входа `run_console` могут импортироваться без установленного пакета `textual`:
 сам перезапуск только формирует список аргументов подпроцесса и запускает его через переданный
-`CommandRunner`. Модуль `harness.console.app` (собственно UI на `textual`) импортируется отложенно,
+`CommandRunner`. Модуль `harness.console.tui.app` (собственно UI на `textual`) импортируется отложенно,
 только когда `run_console` подтверждает, что процесс уже выполняется внутри перезапущенного подпроцесса.
 
 Перед TUI и для `--web` модуль запускает или находит Сервер консоли проекта (`start_server`, ADR 0028):
@@ -27,7 +27,7 @@ import webbrowser
 from pathlib import Path
 from typing import BinaryIO, Callable, NoReturn, Sequence
 
-from .client import ConsoleClient, ConsoleClientError, HomeClient, ServerUnavailable
+from .tui.client import ConsoleClient, ConsoleClientError, HomeClient, ServerUnavailable
 from .kernel.discovery import ServerEndpoint, read_record
 from .pin import CONSOLE_SERVER_REQUIREMENTS, TEXTUAL_PIN, WEBSOCKETS_PIN
 from .kernel.runner import CommandRunner, default_runner
@@ -251,7 +251,7 @@ def discover_console(
 
 def _default_app_runner(repo: Path, client: HomeClient) -> int:
     """Запускает приложение Textual по умолчанию для указанного репозитория."""
-    from . import app as console_app
+    from .tui import app as console_app
 
     return console_app.run(repo, client)
 

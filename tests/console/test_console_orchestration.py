@@ -1,4 +1,4 @@
-"""harness.console.screens.orchestration: Pilot tests of the Orchestration section with a
+"""harness.console.tui.screens.orchestration: Pilot tests of the Orchestration section with a
 recording runner, one scenario per coordinator command group (batch, decide, packet, dispatch,
 risk, context-package). They assert the confirmation shown for a terminal/external-change command,
 that cancelling a confirmation runs nothing, that required and choice-restricted fields block
@@ -22,14 +22,14 @@ from textual.pilot import Pilot
 from textual.widgets import ListItem, ListView, Static, TextArea
 
 from tests.console._pilot_wait import crumb_text
-from harness.console.shell import Breadcrumbs
-from harness.console.app import HarnessConsoleApp
+from harness.console.tui.shell import Breadcrumbs
+from harness.console.tui.app import HarnessConsoleApp
 from harness.console.kernel.coordinator_catalog import (
     COORDINATOR_COMMANDS,
     CoordinatorCommand,
     process_argv,
 )
-from harness.console.screens.orchestration import (
+from harness.console.tui.screens.orchestration import (
     CoordinatorCommandFormScreen,
     OrchestrationScreen,
 )
@@ -349,7 +349,7 @@ def test_pipeline_stats_and_history_filter_by_state_and_open_a_timeline(
     build_reports_fixture(tmp_path)
 
     async def scenario() -> tuple[str, list[str | None], list[str | None], str]:
-        from harness.console.screens.reports import BatchTimelineScreen
+        from harness.console.tui.screens.reports import BatchTimelineScreen
 
         app = _HostApp(OrchestrationScreen(tmp_path, command_runner=_RecordingRunner()))
         async with app.run_test(size=(120, 60)) as pilot:
@@ -410,7 +410,7 @@ async def _shell_orchestration(
 
 
 def test_orchestration_sits_on_the_shell_and_keeps_its_content(tmp_path: Path) -> None:
-    from harness.console.shell import SECTIONS, ContextPanel
+    from harness.console.tui.shell import SECTIONS, ContextPanel
 
     async def scenario() -> None:
         app = HarnessConsoleApp(tmp_path)
@@ -492,8 +492,8 @@ def test_worker_sessions_button_sits_in_the_header_and_shows_the_active_count(
 ) -> None:
     from textual.widgets import Button
 
-    from harness.console import reports
-    from harness.console.screens.worker_observation import WorkerObservationScreen
+    from harness.console.tui import reports
+    from harness.console.tui.screens.worker_observation import WorkerObservationScreen
 
     stages = [
         reports.StageEntry(
@@ -562,7 +562,7 @@ def test_the_page_opens_at_its_top_and_stays_there(
 
 
 def test_the_screen_uses_the_base_overview_repaint() -> None:
-    from harness.console.screens.commands import CommandMenuScreen
+    from harness.console.tui.screens.commands import CommandMenuScreen
 
     assert "_repaint_overview" not in vars(OrchestrationScreen)
     assert OrchestrationScreen._repaint_overview is CommandMenuScreen._repaint_overview

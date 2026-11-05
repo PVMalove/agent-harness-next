@@ -19,7 +19,7 @@ from typing import Mapping, Sequence
 
 import pytest
 
-from harness.console import ledger_lock
+from harness.console.tui import ledger_lock
 from harness.json_types import JsonObject
 from harness.orchestration.core.constants import LEDGER_LOCK_STALE_SECONDS
 
@@ -136,7 +136,7 @@ from harness.console.kernel.coordinator_catalog import (  # noqa: E402
     COORDINATOR_COMMANDS,
     process_argv,
 )
-from harness.console.screens.orchestration import (  # noqa: E402
+from harness.console.tui.screens.orchestration import (  # noqa: E402
     CoordinatorCommandFormScreen,
     OrchestrationScreen,
 )

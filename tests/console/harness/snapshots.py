@@ -23,11 +23,11 @@ from textual.screen import Screen
 from textual.widgets import Button, Input, ListView, Static
 
 from harness.console.kernel import brand, data, i18n
-from harness.console import translate
+from harness.console.tui import translate
 from harness.console.kernel.catalog import HARNESS_COMMANDS
-from harness.console.reports import LedgerView
-from harness.console.screens.harness import CommandFormScreen, HarnessScreen
-from harness.console.shell import Fold
+from harness.console.tui.reports import LedgerView
+from harness.console.tui.screens.harness import CommandFormScreen, HarnessScreen
+from harness.console.tui.shell import Fold
 from tests.console._svg_snapshot import VERSION, SIZES, _SnapshotApp, until
 
 LANGUAGES = ("ru", "en")

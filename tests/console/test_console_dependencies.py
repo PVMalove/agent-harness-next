@@ -22,7 +22,7 @@ SERVICE_INTERNALS = frozenset(
         "harness.console.backend.application.jobs",
         "harness.console.kernel.runner",
         "harness.console.kernel.process_tree",
-        "harness.console.ledger_lock",
+        "harness.console.tui.ledger_lock",
         "harness.console.backend.infrastructure.event_journal",
         "harness.orchestration.coordinator",
     }

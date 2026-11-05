@@ -391,7 +391,7 @@ def test_console_diagnostics_include_the_same_memory_health_report(
     """Console collection and its display/export document retain all memory diagnostics."""
     pytest.importorskip("textual")
     from harness.console.kernel.data import collect_diagnostics
-    from harness.console.screens.diagnostics import health_document
+    from harness.console.tui.screens.diagnostics import health_document
 
     _init_repo(tmp_path)
     _enable_memory(tmp_path)

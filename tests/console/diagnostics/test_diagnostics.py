@@ -11,7 +11,7 @@ import pytest
 from textual.app import App
 from textual.widgets import Button, Static
 
-from harness.console.screens.diagnostics import DiagnosticsScreen
+from harness.console.tui.screens.diagnostics import DiagnosticsScreen
 from harness.health.model import CheckResult, Report
 from tests.console._pilot_wait import wait_until
 
@@ -278,7 +278,7 @@ def test_summary_actions_and_first_group_fit_the_viewport(
     tmp_path: Path, size: tuple[int, int]
 ) -> None:
     from harness.health.model import Fix
-    from harness.console.shell import Fold, JumpLink
+    from harness.console.tui.shell import Fold, JumpLink
 
     data = Report(
         1,
@@ -337,8 +337,8 @@ def test_summary_actions_and_first_group_fit_the_viewport(
 def test_language_round_trip_translates_labels_but_preserves_report_facts(
     tmp_path: Path,
 ) -> None:
-    from harness.console.app import HarnessConsoleApp
-    from harness.console.shell import Fold
+    from harness.console.tui.app import HarnessConsoleApp
+    from harness.console.tui.shell import Fold
     from harness.health.model import Fix
 
     data = Report(
@@ -394,7 +394,7 @@ def test_language_round_trip_translates_labels_but_preserves_report_facts(
 def test_running_failure_and_fix_explanations_follow_the_current_language(
     tmp_path: Path,
 ) -> None:
-    from harness.console.app import HarnessConsoleApp
+    from harness.console.tui.app import HarnessConsoleApp
 
     entered = threading.Event()
     release = threading.Event()
@@ -446,7 +446,7 @@ def test_running_failure_and_fix_explanations_follow_the_current_language(
 def test_bilingual_viewport_and_filters_keep_actual_totals(
     tmp_path: Path, size: tuple[int, int], language: str
 ) -> None:
-    from harness.console.shell import Fold
+    from harness.console.tui.shell import Fold
     from tests.console.diagnostics.snapshots import SnapshotHost, fixture_report
 
     async def scenario() -> None:
@@ -532,7 +532,7 @@ def test_visible_actions_reset_confirmation_and_only_consecutive_fix_applies(
     from typing import cast
     from textual import events
     from textual.screen import Screen
-    from harness.console.shell import Fold
+    from harness.console.tui.shell import Fold
     from tests.console.diagnostics.snapshots import SnapshotHost, fixture_report
 
     applied: list[bool] = []
@@ -707,8 +707,8 @@ def test_strip_cli_line_and_tracker_note_follow_the_mockup(
     from datetime import datetime
     from unittest.mock import patch
 
-    from harness.console.screens import diagnostics
-    from harness.console.shell import Fold, WrappedValue
+    from harness.console.tui.screens import diagnostics
+    from harness.console.tui.shell import Fold, WrappedValue
 
     data = Report(
         1,

@@ -1,4 +1,4 @@
-"""harness.console.reports: the stdlib-only data behind the console's Reports section, against a
+"""harness.console.tui.reports: the stdlib-only data behind the console's Reports section, against a
 real lifecycle-ledger fixture (tests/_console_ledger_fixture.py). No textual needed."""
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from tests.console._console_ledger_fixture import (
 )
 from harness.console.kernel.export import render_markdown
 from harness.orchestration.ledger.lifecycle import JsonObject
-from harness.console.reports import (
+from harness.console.tui.reports import (
     QA_LOG_TAIL_LINES,
     REPORT_SECTIONS,
     BatchSummary,
@@ -93,7 +93,7 @@ def test_filters_by_ticket_role_outcome_and_date(tmp_path: Path) -> None:
 def test_missing_report_time_is_not_replaced_by_dispatch_time(tmp_path: Path) -> None:
     import json
 
-    from harness.console.reports import select_stages
+    from harness.console.tui.reports import select_stages
     from harness.orchestration.core.constants import STATE_REL
     from harness.orchestration.ledger.lifecycle import LifecycleLedger
 
@@ -189,7 +189,7 @@ def test_batches_without_titles_remain_local_read_only_sessions(
 
 
 def test_stage_filters_combine_and_sort_unknown_times_last() -> None:
-    from harness.console.reports import ReportEntry, StageEntry, select_stages
+    from harness.console.tui.reports import ReportEntry, StageEntry, select_stages
 
     report = ReportEntry(
         "dispatch-old",
@@ -269,7 +269,7 @@ def test_stage_filters_combine_and_sort_unknown_times_last() -> None:
 
 
 def test_missing_batch_start_is_not_reconstructed_from_audit(tmp_path: Path) -> None:
-    from harness.console.reports import batch_start_text
+    from harness.console.tui.reports import batch_start_text
     from harness.orchestration.core.constants import STATE_REL
     from harness.orchestration.ledger.lifecycle import LifecycleLedger
     from tests.console._console_ledger_fixture import _Batch

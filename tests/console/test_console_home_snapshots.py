@@ -12,8 +12,8 @@ from typing import cast
 import pytest
 from textual.screen import Screen
 
-from harness.console import reports
-from harness.console.screens.dashboard import DashboardScreen
+from harness.console.tui import reports
+from harness.console.tui.screens.dashboard import DashboardScreen
 from tests.console._home_client import fake_home
 from tests.console._svg_snapshot import (
     PROJECT,

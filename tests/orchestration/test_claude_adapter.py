@@ -303,8 +303,8 @@ def test_native_permission_uses_control_frames_without_extra_model_messages(
     if panel_open:
         import asyncio
         import socket
-        from harness.console.app import HarnessConsoleApp
-        from harness.console.screens.worker_observation import WorkerObservationScreen
+        from harness.console.tui.app import HarnessConsoleApp
+        from harness.console.tui.screens.worker_observation import WorkerObservationScreen
         from textual.widgets import Select
 
         def no_network(_socket: socket.socket, address: object) -> None:

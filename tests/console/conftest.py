@@ -19,7 +19,7 @@ def project(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def offline_advisor_probe(monkeypatch: pytest.MonkeyPatch) -> None:
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     monkeypatch.setattr(
         configuration, "availability", lambda provider, cancel: "Готов к запросу (тест)"
@@ -35,7 +35,7 @@ def private_clipboard(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def offline_home_titles(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ordinary Pilot tests never read the user's tracker."""
-    from harness.console import task_titles
+    from harness.console.tui import task_titles
 
     monkeypatch.setattr(task_titles, "load_task_titles", lambda repo, tickets: {})
 

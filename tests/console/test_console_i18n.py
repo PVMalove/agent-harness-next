@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from harness.console.kernel import i18n
-from harness.console.app import HarnessConsoleApp
-from harness.console.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN, help_markdown
+from harness.console.tui.app import HarnessConsoleApp
+from harness.console.tui.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN, help_markdown
 from harness.console.kernel.i18n_strings import EN, EN_PHRASES
 from tests.console._pilot_wait import wait_until
 

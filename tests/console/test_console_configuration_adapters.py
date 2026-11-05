@@ -99,7 +99,7 @@ def test_settings_screen_shows_status_and_requires_modal_confirmation(
 ) -> None:
     from textual.app import App
     from textual.widgets import Static
-    from harness.console.screens.configuration import (
+    from harness.console.tui.screens.configuration import (
         ConfigurationScreen,
         ConfirmConfiguration,
     )
@@ -204,7 +204,7 @@ def _fake_preview(
 
 
 def _configuration_host(repo: Path) -> App[None]:
-    from harness.console.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration import ConfigurationScreen
 
     class Host(App[None]):
         def on_mount(self) -> None:
@@ -218,7 +218,7 @@ def test_every_adapter_is_a_block_with_a_status_symbol_a_path_and_the_problem(
 ) -> None:
     import asyncio
     from textual.widgets import Static
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     preview = _fake_preview(
         [
@@ -268,7 +268,7 @@ def test_an_unavailable_snapshot_replaces_the_adapter_blocks_with_an_error(
 ) -> None:
     import asyncio
     from textual.widgets import Static
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     def failing(repo: Path) -> object:
         raise ValueError("Сначала установите харнесс проекта")
@@ -295,7 +295,7 @@ def test_the_confirmation_has_a_title_a_plan_block_and_the_reason_confirm_is_off
     import asyncio
     from textual.app import App
     from textual.widgets import Button, Static
-    from harness.console.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
 
     class Host(App[None]):
         def on_mount(self) -> None:
@@ -360,7 +360,7 @@ def test_a_long_adapter_path_wraps_and_stays_inside_the_screen(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import asyncio
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
     from tests.console.test_console_layout import layout_problems
 
     long_path = ".harness/adapters/" + "very_long_adapter_name_" * 6 + "worker.py"

@@ -23,7 +23,7 @@ from unittest import mock
 import pytest
 
 from harness.console import launcher
-from harness.console.client import (
+from harness.console.tui.client import (
     ConsoleClient,
     HomeClient,
     ServerError,
@@ -143,7 +143,7 @@ def test_restart_console_reexecutes_current_python_for_selected_project() -> Non
 
 def test_run_console_already_relaunched_runs_the_injected_app_runner() -> None:
     """Proves the "already relaunched" branch never needs `find_uv`/`runner` and dispatches to
-    `app_runner` - injected here instead of monkeypatching `sys.modules["harness.console.app"]`,
+    `app_runner` - injected here instead of monkeypatching `sys.modules["harness.console.tui.app"]`,
     which is never safe to do in a process that may also run real textual Pilot tests."""
     repo = Path("/tmp/some-repo")
     calls: list[tuple[Path, HomeClient]] = []

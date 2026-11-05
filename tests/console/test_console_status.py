@@ -103,7 +103,7 @@ def test_status_module_does_not_import_textual() -> None:
 
 
 def test_every_role_has_its_own_colour_and_an_unknown_role_is_muted() -> None:
-    from harness.console import session_card
+    from harness.console.tui import session_card
 
     assert set(brand.ROLE_COLORS) == {
         "architect",
@@ -123,7 +123,7 @@ def test_every_role_has_its_own_colour_and_an_unknown_role_is_muted() -> None:
 
 
 def test_status_caption_is_symbol_plus_words_in_the_status_colour() -> None:
-    from harness.console import session_card
+    from harness.console.tui import session_card
 
     running = status.session_status("working")
     caption = session_card.status_caption(running, "en")
@@ -132,7 +132,7 @@ def test_status_caption_is_symbol_plus_words_in_the_status_colour() -> None:
 
 
 def test_session_card_carries_ticket_role_dispatch_and_caption() -> None:
-    from harness.console import session_card
+    from harness.console.tui import session_card
 
     def card(*, stacked: bool) -> Text:
         return session_card.session_card(

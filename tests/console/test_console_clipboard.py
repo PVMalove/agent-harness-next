@@ -13,8 +13,8 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Input, TextArea
 
-from harness.console import clipboard
-from harness.console.app import HarnessConsoleApp
+from harness.console.tui import clipboard
+from harness.console.tui.app import HarnessConsoleApp
 
 
 class _Tool:

@@ -8,7 +8,7 @@ from threading import Event
 
 import pytest
 
-from harness.console.advisor import (
+from harness.console.tui.advisor import (
     Advice,
     AdvisorUnavailable,
     advise,
@@ -16,7 +16,7 @@ from harness.console.advisor import (
     parse_response,
 )
 from harness.console.kernel.configuration import ConfigurationDraft
-from harness.console.configuration_steps import steps_for
+from harness.console.tui.configuration_steps import steps_for
 from tests.console.test_console_configuration_app import installed_project
 
 
@@ -33,7 +33,7 @@ def test_prompt_excludes_authored_commands_and_paths(tmp_path: Path) -> None:
 def test_cli_uses_saved_login_and_disables_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import advisor
+    from harness.console.tui import advisor
 
     installed_project(tmp_path)
     draft = ConfigurationDraft.load(tmp_path, ("project.json",))
@@ -101,7 +101,7 @@ def test_claude_structured_output_and_rejection(tmp_path: Path) -> None:
 def test_claude_reuses_auth_and_never_uses_bare(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import advisor
+    from harness.console.tui import advisor
 
     installed_project(tmp_path)
     draft = ConfigurationDraft.load(tmp_path, ("project.json",))
@@ -133,7 +133,7 @@ def test_claude_reuses_auth_and_never_uses_bare(
 
 def test_cancellation_and_output_limit_terminate_cli(tmp_path: Path) -> None:
     import sys
-    from harness.console.advisor import _run
+    from harness.console.tui.advisor import _run
 
     cancel = Event()
     cancel.set()
@@ -158,7 +158,7 @@ def test_cancellation_and_output_limit_terminate_cli(tmp_path: Path) -> None:
 
 
 def test_stderr_warnings_do_not_corrupt_structured_output(tmp_path: Path) -> None:
-    from harness.console.advisor import _run
+    from harness.console.tui.advisor import _run
 
     script = tmp_path / "cli.py"
     script.write_text(
@@ -183,7 +183,7 @@ def test_stderr_warnings_do_not_corrupt_structured_output(tmp_path: Path) -> Non
 def test_codex_login_status_is_matched_by_leading_words(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str, ready: bool
 ) -> None:
-    from harness.console import advisor
+    from harness.console.tui import advisor
 
     def run(
         argv: list[str],
@@ -234,7 +234,7 @@ def test_comparison_is_validated_and_context_carries_only_non_secret_facts(
 def test_status_commands_may_report_on_stderr_only_when_requested(
     tmp_path: Path,
 ) -> None:
-    from harness.console.advisor import _run
+    from harness.console.tui.advisor import _run
 
     script = tmp_path / "status.py"
     script.write_text(

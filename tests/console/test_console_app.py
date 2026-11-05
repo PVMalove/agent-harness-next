@@ -1,4 +1,4 @@
-"""harness.console.app: TUI на базе textual. Полностью пропускается, если textual не установлен.
+"""harness.console.tui.app: TUI на базе textual. Полностью пропускается, если textual не установлен.
 Пилотные тесты используют управляемый запуск и вызываются через `asyncio.run`."""
 
 from __future__ import annotations
@@ -15,12 +15,12 @@ pytest.importorskip("textual")
 from textual.pilot import Pilot
 
 from harness.console.kernel import brand
-from harness.console.app import HarnessConsoleApp
+from harness.console.tui.app import HarnessConsoleApp
 from harness.console.kernel.data import DashboardData
-from harness.console.screens.dashboard import DashboardScreen
-from harness.console.shell import SECTIONS
-from harness.console.screens.diagnostics import DiagnosticsScreen
-from harness.console.screens.harness import HarnessScreen
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.shell import SECTIONS
+from harness.console.tui.screens.diagnostics import DiagnosticsScreen
+from harness.console.tui.screens.harness import HarnessScreen
 from harness.health.model import CheckResult, Fix, Report
 from tests.console._home_client import fake_home
 from tests.console._pilot_wait import wait_until
@@ -49,7 +49,7 @@ def test_dashboard_keeps_visible_checks_and_project_actions_with_keyboard_shortc
     from textual.binding import Binding
     from textual.widgets import Button, ListItem, Collapsible
 
-    from harness.console.chrome import TopBar
+    from harness.console.tui.chrome import TopBar
 
     class DashboardHost(App[None]):
         CSS = HarnessConsoleApp.CSS
@@ -123,7 +123,7 @@ def test_dashboard_update_opens_the_update_screen_without_running_a_command(
 ) -> None:
     from textual.app import App
 
-    from harness.console.screens.update_harness import UpdateHarnessScreen
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
 
     calls: list[object] = []
 
@@ -222,7 +222,7 @@ def test_configuration_menu_opens_from_keyboard_and_mouse(
     from textual.app import App
     from textual.widgets import ListItem, ListView, Static
 
-    from harness.console.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration import ConfigurationScreen
 
     async def scenario() -> None:
         app = App[None]()
@@ -282,7 +282,7 @@ def test_selecting_orchestration_pushes_the_orchestration_screen(
         """Сценарий выбора пункта Orchestration в меню."""
         from textual.widgets import ListView
 
-        from harness.console.screens.orchestration import OrchestrationScreen
+        from harness.console.tui.screens.orchestration import OrchestrationScreen
 
         app = HarnessConsoleApp(tmp_path)
         async with app.run_test() as pilot:
@@ -485,7 +485,7 @@ def test_help_opens_from_the_menu_and_from_f1(tmp_path: Path) -> None:
     async def scenario() -> tuple[bool, bool]:
         from textual.widgets import ListView
 
-        from harness.console.screens.help import HelpScreen
+        from harness.console.tui.screens.help import HelpScreen
 
         app = HarnessConsoleApp(tmp_path)
         async with app.run_test() as pilot:
@@ -885,7 +885,7 @@ def test_dashboard_summary_lists_problems_and_splits_repo_map_facts() -> None:
     from dataclasses import replace
     from rich.text import Text
 
-    from harness.console.screens.dashboard import _render_summary
+    from harness.console.tui.screens.dashboard import _render_summary
 
     data = replace(
         _fake_dashboard_data(),
@@ -910,7 +910,7 @@ def test_dashboard_summary_colors_labels_and_normalizes_repo_map() -> None:
     from rich.color import Color
     from rich.style import Style
 
-    from harness.console.screens.dashboard import _render_summary
+    from harness.console.tui.screens.dashboard import _render_summary
 
     data = replace(
         _fake_dashboard_data(),
@@ -952,7 +952,7 @@ def test_dashboard_summary_shows_memory_health_without_interpreting_markup(
 
     from rich.text import Text
 
-    from harness.console.screens.dashboard import _render_summary
+    from harness.console.tui.screens.dashboard import _render_summary
     from harness.health.model import Status
 
     data = replace(
@@ -1194,7 +1194,7 @@ def test_home_uses_workspace_shell_and_keeps_technical_report_collapsed(
     tmp_path: Path,
 ) -> None:
     from textual.widgets import Collapsible
-    from harness.console.chrome import WorkspaceHeader
+    from harness.console.tui.chrome import WorkspaceHeader
 
     async def scenario() -> None:
         app = HarnessConsoleApp(tmp_path)
@@ -1234,7 +1234,7 @@ def test_dashboard_session_list_shows_role_labels_and_status_captions(
     from rich.text import Text
     from textual.widgets import ListView, Static
 
-    from harness.console import reports
+    from harness.console.tui import reports
 
     stages = [
         reports.StageEntry(
@@ -1307,7 +1307,7 @@ def test_elapsed_time_and_check_counts_read_naturally() -> None:
     from datetime import UTC, datetime, timedelta
 
     from harness.console.kernel import i18n
-    from harness.console.session_card import elapsed_text
+    from harness.console.tui.session_card import elapsed_text
 
     now = datetime(2026, 10, 17, 14, 40, tzinfo=UTC)
     assert elapsed_text(now - timedelta(seconds=30), now, "ru") == "0 мин"
@@ -1335,7 +1335,7 @@ def test_home_check_block_sessions_and_report_follow_each_other(
     from textual.widgets import Button, Static
     from textual.widgets._collapsible import CollapsibleTitle
 
-    from harness.console import reports
+    from harness.console.tui import reports
 
     stages = [
         reports.StageEntry(
@@ -1429,7 +1429,7 @@ def _mixed_report() -> Report:
 
 
 def test_report_statuses_and_counters_are_shown_as_symbol_plus_text() -> None:
-    from harness.console.screens.diagnostics import _styled_report, render_report
+    from harness.console.tui.screens.diagnostics import _styled_report, render_report
 
     report = _mixed_report()
     before = render_report(report)
@@ -1447,7 +1447,7 @@ def test_report_statuses_and_counters_are_shown_as_symbol_plus_text() -> None:
 
 
 def test_a_zero_counter_keeps_its_symbol_and_is_muted() -> None:
-    from harness.console.screens.diagnostics import _styled_report
+    from harness.console.tui.screens.diagnostics import _styled_report
 
     shown = _styled_report(_fake_report())
     assert shown.plain.split("\n")[0] == "Итого: ✔ ok=1 ⚠ warn=0 ✖ fail=1 ○ skipped=0"
@@ -1462,8 +1462,8 @@ def test_a_zero_counter_keeps_its_symbol_and_is_muted() -> None:
 def test_diagnostics_sits_on_the_shell_with_the_section_menu(tmp_path: Path) -> None:
     from textual.widgets import ListItem, ListView
 
-    from harness.console.chrome import TopBar
-    from harness.console.shell import Breadcrumbs
+    from harness.console.tui.chrome import TopBar
+    from harness.console.tui.shell import Breadcrumbs
     from tests.console._pilot_wait import crumb_text
 
     async def scenario() -> tuple[str, int | None, list[str | None], bool, int, bool]:
@@ -1508,7 +1508,7 @@ def test_diagnostics_sits_on_the_shell_with_the_section_menu(tmp_path: Path) -> 
 def test_diagnostics_switches_language_and_goes_back_with_escape(
     tmp_path: Path,
 ) -> None:
-    from harness.console.shell import Breadcrumbs
+    from harness.console.tui.shell import Breadcrumbs
     from tests.console._pilot_wait import crumb_text
     from textual.widgets import Static
 
@@ -1540,7 +1540,7 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
 
     from rich.text import Text
 
-    from harness.console.screens.dashboard import (
+    from harness.console.tui.screens.dashboard import (
         HomeContext,
         _render_summary,
         _snapshot_facts,
@@ -1678,7 +1678,7 @@ def test_home_requires_attention_lists_every_problem_with_a_jump_to_its_section(
     from textual.color import Color
     from textual.widgets import Static
 
-    from harness.console.shell import JumpLink, SectionCard
+    from harness.console.tui.shell import JumpLink, SectionCard
 
     async def scenario() -> dict[str, object]:
         app = HarnessConsoleApp(tmp_path)
@@ -1762,8 +1762,8 @@ def test_home_requires_attention_lists_every_problem_with_a_jump_to_its_section(
 def test_a_jump_from_requires_attention_opens_the_section_and_runs_no_command(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.update_harness import UpdateHarnessScreen
-    from harness.console.shell import JumpLink
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
+    from harness.console.tui.shell import JumpLink
 
     runner = _Runner()
 
@@ -1794,7 +1794,7 @@ def test_a_jump_from_requires_attention_opens_the_section_and_runs_no_command(
 def _home_context() -> object:
     from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
     from harness.console.kernel.repo_map_settings import MemoryStatus
-    from harness.console.screens.dashboard import HomeContext
+    from harness.console.tui.screens.dashboard import HomeContext
 
     view = RepoMapView(
         payload={},
@@ -1842,7 +1842,7 @@ _BANNER = brand.BannerInfo(
 
 @pytest.mark.parametrize("language", ["ru", "en"])
 def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> None:
-    from harness.console.screens.dashboard import HomeContext, _snapshot_facts
+    from harness.console.tui.screens.dashboard import HomeContext, _snapshot_facts
     from harness.console.backend.application.snapshots import build_home_snapshot
 
     data = _context_data()
@@ -1934,7 +1934,7 @@ def test_home_right_panel_is_cards_of_facts_and_folds_on_a_narrow_terminal(
 ) -> None:
     from textual.widgets import Collapsible, Static
 
-    from harness.console.shell import SectionCard
+    from harness.console.tui.shell import SectionCard
 
     async def scenario() -> dict[str, object]:
         app = HarnessConsoleApp(tmp_path)
@@ -2043,7 +2043,7 @@ def test_a_project_switch_that_cannot_connect_keeps_the_project_and_says_why(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from harness.console import launcher
-    from harness.console.client import ServerUnavailable
+    from harness.console.tui.client import ServerUnavailable
     from tests.console._home_client import FakeHomeClient
 
     def unreachable(repo: Path) -> FakeHomeClient:
@@ -2123,7 +2123,7 @@ class _FailingHomeClient:
 def test_a_failing_first_home_request_ends_the_app_with_the_reason_instead_of_a_traceback(
     tmp_path: Path,
 ) -> None:
-    from harness.console.client import ServerError
+    from harness.console.tui.client import ServerError
 
     error = ServerError("collect_failed", "health упал")
     client = _FailingHomeClient(error)
@@ -2141,8 +2141,8 @@ def test_a_failing_first_home_request_ends_the_app_with_the_reason_instead_of_a_
 def test_run_raises_the_first_home_failure_for_the_launcher_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import app as console_app
-    from harness.console.client import ConnectionLost
+    from harness.console.tui import app as console_app
+    from harness.console.tui.client import ConnectionLost
 
     error = ConnectionLost("соединение с сервером консоли потеряно")
     client = _FailingHomeClient(error)
@@ -2160,7 +2160,7 @@ def test_a_project_switch_whose_first_home_request_fails_keeps_the_project_and_s
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from harness.console import launcher
-    from harness.console.client import ConnectionLost
+    from harness.console.tui.client import ConnectionLost
     from tests.console._home_client import FakeHomeClient
 
     first = FakeHomeClient(tmp_path)

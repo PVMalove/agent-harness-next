@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from harness.console.kernel import brand
-from harness.console.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN
+from harness.console.tui.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN
 
 
 def test_logo_rows_are_one_width_and_the_banner_has_a_line_per_row() -> None:

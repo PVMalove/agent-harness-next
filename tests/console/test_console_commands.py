@@ -7,7 +7,7 @@ from threading import Event
 from typing import Mapping, Sequence
 
 from harness.console.kernel.runner import HarnessRuns
-from harness.console.screens.commands import render_result
+from harness.console.tui.screens.commands import render_result
 
 
 def test_full_result_is_opt_in() -> None:

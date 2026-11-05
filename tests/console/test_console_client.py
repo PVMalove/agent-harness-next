@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.client import (
+from harness.console.tui.client import (
     ConnectionLost,
     ConsoleClient,
     ConsoleClientError,
@@ -355,7 +355,7 @@ class Absent(importlib.abc.MetaPathFinder):
         if fullname.split('.')[0] in {'h11', 'websockets'}:
             raise ModuleNotFoundError(fullname)
 sys.meta_path.insert(0, Absent())
-import harness.console.client
+import harness.console.tui.client
 print(json.dumps({'loaded': sorted(set(sys.modules) & {'h11', 'websockets'})}))
 """
     result = subprocess.run(
@@ -370,7 +370,7 @@ def test_no_reply_within_the_reply_timeout_is_connection_lost(
 ) -> None:
     from websockets.asyncio.server import ServerConnection, serve
 
-    from harness.console import client as console_client
+    from harness.console.tui import client as console_client
 
     monkeypatch.setattr(console_client, "REPLY_TIMEOUT", 0.3)
 

@@ -19,17 +19,17 @@ from textual.widgets import Button, ListView, RadioButton, SelectionList, Static
 from textual.worker import WorkerCancelled
 
 from tests.console._pilot_wait import crumb_text, press, wait_until
-from harness.console import stats as console_stats
-from harness.console.app import HarnessConsoleApp
-from harness.console.shell import (
+from harness.console.tui import stats as console_stats
+from harness.console.tui.app import HarnessConsoleApp
+from harness.console.tui.shell import (
     SECTIONS,
     Breadcrumbs,
     ConsoleShell,
     Fold,
 )
 from harness.console.kernel.catalog import seed_update_entry
-from harness.console.screens.harness import CommandFormScreen
-from harness.console.screens.update_harness import (
+from harness.console.tui.screens.harness import CommandFormScreen
+from harness.console.tui.screens.update_harness import (
     SEED_MODE,
     UpdateHarnessScreen,
     render_drift,
@@ -311,7 +311,7 @@ def test_the_screen_follows_the_language(tmp_path: Path) -> None:
         async with app.run_test(size=(120, 60)) as pilot:
             await pilot.pause()
             app.language = "en"  # type: ignore[attr-defined]
-            from harness.console import translate
+            from harness.console.tui import translate
 
             translate.retranslate(app.screen, "en")
             await pilot.pause()
@@ -328,7 +328,7 @@ def test_the_screen_follows_the_language(tmp_path: Path) -> None:
 
 
 def test_update_harness_stands_on_the_shared_frame(tmp_path: Path) -> None:
-    from harness.console.chrome import TopBar, WorkspaceHeader
+    from harness.console.tui.chrome import TopBar, WorkspaceHeader
 
     async def scenario() -> None:
         app = _console(_screen(tmp_path, _Runner()), tmp_path)
@@ -641,7 +641,7 @@ def test_the_home_key_and_the_home_crumb_close_the_screen_through_its_callback(
     tmp_path: Path,
 ) -> None:
     """Leaving to Home any way runs the opener's callback (it refreshes Home), as Esc does."""
-    from harness.console.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.dashboard import DashboardScreen
 
     async def scenario() -> list[list[object]]:
         results: list[list[object]] = []
@@ -668,8 +668,8 @@ def test_a_number_key_closes_the_screen_and_opens_the_section_over_a_refreshed_h
     tmp_path: Path,
 ) -> None:
     """Another section leaves Home refreshed when it becomes visible again, as after Esc."""
-    from harness.console.screens.dashboard import DashboardScreen
-    from harness.console.screens.help import HelpScreen
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.help import HelpScreen
 
     async def scenario() -> dict[tuple[str, tuple[int, int]], tuple[list[str], int]]:
         outcome: dict[tuple[str, tuple[int, int]], tuple[list[str], int]] = {}

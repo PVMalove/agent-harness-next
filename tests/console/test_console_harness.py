@@ -1,4 +1,4 @@
-"""harness.console.screens.harness: Pilot tests of the Harness section with a recording runner.
+"""harness.console.tui.screens.harness: Pilot tests of the Harness section with a recording runner.
 They assert the process argv the screen invoked, that every irreversible class asks first and a
 cancelled confirmation runs nothing, and that ledger reset requires typing RESET. Skipped without
 textual; driven with `asyncio.run` like tests/test_console_app.py."""
@@ -24,7 +24,7 @@ from harness.console.kernel.catalog import (
     Reversibility,
     process_argv,
 )
-from harness.console.screens.harness import CommandFormScreen, HarnessScreen
+from harness.console.tui.screens.harness import CommandFormScreen, HarnessScreen
 
 
 class _RecordingRunner:
@@ -270,7 +270,7 @@ def test_a_runner_failure_is_shown_instead_of_running_forever(tmp_path: Path) ->
 
 
 def test_every_harness_command_belongs_to_a_menu_group() -> None:
-    from harness.console.screens.harness import _GROUPS
+    from harness.console.tui.screens.harness import _GROUPS
 
     assert {entry.key for entry in HARNESS_COMMANDS} <= set(_GROUPS)
 
@@ -324,8 +324,8 @@ def test_harness_sits_on_the_shell_and_the_section_menu_runs_nothing(
 ) -> None:
     from textual.screen import Screen
 
-    from harness.console.app import HarnessConsoleApp
-    from harness.console.shell import SECTIONS, Breadcrumbs, ConsoleShell
+    from harness.console.tui.app import HarnessConsoleApp
+    from harness.console.tui.shell import SECTIONS, Breadcrumbs, ConsoleShell
     from tests.console._pilot_wait import crumb_text
 
     runner = _RecordingRunner()
@@ -365,9 +365,9 @@ def test_harness_sits_on_the_shell_and_the_section_menu_runs_nothing(
 def test_harness_screen_opens_help_switches_language_and_goes_back(
     tmp_path: Path,
 ) -> None:
-    from harness.console.app import HarnessConsoleApp
-    from harness.console.screens.help import HelpScreen
-    from harness.console.shell import Breadcrumbs
+    from harness.console.tui.app import HarnessConsoleApp
+    from harness.console.tui.screens.help import HelpScreen
+    from harness.console.tui.shell import Breadcrumbs
     from tests.console._pilot_wait import crumb_text
 
     async def scenario() -> tuple[bool, bool, str, bool]:

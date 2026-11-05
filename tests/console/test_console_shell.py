@@ -17,14 +17,14 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import Button, ListItem, ListView, Static
 
-from harness.console.app import HarnessConsoleApp
+from harness.console.tui.app import HarnessConsoleApp
 from harness.console.kernel.data import DashboardData
-from harness.console.screens.dashboard import DashboardScreen
-from harness.console.crumbs import Crumb
-from harness.console.wrap import SEPARATORS
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.crumbs import Crumb
+from harness.console.tui.wrap import SEPARATORS
 from tests.console._home_client import fake_home
 from tests.console._pilot_wait import crumb_text
-from harness.console.shell import (
+from harness.console.tui.shell import (
     SECTIONS,
     Breadcrumbs,
     CrumbLink,
@@ -307,7 +307,7 @@ def test_the_top_bar_shows_project_and_branch_on_every_width(
 
 
 def test_where_text_never_leaves_a_dangling_separator() -> None:
-    from harness.console.chrome import where_text
+    from harness.console.tui.chrome import where_text
 
     assert where_text("project", None, 160) == "project"
     assert where_text("project", "", 80) == "project"
@@ -350,8 +350,8 @@ def test_the_shell_css_has_no_default_text_token() -> None:
     import re
 
     from harness.console.kernel import brand
-    from harness.console.chrome import WorkspaceHeader
-    from harness.console.shell import SHELL_CSS
+    from harness.console.tui.chrome import WorkspaceHeader
+    from harness.console.tui.shell import SHELL_CSS
 
     for css in (SHELL_CSS, WorkspaceHeader.DEFAULT_CSS, DashboardScreen.CSS):
         assert not re.search(r"\$text(?![\w-])", brand.shell_css(css))
@@ -466,7 +466,7 @@ def test_the_main_menu_fits_update_harness_and_its_badge_on_one_line(
 def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
     from rich.text import Text
 
-    from harness.console.shell import menu_label
+    from harness.console.tui.shell import menu_label
 
     label = menu_label(2, "Update Harness", ("⚠", "#E5A04B"))
     name, badge = (column._cells[0] for column in label.columns)
@@ -477,7 +477,7 @@ def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
 
 def test_section_badges_come_from_the_health_facts() -> None:
     from harness.console.kernel import brand
-    from harness.console.shell import section_badges
+    from harness.console.tui.shell import section_badges
 
     badges = section_badges(_home_data())
     assert badges == {
@@ -504,7 +504,7 @@ def test_section_badges_come_from_the_health_facts() -> None:
 
 
 def test_the_menu_badges_are_shown_on_another_shell_screen(tmp_path: Path) -> None:
-    from harness.console.screens.diagnostics import DiagnosticsScreen
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
     from harness.health.model import Report
 
     report = Report(schema_version=1, repo=str(tmp_path), online=False, checks=[])
@@ -612,7 +612,7 @@ def test_section_cards_and_folds_follow_the_language_with_muted_titles(
 
 def test_frame_titles_of_shell_screens_are_muted_capitals(tmp_path: Path) -> None:
     from harness.console.kernel import brand
-    from harness.console.screens.diagnostics import DiagnosticsScreen
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
     from harness.health.model import Report
 
     report = Report(schema_version=1, repo=str(tmp_path), online=False, checks=[])
@@ -689,7 +689,7 @@ def test_the_footer_follows_a_resize_across_the_narrow_threshold(
 
 def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
     from harness.console.kernel import i18n
-    from harness.console.shell import CHECK_ROUTES, check_route
+    from harness.console.tui.shell import CHECK_ROUTES, check_route
     from harness.health.registry import REGISTRY
 
     ids = [check_id for check_id, _check in REGISTRY]
@@ -724,7 +724,7 @@ class JumpShell(StubShell):
 def test_a_jump_link_opens_its_section_and_runs_no_command(
     tmp_path: Path, how: str
 ) -> None:
-    from harness.console.screens.update_harness import UpdateHarnessScreen
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
 
     recorder = _Recorder()
 
@@ -1100,13 +1100,13 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
     only Esc binding)."""
     import re
 
-    from harness.console.screens.configuration import ConfigurationScreen
-    from harness.console.screens.configuration_versions import (
+    from harness.console.tui.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration_versions import (
         ConfigurationVersionsScreen,
     )
 
-    from harness.console.screens.project_setup import ProjectSetupScreen
-    from harness.console.screens.update_harness import UpdateHarnessScreen
+    from harness.console.tui.screens.project_setup import ProjectSetupScreen
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
 
     for screen_class in (
         ConfigurationScreen,
@@ -1119,7 +1119,7 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
         keys = [b.key if isinstance(b, Binding) else b[0] for b in own]
         assert "escape" not in keys, screen_class
 
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     names = (
         "dashboard",
         "harness",
@@ -1150,7 +1150,7 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
 def test_reports_and_repo_map_leave_back_and_breakpoints_to_the_shell() -> None:
     """Esc and the narrow layout belong to the shell: these screens add neither a back key nor
     breakpoints of their own (the build confirmation is a modal, with its own cancel)."""
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     for name, modals in (("reports", 0), ("repo_map", 1), ("repo_map_settings", 0)):
         source = (screens / f"{name}.py").read_text(encoding="utf-8")
         assert source.count('Binding("escape"') == modals, f"{name}: an Esc binding"
@@ -1160,7 +1160,7 @@ def test_reports_and_repo_map_leave_back_and_breakpoints_to_the_shell() -> None:
 
 def test_reports_and_repo_map_show_no_demo_data_from_the_mockups() -> None:
     """The mockups' sample values (ids, commits, paths, counts) are not in the screens' sources."""
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     demo = (
         "85abd57e",
         "generation-1e1684b3",
@@ -1185,7 +1185,7 @@ def test_the_mockup_legend_functions_are_not_on_the_reports_screens(
     suggestions, left for a follow-up ticket: no screen of Reports has them."""
     from textual.widgets import Input, Select
 
-    from harness.console.screens.reports import (
+    from harness.console.tui.screens.reports import (
         BatchTimelineScreen,
         QaLogsScreen,
         ReportScreen,
@@ -1194,7 +1194,7 @@ def test_the_mockup_legend_functions_are_not_on_the_reports_screens(
     from tests.console._console_ledger_fixture import build_reports_fixture
 
     build_reports_fixture(tmp_path)
-    from harness.console.reports import load_ledger_view
+    from harness.console.tui.reports import load_ledger_view
 
     view = load_ledger_view(tmp_path)
     entry = view.reports[0]
