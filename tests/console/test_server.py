@@ -43,9 +43,9 @@ def test_server_binds_ipv4_loopback_and_ephemeral_port(project: Path) -> None:
             import socket
 
             assert server.port > 0
-            assert server._listener is not None
-            assert server._listener.sockets[0].family == socket.AF_INET
-            assert server._listener.sockets[0].getsockname() == (
+            assert server._socket is not None
+            assert server._socket.family == socket.AF_INET
+            assert server._socket.getsockname() == (
                 "127.0.0.1",
                 server.port,
             )
@@ -87,11 +87,12 @@ def test_imports_do_not_require_transport_dependencies() -> None:
 import importlib.abc, json, sys
 class Absent(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'h11', 'websockets'}:
+        if fullname.split('.')[0] in TRANSPORT:
             raise ModuleNotFoundError(fullname)
+TRANSPORT = {'h11', 'websockets', 'fastapi', 'starlette', 'uvicorn', 'pydantic'}
 sys.meta_path.insert(0, Absent())
 import harness.console.server, harness.console.launcher, harness.console.pin, harness.health
-print(json.dumps({'loaded': sorted(set(sys.modules) & {'h11', 'websockets'})}))
+print(json.dumps({'loaded': sorted(set(sys.modules) & TRANSPORT)}))
 """
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=5
@@ -755,11 +756,7 @@ def test_fragmented_upgrade_and_coalesced_first_frame_are_consumed_once(
     asyncio.run(scenario())
 
 
-def test_header_limits_malformed_framing_and_deadline(
-    project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from harness.console import server as transport
-
+def test_header_limits_and_malformed_framing(project: Path) -> None:
     async def scenario() -> None:
         server = ConsoleServer(project)
         await server.start()
@@ -768,7 +765,7 @@ def test_header_limits_malformed_framing_and_deadline(
             for framing, status in (
                 (b"Content-Length: 1\r\nContent-Length: 2", 400),
                 (b"Content-Length: invalid", 400),
-                (b"Transfer-Encoding: invalid", 501),
+                (b"Transfer-Encoding: invalid", 400),
             ):
                 assert (
                     await _raw(server.port, base + framing + b"\r\n\r\n")
@@ -777,12 +774,7 @@ def test_header_limits_malformed_framing_and_deadline(
                 await _raw(
                     server.port, base + b"X-Large: " + b"x" * 17000 + b"\r\n\r\n"
                 )
-            ).startswith(b"HTTP/1.1 431 ")
-            with monkeypatch.context() as patch:
-                patch.setattr(transport, "HEADER_TIMEOUT", 0.03)
-                assert (await _raw(server.port, b"GET / HTTP/1.1\r\n")).startswith(
-                    b"HTTP/1.1 408 "
-                )
+            ).startswith(b"HTTP/1.1 400 ")
         finally:
             await server.close()
 
@@ -988,13 +980,10 @@ def test_text_that_is_not_json_is_answered_and_the_connection_stays_open(
 
 @pytest.mark.parametrize(
     "frames,code",
-    [
-        ([("TEXT", False, b"da"), ("CONT", True, b"ta")], 1003),
-        ([("TEXT", True, b"\xff\xfe")], 1007),
-    ],
-    ids=["fragmented-text", "invalid-utf8"],
+    [([("TEXT", True, b"\xff\xfe")], 1007)],
+    ids=["invalid-utf8"],
 )
-def test_fragmented_and_malformed_text_frames_close_the_connection(
+def test_malformed_text_frames_close_the_connection(
     project: Path, frames: list[tuple[str, bool, bytes]], code: int
 ) -> None:
     from harness.console.discovery import discovery_path
@@ -1026,6 +1015,22 @@ def test_fragmented_and_malformed_text_frames_close_the_connection(
             ]
             assert len(closes) == 1 and Close.parse(closes[0].data).code == code
             assert b'"ok"' not in answer
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_fragmented_text_message_is_reassembled_and_answered(project: Path) -> None:
+    async def scenario() -> None:
+        server = ConsoleServer(project)
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(iter(["da", "ta"]))
+                reply = json.loads(await asyncio.wait_for(client.recv(), 5))
+                assert reply["ok"] is False and reply["error"]["code"] == "bad_json"
+                await asyncio.wait_for(await client.ping(b"alive"), 2)
         finally:
             await server.close()
 
@@ -1137,7 +1142,7 @@ def test_a_disconnect_with_an_unfinished_request_releases_the_connection(
                 await asyncio.sleep(0.1)
                 assert collect.calls == 1
             await asyncio.wait_for(server.close(), 3)
-            assert not server._connections
+            assert server._clients == 0
         finally:
             collect.gate.set()
             await server.close()

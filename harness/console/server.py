@@ -1,13 +1,11 @@
-"""Project-bound asyncio console transport; optional dependencies load only at startup."""
+"""Project-bound console server; FastAPI and Uvicorn load only at startup (harness.console.api)."""
 
 from __future__ import annotations
 
 import asyncio
-import importlib
-import logging
 import secrets
+import socket
 
-from . import admission
 from .decisions import DecisionService
 from .discovery import Discovery
 from .jobs import JobService
@@ -16,36 +14,18 @@ from .request_router import (
     MAX_SUBSCRIPTIONS as MAX_SUBSCRIPTIONS,
     MAX_UNFINISHED_REQUESTS as MAX_UNFINISHED_REQUESTS,
     RequestRouter,
-    RouterConnection,
 )
 from .snapshots import SnapshotService
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import h11
-    from websockets.server import ServerProtocol
+    import uvicorn
 
 HEADER_LIMIT = 16384
-HEADER_TIMEOUT = 5.0
 CLOSE_TIMEOUT = 0.5
-READ_CHUNK = 16384
 MESSAGE_LIMIT = 65536
-
-# This independent logger never propagates protocol headers, even under root DEBUG.
-_PROTOCOL_LOGGER = logging.Logger("harness.console.protocol")
-_PROTOCOL_LOGGER.disabled = True
-_PROTOCOL_LOGGER.propagate = False
-
-_SECURITY_HEADERS = [
-    (b"Cache-Control", b"no-store"),
-    (b"X-Content-Type-Options", b"nosniff"),
-    (b"X-Frame-Options", b"DENY"),
-    (
-        b"Content-Security-Policy",
-        b"default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
-    ),
-]
+_STARTUP_POLL = 0.01
 
 
 class ConsoleServer:
@@ -72,14 +52,15 @@ class ConsoleServer:
         self._idle_grace = idle_grace_seconds
         self._clients = 0
         self._idle_task: asyncio.Task[None] | None = None
-        self._listener: asyncio.Server | None = None
+        self._socket: socket.socket | None = None
+        self._uvicorn: uvicorn.Server | None = None
+        self._serve_task: asyncio.Task[None] | None = None
         self._discovery: Discovery | None = None
         self._token = ""
         self._port = 0
         self._started = False
         self._closing = False
         self._closed = asyncio.Event()
-        self._connections: set[asyncio.Task[None]] = set()
         self._close_task: asyncio.Task[None] | None = None
 
     @property
@@ -89,267 +70,54 @@ class ConsoleServer:
             raise RuntimeError("console server has not started")
         return self._port
 
+    @property
+    def token(self) -> str:
+        return self._token
+
+    @property
+    def closing(self) -> bool:
+        return self._closing
+
+    @property
+    def router(self) -> RequestRouter:
+        return self._router
+
+    def client_opened(self) -> None:
+        self._clients += 1
+
+    def client_closed(self) -> None:
+        self._clients -= 1
+
     async def start(self) -> None:
         if self._started or self._closing:
             raise RuntimeError("console server cannot be restarted")
-        importlib.import_module("h11")
-        importlib.import_module("websockets.server")
+        from .api.app import create_app
+        from .api.host import create_server
+
         self._started = True
         try:
             self._discovery = Discovery(self.repo)
             self._discovery.acquire()
-            self._listener = await asyncio.start_server(
-                self._accept, "127.0.0.1", 0, start_serving=False
-            )
-            self._port = self._listener.sockets[0].getsockname()[1]
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._socket = listener
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+            listener.setblocking(False)
+            self._port = listener.getsockname()[1]
             self._token = secrets.token_hex(32)
             self._discovery.publish(self._port, self._token)
-            await self._listener.start_serving()
+            server = create_server(create_app(self), self)
+            self._uvicorn = server
+            self._serve_task = asyncio.create_task(server.serve(sockets=[listener]))
+            while not server.started:
+                if self._serve_task.done():
+                    self._serve_task.result()
+                    raise RuntimeError("console server stopped during startup")
+                await asyncio.sleep(_STARTUP_POLL)
             self._idle_task = asyncio.create_task(self._exit_when_idle())
         except BaseException:
             await self.close()
             raise
-
-    def _accept(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        task = asyncio.create_task(self._handle(reader, writer))
-        self._connections.add(task)
-        task.add_done_callback(self._connections.discard)
-
-    async def _handle(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        import h11
-
-        connection = h11.Connection(h11.SERVER, max_incomplete_event_size=HEADER_LIMIT)
-        request: h11.Request | None = None
-        handed_off = False
-        try:
-            prefix = bytearray()
-            async with asyncio.timeout(HEADER_TIMEOUT):
-                while request is None:
-                    event = connection.next_event()
-                    if isinstance(event, h11.Request):
-                        request = event
-                    elif event is h11.NEED_DATA:
-                        data = await reader.read(READ_CHUNK)
-                        if not data:
-                            return
-                        prefix.extend(data)
-                        connection.receive_data(data)
-                    else:
-                        return
-            # h11 supplies the consumed-byte boundary, including when a body/frame
-            # arrives in the same read. Never scan or reconstruct the raw envelope.
-            tail, eof = connection.trailing_data
-            boundary = len(prefix) - len(tail)
-            if boundary > HEADER_LIMIT:
-                await self._http(connection, request, reader, writer, 431)
-                return
-            status = admission.request_status(
-                request.headers, request.method, self.port
-            )
-            if status is not None:
-                await self._http(connection, request, reader, writer, status)
-                return
-            if request.target != b"/ws":
-                await self._http(
-                    connection,
-                    request,
-                    reader,
-                    writer,
-                    admission.page_status(
-                        request.target.decode("latin-1"), b"", ("/",)
-                    ),
-                )
-                return
-            status = admission.upgrade_status(
-                request.headers, request.method, "/ws", b"", self.port, self._token
-            )
-            if status is not None:
-                await self._http(connection, request, reader, writer, status)
-                return
-            end = connection.next_event()
-            paused = connection.next_event()
-            if not isinstance(end, h11.EndOfMessage) or paused is not h11.PAUSED or eof:
-                await self._http(connection, request, reader, writer, 400)
-                return
-            envelope = bytes(prefix[:boundary])
-            del prefix
-            handed_off = True
-            await self._websocket(envelope, tail, reader, writer)
-        except h11.RemoteProtocolError as exc:
-            await self._http(connection, request, reader, writer, exc.error_status_hint)
-        except TimeoutError:
-            if not handed_off:
-                await self._http(connection, request, reader, writer, 408)
-        except (ConnectionError, OSError):
-            pass
-        finally:
-            writer.close()
-            try:
-                async with asyncio.timeout(CLOSE_TIMEOUT):
-                    await writer.wait_closed()
-            except (TimeoutError, ConnectionError, OSError):
-                pass
-
-    async def _http(
-        self,
-        connection: h11.Connection,
-        request: h11.Request | None,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter,
-        status: int,
-    ) -> None:
-        import h11
-
-        body = b"Console server\n" if status == 200 else b"Request rejected\n"
-        headers = [
-            *_SECURITY_HEADERS,
-            (b"Content-Type", b"text/plain; charset=utf-8"),
-            (b"Content-Length", str(len(body)).encode()),
-            (b"Connection", b"close"),
-        ]
-        if status == 405:
-            headers.append((b"Allow", b"GET, HEAD"))
-        try:
-            async with asyncio.timeout(CLOSE_TIMEOUT):
-                writer.write(
-                    connection.send(h11.Response(status_code=status, headers=headers))
-                )
-                if request is None or request.method != b"HEAD":
-                    writer.write(connection.send(h11.Data(data=body)))
-                writer.write(connection.send(h11.EndOfMessage()))
-                await writer.drain()
-                if writer.can_write_eof():
-                    writer.write_eof()
-                # Flush the final response before reading a withheld or large body.
-                # h11 drains framing; the application never buffers request bodies.
-                while True:
-                    event = connection.next_event()
-                    if event is h11.NEED_DATA:
-                        data = await reader.read(READ_CHUNK)
-                        connection.receive_data(data)
-                        if not data:
-                            break
-                    elif event is h11.PAUSED or isinstance(
-                        event, (h11.EndOfMessage, h11.ConnectionClosed)
-                    ):
-                        break
-        except (
-            TimeoutError,
-            ConnectionError,
-            OSError,
-            h11.RemoteProtocolError,
-            h11.LocalProtocolError,
-        ):
-            pass
-
-    async def _flush_websocket(
-        self, protocol: ServerProtocol, writer: asyncio.StreamWriter
-    ) -> bool:
-        ended = False
-        for data in protocol.data_to_send():
-            if data:
-                writer.write(data)
-            else:
-                ended = True
-        async with asyncio.timeout(CLOSE_TIMEOUT):
-            await writer.drain()
-        if ended and writer.can_write_eof():
-            writer.write_eof()
-        return ended
-
-    async def _websocket(
-        self,
-        envelope: bytes,
-        tail: bytes,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter,
-    ) -> None:
-        from websockets.http11 import Request
-        from websockets.server import ServerProtocol
-        from websockets.typing import Origin
-
-        protocol = ServerProtocol(
-            origins=[Origin(f"http://127.0.0.1:{self.port}"), None],
-            extensions=None,
-            subprotocols=None,
-            max_size=MESSAGE_LIMIT,
-            logger=_PROTOCOL_LOGGER,
-        )
-        protocol.receive_data(envelope)
-        events = protocol.events_received()
-        if len(events) != 1 or not isinstance(events[0], Request):
-            await self._flush_websocket(protocol, writer)
-            return
-        response = protocol.accept(events[0])
-        if self._closing:
-            response = protocol.reject(503, "Console is closing\n")
-        protocol.send_response(response)
-        if await self._flush_websocket(protocol, writer) or response.status_code != 101:
-            return
-        if tail:
-            protocol.receive_data(tail)
-        self._clients += 1
-        try:
-            await self._pump_websocket(protocol, reader, writer)
-        finally:
-            self._clients -= 1
-
-    async def _pump_websocket(
-        self,
-        protocol: ServerProtocol,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter,
-    ) -> None:
-        from websockets.frames import Frame, Opcode
-
-        async def send(reply: str) -> bool:
-            if protocol.close_expected():
-                return False
-            protocol.send_text(reply.encode())
-            if await self._flush_websocket(protocol, writer):
-                writer.close()
-                return False
-            return True
-
-        connection: RouterConnection = self._router.open(send, writer.close)
-        closing_at: float | None = None
-        try:
-            while True:
-                for event in protocol.events_received():
-                    if not isinstance(event, Frame) or protocol.close_expected():
-                        continue
-                    if event.opcode == Opcode.TEXT and event.fin:
-                        try:
-                            raw = bytes(event.data).decode("utf-8")
-                        except UnicodeDecodeError:
-                            protocol.send_close(1007, "Invalid UTF-8")
-                            continue
-                        await connection.submit(raw)
-                    elif event.opcode in (Opcode.TEXT, Opcode.BINARY, Opcode.CONT):
-                        protocol.send_close(1003, "No application protocol")
-                async with connection.lock:
-                    ended = await self._flush_websocket(protocol, writer)
-                if ended:
-                    return
-                if protocol.close_expected():
-                    if closing_at is None:
-                        closing_at = asyncio.get_running_loop().time() + CLOSE_TIMEOUT
-                    async with asyncio.timeout_at(closing_at):
-                        data = await reader.read(READ_CHUNK)
-                else:
-                    data = await reader.read(READ_CHUNK)
-                if not data:
-                    protocol.receive_eof()
-                    async with connection.lock:
-                        await self._flush_websocket(protocol, writer)
-                    return
-                protocol.receive_data(data)
-        finally:
-            await connection.aclose()
 
     async def _exit_when_idle(self) -> None:
         """Close once no client and no job has been present for the grace period."""
@@ -375,13 +143,12 @@ class ConsoleServer:
         try:
             if self._idle_task is not None:
                 self._idle_task.cancel()
-            if self._listener is not None:
-                self._listener.close()
-                await self._listener.wait_closed()
-            tasks = list(self._connections)
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            if self._uvicorn is not None:
+                self._uvicorn.should_exit = True
+            if self._serve_task is not None:
+                await asyncio.gather(self._serve_task, return_exceptions=True)
+            if self._socket is not None:
+                self._socket.close()
             await self._jobs.close()
             await self._events.close()
         finally:

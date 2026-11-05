@@ -84,7 +84,8 @@ def build_relaunch_argv(
 
 def build_server_argv(uv: str, repo: Path) -> list[str]:
     """Команда запуска Сервера консоли: как у перезапуска TUI, но с зависимостями сервера
-    (`h11`, `websockets`, `jinja2`) и подкомандой `console-server` (ADR 0028)."""
+    (`fastapi`, `starlette`, `uvicorn`, `pydantic`, `websockets`) и подкомандой `console-server`
+    (ADR 0028, ADR 0029)."""
     with_requirements = [
         arg for pin in CONSOLE_SERVER_REQUIREMENTS for arg in ("--with", pin)
     ]
@@ -114,10 +115,10 @@ _SERVER_POLL_SECONDS = 0.1
 
 
 def _serves_console(port: int) -> bool:
-    """Порт отвечает как Сервер консоли (`GET /` даёт 200 «Console server»), а не просто принимает
-    соединения: устаревшая запись может указывать на порт постороннего процесса."""
+    """Порт отвечает как Сервер консоли (`GET /health/live` даёт 200 «Console server»), а не просто
+    принимает соединения: устаревшая запись может указывать на порт постороннего процесса."""
     request = (
-        f"GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+        f"GET /health/live HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
     ).encode()
     reply = b""
     try:
