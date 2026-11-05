@@ -6,11 +6,18 @@ from __future__ import annotations
 import functools
 from pathlib import Path
 
-from .application.ports import Clock, HomeCollector
+from ..kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS
+from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
+from .application.jobs import JobService
+from .application.ports import Clock, CommandSpec, HomeCollector, JobExecutor
 from .application.snapshots import SnapshotService
 from .domain.snapshots import HOME_TTL_SECONDS
-from .infrastructure.clock import monotonic
+from .infrastructure import command_journal
+from .infrastructure.clock import monotonic, utc_now_iso
 from .infrastructure.home_facts import collect_home
+from .infrastructure.ids import new_id
+from .infrastructure.native_permission import NATIVE_PERMISSION_COMMANDS
+from .infrastructure.processes import run_command
 
 
 def snapshot_service(
@@ -32,4 +39,23 @@ def snapshot_service(
             if collect_online is None
             else collect_online
         ),
+    )
+
+
+def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
+    """The job service over the harness, memory, coordinator and native permission commands;
+    without `executor` the commands run as subprocesses."""
+    entries: tuple[CommandSpec, ...] = (
+        *HARNESS_COMMANDS,
+        *MEMORY_COMMANDS,
+        *COORDINATOR_COMMANDS,
+        *NATIVE_PERMISSION_COMMANDS,
+    )
+    return JobService(
+        repo,
+        catalog={entry.key: entry for entry in entries},
+        executor=run_command if executor is None else executor,
+        journal=command_journal.append,
+        new_id=new_id,
+        now=utc_now_iso,
     )

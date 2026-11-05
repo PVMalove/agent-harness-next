@@ -12,7 +12,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 from ..application.decisions import DecisionService, is_decisions_request
 from ..application.decisions import respond as respond_decisions
-from ..application.jobs import JobService, job_request_type
+from ..application.jobs import JobService
+from .protocol.jobs import job_request_type
+from .protocol.jobs import replies as job_replies
 from ..application.events import OrchestrationEvents, is_orchestration_request
 from ..application.snapshots import SnapshotService
 from .protocol.snapshots import busy, respond
@@ -74,7 +76,7 @@ class RouterConnection:
         router = self._router
         try:
             if job_type is not None:
-                async with contextlib.aclosing(router.jobs.replies(raw)) as replies:
+                async with contextlib.aclosing(job_replies(raw, router.jobs)) as replies:
                     await self._stream(replies)
             elif is_orchestration_request(raw):
                 async with contextlib.aclosing(router.events.replies(raw)) as replies:

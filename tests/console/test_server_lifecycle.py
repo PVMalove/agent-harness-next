@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from harness.console.kernel.discovery import discovery_path
-from harness.console.backend.application.jobs import JobService
+from harness.console.backend import composition
 from harness.console.backend.server import ConsoleServer
 from tests.console.test_jobs import FakeExecutor, start
 from tests.console.test_server import _connect, _raw
@@ -78,7 +78,7 @@ def test_the_idle_rule_waits_for_the_last_client_and_then_the_grace(
 def test_an_active_job_keeps_the_server_until_it_ends(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        jobs = JobService(project, executor=fake)
+        jobs = composition.job_service(project, executor=fake)
         server = ConsoleServer(project, jobs=jobs, idle_grace_seconds=0.1)
         await server.start()
         try:

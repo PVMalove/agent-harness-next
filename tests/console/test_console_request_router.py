@@ -34,15 +34,6 @@ class Gate:
             raise
 
 
-class FakeJobs:
-    def __init__(self, gate: Gate) -> None:
-        self.gate = gate
-
-    async def replies(self, raw: str) -> AsyncGenerator[str, None]:
-        await self.gate.wait()
-        yield json.dumps({"id": json.loads(raw)["id"], "ok": True})
-
-
 def _router(
     monkeypatch: pytest.MonkeyPatch, gate: Gate
 ) -> tuple[RequestRouter, list[dict[str, object]]]:
@@ -50,11 +41,16 @@ def _router(
         await gate.wait()
         return json.dumps({"id": json.loads(raw)["id"], "ok": True})
 
+    async def job_replies(raw: str, jobs: JobService) -> AsyncGenerator[str, None]:
+        await gate.wait()
+        yield json.dumps({"id": json.loads(raw)["id"], "ok": True})
+
     monkeypatch.setattr(request_router, "respond", respond)
+    monkeypatch.setattr(request_router, "job_replies", job_replies)
     sent: list[dict[str, object]] = []
     router = RequestRouter(
         cast(SnapshotService, object()),
-        cast(JobService, FakeJobs(gate)),
+        cast(JobService, object()),
         cast(DecisionService, object()),
         cast(OrchestrationEvents, object()),
     )

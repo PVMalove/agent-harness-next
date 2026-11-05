@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shlex
 import sys
 from collections.abc import Mapping, Sequence
@@ -30,20 +29,20 @@ if __package__ in (None, ""):
     ]
     sys.path.insert(0, str(_ROOT))
 
+from harness.console.backend.domain.approvals import (  # noqa: E402
+    NATIVE_ANSWER_FIELDS,
+    native_answer_accepts,
+)
 from harness.console.kernel.catalog import Reversibility  # noqa: E402
 
 _COORDINATOR_SCRIPT = ".harness/orchestration/coordinator.py"
 _SCRIPT = Path(__file__).resolve()
-_FIELDS = ("dispatch", "request_id", "request_sha256")
+_FIELDS = NATIVE_ANSWER_FIELDS
 _FLAGS = {
     "dispatch": "--dispatch",
     "request_id": "--request-id",
     "request_sha256": "--request-sha256",
 }
-_DISPATCH = re.compile(r"dispatch-[0-9a-f-]+")
-_SHA256 = re.compile(r"[0-9a-f]{64}")
-# The runtime stages request ids of up to 256 characters (`runtime_permissions.stage_request`).
-_MAX_ID_CHARS = 256
 
 
 @dataclass(frozen=True)
@@ -67,16 +66,7 @@ class DecisionCommand:
 
     def accepts(self, values: Mapping[str, str]) -> bool:
         """Exactly the dispatch, the request id and its digest, each non-empty and bounded."""
-        if set(values) != set(_FIELDS):
-            return False
-        if any(
-            not value.strip() or len(value) > _MAX_ID_CHARS for value in values.values()
-        ):
-            return False
-        return bool(
-            _DISPATCH.fullmatch(values["dispatch"])
-            and _SHA256.fullmatch(values["request_sha256"])
-        )
+        return native_answer_accepts(values)
 
     def cli_argv(
         self, repo: Path, values: Mapping[str, str] | None = None

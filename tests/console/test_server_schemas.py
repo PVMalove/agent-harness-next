@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
-from harness.console.backend.application import jobs, events as orchestration_events
+from harness.console.backend.api.protocol import jobs
+from harness.console.backend.application import events as orchestration_events
 from harness.console.backend.api import schemas
 from harness.console.backend.application.decisions import DecisionService, DecisionsSnapshot
 from harness.console.backend.server import ConsoleServer

@@ -50,7 +50,7 @@ class ConsoleServer:
         self.repo = repo.resolve()
         self._static_root = static_root
         self._snapshots = snapshots or composition.snapshot_service(self.repo)
-        self._jobs = jobs or JobService(self.repo)
+        self._jobs = jobs or composition.job_service(self.repo)
         self._decisions = decisions or DecisionService(self.repo)
         self._events = events or OrchestrationEvents(self.repo)
         self._router = RequestRouter(
