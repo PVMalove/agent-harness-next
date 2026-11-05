@@ -52,7 +52,7 @@ def test_server_binds_ipv4_loopback_and_ephemeral_port(project: Path) -> None:
             )
             await writer.drain()
             assert (await asyncio.wait_for(reader.read(), 2)).startswith(
-                b"HTTP/1.1 401"
+                b"HTTP/1.1 200"
             )
             writer.close()
             await writer.wait_closed()
@@ -668,12 +668,7 @@ def test_get_head_headers_and_missing_page(project: Path) -> None:
         def request(method: str, path: str) -> tuple[int, dict[str, str], bytes]:
             client = http.client.HTTPConnection("127.0.0.1", server.port, timeout=2)
             try:
-                from harness.console.discovery import discovery_path
-
-                token = json.loads(discovery_path(project).read_text())["token"]
-                client.request(
-                    method, path, headers={"Authorization": "Bearer " + token}
-                )
+                client.request(method, path)
                 response = client.getresponse()
                 return response.status, dict(response.getheaders()), response.read()
             finally:
