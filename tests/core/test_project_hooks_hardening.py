@@ -8,6 +8,7 @@ import dataclasses
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -316,3 +317,91 @@ def test_project_scratchpad_requires_the_current_runtime_session(
         text=True,
     )
     assert process.returncode == expected, process.stderr
+
+
+def _worktree(tmp_path: Path, repo: Path, branch: str) -> Path:
+    """A linked worktree of `repo` on `branch`, under the same temporary root."""
+    worker = tmp_path / "worker"
+    _git(repo, "worktree", "add", "-q", "-b", branch, str(worker))
+    return worker
+
+
+def _exec_payload(
+    cwd: Path,
+    workdir: object = None,
+    command: str = "git add app.py\ngit commit -m change",
+) -> dict[str, object]:
+    """A second-runtime `exec_command` payload, as the hook receives it."""
+    tool_input: dict[str, object] = {"command": command}
+    if workdir is not None:
+        tool_input["workdir"] = workdir
+    return {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "cwd": str(cwd),
+        "tool_input": tool_input,
+    }
+
+
+def _direct_master(
+    payload: dict[str, object], project: Path
+) -> subprocess.CompletedProcess[str]:
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("the hook is a bash script")
+    return subprocess.run(
+        [bash, str(HOOKS / "block-direct-master.sh")],
+        input=json.dumps(payload),
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_exec_command_workdir_selects_the_issue_checkout_over_the_payload_cwd(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+
+    result = _direct_master(_exec_payload(main, str(worker)), main)
+
+    assert result.returncode == 0, result.stderr
+    verdict = json.loads(result.stderr.strip().splitlines()[-1])
+    assert (verdict["hook_id"], verdict["decision"]) == ("block-direct-master", "allow")
+
+
+def test_exec_command_workdir_blocks_a_protected_checkout_despite_an_issue_cwd(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+
+    result = _direct_master(_exec_payload(worker, str(main)), main)
+
+    assert result.returncode == 2, result.stderr
+    assert "integration/harness-runtime-reliability" in result.stderr
+
+
+def test_a_relative_exec_command_workdir_is_resolved_against_the_payload_cwd(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+
+    result = _direct_master(_exec_payload(main, os.path.relpath(worker, main)), main)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_an_unusable_exec_command_workdir_blocks_a_commit(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+    payload = _exec_payload(worker)
+    payload["tool_input"]["workdir"] = 7  # type: ignore[index]
+
+    result = _direct_master(payload, main)
+
+    assert result.returncode == 2, result.stderr

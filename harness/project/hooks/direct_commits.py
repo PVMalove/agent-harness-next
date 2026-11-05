@@ -9,8 +9,9 @@
 
 Вызовы находит разбор `pr_commands.parse`: упоминание commit/push в аргументах печатающих
 команд, в кавычках и в теле heredoc вызовом не считается. Checkout вызова — каталог запуска
-(`cd` раньше в команде, иначе `cwd` из payload, иначе `CLAUDE_PROJECT_DIR`) вместе с опциями
-git `-C`, `--git-dir`, `--work-tree`, `--bare`: ветку спрашивает git с теми же опциями.
+(`cd` раньше в команде, иначе `workdir` вызова `exec_command`, иначе `cwd` из payload, иначе
+`CLAUDE_PROJECT_DIR`) вместе с опциями git `-C`, `--git-dir`, `--work-tree`, `--bare`: ветку
+спрашивает git с теми же опциями. Относительный `workdir` разрешается от `cwd` payload.
 `cd` учитывается только в простой цепочке строгого лексера (`pr_commands.strict_steps`).
 Commit/push в тексте, который не разобрать, checkout, который не определить, git, который не
 ответил, и push, способный обновить все ветки (`--all`, `--mirror`, refspec с `*`), блокируются.
@@ -72,6 +73,10 @@ UNRESOLVED = (
     "заблокирована (fail closed). cd учитывается только в простой цепочке через && или ; без $, "
     "обратных кавычек, скобок, | и ||; путь должен существовать; GIT_DIR, GIT_WORK_TREE и env "
     f"-C не поддерживаются. Укажи путь явно: git -C <path> commit {GUIDE}."
+)
+WORKDIR_UNRESOLVED = (
+    "Zero Direct Commits: workdir вызова exec_command должен быть строкой — фактический "
+    f"checkout неизвестен, команда заблокирована (fail closed). Укажи workdir строкой {GUIDE}."
 )
 GIT_NO_ANSWER = (
     "Zero Direct Commits: git завершился с ошибкой, не запустился или не ответил за "
@@ -458,6 +463,26 @@ def _base_branch(project: Path) -> str:
     return branch if isinstance(branch, str) else ""
 
 
+def command_start(data: object, project: Path) -> Path | None:
+    """Каталог запуска команды из payload: `exec_command.workdir`, `cwd` payload, проект.
+
+    `exec_command` второго runtime может выполнить команду не в `cwd` payload, поэтому явный
+    `workdir` важнее. Относительный `workdir` разрешается от `cwd` payload; пустой — как
+    отсутствующий. None — `workdir` есть, но он не строка: фактический checkout неизвестен.
+    """
+    payload = data if isinstance(data, dict) else {}
+    tool_input = payload.get("tool_input")
+    workdir = tool_input.get("workdir") if isinstance(tool_input, dict) else None
+    cwd = payload.get("cwd")
+    base = Path(cwd) if isinstance(cwd, str) and cwd else project
+    if workdir is None or workdir == "":
+        return base
+    if not isinstance(workdir, str):
+        return None
+    path = Path(workdir)
+    return path if path.is_absolute() else base / path
+
+
 def main() -> int:
     """CLI для shell-хука: `direct_commits.py < payload.json`.
 
@@ -473,9 +498,12 @@ def main() -> int:
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     project = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
     if isinstance(command, str):
-        cwd = data.get("cwd") if isinstance(data, dict) else None
-        start = Path(cwd) if isinstance(cwd, str) else project
-        reason = block_reason(command, start, project)
+        start = command_start(data, project)
+        reason = (
+            WORKDIR_UNRESOLVED
+            if start is None
+            else block_reason(command, start, project)
+        )
     else:
         # A payload without a string command is checked by its raw text (fail closed).
         reason = UNPARSED if CALL_TEXT.search(raw) else ""
