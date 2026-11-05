@@ -57,11 +57,11 @@
         <div class="inner">
           <div>
             <span class="eyebrow"><i></i> Agent Harness Next · beta</span>
-            <h1>Оркестрация ИИ-агентов, которая <em>доводит тикет до PR</em></h1>
+            <h1>Harness для Claude Code и Codex</h1>
             <p class="lead">
-              Портативный harness для Claude Code и Codex: Rust runtime, транзакционный
-              runtime-store, инкрементальные проверки, Release Gate и веб-консоль.
-              Python остаётся policy-слоем, исполнение — за нативным runtime.
+              Rust runtime, транзакционный runtime-store, инкрементальные проверки,
+              Release Gate и веб-консоль. Python остаётся policy-слоем,
+              исполнение — за нативным runtime.
             </p>
             <div class="hero-actions">
               <a class="btn primary" href="docs.html">Начать за 5 минут</a>
@@ -88,7 +88,7 @@
               <img src="mascot.svg" alt="Воксельный маскот Agent Harness Next" width="86" height="112">
               <div class="mascot-bubble">
                 <b>Привет, я H›.</b>
-                <span>Покажу, как harness доводит тикет до PR.</span>
+                <span>Коротко о том, как устроен harness.</span>
               </div>
             </div>
             <div class="terminal" aria-label="Пример вывода harness health">
@@ -146,10 +146,10 @@
       <div class="wrap">
         <div class="section-head">
           <div>
-            <div class="kicker">Что нового в harness</div>
-            <h2>Одна архитектура вместо набора обходных путей</h2>
-            <p>Harness разделяет policy и исполнение: Python принимает решения, Rust runtime хранит
-              состояние и запускает процессы, проверки становятся инкрементальными.</p>
+            <div class="kicker">Возможности</div>
+            <h2>Policy и исполнение разделены</h2>
+            <p>Python принимает решения, Rust runtime хранит состояние и запускает процессы.
+              Проверки выполняются по плану, а не всем набором.</p>
           </div>
           <a class="btn" href="architecture.html">Все решения</a>
         </div>
@@ -206,7 +206,7 @@
         <div class="section-head">
           <div>
             <div class="kicker">Архитектура</div>
-            <h2>Границы, которые можно проверить</h2>
+            <h2>Слои и границы</h2>
             <p>Python решает policy, Rust исполняет и хранит. Один writer на состояние, один
               протокол IPC, один аудит.</p>
           </div>
@@ -275,7 +275,7 @@
         <div class="section-head">
           <div>
             <div class="kicker">Демо</div>
-            <h2>Посмотрите на веб-консоль</h2>
+            <h2>Веб-консоль</h2>
             <p>Интерактивный макет: Главная, задачи, оркестрация, отчёты, восстановление и живые
               шаги агентов. Данные демонстрационные.</p>
           </div>
