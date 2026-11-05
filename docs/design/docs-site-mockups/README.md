@@ -13,6 +13,7 @@
 | `architecture.html` | Архитектура | Ownership, Rust runtime, store, IPC, supervisor, безопасность, ADR |
 | `demo.html` | Демо | Веб-консоль в iframe, переключатель ключевых экранов, пояснения |
 | `console.html` | Консоль | Самостоятельная демонстрация: Главная, Доска задач, Оркестрация, Отчёты |
+| `404.html` | Ошибка | Маскот H›, объяснение и возврат на главную |
 
 Общие файлы: `site.css` (токены, layout, компоненты, responsive), `site.js` (тема, поиск,
 copy, mobile sidebar, TOC, demo screens), `mascot.svg` (воксельный маскот). Внешних шрифтов, CDN и сетевых вызовов нет.
