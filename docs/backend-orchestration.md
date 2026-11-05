@@ -1,7 +1,7 @@
 # Руководство по backend-оркестрации
 
 `backend-orchestration` — opt-in capability для согласованной backend-разработки несколькими
-ролями. Она расширяет `pvmalove-suite`, но это не автономный scheduler. Coordinator (человек или
+ролями. Она расширяет `engineering-suite`, но это не автономный scheduler. Coordinator (человек или
 назначенная им управляющая сессия) планирует batch и ведёт переходы по настроенной политике
 approval. Роли не расширяют свой scope, не выбирают модель и не мержат pull request.
 
@@ -10,7 +10,7 @@ approval. Роли не расширяют свой scope, не выбирают
 содержит подробную процедуру настройки и запуска.
 
 Используйте её, когда у задачи есть независимые backend-границы или обязательная независимая
-проверка. Для обычной одной задачи достаточно стандартного pipeline `pvmalove-suite`.
+проверка. Для обычной одной задачи достаточно стандартного pipeline `engineering-suite`.
 
 ## Владение правилами
 
@@ -66,7 +66,7 @@ Manifest определяет режим роли (`write` или `read-only`), 
 ## 1. Включение
 
 Для нового git-репозитория выберите только `backend-orchestration`. CLI разрешит зависимость от
-`pvmalove-suite` автоматически.
+`engineering-suite` автоматически.
 
 ```bash
 python3 harness/bin/harness.py init /path/to/repository \
@@ -79,7 +79,7 @@ python3 harness/bin/harness.py init /path/to/repository \
 ```
 
 В PowerShell замените `python3` на `python`, а `\` на обратную кавычку. Не передавайте отдельно
-`pvmalove-suite`: capability уже содержит её через `extends`.
+`engineering-suite`: capability уже содержит её через `extends`.
 
 Чтобы включить её в существующем проекте с харнессом, сначала посмотрите локальный drift, затем
 обновите выбранный набор capability:
@@ -372,7 +372,9 @@ worker. Без него brief сохраняет `inherit`, а `dispatch send` �
 ```
 
 - Компоненты `mode` (`inherit`, `sandbox`, `unsandboxed`), `network.hosts` и `filesystem`
-  выбираются независимо от транспорта роли: `in-process` или `external`.
+  выбираются независимо от транспорта роли: `in-process` или `external`. Компонент `container`
+  называет образы встроенного исполнителя `docker`, а `environment` — имена переменных окружения
+  для его worker-а (см. ниже). План без этих компонентов сохраняет прежнюю форму и прежний digest.
 - Override роли (`roles`) или операции (`operations`: `qa`, `git`, `publish`) заменяет только те
   компоненты, которые в нём указаны, а остальные берутся из `defaults`. Операции `qa`, `git` и
   `publish` выполняет сам coordinator, а не worker, поэтому к ним применяются только `defaults` и
@@ -394,14 +396,168 @@ worker. Без него brief сохраняет `inherit`, а `dispatch send` �
   worker, применяет план и выполняет handoff (`observe`, `apply`, `handoff`). Значение `none` ничего
   не доказывает, поэтому без нативной реализации coordinator блокирует `dispatch send` для плана с
   `sandbox`, `unsandboxed`, хостами или путями. Блокировка наступает до передачи работы: тихой
-  подмены и отката на `inherit` нет, а нативное подтверждение ничем не заменяется. Харнесс такую
-  реализацию не поставляет, и `my_runtime:factory` в примере выше — модуль вашего проекта. Пока он не
-  подключён, любой `access_policy`, даже `mode: inherit`, блокирует `dispatch send`. `dispatch status`
-  сохраняет статус и доказательство worker (`runtime_access`).
+  подмены и отката на `inherit` нет, а нативное подтверждение ничем не заменяется. Харнесс
+  поставляет одну реализацию — встроенный контейнерный исполнитель `docker` (следующий раздел).
+  Любую другую среду подключает модуль вашего проекта, как `my_runtime:factory` в примере выше. Пока
+  проект не выбрал реализацию, любой `access_policy`, даже `mode: inherit`, блокирует
+  `dispatch send`. `dispatch status` сохраняет статус и доказательство worker (`runtime_access`).
 
-Если `dispatch send` остановлен, ошибка называет причину. Remedy одинаковый: подготовить указанные
+Если `dispatch send` остановлен, ошибка называет причину. Реализация, которая сама называет свой
+блокер (так делает `docker`), передаёт и собственный remedy, а `dispatch preflight` показывает её
+наблюдения в `runtime_access.verification.environment`. Иначе remedy общий: подготовить указанные
 хосты, пути и режим в новой сессии runtime; подключить реализацию `runtime_access`, которая
 проверяет реальный запуск worker; повторить `dispatch preflight`.
+
+### Встроенный контейнерный исполнитель `docker`
+
+Значение `extensions.runtime_access: "docker"` выбирает исполнитель из поставки харнесса:
+`harness-runtime` запускает каждый утверждённый external dispatch в отдельном контейнере Docker или
+Podman, а при заданном `access_policy.operations.qa.container` — и каждую команду QA. Контракт
+исполнителя описывают [ADR 0025](adr/0025-container-executor.md) и разделы «Решения реализации
+#807» и «Решения реализации #810» [ADR 0022](adr/0022-process-oci-supervisor.md); этот раздел
+описывает поставленное поведение. Пошаговую настройку целевого проекта — предпосылки, сборку
+образов, кэши, allowlist, блокеры, очистку и пример проектного адаптера — даёт англоязычное
+руководство [`harness/docs/container-executor.md`](../harness/docs/container-executor.md), которое
+`backend-orchestration` ставит как `.harness/docs/container-executor.md`. Проектные реализации
+`module:factory` работают, как раньше, а хост-процесс не может зарегистрировать другую реализацию
+под именем `docker`.
+
+```json
+"access_policy": {
+  "defaults": {
+    "mode": "sandbox",
+    "container": {"worker_image": "harness-worker:local", "proxy_image": "harness-proxy:local"},
+    "environment": ["LLM_API_KEY"],
+    "network": {"hosts": ["llm-api.example.com"]}
+  },
+  "roles": {"developer": {"container": {"worker_image": "harness-worker:dev",
+                                        "proxy_image": "harness-proxy:local"}}},
+  "operations": {"qa": {"container": {"worker_image": "harness-worker:local"},
+                        "network": {"hosts": []}}}
+},
+"extensions": {"runtime_access": "docker"}
+```
+
+- Компонент `container` содержит `worker_image` (обязателен), необязательный `proxy_image` и
+  необязательный `engine` (`docker` по умолчанию или `podman`). Тег — одна ссылка на образ без
+  пробелов и без ведущего `-`. Override роли или операции заменяет компонент целиком. Resolver
+  берёт теги только из конфига и не опрашивает движок, сеть и образы. `harness health` и схема
+  требуют `access_policy.defaults.container`, если выбран `docker`: без него роль осталась бы без
+  образа.
+- Компонент `environment` — список уникальных имён переменных окружения (`[A-Za-z_][A-Za-z0-9_]*`),
+  никогда не значений. Override роли или операции заменяет список целиком. План хранит имена в
+  отсортированном виде, поэтому они входят в `plan_digest` и закрепляются в brief при approval:
+  имя, добавленное в конфиг после `dispatch propose`, этот dispatch не получает. Значения движок
+  берёт из окружения `harness-runtime serve`, поэтому после их смены runtime нужно перезапустить.
+  Значения не попадают в конфиг, brief, digest, argv, evidence, логи, тексты ошибок и слои образа.
+  Auth-файлы агента не монтируются.
+- Каждая роль, которую отправляет `dispatch send`, должна иметь `transport: external` в
+  `assignment_plans`. Исполнитель оборачивает команду external-адаптера и не знает конкретного
+  агента.
+- Исполнитель работает только в эпохе runtime store и только на Linux: на файловом ledger и вне
+  Linux `dispatch preflight` блокирует его с remedy (`harness-runtime migrate`, затем
+  `harness-runtime serve`).
+- `dispatch preflight` спрашивает runtime (`container.observe`), а runtime опрашивает движок только
+  на чтение: `<engine> info` определяет режим (`rootful`, `rootless`, `unknown` или `unavailable`),
+  SELinux и ID демона, а `<engine> image inspect` находит локальный id каждого образа. При успехе
+  evidence содержит движок, режим и id образов. Явный блокер с собственным remedy дают: недоступный
+  движок, движок, чей режим нельзя определить по `info` (например, docker-совместимая обёртка
+  другого движка), удалённый Podman, Docker с userns-remap, отсутствующий образ, транспорт
+  `in-process`, режим `unsandboxed`, непустой `network.hosts` без `proxy_image`, корень плана,
+  который открывает сокет движка или каталог runtime, содержит запятую, кавычку или перевод строки
+  либо пересекается с `/harness-home`, отсутствующая в окружении `harness-runtime serve` переменная
+  из `environment` и имя, которое исполнитель задаёт сам (`HOME`, `GIT_CONFIG_COUNT`,
+  `GIT_CONFIG_KEY_0`, `GIT_CONFIG_VALUE_0`, `HARNESS_EXECUTOR`, а при непустом `network.hosts` ещё
+  `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` и их варианты в нижнем регистре). Блокер называет только
+  имена переменных. Preflight перечисляет все блокеры сразу, и ни один из них не создаёт контейнер.
+  Runtime проверяет переменные ещё раз перед запуском: пропавшая после approval переменная отклоняет
+  send, а dispatch остаётся `approved`.
+- Харнесс образы не собирает, не скачивает и не публикует. Payload `.harness/container/` содержит
+  необязательный базовый образ worker-а `Dockerfile.sandbox` (Debian slim с `git`, `curl`, `jq`,
+  Python с `uv` и Node.js), `Dockerfile.proxy` и код egress-proxy. Команды `docker build` и
+  `podman build` для обоих образов даёт руководство; отсутствующий образ соберите или скачайте
+  сами, затем повторите `dispatch preflight` и `dispatch propose`.
+- `dispatch propose` опрашивает движок и закрепляет id образов в поле brief `runtime_images`
+  (`{"worker": "sha256:…", "proxy": "sha256:…" | null}`) рядом с планом. Его sha256 входит в
+  transition digest (`runtime_images_sha256`), но не в `plan_digest`: план остаётся функцией
+  конфига, а образ под тем же тегом может измениться. `dispatch create` опрашивает движок ещё раз,
+  поэтому образ, пересобранный после `propose`, меняет digest, и explicit approval со старым digest
+  отклоняется. Поле есть у brief, который отправляет `dispatch send`, и у brief контейнерного QA;
+  publish и хост-QA его не получают. Brief без поля остаётся валидным.
+- `dispatch send` запускает только закреплённые id. Если образ пропал или изменился после
+  `propose`, runtime отклоняет запуск с `approval_mismatch`, а dispatch остаётся `approved`.
+  Remedy — вернуть образ с закреплённым id либо пересобрать или скачать образ, отменить dispatch
+  (`dispatch cancel`) и повторить `dispatch propose`: approval для другого образа не
+  переиспользуется.
+- `dispatch send` передаёт supervised docker-dispatch в `execution.launch` runtime; Python argv
+  движка не строит. Runtime создаёт сеть `--internal` и sidecar-proxy (если `network.hosts` не
+  пуст), затем worker `harness-<dispatch_id>` командой `<engine> create --pull never` и запускает
+  его `<engine> start` без ожидания (detached). Worker получает `--network none` или внутреннюю сеть
+  dispatch, пользователя хоста (rootful — `--user <uid>:<gid>`, rootless Podman —
+  `--userns=keep-id`, rootless Docker — `--user 0:0`; при SELinux ещё `label=disable`),
+  `--cap-drop ALL`, `no-new-privileges`, HOME на tmpfs `/harness-home`, `safe.directory=*` через
+  `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` и маркер `HARNESS_EXECUTOR=docker`.
+  Каждое имя из `environment` закреплённого плана передаётся как `--env NAME` без значения. Каждый
+  корень плана монтируется по тому же абсолютному пути: `read` — read-only, `write` — read-write;
+  других монтирований нет. Метки `harness.dispatch`, `harness.repository`, `harness.plan_digest`,
+  `harness.operation` и `harness.execution` связывают объекты с dispatch и исполнением. Квитанция
+  `dispatch send` (поле `execution`) называет движок и id контейнера.
+- При непустом `network.hosts` worker выходит наружу только через sidecar из закреплённого
+  proxy-образа: переменные `HTTP_PROXY` и `HTTPS_PROXY` (и в нижнем регистре) указывают на него, а
+  `NO_PROXY` оставляет только loopback. Прокси пропускает HTTP и `CONNECT` к точно совпадающему
+  хосту плана на портах 80 и 443, отказывает IP-литералам и именам с loopback, link-local,
+  unspecified или multicast адресом и отвечает `403` на всё остальное. Хост API модели нужно
+  перечислить явно; ssh-remote Git через прокси не работает.
+- Неудачный staged launch — at-most-once: runtime откатывает созданные объекты от новых к старым,
+  исполнение становится `lost`, операция — `failed`, dispatch — `blocked`, и повторного запуска нет.
+- Адаптер должен лежать внутри монтирований плана и запускаться в образе: `--entrypoint` получает
+  путь адаптера. Для `.py`-адаптера coordinator передаёт интерпретатор хоста, которого в образе
+  обычно нет, поэтому нужен исполняемый адаптер. Флаги агента для запуска в контейнере проектный
+  адаптер выставляет по маркеру `HARNESS_EXECUTOR`.
+
+Ограничения: worker-роль видит `shared_storage` только для чтения, а в хранилище пишет только в
+`.sandboxes/scratch`, и сокет runtime в контейнер не монтируется. Поэтому команды coordinator,
+которые меняют ledger (`dispatch self-report`, `dispatch heartbeat`, `report submit`), из
+контейнера не выполняются: worker кладёт отчёт в `report_staging_path`, а после его выхода отчёт
+записывают на хосте командой `report submit --file <путь>`. Отдельный `--checkout` роли
+`code-review` в контейнер не монтируется: монтируются только корни плана. Настоящий smoke в CI (job
+`docker-smoke`) проверяет только rootful Docker; Podman (rootful и rootless), rootless Docker и
+хосты с SELinux подтверждены лишь argv-матрицей и scripted-движком и на живом движке не проверены.
+
+Контейнерный QA включается только заданным `access_policy.operations.qa.container`: тогда каждая
+команда QA — отдельный foreground-контейнер `--rm --init` из образа, закреплённого в brief
+QA-dispatch, а sidecar и сеть живут весь QA run. Монтирование сужено: каталог clean-room на запись,
+`git_common` только на чтение и `cache` плана. Exit code команды попадает в её stage evidence, а
+окончание классифицирует ADR 0022 (раздел «Решения реализации #810»). Без
+`operations.qa.container` QA остаётся на хосте, а операции `git` и `publish` всегда выполняет
+coordinator в своём окружении (раздел «Доступ QA, Git и publish» ниже).
+
+### Статус и очистка контейнерного worker
+
+Исполнение контейнерного worker-а наблюдает `harness-runtime`, а не coordinator. Reconcile runtime
+при старте, перед каждой операцией над исполнением и раз в `dispatch_poll_interval_seconds`
+сверяет контейнер с его метками: живой объект — `running`, выход с кодом — `exited`, доказанное
+отсутствие — `lost`, отсутствие ответа — `unknown`. `dispatch status` и `dispatch wait`
+показывают это исполнение из runtime и движок сами не спрашивают.
+
+Когда worker завершается, runtime сохраняет его потоки (`executions/<id>/stdout.log` и
+`stderr.log`), записывает код выхода в исполнение и удаляет worker, sidecar и сеть в таком
+порядке; незавершённое удаление повторяет reconcile. По сроку `worker_execution_timeout_seconds`
+runtime останавливает контейнер (`stop --time <stop_grace_seconds>`, затем `kill`) и записывает
+`stopped_by: "deadline"`. Работающий worker без явной команды не останавливается: остановить его
+можно командой движка (`docker stop harness-<dispatch_id>`). Контейнер не пишет в ledger, поэтому
+обычно завершается раньше, чем отчёт записан: подготовленный отчёт лежит в `report_staging_path`,
+и его записывают командой `report submit --file <путь>`.
+
+`harness cleanup <repo>` перечисляет оставшиеся контейнеры и сети этого репозитория через runtime
+(`container.objects`: runtime фильтрует их по собственной метке `harness.repository` и знает
+состояние исполнения каждого объекта) и удаляет их через `container.remove` движками из
+`access_policy`. Команда работает по общим правилам: предпросмотр без `--apply`, `--apply`
+применяет свежий план и отказывает, если план изменился. Раздел выполняется только когда
+`.harness/orchestration.json` выбирает `extensions.runtime_access: "docker"`, и одинаков для `soft`
+и `hard`. Cleanup пропускает не остановленный worker (с подсказкой `<engine> stop <имя>`), объекты
+живого исполнения и ответ runtime, который нельзя получить или прочитать. Volumes runtime не
+перечисляет и не удаляет: анонимные volumes из `VOLUME` образа остаются за `rm`.
 
 ### Доступ QA, Git и publish
 
@@ -425,8 +581,10 @@ worker. Без него brief сохраняет `inherit`, а `dispatch send` �
   Он лишь означает, что coordinator работает в своём окружении. Coordinator принимает `sandbox` и
   `unsandboxed`, только если подключённая реализация `runtime_access` подтверждает их для процесса
   coordinator (`observe` с транспортом `in-process`). Без неё режим считается неподдерживаемым.
-  Харнесс не поставляет такую реализацию и не заявляет нативной поддержки. Ваш проект определяет,
-  что именно подтверждает ваша реализация.
+  Харнесс не поставляет такую реализацию и не заявляет нативной поддержки: встроенный `docker`
+  подтверждает только external worker и команды контейнерного QA (`operations.qa.container`, раздел
+  выше), а для процесса coordinator даёт блокер. Ваш проект определяет, что именно подтверждает
+  ваша реализация.
 - Результат. Подтверждённый отказ (`denied`), неподдерживаемый режим (`unsupported`) и непроверенное
   требование (`unverified`, например путь не существует или remote недоступен) останавливают
   действие до первого изменения. Ошибка называет ресурс, путь и причину. Её remedy — конкретное
@@ -439,7 +597,8 @@ worker. Без него brief сохраняет `inherit`, а `dispatch send` �
 запись очереди не создаются, dispatch остаётся `approved`, предыдущие evidence и попытки
 сохраняются. Следующий запуск после исправления среды проходит без ручной очистки. Любой сбой
 `qa run` уже после взятия lease (создание checkout, смена состояния, запись evidence, неожиданное
-исключение) снимает lease, запись очереди и состояние dispatch. Отказ перед `refresh`, `resolve` и
+исключение) снимает lease, запись очереди и состояние dispatch. Если ledger в этот момент занят,
+откат ждёт lock до 30 секунд (см. «Занятый ledger, `report complete` и `ledger release-lock`»). Отказ перед `refresh`, `resolve` и
 `publish` происходит до fetch, rebase, создания batch и push. Откат отказавшего rebase возвращает
 worktree на issue-ветку. Отказ записи метаданных или remote при rebase и push coordinator
 классифицирует как ошибку доступа (`metadata-write-denied`, `remote-access-denied`,
@@ -518,6 +677,30 @@ brief со stale package. Если и новый package не свежий по 
 `--no-memory`. Brief передаёт compact summary (starting files, related tests, precedents и pinned
 commits). Полный diff остаётся в package один раз. Package не заменяет immutable brief и не
 отменяет обязательные self-report, heartbeat, review или QA.
+
+## Наблюдение запуска и готовый несданный отчёт
+
+Поставляемый пример — `.harness/orchestration/adapters/claude_code.py`; `claude` или `codex`
+сами по себе адаптерами не являются. Из консоли Harness сначала открывается выбранная сессия,
+затем выполняется подтверждённая отправка. Для намеренно скрытого запуска передают
+`--adapter-arg=--visibility=background`. Пример сохраняет native permissions и hooks.
+Проверка родителя не подтверждает доступ Bash-инструментов внутри worker: native probe должен
+пройти до реализации. Постоянный отказ доступа требует подготовки среды, а не одинаковых retry.
+Смена sandbox-профиля делается до propose/approval; глобальные настройки не отключаются.
+
+`dispatch observe --dispatch <id> --offset <next_offset>` читает существующие события локально.
+Открытие панели, обновление и reconnect не вызывают модель; окно можно закрыть без остановки
+worker. Запрос native-разрешения подтверждает человек; он не даёт dispatch approval.
+Первый self-report по умолчанию ждут 120 секунд независимо от heartbeat stale. Для доказанного
+раннего завершения: auto-report → auto-decide → человеческий resume-stop --restart. Повторный
+запуск сохраняет исходный контракт; при drift нужно новое предложение.
+
+Для готового отчёта, который worker не смог сдать, coordinator использует исходный staging-файл:
+`report submit --file <path> --relayed-by <sender> --relay-reason <exact-error>
+--source-sha256 <hash-original-bytes>`. JSON worker не редактируется, provenance пишется отдельно.
+Fail/not_run остаются такими; make lint не заменяет make verify. При уже записанном отчёте
+используют report complete, когда результат submit указывает этот маршрут. Сравнение падения
+с базовым SHA — отдельное evidence, не исправление исходного отчёта задним числом.
 
 ## 3. Выбрать роли и спланировать batch
 
@@ -907,23 +1090,67 @@ transport failure — это operational evidence (`verification-infrastructure`
 code finding. Context limit даёт `context-pressure`, только если для отчитавшегося dispatch записано
 `critical`-наблюдение `context_pressure` (см. ниже). Голое утверждение даёт `unknown`.
 
+**Домены отказа.** Каждый routing record несёт `failure` — ровно один домен ADR 0019
+(`environment_preparation`, `infrastructure`, `policy`, `tooling`, `code_test`, `timeout`,
+`cancelled`, `unknown`) с доказательством, которое показывает этот домен: `domain`, `method`,
+`matched` и `source`. `method` равен `structured` (поле отчёта, стадии или runtime), `heuristic`
+(текстовый шаблон, который никогда не доказывает `code_test`), `approver` (домен назвал человек
+или политика) или `fallback`, а `fallback` всегда означает `unknown`.
+
+Домен `code_test` доказывают находка в review, severity warning/blocker на оси, явный retry, который
+назначил reviewer, failed check, открытый carried item, подтверждённый дефект проекта при
+подготовке QA, отчёт conflict-resolver-а с `resolver.cause: task-defect` и сдвинутый candidate (он
+изменился после закрепления dispatch). Coordinator считает сдвинутый candidate `code_test`
+намеренно: ledger доказывает, что изменилась сама работа, поэтому маршрут остаётся developer retry
+и тратит бюджет, как до появления доменов. Подсказка `retry_reason_classifier` — не доказательство:
+она не заменяет структурированный факт отчёта, и без такого факта домен остаётся `unknown`.
+
+Остальные домены следуют из фактов. Структурированный `tooling_blocker` даёт `tooling`,
+подтверждённый сбой окружения QA — `environment_preparation`, записанное `critical`-наблюдение
+`context_pressure` — `infrastructure`, `block-bypass` — `policy`. Всё, что не подтверждает ни один
+структурированный факт, — `unknown`, но никогда `code_test`.
+
+Только retry с доменом `code_test` расходует `retry_policy.max_developer_retries`.
+`infrastructure`, `environment_preparation`, `policy`, `tooling`, `timeout`, `cancelled` и `unknown`
+не расходуют его никогда. При подсчёте developer retry для остановки `budget-exhausted`
+учитываются только такие записи.
+
+Coordinator отказывает developer retry по отчёту code-review, qa, verification или publish, если
+домен не `code_test`. Отказ типизирован как `UnprovenFailureError` и несёт `failure`; `batch decide
+--decision retry` возвращает `failure` и remedy и ничего не пишет. При `approval_policy: auto` тот же
+отказ становится остановкой `no-automatic-route`/`unknown-reason`, и её evidence сохраняет `failure`.
+Эта же остановка завершает автоматический developer retry с доменом `unknown`, потому что такой
+retry не тратил бы бюджет и остался бы без ограничения.
+
+Approver доказывает домен `code_test` категориями `--reason-category code`, `requirements` или
+`candidate-change`. Он может запросить developer retry и через `--retry-role developer`, в том числе
+для отчёта code-review, qa или verification, заблокированного инструментом. Оба варианта доказывают
+домен `code_test` как `approver` и расходуют бюджет. Исключение — `tooling-retry`: с
+`--retry-role developer` такой retry стадии developer сохраняет домен `tooling` и ничего не
+расходует; остальные `tooling-retry` тоже не расходуют. Решение, записанное до появления доменов,
+не несёт `failure`, и для него действует прежнее правило.
+
 | Стадия отчёта | `accept` | `retry` | `block` / `fail` | `abandon` |
 | --- | --- | --- | --- | --- |
 | architect | developer | новый architect | terminal | `abandoned` |
-| developer | risk assessment | `developer-retry` продолжает непринятый candidate этого report (`snapshot_commit` — его `commit_sha`); retry создаёт новый candidate, и тот получает новую risk assessment; при непустом закрытом списке перенесённых пунктов маршрут — `fix-forward` | terminal | `abandoned` |
-| code-review | qa | новый code-review на том же `candidate_commit`, если report `blocked`, причина — `verification-infrastructure`/`transport`/`context-pressure`, findings пусты, обе оси без findings, нет failed check и candidate не менялся; иначе `developer-retry`, а при непустом закрытом списке перенесённых пунктов — `fix-forward` | terminal | `abandoned` |
-| qa | publish | новый qa на том же SHA при том же условии (QA остаётся read-only); defect или новый candidate — `developer-retry` | terminal | `abandoned` |
-| publish | `completed` | новый publish на том же принятом SHA при `verification-infrastructure`/`transport`/`context-pressure`; `developer-retry`, если candidate должен измениться | terminal | `abandoned` |
+| developer | risk assessment | `developer-retry` продолжает непринятый candidate этого report (`snapshot_commit` — его `commit_sha`); retry создаёт новый candidate, и тот получает новую risk assessment; бюджет расходуется только при домене `code_test`; при непустом закрытом списке перенесённых пунктов маршрут — `fix-forward` | terminal | `abandoned` |
+| verification | risk assessment | `developer-retry` при домене `code_test`, иначе отказ | terminal | `abandoned` |
+| code-review | qa | новый code-review на том же `candidate_commit`, если report `blocked`, причина — `verification-infrastructure`/`transport`/`context-pressure`, findings пусты, обе оси без findings, нет failed check и candidate не менялся; в остальных случаях `developer-retry` при домене `code_test` (при непустом закрытом списке перенесённых пунктов — `fix-forward`), при другом домене — отказ | terminal | `abandoned` |
+| qa | publish | новый qa на том же SHA при том же условии (QA остаётся read-only); defect или новый candidate — `developer-retry` при домене `code_test`, иначе отказ | terminal | `abandoned` |
+| publish | `completed` | новый publish на том же принятом SHA при `verification-infrastructure`/`transport`/`context-pressure`; `developer-retry` при домене `code_test`, если candidate должен измениться; иначе отказ | terminal | `abandoned` |
 
-`code`, `requirements`, `candidate-change` и `unknown` всегда ведут в `developer-retry`. Повторить
-read-only стадию на том же SHA могут только три operational-категории, и лишь при пустых findings,
-неизменном candidate и отсутствии scope/requirement blocker. Противоречивая или неподтверждённая
-причина всегда даёт безопасный маршрут `developer-retry`. Повтор на том же SHA — это новый
-immutable dispatch: новый dispatch ID, повторная проверка свежести Context Package и собственное
-явное approval при `manual_all`, а прежние brief, report и blocker остаются audit evidence.
-Фиктивные и пустые commit не используются, и новый candidate всегда требует новой risk assessment.
-`block` и `fail` сами retry не запускают. `--retry-role developer` принудительно выбирает developer
-retry там, где coordinator иначе повторил бы ту же роль на том же SHA.
+`code`, `requirements` и `candidate-change` ведут в `developer-retry` при доказанном домене
+`code_test`. `unknown`, противоречивая или неподтверждённая причина не доказывает дефект кода: в
+ручном пути стадия developer повторяется через `developer-retry` без расхода бюджета, а в
+автоматическом политика останавливает такой retry. Стадии code-review, qa, verification и publish
+получают отказ (см. «Домены отказа»). Повторить read-only стадию на том же SHA могут только три
+operational-категории, и лишь при пустых findings, неизменном candidate и отсутствии
+scope/requirement blocker. Повтор на том же SHA — это новый immutable dispatch: новый
+dispatch ID, повторная проверка свежести Context Package и собственное явное approval при
+`manual_all`, а прежние brief, report и blocker остаются audit evidence. Фиктивные и пустые commit
+не используются, и новый candidate всегда требует новой risk assessment. `block` и `fail` сами retry
+не запускают. `--retry-role developer` принудительно выбирает developer retry там, где coordinator
+иначе повторил бы ту же роль на том же SHA.
 
 `tooling` — отдельная операционная категория: hook, классификатор безопасности или ledger
 заблокировал законное действие роли. Coordinator присваивает её только по структурному полю
@@ -1026,8 +1253,9 @@ code-review, qa или publish report; не `tooling-retry` и не `bypass-reru
 (собственный у retry developer-отчёта, иначе последний принятый), ещё не содержит этот tip. Routing
 record дополнительно называет `rebase_target_commit` (новый tip) и `integration_base_commit` (база,
 от которой он ушёл) и сохраняет `retry_item_ids`. `next_action` остаётся `developer-retry`, и такой
-retry расходует один `retry_policy.max_developer_retries`. Ошибка fetch отклоняет
-`batch decide --decision retry` с remedy. `decision-packet` показывает её в `route_preview.retry`.
+retry расходует один `retry_policy.max_developer_retries`, когда его домен отказа — `code_test`.
+Ошибка fetch отклоняет `batch decide --decision retry` с remedy. `decision-packet` показывает её
+в `route_preview.retry`.
 Решение только предлагает target: `integration_base_commit` batch до accept не меняется.
 
 Target попадает в brief только через dispatch с явным approval при любой `approval_policy`, кроме
@@ -1335,15 +1563,21 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 
 | `category` | `reason` |
 | --- | --- |
-| `integrity-failure` | `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed` |
+| `integrity-failure` | `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed`, `operational-hold` |
 | `budget-exhausted` | `retry_policy.max_developer_retries`, `continuation_policy.max_continuations`, `continuation_policy.max_rate_limit_resumes`, `attention_policy.max_infrastructure_retries`, `tooling-retry-repeated` |
-| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end` |
+| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure` |
 
 `batch auto-decide` и `batch auto-report` находят остановку в порядке: целостность, бюджет, маршрут.
 Coordinator пишет остановку один раз в `batch.auto_stop` вместе с итоговым отчётом.
-`ledger-validation-failed` команда только выводит: ledger недостоверен. Остановка не создаёт решения
-и не ослабляет валидацию. После остановки каждый шаг batch требует `--approved-by`, а вернуться в
+`ledger-validation-failed` команда только выводит: ledger недостоверен. Остановку `operational-hold`
+политика записывает, когда runtime store удерживает batch: она не решает отчёт и не делает abandon,
+а удержание снимает только `recovery resume` (раздел «Удержание batch и команды `recovery`»).
+Остановка не создаёт решения и не ослабляет валидацию. После остановки каждый шаг batch требует `--approved-by`, а вернуться в
 `auto` batch не может.
+
+Остановку `no-automatic-route`/`unknown-reason` политика записывает и при отказе
+`UnprovenFailureError` от read-only стадии или publish (см. «Домены отказа»): решение не
+записывается, а evidence остановки сохраняет `failure`.
 
 Coordinator пишет итоговый отчёт один раз в `batch.auto_report`: при accept отчёта publish или при
 остановке.
@@ -1422,6 +1656,7 @@ candidate и evidence, но запрещает создание следующе
 
 | `attention_reason` | Когда |
 | --- | --- |
+| `operational-hold` | runtime store удерживает batch записью `recovery/hold/<batch_id>.json`; после устранения причины человек разрешает attention, затем `recovery resume` снимает удержание |
 | `unknown-reason` | retry с причиной `unknown` |
 | `infrastructure-retry-repeated` | operational retry одного candidate больше `max_infrastructure_retries` |
 | `tooling-retry-repeated` | третий подряд `tooling-retry` на одном candidate; снимается после исправления инструмента |
@@ -1681,10 +1916,22 @@ coordinator-а, которая взяла lock. Старые записи без
   содержит владельца и `held_seconds`. Это не недоступность coordinator-а: повторите
   `dispatch status` через `retry_after_seconds`.
 
-Терпимость касается только этих двух команд опроса и `report complete`. Ни одна запись не идёт без
-lock. У остальных команд занятый lock остаётся ошибкой. `report complete` при занятом lock
-останавливается на шаге, который не смог прочитать состояние. Она ничего не пишет и в remedy
-называет себя для повтора.
+Терпимость касается только этих двух команд опроса, `report complete` и освобождения QA-lane в
+`qa run`. Ни одна запись не идёт без lock. У остальных команд занятый lock остаётся ошибкой.
+`report complete` при занятом lock останавливается на шаге, который не смог прочитать состояние.
+Она ничего не пишет и в remedy называет себя для повтора.
+
+`qa run` освобождает QA-lane после сбоя и после записи report. Если lock занят, освобождение ждёт
+его до 30 секунд и повторяет попытку каждые 0,25 секунды. Когда lock освободился, `qa run` снимает
+только lease и запись очереди своего dispatch. После сбоя он ещё возвращает dispatch в `approved`,
+и тот же dispatch можно сразу запустить снова. Если lock занят все 30 секунд, ошибка
+`QA dispatch <id> was not released` называет dispatch, владельца lease и время его истечения.
+Тогда dispatch остаётся `working`. После истечения lease coordinator запускает
+`qa clear-stale-lease`. Команда снимает lease и запись очереди и возвращает dispatch в `approved`,
+если у него нет записанного report. После этого тот же dispatch запускается снова. Ответ команды и
+запись `qa-lane/recoveries/*.json` содержат `restored_dispatch_state`: `approved` или `null`.
+Откат запуска, который пережил свой lease, не снимает lease нового запуска того же dispatch и не
+меняет его состояние.
 
 Состояние lock показывает команда только для чтения. Она не берёт lock и поэтому работает, когда
 ledger занят:
@@ -1735,6 +1982,53 @@ lock при этом не трогается. Объект `lock` описыва
 | `acquired_at` | `acquired_at` из записи, иначе mtime `owner.json` для нечитаемой записи или каталога lock |
 | `held_seconds` | сколько секунд lock держится к моменту проверки |
 
+В эпохе runtime store (схема store 3) `ledger lock-status` сохраняет поля файлового lock и их
+вердикты и добавляет объект `qa_lease`: владелец lease QA-lane, идентичность его процесса,
+`fencing_token`, `expires_at`, `stale_heartbeat`, вердикт runtime и `release_available`. Если
+файловый lock не занят, `ledger release-lock` без `--force` снимает истёкший lease только при
+вердикте `owner-dead`. Живого владельца команда отклоняет кодом 2 и строкой
+`REMEDY: [lease_held] stale_heartbeat=… verdict=…`. `--force` с approval и причиной снимает lease
+при любом вердикте через `lease_clear`, и runtime записывает решение в audit.
+
+#### Параллельная запись, снимки чтения и lease QA-lane
+
+Команды разных batch пишут параллельно. Команда читает store из одного снимка (`state.read` с
+`snapshot`): коммит другого batch между двумя её чтениями не даёт ни отказа, ни половины двух
+состояний. Команды чтения (`dispatch status`, `batch auto-report`, `batch decision-packet`,
+`qa status`) не ждут писателя. Запись в один batch по-прежнему сериализует `revision` строки.
+Решение по всем batch (`concurrency_budget` в `dispatch create`, дубль ticket, branch или worktree в
+`batch create`) защищает ревизия строки `generation` из снимка этого решения. Из двух команд,
+решивших по одному состоянию, коммитит одна, а другая получает `revision_conflict` по `generation`
+и повторяется.
+
+QA-lane в store — singleton lease с `fencing_token`. `qa run` и `integration local-qa` берут его
+операцией `lease_acquire`. Runtime записывает идентичность процесса-владельца из ядра: host,
+boot, PID-namespace, pid и время старта процесса. Каждый новый lease увеличивает `fencing_token`.
+Владелец продлевает lease heartbeat каждую треть `lease_ttl_seconds` (по умолчанию 300 с;
+`--lease-seconds` переопределяет срок). Release или heartbeat с чужим владельцем или токеном
+получает `fencing_mismatch`. После `expires_at` runtime проверяет владельца только по
+идентичности:
+
+| Вердикт | Значение | Lease |
+| --- | --- | --- |
+| `owner-dead` | тот же host, boot и PID-namespace, процесса с этим pid нет | снимается без `--force` |
+| `owner-alive` | pid занят процессом с записанным временем старта | остаётся |
+| `owner-pid-reused` | pid занят процессом с другим временем старта | остаётся: это не доказывает смерть |
+| `owner-in-other-environment` | другой boot или PID-namespace | остаётся |
+| `owner-on-another-host` | другой host | остаётся |
+| `owner-unknown` | идентичности нет (lease схемы 2, клиент вне видимости runtime) | остаётся |
+
+Lease мёртвого владельца снимает следующий `qa run`, `integration local-qa` или `ledger
+release-lock`. Запись audit содержит владельца, идентичность, наблюдение, вердикт и время. Как и
+`qa clear-stale-lease`, снятие удаляет запись очереди владельца, возвращает его QA dispatch в
+`approved` и пишет `qa-lane/recoveries`. При другом вердикте запрос завершается кодом 2 с
+`[lease_held]` и `stale_heartbeat`. `qa status` показывает `stale_heartbeat`, а `dispatch status`
+показывает lane в объекте верхнего уровня `qa_lane`. Живого владельца не снимает ни автоматика, ни
+`ledger release-lock` без `--force`. Ручной override остаётся `ledger release-lock --force` или
+`qa clear-stale-lease`. `harness-runtime serve` нужно запускать в PID-namespace, который видит
+coordinator-ы (host или предок их песочниц). Runtime, который не видит клиента, не записывает его
+идентичность, и такой lease автоматически не снимается.
+
 Команда снимает только тот lock, который проверила: если владелец сменился во время снятия, она
 отказывает и просит повторить. Запуски `ledger release-lock` не пересекаются, потому что их
 сериализует файловая блокировка ОС (`.coordinator.lock.release` в каталоге state), которую система
@@ -1760,6 +2054,85 @@ python .harness/orchestration/coordinator.py --repo . ledger release-lock --forc
 `ledger-lock-force-release-failed` называет первую. `ledger validate` проверяет контрольные суммы
 этих записей; подмену записи вместе с её суммой или удаление файла он не обнаруживает. В консоли
 то же действие — команда «Снять lock ledger» с подтверждением.
+
+### Запись lifecycle в эпохе runtime store
+
+После `harness-runtime migrate` (`ledger.json` версии 4) каждую мутацию batch и dispatch принимает
+Rust runtime, а не файловая запись и не lock `.coordinator.lock` (ADR 0020, ADR 0021, раздел 4).
+Python не открывает `runtime.db` и не имеет запасного пути записи: без запущенного runtime команда
+записи отказывает кодом 2 и `[runtime_unavailable]`, ничего не создаёт и не меняет.
+
+- **Единица записи.** Блок `_ledger_lock` команды стал её единицей записи. Примитивы ledger
+  (`write_immutable`, `write_artifact`, `replace`, `delete`) только накапливают мутации, а команда
+  читает собственные записи из своего view. При чистом выходе из блока coordinator отправляет одну
+  операцию `state.write` на каждый batch; исключение внутри блока не отправляет ничего, кроме
+  записей, которые отказ сохраняет сам (запись попытки при отказе доступа `qa run` и флаг
+  `needs_attention` при отказе `dispatch create`: перед исключением они вызывают `persist_writes`,
+  как их держал файловый ledger). Каждый внешний блок `_ledger_lock` и каждый `read_state` читает
+  свежий снимок store, поэтому опрос `dispatch wait` видит новый `reported` и новые heartbeat;
+  чтения команды до блока видят снимок её начала. Вложенный блок присоединяется к внешней единице. Если мутации касаются двух batch, они уходят двумя
+  транзакциями: каждая атомарна, но не обе вместе.
+- **CAS по revision.** `state.read` отдаёт `revision` каждой строки (`batch`, `dispatch`,
+  `dispatch-status`, `qa-lane`, очередь QA, запись `record`). Первое касание существующей строки
+  несёт ту ревизию, которую команда прочитала; конверт запроса несёт ревизию строки batch
+  (0 при создании). Зафиксированная транзакция увеличивает ревизию каждой затронутой строки ровно
+  на 1. Устаревшая ревизия даёт `revision_conflict`, и ничего не записывается.
+- **Транзакция.** `BEGIN IMMEDIATE`, затем строки в порядке `batch` → `qa_lane` → `generation`
+  (строки batch, строки QA-lane, затем audit и строка `operations`); одна запись audit на мутацию
+  в порядке запроса. Неизменяемые записи (план, brief, отчёт, checkpoint, evidence) не заменяются
+  и не удаляются (`invariant_violation`). Инварианты схемы проверяет SQLite: CHECK #781 для batch и
+  CHECK состояния исполнения (`DispatchState` терминален при исполнении `unknown`, `launching`
+  или `running`).
+- **Идемпотентность.** Строка `operations` (`intent`, `committed` или `failed`) пишется в той же
+  транзакции. Повтор с тем же `operation_id` и тем же digest запроса возвращает сохранённый
+  результат; тот же `operation_id` с другим запросом — `idempotency_conflict`. `operation_id`
+  равен `sha256(batch_id, expected_revision, operation, payload_digest)` (ADR 0021, раздел 4).
+  Полезная нагрузка содержит времена, поэтому команда, перезапущенная после SIGKILL coordinator,
+  строит новый ключ, и CAS по `revision` отвечает `revision_conflict`, а не сохранённым
+  результатом: команду нужно повторить.
+
+| Код | Когда | Повтор | REMEDY (первая строка) |
+|---|---|---|---|
+| `revision_conflict` | другая команда изменила строку после чтения | да | `[revision_conflict]` повторить команду: она заново читает store и применяет политику к текущему состоянию |
+| `store_busy` | store занят дольше 5 секунд | да | `[store_busy]` повторить команду |
+| `runtime_unavailable` | runtime не отвечает | да | `[runtime_unavailable]` запустить `harness-runtime serve --repo <repo>` |
+| `idempotency_conflict` | `operation_id` уже занят другим запросом | нет | `[idempotency_conflict]` повторить команду: она выведет новый id из текущей ревизии |
+| `invariant_violation` | изменение нарушает инвариант store или цепочка audit не сходится | нет | `[invariant_violation]` остановить писателей и выполнить `ledger validate --full` |
+
+Каждый отказ завершает команду кодом 2 и начинает первую строку `REMEDY:` кодом в скобках. Команды,
+которые ждали занятый ledger, считают `store_busy` занятым ledger: `dispatch status` отвечает
+`ledger_busy`, а опрос `dispatch wait` пропускает занятый такт и повторяет его. В эпохе store
+блок `_ledger_lock` не ждёт замка: `store_busy` приходит из `state.read` или из отправки записи,
+то есть уже внутри блока. Поэтому освобождение QA-lane после `qa run` не ждёт 30 секунд, как при
+файловом lock, а пробрасывает `store_busy` сразу; lease и запись очереди остаются до истечения lease, и их
+снимает `qa clear-stale-lease`.
+
+#### Цепочка audit и `ledger validate --full`
+
+Цепочка audit хранится в таблице `audit`: каждая запись связана хешем с предыдущей, первая запись —
+`legacy-import` с якорем манифеста импорта. Таблица `audit_checkpoint` помнит последнюю
+проверенную запись. Обычная команда (чтение и запись) проверяет только записи после checkpoint;
+запись двигает checkpoint в своей транзакции. Отсутствующий или повреждённый checkpoint означает
+полную проверку, и следующая запись или `ledger validate` его перестраивает без ошибки. Запись
+строит недостающий checkpoint до транзакции `BEGIN IMMEDIATE` (полная проверка идёт в снимке
+чтения, не блокирующем писателей), так что внутри транзакции проверяется только хвост цепочки
+(ADR 0020, раздел 3). Нечитаемый store при проверке даёт `store_busy` (занят замок) или `internal`,
+а не `invariant_violation`: отправлять оператора к восстановлению снимка нужно только при
+несошедшейся цепочке.
+
+`coordinator.py ledger validate --full` не использует checkpoint. Оно пересчитывает цепочку от
+genesis (последовательность `seq`, хеши записей и связей, закрытый словарь действий), сверяет
+запись 1 с `store_meta` и `AUTHORITY.json`, пересчитывает манифест импорта и хеши legacy audit и
+поколений, запускает `PRAGMA integrity_check` и `foreign_key_check` и сверяет каждую строку,
+записанную командой, с последней записью audit её пути. Так находятся удаление, вставка и
+перестановка записей и строка, изменённая вне runtime. Строки, импортированные и не
+переписанные после импорта, проверяет только паритет `migrate`. Провал ничего не записывает;
+успех перестраивает checkpoint. В эпохе файлового ledger `--full` принимается и равен обычной
+проверке (кэша нет).
+
+В эпохе runtime store `ledger migrate`, `ledger clean` и `ledger reset` отказывают кодом 2:
+история уже импортирована, store не держит осиротевших записей, а сбросить его команда не может.
+`ledger status` показывает эпоху и число записей audit.
 
 ### Отчётность и мониторинг токенов: `dispatch telemetry`
 
@@ -1889,6 +2262,10 @@ python .harness/orchestration/coordinator.py --repo . qa clear-stale-lease \
   --reason 'проверено, что владелец больше не выполняется'
 ```
 
+Если lease принадлежит dispatch, который остался `working` без записанного report, команда
+возвращает его в `approved`. Поле `restored_dispatch_state` в ответе и в записи восстановления
+равно `approved` или `null`.
+
 #### Подготовка окружения и категории провала
 
 Необязательный `qa_preparation` в `.harness/orchestration.json` задаёт команды подготовки окружения
@@ -1925,6 +2302,7 @@ exit code и санитизированная диагностика упавш�
 теми же командами и границами. Прежние brief, report, артефакт и approval сохраняются как audit
 evidence. Сбой подготовки или записи report не оставляет lease, запись очереди или состояние
 `working`: тот же approved dispatch можно запустить заново без правки ledger и без нового batch.
+Исключение — ledger, занятый другой операцией дольше 30 секунд (см. «Занятый ledger»).
 
 #### Ограниченные инфраструктурные повторы
 
@@ -2513,3 +2891,92 @@ branch уже указывает на candidate. Report должен быть `b
 `prohibited_changes` из brief. Чистый worktree должен оставаться на известном startup SHA.
 Команда записывает отдельное startup evidence, расходует continuation budget и требует новой
 self-report/heartbeat. Изменённый scope, неизвестные коммиты или paused batch исключают этот путь.
+
+### Удержание batch и команды `recovery`
+
+Неизвестные, отсутствующие или нечитаемые системные данные не становятся решением (ADR 0026).
+Если строгое чтение отвергает запись batch, `recovery resume` удерживает batch записью
+`recovery/hold/<batch_id>.json` контракта `operationalHold.v1`: состояние `held` и отказ с шагом
+`hold:<причина>`, где причина — `unknown-value`, `missing-value` или `unreadable-record`. Удержание
+не пишет lifecycle-запись, решение или approval, а терминальный batch никогда не удерживается.
+Запись удержания, которую нельзя прочитать, тоже удерживает batch, но её не снимает ни одна команда
+`recovery`: remedy называет `ledger validate --full` и эскалацию человеку.
+
+Пока удержание действует, эти команды отказывают кодом 2, ничего не пишут и называют в `REMEDY`
+маршрут восстановления: `dispatch propose` и `dispatch create`, `dispatch send`,
+`dispatch self-report`, `dispatch checkpoint`, `report submit`, `qa run`, `dispatch publish`,
+`batch decide`, `batch resume`, `batch resume-stop` и `batch rewind`. Реакция на завершённое
+исполнение supervised dispatch тоже ждёт: `dispatch status --dispatch` показывает отказ как
+`reaction_error`, а отчёт остаётся в `pending_report`. `batch auto-decide` при активной политике
+`auto` записывает остановку `integrity-failure`/`operational-hold` и никогда не решает отчёт и не
+делает abandon; без активной политики команда отказывает, как `batch decide`. Доступными остаются
+`dispatch heartbeat`, `dispatch cancel`, `batch abandon`, `batch attention check` и `resolve`,
+`batch decision-packet` и команды чтения. `batch attention check` поднимает attention
+`operational-hold`. Decision packet удержанного batch показывает поле `operational_hold`, пустые
+`options` и `recovery_route.commands`: `recovery status`, `batch attention resolve` (если attention
+поднят) и `recovery resume`.
+
+Recovery никогда не разрешает attention, а `recovery resume` отказывает с `attention-open`, пока
+attention открыт. Поэтому порядок такой: прочитать диагностику, устранить причину, разрешить
+attention, затем снять удержание.
+
+```bash
+python .harness/orchestration/coordinator.py --repo . recovery status --batch <id> --json
+python .harness/orchestration/coordinator.py --repo . recovery reload --batch <id>
+python .harness/orchestration/coordinator.py --repo . batch attention resolve --batch <id> --note '…' --approved-by … --approved-at …
+python .harness/orchestration/coordinator.py --repo . recovery resume --batch <id>
+```
+
+Команды `recovery status|reload|resume|fix|abort --batch <id>` работают только на установленном
+runtime в эпохе `runtime-store`, не читают stdin и не требуют TTY и Textual, поэтому консоль
+вызывает их как процесс:
+
+| Код | stdout | Когда |
+| --- | --- | --- |
+| 0 | документ `recoveryStatus.v1` с `outcome: done` | действие выполнено |
+| 2 | документ `recoveryStatus.v1` с `outcome: refused` | политика отказала; `refusals` и `diagnostics` называют причину |
+| 2 | пусто, `ERROR:` и `REMEDY:` в stderr | команда не может выполниться: эпоха файлового ledger (remedy `harness-runtime migrate`), отказ `runtime_client` (`[runtime_unavailable]`, `[store_busy]`, `[revision_conflict]`), неполное одобрение или прерывание |
+
+Документ `recoveryStatus.v1` — контракт консоли #711. Он содержит `contract`, `action`, `outcome`,
+`batch_id`, `observed_at`, `resumable`, `lifecycle`, `hold`, `checks`, `diagnostics`,
+`skipped_advisories`, `actions`, `intent` и `next`. Каждая из 13 проверок (`config`, `store`,
+`ledger`, `batch`, `lifecycle`, `runtime`, `snapshot`, `context`, `compatibility`, `operation`,
+`liveness`, `attention`, `approval`) показывает статус и диагностику: pointer, отредактированные
+expected и received, подсказку и remedy. Секреты в документ не попадают.
+
+- `status` только читает. `--skip <diagnostic-id>` (повторяемый) на один вызов скрывает advisory из
+  закрытого списка (`config-normalized`) и ничего не пишет.
+- `reload` заново читает и проверяет конфигурацию и hello runtime (протокол 1.5, `store_id`,
+  features `state.read`, `state.write` и `state.recovery`), возвращает это evidence ключом
+  `runtime` и не запускает worker.
+- `resume` в одной единице записи повторяет проверки `status`. Отказ любой проверки ничего не
+  меняет, кроме удержания batch, чью запись отвергает строгое чтение. Иначе команда снимает
+  удержание и реагирует на наблюдаемое исполнение каждого открытого supervised dispatch:
+  завершённое исполнение получает реакцию (шаг `reconcile`), исполнение `unknown` даёт отказ
+  `ambiguous-effect`, а живой worker второй раз не запускается. Записанная остановка продолжается
+  только через аудируемый `batch resume-stop`, для которого `resume` принимает `--approved-by`,
+  `--approved-at` и `--note` (все три вместе или ни одного); иначе нужен `batch rewind`. Документ
+  добавляет `steps` (`hold`, `release`, `reconcile`, `resume-stop`), `refusals`,
+  `dispatch_created: false`, `worker_started: false`, `status` и `next`. `resume` не создаёт
+  dispatch, не переписывает brief и не меняет attention, бюджеты, `auto_stop` и терминальные
+  отказы; следующий переход требует approval с актуальным digest.
+- `fix` показывает безопасную нормализацию конфигурации, а `fix --apply` применяет её транзакцией
+  конфигурации и ничего не возобновляет.
+- `abort` записывает выход из recovery: ничего не делает abandon, не останавливает и не очищает.
+
+`reload`, `resume`, `fix` и `abort` сначала записывают durable intent
+`recovery/intent/<batch_id>.json` (`recoveryIntent.v1`). После cancel, EOF или SIGINT intent
+остаётся `interrupted`, и повтор команды завершает действие. Внутреннее исключение даёт диагностику
+`internal-error` с correlation ID, а не ошибку конфигурации.
+
+Консоль Harness (`harness console`, раздел Orchestration) показывает три записи каталога в группе
+`batch`: `recovery status` и `recovery reload` выполняются без подтверждения, а `recovery resume` —
+терминальное действие coordinator и запрашивает подтверждение. `recovery fix` и `recovery abort`
+доступны только из CLI.
+
+Записи восстановления подчиняются той же authority, что и lifecycle (ADR 0020, ADR 0021): Python
+решает, Rust store пишет.
+
+| Запись | Решает | Пишет | Правила записи |
+| --- | --- | --- | --- |
+| `recovery/hold/<batch_id>.json`, `recovery/intent/<batch_id>.json` | Python: `operational_hold` и `recovery_api` в единице записи команды | Rust store, `state.write` (протокол 1.5, feature `state.recovery`) | только `create`, затем `replace` по revision строки, `delete` отказывает; поле `batch_id` равно id пути; строка batch существует в той же транзакции; одна запись audit на мутацию; миграции схемы нет |

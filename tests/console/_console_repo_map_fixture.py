@@ -1,37 +1,8 @@
-"""Реальный Git-репозиторий с картой Repo Map схемы v1 для коммита HEAD, записанной
-в кэш результатов через harness.repo_map.cache.write_cache — фикстура для тестов раздела Repo Map."""
+"""Synthetic Repo Map data for unit tests; no Git or cache setup."""
 
-from __future__ import annotations
-
-import json
-import subprocess
-from pathlib import Path
-
-from harness.repo_map.cache import write_cache
 from harness.repo_map.contract import validation_error
-from harness.storage import storage_path
 
 HUB = "pkg/core.py"
-
-
-def _git(repo: Path, *args: str) -> str:
-    """Выполнить команду git в репозитории и вернуть результат без концевых пробелов."""
-    return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
-
-
-def init_repo(repo: Path) -> str:
-    """Инициализировать репозиторий с одним коммитом и вернуть полный SHA коммита HEAD."""
-    repo.mkdir(parents=True, exist_ok=True)
-    _git(repo, "init", "-q")
-    _git(repo, "config", "user.email", "fixture@example.com")
-    _git(repo, "config", "user.name", "Fixture")
-    (repo / "pkg").mkdir(exist_ok=True)
-    (repo / "pkg" / "core.py").write_text("def load_config(path):\n    pass\n", "utf-8")
-    (repo / "pkg" / "cli.py").write_text("from pkg.core import load_config\n", "utf-8")
-    (repo / "README.md").write_text("fixture\n", "utf-8")
-    _git(repo, "add", ".")
-    _git(repo, "commit", "-qm", "fixture")
-    return _git(repo, "rev-parse", "HEAD")
 
 
 def map_payload(commit: str, *, tier: str = "full") -> dict[str, object]:
@@ -141,23 +112,3 @@ def map_payload(commit: str, *, tier: str = "full") -> dict[str, object]:
         }
     assert validation_error(payload) is None
     return payload
-
-
-def cache_dir(repo: Path) -> Path:
-    """Возвратить путь к каталогу кэша результатов карты репозитория."""
-    return storage_path(repo, "cache", "repo_map", "results")
-
-
-def write_cached_map(repo: Path, payload: dict[str, object], key: str) -> Path:
-    """Записать данные карты в кэш результатов repo_map и вернуть путь к файлу."""
-    text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    write_cache(cache_dir(repo), key, text)
-    return cache_dir(repo) / f"{key}.json"
-
-
-def build_repo_map_fixture(repo: Path, *, cached: bool = True) -> str:
-    """Создать тестовый репозиторий с закэшированной картой для HEAD при cached=True."""
-    commit = init_repo(repo)
-    if cached:
-        write_cached_map(repo, map_payload(commit), "a" * 64)
-    return commit

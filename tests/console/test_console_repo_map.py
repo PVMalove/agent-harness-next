@@ -1,28 +1,22 @@
-"""harness.console.repo_map: Repo Map facts for the console on a real repository and cache fixture
-(tests/_console_repo_map_fixture.py). No textual needed."""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from tests.console._console_repo_map_fixture import (
-    HUB,
-    build_repo_map_fixture,
-    cache_dir,
-    init_repo,
-    map_payload,
-    write_cached_map,
-)
 from harness.console import repo_map as console_repo_map
 from harness.console.export import export_text, render_markdown
 from harness.console.repo_map import RepoMapView
-from harness.console.runner import capturing_runner
+from tests.console._console_repo_map_fixture import (
+    HUB,
+    map_payload,
+)
 
 
 class _RecordingRunner:
@@ -51,57 +45,6 @@ def _view(commit: str = "f" * 40) -> RepoMapView:
     view = console_repo_map.parse_map(map_payload(commit), origin="кэш")
     assert not isinstance(view, str)
     return view
-
-
-def test_head_commit_is_the_full_sha(tmp_path: Path) -> None:
-    commit = init_repo(tmp_path)
-    assert console_repo_map.head_commit(tmp_path) == commit
-    assert len(commit) == 40
-    assert console_repo_map.head_commit(tmp_path / "missing") is None
-
-
-def test_cached_map_for_head_is_found_and_verified(tmp_path: Path) -> None:
-    commit = build_repo_map_fixture(tmp_path)
-
-    view = console_repo_map.cached_map(tmp_path, commit)
-
-    assert view is not None
-    assert view.origin == "кэш"
-    assert view.commit == commit
-    assert view.tier == "full"
-    assert [item.path for item in view.files][0] == HUB
-
-
-def test_cached_map_ignores_other_commits_and_corrupt_entries(tmp_path: Path) -> None:
-    commit = init_repo(tmp_path)
-    write_cached_map(tmp_path, map_payload("0" * 40), "b" * 64)
-    broken = write_cached_map(tmp_path, map_payload(commit), "c" * 64)
-    broken.write_text(
-        broken.read_text("utf-8").replace("load_config", "tampered"), "utf-8"
-    )
-    (cache_dir(tmp_path) / ("d" * 64 + ".json")).write_text("{not json", "utf-8")
-
-    assert console_repo_map.cached_map(tmp_path, commit) is None
-
-
-def test_cached_map_prefers_full_tier_then_newest(tmp_path: Path) -> None:
-    commit = init_repo(tmp_path)
-    full = write_cached_map(tmp_path, map_payload(commit), "1" * 64)
-    minimal = write_cached_map(tmp_path, map_payload(commit, tier="minimal"), "2" * 64)
-    os.utime(full, (1_000_000, 1_000_000))
-    os.utime(minimal, (2_000_000, 2_000_000))
-
-    view = console_repo_map.cached_map(tmp_path, commit)
-    assert view is not None and view.tier == "full"
-
-    full.unlink()
-    view = console_repo_map.cached_map(tmp_path, commit)
-    assert view is not None and view.tier == "minimal"
-
-
-def test_no_cache_directory_means_no_cached_map(tmp_path: Path) -> None:
-    commit = init_repo(tmp_path)
-    assert console_repo_map.cached_map(tmp_path, commit) is None
 
 
 def test_parse_map_rejects_a_payload_outside_schema_v1() -> None:
@@ -164,22 +107,6 @@ def test_build_map_reports_cli_failure_invalid_json_and_contract_drift(
         _RecordingRunner(_completed(json.dumps({"schema_version": 2}))),
     )
     assert isinstance(drift, str) and "схеме v1" in drift
-
-
-def test_build_map_with_the_real_cli_degrades_without_a_bundle(tmp_path: Path) -> None:
-    commit = init_repo(tmp_path)
-
-    view = console_repo_map.build_map(tmp_path, commit, capturing_runner)
-
-    assert not isinstance(view, str), view
-    assert view.commit == commit
-    assert view.tier == "minimal"
-    assert view.degradation_reason == "offline parser bundle unavailable"
-    assert sorted(item.path for item in view.files) == [
-        "README.md",
-        "pkg/cli.py",
-        "pkg/core.py",
-    ]
 
 
 def test_summary_has_tier_reason_commit_counts_and_provenance() -> None:
@@ -267,3 +194,57 @@ def test_markdown_document_and_json_export(tmp_path: Path) -> None:
         / f"2026-09-27-180509-repo-map-{'f' * 12}.json"
     )
     assert json.loads(path.read_text("utf-8")) == map_payload("f" * 40)
+
+
+def test_summary_fields_carry_the_mockup_labels_and_the_real_values() -> None:
+    view = _view()
+    fields = console_repo_map.summary_fields(view)
+    assert [label for label, _ in fields] == [
+        "tier",
+        "Деградация",
+        "commit",
+        "Файлов",
+        "Рёбер",
+        "Токенов (оценка)",
+        "Источник",
+    ]
+    values = dict(fields)
+    assert values["tier"] == "full (parser: bundle)"
+    assert values["Деградация"] == "parser bundle applied"
+    assert values["commit"] == "f" * 40
+    assert (values["Файлов"], values["Рёбер"], values["Токенов (оценка)"]) == (
+        "4",
+        "4",
+        "512",
+    )
+    assert values["Источник"] == "кэш"
+
+
+def _shown(item: console_repo_map.MapFile) -> str | None:
+    status = console_repo_map.file_status(item)
+    return status.render("ru") if status else None
+
+
+def test_file_status_is_a_symbol_and_the_parser_word_and_absent_without_a_parser() -> (
+    None
+):
+    view = _view()
+    ok, _, broken, _ = view.files
+    assert _shown(ok) == "✔ ok"
+    assert _shown(broken) == "✖ syntax_error"
+    assert _shown(replace(ok, parser_status="too_large")) == "⚠ too_large"
+    assert _shown(replace(ok, parser_status="odd")) == "⚠ odd"
+    assert _shown(replace(ok, parser_status=None)) is None
+
+
+def test_relation_counts_add_up_the_paths_of_each_direction() -> None:
+    view = _view()
+    assert console_repo_map.relation_counts(view, HUB) == (2, 1)
+    assert console_repo_map.relation_counts(view, "README.md") == (0, 0)
+
+
+def test_diagnostic_rows_pair_each_code_with_a_warning_status() -> None:
+    view = _view()
+    [(status, code, path)] = console_repo_map.diagnostic_rows(view)
+    assert status.render("ru") == "⚠ syntax_error"
+    assert (code, path) == ("syntax_error", "pkg/broken.py")

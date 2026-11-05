@@ -6,11 +6,11 @@ from __future__ import annotations
 import ast
 import dataclasses
 import importlib.util
+import json
 import os
+import shutil
 import subprocess
 import sys
-import time
-from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
@@ -82,20 +82,6 @@ def no_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", str(empty))
 
 
-@pytest.fixture
-def slow_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """PATH whose git never answers within the test's timeout."""
-    if sys.platform == "win32":
-        pytest.skip("a POSIX shell script stands in for git")
-    bin_dir = tmp_path / "slow-bin"
-    bin_dir.mkdir()
-    script = bin_dir / "git"
-    script.write_text("#!/bin/sh\nexec sleep 5\n", encoding="utf-8")
-    script.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
-    yield
-
-
 @pytest.mark.parametrize(
     "hook", sorted(path.name for path in HOOKS.glob("*.py")), ids=str
 )
@@ -136,15 +122,23 @@ def test_a_commit_is_blocked_when_git_cannot_start(
     assert reason == direct_commits.GIT_NO_ANSWER
 
 
-@pytest.mark.usefixtures("slow_git")
 def test_a_commit_is_blocked_when_git_does_not_answer(
     direct_commits: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(direct_commits, "GIT_TIMEOUT_SECONDS", 0.5)
-    started = time.monotonic()
+    calls: list[object] = []
+
+    def timed_out(
+        argv: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        timeout = kwargs["timeout"]
+        assert timeout == direct_commits.GIT_TIMEOUT_SECONDS
+        calls.append(timeout)
+        raise subprocess.TimeoutExpired(argv, direct_commits.GIT_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
     reason = direct_commits.block_reason("git commit -m x", tmp_path, tmp_path)
     assert reason == direct_commits.GIT_NO_ANSWER
-    assert time.monotonic() - started < 4
+    assert calls
 
 
 @pytest.mark.usefixtures("no_git")
@@ -157,6 +151,43 @@ def test_the_grill_docs_exception_needs_an_answer_from_git(
     assert (
         direct_commits._grill_docs_commit(command, found[0], "integration/new") is False
     )
+
+
+@pytest.mark.parametrize("path", ["app.py", "CONTEXT.md", "src/app.py"])
+def test_grill_docs_exception_blocks_commit_path_arguments(
+    tmp_path: Path, path: str
+) -> None:
+    repo = _repo(tmp_path, "integration/grill")
+    remote = tmp_path / "origin.git"
+    _git(repo, "init", "--bare", "-q", str(remote))
+    _git(repo, "remote", "add", "origin", str(remote))
+    (repo / "CONTEXT.md").write_text("# docs\n", encoding="utf-8")
+    _git(repo, "add", "CONTEXT.md")
+    payload = {
+        "tool_input": {"command": f"git commit -m 'docs: grill' {path}"},
+        "cwd": str(repo),
+    }
+    result = subprocess.run(
+        ["bash", str(HOOKS / "block-direct-master.sh")],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        env=dict(os.environ, CLAUDE_PROJECT_DIR=str(repo)),
+        check=False,
+    )
+    assert result.returncode == 2, (result.stdout, result.stderr)
+
+
+@pytest.mark.parametrize("branch", ["master", "integration/grill", ISSUE_BRANCH])
+def test_commit_is_blocked_when_git_cannot_resolve_the_branch(
+    direct_commits: ModuleType, tmp_path: Path, branch: str
+) -> None:
+    repo = tmp_path / "unborn"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", branch)
+    # rev-parse exits 128 before the first commit; an empty/HEAD response is not a branch.
+    reason = direct_commits.block_reason("git commit -m init app.py", repo, repo)
+    assert reason == direct_commits.GIT_NO_ANSWER
 
 
 @pytest.mark.parametrize(
@@ -211,13 +242,166 @@ def test_parsed_is_immutable() -> None:
         parsed.opaque = []
 
 
-@pytest.mark.usefixtures("slow_git")
 def test_qa_gate_git_is_bounded(
     qa_gate_state: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A git that does not answer ends the hook with an error (exit 2), never a hang."""
-    monkeypatch.setattr(qa_gate_state, "GIT_TIMEOUT_SECONDS", 0.5)
-    started = time.monotonic()
+
+    def timed_out(
+        argv: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert kwargs["timeout"] == qa_gate_state.GIT_TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired(argv, qa_gate_state.GIT_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
     with pytest.raises(subprocess.TimeoutExpired):
         qa_gate_state.git(tmp_path, "rev-parse", "HEAD")
-    assert time.monotonic() - started < 4
+
+
+def test_literal_heredoc_does_not_taint_an_unrelated_computed_command(
+    direct_commits: ModuleType, tmp_path: Path
+) -> None:
+    command = "$PY -c 'print(1)'\ncat <<'NOTE'\ngit metadata and commit plan\nNOTE\n"
+    assert direct_commits.block_reason(command, tmp_path, tmp_path) == ""
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "bash <<'EOF'\ngit commit -m forbidden\nEOF",
+        "cat <<EOF\n$(git commit -m forbidden)\nEOF",
+        "PLAN=$(cat <<'EOF'\ncommit\nEOF\n)\n$GIT $PLAN",
+        "cat <<'EOF' | $SHELL\ngit commit -m forbidden\nEOF",
+        "$SHELL <<'EOF'\ngit commit -m forbidden\nEOF",
+    ],
+)
+def test_executable_or_ambiguous_heredoc_git_stays_blocked(
+    direct_commits: ModuleType, tmp_path: Path, command: str
+) -> None:
+    repo = _repo(tmp_path, "master")
+    assert direct_commits.block_reason(command, repo, repo)
+
+
+@pytest.mark.parametrize(
+    ("session", "filename", "expected"),
+    [
+        ("session-716", "notes.md", 0),
+        ("different-session", "notes.md", 2),
+        ("session-716", "pr-body-716.md", 2),
+    ],
+)
+def test_project_scratchpad_requires_the_current_runtime_session(
+    tmp_path: Path,
+    session: str,
+    filename: str,
+    expected: int,
+) -> None:
+    import json
+    import shutil
+
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("Bash hook")
+    path = (
+        tmp_path
+        / ".harness/.sandboxes/scratch/sessions/session-716/scratchpad"
+        / filename
+    )
+    process = subprocess.run(
+        [bash, str(HOOKS / "block-scratch-outside-docs-tasks.sh")],
+        input=json.dumps(
+            {"session_id": session, "tool_input": {"file_path": str(path)}}
+        ),
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(tmp_path)},
+        capture_output=True,
+        text=True,
+    )
+    assert process.returncode == expected, process.stderr
+
+
+def _worktree(tmp_path: Path, repo: Path, branch: str) -> Path:
+    """A linked worktree of `repo` on `branch`, under the same temporary root."""
+    worker = tmp_path / "worker"
+    _git(repo, "worktree", "add", "-q", "-b", branch, str(worker))
+    return worker
+
+
+def _exec_payload(
+    cwd: Path,
+    workdir: object = None,
+    command: str = "git add app.py\ngit commit -m change",
+) -> dict[str, object]:
+    """A second-runtime `exec_command` payload, as the hook receives it."""
+    tool_input: dict[str, object] = {"command": command}
+    if workdir is not None:
+        tool_input["workdir"] = workdir
+    return {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "cwd": str(cwd),
+        "tool_input": tool_input,
+    }
+
+
+def _direct_master(
+    payload: dict[str, object], project: Path
+) -> subprocess.CompletedProcess[str]:
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("the hook is a bash script")
+    return subprocess.run(
+        [bash, str(HOOKS / "block-direct-master.sh")],
+        input=json.dumps(payload),
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_exec_command_workdir_selects_the_issue_checkout_over_the_payload_cwd(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+
+    result = _direct_master(_exec_payload(main, str(worker)), main)
+
+    assert result.returncode == 0, result.stderr
+    verdict = json.loads(result.stderr.strip().splitlines()[-1])
+    assert (verdict["hook_id"], verdict["decision"]) == ("block-direct-master", "allow")
+
+
+def test_exec_command_workdir_blocks_a_protected_checkout_despite_an_issue_cwd(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+
+    result = _direct_master(_exec_payload(worker, str(main)), main)
+
+    assert result.returncode == 2, result.stderr
+    assert "integration/harness-runtime-reliability" in result.stderr
+
+
+def test_a_relative_exec_command_workdir_is_resolved_against_the_payload_cwd(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+
+    result = _direct_master(_exec_payload(main, os.path.relpath(worker, main)), main)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_an_unusable_exec_command_workdir_blocks_a_commit(
+    tmp_path: Path,
+) -> None:
+    main = _repo(tmp_path, "integration/harness-runtime-reliability")
+    worker = _worktree(tmp_path, main, ISSUE_BRANCH)
+    payload = _exec_payload(worker)
+    payload["tool_input"]["workdir"] = 7  # type: ignore[index]
+
+    result = _direct_master(payload, main)
+
+    assert result.returncode == 2, result.stderr

@@ -62,7 +62,7 @@ _Avoid_: шаблонные артефакты, foundation-файлы.
 заменять или добавлять скиллы.
 _Avoid_: пакет, набор скиллов.
 
-В текущем составе `pvmalove-suite` переопределены в `skills/first-party/pvmalove/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
+В текущем составе `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
 
 **Vendor-скилл**:
 Скилл из байт-в-байт snapshot закреплённого upstream-источника в `skills/vendor/`, связанный с
@@ -256,7 +256,7 @@ _Avoid_: общий рейтинг findings, один универсальный
 _Avoid_: специализация каждой сервисной правки, параллельные writers в одном batch.
 
 **Backend orchestration capability**:
-Необязательная capability `backend-orchestration`, расширяющая `pvmalove-suite` и доставляющая
+Необязательная capability `backend-orchestration`, расширяющая `engineering-suite` и доставляющая
 role manifests, config contract, lifecycle, handoff и optional runtime adapter без изменения
 существующих проектов. Практический порядок включения и запуска —
 `docs/backend-orchestration.md`.
@@ -377,6 +377,28 @@ _Avoid_: сырые логи в Git, report с секретами, удален�
 не выполняет project checks и не мержит PR.
 _Avoid_: обязательная зависимость от конкретного provider, config-only ядро с командами provider.
 
+**Контейнерный исполнитель**:
+Встроенная реализация доступа `docker`, через которую `harness-runtime` запускает один утверждённый
+external dispatch, а при заданном `operations.qa.container` и каждую команду QA, в отдельном
+контейнере Docker или Podman: монтирует только ресурсы плана доступа, пропускает в сеть только хосты
+плана через egress-proxy и передаёт только названные в плане переменные окружения. Образы собирает
+пользователь, а исполнитель запускает только id, закреплённые при `dispatch propose`. Не меняет
+флаги агента, не подтверждает действия за человека и не исполняет in-process роли. Настоящим smoke
+проверен только rootful Docker.
+_Avoid_: Docker sandbox, песочница (занято `.harness/.sandboxes/`), постоянный dev-контейнер.
+
+**Базовый образ worker-а** (`Dockerfile.sandbox`):
+Необязательный Dockerfile из payload `.harness/container/`: Debian slim с `git`, `curl`, `jq`,
+Python с `uv` и Node.js, без `ENTRYPOINT`, `USER`, `VOLUME` и секретов. Проект собирает его сам и
+строит на нём свой образ worker-а; исполнитель принимает и любой другой совместимый образ.
+_Avoid_: обязательный образ харнесса, образ, который харнесс скачивает.
+
+**Docker smoke**:
+Тесты с маркером `docker_smoke` на настоящем rootful Docker: публичные команды coordinator,
+настоящий `harness-runtime`, Git worktree и store проверяют worker-а и контейнерный QA. Прогоны
+pytest по умолчанию их отбрасывают; запускает их только CI job `docker-smoke` с `-m docker_smoke`.
+_Avoid_: smoke в `make verify`, проверка Podman или rootless Docker.
+
 **Role common contract** (`harness/orchestration/roles/_common.md`):
 Общий Markdown-контракт для всех ролей: handoff, completion report, branch/worktree, commit proof и
 escalation. Индивидуальный role manifest содержит только уникальные границы, trigger и доказательства.
@@ -494,6 +516,19 @@ retry, долго стоящем retry, устаревшем Context Package/bas
 dispatch не создаётся; evidence и candidate не трогаются. Снимает его только человек.
 _Avoid_: `blocked` (терминальное состояние), автоматический сброс по таймауту.
 
+**Операционное удержание** (operational hold, `recovery/hold/<batch_id>.json`):
+Запись runtime store (`operationalHold.v1`), которая останавливает batch на неизвестных,
+отсутствующих или нечитаемых системных данных вместо решения. Удержанный batch отказывает в
+переходах lifecycle и запуске worker-ов до `recovery resume`; запись решает Python, а пишет Rust
+store. Удержание не меняет lifecycle, решения и approval; терминальный batch не удерживается.
+_Avoid_: suspended, quarantine, `blocked` (lifecycle-состояние), abandon по умолчанию.
+
+**Durable intent восстановления** (recovery intent, `recovery/intent/<batch_id>.json`):
+Запись runtime store (`recoveryIntent.v1`), которую команда `recovery` пишет до действия и
+завершает после него. Прерванное действие остаётся `interrupted`, и повтор команды его завершает;
+finish пишет, только пока сохранённый correlation ID принадлежит этой команде.
+_Avoid_: журнал recovery, lock восстановления.
+
 **Retry idempotency key** (`retry_idempotency_key`):
 SHA-256 от роли, candidate SHA, base SHA, review scope, reason category и digest verification commands
 для `architect`/`code-review`/`qa`/publish. Два активных dispatch с одним ключом запрещены; завершённый
@@ -558,6 +593,17 @@ _Avoid_: doctor (такого названия нет), QA-gate (проверя�
 изменения, перезапись управляемых файлов) выполняются только после переспроса.
 _Avoid_: doctor, dashboard (дашборд — лишь главный экран пульта), Health-отчёт (неинтерактивное ядро).
 
+**Веб-консоль** (Web Console, `harness console --web`):
+Полная браузерная альтернатива терминальному пульту: те же факты, команды и подтверждения
+необратимых действий, плюс живой просмотр шагов worker и оркестрации.
+_Avoid_: web UI, textual-serve (он показывает тот же терминал), веб-дашборд.
+
+**Сервер консоли** (console server):
+Локальный процесс проекта, через который терминальный пульт и Веб-консоль получают факты, запускают
+команды и следят за событиями. Выполняемая им команда (job) принадлежит серверу и переживает
+отключение клиента.
+_Avoid_: runtime (так называется Rust-процесс authority), daemon, backend.
+
 **Дашборд выполнения** (execution dashboard):
 Главный обзор текущего проекта в Harness console, связывающий batch и вложенные dispatch с
 сигналами для проверки и переходами к evidence. Его предупреждения являются наблюдениями:
@@ -571,3 +617,39 @@ _Avoid_: scheduler, worker monitor с гарантией жизни процес
 индекс можно удалить и пересобрать. Включается проектом явно; хиты попадают в Context Package
 как advisory-контекст с пометкой статуса источника.
 _Avoid_: RAG-хранилище, база знаний, долгосрочная память агента, вектор-стор.
+
+**Receipt запуска worker** (`harness-worker-v1`):
+Сведения adapter о конкретном dispatch/launch, идентичности процесса и канале существующих
+событий. Не заменяет model self-report, отчёт роли или решение о приёмке.
+
+**Наблюдение worker** (worker observation):
+Локальное представление уже существующих событий runtime, без дополнительных LLM-вызовов
+и сообщений в контекст модели. Native permissions остаются отдельными действиями человека.
+
+**Передача отчёта** (report relay):
+Доставка координатором неизменного файла worker с раздельным учётом автора, отправителя и hash
+исходных байтов. Сама передача не принимает работу и не расходует developer retry.
+
+**Эпоха authority** (`file-ledger` | `runtime-store`):
+Период, в котором operational state пишет ровно один writer: Python `LifecycleLedger` установки
+1.x или Rust runtime store. Эпоху меняют только `harness-runtime migrate` и
+`harness-runtime rollback --to-legacy`; признак — `ledger.json.version` и `state/AUTHORITY.json`
+(ADR 0020). Релиз 2.0.0 работает только в эпохе `runtime-store`.
+_Avoid_: dual-write, переходный период с двумя writer-ами, Python fallback-writer.
+
+**Release Gate**:
+Условие, при котором кандидат вливается в целевую ветку, будь то integration-ветка или `master`:
+правила пары `{candidate_sha, target_sha}` и дерева кандидата из ADR 0026, раздел 4.
+_Avoid_: merge gate, release QA, QA-gate (проверка кода в checkout, а не допуск к merge).
+
+**Harness Next**:
+Программа эпика #784: Rust runtime, транзакционный store, инкрементальная проверка и профили
+hooks. Работа идёт в `integration/harness-runtime-reliability` и выходит одним релизом 2.0.0
+(ADR 0019–0026).
+_Avoid_: harness-next-runtime (такой ветки нет), HN как имя ветки.
+
+**Superseded-by-Harness-Next**:
+Статус issue или коммита, чью Python-реализацию заменяет компонент Harness Next. Критерии такой
+задачи переходят на новый компонент; сама реализация в Harness Next не импортируется (ADR 0020,
+раздел 6; ADR 0026, раздел 1).
+_Avoid_: отменено, won't fix, закрыто без замены.

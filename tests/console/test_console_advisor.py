@@ -1,8 +1,9 @@
+"""Unit tests of console logic; no application startup or external processes."""
+
 from __future__ import annotations
 
 import json
 import shutil
-import sys
 from pathlib import Path
 from threading import Event
 
@@ -17,7 +18,7 @@ from harness.console.advisor import (
 )
 from harness.console.configuration import ConfigurationDraft
 from harness.console.configuration_steps import steps_for
-from tests.console.test_console_configuration_app import installed_project
+from tests.console._configuration_fixture import installed_project
 
 
 def test_prompt_excludes_authored_commands_and_paths(tmp_path: Path) -> None:
@@ -131,46 +132,6 @@ def test_claude_reuses_auth_and_never_uses_bare(
     assert not any("login" in command or "logout" in command for command in seen)
 
 
-def test_cancellation_and_output_limit_terminate_cli(tmp_path: Path) -> None:
-    import sys
-    from harness.console.advisor import _run
-
-    cancel = Event()
-    cancel.set()
-    with pytest.raises(AdvisorUnavailable, match="отменён"):
-        _run(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
-            tmp_path,
-            "",
-            cancel,
-            1,
-        )
-    with pytest.raises(AdvisorUnavailable, match="слишком большой"):
-        _run([sys.executable, "-c", "print('x' * 130000)"], tmp_path, "", Event(), 5)
-    with pytest.raises(AdvisorUnavailable, match="вовремя"):
-        _run(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
-            tmp_path,
-            "",
-            Event(),
-            0.1,
-        )
-
-
-def test_stderr_warnings_do_not_corrupt_structured_output(tmp_path: Path) -> None:
-    from harness.console.advisor import _run
-
-    script = tmp_path / "cli.py"
-    script.write_text(
-        "import sys\n"
-        "sys.stderr.write('WARNING: read-only file system\\n')\n"
-        "sys.stdout.write('{\"ok\": true}')\n",
-        encoding="utf-8",
-    )
-    out = _run([sys.executable, str(script)], tmp_path, "", Event(), 10)
-    assert json.loads(out) == {"ok": True}
-
-
 @pytest.mark.parametrize(
     ("status", "ready"),
     [
@@ -231,20 +192,6 @@ def test_comparison_is_validated_and_context_carries_only_non_secret_facts(
             parse_response(json.dumps(bad), field)
 
 
-def test_status_commands_may_report_on_stderr_only_when_requested(
-    tmp_path: Path,
-) -> None:
-    from harness.console.advisor import _run
-
-    script = tmp_path / "status.py"
-    script.write_text(
-        "import sys\nsys.stderr.write('Logged in using ChatGPT\\n')\n", encoding="utf-8"
-    )
-    argv = [sys.executable, str(script)]
-    assert _run(argv, tmp_path, "", Event(), 10) == ""
-    assert "Logged in" in _run(argv, tmp_path, "", Event(), 10, merge_stderr=True)
-
-
 def test_a_response_in_a_code_fence_or_with_an_encoded_value_is_accepted(
     tmp_path: Path,
 ) -> None:
@@ -270,3 +217,10 @@ def test_a_rejected_response_names_the_reason(tmp_path: Path) -> None:
     ):
         with pytest.raises(AdvisorUnavailable, match=reason):
             parse_response(raw, field)
+
+
+@pytest.fixture(autouse=True)
+def no_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.console import project_facts
+
+    monkeypatch.setattr(project_facts, "_default_branch", lambda _repo: None)

@@ -1,0 +1,484 @@
+//! The end of an execution: the exit a watcher reaps, and the stop at `execution_deadline`
+//! (ADR 0022, section 3).
+//!
+//! The stop of a `running` execution (never of an `unknown` one): SIGTERM goes to the recorded
+//! process group, then the row becomes `stopping` with the time of that signal and the lease
+//! still held, SIGKILL follows after `stop_grace_seconds` when a member is still there, and the
+//! stop waits until the leader is gone and the group is empty. Then one transaction records
+//! `exited` with the exit evidence (the wait status of a child of this runtime, or
+//! `stop-observed` for an adopted process, the signal times and the size and SHA-256 of both
+//! logs) and releases the lease. An observation that fails during the stop moves the row to
+//! `unknown` and keeps the lease. The group id comes only from the recorded identity, never from
+//! a bare pid, a group id at or below 1 is never signalled, and the leader is looked at again
+//! right before each signal. A runtime that dies between the SIGTERM and its record leaves the
+//! row `running` past its deadline, and the next runtime stops it again. A stop that a runtime
+//! before this one recorded is driven to its proof by reconcile: SIGTERM again while the grace
+//! runs, SIGKILL once it has passed since the recorded SIGTERM, then the same evidence.
+//!
+//! A leader that exits by itself ends its execution only with its group: a member that outlives
+//! it keeps the row `running` and the lease held until it ends, or until the deadline stops it.
+//! A store that refuses an outcome for good leaves the row `unknown` with the lease held and
+//! names the cause on the stderr of the runtime. The record of `stopping` follows the same rules:
+//! a repeatable refusal is tried again for a bounded time, and a refusal for good leaves the row
+//! `unknown` with the fact `unrecorded: stopping` and sends no kill. A watcher never drops its
+//! child unreaped: when the stop ends without the proof of the exit, `os::reap` takes the child,
+//! and reconcile observes the execution from its identity.
+//!
+//! Debug-build hooks (`HARNESS_RUNTIME_TEST_PAUSE_AT`, `HARNESS_RUNTIME_TEST_FAIL_AT`, once per
+//! process): `execution.stop:signalled`, a pause only, the SIGTERM of a deadline stop is sent and
+//! its record is not written yet; `execution.stop:stopping`, the record of `stopping` begins, and
+//! an injected failure there is a repeatable refusal.
+//!
+//! The signals, the group and the leader come from the platform layer (`crate::os`); this module
+//! holds the order of the steps and the records, which are the same on every platform. On Windows
+//! the first step is `CTRL_BREAK` to the recorded process group and the kill is
+//! `TerminateJobObject`; the group is the job object of the execution, and a `CTRL_BREAK` that was
+//! not delivered is recorded as the fact `ctrl_break` of the row and of the exit evidence, while
+//! the stop goes on to the kill.
+
+use std::fs::File;
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
+
+use contracts::{ErrorBody, ExecutionState};
+use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
+use state::executions::{self, Change, Execution};
+use state::hooks;
+use state::time::{iso_from_micros, iso_now, now_micros, parse_rfc3339};
+
+use crate::Supervisor;
+use crate::launch::{guard, injected, sql};
+use crate::os::{self, Group, Leader};
+
+/// How often a watcher or a stop looks at the process.
+const POLL: Duration = Duration::from_millis(50);
+/// How long a stop waits after SIGKILL before it calls the outcome unknown.
+const KILL_PROOF_SECONDS: i64 = 30;
+/// How often the record of an outcome is tried while the store answers a repeatable refusal (a
+/// busy store, a revision conflict), and the wait between two tries.
+const RECORD_ATTEMPTS: u32 = 120;
+const RECORD_RETRY: Duration = Duration::from_millis(500);
+
+/// Whether the RFC 3339 time `deadline` has passed. A deadline that cannot be read never passes.
+pub(crate) fn past(deadline: &str) -> bool {
+    parse_rfc3339(deadline).is_some_and(|deadline| now_micros() >= deadline)
+}
+
+/// The first step of a stop: the time it was sent, as recorded and in microseconds, the grace
+/// before the kill, and the facts the platform records about it.
+struct StopPlan {
+    term_sent_at: String,
+    term_at: i64,
+    grace_seconds: i64,
+    term: Map<String, Value>,
+}
+
+/// What the stop saw of the leader: gone (with the exit it proves, if any), alive, or nothing
+/// it can prove.
+pub(crate) enum Seen {
+    Gone(Option<os::Exit>),
+    Alive,
+    Unproven(String),
+}
+
+/// Whether the leader lives, or a member of its group outlives it: looked at right before a
+/// signal, because an adopted leader may have ended since reconcile saw it and the number of an
+/// empty group may be reused.
+fn still_there(leader: &mut Leader<'_>, group: &Group) -> bool {
+    matches!(leader.look(), Seen::Alive) || matches!(group.members_alive(), Ok(true))
+}
+
+/// The size and SHA-256 of one log, read in blocks: a large log never sits in memory whole.
+fn digest(path: &Path) -> io::Result<(u64, String)> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut block = vec![0_u8; 64 * 1024];
+    let mut bytes = 0_u64;
+    loop {
+        let read = match file.read(&mut block) {
+            Ok(0) => break,
+            Ok(read) => read,
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        };
+        hasher.update(&block[..read]);
+        bytes += u64::try_from(read).unwrap_or(u64::MAX);
+    }
+    let hex = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    Ok((bytes, hex))
+}
+
+/// The size and SHA-256 of each log of an execution, as far as it was written.
+pub(crate) fn logs(paths: &[PathBuf]) -> Value {
+    Value::Array(
+        paths
+            .iter()
+            .map(|path| match digest(path) {
+                Ok((bytes, sha256)) => json!({"path": path, "bytes": bytes, "sha256": sha256}),
+                Err(err) => json!({"path": path, "error": err.to_string()}),
+            })
+            .collect(),
+    )
+}
+
+impl Supervisor {
+    /// One transition of the execution `id` from `from`, under its mutex. Returns the row after
+    /// the transition, or `None` when it was no longer in `from`.
+    fn locked(
+        &self,
+        id: &str,
+        from: ExecutionState,
+        to: ExecutionState,
+        change: Change,
+    ) -> Result<Option<Execution>, ErrorBody> {
+        if to == ExecutionState::Stopping {
+            hooks::reach_once("execution.stop:stopping").map_err(|err| injected(&err))?;
+        }
+        let lock = self.lock_of(id);
+        let _held = guard(&lock);
+        let mut connection = executions::connect(self.state()?)?;
+        let tx = executions::begin(&mut connection)?;
+        let Some(current) = executions::load(&tx, id)?.filter(|current| current.state == from)
+        else {
+            return Ok(None);
+        };
+        let moved = executions::transition(&tx, &current, to, change, &iso_now())?;
+        sql(tx.commit())?;
+        Ok(Some(moved))
+    }
+
+    /// Record `to`, and answer whether this call recorded it. A repeatable refusal of the store
+    /// delays the evidence for a bounded time; a refusal for good leaves the row `unknown` from
+    /// `from` with the lease held, and the stderr of the runtime names the cause. Reconcile
+    /// observes the execution again afterwards.
+    pub(crate) fn record(
+        &self,
+        id: &str,
+        from: ExecutionState,
+        to: ExecutionState,
+        change: &Change,
+    ) -> bool {
+        let mut attempt = 1;
+        let refused = loop {
+            match self.locked(id, from, to, change.clone()) {
+                Ok(moved) => return moved.is_some(),
+                Err(err) if err.retryable && attempt < RECORD_ATTEMPTS => {
+                    attempt += 1;
+                    thread::sleep(RECORD_RETRY);
+                }
+                Err(err) => break err,
+            }
+        };
+        eprintln!(
+            "harness-runtime: the execution {id} was not recorded {}: [{}] {}",
+            to.as_str(),
+            refused.code.as_str(),
+            refused.message
+        );
+        if to == ExecutionState::Unknown {
+            return false;
+        }
+        let unrecorded = Change {
+            facts: json!({
+                "unrecorded": to.as_str(),
+                "store_error": {"code": refused.code.as_str(), "message": refused.message},
+            }),
+            ..Change::default()
+        };
+        if let Err(again) = self.locked(id, from, ExecutionState::Unknown, unrecorded) {
+            eprintln!(
+                "harness-runtime: the execution {id} was not recorded unknown either: [{}] {}",
+                again.code.as_str(),
+                again.message
+            );
+        }
+        false
+    }
+
+    pub(crate) fn log_paths(&self, id: &str) -> Vec<PathBuf> {
+        self.logs(id)
+            .map(|(stdout, stderr)| vec![stdout, stderr])
+            .unwrap_or_default()
+    }
+
+    /// Wait for a child of this runtime on its own thread: its exit, or its deadline.
+    pub(crate) fn watch(self: &Arc<Self>, execution: &Execution, child: os::Launched) {
+        guard(&self.inner.watched).insert(execution.id.clone());
+        let supervisor = Arc::clone(self);
+        let execution = execution.clone();
+        thread::spawn(move || {
+            supervisor.wait_for(&execution, child);
+            guard(&supervisor.inner.watched).remove(&execution.id);
+        });
+    }
+
+    fn wait_for(&self, execution: &Execution, mut child: os::Launched) {
+        let id = &execution.id;
+        let group = Group::of(self, execution);
+        let outlived = || {
+            group
+                .as_ref()
+                .is_ok_and(|group| matches!(group.members_alive(), Ok(true)))
+        };
+        loop {
+            let seen = Leader::Child(&mut child).look();
+            match seen {
+                Seen::Gone(Some(status)) if !outlived() => {
+                    let exit = json!({
+                        "exit_code": status.code(),
+                        "signal": status.signal(),
+                        "source": status.source(),
+                        "stopped_by": null,
+                        "ended_at": iso_now(),
+                        "logs": logs(&self.log_paths(id)),
+                    });
+                    let change = Change {
+                        exit: Some(exit),
+                        facts: json!({"source": status.source()}),
+                        ..Change::default()
+                    };
+                    self.record(id, ExecutionState::Running, ExecutionState::Exited, &change);
+                    return;
+                }
+                // The exit is lost: reconcile observes the identity from now on.
+                Seen::Unproven(_) => {
+                    os::reap(child);
+                    return;
+                }
+                // The leader runs, or a member of its group outlives it: both end at the deadline.
+                // A stop that ended without the proof of the exit leaves the child to `reap`.
+                _ if past(&execution.execution_deadline) => {
+                    if self.stop(execution, Leader::Child(&mut child)) {
+                        os::reap(child);
+                        return;
+                    }
+                }
+                _ => thread::sleep(POLL),
+            }
+        }
+    }
+
+    /// Stop an adopted execution on its own thread: a `running` one past its deadline, or a
+    /// `stopping` one whose stop a runtime before this one began.
+    pub(crate) fn stop_adopted(self: &Arc<Self>, execution: &Execution) {
+        if execution.identity.is_none() || execution.pgid.is_none() {
+            return;
+        }
+        if !guard(&self.inner.watched).insert(execution.id.clone()) {
+            return;
+        }
+        let supervisor = Arc::clone(self);
+        let execution = execution.clone();
+        thread::spawn(move || {
+            if let Some(leader) = Leader::adopted(&supervisor, &execution) {
+                if execution.state == ExecutionState::Stopping {
+                    supervisor.resume(&execution, leader);
+                } else {
+                    supervisor.stop(&execution, leader);
+                }
+            }
+            guard(&supervisor.inner.watched).remove(&execution.id);
+        });
+    }
+
+    /// The deadline stop of a `running` execution. Returns `false` when it did not begin because
+    /// the leader is gone and no member of its group is left: its exit is recorded elsewhere.
+    fn stop(&self, execution: &Execution, mut leader: Leader<'_>) -> bool {
+        let id = &execution.id;
+        let group = match Group::of(self, execution) {
+            Ok(group) => group,
+            Err(reason) => {
+                self.unproven(id, ExecutionState::Running, &reason);
+                return true;
+            }
+        };
+        if !still_there(&mut leader, &group) {
+            return false;
+        }
+        // The first step goes out before the row records it: the row never claims a signal that
+        // was not sent, and a runtime that dies between the two leaves the row `running` past its
+        // deadline, which the next runtime stops again.
+        let term_at = now_micros();
+        let term = match group.term() {
+            Ok(term) => term,
+            Err(reason) => {
+                self.unproven(id, ExecutionState::Running, &reason);
+                return true;
+            }
+        };
+        // A debug-build pause only: the step has no failure to inject.
+        let _ = hooks::reach_once("execution.stop:signalled");
+        let term_sent_at = iso_from_micros(term_at);
+        let mut stopped = Map::new();
+        stopped.insert("stopped_by".to_owned(), json!("deadline"));
+        stopped.insert("term_sent_at".to_owned(), json!(term_sent_at));
+        stopped.extend(term.clone());
+        let stopping = Change {
+            observation: Some(Value::Object(stopped.clone())),
+            facts: Value::Object(stopped),
+            ..Change::default()
+        };
+        // A refusal for good leaves the row `unknown` with the lease held, and no kill follows:
+        // reconcile observes the execution from then on.
+        if !self.record(
+            id,
+            ExecutionState::Running,
+            ExecutionState::Stopping,
+            &stopping,
+        ) {
+            return true;
+        }
+        let plan = StopPlan {
+            term_sent_at,
+            term_at,
+            grace_seconds: execution.stop_grace_seconds,
+            term,
+        };
+        self.conclude(id, &group, leader, &plan);
+        true
+    }
+
+    /// Drive the stop of a `stopping` execution that a runtime before this one began to its
+    /// proof, from the time of the first step it recorded.
+    fn resume(&self, execution: &Execution, mut leader: Leader<'_>) {
+        let id = &execution.id;
+        let recorded = execution.observation.as_ref().and_then(Value::as_object);
+        let term_sent_at = recorded
+            .and_then(|observation| observation.get("term_sent_at"))
+            .and_then(Value::as_str);
+        // The facts the platform recorded about the first step go on into the exit evidence.
+        let term: Map<String, Value> = recorded
+            .into_iter()
+            .flatten()
+            .filter(|(key, _)| !matches!(key.as_str(), "stopped_by" | "term_sent_at"))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        let Some(mut plan) = term_sent_at.and_then(|at| {
+            parse_rfc3339(at).map(|term_at| StopPlan {
+                term_sent_at: at.to_owned(),
+                term_at,
+                grace_seconds: execution.stop_grace_seconds,
+                term,
+            })
+        }) else {
+            self.unproven(id, ExecutionState::Stopping, os::NO_TERM_TIME);
+            return;
+        };
+        let group = match Group::of(self, execution) {
+            Ok(group) => group,
+            Err(reason) => {
+                self.unproven(id, ExecutionState::Stopping, &reason);
+                return;
+            }
+        };
+        // The first step again while the grace runs: harmless after the first one, and it
+        // reaches a group that a stop recorded before its signal (by an earlier runtime) never
+        // got.
+        if now_micros() < plan.term_at + plan.grace_seconds * 1_000_000
+            && still_there(&mut leader, &group)
+        {
+            match group.term() {
+                Ok(term) => plan.term.extend(term),
+                Err(reason) => {
+                    self.unproven(id, ExecutionState::Stopping, &reason);
+                    return;
+                }
+            }
+        }
+        self.conclude(id, &group, leader, &plan);
+    }
+
+    /// The rest of a stop after the first step of `plan`: the kill after its grace when a member
+    /// is still there, the wait until the leader is gone and the group is empty, then `exited`
+    /// with the exit evidence and the lease released, in one transition. Only that record lets
+    /// the platform layer close what it held of the leader.
+    fn conclude(&self, id: &str, group: &Group, mut leader: Leader<'_>, plan: &StopPlan) {
+        let mut kill_sent_at: Option<String> = None;
+        let mut kill_at = 0;
+        let mut status = None;
+        let mut leader_gone = false;
+        loop {
+            if !leader_gone {
+                match leader.look() {
+                    Seen::Gone(reaped) => {
+                        leader_gone = true;
+                        status = reaped;
+                    }
+                    Seen::Alive => {}
+                    Seen::Unproven(reason) => {
+                        self.unproven(id, ExecutionState::Stopping, &reason);
+                        return;
+                    }
+                }
+            }
+            if leader_gone {
+                match group.members_alive() {
+                    Ok(false) => break,
+                    Ok(true) => {}
+                    Err(reason) => {
+                        self.unproven(id, ExecutionState::Stopping, &reason);
+                        return;
+                    }
+                }
+            }
+            let now = now_micros();
+            if kill_sent_at.is_none() && now >= plan.term_at + plan.grace_seconds * 1_000_000 {
+                if let Err(reason) = group.kill() {
+                    self.unproven(id, ExecutionState::Stopping, &reason);
+                    return;
+                }
+                kill_sent_at = Some(iso_now());
+                kill_at = now;
+            }
+            if kill_sent_at.is_some() && now >= kill_at + KILL_PROOF_SECONDS * 1_000_000 {
+                self.unproven(id, ExecutionState::Stopping, os::OUTLIVED_KILL);
+                return;
+            }
+            thread::sleep(POLL);
+        }
+        let source = status.as_ref().map_or("stop-observed", os::Exit::source);
+        let mut exit = json!({
+            "exit_code": status.as_ref().map_or(Value::Null, os::Exit::code),
+            "signal": status.as_ref().map_or(Value::Null, os::Exit::signal),
+            "source": source,
+            "stopped_by": "deadline",
+            "term_sent_at": plan.term_sent_at,
+            "kill_sent_at": kill_sent_at,
+            "ended_at": iso_now(),
+            "logs": logs(&self.log_paths(id)),
+        });
+        if let Some(evidence) = exit.as_object_mut() {
+            evidence.extend(plan.term.clone());
+        }
+        let change = Change {
+            exit: Some(exit),
+            facts: json!({"source": source, "stopped_by": "deadline"}),
+            ..Change::default()
+        };
+        if self.record(
+            id,
+            ExecutionState::Stopping,
+            ExecutionState::Exited,
+            &change,
+        ) {
+            os::release_leader(self, id);
+        }
+    }
+
+    /// A stop that cannot prove its outcome: `unknown` from `from`, and the lease stays held.
+    fn unproven(&self, id: &str, from: ExecutionState, reason: &str) {
+        let change = Change {
+            facts: json!({"stopped_by": "deadline", "unproven": reason}),
+            ..Change::default()
+        };
+        self.record(id, from, ExecutionState::Unknown, &change);
+    }
+}

@@ -405,6 +405,10 @@ class IntegrationPrepareTests(unittest.TestCase):
         self.assertEqual(result["published_sha"], published["candidate"])
         self.assertEqual(result["target_sha"], target)
         self.assertEqual(result["integration_ref"], "master")
+        self.assertEqual(
+            result["candidate_tree_sha"],
+            _git(self.branch.repo, "rev-parse", f"{published['candidate']}^{{tree}}"),
+        )
         self.assertEqual(result["status"]["state"], "current")
         self.assertEqual(result["evidence_links"], [])
         source = result["source_evidence"]
@@ -1074,13 +1078,16 @@ class IntegrationGuidanceTests(unittest.TestCase):
             "integration status",
             "integration link-evidence",
             "integration next",
+            "reports/integration-pair",
+            "qa.evidence.verify",
+            "--merge-commit",
         ),
         "harness/orchestration/README.md": (
             "integration prepare",
             "integration status",
         ),
-        "skills/first-party/pvmalove/implement/SKILL.md": ("integration prepare",),
-        "skills/first-party/pvmalove/to-pull-requests/SKILL.md": (
+        "skills/first-party/engineering/implement/SKILL.md": ("integration prepare",),
+        "skills/first-party/engineering/to-pull-requests/SKILL.md": (
             "integration status",
             "integration next",
             "integration collect-ci",
@@ -1088,6 +1095,10 @@ class IntegrationGuidanceTests(unittest.TestCase):
             "candidate_sha",
             "target_sha",
             "qa_source",
+            "release-gate-refused",
+            "--merge-commit",
+            "candidate_tree_sha",
+            "merge-tree-mismatch",
         ),
         "docs/skills/implement.md": ("integration prepare",),
         "docs/skills/to-pull-requests.md": (
@@ -1096,6 +1107,10 @@ class IntegrationGuidanceTests(unittest.TestCase):
             "integration collect-ci",
             "integration local-qa",
             "qa_source",
+            "release-gate-refused",
+            "--merge-commit",
+            "candidate_tree_sha",
+            "merge-tree-mismatch",
         ),
         "docs/adr/0017-pr-continuation-routing.md": (
             "integration next",
@@ -1120,7 +1135,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
 
     def test_the_skills_never_dispatch_or_rewrite_on_stale(self) -> None:
         text = (
-            REPO / "skills/first-party/pvmalove/to-pull-requests/SKILL.md"
+            REPO / "skills/first-party/engineering/to-pull-requests/SKILL.md"
         ).read_text(encoding="utf-8")
         self.assertIn("do not create a dispatch", text)
 
@@ -1128,7 +1143,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
         """After the developer route of a failed original pair one ticket and branch have two
         records and '<ticket-branch>' is refused; '--record <new record>' replaces it."""
         notes = {
-            "skills/first-party/pvmalove/to-pull-requests/SKILL.md": (
+            "skills/first-party/engineering/to-pull-requests/SKILL.md": (
                 "several integration records match",
                 "`--record <new record>` replaces `<ticket-branch>`",
             ),
@@ -1168,7 +1183,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
 
     def test_the_pr_skill_binds_confirmation_to_the_pair_and_never_merges(self) -> None:
         text = (
-            REPO / "skills/first-party/pvmalove/to-pull-requests/SKILL.md"
+            REPO / "skills/first-party/engineering/to-pull-requests/SKILL.md"
         ).read_text(encoding="utf-8")
         confirmation = text.index("separate confirmation")
         opening = text.index("gh pr create")

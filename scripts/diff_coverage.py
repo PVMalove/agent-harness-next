@@ -19,14 +19,20 @@ COVERAGE_JSON_FILE = ROOT / ".coverage.diff-coverage.json"
 # Bound for the helper commands (git, `coverage json`); the measured test run itself is unbounded.
 HELPER_TIMEOUT_SECONDS = 300
 # Verified by the clean-room run (scripts/verify.py), not by the unittest suite this gate measures,
-# so their changed lines could never count as covered.
+# so their changed lines could never count as covered. The real Docker and Podman smokes run only
+# in their own CI job and workflow: the default pytest run this gate measures deselects the
+# `docker_smoke` and `podman_smoke` markers.
 EXCLUDED_FROM_GATE = frozenset(
     {
         "scripts/test_clean_room.py",
+        "tests/orchestration/test_docker_smoke.py",
+        "tests/orchestration/test_podman_smoke.py",
         "harness/project/hooks/qa-gate-state.py",
         "harness/project/hooks/tracker-issue.py",
         "harness/project/hooks/pr_commands.py",
         "harness/project/hooks/direct_commits.py",
+        "harness/project/hooks/hook_response.py",
+        "harness/project/hooks/protect_hook_policy.py",
     }
 )
 # The clean-room scenarios `scripts/test_clean_room.py` runs, split into their own package.
@@ -56,6 +62,9 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            # A diff may hold any bytes (a non-UTF-8 fixture is still text to Git); only the
+            # *.py hunks are read, so undecodable bytes elsewhere must not stop the gate.
+            errors="surrogateescape",
             check=False,
             timeout=HELPER_TIMEOUT_SECONDS,
         )

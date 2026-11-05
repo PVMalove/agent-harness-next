@@ -24,10 +24,30 @@ from ..chrome import TopBar
 from ..translate import Translated
 from ..logtext import colorize_log, colorize_overview
 from ..catalog import CONFIRMATION_REASONS, Reversibility
-from ..runner import CommandRunner
+from ..runner import CommandRunner, HarnessRuns
 from .. import brand, i18n
 
 _OUTPUT_TAIL_LINES = 200
+
+
+def command_menu_css(screen: str) -> str:
+    """The rules of a command-menu section for the screen type `screen`. A type selector reaches
+    only the first base class of a screen, so a shell screen that mixes in `CommandMenuScreen` loads
+    these rules under its own type name, after the shell's."""
+    return brand.shell_css(f"""
+    {screen} .overview {{ height: auto; margin: 0 0 1 0; padding: 0 1; border: round $component-border; border-title-color: $primary; }}
+    {screen} #command-body {{ height: 16; margin: 0 0 1 0; }}
+    {screen} #command-menu {{ height: 1fr; margin: 0; border: round $component-border; border-title-color: $primary; }}
+    {screen} #command-menu:focus {{ border: round $primary; }}
+    {screen}.-wide #command-menu, {screen}.-spacious #command-menu {{ width: 48; }}
+    {screen} #command-detail-scroll {{ height: 1fr; padding: 0 1; border: round $component-border; border-title-color: $primary; }}
+    {screen} #command-output-scroll {{ height: 8; margin: 0; padding: 0 1; border: round $component-border; border-title-color: $primary; }}
+    {screen} #command-menu > ListItem {{ height: 1; padding: 0 1; }}
+    {screen} #command-menu Static {{ height: 1; text-wrap: nowrap; text-overflow: ellipsis; }}
+    {screen} .group-title {{ color: $text-muted; text-style: bold; }}
+    {screen}.-narrow #command-body {{ layout: vertical; height: 22; }}
+    {screen}.-narrow #command-detail-scroll {{ height: 6; }}
+    """)
 
 
 _Result = TypeVar("_Result")
@@ -45,16 +65,30 @@ def call_from_worker(screen: Widget, callback: Callable[[], object]) -> None:
         pass
 
 
+def harness_runs(widget: Widget) -> HarnessRuns:
+    """The Harness session's admission belongs to the app, not to a replaceable screen."""
+    state = getattr(widget.app, "_harness_runs", None)
+    if not isinstance(state, HarnessRuns):
+        state = HarnessRuns()
+        setattr(widget.app, "_harness_runs", state)
+    return state
+
+
 def short_repo(cli_line: str, repo: Path) -> str:
     """`cli_line` with the project path replaced by `$REPO`, quoted or not (a Windows path is quoted)."""
     return cli_line.replace(shlex.quote(str(repo)), "$REPO").replace(str(repo), "$REPO")
 
 
-def render_result(cli_line: str, result: "CompletedProcess[str]") -> str:
+def render_result(
+    cli_line: str, result: "CompletedProcess[str]", *, full: bool = False
+) -> str:
     """Формирует текстовый результат выполнения команды: строку вызова, код выхода и последние строки вывода."""
     output = "\n".join(part for part in (result.stdout, result.stderr) if part)
-    lines = output.rstrip().splitlines()[-_OUTPUT_TAIL_LINES:]
-    return "\n".join([f"$ {cli_line}", f"код выхода: {result.returncode}", *lines])
+    lines = output.rstrip().splitlines()
+    if not full:
+        lines = lines[-_OUTPUT_TAIL_LINES:]
+    label = "exit" if full else "код выхода:"
+    return "\n".join([f"$ {cli_line}", f"{label} {result.returncode}", *lines])
 
 
 def describe_command(
@@ -104,13 +138,23 @@ class CommandForm(Translated, ModalScreen["dict[str, str] | None"]):
     """
 
     def form_header(
-        self, title: str, cli_line: str, reversibility: Reversibility
+        self,
+        title: str,
+        cli_line: str,
+        reversibility: Reversibility,
+        *,
+        warning_cli: bool = False,
     ) -> ComposeResult:
         """Генерирует заголовок формы, эквивалент команды CLI и причину подтверждения при наличии."""
         language = getattr(self.app, "language", "ru")
         yield Static(Text(i18n.tr(language, title), style="bold"), markup=False)
         yield Static(
-            Text(f"$ {cli_line}", style=f"bold {brand.PALETTE['secondary']}"),
+            Text(
+                f"$ {cli_line}",
+                style=brand.PALETTE["warning"]
+                if warning_cli
+                else f"bold {brand.PALETTE['secondary']}",
+            ),
             id="form-cli",
             markup=False,
         )
@@ -173,6 +217,7 @@ class CommandMenuScreen(Translated, Screen[None]):
     # The command menu owns the keyboard on arrival even when a section adds an overview above it.
     AUTO_FOCUS = "#command-menu"
     CRUMB = "Команды"
+    CANCEL_OWN_WORKERS_ONLY = False
     HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (100, "-wide")]
     DEFAULT_CSS = """
     CommandMenuScreen .overview {
@@ -181,7 +226,7 @@ class CommandMenuScreen(Translated, Screen[None]):
     }
     CommandMenuScreen #command-body { height: 1fr; min-height: 8; margin: 0 1; }
     CommandMenuScreen #command-menu { height: 1fr; margin: 0; border-title-color: $primary; }
-    CommandMenuScreen.-wide #command-menu { width: 48; }
+    CommandMenuScreen.-wide #command-menu, CommandMenuScreen.-spacious #command-menu { width: 48; }
     CommandMenuScreen #command-detail-scroll {
         height: 1fr; padding: 0 1; border: round $panel-lighten-2; border-title-color: $primary;
     }
@@ -264,23 +309,28 @@ class CommandMenuScreen(Translated, Screen[None]):
     def compose(self) -> ComposeResult:
         """Формирует структуру виджетов экрана меню команд."""
         yield TopBar(f"Главная › {self.CRUMB}")
+        yield from self.compose_commands()
+        yield Footer()
+
+    def compose_commands(self) -> ComposeResult:
+        """Содержимое экрана без рамки: обзор, меню команд с деталями и область вывода. Его же
+        размещает общая оболочка консоли."""
         yield from self.overview()
         self._language = getattr(self.app, "language", "ru")
         children = self._menu_children()
         first = next((i for i, item in enumerate(children) if item.name), 0)
         with Horizontal(id="command-body"):
             menu = ListView(*children, id="command-menu", initial_index=first)
-            menu.border_title = brand.frame_title(i18n.ui(self._language, "commands"))
+            menu.border_title = brand.section_title(i18n.ui(self._language, "commands"))
             yield menu
             with VerticalScroll(id="command-detail-scroll") as detail:
-                detail.border_title = brand.frame_title("Описание")
+                detail.border_title = brand.section_title("Описание")
                 yield Static("", id="command-detail")
         output = VerticalScroll(
             Static("", id="command-output", markup=False), id="command-output-scroll"
         )
-        output.border_title = brand.frame_title("Вывод")
+        output.border_title = brand.section_title("Вывод")
         yield output
-        yield Footer()
 
     def sync_language(self) -> None:
         """Re-label the group headings after the console language changed."""
@@ -290,7 +340,7 @@ class CommandMenuScreen(Translated, Screen[None]):
             return
         self._language = language
         menu = self.query_one("#command-menu", ListView)
-        menu.border_title = brand.frame_title(i18n.ui(language, "commands"))
+        menu.border_title = brand.section_title(i18n.ui(language, "commands"))
         for heading_id, heading in self._headings.items():
             self.query_one(f"#{heading_id} Static", Static).update(
                 i18n.group_title(language, heading).upper()
@@ -332,7 +382,10 @@ class CommandMenuScreen(Translated, Screen[None]):
 
     def on_unmount(self) -> None:
         """Отменяет фоновые воркеры при размонтировании экрана."""
-        self.workers.cancel_all()
+        if self.CANCEL_OWN_WORKERS_ONLY:
+            self.workers.cancel_node(self)
+        else:
+            self.workers.cancel_all()
 
     def run_process(self, cli_line: str, argv: list[str]) -> None:
         """Запускает процесс команды в фоновом потоке без блокировки интерфейса TUI."""
