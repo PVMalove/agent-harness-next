@@ -8,14 +8,15 @@ screens only render them. Report text is untrusted role output, so every widget 
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
-from typing import Callable
 
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widget import Widget
 from textual.widgets import Button, Input, ListItem, ListView, Select, Static
 
 from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard, WrappedValue
@@ -27,7 +28,7 @@ from ...kernel.reports import BatchTimeline, LedgerView, ReportEntry, StageEntry
 from ...kernel import brand
 from ...kernel import i18n
 from ...kernel.json_fields import strings, text
-from ...kernel.pr_timings import load_reports_view
+from ..client import ConsoleClientError, ScreenClient
 from .export import EXPORT_BINDING_KEY, export_document
 from .commands import call_from_worker
 
@@ -106,6 +107,57 @@ async def _replace_items(listing: ListView, items: list[ListItem]) -> None:
     )
 
 
+SERVER_UNAVAILABLE = "Сервер консоли не отдал данные леджера"
+REPORT_MISSING = "Сервер консоли не нашёл тело этого отчёта"
+TIMELINE_MISSING = "Хронология батча недоступна"
+
+
+def read_view(client: ScreenClient, *, online: bool = False) -> LedgerView:
+    """The ledger of the Reports screen from the console server; a client failure is the view's
+    unavailable text, never an exception."""
+    try:
+        return client.reports(online=online)
+    except ConsoleClientError as exc:
+        return LedgerView(unavailable=f"{SERVER_UNAVAILABLE}: {exc}")
+
+
+def read_report(client: ScreenClient, entry: ReportEntry) -> ReportEntry | str:
+    """`entry` with its body from the console server, or the text of why it is missing."""
+    try:
+        body = client.report(entry.dispatch_id)
+    except ConsoleClientError as exc:
+        return f"{REPORT_MISSING}: {exc}"
+    return REPORT_MISSING if body is None else replace(entry, report=body)
+
+
+def read_timeline(client: ScreenClient, batch_id: str) -> BatchTimeline | str:
+    """The chronology of a batch from the console server, or the text of why it is missing."""
+    try:
+        timeline = client.timeline(batch_id)
+    except ConsoleClientError as exc:
+        return f"{TIMELINE_MISSING}: {exc}"
+    return TIMELINE_MISSING if timeline is None else timeline
+
+
+def open_timeline(
+    screen: Widget, client: ScreenClient, repo: Path, batch_id: str, *, notice: str = ""
+) -> None:
+    """Read the chronology of `batch_id` in a worker and push it, or say why it is missing."""
+
+    def work() -> None:
+        found = read_timeline(client, batch_id)
+
+        def show() -> None:
+            if isinstance(found, str):
+                screen.notify(found, severity="warning")
+            else:
+                screen.app.push_screen(BatchTimelineScreen(found, repo, notice=notice))
+
+        call_from_worker(screen, show)
+
+    screen.run_worker(work, thread=True, group="reports-timeline", exclusive=True)
+
+
 class ReportsScreen(ConsoleShell):
     """Current stages and reports with filters, ordering, refresh and batch chronology."""
 
@@ -158,17 +210,11 @@ class ReportsScreen(ConsoleShell):
     ReportsScreen.-narrow #batch-list { height: 6; }
     """)
 
-    def __init__(
-        self,
-        repo: Path,
-        *,
-        load_view: Callable[[Path], LedgerView] | None = None,
-    ) -> None:
+    def __init__(self, repo: Path, client: ScreenClient) -> None:
         super().__init__()
         self.repo = repo
-        self._load_view = load_view or load_reports_view
-        self.view = (load_view or console_reports.load_ledger_view)(repo)
-        self._initial_timings = load_view is None
+        self._client = client
+        self.view = read_view(client)
         self.shown: list[StageEntry] = list(self.view.stages)
         self.refreshing = False
         self.refresh_error = ""
@@ -185,7 +231,7 @@ class ReportsScreen(ConsoleShell):
         self.query_one("#reports-empty", Static).display = not self.shown or bool(
             self.view.unavailable
         )
-        if self._initial_timings and any(batch.branch for batch in self.view.batches):
+        if any(batch.branch for batch in self.view.batches):
             self.action_refresh()
 
     def on_screen_resume(self) -> None:
@@ -468,7 +514,7 @@ class ReportsScreen(ConsoleShell):
 
         def read() -> None:
             try:
-                view, error = self._load_view(self.repo), ""
+                view, error = self._client.reports(online=True), ""
             except Exception as exc:
                 view, error = self.view, f"Ошибка обновления: {exc}"
             call_from_worker(self, lambda: self._refreshed(view, error))
@@ -493,23 +539,35 @@ class ReportsScreen(ConsoleShell):
                 (item for item in self.view.stages if item.dispatch_id == name), None
             )
             if entry is not None and entry.report is not None:
-                self.app.push_screen(ReportScreen(entry.report, self.view, self.repo))
+                self._open_report(entry.report)
             elif entry is not None:
-                timeline = self.view.timeline(entry.batch_id)
-                if timeline is not None:
-                    self.app.push_screen(
-                        BatchTimelineScreen(
-                            timeline,
-                            self.repo,
-                            notice=f"{entry.dispatch_id} · {entry.state}: отчёт ещё не получен",
-                        )
-                    )
-                else:
-                    self.notify("Хронология батча недоступна", severity="warning")
+                open_timeline(
+                    self,
+                    self._client,
+                    self.repo,
+                    entry.batch_id,
+                    notice=f"{entry.dispatch_id} · {entry.state}: отчёт ещё не получен",
+                )
         elif event.list_view.id == "batch-list":
-            timeline = self.view.timeline(name)
-            if timeline is not None:
-                self.app.push_screen(BatchTimelineScreen(timeline, self.repo))
+            open_timeline(self, self._client, self.repo, name)
+
+    def _open_report(self, entry: ReportEntry) -> None:
+        """Read the report body in a worker and push the report, or say why it is missing."""
+
+        def work() -> None:
+            found = read_report(self._client, entry)
+
+            def show() -> None:
+                if isinstance(found, str):
+                    self.notify(found, severity="warning")
+                else:
+                    self.app.push_screen(
+                        ReportScreen(found, self.view, self.repo, client=self._client)
+                    )
+
+            call_from_worker(self, show)
+
+        self.run_worker(work, thread=True, group="reports-report", exclusive=True)
 
     def action_open_qa_logs(self) -> None:
         self.app.push_screen(QaLogsScreen(self.view))
@@ -579,11 +637,19 @@ class ReportScreen(ConsoleShell):
         Binding(EXPORT_BINDING_KEY, "export", "Экспорт"),
     ]
 
-    def __init__(self, entry: ReportEntry, view: LedgerView, repo: Path) -> None:
+    def __init__(
+        self,
+        entry: ReportEntry,
+        view: LedgerView,
+        repo: Path,
+        *,
+        client: ScreenClient,
+    ) -> None:
         super().__init__()
         self.entry = entry
         self.view = view
         self.repo = repo
+        self._client = client
 
     def _language(self) -> str:
         return getattr(self.app, "language", "ru")
@@ -674,11 +740,7 @@ class ReportScreen(ConsoleShell):
         )
 
     def action_open_timeline(self) -> None:
-        timeline = self.view.timeline(self.entry.batch_id)
-        if timeline is None:
-            self.notify("батч этого отчёта не найден в ledger", severity="warning")
-            return
-        self.app.push_screen(BatchTimelineScreen(timeline, self.repo))
+        open_timeline(self, self._client, self.repo, self.entry.batch_id)
 
 
 class BatchTimelineScreen(ConsoleShell):

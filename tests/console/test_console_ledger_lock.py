@@ -117,3 +117,48 @@ def test_an_unreadable_state_is_shown_not_raised(tmp_path: Path) -> None:
     text = ledger_lock.current_lock_text(tmp_path, broken)
 
     assert text == "Lock ledger: состояние недоступно: state is unreadable"
+
+
+def test_a_console_server_failure_is_shown_as_the_unavailable_text() -> None:
+    from harness.console.tui.client import LockUnavailable, ServerUnavailable
+
+    def refused(repo: Path) -> JsonObject:
+        raise LockUnavailable("ledger занят")
+
+    def down(repo: Path) -> JsonObject:
+        raise ServerUnavailable("нет сервера")
+
+    assert ledger_lock.current_lock_text(Path("."), refused) == (
+        "Lock ledger: состояние недоступно: ledger занят"
+    )
+    assert "нет сервера" in ledger_lock.current_lock_text(Path("."), down)
+
+
+def test_the_orchestration_screen_reads_its_lock_and_ledger_through_the_client() -> None:
+    import pytest
+
+    from harness.console.tui.client import LockUnavailable
+    from harness.console.tui.screens import orchestration
+
+    from ._home_client import FakeHomeClient
+    from ._screen_facts import ledger
+
+    client = FakeHomeClient(Path("."), load_ledger=lambda repo: ledger())
+    found = orchestration.read_orchestration(client)
+    assert found.ledger.batches[0].batch_id == "b-1"
+    assert orchestration.first_lock(found) == {"locked": False}
+    client.lock = "занят"
+    with pytest.raises(LockUnavailable, match="занят"):
+        orchestration.first_lock(orchestration.read_orchestration(client))
+    with pytest.raises(LockUnavailable):
+        client.ledger_lock()
+
+    def down(*, force: bool = False) -> object:
+        from harness.console.tui.client import ServerUnavailable
+
+        raise ServerUnavailable("нет сервера")
+
+    client.orchestration = down  # type: ignore[method-assign,assignment]
+    failed = orchestration.read_orchestration(client)
+    assert failed.ledger.unavailable is not None and "нет сервера" in failed.ledger.unavailable
+    assert failed.lock is None and failed.lock_error == "нет сервера"

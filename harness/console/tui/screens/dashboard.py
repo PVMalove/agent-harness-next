@@ -40,7 +40,7 @@ from ..shell import (
 )
 from ...kernel import reports
 from ...kernel import data as console_data
-from ..client import HomeClient
+from ..client import ScreenClient
 from ...kernel.data import DashboardData
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.home_snapshot import HomeContext as HomeContext, HomeSnapshot
@@ -400,7 +400,7 @@ class DashboardScreen(ConsoleShell):
         self,
         repo: Path,
         *,
-        home_client: HomeClient,
+        home_client: ScreenClient,
         collect_banner: Callable[[Path], brand.BannerInfo] = _default_banner,
         command_runner: CommandRunner = capturing_runner,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -917,12 +917,14 @@ class DashboardScreen(ConsoleShell):
     def _orchestration(self) -> Screen[None]:
         from .orchestration import OrchestrationScreen
 
-        return OrchestrationScreen(self.repo, command_runner=self._command_runner)
+        return OrchestrationScreen(
+            self.repo, client=self._home_client, command_runner=self._command_runner
+        )
 
     def _reports(self) -> Screen[None]:
         from .reports import ReportsScreen
 
-        return ReportsScreen(self.repo)
+        return ReportsScreen(self.repo, self._home_client)
 
     def _repo_map(self) -> Screen[None]:
         from .repo_map import RepoMapScreen

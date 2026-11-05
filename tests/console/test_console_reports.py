@@ -298,3 +298,33 @@ def test_the_timeline_payload_round_trips_and_refuses_a_broken_one() -> None:
     assert reports.timeline_from_payload(payload) == timeline
     with pytest.raises(ValueError):
         reports.timeline_from_payload({**payload, "events": [{"at": "t"}]})
+
+
+def test_the_reports_screen_reads_the_ledger_and_bodies_through_the_client() -> None:
+    from harness.console.tui.client import ServerUnavailable
+    from harness.console.tui.screens import reports as screen
+
+    from ._home_client import FakeHomeClient
+    from ._screen_facts import BODY, ledger
+
+    client = FakeHomeClient(Path("."), load_ledger=lambda repo: ledger())
+    view = screen.read_view(client)
+    assert view.reports[0].report == {} and view.unavailable is None
+    found = screen.read_report(client, view.reports[0])
+    assert isinstance(found, ReportEntry) and found.report == {"output": BODY}
+    timeline = screen.read_timeline(client, "b-1")
+    assert not isinstance(timeline, str) and timeline.batch.batch_id == "b-1"
+    missing = replace(view.reports[0], dispatch_id="d-9")
+    assert screen.read_report(client, missing) == screen.REPORT_MISSING
+    assert screen.read_timeline(client, "b-9") == screen.TIMELINE_MISSING
+
+    def down(*args: object, **kwargs: object) -> object:
+        raise ServerUnavailable("нет сервера")
+
+    client.reports = down  # type: ignore[method-assign,assignment]
+    client.report = down  # type: ignore[method-assign,assignment]
+    client.timeline = down  # type: ignore[method-assign,assignment]
+    unavailable = screen.read_view(client, online=True).unavailable
+    assert unavailable is not None and "нет сервера" in unavailable
+    assert "нет сервера" in str(screen.read_report(client, view.reports[0]))
+    assert "нет сервера" in str(screen.read_timeline(client, "b-1"))

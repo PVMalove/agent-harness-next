@@ -50,3 +50,15 @@ def test_short_time_keeps_minutes_only() -> None:
     assert stats.short_time("2026-09-28T09:52:05.4+00:00") == "2026-09-28 09:52"
     assert stats.short_time("") == ""
     assert stats.short_time("вчера") == "вчера"
+
+
+def test_pipeline_stats_are_the_same_through_the_substituted_client() -> None:
+    from ._home_client import FakeHomeClient
+    from ._screen_facts import ledger
+
+    view = ledger()
+    served = FakeHomeClient(Path("."), load_ledger=lambda repo: view).reports()
+    assert stats.pipeline_stats(served) == stats.pipeline_stats(view)
+    assert stats.batches_in_state(served, stats.ALL_STATES) == stats.batches_in_state(
+        view, stats.ALL_STATES
+    )

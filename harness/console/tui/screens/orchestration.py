@@ -8,9 +8,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import Mapping, Sequence
 
 from rich.text import Text
+
+from harness.orchestration.ledger.lifecycle import JsonObject
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -31,6 +33,7 @@ from ...kernel import reports as console_reports
 from .. import stats as console_stats
 from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand, process_argv
 from ...kernel.runner import CommandRunner, capturing_runner
+from ..client import ConsoleClientError, LockUnavailable, OrchestrationView, ScreenClient
 from ..shell import SHELL_CSS, ConsoleShell, FieldGrid
 from ..widgets import CheckBox
 from .commands import (
@@ -121,6 +124,29 @@ class CoordinatorCommandFormScreen(CommandForm):
             self.dismiss(values)
 
 
+SERVER_UNAVAILABLE = "Сервер консоли не отдал данные оркестрации"
+
+
+def read_orchestration(client: ScreenClient) -> OrchestrationView:
+    """The Orchestration screen's ledger and lock state from the console server; a client
+    failure is the view's unavailable text and the lock's error, never an exception."""
+    try:
+        return client.orchestration()
+    except ConsoleClientError as exc:
+        return OrchestrationView(
+            console_reports.LedgerView(unavailable=f"{SERVER_UNAVAILABLE}: {exc}"),
+            None,
+            str(exc),
+        )
+
+
+def first_lock(found: OrchestrationView) -> JsonObject:
+    """The lock state the Orchestration snapshot carried; its error raises `LockUnavailable`."""
+    if found.lock is None:
+        raise LockUnavailable(found.lock_error or "состояние не сообщается")
+    return found.lock
+
+
 class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     """Экран раздела Orchestration на общей оболочке консоли: статистика пайплайна, живое состояние
     lock ledger, история batch с фильтром по состоянию (выбор batch открывает его хронологию) и
@@ -164,12 +190,9 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         self,
         repo: Path,
         *,
+        client: ScreenClient,
         command_runner: CommandRunner = capturing_runner,
         catalog: Sequence[CoordinatorCommand] = COORDINATOR_COMMANDS,
-        load_view: Callable[
-            [Path], console_reports.LedgerView
-        ] = console_reports.load_ledger_view,
-        load_lock: ledger_lock.LockLoader = ledger_lock.load_lock_status,
         lock_refresh_seconds: float = 1.0,
     ) -> None:
         """Инициализирует экран раздела Orchestration со списком доступных команд координатора.
@@ -178,8 +201,10 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         остаток до снятия по таймауту идут на живом экране без перезапуска."""
         super().__init__(repo, command_runner=command_runner)
         self._entries = {entry.key: entry for entry in catalog}
-        self._view = load_view(repo)
-        self._load_lock = load_lock
+        self._client = client
+        found = read_orchestration(client)
+        self._view = found.ledger
+        self._first_lock = found
         self._lock_refresh_seconds = lock_refresh_seconds
 
     def compose_strip(self) -> ComposeResult:
@@ -240,7 +265,9 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         panel.border_title = brand.section_title("Состояние и статистика")
         yield panel
         lock = Static(
-            ledger_lock.current_lock_text(self.repo, self._load_lock, self._language),
+            ledger_lock.current_lock_text(
+                self.repo, lambda repo: first_lock(self._first_lock), self._language
+            ),
             id="ledger-lock",
             classes="overview",
             markup=False,
@@ -279,7 +306,9 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         language = self._language
 
         def work() -> None:
-            text = ledger_lock.current_lock_text(self.repo, self._load_lock, language)
+            text = ledger_lock.current_lock_text(
+                self.repo, lambda repo: self._client.ledger_lock(), language
+            )
             call_from_worker(self, lambda: self._show_lock(text))
 
         self.run_worker(work, thread=True, exclusive=True, group="ledger-lock")
@@ -367,11 +396,9 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         )
 
     def _open_timeline(self, batch_id: str) -> None:
-        from .reports import BatchTimelineScreen
+        from .reports import open_timeline
 
-        timeline = self._view.timeline(batch_id)
-        if timeline is not None:
-            self.app.push_screen(BatchTimelineScreen(timeline, self.repo))
+        open_timeline(self, self._client, self.repo, batch_id)
 
     @on(Button.Pressed, "#open-recovery")
     def open_recovery(self, event: Button.Pressed) -> None:
@@ -388,7 +415,9 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         item = history.highlighted_child if history is not None else None
         batch = item.name if item is not None and item.name else ""
         self.app.push_screen(
-            RecoveryScreen(self.repo, batch=batch, command_runner=self._command_runner)
+            RecoveryScreen(
+                self.repo, batch=batch, command_runner=self._command_runner
+            )
         )
 
     @on(Button.Pressed, "#container-route")
