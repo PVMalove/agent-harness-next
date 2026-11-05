@@ -27,9 +27,10 @@ from pathlib import Path
 
 from harness.orchestration.core.constants import STATE_REL
 
-from ...kernel.discovery import _private_file, discovery_path
+from ...kernel.discovery import discovery_path
 from ..application.ports import JournalUnavailable
 from ..domain.events import Event, View
+from .discovery import _private_file
 
 JOURNAL_NAME = "orchestration-events.jsonl"
 FORMAT = 1

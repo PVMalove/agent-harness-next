@@ -7,7 +7,6 @@ import secrets
 import socket
 
 from .application.decisions import DecisionService
-from ..kernel.discovery import Discovery
 from .application.jobs import JobService
 from .application.events import OrchestrationEvents
 from .api.request_router import (
@@ -18,10 +17,21 @@ from .api.request_router import (
 from .application.snapshots import SnapshotService
 from . import composition
 from pathlib import Path
+from collections.abc import Callable
 from typing import Protocol
 
 _STARTUP_POLL = 0.01
 DEFAULT_STATIC_ROOT = Path(__file__).resolve().parents[1] / "web" / "dist"
+
+
+class _Discovery(Protocol):
+    """The owner of the project's discovery lock and record (backend.infrastructure.discovery)."""
+
+    def acquire(self) -> None: ...
+
+    def publish(self, port: int, token: str) -> None: ...
+
+    def close(self) -> None: ...
 
 
 class _Serving(Protocol):
@@ -49,20 +59,26 @@ class ConsoleServer:
     ) -> None:
         self.repo = repo.resolve()
         self._static_root = static_root
-        self._snapshots = snapshots or composition.snapshot_service(self.repo)
-        self._jobs = jobs or composition.job_service(self.repo)
-        self._decisions = decisions or composition.decision_service(self.repo)
-        self._events = events or composition.orchestration_events(self.repo)
-        self._router = RequestRouter(
-            self._snapshots, self._jobs, self._decisions, self._events
+        parts = composition.compose(
+            self.repo,
+            snapshots=snapshots,
+            jobs=jobs,
+            decisions=decisions,
+            events=events,
         )
+        self._snapshots = parts.snapshots
+        self._jobs = parts.jobs
+        self._decisions = parts.decisions
+        self._events = parts.events
+        self._router = parts.router
+        self._new_discovery: Callable[[Path], _Discovery] = parts.discovery
         self._idle_grace = idle_grace_seconds
         self._clients = 0
         self._idle_task: asyncio.Task[None] | None = None
         self._socket: socket.socket | None = None
         self._uvicorn: _Serving | None = None
         self._serve_task: asyncio.Task[None] | None = None
-        self._discovery: Discovery | None = None
+        self._discovery: _Discovery | None = None
         self._token = ""
         self._port = 0
         self._started = False
@@ -108,7 +124,7 @@ class ConsoleServer:
 
         self._started = True
         try:
-            self._discovery = Discovery(self.repo)
+            self._discovery = self._new_discovery(self.repo)
             self._discovery.acquire()
             listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._socket = listener

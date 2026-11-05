@@ -142,7 +142,7 @@ def test_live_discovery_owner_cannot_be_stolen_by_another_process(
         code = """
 import asyncio, sys
 from pathlib import Path
-from harness.console.kernel.discovery import DiscoveryBusyError
+from harness.console.backend.infrastructure.discovery import DiscoveryBusyError
 from harness.console.backend.server import ConsoleServer
 async def main():
     server = ConsoleServer(Path(sys.argv[1]))
@@ -274,7 +274,8 @@ def test_discovery_refuses_symlinks(project: Path, component: str) -> None:
 
 
 def test_linked_worktree_uses_main_project_discovery(project: Path) -> None:
-    from harness.console.kernel.discovery import DiscoveryBusyError, discovery_path
+    from harness.console.backend.infrastructure.discovery import DiscoveryBusyError
+    from harness.console.kernel.discovery import discovery_path
 
     subprocess.run(
         [
@@ -316,7 +317,8 @@ def test_linked_worktree_uses_main_project_discovery(project: Path) -> None:
 def test_windows_acl_failure_precedes_any_secret_write(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console.kernel import discovery
+    from harness.console.backend.infrastructure import discovery
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -332,7 +334,7 @@ def test_windows_acl_failure_precedes_any_secret_write(
             patch.setattr(discovery, "_private_file", denied)
             with pytest.raises(PermissionError, match="private ACL unavailable"):
                 await server.start()
-        path = discovery.discovery_path(project)
+        path = discovery_path(project)
         assert not path.exists()
         assert not list(path.parent.glob("*.tmp"))
         with pytest.raises(OSError):

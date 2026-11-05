@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
+from .api.request_router import RequestRouter
 from .application.decisions import DecisionService
 from .application.events import POLL_INTERVAL_SECONDS, OrchestrationEvents
 from .application.jobs import JobService
@@ -24,6 +26,7 @@ from .domain.approvals import DecisionsSnapshot
 from .domain.snapshots import HOME_TTL_SECONDS
 from .infrastructure import command_journal
 from .infrastructure.clock import monotonic, utc_now_iso
+from .infrastructure.discovery import Discovery
 from .infrastructure.event_journal import opener
 from .infrastructure.home_facts import collect_home
 from .infrastructure.ids import new_id
@@ -99,4 +102,40 @@ def orchestration_events(
         open_journal=opener(root, journal_path),
         now=utc_now_iso,
         interval=interval,
+    )
+
+
+@dataclass(frozen=True)
+class Composition:
+    """Everything one console server is built from. `discovery` makes the project's discovery
+    owner when the server starts."""
+
+    snapshots: SnapshotService
+    jobs: JobService
+    decisions: DecisionService
+    events: OrchestrationEvents
+    router: RequestRouter
+    discovery: Callable[[Path], Discovery]
+
+
+def compose(
+    repo: Path,
+    *,
+    snapshots: SnapshotService | None = None,
+    jobs: JobService | None = None,
+    decisions: DecisionService | None = None,
+    events: OrchestrationEvents | None = None,
+) -> Composition:
+    """The services of one console server, with the given ones kept, and its request router."""
+    snapshots = snapshots or snapshot_service(repo)
+    jobs = jobs or job_service(repo)
+    decisions = decisions or decision_service(repo)
+    events = events or orchestration_events(repo)
+    return Composition(
+        snapshots,
+        jobs,
+        decisions,
+        events,
+        RequestRouter(snapshots, jobs, decisions, events),
+        Discovery,
     )
