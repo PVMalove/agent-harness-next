@@ -502,3 +502,407 @@ def test_a_known_outcome_shows_neither_the_banner_nor_a_resend_action() -> None:
             checks=checks(operation={"executions": [{"execution": "exited"}]})
         )
     )
+
+
+# ----------------------------------------------------------------------------- the action planner
+
+from harness.console.recovery_view import (  # noqa: E402
+    FixChoice,
+    FixPreview,
+    RecoverySession,
+    WizardTarget,
+    pointer_parts,
+)
+
+
+def session_with(
+    document: dict[str, object] | None = None,
+) -> tuple[RecoverySession, Coordinator]:
+    runner = Coordinator()
+    runner.reply(
+        "recovery status", document if document is not None else held_document()
+    )
+    session = RecoverySession(
+        REPO, "batch-1", runner, now=lambda: "2026-11-05T16:00:00+00:00"
+    )
+    session.refresh()
+    return session, runner
+
+
+def test_refresh_is_a_read_only_status_call_with_the_session_skips() -> None:
+    session, runner = session_with()
+    assert runner.commands() == ["recovery status"]
+    call = runner.calls[0]
+    assert (
+        call[call.index("--batch") + 1] == "batch-1"
+        and "--json" in call
+        and "--skip" not in call
+    )
+
+
+def test_fix_requires_an_explicit_choice_and_the_preview_writes_nothing() -> None:
+    session, runner = session_with()
+    try:
+        session.fix(None)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("fix must not pick a value for the operator")
+    runner.reply(
+        "recovery fix",
+        {
+            "action": "fix",
+            "outcome": "done",
+            "diff": "-mode: x\n+mode: sandbox",
+            "applied": False,
+            "backup_version": None,
+        },
+    )
+    preview = session.fix(FixChoice.NORMALIZE)
+    assert isinstance(preview, FixPreview) and preview.writable
+    assert "--apply" not in runner.calls[-1]
+    view = session.view()
+    assert row(view, "Diff (превью)").value == "-mode: x\n+mode: sandbox"
+    assert row(view, "Записано").value == "нет"
+
+
+def test_a_confirmed_write_follows_the_preview_and_is_spent_after_one_use() -> None:
+    session, runner = session_with()
+    runner.reply(
+        "recovery fix",
+        {"action": "fix", "outcome": "done", "diff": "+x", "applied": False},
+    )
+    session.fix(FixChoice.NORMALIZE)
+    for confirmed in (False,):
+        try:
+            session.apply_fix(confirmed)
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError("an unconfirmed write must not run")
+    assert runner.commands().count("recovery fix") == 1
+    runner.reply(
+        "recovery fix",
+        {
+            "action": "fix",
+            "outcome": "done",
+            "diff": "+x",
+            "applied": True,
+            "backup_version": "v-12",
+        },
+    )
+    result = session.apply_fix(True)
+    assert result.ok and "--apply" in runner.calls[-1]
+    assert row(session.view(), "Записано").value == "да"
+    assert row(session.view(), "Резервная копия").value == "v-12"
+    try:
+        session.apply_fix(True)
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("a spent preview must not be applied twice")
+
+
+def test_a_write_without_a_preview_or_without_a_diff_is_refused() -> None:
+    session, runner = session_with()
+    try:
+        session.apply_fix(True)
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("no preview, no write")
+    runner.reply(
+        "recovery fix",
+        {"action": "fix", "outcome": "done", "diff": None, "applied": False},
+    )
+    session.fix(FixChoice.NORMALIZE)
+    try:
+        session.apply_fix(True)
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("nothing to normalize, nothing to write")
+    assert "--apply" not in " ".join(sum(runner.calls, []))
+
+
+def test_choosing_a_value_opens_the_wizard_at_the_pointer_with_the_suggestion_unapplied() -> (
+    None
+):
+    session, runner = session_with()
+    target = session.fix(FixChoice.EDIT_AT_POINTER, "d1d1d1d1d1d1d1d1")
+    assert target == WizardTarget(
+        "orchestration.json", ("access_policy", "defaults", "mode"), "sandbox"
+    )
+    assert "recovery fix" not in runner.commands()
+    try:
+        session.fix(FixChoice.EDIT_AT_POINTER, "nope")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a pointer the status does not list cannot be edited")
+    assert pointer_parts("/a/b~1c/~0d") == ("a", "b/c", "~d")
+
+
+def test_fix_is_refused_when_the_core_does_not_offer_it() -> None:
+    session, _ = session_with(status_document(actions=actions(fix=False)))
+    try:
+        session.fix(FixChoice.NORMALIZE)
+    except PermissionError as exc:
+        assert "core reason for fix" in str(exc)
+    else:
+        raise AssertionError("fix is core-gated")
+
+
+def test_reload_only_revalidates_and_names_that_no_worker_started() -> None:
+    session, runner = session_with()
+    runner.reply(
+        "recovery reload",
+        {
+            "action": "reload",
+            "outcome": "done",
+            "diagnostics": [],
+            "runtime": {"compatible": True, "problems": []},
+            "worker_started": False,
+        },
+    )
+    session.reload()
+    assert runner.commands() == ["recovery status", "recovery reload"]
+    view = session.view()
+    assert row(view, "Исход", "Результат: reload").value == "done"
+    assert row(view, "worker запущен").value == "нет"
+    assert row(view, "Совместимость runtime").value == "да"
+
+
+def test_a_refused_reload_keeps_the_runtime_problems() -> None:
+    session, runner = session_with()
+    runner.reply(
+        "recovery reload",
+        {
+            "action": "reload",
+            "outcome": "refused",
+            "diagnostics": [diagnostic()],
+            "runtime": {"compatible": False, "problems": ["protocol 3 needs 4"]},
+            "worker_started": False,
+        },
+        code=2,
+    )
+    result = session.reload()
+    assert not result.ok
+    view = session.view()
+    assert row(view, "Исход", "Результат: reload").state is State.BLOCKED
+    assert "protocol 3 needs 4" in row(view, "Совместимость runtime").value
+
+
+def test_resume_is_gated_by_the_core_and_never_runs_when_refused() -> None:
+    session, runner = session_with()  # held_document: resume unavailable
+    try:
+        session.resume()
+    except PermissionError as exc:
+        assert "core reason for resume" in str(exc)
+    else:
+        raise AssertionError("resume must follow the core")
+    assert "recovery resume" not in runner.commands()
+
+
+def test_resume_shows_the_exact_command_checks_and_approval_before_running() -> None:
+    session, runner = session_with(status_document())
+    plan = session.resume_plan()
+    assert plan.command == "coordinator.py recovery resume --batch batch-1 --json"
+    assert [name for name, _ in plan.checks] == list(CHECK_NAMES)
+    assert (
+        not plan.approval_required
+        and "recovery resume --batch batch-1" in plan.next_step
+    )
+    assert runner.commands() == ["recovery status"]
+    runner.reply(
+        "recovery resume",
+        {
+            "action": "resume",
+            "outcome": "done",
+            "steps": [{"step": "release-hold", "detail": "released"}],
+            "refusals": [],
+            "dispatch_created": False,
+            "worker_started": False,
+            "next": None,
+        },
+    )
+    session.resume()
+    call = runner.calls[-1]
+    assert "--approved-by" not in call
+    view = session.view()
+    assert row(view, "Шаг").value == "release-hold: released"
+    assert (
+        row(view, "dispatch создан").value == "нет"
+        and row(view, "worker запущен").value == "нет"
+    )
+
+
+def test_a_stopped_batch_needs_a_named_approver_with_a_note_all_three_together() -> (
+    None
+):
+    stopped = status_document(
+        lifecycle={
+            "state": "blocked",
+            "next_action": None,
+            "terminal": False,
+            "stopped": True,
+            "needs_attention": True,
+            "attention_reason": "x",
+            "auto_stop": False,
+            "manual_recovery": True,
+        }
+    )
+    session, runner = session_with(stopped)
+    assert session.resume_plan().approval_required
+    for who, note in (("", "why"), ("operator", "")):
+        try:
+            session.resume(who, note)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("a partial approval must not run")
+    assert "recovery resume" not in runner.commands()
+    runner.reply(
+        "recovery resume",
+        {"action": "resume", "outcome": "done", "steps": [], "refusals": []},
+    )
+    session.resume("operator", "checked by hand")
+    call = runner.calls[-1]
+    assert call[call.index("--approved-by") + 1] == "operator"
+    assert call[call.index("--approved-at") + 1] == "2026-11-05T16:00:00+00:00"
+    assert call[call.index("--note") + 1] == "checked by hand"
+
+
+def test_a_refused_resume_shows_the_core_refusals_as_blockers() -> None:
+    session, runner = session_with(status_document())
+    runner.reply(
+        "recovery resume",
+        {
+            "action": "resume",
+            "outcome": "refused",
+            "steps": [],
+            "refusals": [diagnostic(remedy="fix the config first")],
+            "dispatch_created": False,
+            "worker_started": False,
+        },
+        code=2,
+    )
+    session.resume()
+    view = session.view()
+    assert (
+        row(view, "Отказ").value == "fix the config first"
+        and row(view, "Отказ").state is State.BLOCKED
+    )
+    assert row(view, "Исход", "Результат: resume").state is State.BLOCKED
+
+
+def test_resume_stays_blocked_in_the_unknown_outcome_even_if_the_core_lists_it_available() -> (
+    None
+):
+    session, runner = session_with(unknown_document())
+    try:
+        session.resume()
+    except PermissionError as exc:
+        assert "второй worker не запускается" in str(exc)
+    else:
+        raise AssertionError("unknown outcome blocks resume")
+    assert "recovery resume" not in runner.commands()
+
+
+def test_skip_is_session_only_limited_to_allowlisted_advisories_and_passed_to_status() -> (
+    None
+):
+    advisory = diagnostic(
+        id="a1",
+        code="config-advisory",
+        severity="warning",
+        fatal=False,
+        advisory="config-normalized",
+    )
+    session, runner = session_with(
+        status_document(diagnostics=[advisory], actions=actions(skip=True))
+    )
+    try:
+        session.skip("d-unknown")
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("an unlisted diagnostic cannot be skipped")
+    session.skip("a1")
+    assert session.skipped == {"a1"}
+    assert row(session.view(), "Диагностика").value == "замечаний нет"
+    session.refresh()
+    call = runner.calls[-1]
+    assert call[call.index("--skip") + 1] == "a1"
+    fresh = RecoverySession(REPO, "batch-1", runner)
+    assert fresh.skipped == set()  # nothing persists between sessions
+
+
+def test_a_fatal_diagnostic_is_never_skipped_by_the_session() -> None:
+    session, _ = session_with(
+        status_document(diagnostics=[diagnostic()], resumable=False)
+    )
+    try:
+        session.skip("d1d1d1d1d1d1d1d1")
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("a fatal diagnostic is resolved, never skipped")
+    assert session.skipped == set()
+
+
+def test_exit_with_save_is_not_abandon_not_kill_and_shows_the_cores_own_flags() -> None:
+    session, runner = session_with()
+    runner.reply(
+        "recovery abort",
+        {
+            "action": "abort",
+            "outcome": "done",
+            "abandoned": False,
+            "worker_stopped": False,
+            "worktree_cleaned": False,
+            "intent": {"status": "aborted"},
+        },
+    )
+    session.abort()
+    assert runner.commands() == ["recovery status", "recovery abort"]
+    view = session.view()
+    assert row(view, "batch отменён").value == "нет"
+    assert row(view, "worker остановлен").value == "нет"
+    assert row(view, "worktree очищен").value == "нет"
+    assert not any(
+        "kill" in " ".join(call) or "abandon" in " ".join(call) for call in runner.calls
+    )
+
+
+def test_exit_with_save_is_the_one_exit_offered_when_the_outcome_is_unknown() -> None:
+    session, runner = session_with(unknown_document())
+    runner.reply(
+        "recovery abort",
+        {
+            "action": "abort",
+            "outcome": "done",
+            "abandoned": False,
+            "worker_stopped": False,
+            "worktree_cleaned": False,
+        },
+    )
+    session.abort()
+    assert "recovery abort" in runner.commands()
+    keys = [a.key for a in session.view().actions if a.enabled]
+    assert (
+        "resume" not in keys
+        and "resend" not in keys
+        and {"status", "abort"} <= set(keys)
+    )
+
+
+def test_a_failed_action_is_shown_verbatim_and_is_a_blocker() -> None:
+    session, runner = session_with()
+    runner.reply(
+        "recovery abort", None, stderr="ERROR: store busy\nREMEDY: retry", code=2
+    )
+    session.abort()
+    view = session.view()
+    assert "ERROR: store busy" in view.blockers[-1]
+    assert row(view, "Результат abort").state is State.FAILED
