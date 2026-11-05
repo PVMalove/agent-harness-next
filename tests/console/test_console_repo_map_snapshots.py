@@ -19,9 +19,9 @@ from textual.pilot import Pilot
 from textual.screen import Screen
 from textual.widgets import Button, TabbedContent, Tree
 
-from harness.console import repo_map as console_repo_map
-from harness.console.repo_map import RepoMapView
-from harness.console.screens.repo_map import RepoMapScreen
+from harness.console.kernel import repo_map as console_repo_map
+from harness.console.kernel.repo_map import RepoMapView
+from harness.console.tui.screens.repo_map import RepoMapScreen
 from harness.repo_map.bundle_fetch import ParserStatus
 from tests.console._console_repo_map_fixture import HUB, map_payload
 from tests.console._svg_snapshot import (

@@ -127,7 +127,7 @@ class _Batch:
             "outcome": outcome,
             "output": output,
             "commit_sha": "a" * 40,
-            "changed_files": ["harness/console/reports.py"],
+            "changed_files": ["harness/console/tui/reports.py"],
             "checks_run": [
                 {
                     "command": "make test",
@@ -212,7 +212,7 @@ def build_reports_fixture(repo: Path) -> None:
         output="Ревью без блокирующих находок [high] не найдено",
         review={
             "candidate_commit": "a" * 40,
-            "scope": ["harness/console/reports.py"],
+            "scope": ["harness/console/tui/reports.py"],
             "standards": {
                 "severity": "low",
                 "findings": [

@@ -20,10 +20,10 @@ from textual.widgets import (
     Static,
 )
 
-from harness.console.app import HarnessConsoleApp
-from harness.console.screens.dashboard import DashboardScreen
-from harness.console.screens.project_setup import ProjectSetupScreen
-from harness.console.shell import Fold
+from harness.console.tui.app import HarnessConsoleApp
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.screens.project_setup import ProjectSetupScreen
+from harness.console.tui.shell import Fold
 
 from tests.console._home_client import fake_home
 from tests.console._pilot_wait import press, wait_until
@@ -177,7 +177,7 @@ def test_late_results_of_the_previous_project_do_not_reach_the_new_dashboard(
 
     from textual.app import App
 
-    from harness.console.data import DashboardData
+    from harness.console.kernel.data import DashboardData
     from tests.console.test_console_app import _fake_dashboard_data
 
     release = threading.Event()
@@ -216,7 +216,7 @@ def test_late_results_of_the_previous_project_do_not_reach_the_new_dashboard(
 
 
 def test_report_summary_separates_checked_skipped_and_failing_checks() -> None:
-    from harness.console.screens.project_setup import ChecksSummary, summarize_report
+    from harness.console.tui.screens.project_setup import ChecksSummary, summarize_report
     from harness.health.model import CheckResult, Fix, Report
 
     report = Report(
@@ -237,7 +237,7 @@ def test_report_summary_separates_checked_skipped_and_failing_checks() -> None:
 def test_online_check_and_local_fixes_target_the_selected_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import data
+    from harness.console.kernel import data
     from harness.health.model import CheckResult, Report
 
     second = tmp_path / "backend"
@@ -336,8 +336,8 @@ def test_capability_change_keeps_install_disabled_during_diagnostics(
 ) -> None:
     import threading
 
-    from harness.console import data
-    from harness.console.screens.harness import CommandFormScreen
+    from harness.console.kernel import data
+    from harness.console.tui.screens.harness import CommandFormScreen
     from harness.health.model import Report
 
     second = tmp_path / "backend with spaces"
@@ -399,7 +399,7 @@ def test_open_project_sits_on_the_shell_and_digits_typed_in_the_path_stay_there(
 ) -> None:
     from textual.widgets import ListItem, ListView
 
-    from harness.console.shell import SECTIONS, Breadcrumbs
+    from harness.console.tui.shell import SECTIONS, Breadcrumbs
     from tests.console._pilot_wait import crumb_text
 
     async def scenario() -> tuple[str, list[str | None], int | None, bool, str, bool]:
@@ -500,7 +500,7 @@ def test_the_section_menu_waits_for_a_running_operation(
 
 
 def test_the_busy_note_has_an_english_text() -> None:
-    from harness.console import i18n
+    from harness.console.kernel import i18n
 
     assert (
         i18n.tr("en", "Дождитесь окончания операции")
@@ -509,7 +509,7 @@ def test_the_busy_note_has_an_english_text() -> None:
 
 
 def test_setup_output_marks_report_statuses_but_not_plain_list_items() -> None:
-    from harness.console.screens.diagnostics import styled_log
+    from harness.console.tui.screens.diagnostics import styled_log
 
     text = "- установка\nИтого: ok=1 warn=0 fail=1 skipped=1\n[FAIL] env.uv: нет\n- net: офлайн"
     assert styled_log(text).plain.split("\n") == [
@@ -521,7 +521,7 @@ def test_setup_output_marks_report_statuses_but_not_plain_list_items() -> None:
 
 
 def test_styled_log_ignores_foreign_lines_that_only_look_like_a_report_total() -> None:
-    from harness.console.screens.diagnostics import styled_log
+    from harness.console.tui.screens.diagnostics import styled_log
 
     text = "Итого: 3 файла\n- элемент списка"
     assert styled_log(text).plain == text
@@ -572,7 +572,7 @@ def test_status_lines_start_with_a_symbol(
 ) -> None:
     import threading
 
-    from harness.console.project_target import inspect_target
+    from harness.console.tui.project_target import inspect_target
 
     project = tmp_path / "backend"
     project.mkdir()
@@ -584,7 +584,7 @@ def test_status_lines_start_with_a_symbol(
         gate.wait(30)
         return real(value)
 
-    monkeypatch.setattr("harness.console.screens.project_setup.inspect_target", slow)
+    monkeypatch.setattr("harness.console.tui.screens.project_setup.inspect_target", slow)
 
     async def scenario() -> dict[str, str]:
         seen: dict[str, str] = {}
@@ -1292,7 +1292,7 @@ def test_the_screen_follows_the_mockup_composition_at_every_size(
 def test_the_screen_shows_no_demo_data_from_the_mockup() -> None:
     """The mockup's sample values (branch, counts, paths, version) are not in the sources: the
     screen shows only what the console receives."""
-    root = Path(__file__).resolve().parents[2] / "harness" / "console"
+    root = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui"
     for source in (root / "screens" / "project_setup.py", root / "project_target.py"):
         text = source.read_text(encoding="utf-8")
         for demo in (
@@ -1345,7 +1345,7 @@ def test_an_option_button_keeps_both_lines_of_its_label() -> None:
     """Guards the private Textual API `_OptionButton` relies on (`_make_label`, `_label`)."""
     from textual.geometry import Size
 
-    from harness.console.screens.project_setup import _OptionButton
+    from harness.console.tui.screens.project_setup import _OptionButton
 
     button = _OptionButton("name\ndescription")
     assert button._label.plain == "name\ndescription"

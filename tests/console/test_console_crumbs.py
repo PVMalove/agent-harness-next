@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from harness.console.crumbs import SEPARATOR, Crumb, collapse_crumbs, split_path
+from harness.console.tui.crumbs import SEPARATOR, Crumb, collapse_crumbs, split_path
 
 PATH = ["Главная", "Оркестрация", "batch-31007025-83d2", "Worker / Наблюдение"]
 

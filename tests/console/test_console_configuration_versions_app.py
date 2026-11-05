@@ -8,7 +8,7 @@ from textual.app import App
 
 from harness.configuration import read_config_bundle
 from harness.configuration_store import ConfigurationStore
-from harness.console.screens.configuration_versions import ConfigurationVersionsScreen
+from harness.console.tui.screens.configuration_versions import ConfigurationVersionsScreen
 from tests.console._pilot_wait import press, wait_until
 from tests.console.test_console_configuration_app import installed_project
 
@@ -131,7 +131,7 @@ def test_a_storage_path_with_brackets_is_shown_as_plain_text(tmp_path: Path) -> 
 
 
 def test_the_save_messages_name_the_storage(tmp_path: Path) -> None:
-    from harness.console.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration import ConfigurationScreen
 
     installed_project(tmp_path)
     screen = ConfigurationScreen(tmp_path)
@@ -143,8 +143,8 @@ def test_the_save_messages_name_the_storage(tmp_path: Path) -> None:
 def test_versions_stand_on_the_shared_frame_and_wait_for_a_running_restore(
     tmp_path: Path,
 ) -> None:
-    from harness.console.chrome import TopBar, WorkspaceHeader
-    from harness.console.shell import ConsoleShell
+    from harness.console.tui.chrome import TopBar, WorkspaceHeader
+    from harness.console.tui.shell import ConsoleShell
 
     installed_project(tmp_path)
 
@@ -174,9 +174,9 @@ def test_versions_stand_on_the_shared_frame_and_wait_for_a_running_restore(
 def test_the_home_key_and_the_home_crumb_ask_before_a_changed_wizard_draft_is_dropped_and_cancel_keeps_versions(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.configuration import ConfirmConfiguration
-    from harness.console.screens.dashboard import DashboardScreen
-    from harness.console.shell import CrumbLink
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.shell import CrumbLink
     from tests.console.test_console_configuration_app import (
         _change_draft,
         _dashboard_host,
@@ -222,9 +222,9 @@ def test_the_home_key_and_the_home_crumb_ask_before_a_changed_wizard_draft_is_dr
 def test_a_section_from_the_versions_screen_closes_both_and_refreshes_home_once(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.configuration import ConfirmConfiguration
-    from harness.console.screens.dashboard import DashboardScreen
-    from harness.console.screens.help import HelpScreen
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.help import HelpScreen
     from tests.console.test_console_configuration_app import (
         _change_draft,
         _dashboard_host,

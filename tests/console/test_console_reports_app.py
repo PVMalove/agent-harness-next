@@ -19,11 +19,11 @@ from textual.widgets import Button, Input, ListView, Select, Static
 from tests.console._pilot_wait import wait_until
 from tests.console._console_ledger_fixture import QA_LOG_SHA256, build_reports_fixture
 from tests.console._home_client import fake_home
-from harness.console.app import HarnessConsoleApp
-from harness.console.data import DashboardData
-from harness.console.screens.dashboard import DashboardScreen
-from harness.console.shell import SECTIONS, ConsoleShell, Fold, SectionCard
-from harness.console.screens.reports import (
+from harness.console.tui.app import HarnessConsoleApp
+from harness.console.kernel.data import DashboardData
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.shell import SECTIONS, ConsoleShell, Fold, SectionCard
+from harness.console.tui.screens.reports import (
     BatchTimelineScreen,
     QaLogsScreen,
     ReportScreen,
@@ -224,7 +224,7 @@ def test_batch_rows_and_timeline_show_start_and_time_to_pr_in_a_narrow_window(
     tmp_path: Path,
 ) -> None:
     from dataclasses import replace
-    from harness.console.reports import load_ledger_view
+    from harness.console.tui.reports import load_ledger_view
 
     build_reports_fixture(tmp_path)
     view = load_ledger_view(tmp_path)
@@ -660,11 +660,11 @@ def test_status_rows_wrap_instead_of_being_cut_and_name_the_role(
 
 
 def test_role_badge_takes_its_colour_from_the_brand_palette(tmp_path: Path) -> None:
-    from harness.console import brand
-    from harness.console.screens.reports import _report_label
+    from harness.console.kernel import brand
+    from harness.console.tui.screens.reports import _report_label
 
     build_reports_fixture(tmp_path)
-    from harness.console.reports import load_ledger_view
+    from harness.console.tui.reports import load_ledger_view
 
     entry = next(
         stage
@@ -795,7 +795,7 @@ def test_report_screen_header_fields_checks_and_footer(tmp_path: Path) -> None:
     assert header.endswith("UTC")
     for label in ("dispatch", "batch", "commit", "файлы"):
         assert label in fields
-    assert "harness/console/reports.py" in fields
+    assert "harness/console/tui/reports.py" in fields
     assert buttons == ["b Хронология batch", "e Экспорт в Markdown"]
     assert checks == "✔ pass  make test — 412 passed"
     assert risks == "✔ нет"
@@ -813,7 +813,7 @@ def test_a_long_dispatch_id_stays_whole_by_wrapping_in_a_narrow_report(
 ) -> None:
     from dataclasses import replace
 
-    from harness.console.reports import load_ledger_view
+    from harness.console.tui.reports import load_ledger_view
 
     build_reports_fixture(tmp_path)
     view = load_ledger_view(tmp_path)

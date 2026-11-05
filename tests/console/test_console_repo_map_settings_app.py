@@ -16,11 +16,11 @@ from textual.app import App
 from textual.pilot import Pilot
 from textual.widgets import Button, RadioButton, SelectionList, Static, TabbedContent
 
-from harness.console import brand
+from harness.console.kernel import brand
 from tests.console._pilot_wait import press
-from harness.console.app import HarnessConsoleApp
-from harness.console.screens.configuration import ConfigurationScreen
-from harness.console.screens.repo_map import RepoMapScreen
+from harness.console.tui.app import HarnessConsoleApp
+from harness.console.tui.screens.configuration import ConfigurationScreen
+from harness.console.tui.screens.repo_map import RepoMapScreen
 from harness.repo_map.bundle_fetch import ParserStatus
 from tests.console.test_console_configuration_app import (
     _orchestration_project,
@@ -413,7 +413,7 @@ def _region(app: App[None], selector: str) -> tuple[int, int]:
 def test_the_settings_cards_form_a_two_by_two_grid_on_a_wide_terminal(
     tmp_path: Path,
 ) -> None:
-    from harness.console.shell import SectionCard
+    from harness.console.tui.shell import SectionCard
 
     repo = _git_project(tmp_path)
 

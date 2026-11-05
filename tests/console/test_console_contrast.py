@@ -15,7 +15,8 @@ import pytest
 
 pytest.importorskip("textual")
 
-from harness.console import brand, shell
+from harness.console.kernel import brand
+from harness.console.tui import shell
 
 SURFACE = brand.PALETTE["surface"]
 TOKENS = brand.SHELL_TOKENS
@@ -98,8 +99,8 @@ def test_a_shell_button_is_drawn_with_the_component_border(tmp_path: Path) -> No
     from textual.color import Color
     from textual.widgets import Button
 
-    from harness.console.app import HarnessConsoleApp
-    from harness.console.screens.worker_observation import WorkerObservationScreen
+    from harness.console.tui.app import HarnessConsoleApp
+    from harness.console.tui.screens.worker_observation import WorkerObservationScreen
 
     async def scenario() -> Color:
         app = HarnessConsoleApp(tmp_path)

@@ -1,4 +1,4 @@
-"""harness.console.repo_map: Repo Map facts for the console on a real repository and cache fixture
+"""harness.console.kernel.repo_map: Repo Map facts for the console on a real repository and cache fixture
 (tests/_console_repo_map_fixture.py). No textual needed."""
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from tests.console._console_repo_map_fixture import (
     map_payload,
     write_cached_map,
 )
-from harness.console import repo_map as console_repo_map
-from harness.console.export import export_text, render_markdown
-from harness.console.repo_map import RepoMapView
-from harness.console.runner import capturing_runner
+from harness.console.kernel import repo_map as console_repo_map
+from harness.console.kernel.export import export_text, render_markdown
+from harness.console.kernel.repo_map import RepoMapView
+from harness.console.kernel.runner import capturing_runner
 
 
 class _RecordingRunner:

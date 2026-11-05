@@ -13,8 +13,8 @@ from textual.color import Color
 from textual.screen import Screen
 from textual.widgets import Button, Input, ListView, Static
 
-from harness.console.screens.harness import CommandFormScreen, HarnessScreen
-from harness.console.shell import Fold
+from harness.console.tui.screens.harness import CommandFormScreen, HarnessScreen
+from harness.console.tui.shell import Fold
 from tests.console._svg_snapshot import SIZES, mockup_states, until
 from tests.console.harness.snapshots import (
     EXCLUDED,

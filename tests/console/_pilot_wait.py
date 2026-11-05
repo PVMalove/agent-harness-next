@@ -9,8 +9,8 @@ from collections.abc import Callable
 from textual.pilot import Pilot
 from textual.widgets import Button, Static
 
-from harness.console.crumbs import SEPARATOR
-from harness.console.shell import Breadcrumbs
+from harness.console.tui.crumbs import SEPARATOR
+from harness.console.tui.shell import Breadcrumbs
 
 WAIT_SECONDS = 30.0
 POLL_SECONDS = 0.05

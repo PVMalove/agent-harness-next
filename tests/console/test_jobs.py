@@ -16,10 +16,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from harness.console import jobs as job_module
-from harness.console.jobs import JobService
-from harness.console.process_tree import CommandCancelled
-from harness.console.server import MAX_SUBSCRIPTIONS, MESSAGE_LIMIT, ConsoleServer
+from harness.console.backend import composition
+from harness.console.backend.api.protocol import jobs as job_protocol
+from harness.console.backend.application import jobs as job_module
+from harness.console.backend.domain import jobs as job_domain
+from harness.console.backend.infrastructure import processes
+from harness.console.kernel.process_tree import CommandCancelled
+from harness.console.backend.server import MAX_SUBSCRIPTIONS, ConsoleServer
+from harness.console.kernel.protocol import MESSAGE_LIMIT
 from tests.console.test_server import _connect
 
 if TYPE_CHECKING:
@@ -34,7 +38,7 @@ def test_completed_jobs_append_client_and_result_to_command_journal(
     async def scenario() -> None:
         fake = FakeExecutor()
         fake.finish.set()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -72,7 +76,7 @@ def test_journal_masks_all_user_values_and_preserves_command(
     async def scenario() -> None:
         fake = FakeExecutor()
         fake.finish.set()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -240,7 +244,7 @@ def test_catalog_job_stream_survives_disconnect_and_replays_from_cursor(
 ) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -330,7 +334,7 @@ def test_job_admission_rejects_invalid_catalog_requests(
 
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -359,7 +363,7 @@ def test_job_lookup_rejects_invalid_requests(
 ) -> None:
     async def scenario() -> None:
         server = ConsoleServer(
-            project, jobs=JobService(project, executor=FakeExecutor())
+            project, jobs=composition.job_service(project, executor=FakeExecutor())
         )
         await server.start()
         try:
@@ -384,7 +388,7 @@ def test_coordinator_job_passes_declared_fields_only_when_the_coordinator_exists
     async def scenario() -> None:
         fake = FakeExecutor()
         fake.finish.set()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -409,7 +413,7 @@ def test_coordinator_job_passes_declared_fields_only_when_the_coordinator_exists
 def test_cleanup_job_deletes_only_the_previewed_plan(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -435,7 +439,7 @@ def test_job_list_shows_running_and_finished_jobs_to_a_new_client(
 ) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -462,7 +466,7 @@ def test_job_list_shows_running_and_finished_jobs_to_a_new_client(
 def test_running_job_limit_refuses_a_start_but_not_reads(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -492,7 +496,7 @@ def test_mutating_jobs_are_exclusive_but_reads_run_beside_one(
 ) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -527,7 +531,7 @@ def test_job_cancel_requires_confirmation_then_frees_the_mutation_slot(
 ) -> None:
     async def scenario() -> None:
         fake = CancellableExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -567,7 +571,7 @@ def test_job_cancel_requires_confirmation_then_frees_the_mutation_slot(
 def test_cancelling_a_read_leaves_the_mutation_running(project: Path) -> None:
     async def scenario() -> None:
         fake = CancellableExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -579,7 +583,7 @@ def test_cancelling_a_read_leaves_the_mutation_running(project: Path) -> None:
                 # Only a mutation warns that its changes stay: a read made none.
                 assert (
                     refused["error"]["message"]
-                    == job_module._ERRORS["confirmation_required"]
+                    == job_protocol._ERRORS["confirmation_required"]
                 )
                 await client.send(request("job.cancel", job_id=read, confirmed=True))
                 assert (await receive(client))["job"]["phase"] == "cancelled"
@@ -601,7 +605,7 @@ def test_cancelling_a_read_leaves_the_mutation_running(project: Path) -> None:
 def test_job_cancel_refuses_unknown_and_finished_jobs(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -627,7 +631,7 @@ def test_two_cancels_of_one_job_both_answer_with_the_cancelled_job(
 ) -> None:
     async def scenario() -> None:
         fake = CancellableExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -658,7 +662,7 @@ def test_cancel_completes_after_the_requesting_client_disconnects(
     async def scenario() -> None:
         fake = CancellableExecutor()
         fake.stop.clear()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -680,7 +684,7 @@ def test_cancel_completes_after_the_requesting_client_disconnects(
 def test_mutation_slot_frees_when_the_job_completes(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -702,7 +706,7 @@ def test_ledger_reads_run_beside_a_mutation_while_release_lock_is_busy(
         fake = FakeExecutor()
         (project / ".harness/orchestration").mkdir(parents=True)
         (project / ".harness/orchestration/coordinator.py").write_text("")
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -730,7 +734,7 @@ def test_cancel_of_a_command_that_outlives_the_stop_keeps_its_own_result(
 
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -812,7 +816,7 @@ def test_public_job_cancel_terminates_the_full_process_tree(
 def test_waiting_subscriptions_leave_request_slots_free(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -846,7 +850,7 @@ def test_failed_execution_reports_only_the_failure_type(project: Path) -> None:
         raise RuntimeError("private detail")
 
     async def scenario() -> None:
-        server = ConsoleServer(project, jobs=JobService(project, executor=failing))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=failing))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -871,7 +875,7 @@ def test_unpreparable_command_is_an_error_reply_on_a_live_connection(
 
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -889,11 +893,11 @@ def test_unpreparable_command_is_an_error_reply_on_a_live_connection(
 def test_output_beyond_the_job_limit_is_cut_and_marked(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(job_module, "_OUTPUT_LIMIT_CHARS", 10)
+    monkeypatch.setattr(job_domain, "_OUTPUT_LIMIT_CHARS", 10)
 
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -921,7 +925,7 @@ def test_only_the_newest_finished_jobs_are_kept(
     async def scenario() -> None:
         fake = FakeExecutor()
         fake.finish.set()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -943,7 +947,7 @@ def test_running_job_prevents_idle_exit_without_clients(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
         server = ConsoleServer(
-            project, jobs=JobService(project, executor=fake), idle_grace_seconds=0.1
+            project, jobs=composition.job_service(project, executor=fake), idle_grace_seconds=0.1
         )
         await server.start()
         try:
@@ -968,7 +972,7 @@ def test_invalid_cursor_does_not_advance_another_reader(
 ) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -993,7 +997,7 @@ def test_large_completed_output_is_replayed_to_independent_clients(
 ) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as creator:
@@ -1051,7 +1055,7 @@ def test_default_job_executor_uses_the_existing_capturing_runner(
         on_output("stdout", "from runner\n")
         return subprocess.CompletedProcess(list(argv), 0, "from runner\n", "")
 
-    monkeypatch.setattr(job_module, "capturing_runner", capture)
+    monkeypatch.setattr(processes, "capturing_runner", capture)
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -1072,7 +1076,7 @@ def test_default_job_executor_uses_the_existing_capturing_runner(
 def test_typed_catalog_confirmation_is_preserved(project: Path) -> None:
     async def scenario() -> None:
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -1117,7 +1121,7 @@ def test_native_permission_answer_runs_only_confirmed_in_its_project(
     async def scenario() -> None:
         fake = FakeExecutor()
         fake.finish.set()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -1144,7 +1148,7 @@ def test_native_permission_answer_runs_only_confirmed_in_its_project(
         [(argv, cwd)] = fake.calls
         assert cwd == project.resolve()
         assert argv[0] == sys.executable
-        assert argv[1].endswith("harness/console/native_permission.py")
+        assert argv[1].endswith("harness/console/backend/infrastructure/native_permission.py")
         assert argv[2:4] == ["--repo", str(project.resolve())]
         assert argv[-1] == "--allow"
 
@@ -1155,7 +1159,7 @@ def test_decisions_wait_for_the_running_mutation(project: Path) -> None:
     async def scenario() -> None:
         _with_coordinator(project)
         fake = FakeExecutor()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -1193,7 +1197,7 @@ def test_dispatch_approval_proposes_then_creates_with_the_shown_digest(
         _with_coordinator(project)
         fake = FakeExecutor()
         fake.finish.set()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:
@@ -1280,7 +1284,7 @@ def test_decisions_are_journaled_with_masked_values(
         _with_coordinator(project)
         fake = FakeExecutor()
         fake.finish.set()
-        server = ConsoleServer(project, jobs=JobService(project, executor=fake))
+        server = ConsoleServer(project, jobs=composition.job_service(project, executor=fake))
         await server.start()
         try:
             async with _connect(server, project) as client:

@@ -1,4 +1,4 @@
-"""harness.console.export: the console's shared Markdown export (Reports and Repo Map). No
+"""harness.console.kernel.export: the console's shared Markdown export (Reports and Repo Map). No
 textual needed."""
 
 from __future__ import annotations
@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from harness.console.export import (
+from harness.console.kernel.export import (
     MarkdownDocument,
     MarkdownSection,
     export_directory,
