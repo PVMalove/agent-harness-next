@@ -254,8 +254,8 @@ python3 harness/bin/harness.py console /path/to/repository
 Пульту нужен [`uv`](https://docs.astral.sh/uv/) в `PATH`. Пульт запускается через
 `uv run --no-project --with textual==<pin>` и не изменяет зависимости целевого проекта. При первом
 запуске загружается `textual`, поэтому требуется доступ к сети. Перед пультом поднимается Сервер
-консоли проекта (`harness console-server`, зависимости `h11`, `websockets` и `jinja2` приходят тем же
-`uv run --with`). При отсутствии `uv` или сети, а также при сбое запуска сервера пульт выводит причину
+консоли проекта (`harness console-server`: FastAPI под Uvicorn, зависимости `fastapi`, `starlette`,
+`uvicorn`, `pydantic` и `websockets` приходят тем же `uv run --with`). При отсутствии `uv` или сети, а также при сбое запуска сервера пульт выводит причину
 и текстовый отчёт `harness health`, код возврата 1.
 
 `harness console /path/to/repository --web` поднимает тот же сервер (или находит уже запущенный),
