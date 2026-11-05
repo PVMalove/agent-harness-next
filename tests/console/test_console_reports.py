@@ -300,6 +300,21 @@ def test_the_timeline_payload_round_trips_and_refuses_a_broken_one() -> None:
         reports.timeline_from_payload({**payload, "events": [{"at": "t"}]})
 
 
+def test_the_reports_and_orchestration_screens_read_nothing_on_the_ui_thread() -> None:
+    """The snapshot read goes over the network: constructing a screen, which happens on the UI
+    thread, must leave it to the screen's worker."""
+    from harness.console.tui.screens.orchestration import OrchestrationScreen
+    from harness.console.tui.screens.reports import ReportsScreen
+
+    from ._home_client import FakeHomeClient
+    from ._screen_facts import ledger
+
+    client = FakeHomeClient(Path("."), load_ledger=lambda repo: ledger())
+    ReportsScreen(Path("."), client)
+    OrchestrationScreen(Path("."), client=client)
+    assert client.screen_requests == []
+
+
 def test_the_reports_screen_reads_the_ledger_and_bodies_through_the_client() -> None:
     from harness.console.tui.client import ServerUnavailable
     from harness.console.tui.screens import reports as screen

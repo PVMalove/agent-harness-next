@@ -214,9 +214,11 @@ class ReportsScreen(ConsoleShell):
         super().__init__()
         self.repo = repo
         self._client = client
-        self.view = read_view(client)
-        self.shown: list[StageEntry] = list(self.view.stages)
-        self.refreshing = False
+        # The ledger is read over the network by the worker `on_mount` starts, never here on
+        # the UI thread; until it arrives the screen shows the refresh status.
+        self.view = LedgerView()
+        self.shown: list[StageEntry] = []
+        self.refreshing = True
         self.refresh_error = ""
         self._narrow = False
 
@@ -228,9 +230,17 @@ class ReportsScreen(ConsoleShell):
     def on_mount(self) -> None:
         self._narrow = self.app.size.width < brand.NARROW_WIDTH
         self._apply_layout()
-        self.query_one("#reports-empty", Static).display = not self.shown or bool(
-            self.view.unavailable
-        )
+        self.query_one("#reports-empty", Static).display = False
+        self.query_one("#refresh-reports", Button).disabled = True
+
+        def load() -> None:
+            view = read_view(self._client)
+            call_from_worker(self, lambda: self._loaded(view))
+
+        self.run_worker(load, thread=True, group="reports-load", exclusive=True)
+
+    async def _loaded(self, view: LedgerView) -> None:
+        await self._refreshed(view, "")
         if any(batch.branch for batch in self.view.batches):
             self.action_refresh()
 

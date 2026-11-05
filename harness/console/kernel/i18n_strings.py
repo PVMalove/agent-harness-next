@@ -838,6 +838,7 @@ EN.update(
         "Сервер консоли не отдал данные леджера": "The console server did not return the ledger",
         "Сервер консоли не нашёл тело этого отчёта": "The console server found no body for this report",
         "Сервер консоли не отдал данные оркестрации": "The console server did not return the orchestration data",
+        "Загрузка данных оркестрации…": "Loading the orchestration data…",
         "конфигурация не получена от сервера консоли": "configuration not received from the console server",
     }
 )

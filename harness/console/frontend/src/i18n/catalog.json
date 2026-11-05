@@ -141,6 +141,7 @@
     "Завершённые": "Finished",
     "Загрузить внешние изменения": "Load external changes",
     "Загрузить заново": "Reload data",
+    "Загрузка данных оркестрации…": "Loading the orchestration data…",
     "Задачи, QA и ручная настройка project.json": "Tasks, QA and manual project.json setup",
     "Задачи, роли, возраст и маршрут не входят в текущий снимок": "Tasks, roles, age and route are unavailable in the current snapshot",
     "Закрыть": "Close",

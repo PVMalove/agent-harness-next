@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from rich.text import Text
 
@@ -125,6 +125,20 @@ class CoordinatorCommandFormScreen(CommandForm):
 
 
 SERVER_UNAVAILABLE = "Сервер консоли не отдал данные оркестрации"
+LOADING = "Загрузка данных оркестрации…"
+
+
+class OrchestrationOverview(Vertical):
+    """The panels above the command menu, rebuilt once the snapshot arrives."""
+
+    DEFAULT_CSS = "OrchestrationOverview { height: auto; }"
+
+    def __init__(self, parts: Callable[[], ComposeResult]) -> None:
+        super().__init__()
+        self._parts = parts
+
+    def compose(self) -> ComposeResult:
+        yield from self._parts()
 
 
 def read_orchestration(client: ScreenClient) -> OrchestrationView:
@@ -206,7 +220,11 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             entry.key: entry for entry in catalog if entry.path[0] != "recovery"
         }
         self._client = client
-        found = read_orchestration(client)
+        # The snapshot is read over the network by the worker `on_mount` starts, never here on
+        # the UI thread; until it arrives the overview says it is loading.
+        found = OrchestrationView(
+            console_reports.LedgerView(unavailable=LOADING), None, LOADING
+        )
         self._view = found.ledger
         self._first_lock = found
         self._lock_refresh_seconds = lock_refresh_seconds
@@ -231,11 +249,14 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
                 yield Button(self._sessions_label(), id="worker-sessions", compact=True)
             yield from self.compose_commands()
 
+    def overview(self) -> ComposeResult:
+        yield OrchestrationOverview(self._overview_parts)
+
     def sync_language(self) -> None:
         ConsoleShell.sync_language(self)
         CommandMenuScreen.sync_language(self)
 
-    def overview(self) -> ComposeResult:
+    def _overview_parts(self) -> ComposeResult:
         """Статистика пайплайна и история batch: слева состояния с числом batch, справа batch
         выбранного состояния."""
         view = self._view
@@ -295,12 +316,23 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             yield history
 
     def on_mount(self) -> None:
-        if not self._view.unavailable:
-            self._show_batches(console_stats.ALL_STATES)
+        def load() -> None:
+            found = read_orchestration(self._client)
+            call_from_worker(self, lambda: self._loaded(found))
+
+        self.run_worker(load, thread=True, exclusive=True, group="orchestration-load")
         self.set_interval(self._lock_refresh_seconds, self._refresh_lock)
         # The command menu takes focus on arrival; the page still opens at its top.
         page = self.query_one("#orchestration-page", VerticalScroll)
         self.call_after_refresh(page.scroll_home, animate=False)
+
+    async def _loaded(self, found: OrchestrationView) -> None:
+        self._view, self._first_lock = found.ledger, found
+        await self.query_one(OrchestrationOverview).recompose()
+        self._repaint_overview(self._language)
+        self.query_one("#worker-sessions", Button).label = self._sessions_label()
+        if not self._view.unavailable:
+            self._show_batches(console_stats.ALL_STATES)
 
     def _refresh_lock(self) -> None:
         """Перечитать состояние lock ledger без его захвата и обновить панель.
