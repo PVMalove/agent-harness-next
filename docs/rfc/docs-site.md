@@ -2,8 +2,7 @@
 
 **Статус:** DRAFT, на ревью.
 **Дата:** 2026-11-05.
-**Связанные документы:** `docs/design/docs-site-mockups/`, `docs/design/web-console-mockups/`,
-`docs/adr/0028-web-console.md`, `docs/adr/0029-web-console-fastapi-react.md`.
+**Связанные документы:** `docs/design/docs-site-mockups/`; дизайн-токены веб-консоли.
 **Целевой URL:** `https://pvmalove.github.io/agent-harness-next/`.
 
 ## 1. Контекст

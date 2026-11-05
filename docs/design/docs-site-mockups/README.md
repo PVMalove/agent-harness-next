@@ -2,7 +2,7 @@
 
 **Статус:** DRAFT, на ревью.
 **RFC:** [docs/rfc/docs-site.md](../../rfc/docs-site.md).
-**Основа:** дизайн-токены и паттерны [веб-консоли](../web-console-mockups/README.md).
+**Основа:** дизайн-токены и паттерны веб-консоли, перенесённые в `site.css`.
 
 ## Экраны
 
@@ -26,7 +26,7 @@ python3 -m http.server 8765
 ```
 
 Или откройте `index.html` напрямую в браузере; demo-iframe ссылается на
-`../web-console-mockups/execution-console-prototype.html`.
+`console.html`.
 
 ## Решения
 
