@@ -64,6 +64,7 @@ def test_the_default_language_comes_from_the_environment(
 # ----------------------------------------------------------------------------- container route (#711)
 
 import ast  # noqa: E402
+from collections.abc import Callable  # noqa: E402
 import inspect  # noqa: E402
 from pathlib import Path  # noqa: E402
 
@@ -233,3 +234,108 @@ def test_executor_context_strip_joins_worker_qa_and_labels() -> None:
     )
     assert text == "Worker: dispatch-1  ·  QA: not created"
     assert isinstance(ScriptedCoordinator(), ScriptedCoordinator)
+
+
+# ----------------------------------------------------------------------------- recovery screen (#711)
+
+from harness.console import batch_history as history_model  # noqa: E402
+from harness.console import recovery_view as recovery_model  # noqa: E402
+from harness.console.screens import recovery as recovery_screen  # noqa: E402
+from tests.console.test_console_recovery_view import (  # noqa: E402
+    held_document,
+    session_with,
+    status_document,
+    unknown_document,
+)
+
+
+@pytest.mark.parametrize("module", [recovery_model, history_model, recovery_screen])
+def test_every_fixed_text_of_the_recovery_screen_has_an_english_form(
+    module: object,
+) -> None:
+    missing = sorted(
+        text
+        for text in _russian_fixed_texts(module)
+        if _CYRILLIC.search(i18n.tr_text("en", text))
+    )
+    assert missing == []
+
+
+@pytest.mark.parametrize("document", [held_document, status_document, unknown_document])
+def test_english_recovery_pane_has_no_russian_left_and_ru_keeps_the_banner(
+    document: Callable[[], dict[str, object]],
+) -> None:
+    session, _ = session_with(document())
+    view = session.view()
+    english = route_screen.render_body(
+        view.rows, view.blockers, view.notes, view.actions, "en", narrow=False
+    )
+    assert not _CYRILLIC.search(english), [
+        line for line in english.split("\n") if _CYRILLIC.search(line)
+    ]
+    russian = route_screen.render_body(
+        view.rows, view.blockers, view.notes, view.actions, "ru", narrow=True
+    )
+    if view.unknown_outcome:
+        assert "Мы не знаем, запустился ли агент" in russian
+        assert "We do not know whether the agent started" in english
+        assert "effect_state" in english and "no engine response" in english
+
+
+def test_the_reason_precedes_every_action_and_unavailable_actions_carry_their_reason() -> (
+    None
+):
+    session, _ = session_with(held_document())
+    view = session.view()
+    text = route_screen.render_body(
+        view.rows, view.blockers, view.notes, view.actions, "ru", narrow=False
+    )
+    assert text.index("Причина") < text.index("недоступно")
+    assert "✖ недоступно: Resume — core reason for resume" in text
+
+
+def test_the_recovery_screen_is_a_shell_view_inside_orchestration_in_both_layouts() -> (
+    None
+):
+    from harness.console.shell import ConsoleShell
+
+    screen = recovery_screen.RecoveryScreen
+    assert issubclass(screen, ConsoleShell)
+    assert screen.SECTION == "Orchestration" and screen.IS_SECTION_ROOT is False
+    assert i18n.tr("en", screen.CRUMBS) == "Home › Orchestration › Recovery"
+    assert "RecoveryScreen.-narrow #recovery-actions { layout: vertical" in screen.CSS
+    assert hasattr(OrchestrationScreen, "open_recovery")
+    assert "open-recovery" in inspect.getsource(OrchestrationScreen.compose_content)
+
+
+def test_every_recovery_view_fits_the_fixed_pool_of_action_buttons() -> None:
+    for document in (held_document, status_document, unknown_document):
+        session, _ = session_with(document())
+        assert (
+            len(session.view().actions) + 1 <= recovery_screen.MAX_ACTIONS
+        )  # + the write action
+
+
+def test_a_long_pointer_and_diagnostic_value_stay_fully_reachable_in_the_pane() -> None:
+    pointer = "/access_policy/roles/" + "very-long-role-name/" * 8 + "mode"
+    session, _ = session_with(
+        status_document(
+            resumable=False,
+            diagnostics=[
+                {
+                    "id": "d1",
+                    "code": "config-invalid",
+                    "check": "config",
+                    "pointer": pointer,
+                    "fatal": True,
+                    "received_redacted": "x" * 300,
+                }
+            ],
+        )
+    )
+    view = session.view()
+    for narrow in (False, True):
+        text = route_screen.render_body(
+            view.rows, view.blockers, view.notes, view.actions, "ru", narrow
+        )
+        assert pointer in text and "x" * 300 in text and "…" not in text

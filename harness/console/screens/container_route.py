@@ -76,7 +76,9 @@ def render_body(
     if blockers:
         parts.append(_t(language, "✖ Блокирует маршрут"))
         parts.extend(
-            f"  {line}" for blocker in blockers for line in blocker.split("\n")
+            f"  {line}"
+            for blocker in blockers
+            for line in _t(language, blocker).split("\n")
         )
         parts.append("")
     group = None

@@ -197,6 +197,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
                     "Пайплайн batch, рабочие сессии и команды координатора.",
                     id="orchestration-subtitle",
                 )
+                yield Button("Восстановление", id="open-recovery", compact=True)
                 yield Button("Контейнерный маршрут", id="container-route", compact=True)
                 yield Button(self._sessions_label(), id="worker-sessions", compact=True)
             yield from self.compose_commands()
@@ -371,6 +372,24 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         timeline = self._view.timeline(batch_id)
         if timeline is not None:
             self.app.push_screen(BatchTimelineScreen(timeline, self.repo))
+
+    @on(Button.Pressed, "#open-recovery")
+    def open_recovery(self, event: Button.Pressed) -> None:
+        """Opens the recovery screen in the same shell; the highlighted batch is preselected. The
+        screen lists the runtime store's batches and asks the core before offering recovery."""
+        from .recovery import RecoveryScreen
+
+        event.stop()
+        history = (
+            self.query_one("#batch-history", ListView)
+            if self.query("#batch-history")
+            else None
+        )
+        item = history.highlighted_child if history is not None else None
+        batch = item.name if item is not None and item.name else ""
+        self.app.push_screen(
+            RecoveryScreen(self.repo, batch=batch, command_runner=self._command_runner)
+        )
 
     @on(Button.Pressed, "#container-route")
     def open_container_route(self, event: Button.Pressed) -> None:
