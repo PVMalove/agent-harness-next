@@ -13,7 +13,11 @@ export type ConsoleReply =
   | JobReply
   | DecisionsSnapshotReply
   | OrchestrationSourceReply
-  | OrchestrationEventsReply;
+  | OrchestrationEventsReply
+  | ScreenSnapshotReply
+  | PagedReply
+  | SnapshotPageReply
+  | OrchestrationLockReply;
 export type Code = string;
 export type JobId = string | null;
 export type Message = string;
@@ -77,6 +81,39 @@ export type Kind1 = "events";
 export type Ok7 = true;
 export type Type7 = "orchestration.subscribe";
 export type V7 = 1;
+export type AgeSeconds1 = number;
+export type Cached1 = boolean;
+export type Done2 = boolean;
+export type Id9 = string | number | null;
+export type Next1 = number;
+export type Ok8 = true;
+export type SnapshotId = number;
+export type Text1 = string;
+export type Type8 = "reports.snapshot" | "orchestration.snapshot" | "recovery.snapshot" | "container_route.snapshot";
+export type V8 = 1;
+export type Done3 = boolean;
+export type Id10 = string | number | null;
+export type Next2 = number;
+export type Ok9 = true;
+export type SnapshotId1 = number;
+export type Text2 = string;
+export type Type9 = "reports.report" | "reports.timeline";
+export type V9 = 1;
+export type Done4 = boolean;
+export type Id11 = string | number | null;
+export type Next3 = number;
+export type Ok10 = true;
+export type Text3 = string;
+export type Type10 = "snapshot.page";
+export type V10 = 1;
+export type Error1 = string | null;
+export type Id12 = string | number | null;
+export type Lock = {
+  [k: string]: JsonValue | undefined;
+} | null;
+export type Ok11 = true;
+export type Type11 = "orchestration.lock";
+export type V11 = 1;
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "ConsoleRequest".
@@ -90,41 +127,81 @@ export type ConsoleRequest =
   | JobCancelRequest
   | JobListRequest
   | DecisionsSnapshotRequest
-  | OrchestrationSubscribeRequest;
+  | OrchestrationSubscribeRequest
+  | ReportsSnapshotRequest
+  | ReportRequest
+  | TimelineRequest
+  | OrchestrationSnapshotRequest
+  | OrchestrationLockRequest
+  | RecoverySnapshotRequest
+  | ContainerRouteSnapshotRequest
+  | SnapshotPageRequest;
 export type Force = boolean;
-export type Id9 = string | number | null;
+export type Id13 = string | number | null;
 export type Online = boolean;
-export type Type8 = "home.snapshot";
-export type Id10 = string | number | null;
+export type Type12 = "home.snapshot";
+export type Id14 = string | number | null;
 export type Offset = number;
-export type SnapshotId = number;
-export type Type9 = "home.problems";
+export type SnapshotId2 = number;
+export type Type13 = "home.problems";
 export type Client = string;
 export type CommandId1 = string;
 export type Confirmation = string | null;
 export type Confirmed = boolean;
-export type Id11 = string | number | null;
-export type PlanDigest = string | null;
-export type Type10 = "job.start";
-export type Cursor3 = number;
-export type Id12 = string | number | null;
-export type JobId1 = string;
-export type Type11 = "job.get";
-export type Cursor4 = number;
-export type Id13 = string | number | null;
-export type JobId2 = string;
-export type Type12 = "job.subscribe";
-export type Confirmed1 = boolean;
-export type Id14 = string | number | null;
-export type JobId3 = string;
-export type Type13 = "job.cancel";
 export type Id15 = string | number | null;
-export type Type14 = "job.list";
+export type PlanDigest = string | null;
+export type Type14 = "job.start";
+export type Cursor3 = number;
 export type Id16 = string | number | null;
-export type Type15 = "decisions.snapshot";
-export type Cursor5 = string | null;
+export type JobId1 = string;
+export type Type15 = "job.get";
+export type Cursor4 = number;
 export type Id17 = string | number | null;
-export type Type16 = "orchestration.subscribe";
+export type JobId2 = string;
+export type Type16 = "job.subscribe";
+export type Confirmed1 = boolean;
+export type Id18 = string | number | null;
+export type JobId3 = string;
+export type Type17 = "job.cancel";
+export type Id19 = string | number | null;
+export type Type18 = "job.list";
+export type Id20 = string | number | null;
+export type Type19 = "decisions.snapshot";
+export type Cursor5 = string | null;
+export type Id21 = string | number | null;
+export type Type20 = "orchestration.subscribe";
+export type Force1 = boolean;
+export type Id22 = string | number | null;
+export type Online1 = boolean;
+export type Type21 = "reports.snapshot";
+export type DispatchId = string;
+export type Id23 = string | number | null;
+export type Type22 = "reports.report";
+export type BatchId = string;
+export type Id24 = string | number | null;
+export type Type23 = "reports.timeline";
+export type Force2 = boolean;
+export type Id25 = string | number | null;
+export type Type24 = "orchestration.snapshot";
+export type Id26 = string | number | null;
+export type Type25 = "orchestration.lock";
+export type Batch = string;
+export type Force3 = boolean;
+export type Id27 = string | number | null;
+/**
+ * @maxItems 32
+ */
+export type Skip = string[];
+export type Type26 = "recovery.snapshot";
+export type Batch1 = string;
+export type Id28 = string | number | null;
+export type Role = string;
+export type Runtime = string;
+export type Type27 = "container_route.snapshot";
+export type Id29 = string | number | null;
+export type Offset1 = number;
+export type SnapshotId3 = number;
+export type Type28 = "snapshot.page";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
@@ -262,24 +339,83 @@ export interface OrchestrationEventsReply {
   v: V7;
 }
 /**
+ * The first page of a screen snapshot's JSON text; `snapshot.page` reads the rest.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ScreenSnapshotReply".
+ */
+export interface ScreenSnapshotReply {
+  age_seconds: AgeSeconds1;
+  cached: Cached1;
+  done: Done2;
+  id: Id9;
+  next: Next1;
+  ok: Ok8;
+  snapshot_id: SnapshotId;
+  text: Text1;
+  type: Type8;
+  v: V8;
+}
+/**
+ * The first page of a report body or a batch chronology as JSON text.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "PagedReply".
+ */
+export interface PagedReply {
+  done: Done3;
+  id: Id10;
+  next: Next2;
+  ok: Ok9;
+  snapshot_id: SnapshotId1;
+  text: Text2;
+  type: Type9;
+  v: V9;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "SnapshotPageReply".
+ */
+export interface SnapshotPageReply {
+  done: Done4;
+  id: Id11;
+  next: Next3;
+  ok: Ok10;
+  text: Text3;
+  type: Type10;
+  v: V10;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "OrchestrationLockReply".
+ */
+export interface OrchestrationLockReply {
+  error: Error1;
+  id: Id12;
+  lock: Lock;
+  ok: Ok11;
+  type: Type11;
+  v: V11;
+}
+/**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HomeSnapshotRequest".
  */
 export interface HomeSnapshotRequest {
   force?: Force;
-  id?: Id9;
+  id?: Id13;
   online?: Online;
-  type: Type8;
+  type: Type12;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HomeProblemsRequest".
  */
 export interface HomeProblemsRequest {
-  id?: Id10;
+  id?: Id14;
   offset: Offset;
-  snapshot_id: SnapshotId;
-  type: Type9;
+  snapshot_id: SnapshotId2;
+  type: Type13;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -290,9 +426,9 @@ export interface JobStartRequest {
   command_id: CommandId1;
   confirmation?: Confirmation;
   confirmed?: Confirmed;
-  id?: Id11;
+  id?: Id15;
   plan_digest?: PlanDigest;
-  type: Type10;
+  type: Type14;
   values?: Values;
 }
 export interface Values {
@@ -304,9 +440,9 @@ export interface Values {
  */
 export interface JobGetRequest {
   cursor?: Cursor3;
-  id?: Id12;
+  id?: Id16;
   job_id: JobId1;
-  type: Type11;
+  type: Type15;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -314,9 +450,9 @@ export interface JobGetRequest {
  */
 export interface JobSubscribeRequest {
   cursor?: Cursor4;
-  id?: Id13;
+  id?: Id17;
   job_id: JobId2;
-  type: Type12;
+  type: Type16;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -324,25 +460,25 @@ export interface JobSubscribeRequest {
  */
 export interface JobCancelRequest {
   confirmed?: Confirmed1;
-  id?: Id14;
+  id?: Id18;
   job_id: JobId3;
-  type: Type13;
+  type: Type17;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "JobListRequest".
  */
 export interface JobListRequest {
-  id?: Id15;
-  type: Type14;
+  id?: Id19;
+  type: Type18;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "DecisionsSnapshotRequest".
  */
 export interface DecisionsSnapshotRequest {
-  id?: Id16;
-  type: Type15;
+  id?: Id20;
+  type: Type19;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -350,6 +486,83 @@ export interface DecisionsSnapshotRequest {
  */
 export interface OrchestrationSubscribeRequest {
   cursor?: Cursor5;
-  id?: Id17;
-  type: Type16;
+  id?: Id21;
+  type: Type20;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ReportsSnapshotRequest".
+ */
+export interface ReportsSnapshotRequest {
+  force?: Force1;
+  id?: Id22;
+  online?: Online1;
+  type: Type21;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ReportRequest".
+ */
+export interface ReportRequest {
+  dispatch_id: DispatchId;
+  id?: Id23;
+  type: Type22;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "TimelineRequest".
+ */
+export interface TimelineRequest {
+  batch_id: BatchId;
+  id?: Id24;
+  type: Type23;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "OrchestrationSnapshotRequest".
+ */
+export interface OrchestrationSnapshotRequest {
+  force?: Force2;
+  id?: Id25;
+  type: Type24;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "OrchestrationLockRequest".
+ */
+export interface OrchestrationLockRequest {
+  id?: Id26;
+  type: Type25;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "RecoverySnapshotRequest".
+ */
+export interface RecoverySnapshotRequest {
+  batch?: Batch;
+  force?: Force3;
+  id?: Id27;
+  skip?: Skip;
+  type: Type26;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ContainerRouteSnapshotRequest".
+ */
+export interface ContainerRouteSnapshotRequest {
+  batch?: Batch1;
+  id?: Id28;
+  role?: Role;
+  runtime?: Runtime;
+  type: Type27;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "SnapshotPageRequest".
+ */
+export interface SnapshotPageRequest {
+  id?: Id29;
+  offset: Offset1;
+  snapshot_id: SnapshotId3;
+  type: Type28;
 }

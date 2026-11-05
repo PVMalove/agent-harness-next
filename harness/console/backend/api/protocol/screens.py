@@ -1,0 +1,175 @@
+"""The screen snapshot requests of Reports, Orchestration, Recovery and Container route and the
+`snapshot.page` request that completes them: parsing and the replies."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+
+from ....kernel.protocol import (
+    LOCK_REQUEST,
+    MAX_ID_CHARS,
+    MAX_SKIPPED,
+    ORCHESTRATION_REQUEST,
+    PAGE_REQUEST,
+    PROTOCOL_VERSION,
+    RECOVERY_REQUEST,
+    REPORT_REQUEST,
+    REPORTS_REQUEST,
+    ROUTE_REQUEST,
+    TIMELINE_REQUEST,
+)
+from ...application.screens import NotFound, Paged, ScreenService
+from . import Rejected, encode, error_reply, parse_envelope
+
+_ERRORS = {
+    "not_found": "The ledger has no such report or batch.",
+    "snapshot_expired": "The snapshot is no longer kept; request it again.",
+}
+
+# Every request type with the fields it may carry beside `id` and `type`.
+_FIELDS: dict[str, frozenset[str]] = {
+    REPORTS_REQUEST: frozenset({"force", "online"}),
+    REPORT_REQUEST: frozenset({"dispatch_id"}),
+    TIMELINE_REQUEST: frozenset({"batch_id"}),
+    ORCHESTRATION_REQUEST: frozenset({"force"}),
+    LOCK_REQUEST: frozenset(),
+    RECOVERY_REQUEST: frozenset({"batch", "skip", "force"}),
+    ROUTE_REQUEST: frozenset({"batch", "role", "runtime"}),
+    PAGE_REQUEST: frozenset({"snapshot_id", "offset"}),
+}
+SCREEN_TYPES = frozenset(_FIELDS)
+
+
+def is_screen_request(raw: str) -> bool:
+    """True for a request of a screen snapshot type or `snapshot.page`, malformed or not."""
+    try:
+        _, _, kind = parse_envelope(raw)
+    except Rejected:
+        return False
+    return kind in SCREEN_TYPES
+
+
+class _Bad(Exception):
+    pass
+
+
+def _flag(body: dict[str, object], name: str) -> bool:
+    value = body.get(name, False)
+    if not isinstance(value, bool):
+        raise _Bad(name)
+    return value
+
+
+def _id(body: dict[str, object], name: str, default: str | None = None) -> str:
+    """A bounded id; without `default` it is required and may not be empty."""
+    value = body.get(name, default)
+    if not isinstance(value, str) or len(value) > MAX_ID_CHARS:
+        raise _Bad(name)
+    if default is None and not value:
+        raise _Bad(name)
+    return value
+
+
+def _count(body: dict[str, object], name: str) -> int:
+    value = body.get(name)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise _Bad(name)
+    return value
+
+
+def _skip(body: dict[str, object]) -> tuple[str, ...]:
+    value = body.get("skip", [])
+    if not isinstance(value, list) or len(value) > MAX_SKIPPED:
+        raise _Bad("skip")
+    if not all(
+        isinstance(item, str) and 0 < len(item) <= MAX_ID_CHARS for item in value
+    ):
+        raise _Bad("skip")
+    return tuple(value)
+
+
+def _call(
+    kind: str, body: dict[str, object], screens: ScreenService
+) -> Callable[[], Awaitable[Paged | dict[str, object]]]:
+    """The service call a valid request asks for; `_Bad` for a missing or invalid field."""
+    if kind == REPORTS_REQUEST:
+        force, online = _flag(body, "force"), _flag(body, "online")
+        return lambda: screens.reports(force=force, online=online)
+    if kind == REPORT_REQUEST:
+        dispatch_id = _id(body, "dispatch_id")
+        return lambda: screens.report(dispatch_id)
+    if kind == TIMELINE_REQUEST:
+        batch_id = _id(body, "batch_id")
+        return lambda: screens.timeline(batch_id)
+    if kind == ORCHESTRATION_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.orchestration(force=force)
+    if kind == LOCK_REQUEST:
+        return screens.lock
+    if kind == RECOVERY_REQUEST:
+        batch, skip, force = _id(body, "batch", ""), _skip(body), _flag(body, "force")
+        return lambda: screens.recovery(batch, skip, force=force)
+    batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
+    runtime = _id(body, "runtime", "")
+    if not role:
+        raise _Bad("role")
+    return lambda: screens.container_route(batch, role, runtime)
+
+
+def _ok(request_id: str | int | None, kind: str, **fields: object) -> str:
+    return encode(
+        {"v": PROTOCOL_VERSION, "id": request_id, "type": kind, "ok": True, **fields}
+    )
+
+
+def _page_reply(
+    request_id: str | int | None, kind: str, body: dict[str, object], screens: ScreenService
+) -> str:
+    try:
+        snapshot_id, offset = _count(body, "snapshot_id"), _count(body, "offset")
+    except _Bad:
+        return error_reply("bad_request", request_id, kind)
+    try:
+        text, next_offset, done = screens.page(snapshot_id, offset)
+    except LookupError:
+        return error_reply(
+            "snapshot_expired", request_id, kind, _ERRORS["snapshot_expired"]
+        )
+    except ValueError:
+        return error_reply("bad_request", request_id, kind)
+    return _ok(request_id, kind, text=text, next=next_offset, done=done)
+
+
+async def respond(raw: str, screens: ScreenService) -> str:
+    """The reply to one screen request frame. Never raises: every failure is an error reply."""
+    try:
+        body, request_id, kind = parse_envelope(raw)
+    except Rejected as rejected:
+        return error_reply(rejected.code, rejected.id, rejected.type)
+    if kind not in SCREEN_TYPES:
+        return error_reply("unknown_type", request_id, kind[:MAX_ID_CHARS])
+    if set(body) - {"id", "type"} - _FIELDS[kind]:
+        return error_reply("bad_request", request_id, kind)
+    if kind == PAGE_REQUEST:
+        return _page_reply(request_id, kind, body, screens)
+    try:
+        call = _call(kind, body, screens)
+    except _Bad:
+        return error_reply("bad_request", request_id, kind)
+    try:
+        served = await call()
+    except NotFound:
+        return error_reply("not_found", request_id, kind, _ERRORS["not_found"])
+    except Exception as exc:
+        return error_reply("collect_failed", request_id, kind, type(exc).__name__)
+    if isinstance(served, dict):
+        return _ok(request_id, kind, **served)
+    fields: dict[str, object] = {
+        "snapshot_id": served.snapshot_id,
+        "text": served.text,
+        "next": served.next,
+        "done": served.done,
+    }
+    if kind.endswith(".snapshot"):
+        fields.update(cached=served.cached, age_seconds=served.age_seconds)
+    return _ok(request_id, kind, **fields)

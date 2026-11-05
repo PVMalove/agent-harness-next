@@ -13,6 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
+from ...kernel.protocol import MAX_ID_CHARS, MAX_SKIPPED
 from .request_router import RequestRouter
 
 REGENERATE = "python -m harness.console.backend.api.schemas"
@@ -94,6 +95,63 @@ class OrchestrationSubscribeRequest(_Strict):  # type: ignore[explicit-any]
     cursor: str | None = None
 
 
+ScreenId = Annotated[str, Field(min_length=1, max_length=MAX_ID_CHARS)]
+OptionalScreenId = Annotated[str, Field(max_length=MAX_ID_CHARS)]
+
+
+class ReportsSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["reports.snapshot"]
+    force: bool = False
+    online: bool = False
+
+
+class ReportRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["reports.report"]
+    dispatch_id: ScreenId
+
+
+class TimelineRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["reports.timeline"]
+    batch_id: ScreenId
+
+
+class OrchestrationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["orchestration.snapshot"]
+    force: bool = False
+
+
+class OrchestrationLockRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["orchestration.lock"]
+
+
+class RecoverySnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["recovery.snapshot"]
+    batch: OptionalScreenId = ""
+    skip: Annotated[list[ScreenId], Field(max_length=MAX_SKIPPED)] = []
+    force: bool = False
+
+
+class ContainerRouteSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["container_route.snapshot"]
+    batch: OptionalScreenId = ""
+    role: ScreenId = "developer"
+    runtime: OptionalScreenId = ""
+
+
+class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["snapshot.page"]
+    snapshot_id: Annotated[int, Field(ge=0)]
+    offset: Annotated[int, Field(ge=0)]
+
+
 ConsoleRequest = Annotated[
     HomeSnapshotRequest
     | HomeProblemsRequest
@@ -103,7 +161,15 @@ ConsoleRequest = Annotated[
     | JobCancelRequest
     | JobListRequest
     | DecisionsSnapshotRequest
-    | OrchestrationSubscribeRequest,
+    | OrchestrationSubscribeRequest
+    | ReportsSnapshotRequest
+    | ReportRequest
+    | TimelineRequest
+    | OrchestrationSnapshotRequest
+    | OrchestrationLockRequest
+    | RecoverySnapshotRequest
+    | ContainerRouteSnapshotRequest
+    | SnapshotPageRequest,
     Field(discriminator="type"),
 ]
 
@@ -190,6 +256,50 @@ class OrchestrationEventsReply(_Envelope):  # type: ignore[explicit-any]
     events: list[JsonValue]
 
 
+class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
+    """The first page of a screen snapshot's JSON text; `snapshot.page` reads the rest."""
+
+    type: Literal[
+        "reports.snapshot",
+        "orchestration.snapshot",
+        "recovery.snapshot",
+        "container_route.snapshot",
+    ]
+    ok: Literal[True]
+    snapshot_id: int
+    text: str
+    next: int
+    done: bool
+    cached: bool
+    age_seconds: float
+
+
+class PagedReply(_Envelope):  # type: ignore[explicit-any]
+    """The first page of a report body or a batch chronology as JSON text."""
+
+    type: Literal["reports.report", "reports.timeline"]
+    ok: Literal[True]
+    snapshot_id: int
+    text: str
+    next: int
+    done: bool
+
+
+class SnapshotPageReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["snapshot.page"]
+    ok: Literal[True]
+    text: str
+    next: int
+    done: bool
+
+
+class OrchestrationLockReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["orchestration.lock"]
+    ok: Literal[True]
+    lock: dict[str, JsonValue] | None
+    error: str | None
+
+
 ConsoleReply = (
     ErrorReply
     | HomeSnapshotReply
@@ -199,6 +309,10 @@ ConsoleReply = (
     | DecisionsSnapshotReply
     | OrchestrationSourceReply
     | OrchestrationEventsReply
+    | ScreenSnapshotReply
+    | PagedReply
+    | SnapshotPageReply
+    | OrchestrationLockReply
 )
 
 REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)

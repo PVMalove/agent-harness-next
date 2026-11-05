@@ -8,8 +8,12 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from ...kernel.batch_history import History
 from ...kernel.catalog import Reversibility
+from ...kernel.container_route import Authored
+from ...kernel.coordinator_api import ApiResult
 from ...kernel.home_snapshot import HomeSnapshot
+from ...kernel.reports import LedgerView
 from ..domain.events import Event, Observation, View
 
 
@@ -23,6 +27,39 @@ class HomeCollector(Protocol):
     """Collect the Home snapshot of a project; blocks until the checks are done."""
 
     def __call__(self, repo: Path, /) -> HomeSnapshot: ...
+
+
+class LedgerCollector(Protocol):
+    """Read the orchestration ledger of a project for the Reports and Orchestration screens;
+    blocks until it is read."""
+
+    def __call__(self, repo: Path, /) -> LedgerView: ...
+
+
+class LockReader(Protocol):
+    """The read-only state of the project's ledger lock; raises when it cannot be read."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
+class RecoveryReader(Protocol):
+    """The batch history and the recovery status of one batch, through read-only coordinator
+    commands; blocks until the command ends."""
+
+    def history(self, repo: Path) -> History: ...
+
+    def status(self, repo: Path, batch: str, skip: Sequence[str]) -> ApiResult: ...
+
+
+class RouteReader(Protocol):
+    """The authored orchestration configuration and the read-only `dispatch preflight` of the
+    container route; blocks until it is read."""
+
+    def authored(self, repo: Path) -> Authored: ...
+
+    def preflight(
+        self, repo: Path, batch: str, role: str, runtime: str
+    ) -> ApiResult: ...
 
 
 class JobExecutor(Protocol):
