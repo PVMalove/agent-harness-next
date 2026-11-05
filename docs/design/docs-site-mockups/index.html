@@ -262,7 +262,7 @@
               <li><span class="num">01</span><span><b>Один writer.</b> Python не пишет operational state в обход runtime.</span></li>
               <li><span class="num">02</span><span><b>Идемпотентность.</b> Повтор после потерянного ответа возвращает тот же результат.</span></li>
               <li><span class="num">03</span><span><b>Audit.</b> Хэш-цепочка и <code>ledger validate --full</code> обнаруживают удаление, вставку и перестановку.</span></li>
-              <li><span class="num">04</span><span><b>Recovery.</b> После SIGKILL runtime находит исполнение по меткам и доводит остановку до конца.</span></li>
+              <li><span class="num">04</span><span><b>Recovery.</b> После SIGKILL runtime находит исполнение по меткам и завершает остановку.</span></li>
               <li><span class="num">05</span><span><b>Границы.</b> Worker не получает сокет движка или runtime; QA идёт в отдельном контейнере.</span></li>
             </ul>
           </div>
