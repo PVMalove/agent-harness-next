@@ -24,10 +24,10 @@ from textual.pilot import Pilot
 from textual.screen import Screen
 from textual.scrollbar import ScrollBar
 
-from harness.console import brand
-from harness.console import data as console_data
-from harness.console.app import HARNESS_THEME, HarnessConsoleApp
-from harness.console.style import ThinScrollBarRender
+from harness.console.kernel import brand
+from harness.console.kernel import data as console_data
+from harness.console.tui.app import HARNESS_THEME, HarnessConsoleApp
+from harness.console.tui.style import ThinScrollBarRender
 
 SNAPSHOTS = Path(__file__).resolve().parent / "snapshots"
 MOCKUPS = Path(__file__).resolve().parents[2] / "docs" / "design" / "console-mockups"

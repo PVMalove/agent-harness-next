@@ -21,10 +21,10 @@ from textual.geometry import Region
 from textual.screen import Screen
 from textual.widget import Widget
 
-from harness.console import reports
-from harness.console.app import HarnessConsoleApp
+from harness.console.tui import reports
+from harness.console.tui.app import HarnessConsoleApp
 from harness.orchestration.core.utils import JsonObject
-from harness.console.screens.dashboard import DashboardScreen
+from harness.console.tui.screens.dashboard import DashboardScreen
 from tests.console._home_client import fake_home
 
 SIZES = [(160, 52), (120, 40), (80, 24)]
@@ -270,7 +270,7 @@ def test_orchestration_layout(
 ) -> None:
     from textual.widgets import Button, ListView
 
-    from harness.console.screens.orchestration import OrchestrationScreen
+    from harness.console.tui.screens.orchestration import OrchestrationScreen
     from tests.console._console_ledger_fixture import build_reports_fixture
 
     build_reports_fixture(tmp_path)
@@ -326,7 +326,7 @@ def _worker_snapshot(_repo: Path, dispatch: str, _offset: int) -> JsonObject:
 def test_worker_layout(
     tmp_path: Path, sessions: None, size: tuple[int, int], language: str
 ) -> None:
-    from harness.console.screens.worker_observation import WorkerObservationScreen
+    from harness.console.tui.screens.worker_observation import WorkerObservationScreen
 
     async def scenario() -> list[str]:
         app = HarnessConsoleApp(tmp_path)
@@ -348,7 +348,7 @@ HARNESS_TITLES = (".breadcrumbs", "#harness-state")
 def test_harness_layout(tmp_path: Path, size: tuple[int, int], language: str) -> None:
     from textual.widgets import ListView
 
-    from harness.console.screens.harness import HarnessScreen
+    from harness.console.tui.screens.harness import HarnessScreen
 
     async def scenario() -> tuple[list[str], int]:
         app = HarnessConsoleApp(tmp_path)
@@ -373,7 +373,7 @@ DIAGNOSTICS_TITLES = (".breadcrumbs",)
 def test_diagnostics_layout(
     tmp_path: Path, size: tuple[int, int], language: str
 ) -> None:
-    from harness.console.screens.diagnostics import DiagnosticsScreen
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
     from harness.health.model import CheckResult, Fix, Report
 
     long_repo = tmp_path / ("nested-directory-name-" * 3) / "project"
@@ -416,8 +416,8 @@ PROJECT_SETUP_TITLES = (".breadcrumbs",)
 def test_open_project_layout(
     tmp_path: Path, size: tuple[int, int], language: str
 ) -> None:
-    from harness.console.runner import capturing_runner
-    from harness.console.screens.project_setup import ProjectSetupScreen
+    from harness.console.kernel.runner import capturing_runner
+    from harness.console.tui.screens.project_setup import ProjectSetupScreen
 
     async def scenario() -> list[str]:
         app = HarnessConsoleApp(tmp_path)
@@ -442,7 +442,7 @@ def test_configuration_layout(
     tmp_path: Path, size: tuple[int, int], language: str
 ) -> None:
     """The start page, a parameter step and the review page of the wizard stay inside the screen."""
-    from harness.console.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration import ConfigurationScreen
     from tests.console._pilot_wait import press, wait_until
     from tests.console.test_console_configuration_app import installed_project
 
@@ -478,7 +478,7 @@ def test_configuration_versions_layout(
 ) -> None:
     from harness.configuration import read_config_bundle
     from harness.configuration_store import ConfigurationStore
-    from harness.console.screens.configuration_versions import (
+    from harness.console.tui.screens.configuration_versions import (
         ConfigurationVersionsScreen,
     )
     from tests.console.test_console_configuration_app import installed_project
@@ -508,7 +508,7 @@ def test_update_harness_layout(
     """The main page, the seed mode and every fold opened stay inside the screen."""
     from textual.widgets import RadioButton
 
-    from harness.console.shell import Fold
+    from harness.console.tui.shell import Fold
     from tests.console.test_console_update_harness import _Runner, _screen
 
     async def scenario() -> dict[str, list[str]]:

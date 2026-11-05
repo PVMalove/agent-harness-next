@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from harness.console.task_titles import load_task_titles
+from harness.console.tui.task_titles import load_task_titles
 
 
 def test_title_queries_share_one_deadline(

@@ -18,10 +18,10 @@ from textual.widgets import RichLog, Static, Select, TabbedContent, Button
 
 from harness.orchestration.core.utils import JsonObject
 from tests.console._pilot_wait import crumb_text
-from harness.console.shell import Breadcrumbs
-from harness.console.app import HarnessConsoleApp
-from harness.console.screens.worker_observation import WorkerObservationScreen
-from harness.console.shell import SECTIONS, WrappedValue
+from harness.console.tui.shell import Breadcrumbs
+from harness.console.tui.app import HarnessConsoleApp
+from harness.console.tui.screens.worker_observation import WorkerObservationScreen
+from harness.console.tui.shell import SECTIONS, WrappedValue
 
 
 async def settle(pilot: Pilot[None], done: Callable[[], bool]) -> None:
@@ -160,7 +160,7 @@ def test_native_permission_requires_an_explicit_choice(
     choice: str,
 ) -> None:
     from harness.orchestration.workflow import delivery
-    from harness.console.screens.worker_observation import NativePermissionDialog
+    from harness.console.tui.screens.worker_observation import NativePermissionDialog
 
     choices: list[bool] = []
 
@@ -320,7 +320,7 @@ def test_worker_matches_the_approved_three_panel_workspace(tmp_path: Path) -> No
 def test_session_list_prefers_recent_active_work_and_preserves_explicit_selection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import reports
+    from harness.console.tui import reports
 
     stages = [
         reports.StageEntry(
@@ -453,7 +453,7 @@ def test_context_panel_keeps_full_id_path_and_block_reason_at_every_width(
 def test_worker_menu_navigation_runs_no_command_and_back_keys_work(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.dashboard import DashboardScreen
 
     opened: list[int] = []
 
@@ -492,7 +492,8 @@ def test_worker_session_list_uses_the_shared_role_label_and_caption(
     from rich.text import Text
     from textual.widgets import ListView
 
-    from harness.console import brand, reports
+    from harness.console.kernel import brand
+    from harness.console.tui import reports
 
     stages = [
         reports.StageEntry(
@@ -533,9 +534,9 @@ def test_worker_session_list_uses_the_shared_role_label_and_caption(
 
 
 def test_worker_breadcrumbs_link_back_to_orchestration_and_home(tmp_path: Path) -> None:
-    from harness.console.screens.dashboard import DashboardScreen
-    from harness.console.screens.orchestration import OrchestrationScreen
-    from harness.console.shell import CrumbLink
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.orchestration import OrchestrationScreen
+    from harness.console.tui.shell import CrumbLink
 
     async def scenario() -> tuple[list[str], bool, bool, int]:
         app = HarnessConsoleApp(tmp_path)
@@ -586,8 +587,8 @@ def test_worker_breadcrumbs_link_back_to_orchestration_and_home(tmp_path: Path) 
 def test_worker_uses_the_shell_breakpoints_and_wraps_long_values_at_separators(
     tmp_path: Path,
 ) -> None:
-    from harness.console.shell import ConsoleShell
-    from harness.console.wrap import SEPARATORS
+    from harness.console.tui.shell import ConsoleShell
+    from harness.console.tui.wrap import SEPARATORS
 
     assert (
         WorkerObservationScreen.HORIZONTAL_BREAKPOINTS
@@ -694,8 +695,8 @@ def test_the_batch_crumb_is_a_link_only_when_the_batch_timeline_exists(
     tmp_path: Path,
 ) -> None:
     from tests.console._console_ledger_fixture import build_reports_fixture
-    from harness.console.screens.reports import BatchTimelineScreen
-    from harness.console.shell import CrumbLink
+    from harness.console.tui.screens.reports import BatchTimelineScreen
+    from harness.console.tui.shell import CrumbLink
 
     build_reports_fixture(tmp_path)
 

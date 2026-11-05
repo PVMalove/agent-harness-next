@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from harness.console.configuration import ConfigurationDraft
+from harness.console.kernel.configuration import ConfigurationDraft
 
 
 def test_editing_and_validating_a_draft_preserves_the_active_file(
@@ -110,7 +110,7 @@ def _bundle(**files: object) -> dict[str, bytes | None]:
 
 def test_bundle_diff_is_unchanged_without_secrets_and_masks_a_stored_secret() -> None:
     from harness.configuration import SECRET_MASK
-    from harness.console.configuration import bundle_diff
+    from harness.console.kernel.configuration import bundle_diff
 
     plain_old = {"project.json": b'{"a": 1}\n', "orchestration.json": None}
     plain_new = {"project.json": b'{"a": 2}\n', "orchestration.json": None}
@@ -128,7 +128,7 @@ def test_bundle_diff_is_unchanged_without_secrets_and_masks_a_stored_secret() ->
 
 
 def test_bundle_diff_says_when_only_hidden_values_changed_and_hides_unparsed_files() -> None:
-    from harness.console.configuration import bundle_diff
+    from harness.console.kernel.configuration import bundle_diff
 
     old = _bundle(**{"project.json": {"token": "ONE"}})
     new = _bundle(**{"project.json": {"token": "TWO"}})
@@ -149,7 +149,7 @@ def test_bundle_diff_says_when_only_hidden_values_changed_and_hides_unparsed_fil
 
 
 def test_bundle_diff_masks_a_secret_under_an_overridden_duplicate_key() -> None:
-    from harness.console.configuration import bundle_diff
+    from harness.console.kernel.configuration import bundle_diff
 
     duplicate = b'{"url": "https://user:pass@host", "url": "https://host"}\n'
     nested = b'{"a": {"token": "HUNTER2", "token": "x"}, "b": 1}\n'

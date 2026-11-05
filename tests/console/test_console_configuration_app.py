@@ -17,13 +17,13 @@ from textual.pilot import Pilot
 from textual.widgets import Button, RadioButton, RadioSet, Static, TextArea
 
 from harness.configuration_schema import PACKAGE
-from harness.console.configuration import ConfigurationDraft
-from harness.console.configuration_steps import ConfigurationStep
-from harness.console.advisor import Advice, AdvisorUnavailable
-from harness.console.screens.configuration import ConfigurationScreen
+from harness.console.kernel.configuration import ConfigurationDraft
+from harness.console.tui.configuration_steps import ConfigurationStep
+from harness.console.tui.advisor import Advice, AdvisorUnavailable
+from harness.console.tui.screens.configuration import ConfigurationScreen
 
 if TYPE_CHECKING:
-    from harness.console.app import HarnessConsoleApp
+    from harness.console.tui.app import HarnessConsoleApp
 
 from tests.console._home_client import fake_home
 from tests.console._pilot_wait import crumb_text, press, wait_until
@@ -102,7 +102,7 @@ def test_wizard_choice_changes_only_a_draft_until_apply(tmp_path: Path) -> None:
 def test_advisor_is_explicit_and_only_changes_the_draft(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     before = installed_project(tmp_path)
     requests: list[str] = []
@@ -147,7 +147,7 @@ def test_advisor_is_explicit_and_only_changes_the_draft(
 def test_cli_failure_keeps_manual_wizard_available(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     installed_project(tmp_path)
 
@@ -238,9 +238,9 @@ def test_dashboard_refreshes_after_applied_configuration_is_closed(
     tmp_path: Path,
 ) -> None:
     from textual.widgets import ListView
-    from harness.console.data import DashboardData
-    from harness.console.screens.dashboard import DashboardScreen
-    from harness.console.shell import SECTIONS
+    from harness.console.kernel.data import DashboardData
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.shell import SECTIONS
 
     installed_project(tmp_path)
     collections: list[bool] = []
@@ -533,7 +533,7 @@ def test_current_set_can_be_saved_as_a_version_from_the_menu(tmp_path: Path) -> 
 def test_errors_link_to_steps_and_cli_status_is_shown_without_a_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     installed_project(tmp_path)
     monkeypatch.setattr(
@@ -638,7 +638,7 @@ def test_a_message_appears_in_the_actions_frame_and_hides_again(tmp_path: Path) 
 def test_the_confirmation_dialog_is_framed_and_cancel_changes_nothing(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
 
     before = installed_project(tmp_path)
     answers: list[bool | None] = []
@@ -905,8 +905,8 @@ def test_the_menu_and_the_json_text_edit_the_same_list(tmp_path: Path) -> None:
 
 
 def _dashboard_host(repo: Path) -> App[None]:
-    from harness.console.data import DashboardData
-    from harness.console.screens.dashboard import DashboardScreen
+    from harness.console.kernel.data import DashboardData
+    from harness.console.tui.screens.dashboard import DashboardScreen
 
     def collect(repo: Path, *, online: bool = False) -> DashboardData:
         return DashboardData(
@@ -932,7 +932,7 @@ async def _open_wizard_from_home(
 ) -> ConfigurationScreen:
     from textual.widgets import ListView
 
-    from harness.console.shell import SECTIONS
+    from harness.console.tui.shell import SECTIONS
 
     await wait_until(pilot, lambda: bool(app.screen.query("#section-menu")))
     app.screen.query_one("#section-menu", ListView).index = SECTIONS.index(
@@ -955,8 +955,8 @@ def _change_draft(screen: ConfigurationScreen) -> None:
 
 
 def test_configuration_stands_on_the_shared_frame(tmp_path: Path) -> None:
-    from harness.console.chrome import TopBar, WorkspaceHeader
-    from harness.console.shell import Breadcrumbs, ConsoleShell
+    from harness.console.tui.chrome import TopBar, WorkspaceHeader
+    from harness.console.tui.shell import Breadcrumbs, ConsoleShell
 
     async def scenario() -> None:
         app = Host(tmp_path)
@@ -984,8 +984,8 @@ def test_a_phase_change_keeps_the_menu_and_puts_focus_in_the_page(
 ) -> None:
     from textual.widgets import ListView
 
-    from harness.console.shell import SECTIONS
-    from harness.console.widgets import ComposedPage
+    from harness.console.tui.shell import SECTIONS
+    from harness.console.tui.widgets import ComposedPage
 
     installed_project(tmp_path)
 
@@ -1018,7 +1018,7 @@ def test_a_phase_change_keeps_the_menu_and_puts_focus_in_the_page(
 def test_esc_with_a_changed_draft_asks_and_cancel_keeps_the_draft(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
 
     installed_project(tmp_path)
 
@@ -1041,8 +1041,8 @@ def test_esc_with_a_changed_draft_asks_and_cancel_keeps_the_draft(
 def test_a_number_key_and_the_home_crumb_with_a_changed_draft_ask_first(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.configuration import ConfirmConfiguration
-    from harness.console.shell import CrumbLink
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.shell import CrumbLink
 
     installed_project(tmp_path)
 
@@ -1074,8 +1074,8 @@ def test_the_home_key_and_the_home_crumb_refresh_home_like_esc(
 ) -> None:
     from textual.widgets import ListView
 
-    from harness.console.screens.dashboard import DashboardScreen
-    from harness.console.shell import SECTIONS, CrumbLink
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.shell import SECTIONS, CrumbLink
 
     installed_project(tmp_path)
 
@@ -1114,8 +1114,8 @@ def test_the_home_key_and_the_home_crumb_refresh_home_like_esc(
 def test_confirming_the_discard_on_the_way_home_asks_exactly_once(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.configuration import ConfirmConfiguration
-    from harness.console.shell import CrumbLink
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.shell import CrumbLink
 
     installed_project(tmp_path)
 
@@ -1151,9 +1151,9 @@ def test_confirming_the_discard_on_the_way_home_asks_exactly_once(
 def test_confirming_the_discard_closes_the_wizard_and_then_opens_the_section(
     tmp_path: Path,
 ) -> None:
-    from harness.console.screens.configuration import ConfirmConfiguration
-    from harness.console.screens.dashboard import DashboardScreen
-    from harness.console.screens.help import HelpScreen
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.help import HelpScreen
 
     installed_project(tmp_path)
 
@@ -1178,11 +1178,11 @@ def test_a_number_key_closes_the_wizard_and_opens_the_section_over_a_refreshed_h
     tmp_path: Path,
 ) -> None:
     """Any way out of Configuration closes it as Esc does: Home refreshes once, the section sits on Home."""
-    from harness.console.screens.configuration import ConfirmConfiguration
-    from harness.console.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.dashboard import DashboardScreen
     from harness.configuration_store import json_bytes
-    from harness.console.screens.help import HelpScreen
-    from harness.console.shell import SECTIONS
+    from harness.console.tui.screens.help import HelpScreen
+    from harness.console.tui.shell import SECTIONS
     from textual.widgets import ListView
 
     installed_project(tmp_path)
@@ -1265,7 +1265,7 @@ def test_a_running_write_keeps_the_wizard_open_for_every_way_out(
 
 
 def _console_app(repo: Path) -> "HarnessConsoleApp":
-    from harness.console.app import HarnessConsoleApp
+    from harness.console.tui.app import HarnessConsoleApp
 
     return HarnessConsoleApp(repo)
 

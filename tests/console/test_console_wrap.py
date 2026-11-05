@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.console import wrap
-from harness.console.wrap import SEPARATORS, wrap_value
+from harness.console.tui import wrap
+from harness.console.tui.wrap import SEPARATORS, wrap_value
 
 PATH = "/home/user/Projects/Code/some-project/.harness/.sandboxes/worktrees/issue-721-console-design-system"
 IDENTIFIER = "dispatch-e98a4a72-50ac-4fd8-b421-1db55c17f287"

@@ -23,14 +23,14 @@ from unittest import mock
 import pytest
 
 from harness.console import launcher
-from harness.console.client import (
+from harness.console.tui.client import (
     ConsoleClient,
     HomeClient,
     ServerError,
     ServerUnavailable,
     TokenRejected,
 )
-from harness.console.discovery import ServerEndpoint, discovery_path
+from harness.console.kernel.discovery import ServerEndpoint, discovery_path
 from harness.console.pin import TEXTUAL_PIN, WEBSOCKETS_PIN
 from tests.console._home_client import FakeHomeClient
 
@@ -114,11 +114,15 @@ def test_build_server_argv_pins_the_server_requirements_and_never_touches_the_pr
         "--python",
         sys.executable,
         "--with",
-        "h11==0.16.0",
+        "fastapi==0.162.0",
+        "--with",
+        "starlette==1.10.0",
+        "--with",
+        "uvicorn==0.54.0",
+        "--with",
+        "pydantic==2.14.3",
         "--with",
         "websockets==17.3",
-        "--with",
-        "jinja2==3.1.6",
         "python",
         str(launcher.BIN_HARNESS_PATH),
         "console-server",
@@ -139,7 +143,7 @@ def test_restart_console_reexecutes_current_python_for_selected_project() -> Non
 
 def test_run_console_already_relaunched_runs_the_injected_app_runner() -> None:
     """Proves the "already relaunched" branch never needs `find_uv`/`runner` and dispatches to
-    `app_runner` - injected here instead of monkeypatching `sys.modules["harness.console.app"]`,
+    `app_runner` - injected here instead of monkeypatching `sys.modules["harness.console.tui.app"]`,
     which is never safe to do in a process that may also run real textual Pilot tests."""
     repo = Path("/tmp/some-repo")
     calls: list[tuple[Path, HomeClient]] = []
@@ -839,3 +843,46 @@ def test_start_server_ignores_a_record_whose_port_belongs_to_another_program(
 
     assert endpoint.port != foreign_port
     assert endpoint.token != "ee" * 32
+
+
+def test_the_liveness_probe_asks_the_console_health_route(tmp_path: Path) -> None:
+    """A live Сервер консоли answers /health/live; a port that only serves `/` is not one."""
+    import asyncio
+
+    from harness.console.backend.server import ConsoleServer
+
+    repo = tmp_path / "project"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+
+    async def scenario() -> None:
+        server = ConsoleServer(repo)
+        await server.start()
+        try:
+            assert await asyncio.to_thread(launcher._serves_console, server.port)
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+    requests: list[bytes] = []
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+
+        def answer() -> None:
+            connection, _ = listener.accept()
+            with connection:
+                requests.append(connection.recv(4096))
+                connection.sendall(
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
+                )
+
+        import threading
+
+        thread = threading.Thread(target=answer)
+        thread.start()
+        assert not launcher._serves_console(port)
+        thread.join(2)
+    assert requests and requests[0].startswith(b"GET /health/live HTTP/1.1\r\n")

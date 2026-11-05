@@ -1,4 +1,4 @@
-"""harness.console.coordinator_catalog: каталог команд раздела Orchestration, интроспектируемый
+"""harness.console.kernel.coordinator_catalog: каталог команд раздела Orchestration, интроспектируемый
 из реального `coordinator.parser()`. Тесты проверяют синхронизацию дескрипторов команд с парсером,
 соответствие классов обратимости архитектуре и точную диспетчеризацию CLI-аргументов в обработчики."""
 
@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.coordinator_catalog import (
+from harness.console.kernel.coordinator_catalog import (
     COORDINATOR_COMMANDS,
     CoordinatorCommand,
     subparser,
 )
-from harness.console.catalog import Reversibility
+from harness.console.kernel.catalog import Reversibility
 from harness.orchestration import coordinator
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -222,7 +222,7 @@ def test_repeatable_field_serialises_one_flag_value_pair_per_non_empty_line() ->
 
 def test_coordinator_catalog_imports_without_textual() -> None:
     """Проверить, что каталог команд координатора импортируется без установленного textual."""
-    code = "import sys; sys.modules['textual'] = None; import harness.console.coordinator_catalog"
+    code = "import sys; sys.modules['textual'] = None; import harness.console.kernel.coordinator_catalog"
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=ROOT,

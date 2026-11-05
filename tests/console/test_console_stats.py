@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from harness.console import reports, stats
+from harness.console.tui import reports, stats
 from tests.console._console_ledger_fixture import build_reports_fixture
 
 

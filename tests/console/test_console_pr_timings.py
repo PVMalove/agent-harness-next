@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.pr_timings import load_reports_view
-from harness.console.reports import batch_timing_text
+from harness.console.tui.pr_timings import load_reports_view
+from harness.console.tui.reports import batch_timing_text
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from tests.console._console_ledger_fixture import _Batch
@@ -209,7 +209,7 @@ def test_tracker_timeout_does_not_repeat_for_every_historical_branch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from harness.console import pr_timings
+    from harness.console.tui import pr_timings
 
     ledger = LifecycleLedger(tmp_path / STATE_REL)
     ledger.ensure()

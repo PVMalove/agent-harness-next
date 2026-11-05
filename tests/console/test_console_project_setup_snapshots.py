@@ -23,11 +23,11 @@ from textual.pilot import Pilot
 from textual.screen import Screen
 from textual.widgets import Button, DirectoryTree, Input
 
-from harness.console import data as console_data
-from harness.console import project_target
-from harness.console.project_target import ProjectTarget
-from harness.console.screens import project_setup
-from harness.console.screens.project_setup import ProjectSetupScreen
+from harness.console.kernel import data as console_data
+from harness.console.tui import project_target
+from harness.console.tui.project_target import ProjectTarget
+from harness.console.tui.screens import project_setup
+from harness.console.tui.screens.project_setup import ProjectSetupScreen
 from harness.health.model import CheckResult, Fix, Report
 from tests.console._svg_snapshot import (
     PROJECT,
@@ -211,7 +211,7 @@ async def _not_git(pilot: Pilot[None], app: App[None]) -> None:
 
 async def _git_unavailable(pilot: Pilot[None], app: App[None]) -> None:
     with patch(
-        "harness.console.project_target.subprocess.run", side_effect=FileNotFoundError
+        "harness.console.tui.project_target.subprocess.run", side_effect=FileNotFoundError
     ):
         await _check_failing(pilot, app, FIXED_REPO)
 

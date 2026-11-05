@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.project_target import (
+from harness.console.tui.project_target import (
     ProjectTarget,
     inspect_target,
     installation_blockers,

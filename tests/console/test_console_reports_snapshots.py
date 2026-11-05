@@ -17,7 +17,7 @@ from textual.pilot import Pilot
 from textual.screen import Screen
 from textual.widgets import Button, Input, ListView
 
-from harness.console.reports import (
+from harness.console.tui.reports import (
     BatchSummary,
     BatchTimeline,
     LedgerView,
@@ -27,8 +27,8 @@ from harness.console.reports import (
     StageEntry,
     TimelineEvent,
 )
-from harness.console.screens import reports as reports_screens
-from harness.console.screens.reports import (
+from harness.console.tui.screens import reports as reports_screens
+from harness.console.tui.screens.reports import (
     BatchTimelineScreen,
     QaLogsScreen,
     ReportScreen,

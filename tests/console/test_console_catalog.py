@@ -1,4 +1,4 @@
-"""harness.console.catalog: каталог команд консоли на основе стандартной библиотеки.
+"""harness.console.kernel.catalog: каталог команд консоли на основе стандартной библиотеки.
 Тесты выполняются без textual и проверяют корректность формирования аргументов CLI."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.catalog import (
+from harness.console.kernel.catalog import (
     CONFIRMATION_REASONS,
     HARNESS_COMMANDS,
     MEMORY_COMMANDS,
@@ -217,7 +217,7 @@ def test_worktree_removal_uses_the_guarded_cli_boundary() -> None:
 
 def test_catalog_imports_without_textual() -> None:
     """Проверить, что каталог команд импортируется без установленного textual."""
-    code = "import sys; sys.modules['textual'] = None; import harness.console.catalog"
+    code = "import sys; sys.modules['textual'] = None; import harness.console.kernel.catalog"
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=ROOT,
@@ -230,7 +230,7 @@ def test_catalog_imports_without_textual() -> None:
 
 def test_repo_map_commands_dispatch_to_their_cli_functions() -> None:
     """The Repo Map section's memory and parser commands reach the CLI functions they name."""
-    from harness.console.catalog import MEMORY_COMMANDS, parsers_install_entry
+    from harness.console.kernel.catalog import MEMORY_COMMANDS, parsers_install_entry
 
     cli = runpy.run_path(str(BIN_HARNESS_PATH))
     install = parsers_install_entry(["python", "go"])

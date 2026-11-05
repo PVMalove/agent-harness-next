@@ -1,0 +1,27 @@
+{
+  "info": {
+    "title": "Harness console server",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "health_live",
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness of the console server"
+      }
+    }
+  }
+}

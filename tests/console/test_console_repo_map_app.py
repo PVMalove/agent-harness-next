@@ -25,11 +25,11 @@ from tests.console._console_repo_map_fixture import (
     map_payload,
 )
 from tests.console._home_client import fake_home
-from harness.console import repo_map as console_repo_map
-from harness.console.data import DashboardData
-from harness.console.screens.dashboard import DashboardScreen
-from harness.console.shell import SECTIONS, ConsoleShell, Fold
-from harness.console.screens.repo_map import BuildConfirmScreen, RepoMapScreen
+from harness.console.kernel import repo_map as console_repo_map
+from harness.console.kernel.data import DashboardData
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.shell import SECTIONS, ConsoleShell, Fold
+from harness.console.tui.screens.repo_map import BuildConfirmScreen, RepoMapScreen
 
 
 class _RecordingRunner:
@@ -538,8 +538,8 @@ def test_a_long_path_in_the_relations_stays_whole_by_wrapping(tmp_path: Path) ->
 def test_the_build_confirmation_keeps_its_ids_and_warns_in_the_warning_colour(
     tmp_path: Path,
 ) -> None:
-    from harness.console import brand
-    from harness.console.app import HarnessConsoleApp
+    from harness.console.kernel import brand
+    from harness.console.tui.app import HarnessConsoleApp
 
     build_repo_map_fixture(tmp_path, cached=False)
 

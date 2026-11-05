@@ -11,16 +11,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from harness.console.orchestration_events import (
-    POLL_INTERVAL_SECONDS,
-    BatchFacts,
-    Observation,
-    OrchestrationEvents,
-    ProjectReader,
-    SourceUnavailable,
-)
-from harness.console.server import MAX_SUBSCRIPTIONS, ConsoleServer
-from harness.console.snapshots import SnapshotService
+from harness.console.backend.application.events import POLL_INTERVAL_SECONDS
+from harness.console.backend.application.ports import SourceUnavailable
+from harness.console.backend.domain.events import BatchFacts, Observation
+from harness.console.backend.infrastructure.orchestration_reader import ProjectReader
+from harness.console.backend.server import MAX_SUBSCRIPTIONS, ConsoleServer
+from harness.console.backend import composition
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from tests.console._console_ledger_fixture import _Batch
@@ -62,8 +58,8 @@ def _ledger(project: Path) -> LifecycleLedger:
 def _server(project: Path, reader: ProjectReader | None = None) -> ConsoleServer:
     return ConsoleServer(
         project,
-        events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
-        snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+        events=composition.orchestration_events(project, interval=INTERVAL, reader=reader),
+        snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
     )
 
 
@@ -192,7 +188,7 @@ def test_a_malformed_subscription_is_a_bad_request(project: Path) -> None:
 
 
 def _journal(project: Path) -> Path:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     return discovery_path(project).with_name("orchestration-events.jsonl")
 
@@ -374,7 +370,7 @@ def test_foreign_expired_and_invalid_cursors_are_refused(project: Path) -> None:
 def test_a_cursor_below_the_kept_window_expires_after_compaction(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import event_journal
+    from harness.console.backend.infrastructure import event_journal
 
     monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
     ledger = _ledger(project)
@@ -423,7 +419,7 @@ def test_compaction_replaces_the_journal_only_after_closing_it(
     """Windows refuses to replace a file that the process still holds open."""
     import os
 
-    from harness.console import event_journal
+    from harness.console.backend.infrastructure import event_journal
 
     monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
     journal = _journal(project)
@@ -620,8 +616,8 @@ def test_a_failing_poll_is_a_typed_state_and_the_poller_keeps_polling(
     async def scenario() -> None:
         server = ConsoleServer(
             project,
-            events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
-            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+            events=composition.orchestration_events(project, interval=INTERVAL, reader=reader),
+            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
         )
         await server.start()
         try:
@@ -658,7 +654,7 @@ def test_a_failing_poll_is_a_typed_state_and_the_poller_keeps_polling(
 def test_compaction_keeps_a_lone_surrogate_and_bounds_the_journal(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import event_journal
+    from harness.console.backend.infrastructure import event_journal
 
     monkeypatch.setattr(event_journal, "_KEPT_EVENTS", 2)
     _ledger(project)
@@ -667,8 +663,8 @@ def test_compaction_keeps_a_lone_surrogate_and_bounds_the_journal(
     async def scenario() -> None:
         server = ConsoleServer(
             project,
-            events=OrchestrationEvents(project, interval=INTERVAL, reader=reader),
-            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
+            events=composition.orchestration_events(project, interval=INTERVAL, reader=reader),
+            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
         )
         await server.start()
         try:

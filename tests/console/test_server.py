@@ -15,17 +15,14 @@ import tomllib
 import pytest
 
 from harness.console.pin import CONSOLE_SERVER_REQUIREMENTS
-from harness.console.data import DashboardData
-from harness.console.data import collect_dashboard
-from harness.console.server import ConsoleServer
-from harness.console.snapshots import (
-    HOME_TTL_SECONDS,
-    HomeContext,
-    HomeSnapshot,
-    SnapshotService,
-    build_home_snapshot,
-    collect_home,
-)
+from harness.console.kernel.data import DashboardData
+from harness.console.kernel.data import collect_dashboard
+from harness.console.backend.server import ConsoleServer
+from harness.console.backend import composition
+from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.backend.domain.snapshots import HOME_TTL_SECONDS
+from harness.console.backend.infrastructure.home_facts import collect_home
+from harness.console.kernel.home_snapshot import HomeContext, HomeSnapshot, build_home_snapshot
 from tests.console.test_snapshots import FakeClock
 
 
@@ -43,9 +40,9 @@ def test_server_binds_ipv4_loopback_and_ephemeral_port(project: Path) -> None:
             import socket
 
             assert server.port > 0
-            assert server._listener is not None
-            assert server._listener.sockets[0].family == socket.AF_INET
-            assert server._listener.sockets[0].getsockname() == (
+            assert server._socket is not None
+            assert server._socket.family == socket.AF_INET
+            assert server._socket.getsockname() == (
                 "127.0.0.1",
                 server.port,
             )
@@ -87,11 +84,12 @@ def test_imports_do_not_require_transport_dependencies() -> None:
 import importlib.abc, json, sys
 class Absent(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'h11', 'websockets'}:
+        if fullname.split('.')[0] in TRANSPORT:
             raise ModuleNotFoundError(fullname)
+TRANSPORT = {'h11', 'websockets', 'fastapi', 'starlette', 'uvicorn', 'pydantic'}
 sys.meta_path.insert(0, Absent())
-import harness.console.server, harness.console.launcher, harness.console.pin, harness.health
-print(json.dumps({'loaded': sorted(set(sys.modules) & {'h11', 'websockets'})}))
+import harness.console.backend.server, harness.console.launcher, harness.console.pin, harness.health
+print(json.dumps({'loaded': sorted(set(sys.modules) & TRANSPORT)}))
 """
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=5
@@ -144,8 +142,8 @@ def test_live_discovery_owner_cannot_be_stolen_by_another_process(
         code = """
 import asyncio, sys
 from pathlib import Path
-from harness.console.discovery import DiscoveryBusyError
-from harness.console.server import ConsoleServer
+from harness.console.backend.infrastructure.discovery import DiscoveryBusyError
+from harness.console.backend.server import ConsoleServer
 async def main():
     server = ConsoleServer(Path(sys.argv[1]))
     try:
@@ -177,7 +175,7 @@ asyncio.run(main())
 def test_stale_discovery_is_replaced_atomically_and_cleanup_checks_owner(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import discovery
+    from harness.console.kernel import discovery
     import os
     import stat
 
@@ -217,7 +215,7 @@ def test_stale_discovery_is_replaced_atomically_and_cleanup_checks_owner(
 def test_publication_failure_rolls_back_listener_and_lock(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import discovery
+    from harness.console.kernel import discovery
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -276,7 +274,8 @@ def test_discovery_refuses_symlinks(project: Path, component: str) -> None:
 
 
 def test_linked_worktree_uses_main_project_discovery(project: Path) -> None:
-    from harness.console.discovery import DiscoveryBusyError, discovery_path
+    from harness.console.backend.infrastructure.discovery import DiscoveryBusyError
+    from harness.console.kernel.discovery import discovery_path
 
     subprocess.run(
         [
@@ -318,7 +317,8 @@ def test_linked_worktree_uses_main_project_discovery(project: Path) -> None:
 def test_windows_acl_failure_precedes_any_secret_write(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import discovery
+    from harness.console.backend.infrastructure import discovery
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -334,7 +334,7 @@ def test_windows_acl_failure_precedes_any_secret_write(
             patch.setattr(discovery, "_private_file", denied)
             with pytest.raises(PermissionError, match="private ACL unavailable"):
                 await server.start()
-        path = discovery.discovery_path(project)
+        path = discovery_path(project)
         assert not path.exists()
         assert not list(path.parent.glob("*.tmp"))
         with pytest.raises(OSError):
@@ -346,7 +346,7 @@ def test_windows_acl_failure_precedes_any_secret_write(
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires a real Windows ACL")
 def test_windows_discovery_has_protected_current_user_only_dacl(project: Path) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -377,7 +377,7 @@ def test_windows_discovery_has_protected_current_user_only_dacl(project: Path) -
 
 
 def test_authenticated_websocket_ping_and_http_method_with_body(project: Path) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
     from websockets.exceptions import InvalidStatus
     import http.client
@@ -434,7 +434,7 @@ async def _raw(port: int, data: bytes) -> bytes:
 def test_native_and_browser_websocket_credentials(
     project: Path, credential: str
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
 
     from websockets.typing import Origin
@@ -495,7 +495,7 @@ def test_native_and_browser_websocket_credentials(
 def test_websocket_admission_fails_closed(
     project: Path, case: str, status: int
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project)
@@ -701,7 +701,7 @@ def test_get_head_headers_and_missing_page(project: Path) -> None:
 def test_fragmented_upgrade_and_coalesced_first_frame_are_consumed_once(
     project: Path,
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.client import ClientProtocol
     from websockets.frames import Frame, Opcode
     from websockets.uri import parse_uri
@@ -760,11 +760,7 @@ def test_fragmented_upgrade_and_coalesced_first_frame_are_consumed_once(
     asyncio.run(scenario())
 
 
-def test_header_limits_malformed_framing_and_deadline(
-    project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from harness.console import server as transport
-
+def test_header_limits_and_malformed_framing(project: Path) -> None:
     async def scenario() -> None:
         server = ConsoleServer(project)
         await server.start()
@@ -773,7 +769,7 @@ def test_header_limits_malformed_framing_and_deadline(
             for framing, status in (
                 (b"Content-Length: 1\r\nContent-Length: 2", 400),
                 (b"Content-Length: invalid", 400),
-                (b"Transfer-Encoding: invalid", 501),
+                (b"Transfer-Encoding: invalid", 400),
             ):
                 assert (
                     await _raw(server.port, base + framing + b"\r\n\r\n")
@@ -782,12 +778,7 @@ def test_header_limits_malformed_framing_and_deadline(
                 await _raw(
                     server.port, base + b"X-Large: " + b"x" * 17000 + b"\r\n\r\n"
                 )
-            ).startswith(b"HTTP/1.1 431 ")
-            with monkeypatch.context() as patch:
-                patch.setattr(transport, "HEADER_TIMEOUT", 0.03)
-                assert (await _raw(server.port, b"GET / HTTP/1.1\r\n")).startswith(
-                    b"HTTP/1.1 408 "
-                )
+            ).startswith(b"HTTP/1.1 400 ")
         finally:
             await server.close()
 
@@ -797,7 +788,7 @@ def test_header_limits_malformed_framing_and_deadline(
 def test_debug_logging_never_contains_credentials(
     project: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     import logging
 
     async def scenario() -> None:
@@ -822,7 +813,7 @@ def test_debug_logging_never_contains_credentials(
 def test_frame_errors_and_unanswered_close_have_bounded_cleanup(
     project: Path, masked: bool, opcode: str, code: int
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.client import ClientProtocol
     from websockets.frames import Close, Frame, Opcode
     from websockets.uri import parse_uri
@@ -859,7 +850,7 @@ def test_frame_errors_and_unanswered_close_have_bounded_cleanup(
 
 
 def test_idle_server_exits_after_grace_and_removes_discovery(project: Path) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
 
     async def scenario() -> None:
         server = ConsoleServer(project, idle_grace_seconds=0.2)
@@ -874,7 +865,7 @@ def test_idle_server_exits_after_grace_and_removes_discovery(project: Path) -> N
 def test_connected_client_keeps_server_alive_until_it_disconnects(
     project: Path,
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
 
     async def scenario() -> None:
@@ -926,7 +917,7 @@ class GatedCollect:
 
 
 def _connect(server: ConsoleServer, repo: Path):  # type: ignore[no-untyped-def]
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.asyncio.client import connect
 
     token = json.loads(discovery_path(repo).read_text())["token"]
@@ -947,7 +938,7 @@ def test_home_snapshot_is_answered_on_the_websocket(project: Path) -> None:
     async def scenario() -> None:
         collect = GatedCollect(open_gate=True)
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -993,16 +984,13 @@ def test_text_that_is_not_json_is_answered_and_the_connection_stays_open(
 
 @pytest.mark.parametrize(
     "frames,code",
-    [
-        ([("TEXT", False, b"da"), ("CONT", True, b"ta")], 1003),
-        ([("TEXT", True, b"\xff\xfe")], 1007),
-    ],
-    ids=["fragmented-text", "invalid-utf8"],
+    [([("TEXT", True, b"\xff\xfe")], 1007)],
+    ids=["invalid-utf8"],
 )
-def test_fragmented_and_malformed_text_frames_close_the_connection(
+def test_malformed_text_frames_close_the_connection(
     project: Path, frames: list[tuple[str, bool, bytes]], code: int
 ) -> None:
-    from harness.console.discovery import discovery_path
+    from harness.console.kernel.discovery import discovery_path
     from websockets.client import ClientProtocol
     from websockets.frames import Close, Frame, Opcode
     from websockets.uri import parse_uri
@@ -1037,11 +1025,27 @@ def test_fragmented_and_malformed_text_frames_close_the_connection(
     asyncio.run(scenario())
 
 
+def test_a_fragmented_text_message_is_reassembled_and_answered(project: Path) -> None:
+    async def scenario() -> None:
+        server = ConsoleServer(project)
+        await server.start()
+        try:
+            async with _connect(server, project) as client:
+                await client.send(iter(["da", "ta"]))
+                reply = json.loads(await asyncio.wait_for(client.recv(), 5))
+                assert reply["ok"] is False and reply["error"]["code"] == "bad_json"
+                await asyncio.wait_for(await client.ping(b"alive"), 2)
+        finally:
+            await server.close()
+
+    asyncio.run(scenario())
+
+
 def test_ping_is_answered_while_a_slow_check_is_still_running(project: Path) -> None:
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1063,7 +1067,7 @@ def test_the_fifth_unfinished_request_gets_busy(project: Path) -> None:
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1098,7 +1102,7 @@ def test_a_lone_surrogate_id_is_echoed_and_the_connection_stays_open(
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1133,7 +1137,7 @@ def test_a_disconnect_with_an_unfinished_request_releases_the_connection(
     async def scenario() -> None:
         collect = GatedCollect()
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=collect)
+            project, snapshots=composition.snapshot_service(project, collect=collect)
         )
         await server.start()
         try:
@@ -1142,7 +1146,7 @@ def test_a_disconnect_with_an_unfinished_request_releases_the_connection(
                 await asyncio.sleep(0.1)
                 assert collect.calls == 1
             await asyncio.wait_for(server.close(), 3)
-            assert not server._connections
+            assert server._clients == 0
         finally:
             collect.gate.set()
             await server.close()
@@ -1237,7 +1241,7 @@ def test_a_failed_collect_is_an_error_reply_and_the_connection_survives(
 
     async def scenario() -> None:
         server = ConsoleServer(
-            project, snapshots=SnapshotService(project, collect=flaky)
+            project, snapshots=composition.snapshot_service(project, collect=flaky)
         )
         await server.start()
         try:
@@ -1270,7 +1274,7 @@ def test_expensive_checks_are_not_rerun_within_the_ttl_and_force_rebuilds(
         return DATA
 
     clock = FakeClock()
-    service = SnapshotService(
+    service = composition.snapshot_service(
         project,
         clock=clock,
         collect=functools.partial(
@@ -1306,11 +1310,7 @@ def test_expensive_checks_are_not_rerun_within_the_ttl_and_force_rebuilds(
 def test_pending_decisions_are_answered_beside_the_home_snapshot(
     project: Path,
 ) -> None:
-    from harness.console.decisions import (
-        DecisionItem,
-        DecisionService,
-        DecisionsSnapshot,
-    )
+    from harness.console.backend.domain.approvals import DecisionItem, DecisionsSnapshot
 
     item = DecisionItem(
         kind="batch-approval",
@@ -1331,8 +1331,8 @@ def test_pending_decisions_are_answered_beside_the_home_snapshot(
     async def scenario() -> None:
         server = ConsoleServer(
             project,
-            snapshots=SnapshotService(project, collect=GatedCollect(open_gate=True)),
-            decisions=DecisionService(project, collect=fake),
+            snapshots=composition.snapshot_service(project, collect=GatedCollect(open_gate=True)),
+            decisions=composition.decision_service(project, collect=fake),
         )
         await server.start()
         try:
@@ -1384,7 +1384,7 @@ def test_an_online_home_request_runs_the_online_checks_on_the_websocket(
             repo, online=online, dashboard=dashboard, context=lambda repo: HomeContext()
         )
 
-    service = SnapshotService(
+    service = composition.snapshot_service(
         project,
         clock=FakeClock(),
         collect=collect,

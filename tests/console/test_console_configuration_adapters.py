@@ -25,7 +25,7 @@ def project(tmp_path: Path) -> Path:
 
 
 def test_console_adapter_install_requires_preview_confirmation(project: Path) -> None:
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -49,7 +49,7 @@ def test_console_adapter_install_requires_preview_confirmation(project: Path) ->
 def test_console_rejects_stale_preview_and_preserves_local_adapter(
     project: Path,
 ) -> None:
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -76,7 +76,7 @@ def test_console_rejects_stale_preview_and_preserves_local_adapter(
 
 def test_console_does_not_enable_missing_capability(project: Path) -> None:
     import json
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -99,7 +99,7 @@ def test_settings_screen_shows_status_and_requires_modal_confirmation(
 ) -> None:
     from textual.app import App
     from textual.widgets import Static
-    from harness.console.screens.configuration import (
+    from harness.console.tui.screens.configuration import (
         ConfigurationScreen,
         ConfirmConfiguration,
     )
@@ -155,7 +155,7 @@ def test_console_updates_outdated_managed_adapter_after_confirmation(
 ) -> None:
     import hashlib
     import json
-    from harness.console.configuration import (
+    from harness.console.kernel.configuration import (
         preview_runtime_adapters,
         apply_runtime_adapters,
     )
@@ -191,7 +191,7 @@ def _fake_preview(
     blocked: bool = False,
     reason: str = "",
 ) -> object:
-    from harness.console.configuration import RuntimeAdapterPreview
+    from harness.console.kernel.configuration import RuntimeAdapterPreview
 
     return RuntimeAdapterPreview(
         adapters,  # type: ignore[arg-type]
@@ -204,7 +204,7 @@ def _fake_preview(
 
 
 def _configuration_host(repo: Path) -> App[None]:
-    from harness.console.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration import ConfigurationScreen
 
     class Host(App[None]):
         def on_mount(self) -> None:
@@ -218,7 +218,7 @@ def test_every_adapter_is_a_block_with_a_status_symbol_a_path_and_the_problem(
 ) -> None:
     import asyncio
     from textual.widgets import Static
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     preview = _fake_preview(
         [
@@ -268,7 +268,7 @@ def test_an_unavailable_snapshot_replaces_the_adapter_blocks_with_an_error(
 ) -> None:
     import asyncio
     from textual.widgets import Static
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
 
     def failing(repo: Path) -> object:
         raise ValueError("Сначала установите харнесс проекта")
@@ -295,7 +295,7 @@ def test_the_confirmation_has_a_title_a_plan_block_and_the_reason_confirm_is_off
     import asyncio
     from textual.app import App
     from textual.widgets import Button, Static
-    from harness.console.screens.configuration import ConfirmConfiguration
+    from harness.console.tui.screens.configuration import ConfirmConfiguration
 
     class Host(App[None]):
         def on_mount(self) -> None:
@@ -335,7 +335,7 @@ def test_the_plan_names_changes_with_words_and_the_blocking_line_with_a_warning(
     project: Path,
 ) -> None:
     import json
-    from harness.console.configuration import preview_runtime_adapters
+    from harness.console.kernel.configuration import preview_runtime_adapters
 
     preview = preview_runtime_adapters(project)
     assert "✔ добавится  .harness/adapters/claude_worker.py" in preview.text or (
@@ -360,7 +360,7 @@ def test_a_long_adapter_path_wraps_and_stays_inside_the_screen(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import asyncio
-    from harness.console.screens import configuration
+    from harness.console.tui.screens import configuration
     from tests.console.test_console_layout import layout_problems
 
     long_path = ".harness/adapters/" + "very_long_adapter_name_" * 6 + "worker.py"

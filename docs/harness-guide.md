@@ -698,7 +698,7 @@ python3 harness/bin/harness.py console /path/to/repository
 textual. При аварийном завершении TUI пульт сообщает код выхода.
 
 **Оформление** — тема textual `harness-warm`: терракотовые и янтарные акценты на графитовом фоне,
-тонкие скруглённые рамки. Палитра и знак — в stdlib-модуле `harness/console/brand.py`. Главный экран
+тонкие скруглённые рамки. Палитра и знак — в stdlib-модуле `harness/console/kernel/brand.py`. Главный экран
 начинается со знака харнесса с описанием установки (версия, capability из `harness.lock`, путь,
 ветка). Под ним — дашборд: offline-счётчики `ok`/`warn`/`fail`/`skipped`, число открытых batch
 оркестрации или «не подключено», tier Repo Map, версия харнесса и статус дрейфа. Действие «Online
@@ -712,12 +712,12 @@ checks» пересчитывает счётчики с `--online` и показ
 | Раздел | Что внутри |
 |---|---|
 | `Diagnostics` | Полный отчёт `health`, «online checks» и «apply fixes» (`health --fix`, после online checks — `--online --fix`; требует повторного нажатия). Health работает в фоновом потоке, отчёт экспортируется в Markdown |
-| `Harness` | Панель «Состояние»: установленная версия (и версия пакета, если они расходятся), capability, число скиллов и управляемых файлов, время обновления lock, подключена ли оркестрация и сводка использования пайплайна (`harness/console/stats.py`). Ниже — команды из `harness/console/catalog.py`: init, update (в том числе `--force-managed-files` и `--force-seed-files`), diff, adopt, очистка soft/hard (план и применение), удаление харнесса (план и применение), registry, lock-project-skills, list, health, Repo Map, parser bundle, verify, ledger migrate/clean/reset, удаление worktree |
-| `Orchestration` | Статистика пайплайна (запуски и тикеты, состояния, диспатчи по ролям, итоги отчётов, QA, период) и история: слева все состояния batch с числом, справа batch выбранного состояния, Enter открывает хронологию. Ниже — команды coordinator из `harness/console/coordinator_catalog.py` |
+| `Harness` | Панель «Состояние»: установленная версия (и версия пакета, если они расходятся), capability, число скиллов и управляемых файлов, время обновления lock, подключена ли оркестрация и сводка использования пайплайна (`harness/console/tui/stats.py`). Ниже — команды из `harness/console/kernel/catalog.py`: init, update (в том числе `--force-managed-files` и `--force-seed-files`), diff, adopt, очистка soft/hard (план и применение), удаление харнесса (план и применение), registry, lock-project-skills, list, health, Repo Map, parser bundle, verify, ledger migrate/clean/reset, удаление worktree |
+| `Orchestration` | Статистика пайплайна (запуски и тикеты, состояния, диспатчи по ролям, итоги отчётов, QA, период) и история: слева все состояния batch с числом, справа batch выбранного состояния, Enter открывает хронологию. Ниже — команды coordinator из `harness/console/kernel/coordinator_catalog.py` |
 | `Reports` | Completion reports из леджера с фильтрами по тикету, роли, outcome и дате; хронология batch; QA-логи |
 | `Repo Map` | Карта для HEAD из кэша или построение: сводка, дерево файлов с сигнатурами, поиск символа, связи, топ-10 хабов, диагностика. Вкладка «Настройки»: режим карты `minimal`/`full` (`repo_map_policy.tier`), мастер на шаге `repo_map_policy`, установка парсеров выбранных языков (`harness parsers install`) и память проекта: инициализация (`memory_policy` по умолчанию и `harness memory build`), синхронизация, пересборка, мастер на шаге `memory` |
-| `Настройка конфигурации` | Пошаговый мастер `project.json` и `orchestration.json` (`harness/console/configuration_steps.py`): пояснения и рекомендации по признакам проекта, проверка по схеме и валидаторам, различия, применение с автоматической резервной копией, локальные версии в `.harness/config_versions/` и откат, необязательные подсказки через авторизованный Codex CLI или Claude Code CLI (`harness/console/advisor.py`) |
-| `Help` | Справка по разделам, клавишам и правилам безопасности (`harness/console/help_text.py`) |
+| `Настройка конфигурации` | Пошаговый мастер `project.json` и `orchestration.json` (`harness/console/tui/configuration_steps.py`): пояснения и рекомендации по признакам проекта, проверка по схеме и валидаторам, различия, применение с автоматической резервной копией, локальные версии в `.harness/config_versions/` и откат, необязательные подсказки через авторизованный Codex CLI или Claude Code CLI (`harness/console/tui/advisor.py`) |
+| `Help` | Справка по разделам, клавишам и правилам безопасности (`harness/console/tui/help_text.py`) |
 
 | Клавиша | Действие |
 |---|---|
@@ -759,8 +759,8 @@ checks» пересчитывает счётчики с `--online` и показ
   попадает в черновик только по кнопке.
 
 Код разложен по шву stdlib/textual. Модули `harness/console/{pin,runner,launcher,data,catalog,coordinator_catalog,reports,export,repo_map,json_fields,brand,help_text,stats,advisor,configuration,configuration_steps,project_target,project_facts}.py`
-не импортируют `textual`, и тесты проверяют их без него. `harness/console/app.py` и
-`harness/console/screens/*.py` импортируют его только внутри перезапущенного процесса. Pilot-тесты
+не импортируют `textual`, и тесты проверяют их без него. `harness/console/tui/app.py` и
+`harness/console/tui/screens/*.py` импортируют его только внутри перезапущенного процесса. Pilot-тесты
 (`tests/console/test_console_app.py`, `tests/console/test_console_harness.py`,
 `tests/console/test_console_orchestration.py`, `tests/console/test_console_reports_app.py`,
 `tests/console/test_console_repo_map_app.py`, `tests/console/test_console_configuration_app.py`,

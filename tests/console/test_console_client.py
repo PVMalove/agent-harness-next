@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.client import (
+from harness.console.tui.client import (
     ConnectionLost,
     ConsoleClient,
     ConsoleClientError,
@@ -25,14 +25,11 @@ from harness.console.client import (
     ServerUnavailable,
     TokenRejected,
 )
-from harness.console.discovery import ServerEndpoint, read_record
-from harness.console.server import ConsoleServer
-from harness.console.snapshots import (
-    HomeContext,
-    HomeSnapshot,
-    SnapshotService,
-    build_home_snapshot,
-)
+from harness.console.kernel.discovery import ServerEndpoint, read_record
+from harness.console.backend.server import ConsoleServer
+from harness.console.backend import composition
+from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.kernel.home_snapshot import HomeContext, HomeSnapshot, build_home_snapshot
 from tests.console.test_snapshots import DATA, MEMORY, VIEW, FakeClock
 
 SNAPSHOT = build_home_snapshot(DATA, HomeContext(repo_map=VIEW, memory=MEMORY))
@@ -65,7 +62,7 @@ def _server(
     collect_online: Callable[[Path], HomeSnapshot] | None = None,
 ) -> Iterator[tuple[ConsoleServer, _Loop]]:
     loop = _Loop()
-    service = SnapshotService(
+    service = composition.snapshot_service(
         repo,
         clock=FakeClock(),
         collect=collect,
@@ -355,7 +352,7 @@ class Absent(importlib.abc.MetaPathFinder):
         if fullname.split('.')[0] in {'h11', 'websockets'}:
             raise ModuleNotFoundError(fullname)
 sys.meta_path.insert(0, Absent())
-import harness.console.client
+import harness.console.tui.client
 print(json.dumps({'loaded': sorted(set(sys.modules) & {'h11', 'websockets'})}))
 """
     result = subprocess.run(
@@ -370,7 +367,7 @@ def test_no_reply_within_the_reply_timeout_is_connection_lost(
 ) -> None:
     from websockets.asyncio.server import ServerConnection, serve
 
-    from harness.console import client as console_client
+    from harness.console.tui import client as console_client
 
     monkeypatch.setattr(console_client, "REPLY_TIMEOUT", 0.3)
 
