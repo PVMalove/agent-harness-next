@@ -17,7 +17,7 @@ import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, cast
 
 from harness.orchestration import coordinator
 
@@ -29,6 +29,8 @@ from .coordinator_catalog import (
     subparser,
 )
 from .catalog import Reversibility
+from .home_snapshot import _fields as _payload_fields
+from .home_snapshot import _int, _list, _optional, _str
 from .runner import CommandRunner, capturing_runner
 
 # The only coordinator subcommands the console reaches. Anything else (send, abandon, decide, ...)
@@ -106,6 +108,34 @@ class ApiResult:
     def problem_text(self) -> str:
         """What went wrong, verbatim: the process error or stderr, else the raw output."""
         return (self.stderr or self.stdout_text).strip()
+
+    def to_payload(self) -> dict[str, object]:
+        """The JSON-safe form a console server reply carries."""
+        return {
+            "outcome": self.outcome.value,
+            "argv": list(self.argv),
+            "documents": list(self.documents),
+            "returncode": self.returncode,
+            "stderr": self.stderr,
+            "stdout_text": self.stdout_text,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: object) -> ApiResult:
+        """The result a `to_payload` result (read back from JSON) describes; any schema break is
+        `ValueError`."""
+        found = _payload_fields(payload, cls)
+        documents = _list(found["documents"])
+        if not all(isinstance(item, dict) for item in documents):
+            raise ValueError("ApiResult: a document is not an object")
+        return cls(
+            outcome=Outcome(_str(found["outcome"])),
+            argv=tuple(_str(item) for item in _list(found["argv"])),
+            documents=tuple(cast(dict[str, object], item) for item in documents),
+            returncode=_optional(found["returncode"], _int),
+            stderr=_str(found["stderr"]),
+            stdout_text=_str(found["stdout_text"]),
+        )
 
 
 class ArgvError(ValueError):
@@ -228,19 +258,26 @@ class CoordinatorApi:
             Exception
         ) as exc:  # the process boundary: any failure is shown, none is hidden
             return ApiResult(Outcome.UNAVAILABLE, frozen, stderr=str(exc) or repr(exc))
-        stdout = completed.stdout or ""
-        stderr = completed.stderr or ""
-        documents, clean = parse_documents(stdout)
-        code = completed.returncode
-        if code == 0:
-            outcome = Outcome.DOCUMENT if clean else Outcome.UNPARSED
-        else:
-            outcome = Outcome.REFUSED if clean else Outcome.FAILED
-        return ApiResult(
-            outcome,
-            frozen,
-            documents if clean or outcome is Outcome.UNPARSED else (),
-            code,
-            stderr,
-            stdout if not clean else "",
+        return classify(
+            argv, completed.returncode, completed.stdout or "", completed.stderr or ""
         )
+
+
+def classify(
+    argv: Sequence[str], returncode: int, stdout: str, stderr: str
+) -> ApiResult:
+    """The typed answer of a finished command: a document, a refusal, a failure or an unparsed
+    success, from its exit code and its output alone."""
+    documents, clean = parse_documents(stdout)
+    if returncode == 0:
+        outcome = Outcome.DOCUMENT if clean else Outcome.UNPARSED
+    else:
+        outcome = Outcome.REFUSED if clean else Outcome.FAILED
+    return ApiResult(
+        outcome,
+        tuple(argv),
+        documents if clean or outcome is Outcome.UNPARSED else (),
+        returncode,
+        stderr,
+        stdout if not clean else "",
+    )

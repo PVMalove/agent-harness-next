@@ -9,11 +9,12 @@ status the core did not give is shown as not checked, never as 'no recovery need
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .container_route import JsonObject, State, _items, _obj, _text
 from .coordinator_api import ApiResult, CoordinatorApi, Outcome
+from .home_snapshot import _bool, _fields, _int, _list, _str
 from .runner import CommandRunner, capturing_runner
 
 
@@ -65,6 +66,37 @@ class History:
 
     def find(self, batch_id: str) -> HistoryBatch | None:
         return next((item for item in self.batches if item.batch_id == batch_id), None)
+
+    def to_payload(self) -> dict[str, object]:
+        """The JSON-safe form a console server reply carries."""
+        return {
+            "batches": [asdict(item) for item in self.batches],
+            "unavailable": self.unavailable,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: object) -> History:
+        """The history a `to_payload` result describes; any schema break is `ValueError`."""
+        found = _fields(payload, cls)
+        return cls(
+            batches=tuple(_history_batch_from(item) for item in _list(found["batches"])),
+            unavailable=_str(found["unavailable"]),
+        )
+
+
+def _history_batch_from(value: object) -> HistoryBatch:
+    found = _fields(value, HistoryBatch)
+    return HistoryBatch(
+        batch_id=_str(found["batch_id"]),
+        ticket=_str(found["ticket"]),
+        branch=_str(found["branch"]),
+        state=_str(found["state"]),
+        created_at=_str(found["created_at"]),
+        terminal=_bool(found["terminal"]),
+        dispatches=_int(found["dispatches"]),
+        open_dispatches=_int(found["open_dispatches"]),
+        next_action=_str(found["next_action"]),
+    )
 
 
 @dataclass(frozen=True)

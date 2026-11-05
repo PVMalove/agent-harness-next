@@ -7,6 +7,8 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import pytest
+
 from harness.console.kernel.container_route import (
     NEED_BATCH,
     Authored,
@@ -1846,3 +1848,11 @@ def test_a_long_digest_path_and_log_line_are_kept_whole_in_every_stage() -> None
     session.refresh_worker()
     text = render(session.view(Stage.WORKER))
     assert long_path in text and digest in text and "…" not in text
+
+
+def test_authored_round_trips_through_its_payload() -> None:
+    for authored in (Authored({"roles": {"qa": {}}}), Authored(None, "не прочитана")):
+        payload = json.loads(json.dumps(authored.to_payload()))
+        assert Authored.from_payload(payload) == authored
+    with pytest.raises(ValueError):
+        Authored.from_payload({"document": [], "problem": ""})
