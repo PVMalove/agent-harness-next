@@ -42,6 +42,7 @@ if _HARNESS_ROOT.name != "harness" or not (_HARNESS_ROOT / "__init__.py").is_fil
     sys.modules["harness"] = importlib.util.module_from_spec(_spec)
 
 from harness.errors import HarnessError, print_and_exit
+from harness.orchestration.config_commands import validate_config as validate_config
 from harness.orchestration.coordinator_cli import build_parser
 from harness.orchestration.core import constants
 
@@ -61,6 +62,7 @@ from harness.orchestration.core.utils import _now as _now
 from harness.orchestration.core.utils import _read_object as _read_object
 from harness.orchestration.core.utils import _repo as _repo
 from harness.orchestration.core.utils import _safe_id as _safe_id
+from harness.orchestration.ledger.ledger_ops import command_state as command_state
 from harness.orchestration.ledger.ledger_ops import _load_batch as _load_batch
 from harness.orchestration.ledger.ledger_ops import _load_dispatch as _load_dispatch
 from harness.orchestration.ledger.ledger_ops import (
@@ -100,6 +102,7 @@ from harness.orchestration.ledger.ledger_admin import (
     release_ledger_lock as release_ledger_lock,
 )
 from harness.orchestration.ledger.ledger_admin import reset_ledger as reset_ledger
+from harness.orchestration.runtime_client import runtime_status as runtime_status
 from harness.orchestration.workflow.attention import attention_check as attention_check
 from harness.orchestration.workflow.attention import (
     attention_resolve as attention_resolve,
@@ -122,6 +125,21 @@ from harness.orchestration.workflow.recovery import (
     resume_stopped_batch as resume_stopped_batch,
 )
 from harness.orchestration.workflow.recovery import rewind_batch as rewind_batch
+from harness.orchestration.workflow.recovery_commands import (
+    recovery_abort as recovery_abort,
+)
+from harness.orchestration.workflow.recovery_commands import (
+    recovery_fix as recovery_fix,
+)
+from harness.orchestration.workflow.recovery_commands import (
+    recovery_reload as recovery_reload,
+)
+from harness.orchestration.workflow.recovery_commands import (
+    recovery_resume as recovery_resume,
+)
+from harness.orchestration.workflow.recovery_commands import (
+    recovery_status as recovery_status,
+)
 from harness.orchestration.workflow.carried_items import (
     carry_over_findings as carry_over_findings,
 )
@@ -131,6 +149,7 @@ from harness.orchestration.workflow.context_package import (
 )
 from harness.orchestration.workflow.decisions import decide_batch as decide_batch
 from harness.orchestration.workflow.decisions import decision_packet as decision_packet
+from harness.orchestration.workflow.delivery import observe_dispatch as observe_dispatch
 from harness.orchestration.workflow.delivery import dispatch_status as dispatch_status
 from harness.orchestration.workflow.delivery import publish_dispatch as publish_dispatch
 from harness.orchestration.workflow.delivery import (
@@ -229,10 +248,16 @@ def main() -> int:
             # No timeout by design: the re-run is this same command on the pinned runtime, which
             # applies the bounds the command has (`dispatch wait` its own deadline, for example).
             return subprocess.call(pinned)
-        output = args.handler(args)
+        with command_state(args):
+            output = args.handler(args)
     except HarnessError as exc:
         return print_and_exit(exc)
     print(json.dumps(output, ensure_ascii=False, sort_keys=True))
+    if args.command == "config" and output.get("valid") is False:
+        return 2
+    # A recovery refusal prints its structured diagnostics and exits 2, never waiting for input.
+    if args.command == "recovery" and output.get("outcome") == "refused":
+        return 2
     return 0
 
 

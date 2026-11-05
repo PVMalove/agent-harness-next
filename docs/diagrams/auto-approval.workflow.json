@@ -505,7 +505,9 @@
       "items": [
         "1. integrity-failure: stale, model-mismatch, worktree-mismatch, harness-snapshot-changed, deterministic-gate-failed, ledger-validation-failed",
         "2. budget-exhausted: лимиты retry_policy, continuation_policy и attention_policy; tooling-retry-repeated",
-        "3. no-automatic-route: unknown-reason, abandon-dead-end, supersede-dead-end",
+        "3. no-automatic-route: unknown-reason, abandon-dead-end, supersede-dead-end, qa-environment-failure",
+        "3a. unknown-reason: недоказанный дефект кода на read-only стадии или publish (домен отказа не code_test) — отказ UnprovenFailureError, evidence сохраняет failure",
+        "3b. unknown-reason: автоматический developer retry с доменом unknown — бюджет не ограничивает его, поэтому политика останавливает путь",
         "Координатор пишет остановку один раз в batch.auto_stop вместе с итоговым отчётом",
         "ledger-validation-failed команда только выводит: ledger недостоверен"
       ]

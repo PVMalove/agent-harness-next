@@ -8,7 +8,7 @@
 
 ## 2. Полное описание
 
-`run-test.sh` — не hook события: установка `pvmalove-suite` копирует его в
+`run-test.sh` — не hook события: установка `engineering-suite` копирует его в
 `.claude/hooks/run-test.sh`, но не подключает в `settings.local.json`. Скрипт запускает один тест,
 выбранный по идентификатору, внутри bubblewrap, поэтому тест и все его дочерние процессы не могут
 изменить production-код, `.git` и конфигурацию runner. Сам скрипт только находит Python и корень
@@ -36,7 +36,7 @@
 по флагам, а некорректное значение `init` отклоняет до записи файлов:
 
 ```bash
-harness init . --capability pvmalove-suite \
+harness init . --capability engineering-suite \
   --test-path 'tests/**' \
   --test-runner-command 'python3 -m unittest {test_id}'
 ```
@@ -60,14 +60,17 @@ harness init . --capability pvmalove-suite \
   production-файл дал бы к нему альтернативный доступ.
 
 Symlink внутри зоны безопасен: запись через него попадает в монтирование только для чтения и
-получает `EROFS`. Кроме зон тест пишет в `/tmp` (tmpfs, не сохраняется) и в свежие для каждого
-запуска `cache/` и `reports/`. Общего кеша между запусками нет: через него тест подложил бы
+получает `EROFS`. Кроме зон тест пишет в `/tmp` и в свежие для каждого
+запуска `cache/` и `reports/`. Как hermetic `/tmp` в Bazel, `/tmp` — это не каталог хоста, а свой
+пустой каталог `<run>/tmp-*` на каждый запуск bwrap (probe, сборка, тест); после запуска он
+удаляется. Внутри путь остаётся коротким `/tmp`, поэтому сокеты базы данных укладываются в лимит
+AF_UNIX в 107 байт (#769). Общего кеша между запусками нет: через него тест подложил бы
 `.pyc` production-модуля следующему запуску.
 
 **Песочница.** Набор флагов из [ADR 0014](../adr/0014-test-author-isolation.md) не ослабляется:
 
 ```text
-bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --tmpfs /run
+bwrap --ro-bind / / --dev /dev --proc /proc --bind <run>/tmp-* /tmp --tmpfs /run
       --bind <зона> <зона> ... --bind <run>/cache <run>/cache --bind <run>/reports <run>/reports
       --chdir <repo> --unshare-all --die-with-parent --new-session --cap-drop ALL
       --json-status-fd <fd> -- <test_runner.command с id вместо {test_id}>

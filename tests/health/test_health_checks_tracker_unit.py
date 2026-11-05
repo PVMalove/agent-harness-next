@@ -421,3 +421,61 @@ sys.exit(1)
 def test_the_issues_endpoint_has_no_ampersand(host: str) -> None:
     """`&` splits a command in a Windows `.cmd` launcher, so the query must not carry it."""
     assert "&" not in tracker._HOSTS[host].issues_endpoint("acme/widgets")
+
+
+@pytest.mark.parametrize(
+    ("returncode", "expected"), [(0, "ok"), (1, "fail"), (None, "fail")]
+)
+def test_auth_response_status_without_a_cli_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    returncode: int | None,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(tracker, "detect_tracker", lambda _context: _GITHUB)
+    monkeypatch.setattr(shutil, "which", lambda _name: "/fake/gh")
+    calls: list[list[str]] = []
+
+    def run(
+        argv: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str] | None:
+        calls.append(argv)
+        assert kwargs["cwd"] == tmp_path
+        return (
+            None
+            if returncode is None
+            else subprocess.CompletedProcess(argv, returncode, "", "")
+        )
+
+    monkeypatch.setattr(tracker, "_run", run)
+    result = tracker.check_auth(_online_context(tmp_path))
+    assert result.status == expected
+    assert calls == [["/fake/gh", "auth", "status", "--hostname", "github.com"]]
+
+
+@pytest.mark.parametrize(
+    ("level", "expected"),
+    [(10, (False, False)), (20, (False, True)), (30, (True, True))],
+)
+def test_gitlab_permissions_use_effective_membership_without_a_cli_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    level: int,
+    expected: tuple[bool, bool],
+) -> None:
+    endpoints: list[str] = []
+
+    def api(executable: str, host: str, endpoint: str, **kwargs: object) -> object:
+        assert executable == "/fake/glab" and host == "git.example.test:4443"
+        assert kwargs["cwd"] == tmp_path
+        endpoints.append(endpoint)
+        return {"id": 7} if endpoint == "user" else {"access_level": level}
+
+    monkeypatch.setattr(tracker, "_api_json", api)
+    assert (
+        tracker._gitlab_permissions(
+            "/fake/glab", "git.example.test:4443", "group/sub/repo", tmp_path
+        )
+        == expected
+    )
+    assert endpoints == ["user", "projects/group%2Fsub%2Frepo/members/all/7"]

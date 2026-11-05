@@ -63,14 +63,14 @@ class TopBar(Horizontal):
         muted = brand.PALETTE["muted"]
         version = console_data.harness_version()
         crumbs = i18n.tr(getattr(self.app, "language", "ru"), self.crumbs)
-        left = f"[bold]☰ ◆ Harness {escape(version)}[/][{muted}] · {escape(crumbs)}[/]"
+        left = f"[bold]☰ {brand.MARK} {brand.PRODUCT} {escape(version)}[/][{muted}] · {escape(crumbs)}[/]"
         counts: HealthCounts | None = getattr(self.app, "health_counts", None)
         counters = health_counts_markup(counts) if counts is not None else ""
         right = ""
         branch = self._branch
         if branch:
             # The whole branch name whenever it fits; the breadcrumb already ellipsizes first.
-            left_cells = len(f"☰ ◆ Harness {version} · {crumbs}")
+            left_cells = len(f"☰ {brand.MARK} {brand.PRODUCT} {version} · {crumbs}")
             counter_cells = len(" ".join(f"x{v}" for v in counts)) if counts else 0
             room = self.size.width - 2 - left_cells - counter_cells - 8
             limit = max(len(branch) if room >= len(branch) else room, 14)
@@ -78,3 +78,38 @@ class TopBar(Horizontal):
         right += counters
         self.query_one("#topbar-left", Static).update(left)
         self.query_one("#topbar-right", Static).update(right.rstrip())
+
+
+def where_text(project: str, branch: str | None, width: int) -> str:
+    """The right side of the top bar: `project · ⎇ branch` on a wide terminal and the branch alone,
+    shortened to fit, on a narrow one; only the project when there is no branch."""
+    if not branch:
+        return project
+    if width < brand.NARROW_WIDTH:
+        return f"⎇ {brand.shorten(branch, max(12, (width - 4) // 2 - 4))}"
+    limit = max(16, width // 2 - len(project) - 10)
+    return f"{project} · ⎇ {brand.shorten(branch, limit)}"
+
+
+class WorkspaceHeader(TopBar):
+    """Product identity stays in the window bar; breadcrumbs belong to the content below it."""
+
+    DEFAULT_CSS = brand.shell_css("""
+    WorkspaceHeader { height: 2; margin: 0; padding: 0 2; background: transparent; color: $foreground; border-bottom: solid $border-subtle; }
+    WorkspaceHeader #topbar-left { width: 1fr; }
+    WorkspaceHeader #topbar-right { width: 1fr; color: $text-muted; }
+    """)
+
+    def refresh_status(self) -> None:
+        if not self.is_mounted or not self.query("#topbar-left"):
+            return
+        primary, muted = brand.PALETTE["primary"], brand.PALETTE["muted"]
+        self.query_one("#topbar-left", Static).update(
+            f"[{primary}]{brand.MARK}[/]  {brand.PRODUCT}  [{muted}]{console_data.harness_version()}[/]"
+        )
+        repo = getattr(self.app, "repo", None)
+        project = repo.name if repo else ""
+        width = self.size.width or self.app.size.width
+        self.query_one("#topbar-right", Static).update(
+            escape(where_text(project, self._branch, width))
+        )

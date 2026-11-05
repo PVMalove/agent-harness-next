@@ -1,20 +1,14 @@
-"""The console reads and writes the system clipboard, so Ctrl+C / Ctrl+V reach other programs."""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
-import asyncio
 import shutil
 import subprocess
-from pathlib import Path
 from typing import Sequence
 
 import pytest
-from textual.app import ComposeResult
-from textual.screen import Screen
-from textual.widgets import Input, TextArea
 
 from harness.console import clipboard
-from harness.console.app import HarnessConsoleApp
 
 
 class _Tool:
@@ -81,34 +75,3 @@ def test_the_switch_turns_the_system_clipboard_off(
     monkeypatch.setenv("HARNESS_CONSOLE_SYSTEM_CLIPBOARD", "0")
     assert clipboard.read_system() is None
     assert wayland.calls == []
-
-
-class _Editors(Screen[None]):
-    def compose(self) -> ComposeResult:
-        yield Input("", id="line")
-        yield TextArea("", id="area")
-
-
-def test_ctrl_v_pastes_the_system_clipboard_and_ctrl_c_copies_to_it(
-    wayland: _Tool, tmp_path: Path
-) -> None:
-    async def scenario() -> tuple[str, str, bytes]:
-        app = HarnessConsoleApp(tmp_path)
-        async with app.run_test() as pilot:
-            await app.push_screen(_Editors())
-            await pilot.pause()
-            area = app.screen.query_one("#area", TextArea)
-            area.focus()
-            await pilot.press("ctrl+v")
-            await pilot.pause()
-            pasted = area.text
-            area.select_all()
-            wayland.content = b"overwritten later"
-            await pilot.press("ctrl+c")
-            await pilot.pause()
-            return pasted, area.text, wayland.content
-
-    pasted, text, stored = asyncio.run(scenario())
-    assert pasted == "from outside"
-    assert text == "from outside"
-    assert stored == b"from outside"

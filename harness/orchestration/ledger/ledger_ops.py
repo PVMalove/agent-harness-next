@@ -8,10 +8,13 @@ layer can leak a ledger error into the CLI boundary, which only catches the coor
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator
-from contextlib import contextmanager
+import uuid
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from harness.orchestration.core import state_view
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.core.utils import (
     CoordinatorError,
@@ -27,14 +30,29 @@ from harness.orchestration.ledger.lifecycle import (
     DispatchStatusRecord,
     LedgerError,
     LedgerLockBusy,
+    LedgerSandboxDenied,
     LedgerRecordVO,
     LifecycleLedger,
     RiskAssessmentRecord,
 )
+from harness.orchestration.ledger.lifecycle import (
+    STORE_LEDGER_VERSION as STORE_LEDGER_VERSION,
+)
+from harness.orchestration.ledger.lifecycle import (
+    store_is_authority as store_is_authority,
+)
+
+
+if TYPE_CHECKING:
+    from harness.orchestration.runtime_client import RuntimeClient, RuntimeReply
 
 
 class LedgerBusyError(CoordinatorError):
     """Another coordinator operation holds the ledger lock."""
+
+
+class SandboxDeniedError(CoordinatorError):
+    """The environment forbids writing the ledger; classify as infrastructure, not the task."""
 
 
 @contextmanager
@@ -89,14 +107,325 @@ def _ledger_lock(ledger: LifecycleLedger) -> Iterator[None]:
     repeating a ``try/except`` at every one of this module's lock sites) removes the risk of a lock
     site forgetting it and leaking an uncaught ``LedgerError`` into the CLI.  Contention becomes
     the ``LedgerBusyError`` marker, so a call site that may wait out a busy ledger can tell it from
-    every other refusal."""
+    every other refusal.
+
+    In the runtime-store epoch (ADR 0020) there is no lock: the block is the store unit of one
+    command. The primitives of the ledger stage their writes on it, the command reads its own
+    writes from the view, and a clean exit sends them to the runtime as one ``state.write`` for
+    each batch (a block that raises sends nothing). A nested block joins the unit of the outer one."""
+    cut_over = store_is_authority(ledger.root)
     try:
-        with ledger.lock():
+        if not cut_over:
+            with ledger.lock():
+                if not store_is_authority(ledger.root):
+                    yield
+                    return
+            # The migration finished between the epoch check and the lock: the file lock means
+            # nothing any more, so the block goes on as a command of the store.
+        with _store_unit(ledger):
             yield
     except LedgerLockBusy as exc:
         raise LedgerBusyError(exc.message, remedy=exc.remedy) from exc
+    except LedgerSandboxDenied as exc:
+        raise SandboxDeniedError(exc.message, remedy=exc.remedy) from exc
     except LedgerError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
+
+
+# How long a read waits for the runtime to answer before it is `runtime_unavailable`.
+READ_TIMEOUT_SECONDS = 30.0
+# The same for a write; the runtime itself gives up on a locked store after 5 seconds.
+WRITE_TIMEOUT_SECONDS = 30.0
+
+
+class _LazyClient:
+    """The runtime client of a repository, made at the first request: a command that never
+    reaches the runtime (a refusal of its arguments, a ``ledger`` command of the file epoch) does
+    not need the address of the runtime to be resolvable."""
+
+    def __init__(self, repo: Path) -> None:
+        self._repo = repo
+        self._client: RuntimeClient | None = None
+
+    def call(
+        self,
+        operation: str,
+        *,
+        operation_id: str,
+        payload: JsonObject | None = None,
+        expected_revision: int | None = None,
+        batch_id: str | None = None,
+        timeout_seconds: float,
+        requires_minor: int = 0,
+    ) -> RuntimeReply:
+        if self._client is None:
+            from harness.orchestration.runtime_client import RuntimeClient
+
+            self._client = RuntimeClient(self._repo)
+        return self._client.call(
+            operation,
+            operation_id=operation_id,
+            payload=payload,
+            expected_revision=expected_revision,
+            batch_id=batch_id,
+            timeout_seconds=timeout_seconds,
+            requires_minor=requires_minor,
+        )
+
+
+def _runtime_commit(repo: Path) -> state_view.Commit:
+    """``state.write`` through ``runtime_client``.
+
+    The ``operation_id`` follows ADR 0021, section 4: ``sha256(batch_id, expected_revision,
+    operation, payload_digest)``. A repeat of the same request, such as one whose answer was
+    lost, gets the same key and the stored result. A command that runs again after it was killed
+    builds its payload from the clock again, so it gets another key, and the revision check
+    answers ``revision_conflict`` instead of a stored result."""
+    from harness.orchestration.operational_guards import _digest
+    from harness.orchestration.runtime_client import RuntimeClientError
+
+    client = _LazyClient(repo)
+
+    def commit(
+        batch_id: str | None,
+        expected_revision: int | None,
+        mutations: list[JsonObject],
+        /,
+        *,
+        guard: state_view.Guard | None = None,
+        answer: list[JsonObject] | None = None,
+    ) -> dict[str, int]:
+        payload: JsonObject = {"mutations": mutations}
+        if guard is not None and guard.expected is not None:
+            payload["expected_generation_revision"] = guard.expected
+        try:
+            reply = client.call(
+                "state.write",
+                operation_id=_digest(
+                    [batch_id, expected_revision, "state.write", _digest(payload)]
+                ),
+                payload=payload,
+                expected_revision=expected_revision,
+                batch_id=batch_id,
+                timeout_seconds=WRITE_TIMEOUT_SECONDS,
+            )
+        except RuntimeClientError as exc:
+            if exc.code == "store_busy":
+                raise LedgerBusyError(exc.message, remedy=exc.remedy) from exc
+            raise
+        if answer is not None:
+            answer.append(reply.result)
+        generation = reply.result.get("generation_revision")
+        if guard is not None and isinstance(generation, int):
+            # The next request of the unit expects the generation this one left.
+            guard.expected = generation
+        revisions = reply.result.get("revisions")
+        return {
+            path: revision
+            for path, revision in (revisions if isinstance(revisions, dict) else {}).items()
+            if isinstance(revision, int)
+        }
+
+    return commit
+
+
+@contextmanager
+def _store_unit(ledger: LifecycleLedger) -> Iterator[None]:
+    """The store unit of one command: reads from the view, writes staged until a clean exit."""
+    view = state_view.current_view()
+    if view is not None and view.root != ledger.root:
+        view = None
+    if view is not None and view.unit is not None:
+        yield
+        return
+    repo = ledger.repository()
+    owned = view is None
+    if view is None:
+        view = state_view.StateView(ledger.root, _runtime_fetch(repo))
+    else:
+        # The view of the whole command (``command_state``) answered the reads before this
+        # block. Each block starts on a fresh snapshot, as a ``read_state`` does.
+        view.refresh()
+    unit = view.begin_unit(_runtime_commit(repo))
+    with state_view.bind(view) if owned else nullcontext():
+        try:
+            yield
+        except BaseException:
+            unit.abort()
+            raise
+        unit.flush()
+
+
+def persist_writes(ledger: LifecycleLedger) -> None:
+    """Keep what the running ``_ledger_lock`` block wrote when the block raises next.
+
+    In the file epoch the writes are on disk already and this does nothing. In the store epoch a
+    block that raises sends nothing, so a refusal that must leave its evidence behind (the
+    attempt record of a QA access refusal, the attention flag of a refused dispatch) calls this
+    right before it raises."""
+    unit = state_view.current_unit()
+    if unit is not None and unit.view.root == ledger.root:
+        unit.persist()
+
+
+class _SnapshotRead:
+    """``state.read`` through ``runtime_client``, from one read snapshot of the store.
+
+    The first read opens the snapshot (``"snapshot": "open"``) and the later reads name it, so the
+    reads of one view see the store as it was at its first read, while other commands commit
+    (ADR 0020, section 3). ``close`` ends it; the view closes it at a refresh, after its unit
+    commits and when it is unbound. A busy store and a snapshot the runtime no longer holds read
+    as a busy ledger; the command repeats on a new snapshot."""
+
+    def __init__(self, repo: Path) -> None:
+        self._client = _LazyClient(repo)
+        self._snapshot: str | None = None
+        self._generation: int | None = None
+
+    @property
+    def generation_revision(self) -> int | None:
+        return self._generation
+
+    def __call__(
+        self,
+        collections: Sequence[str],
+        paths: Sequence[str],
+        revision: int | None,
+        filter_: state_view.Filter | None = None,
+        /,
+    ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]:
+        from harness.orchestration.runtime_client import FILTER_PROTOCOL_MINOR, RuntimeClientError
+
+        payload: JsonObject = {
+            "collections": list(collections),
+            "paths": list(paths),
+            "snapshot": self._snapshot or "open",
+        }
+        if filter_ is not None:
+            payload["filter"] = filter_.payload()
+        try:
+            reply = self._client.call(
+                "state.read",
+                operation_id=f"state.read-{uuid.uuid4().hex}",
+                payload=payload,
+                timeout_seconds=READ_TIMEOUT_SECONDS,
+                requires_minor=FILTER_PROTOCOL_MINOR if filter_ is not None else 0,
+            )
+        except RuntimeClientError as exc:
+            if exc.facts.get("reason") in {"snapshot_expired", "snapshot_limit"}:
+                self._snapshot, self._generation = None, None
+            if exc.code in {"store_busy", "revision_conflict"}:
+                raise LedgerBusyError(exc.message, remedy=exc.remedy) from exc
+            if exc.facts.get("reason") == "answer_too_large":
+                raise state_view.AnswerTooLarge(exc.message) from exc
+            raise
+        snapshot = reply.result.get("snapshot")
+        if self._snapshot is None and isinstance(snapshot, str):
+            self._snapshot = snapshot
+            generation = reply.result.get("generation_revision")
+            self._generation = generation if isinstance(generation, int) else None
+        records = reply.result.get("records")
+        revisions = reply.result.get("revisions")
+        return (
+            (records if isinstance(records, dict) else {}),
+            reply.revision,
+            {
+                path: revision
+                for path, revision in (
+                    revisions if isinstance(revisions, dict) else {}
+                ).items()
+                if isinstance(revision, int)
+            },
+        )
+
+    def close(self) -> None:
+        snapshot, self._snapshot, self._generation = self._snapshot, None, None
+        if snapshot is None:
+            return
+        from harness.orchestration.runtime_client import RuntimeClientError
+
+        try:
+            self._client.call(
+                "state.read",
+                operation_id=f"state.read-{uuid.uuid4().hex}",
+                payload={"snapshot": snapshot, "close": True},
+                timeout_seconds=READ_TIMEOUT_SECONDS,
+            )
+        except RuntimeClientError:
+            # An expired snapshot is closed already, and the runtime ends an idle one itself.
+            pass
+
+
+def _runtime_fetch(repo: Path) -> state_view.SnapshotFetch:
+    """``state.read`` through ``runtime_client`` from one snapshot; a busy store, or a snapshot
+    the runtime no longer holds, reads as a busy ledger."""
+    return _SnapshotRead(repo)
+
+
+@contextmanager
+def command_state(args: argparse.Namespace) -> Iterator[None]:
+    """The view of the runtime store for one command, when the store is the authority.
+
+    A command checks its arguments against the records before it takes ``_ledger_lock``. In the
+    store epoch there is no file to read for that, so the command runs on one view from its first
+    read, and the blocks of the command join it: it sees one snapshot of the store and no read
+    falls back to the file ledger. Without a store epoch this changes nothing."""
+    repo = Path(getattr(args, "repo", ".")).resolve()
+    root = _state_root(args, repo)
+    if (
+        state_view.current_view() is not None
+        or not store_is_authority(root)
+        or root != (repo / STATE_REL).resolve()
+    ):
+        yield
+        return
+    with state_view.bind(state_view.StateView(root, _runtime_fetch(repo))):
+        yield
+
+
+@contextmanager
+def read_state(ledger: LifecycleLedger, repo: Path) -> Iterator[None]:
+    """Read operational state for one command (ADR 0020, sections 1 and 3).
+
+    In the file-ledger epoch this is ``_ledger_lock``. In the runtime-store epoch there is no
+    lock: the commands that read bind a view that asks the runtime (``state.read``), so they never
+    open the file ledger or ``runtime.db``, and the records they read come from one store revision."""
+    if not store_is_authority(ledger.root):
+        with _ledger_lock(ledger):
+            yield
+        return
+    if ledger.root != (repo / STATE_REL).resolve():
+        raise CoordinatorError(
+            "the runtime store serves only the state directory of its own repository",
+            remedy="repeat the command without --state-dir",
+        )
+    view = state_view.current_view()
+    if view is not None and view.root == ledger.root:
+        if view.unit is None:
+            # A poll that reads again and again sees the store as it is at each read.
+            view.refresh()
+        yield
+        return
+    with state_view.bind(state_view.StateView(ledger.root, _runtime_fetch(repo))):
+        yield
+
+
+def _read_store_record(root: Path, relative: str) -> tuple[JsonObject | None, int | None]:
+    """The record of the runtime store at ``relative`` as the bound view reads it, with the
+    revision of its row: ``(None, None)`` when the store holds none. Only the store epoch keeps
+    such a record, and only a bound view reads it (``read_state``, ``_ledger_lock``)."""
+    view = state_view.current_view()
+    if view is None or view.root != root or not store_is_authority(root):
+        raise CoordinatorError(
+            f"{relative} is read only from the runtime store of the running command",
+            remedy="read it inside the command's read_state or _ledger_lock block of the "
+            "runtime-store epoch",
+        )
+    record = view.read(relative)
+    return (
+        None if record is None else dict(record),
+        None if record is None else view.revisions.get(relative),
+    )
 
 
 def _load_batch(root: Path, batch_id: str) -> JsonObject:

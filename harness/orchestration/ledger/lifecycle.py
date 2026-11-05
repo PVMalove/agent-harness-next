@@ -10,6 +10,7 @@ atomically switched.
 from __future__ import annotations
 
 import contextlib
+import copy
 import errno
 import hashlib
 import json
@@ -29,12 +30,20 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar, Protocol, cast
 
 from ...errors import INTERNAL_INVARIANT_REMEDY, HarnessError
-from ..core.constants import BatchState, DispatchState
+from ..core import state_view
+from ..core.constants import STATE_REL, BatchState, DispatchState
 from ..core.utils import sealed
 from .recovery_chain import event_audit, terminal
 
 LEDGER_VERSION = 3
 SUPPORTED_LEDGER_VERSIONS = (1, 2, 3)
+# The version of ``ledger.json`` that says the runtime store is the authority (ADR 0020).
+STORE_LEDGER_VERSION = 4
+STORE_EPOCH_MESSAGE = "the runtime store is the authority of this state directory, so the file ledger is closed"
+STORE_EPOCH_REMEDY = (
+    "run the command through the coordinator CLI with the runtime serving "
+    "(`harness-runtime serve --repo <repo>`); the coordinator never writes the state files"
+)
 POINTER_NAME = "ledger.json"
 GENERATIONS = "generations"
 LOCK_DIRECTORY = ".coordinator.lock"
@@ -100,6 +109,13 @@ class LedgerError(HarnessError):
 
 class LedgerLockBusy(LedgerError):
     """Another operation holds the ledger lock."""
+
+
+class LedgerSandboxDenied(LedgerError):
+    """The process may not write the ledger state: an environment limit, not a task error."""
+
+
+_DENIED_ERRNOS = frozenset({errno.EROFS, errno.EACCES, errno.EPERM})
 
 
 def _parse_state[T: StrEnum](value: object, vocabulary: type[T]) -> T:
@@ -468,6 +484,37 @@ class IntegrationEvidenceRecord:
 
 
 @dataclass(frozen=True)
+class IntegrationPairRecord:
+    """Value Object for a ``reports/integration-pair/*.json`` record: the Release Gate pair
+    ``{candidate_sha, target_sha}`` with the tree of its candidate (ADR 0026, section 4).
+
+    The content is deterministic (no recording time) and the id derives from the pair, so writing
+    the pair again finds the same record; the runtime store checks its exact fields."""
+
+    directory: ClassVar[str] = "reports/integration-pair"
+    ID_MEMBERS: ClassVar[tuple[str, ...]] = ("candidate_sha", "target_sha")
+
+    pair_id: str
+    extra: JsonObject = field(default_factory=dict)
+
+    @classmethod
+    def derive_id(cls, members: JsonObject) -> str:
+        return _derived_id("pair", {key: members.get(key) for key in cls.ID_MEMBERS})
+
+    @property
+    def record_id(self) -> str:
+        return self.pair_id
+
+    def to_dict(self) -> JsonObject:
+        return {**self.extra, "pair_id": self.pair_id}
+
+    @classmethod
+    def from_dict(cls, data: JsonObject) -> IntegrationPairRecord:
+        extra = {key: value for key, value in data.items() if key != "pair_id"}
+        return cls(pair_id=cast(str, data.get("pair_id")), extra=extra)
+
+
+@dataclass(frozen=True)
 class IntegrationLocalQaRecord:
     """Append-only request, attempt or result in the existing reports contract."""
 
@@ -618,7 +665,29 @@ def _canonical(value: JsonObject) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
+def store_is_authority(root: Path) -> bool:
+    """Whether ``ledger.json`` selects the runtime-store epoch.
+
+    The pointer is the epoch selector of ADR 0020, section 1, not operational state: this is the
+    one read of the file ledger that a store-backed command makes."""
+    try:
+        pointer = json.loads((root / POINTER_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(pointer, dict) and pointer.get("version") == STORE_LEDGER_VERSION
+
+
 def _read(path: Path, label: str) -> JsonObject:
+    found = state_view.view_for(path)
+    if found is not None:
+        # The runtime store answers: the record has the shape the legacy file had.
+        record = found[0].read(found[1])
+        if record is None:
+            raise LedgerError(
+                f"{label} is not valid JSON: {path.name}",
+                remedy=f"the store holds no record at {found[1]}",
+            )
+        return copy.deepcopy(record)
     try:
         value: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -656,7 +725,12 @@ class LifecycleLedger:
         The lock is held by whoever first creates its owner record, ``owner.json`` (pid, host,
         acquired_at), exclusively inside the lock directory; creating the directory alone does
         not hold it.  The record lets ``ledger release-lock`` judge a lock left behind by a dead
-        process.  Release removes the record and then the directory."""
+        process.  Release removes the record and then the directory.
+
+        In the runtime-store epoch there is no lock to take: the runtime serializes the writes, so
+        the file lock is refused instead of being created beside the store."""
+        if store_is_authority(self.root):
+            raise LedgerError(STORE_EPOCH_MESSAGE, remedy=STORE_EPOCH_REMEDY)
         lock_dir = self._take_lock_directory()
         owner = self._record_lock_owner(lock_dir)
         try:
@@ -670,12 +744,21 @@ class LifecycleLedger:
 
     def _take_lock_directory(self) -> Path:
         """The first step of ``lock()``: create the lock directory, or be busy."""
-        self.root.mkdir(parents=True, exist_ok=True)
         lock_dir = self.root / LOCK_DIRECTORY
         try:
+            self.root.mkdir(parents=True, exist_ok=True)
             lock_dir.mkdir()
         except FileExistsError as exc:
             raise _lock_busy() from exc
+        except OSError as exc:
+            if exc.errno not in _DENIED_ERRNOS:
+                raise
+            raise LedgerSandboxDenied(
+                f"sandbox_denied: the coordinator cannot write {lock_dir} ({exc.strerror})",
+                remedy=f"let this process write {self.root} (for the Claude Code sandbox: "
+                "sandbox.filesystem.allowWrite), or run the command where that directory is "
+                "writable; an infrastructure refusal, not a task error",
+            ) from exc
         return lock_dir
 
     def _record_lock_owner(self, lock_dir: Path) -> Path:
@@ -881,6 +964,8 @@ class LifecycleLedger:
         if not self.pointer_path.exists():
             return None
         pointer = _read(self.pointer_path, "ledger pointer")
+        if pointer.get("version") == STORE_LEDGER_VERSION:
+            raise LedgerError(STORE_EPOCH_MESSAGE, remedy=STORE_EPOCH_REMEDY)
         if set(pointer) != {"version", "generation", "selected_at"}:
             raise LedgerError(
                 "ledger pointer has an invalid schema",
@@ -924,7 +1009,13 @@ class LifecycleLedger:
         return generation
 
     def records_root(self) -> Path:
-        """Return the selected generation; legacy state is readable only by ``migrate``."""
+        """Return the selected generation; legacy state is readable only by ``migrate``.
+
+        While a read view of the runtime store is bound for this state root (ADR 0020), the records
+        root is the virtual root of that view: the file ledger is not the authority any more."""
+        view = state_view.current_view()
+        if view is not None and view.root == self.root:
+            return view.virtual_root
         pointer = self.pointer()
         if pointer is None:
             if self._legacy_records_present():
@@ -975,7 +1066,12 @@ class LifecycleLedger:
             return None
 
     def ensure(self) -> JsonObject:
-        """Create the first empty generation; never reinterpret legacy records implicitly."""
+        """Create the first empty generation; never reinterpret legacy records implicitly.
+
+        The runtime store exists after the cutover and holds its generation: there is nothing to
+        create, and the answer says only which epoch it is."""
+        if store_is_authority(self.root):
+            return {"version": STORE_LEDGER_VERSION}
         pointer = self.pointer()
         if pointer is not None:
             if pointer["version"] != LEDGER_VERSION:
@@ -993,6 +1089,18 @@ class LifecycleLedger:
         return self._select(generation)
 
     def status(self) -> JsonObject:
+        if store_is_authority(self.root):
+            # The runtime verifies the audit records after its checkpoint and counts them.
+            store = self._validate_store(full=False)["store"]
+            audit_records = (
+                store.get("audit_records") if isinstance(store, dict) else None
+            )
+            return {
+                "version": STORE_LEDGER_VERSION,
+                "generation": None,
+                "authority": "runtime-store",
+                "audit_records": audit_records,
+            }
         pointer = self.pointer()
         if pointer is None:
             return {
@@ -1015,8 +1123,44 @@ class LifecycleLedger:
             "audit_records": len(list((root / "audit").glob("*.json"))),
         }
 
-    def validate(self) -> JsonObject:
-        """Validate the selected generation without ensure, migration or pointer writes."""
+    def _validate_store(self, *, full: bool) -> JsonObject:
+        """Ask the runtime to verify the store (``state.validate``); ``full`` recomputes everything
+        from the genesis of the audit chain. The batches come from the command's view."""
+        view = state_view.current_view()
+        if view is None or view.root != self.root:
+            raise LedgerError(STORE_EPOCH_MESSAGE, remedy=STORE_EPOCH_REMEDY)
+        from ..runtime_client import RuntimeClient
+
+        reply = RuntimeClient(self.repository()).call(
+            "state.validate",
+            operation_id=f"state.validate-{uuid.uuid4().hex}",
+            payload={"full": full},
+        )
+        return {
+            "valid": True,
+            "version": STORE_LEDGER_VERSION,
+            "generation": None,
+            "batches": [name.removesuffix(".json") for name in view.names("batches")],
+            "store": reply.result,
+        }
+
+    def repository(self) -> Path:
+        """The repository whose runtime serves this state directory."""
+        suffix = STATE_REL.parts
+        if self.root.parts[-len(suffix) :] != suffix:
+            raise LedgerError(
+                "the runtime store serves only the state directory of its own repository",
+                remedy="repeat the command without --state-dir",
+            )
+        return Path(*self.root.parts[: -len(suffix)])
+
+    def validate(self, *, full: bool = False) -> JsonObject:
+        """Validate the selected generation without ensure, migration or pointer writes.
+
+        In the runtime-store epoch the runtime verifies the store; ``full`` recomputes the whole
+        audit chain. A file ledger keeps no checkpoint, so every check of it is already full."""
+        if store_is_authority(self.root):
+            return self._validate_store(full=full)
         pointer = self.pointer()
         root = (
             self.root
@@ -1233,6 +1377,16 @@ class LifecycleLedger:
         if not artifact:
             _validate_record_state(path.parent.name, value)
         generation, relative = self._selected_path(path)
+        unit = self._unit()
+        if unit is not None:
+            existing = unit.view.read(relative)
+            if existing is not None and not (artifact and existing == value):
+                raise LedgerError(
+                    f"refusing to overwrite immutable record: {path.name}",
+                    remedy=f"use a different record id, or 'ledger clean'/inspect {path} if it is orphaned evidence",
+                )
+            unit.create(relative, value, _canonical(value), artifact=artifact)
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with path.open("x", encoding="utf-8", newline="\n") as stream:
@@ -1253,6 +1407,12 @@ class LifecycleLedger:
 
     def write_artifact(self, path: Path, value: str) -> None:
         generation, relative = self._selected_path(path)
+        unit = self._unit()
+        if unit is not None:
+            # A repeat with the same text is the same evidence (the runtime checks the bytes it
+            # holds); another text for the path is refused there.
+            unit.create_text(relative, value)
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with path.open("x", encoding="utf-8", newline="\n") as stream:
@@ -1279,13 +1439,18 @@ class LifecycleLedger:
         """
         _validate_record_state(path.parent.name, value)
         generation, relative = self._selected_path(path)
-        if not path.is_file():
+        unit = self._unit()
+        if not (state_view.is_file(path) if unit is not None else path.is_file()):
             raise LedgerError(
                 f"ledger transition targets a missing record: {relative}",
                 remedy=f"write the record at {path} before transitioning it",
             )
         before = _read(path, "current lifecycle record")
-        transition: JsonObject = {"path": relative, "before_sha256": _digest(path)}
+        transition: JsonObject = (
+            {}
+            if unit is not None
+            else {"path": relative, "before_sha256": _digest(path)}
+        )
         if relative.startswith("batches/"):
             self._validate_batch_transition(generation, before, value)
             events = cast(list[JsonObject], value.get("recovery_events", []))
@@ -1298,6 +1463,10 @@ class LifecycleLedger:
                         remedy="use the recovery command to bind approval and transition in one audit record",
                     )
             transition.update({"from": before.get("state"), "to": value.get("state")})
+        if unit is not None:
+            # The runtime derives the transition record (hashes, states) from the stored row.
+            unit.replace(relative, value, _canonical(value), decision=decision)
+            return
         self._atomic_write(path, value)
         transition["sha256"] = _digest(path)
         if decision is not None:
@@ -1307,11 +1476,15 @@ class LifecycleLedger:
     def delete(self, path: Path, *, reason: str) -> None:
         """Delete a mutable coordination lease/queue record with immutable evidence of removal."""
         generation, relative = self._selected_path(path)
-        if not path.is_file():
+        unit = self._unit()
+        if not (state_view.is_file(path) if unit is not None else path.is_file()):
             raise LedgerError(
                 f"ledger deletion targets a missing record: {relative}",
                 remedy=f"verify {path} exists before deleting it",
             )
+        if unit is not None:
+            unit.delete(relative, reason=reason)
+            return
         previous = _digest(path)
         path.unlink()
         self._append_audit(
@@ -1320,10 +1493,20 @@ class LifecycleLedger:
             {"path": relative, "sha256": previous, "reason": reason},
         )
 
+    def _unit(self) -> state_view.StoreUnit | None:
+        """The store unit of the running command, when it writes this ledger's state."""
+        unit = state_view.current_unit()
+        return unit if unit is not None and unit.view.root == self.root else None
+
     def _selected_path(self, path: Path) -> tuple[Path, str]:
         generation = self.records_root()
+        found = state_view.view_for(path)
         try:
-            relative = path.resolve().relative_to(generation).as_posix()
+            if found is not None:
+                # The store holds no file to resolve: the path is read below the virtual root.
+                relative = found[1]
+            else:
+                relative = path.resolve().relative_to(generation).as_posix()
         except ValueError as exc:
             raise LedgerError(
                 "lifecycle record escapes the selected generation",

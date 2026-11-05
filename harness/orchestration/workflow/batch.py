@@ -16,6 +16,7 @@ from dataclasses import replace as _vo_replace
 from pathlib import Path
 from typing import cast
 
+from harness.orchestration import operational_hold
 from harness.orchestration.contract import (
     ContractError,
     is_clean_path_pattern,
@@ -41,6 +42,7 @@ from harness.orchestration.core.constants import (
 )
 from harness.orchestration.core.git_utils import (
     _fetch_ref_tip,
+    _git_is_ancestor,
     _head_commit,
 )
 from harness.orchestration.core.utils import (
@@ -62,8 +64,10 @@ from harness.orchestration.core.workspace import (
     _validate_branch,
     _validate_worktree,
 )
+from harness.orchestration.core import state_view
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
+    read_state,
     _load_batch,
     _load_dispatch_status,
     _records_root,
@@ -95,11 +99,33 @@ from harness.orchestration.workflow.history import (
     _validate_batch_integrity,
 )
 
+BRANCH_START_MISSING_BASE = "branch_start_missing_base"
+
+
+def _reject_start_without_base(
+    repo: Path, worktree: str, base: str, start: str | None
+) -> None:
+    """Refuse a batch whose worktree branch does not contain the integration base it pins.
+
+    The batch measures its changes from that base when the branch starts below it, so the files
+    of the upstream commits would count as changes of the ticket. The coordinator never moves the
+    branch: the human brings the base into it and repeats ``batch create``."""
+    if start is None or _git_is_ancestor(repo, base, start):
+        return
+    raise CoordinatorError(
+        f"{BRANCH_START_MISSING_BASE}: the branch of worktree {worktree} starts at {start}, "
+        f"which does not contain the integration base {base}; the files of the upstream "
+        "commits would count as changes of this batch",
+        remedy=f"fast-forward the issue branch to the fetched tip with 'git -C {worktree} merge "
+        f"--ff-only {base}' (merge or rebase onto {base} when the branch has commits of its "
+        "own), then repeat batch create",
+    )
+
 
 def _batch_records(root: Path) -> Iterator[JsonObject]:
     """Every batch record of the ledger, in batch-id order."""
-    for path in sorted(
-        (_records_root(root) / BatchRecord.directory).glob("batch-*.json")
+    for path in state_view.glob(
+        _records_root(root) / BatchRecord.directory, "batch-*.json"
     ):
         yield _read_object(path, "batch record")
 
@@ -132,6 +158,9 @@ def _check_batch_conflicts(root: Path, config: JsonObject, batch: JsonObject) ->
         ):
             continue
         active += 1
+    # The count read every batch: a command that admits another batch in the meantime moves the
+    # generation, and the write of this command is refused instead of exceeding the budget.
+    state_view.depend_on_shared()
     if active >= budget:
         raise CoordinatorError(
             f"concurrency_budget ({budget}) is exhausted: {active} other batch(es) are already active",
@@ -148,7 +177,11 @@ def _reject_duplicate_work(root: Path, ticket: str, branch: str, worktree: str) 
     retain their ticket, branch and worktree until an explicit operator refusal.
     """
     mine_worktree = str(Path(worktree).resolve())
-    for other in _batch_records(root):
+    # The check reads every batch: a batch another command creates in the meantime moves the
+    # generation, and the creation of this one is refused instead of doubling the work.
+    others = list(_batch_records(root))
+    state_view.depend_on_shared()
+    for other in others:
         if terminal(other):
             continue
         other_worktree = other.get("worktree")
@@ -400,6 +433,12 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
     )
     # A superseding batch is approved by a human before the lock (issue #506).
     superseded = supersede.request(args)
+    has_worktree = Path(worktree).is_dir()
+    branch_start = _head_commit(Path(worktree) if has_worktree else repo)
+    # A superseding batch keeps its branch: its rebase target brings the base in (issue #506).
+    # A conflict-resolver batch (issue #534) exists to merge the moved base into its branch.
+    if has_worktree and superseded is None and not getattr(args, "merges_base", False):
+        _reject_start_without_base(repo, worktree, pinned_base, branch_start)
     root = _state_root(args, repo)
     developer_commands, review_commands = _batch_verification_commands(
         config, allowed_paths
@@ -412,9 +451,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
         if _non_empty(integration_ref)
         else None,
         "integration_base_commit": pinned_base,
-        "branch_start_commit": _head_commit(Path(worktree))
-        if Path(worktree).is_dir()
-        else _head_commit(repo),
+        "branch_start_commit": branch_start,
         "state": "planned",
         "ticket": ticket.strip(),
         "branch": branch.strip(),
@@ -446,6 +483,13 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
     # Frozen like the command lists, and only when configured: a legacy batch keeps its shape.
     if isinstance(config.get("retry_verification"), dict):
         record["retry_verification"] = config["retry_verification"]
+    if isinstance(config.get("verification_plan_policy"), dict):
+        record["verification_plan_policy"] = config["verification_plan_policy"]
+        # The Repo Map policy shapes the import graph behind the plan, so it is frozen beside it.
+        repo_map_policy = config.get("repo_map_policy")
+        record["repo_map_policy"] = (
+            repo_map_policy if isinstance(repo_map_policy, dict) else {}
+        )
     _reject_sensitive(record, "batch")
     _store_runtime_snapshot(
         root, _runtime_snapshot_root(repo).parent, record["harness_runtime_sha256"]
@@ -559,7 +603,7 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
     repo = _repo(args)
     root = _state_root(args, repo)
     ledger = LifecycleLedger(root)
-    with _ledger_lock(ledger):
+    with read_state(ledger, repo):
         batches = []
         for batch in _batch_records(root):
             dispatches = batch.get("dispatches", [])
@@ -609,6 +653,7 @@ def resume_batch(args: argparse.Namespace) -> JsonObject:
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         batch = _load_batch(root, args.batch)
+        operational_hold.require_no_hold(root, args.batch)
         _validate_batch_integrity(root, batch)
         if (
             approvals.auto_configured(core_config._config(repo), batch)

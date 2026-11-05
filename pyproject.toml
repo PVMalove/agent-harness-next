@@ -25,11 +25,12 @@ files = [
     "tests",
     "scripts/verify.py",
     "scripts/verification",
+    "scripts/perf",
     "scripts/check_public_metadata.py",
     "scripts/check_private_terms.py",
     "scripts/diff_coverage.py",
     "scripts/build_parser_bundle.py",
-    "skills/first-party/pvmalove/qa-gate/scripts/test_summary.py",
+    "skills/first-party/engineering/qa-gate/scripts/test_summary.py",
 ]
 # Imports `tree_sitter*`, which only the parser bundle provides: checked by the separate mypy run in
 # the `repo-map-bundle` CI job with the bundle installed (ADR 0008).
@@ -37,6 +38,14 @@ exclude = ["^harness/repo_map/tree_sitter_worker\\.py$"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Real container smokes require their dedicated workflows; default runs deselect both.
+# Fault-injection tests remain in the default run and also have a dedicated CI job.
+addopts = ["-m", "not docker_smoke and not podman_smoke"]
+markers = [
+    "docker_smoke: real Docker smoke of the container executor; run only with -m docker_smoke",
+    "podman_smoke: real rootless Podman smoke on Fedora with SELinux enforcing; run only with -m podman_smoke",
+    "fault_injection: a scenario of the fault-injection and security matrix at seam 1 (tests/orchestration/fault_injection_matrix.py)",
+]
 
 [tool.coverage.run]
 # CLI adapters run in child Python processes, including their detached worker supervisors.
@@ -55,8 +64,6 @@ patch = ["subprocess"]
 "tests/orchestration/test_advisory.py" = ["E402"]
 "tests/console/test_console_app.py" = ["E402"]
 "tests/console/test_console_harness.py" = ["E402"]
-"tests/console/test_console_orchestration.py" = ["E402"]
-"tests/console/test_console_repo_map_app.py" = ["E402"]
 "tests/console/test_console_reports_app.py" = ["E402"]
 
 [dependency-groups]
@@ -67,7 +74,7 @@ dev = [
     "pytest-cov==7.1.0",
     "pytest-xdist==3.8.0",
     "ruff==0.8.6",
-    # harness console TUI tests (tests/console/test_console_app.py) - same pin as
+    # Console widget/formatting unit tests use the same pin as
     # harness/console/pin.py (ADR 0009); tests/console/test_console_pin.py keeps them equal. Dev-only:
     # `harness console` itself gets textual through `uv run --with`, never a project dependency.
     "textual==6.5.0",
