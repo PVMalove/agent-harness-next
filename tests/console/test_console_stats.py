@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from harness.console.tui import reports, stats
+from harness.console.kernel import reports
+from harness.console.tui import stats
 
 
 def test_empty_and_missing_ledgers_are_explained(tmp_path: Path) -> None:

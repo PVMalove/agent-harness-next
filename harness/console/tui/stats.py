@@ -2,7 +2,7 @@
 
 Stdlib-only, like the rest of the textual-free seam: the installation state comes from
 `.harness/harness.lock` and the skills directory, the pipeline statistics from a `LedgerView`
-already read by harness.console.tui.reports."""
+already read by harness.console.kernel.reports."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..kernel.json_fields import strings, text
-from .reports import BatchSummary, LedgerView
+from ..kernel.reports import BatchSummary, LedgerView
 
 # The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state.
 BATCH_STATES = (

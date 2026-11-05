@@ -26,7 +26,7 @@ from textual.widgets import (
 
 from harness.orchestration.core.utils import JsonObject
 from ...kernel import brand, i18n
-from .. import reports
+from ...kernel import reports
 from ..chrome import TopBar
 from ...kernel.runner import CommandRunner
 from ..session_card import session_card, status_caption

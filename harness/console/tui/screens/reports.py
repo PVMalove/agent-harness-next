@@ -2,9 +2,9 @@
 with manual refresh, combined filters and ordering; one report read section by section; and a
 batch chronology - states, dispatches by role, coordinator decisions and risks; QA gate logs (verdict
 and tail) with failed qa-lane attempts. A report or a chronology exports to Markdown (`e`) through
-the shared screens/export.py action. All facts come from
-harness.console.tui.reports; these screens only render them. Report text is untrusted role output, so
-every widget renders it with `markup=False`."""
+the shared screens/export.py action. All facts come from harness.console.kernel.reports; these
+screens only render them. Report text is untrusted role output, so every widget renders it with
+`markup=False`."""
 
 from __future__ import annotations
 
@@ -22,12 +22,12 @@ from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard, Wrapp
 from ...kernel.status import Status
 from ..translate import translate_bindings
 from ..widgets import OpenableList, ScrollingView
-from .. import reports as console_reports
-from ..reports import BatchTimeline, LedgerView, ReportEntry, StageEntry
+from ...kernel import reports as console_reports
+from ...kernel.reports import BatchTimeline, LedgerView, ReportEntry, StageEntry
 from ...kernel import brand
 from ...kernel import i18n
 from ...kernel.json_fields import strings, text
-from ..pr_timings import load_reports_view
+from ...kernel.pr_timings import load_reports_view
 from .export import EXPORT_BINDING_KEY, export_document
 from .commands import call_from_worker
 

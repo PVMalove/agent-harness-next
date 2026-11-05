@@ -38,7 +38,7 @@ from ..shell import (
     fact_table,
     section_badges,
 )
-from .. import reports
+from ...kernel import reports
 from ...kernel import data as console_data
 from ..client import HomeClient
 from ...kernel.data import DashboardData

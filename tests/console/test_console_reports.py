@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.console.tui.reports import (
+from harness.console.kernel.reports import (
     BatchSummary,
     ReportEntry,
     StageEntry,
@@ -18,7 +18,7 @@ from harness.orchestration.ledger.lifecycle import JsonObject
 
 
 def test_stage_filters_combine_and_sort_unknown_times_last() -> None:
-    from harness.console.tui.reports import ReportEntry, StageEntry, select_stages
+    from harness.console.kernel.reports import ReportEntry, StageEntry, select_stages
 
     report = ReportEntry(
         "dispatch-old",
@@ -189,7 +189,7 @@ def test_report_review_axis_verdict_follows_the_recorded_severity_not_the_findin
 
 
 def test_filters_combine_without_loading_a_ledger() -> None:
-    from harness.console.tui.reports import filter_reports
+    from harness.console.kernel.reports import filter_reports
 
     reports = [
         ReportEntry("a", "batch", "#101", "developer", "completed", "2026-01-02", {}),

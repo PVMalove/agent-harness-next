@@ -24,7 +24,7 @@ from textual.widgets import Button, Collapsible, Input, ListItem, ListView, Stat
 
 from ...kernel import brand, i18n
 from ...kernel import data as console_data
-from .. import reports as console_reports
+from ...kernel import reports as console_reports
 from .. import stats as console_stats
 from ...kernel.catalog import (
     HARNESS_COMMANDS,

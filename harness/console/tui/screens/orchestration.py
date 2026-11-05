@@ -27,7 +27,7 @@ from textual.widgets import (
 
 from ...kernel import brand, i18n
 from .. import ledger_lock
-from .. import reports as console_reports
+from ...kernel import reports as console_reports
 from .. import stats as console_stats
 from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand, process_argv
 from ...kernel.runner import CommandRunner, capturing_runner
