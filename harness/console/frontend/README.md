@@ -14,10 +14,29 @@ npm ci                 # точные версии из package-lock.json
 npm run build          # проверка типов и сборка в dist/
 npm test               # Vitest: tests/web/**/*.test.ts(x), включая проверки dist/
 npm run typecheck      # tsc для src/ и tests/web/
+npx playwright install chromium   # один раз: браузер для Playwright
+npm run test:e2e       # Playwright: tests/web/*.spec.ts против настоящего сервера консоли
+npm run test:e2e:update           # переснять эталонные скриншоты
 ```
+
+Из корня репозитория те же шаги запускают `make web-install`, `make web-build`, `make web-test` и
+`make web-e2e`.
 
 `npm test` проверяет и готовую сборку (`tests/web/dist.test.ts`), поэтому сначала выполните
 `npm run build`.
+
+## Playwright
+
+`tests/web/global-setup.ts` запускает `python -m tests.web.serve_console`: настоящий
+`ConsoleServer` над временным пустым Git-проектом со сборкой из `dist/`, с настоящими CSP, cookie и
+WebSocket. Интерпретатор задаёт `HARNESS_PYTHON` (по умолчанию `<repo>/.harness/.venv/bin/python`,
+его создаёт `make bootstrap`). Нужна свежая сборка: `npm run build`.
+
+Эталонные скриншоты оболочки и Главной (1440 и 390 px) лежат в `tests/web/__screenshots__/`, по
+одному на имя, без суффикса платформы. Допуск сравнения: `maxDiffPixelRatio: 0.01` (не больше 1 %
+отличающихся пикселей) и `threshold: 0.2` (порог цветового отличия пикселя), анимации и курсор
+отключены. Снимки сняты в Chromium из `@playwright/test` на Linux; на другой ОС отличия
+сглаживания шрифтов могут превысить допуск.
 
 ## Устройство
 
