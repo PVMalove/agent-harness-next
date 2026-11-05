@@ -906,3 +906,74 @@ def test_a_failed_action_is_shown_verbatim_and_is_a_blocker() -> None:
     view = session.view()
     assert "ERROR: store busy" in view.blockers[-1]
     assert row(view, "Результат abort").state is State.FAILED
+
+
+# ----------------------------------------------------------------------------- contract (#711)
+
+from harness.console.coordinator_api import forbidden_in  # noqa: E402
+
+
+def test_no_recovery_call_carries_a_forbidden_flag_and_none_abandons_or_kills() -> None:
+    session, runner = session_with(status_document(actions=actions(fix=True)))
+    runner.reply(
+        "recovery reload",
+        {"outcome": "done", "diagnostics": [], "worker_started": False},
+    )
+    runner.reply("recovery fix", {"outcome": "done", "diff": "+x", "applied": False})
+    runner.reply("recovery abort", {"outcome": "done", "abandoned": False})
+    runner.reply("recovery resume", {"outcome": "done", "steps": [], "refusals": []})
+    session.reload()
+    session.fix(FixChoice.NORMALIZE)
+    session.apply_fix(True)
+    session.resume()
+    session.abort()
+    for call in runner.calls:
+        assert forbidden_in(call) is None, call
+        assert not any(
+            word in " ".join(call)
+            for word in ("abandon", "kill", "--docker", "auto-approve")
+        )
+    assert {
+        "recovery status",
+        "recovery reload",
+        "recovery fix",
+        "recovery resume",
+        "recovery abort",
+    } == set(runner.commands())
+
+
+def test_no_secret_reaches_the_recovery_view_even_if_a_document_carries_one() -> None:
+    leaky = diagnostic(
+        received=SECRET, received_redacted="<redacted>", suggestion="sandbox"
+    )
+    document = status_document(
+        diagnostics=[leaky],
+        resumable=False,
+        hold={
+            "reason": "x",
+            "code": "integrity-failure",
+            "step": "s",
+            "message": "held",
+            "revision": 1,
+            "releasable": True,
+            "remedy": "r",
+            "received": SECRET,
+        },
+    )
+    session, runner = session_with(document)
+    view = session.view()
+    assert SECRET not in json.dumps([r.value for r in view.rows]) + "".join(
+        view.blockers
+    )
+    assert all(SECRET not in token for call in runner.calls for token in call)
+
+
+def test_an_unknown_state_a_failed_status_and_a_pending_status_are_never_a_clean_batch() -> (
+    None
+):
+    assert row(build_recovery_view(None, "b"), "Состояние").state is State.NOT_CHECKED
+    failed = view_of(None, stderr="ERROR: x", code=2)
+    assert failed.rows[0].state is State.FAILED and not failed.available
+    assert not any(r.state is State.OK for r in failed.rows)
+    unknown = view_of(unknown_document())
+    assert not action(unknown, "resume").enabled and unknown.unknown_outcome

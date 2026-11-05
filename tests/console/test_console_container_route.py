@@ -1622,3 +1622,120 @@ def test_cleanup_apply_needs_confirmation_and_preview_does_not() -> None:
         actions["cleanup-apply"].needs_confirmation
         and not actions["cleanup-preview"].needs_confirmation
     )
+
+
+# ----------------------------------------------------------------------------- contract (#711)
+
+from harness.console.coordinator_api import forbidden_in  # noqa: E402
+
+
+def full_route() -> tuple[RouteSession, ScriptedCoordinator]:
+    """A session that has used every call of the route with fixtures that carry a secret value."""
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    scripted.reply(
+        "dispatch create", {"dispatch_id": "dispatch-9", "state": "approved"}
+    )
+    scripted.reply("dispatch status", status_document(running_execution()))
+    scripted.reply("qa status", {"lease": None, "lease_stale": False, "queue": []})
+    scripted.reply("cleanup", {"plan": cleanup_plan()})
+    session.propose()
+    session.create("operator")
+    session.refresh_worker()
+    session.refresh_qa()
+    scripted.reply("dispatch propose", qa_propose_document())
+    scripted.reply(
+        "dispatch create", {"dispatch_id": "dispatch-qa-1", "state": "approved"}
+    )
+    session.propose_qa()
+    session.create_qa("operator")
+    session.preview_cleanup()
+    return session, scripted
+
+
+def test_no_secret_value_reaches_any_rendered_view_or_argv_of_the_route() -> None:
+    session, scripted = full_route()
+    shown = "\n".join(render(session.view(stage)) for stage in Stage)
+    shown += "\n".join(f"{t.title} {t.reason}" for t in session.tabs())
+    shown += "\n".join(f"{k} {v}" for k, v in session.executor_context())
+    assert SECRET not in shown
+    assert all(SECRET not in token for call in scripted.calls for token in call)
+
+
+def test_no_call_of_the_route_carries_a_forbidden_flag_or_an_engine_command() -> None:
+    _, scripted = full_route()
+    assert scripted.calls
+    for call in scripted.calls:
+        assert forbidden_in(call) is None, call
+        assert not {"docker", "podman", "--docker", "--confirm"} & set(call)
+
+
+def test_a_call_that_gave_no_document_never_yields_a_successful_dependent_row() -> None:
+    cases = (
+        (Stage.PREFLIGHT, "dispatch preflight"),
+        (Stage.WORKER, "dispatch status"),
+        (Stage.CLEANUP, "cleanup"),
+    )
+    for stage, key in cases:
+        for stderr, code in (
+            ("ERROR: boom", 2),
+            ("", 0),
+        ):  # a failure, and a silent success
+            session, scripted = make_session()
+            session.select("batch-1")
+            session.selection.dispatch = "dispatch-9"
+            scripted.reply(key, None, stderr=stderr, code=code)
+            session.recheck() if stage is Stage.PREFLIGHT else session.refresh_worker() if stage is Stage.WORKER else session.preview_cleanup()
+            view = session.view(stage)
+            assert not any(
+                row.state is State.OK for row in view.rows if row.label != "Dispatch"
+            ), (stage, stderr)
+
+
+def test_unparsed_and_unavailable_outcomes_are_shown_as_such() -> None:
+    session, scripted = make_session()
+    session.select("batch-1")
+    scripted.replies["dispatch preflight"] = ("{not json", "", 0)
+    session.recheck()
+    first = session.view(Stage.PREFLIGHT).rows[0]
+    assert first.state is State.FAILED and first.value.startswith("unparsed")
+
+    def broken(*args: object, **kwargs: object) -> "subprocess.CompletedProcess[str]":
+        raise OSError("no interpreter")
+
+    down = RouteSession(REPO, broken)
+    down.select("batch-1")
+    down.recheck()
+    assert (
+        down.view(Stage.PREFLIGHT)
+        .rows[0]
+        .value.startswith("unavailable: no interpreter")
+    )
+
+
+def test_pending_unknown_and_stale_states_are_distinct_marks() -> None:
+    marks = {
+        mark(s)
+        for s in (
+            State.PENDING,
+            State.UNKNOWN,
+            State.WARN,
+            State.NOT_CHECKED,
+            State.NOT_REPORTED,
+        )
+    }
+    assert len(marks) == 5
+
+
+def test_a_long_digest_path_and_log_line_are_kept_whole_in_every_stage() -> None:
+    long_path = "/work/" + "deep-directory/" * 20 + "file.log"
+    digest = "sha256:" + "9" * 64
+    execution = running_execution(
+        launch={"images": {"worker": digest}, "labels": {}, "logs": long_path},
+        exit={"exit_code": 3, "logs": long_path},
+        state="exited",
+    )
+    session, scripted = worker_session(status_document(execution))
+    session.refresh_worker()
+    text = render(session.view(Stage.WORKER))
+    assert long_path in text and digest in text and "…" not in text

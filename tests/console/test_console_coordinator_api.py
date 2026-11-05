@@ -189,3 +189,51 @@ def test_cleanup_is_always_soft_and_apply_is_bound_to_a_digest() -> None:
     assert "--confirm" not in apply and "hard" not in apply
     with pytest.raises(ArgvError):
         cleanup_argv(REPO, apply_digest="  ")
+
+
+# ----------------------------------------------------------------------------- contract (#711)
+
+
+def test_every_command_the_client_can_build_is_free_of_forbidden_flags() -> None:
+    from harness.console.coordinator_api import _fields_of
+
+    for path in sorted(ALLOWED_PATHS):
+        required = {
+            dest: "x" for dest, field in _fields_of(path).items() if field.required
+        }
+        argv = coordinator_argv(REPO, path, required)
+        assert forbidden_in(argv) is None, (path, argv)
+        assert "--docker" not in argv and not any(
+            "auto-approve" in token for token in argv
+        )
+
+
+def test_the_argv_helpers_never_carry_a_value_a_screen_could_leak() -> None:
+    argv = coordinator_argv(
+        REPO,
+        ("dispatch", "create"),
+        {
+            "batch": "b-1",
+            "approved_by": "operator",
+            "approved_at": "2026-01-01T00:00:00+00:00",
+            "transition_digest": "d" * 64,
+        },
+    )
+    assert all(
+        "=" not in token for token in argv[3:]
+    )  # no NAME=value env pair rides along
+    assert "--env" not in argv and "-e" not in argv
+
+
+def test_the_client_module_names_no_container_engine_or_runtime_protocol() -> None:
+    import harness.console.coordinator_api as client
+
+    source = Path(client.__file__).read_text(encoding="utf-8")
+    for token in (
+        "docker run",
+        "podman run",
+        "container.observe",
+        "execution.launch",
+        "RuntimeClient",
+    ):
+        assert token not in source
