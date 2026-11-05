@@ -13,6 +13,7 @@ from harness.console.batch_history import (
     load_history,
     recovery_reason,
 )
+from harness.console import i18n
 from harness.console.container_route import State
 from harness.console.coordinator_api import CoordinatorApi
 
@@ -230,3 +231,10 @@ def test_a_refusal_document_with_a_diagnostic_still_opens_recovery() -> None:
     runner.reply("recovery status", status, code=2)  # a refusal: a document plus exit 2
     entry = BatchHistorySource(REPO, runner).recovery_entry("b-1")
     assert entry.enabled and entry.reason == "bad mode"
+
+
+def test_a_batch_label_translates_to_english_with_no_russian_left() -> None:
+    label = HistoryBatch.of(batch("b-1", "2026-01-01")).label
+    assert i18n.tr_text("en", label) == "#711 · active · b-1 · 1 open"
+    unreported = HistoryBatch.of({"batch_id": "b-3"}).label
+    assert "не сообщается" not in i18n.tr_text("en", unreported)

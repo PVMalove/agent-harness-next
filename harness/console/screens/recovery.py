@@ -120,6 +120,7 @@ class RecoveryScreen(ConsoleShell):
         self._busy = False
         self._status = ""
         self._action_keys: list[str] = []
+        self._history_labels: list[tuple[Static, str]] = []
 
     @property
     def _language(self) -> str:
@@ -158,6 +159,8 @@ class RecoveryScreen(ConsoleShell):
 
     def sync_language(self) -> None:
         ConsoleShell.sync_language(self)
+        for widget, label in self._history_labels:
+            widget.update(_t(self._language, label))
         self._refresh()
 
     # ------------------------------------------------------------------ data
@@ -170,15 +173,15 @@ class RecoveryScreen(ConsoleShell):
                     return
                 listing = self.query_one("#recovery-history", ListView)
                 listing.clear()
+                self._history_labels = []
                 if history.unavailable:
                     self._status = history.unavailable
                 for item in history.batches:
-                    listing.append(
-                        ListItem(
-                            Static(item.label, markup=False, classes="no-i18n"),
-                            name=item.batch_id,
-                        )
+                    widget = Static(
+                        _t(self._language, item.label), markup=False, classes="no-i18n"
                     )
+                    self._history_labels.append((widget, item.label))
+                    listing.append(ListItem(widget, name=item.batch_id))
                 if history.batches:
                     # Highlighting the newest batch asks the core about it, and only about it.
                     self.call_after_refresh(setattr, listing, "index", 0)
