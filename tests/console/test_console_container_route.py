@@ -547,3 +547,248 @@ def test_recheck_is_one_read_only_preflight_call_and_never_starts_a_worker() -> 
     ]
     recheck = session.view(Stage.PREFLIGHT).actions[0]
     assert recheck.enabled and not recheck.needs_confirmation
+
+
+# ----------------------------------------------------------------------------- Plan / approval
+
+TRANSITION = "t" * 64
+WORKER_ID = "sha256:" + "c" * 64
+PROXY_ID = "sha256:" + "d" * 64
+
+
+def propose_document(
+    transition_digest: str = TRANSITION, plan: dict[str, object] | None = None
+) -> dict[str, object]:
+    return {
+        "batch_id": "batch-1",
+        "state": "proposed",
+        "transition": {
+            "next_role": "developer",
+            "purpose": "work",
+            "base_sha": "b" * 40,
+            "candidate_sha": None,
+        },
+        "transition_digest": transition_digest,
+        "runtime_access": plan if plan is not None else plan_document(),
+        "runtime_images": {"worker": WORKER_ID, "proxy": PROXY_ID},
+    }
+
+
+def verified_session() -> tuple[RouteSession, ScriptedCoordinator]:
+    session, scripted = make_session()
+    scripted.reply(
+        "dispatch preflight",
+        preflight_document(
+            verified=verification("verified", evidence=verified_evidence())
+        ),
+    )
+    session.select("batch-1", "developer")
+    session.recheck()
+    return session, scripted
+
+
+def test_propose_is_refused_before_a_verified_preflight_and_runs_nothing() -> None:
+    session, scripted = make_session()
+    session.select("batch-1")
+    view = session.view(Stage.PLAN)
+    propose = next(a for a in view.actions if a.key == "propose")
+    assert not propose.enabled and "verified" in propose.reason
+    try:
+        session.propose()
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("propose must fail closed")
+    assert scripted.calls == []
+
+
+def test_a_blocked_preflight_never_reaches_an_approval() -> None:
+    session, scripted = make_session()
+    scripted.reply(
+        "dispatch preflight",
+        preflight_document(
+            verified=verification("unverified", environment=blocked_facts())
+        ),
+    )
+    session.select("batch-1")
+    session.recheck()
+    view = session.view(Stage.PLAN)
+    assert not next(a for a in view.actions if a.key == "propose").enabled
+    assert not next(a for a in view.actions if a.key == "approve").enabled
+    assert scripted.commands() == ["dispatch preflight"]
+
+
+def test_the_plan_view_shows_mounts_hosts_env_names_and_full_digests() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()
+    view = session.view(Stage.PLAN)
+    assert row_value(view, "Монтирования") == (
+        "checkout write /work/wt\ngit_common write /work/project/.git\n"
+        "shared_storage read /work/project/.harness"
+    )
+    assert row_value(view, "Сетевые хосты") == "api.example.com"
+    assert row_value(view, "Переменные окружения (имена)") == "API_TOKEN, HOME_DIR"
+    assert row_value(view, "Образ worker") == f"harness-worker:local\n{WORKER_ID}"
+    assert row_value(view, "Образ proxy") == f"harness-proxy:local\n{PROXY_ID}"
+    assert row_value(view, "plan_digest") == "p" * 64
+    assert row_value(view, "transition_digest") == TRANSITION
+    assert row_value(view, "Базовый коммит") == "b" * 40
+    assert "нового propose" in row_value(view, "Одобрение")
+    assert SECRET not in render(view)
+
+
+def test_approval_passes_only_the_displayed_transition_digest() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    scripted.reply(
+        "dispatch create", {"dispatch_id": "dispatch-9", "state": "approved"}
+    )
+    session.propose()
+    session.create(" operator ")
+    command = scripted.calls[-1]
+    assert command[command.index("--transition-digest") + 1] == TRANSITION
+    assert command[command.index("--approved-by") + 1] == "operator"
+    assert "--approved-at" in command
+    assert all(not token.startswith("--auto") for token in command)
+    assert session.selection.dispatch == "dispatch-9"
+    assert session.proposal is None
+    view = session.view(Stage.PLAN)
+    assert row_value(view, "Создан dispatch") == "dispatch-9"
+    assert "не запущен" in row_value(view, "Worker")
+
+
+def test_approval_requires_a_live_proposal_and_a_named_approver() -> None:
+    session, scripted = verified_session()
+    try:
+        session.create("operator")
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("create without a proposal must fail closed")
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()
+    try:
+        session.create("  ")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("an approval needs a named approver")
+    assert "dispatch create" not in scripted.commands()
+
+
+def test_a_refused_create_invalidates_the_proposal_and_needs_a_new_one() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    scripted.reply(
+        "dispatch create",
+        None,
+        stderr="ERROR: approval digest does not match the proposed transition\nREMEDY: propose again",
+        code=2,
+    )
+    session.propose()
+    session.create("operator")
+    assert session.proposal is not None and session.proposal.stale.startswith(
+        "отказ ядра"
+    )
+    view = session.view(Stage.PLAN)
+    approve = next(a for a in view.actions if a.key == "approve")
+    assert not approve.enabled and "propose заново" in approve.reason
+    assert "approval digest does not match" in view.blockers[0]
+    try:
+        session.create("operator")
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("a stale proposal must not be approved again")
+    assert scripted.commands().count("dispatch create") == 1
+    assert {tab.stage: tab for tab in session.tabs()}[Stage.PLAN].state is State.WARN
+
+
+def test_a_refused_propose_drops_the_previously_held_proposal() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()
+    assert session.proposal is not None
+    scripted.reply(
+        "dispatch propose",
+        None,
+        stderr="ERROR: image missing\nREMEDY: build it",
+        code=2,
+    )
+    session.propose()
+    assert session.proposal is None
+    view = session.view(Stage.PLAN)
+    assert view.blockers == ("ERROR: image missing\nREMEDY: build it",)
+    assert not next(a for a in view.actions if a.key == "approve").enabled
+
+
+def test_plan_drift_between_propose_and_approval_requires_a_new_proposal() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()
+    drifted = plan_document(plan_digest="q" * 64)
+    scripted.reply(
+        "dispatch preflight",
+        preflight_document(
+            plan=drifted,
+            verified=verification("verified", evidence=verified_evidence()),
+        ),
+    )
+    session.recheck()
+    assert (
+        session.proposal is not None
+        and "plan_digest изменился" in session.proposal.stale
+    )
+    assert not next(
+        a for a in session.view(Stage.PLAN).actions if a.key == "approve"
+    ).enabled
+
+
+def test_a_preflight_that_stops_being_verified_stales_the_held_proposal() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()
+    scripted.reply(
+        "dispatch preflight",
+        preflight_document(
+            verified=verification("unverified", environment=blocked_facts())
+        ),
+    )
+    session.recheck()
+    assert (
+        session.proposal is not None and "больше не verified" in session.proposal.stale
+    )
+
+
+def test_a_new_selection_drops_the_proposal_and_the_old_created_result() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()
+    session.select("batch-2", "developer")
+    assert session.proposal is None and session.created is None
+    assert session.selection.dispatch == ""
+
+
+def test_a_proposal_without_a_transition_digest_is_not_held() -> None:
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", {"state": "proposed"})
+    session.propose()
+    assert session.proposal is None
+    assert not next(
+        a for a in session.view(Stage.PLAN).actions if a.key == "approve"
+    ).enabled
+
+
+def test_creating_a_dispatch_needs_confirmation_and_propose_does_not_start_a_worker() -> (
+    None
+):
+    session, scripted = verified_session()
+    scripted.reply("dispatch propose", propose_document())
+    session.propose()
+    actions = {a.key: a for a in session.view(Stage.PLAN).actions}
+    assert (
+        actions["approve"].needs_confirmation
+        and not actions["propose"].needs_confirmation
+    )
+    assert scripted.commands() == ["dispatch preflight", "dispatch propose"]

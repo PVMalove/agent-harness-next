@@ -12,7 +12,8 @@ variables appear by name only; no value ever reaches a row, an argv or a log.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Callable
@@ -587,6 +588,216 @@ def preflight_view(result: ApiResult | None, selection: Selection) -> StageView:
     return StageView(Stage.PREFLIGHT, tuple(rows), (recheck,), tuple(blockers), notes)
 
 
+# ----------------------------------------------------------------------------- Plan / approval
+
+
+@dataclass(frozen=True)
+class Proposal:
+    """The one `dispatch propose` the operator may approve. Approval carries exactly this
+    `transition_digest`; anything that changed since, or any refusal, sets `stale`."""
+
+    batch: str
+    role: str
+    runtime: str
+    purpose: str
+    transition_digest: str
+    plan_digest: str
+    document: JsonObject
+    stale: str = ""
+
+
+def _requirement_lines(plan: JsonObject) -> str:
+    lines = []
+    for item in _items(plan.get("requirements")):
+        data = _obj(item)
+        lines.append(
+            f"{_text(data.get('resource'))} {_text(data.get('access'))} {_text(data.get('path'))}"
+        )
+    return "\n".join(lines)
+
+
+def plan_view(
+    preflight: ApiResult | None,
+    proposal: Proposal | None,
+    proposal_result: ApiResult | None,
+    created: ApiResult | None,
+    selection: Selection,
+) -> StageView:
+    verified = verification_status(preflight) == "verified"
+    group = "План"
+    rows: list[Row] = []
+    blockers: list[str] = []
+    document = proposal.document if proposal is not None else None
+    if proposal_result is not None and not proposal_result.ok:
+        rows.append(_call_failure("Предложение", proposal_result))
+        blockers.append(proposal_result.problem_text or proposal_result.outcome.value)
+    if document is not None:
+        plan = _obj(document.get("runtime_access"))
+        container = _obj(plan.get("container"))
+        images = _obj(document.get("runtime_images"))
+        transition = _obj(document.get("transition"))
+        rows.append(
+            Row(
+                "Монтирования", _requirement_lines(plan) or "не сообщается", None, group
+            )
+        )
+        rows.append(
+            Row(
+                "Сетевые хосты",
+                ", ".join(
+                    str(h) for h in _items(_obj(plan.get("network")).get("hosts"))
+                )
+                or "нет",
+                None,
+                group,
+            )
+        )
+        rows.append(
+            Row(
+                "Переменные окружения (имена)",
+                ", ".join(env_names(plan.get("environment"))) or "нет",
+                None,
+                group,
+            )
+        )
+        rows.append(Row("Движок", _text(container.get("engine"), "—"), None, group))
+        for label, key in (("Образ worker", "worker"), ("Образ proxy", "proxy")):
+            tag = _text(container.get(f"{key}_image"))
+            image_id = _text(images.get(key))
+            if image_id:
+                rows.append(
+                    Row(
+                        label,
+                        f"{tag}\n{image_id}" if tag else image_id,
+                        State.OK,
+                        group,
+                    )
+                )
+            elif tag:
+                rows.append(
+                    Row(
+                        label,
+                        f"{tag}\nне сообщается: digest не закреплён",
+                        State.NOT_REPORTED,
+                        group,
+                    )
+                )
+        rows.append(
+            Row(
+                "plan_digest",
+                proposal.plan_digest if proposal else "—",
+                None,
+                "Привязка",
+            )
+        )
+        rows.append(
+            Row(
+                "transition_digest",
+                proposal.transition_digest if proposal else "—",
+                State.INFO,
+                "Привязка",
+            )
+        )
+        for label, key in (
+            ("Следующая роль", "next_role"),
+            ("Цель", "purpose"),
+            ("Базовый коммит", "base_sha"),
+            ("Кандидат", "candidate_sha"),
+        ):
+            if key in transition:
+                rows.append(Row(label, _text(transition[key], "—"), None, "Привязка"))
+        if proposal is not None and proposal.stale:
+            rows.append(
+                Row(
+                    "Предложение", f"устарело: {proposal.stale}", State.WARN, "Привязка"
+                )
+            )
+        else:
+            rows.append(
+                Row(
+                    "Одобрение",
+                    "привязано к показанному transition_digest; изменение плана, образов, "
+                    "кандидата или роли требует нового propose и нового одобрения",
+                    State.INFO,
+                    "Привязка",
+                )
+            )
+    elif preflight is not None and verified:
+        plan, _ = _packet(preflight)
+        rows.append(
+            Row("Предложение", "не запрошено: выполните propose", State.PENDING)
+        )
+        rows.append(
+            Row(
+                "plan_digest (по preflight)",
+                _text(plan.get("plan_digest"), "—"),
+                State.INFO,
+            )
+        )
+    elif proposal_result is None:
+        rows.append(
+            Row(
+                "Предложение",
+                "заблокировано: сначала Preflight со статусом verified",
+                State.BLOCKED,
+            )
+        )
+    if created is not None:
+        if created.ok:
+            doc = created.document or {}
+            rows.append(
+                Row(
+                    "Создан dispatch",
+                    _text(doc.get("dispatch_id"), "не сообщается"),
+                    State.OK if _text(doc.get("dispatch_id")) else State.NOT_REPORTED,
+                    "Результат",
+                )
+            )
+            rows.append(
+                Row(
+                    "Worker",
+                    "не запущен: отправка — отдельное действие",
+                    State.INFO,
+                    "Результат",
+                )
+            )
+        else:
+            rows.append(_call_failure("Создание dispatch", created))
+            blockers.append(created.problem_text or created.outcome.value)
+    can_propose = bool(selection.batch) and verified
+    if not selection.batch:
+        propose_reason = NEED_BATCH
+    elif not verified:
+        propose_reason = "сначала Preflight со статусом verified"
+    else:
+        propose_reason = ""
+    live = proposal is not None and not proposal.stale
+    approve_reason = (
+        ""
+        if live
+        else "предложение устарело: выполните propose заново"
+        if proposal is not None
+        else "сначала запросите предложение (propose)"
+    )
+    actions = (
+        Action(
+            "propose",
+            "Запросить предложение",
+            can_propose,
+            propose_reason,
+            Effect.RECORD,
+        ),
+        Action(
+            "approve",
+            "Одобрить и создать dispatch",
+            live,
+            approve_reason,
+            Effect.APPROVE,
+        ),
+    )
+    return StageView(Stage.PLAN, tuple(rows), actions, tuple(blockers))
+
+
 # ----------------------------------------------------------------------------- Session
 
 
@@ -611,13 +822,20 @@ class RouteSession:
         api: CoordinatorApi | None = None,
         load_authored: Callable[[Path], Authored] = read_authored,
         load_report: Callable[[str], JsonObject | None] = read_report,
+        now: Callable[[], str] = lambda: datetime.now(UTC).isoformat(
+            timespec="seconds"
+        ),
     ) -> None:
         self.repo = repo
         self.api = api or CoordinatorApi(repo, runner)
         self._load_authored = load_authored
         self._load_report = load_report
+        self._now = now
         self.selection = Selection()
         self.preflight: ApiResult | None = None
+        self.proposal: Proposal | None = None
+        self.proposal_result: ApiResult | None = None
+        self.created: ApiResult | None = None
 
     def select(
         self, batch: str = "", role: str = "developer", runtime: str = ""
@@ -626,8 +844,16 @@ class RouteSession:
         chosen = (batch.strip(), role.strip() or "developer", runtime.strip())
         current = (self.selection.batch, self.selection.role, self.selection.runtime)
         if chosen != current:
-            self.selection = Selection(*chosen)
+            same_batch = chosen[0] == self.selection.batch
+            self.selection = Selection(
+                *chosen,
+                dispatch=self.selection.dispatch if same_batch else "",
+                qa_dispatch=self.selection.qa_dispatch if same_batch else "",
+            )
             self.preflight = None
+            self.proposal = None
+            self.proposal_result = None
+            self.created = None
 
     def _preflight_values(self) -> dict[str, str]:
         values = {"batch": self.selection.batch, "role": self.selection.role}
@@ -640,7 +866,85 @@ class RouteSession:
         self.preflight = self.api.call(
             ("dispatch", "preflight"), self._preflight_values()
         )
+        self._detect_drift()
         return self.preflight
+
+    def _detect_drift(self) -> None:
+        """A held proposal no longer matches a plan the core now reports: it needs a new propose."""
+        held = self.proposal
+        if held is None or held.stale:
+            return
+        plan, _ = _packet(self.preflight)
+        if verification_status(self.preflight) != "verified":
+            reason = "preflight больше не verified"
+        elif _text(plan.get("plan_digest")) != held.plan_digest:
+            reason = "plan_digest изменился после propose"
+        else:
+            return
+        self.proposal = replace(
+            held, stale=f"{reason}: нужны новый propose и новое одобрение"
+        )
+
+    def _dispatch_values(self, held: Proposal) -> dict[str, str]:
+        values = {"batch": held.batch, "role": held.role, "purpose": held.purpose}
+        if held.runtime:
+            values["runtime"] = held.runtime
+        return values
+
+    def propose(self) -> ApiResult:
+        """`dispatch propose`: the core records a proposal; nothing is approved or started. It runs
+        only after a verified preflight, so a blocked route never reaches an approval."""
+        if verification_status(self.preflight) != "verified":
+            raise PermissionError("dispatch propose requires a verified preflight")
+        values = {**self._preflight_values(), "purpose": "work"}
+        result = self.api.call(("dispatch", "propose"), values)
+        self.proposal_result = result
+        self.created = None
+        self.proposal = None  # any outcome replaces the previously held proposal
+        document = result.document if result.ok else None
+        digest = _text(_obj(document).get("transition_digest"))
+        if document is not None and digest:
+            plan = _obj(document.get("runtime_access"))
+            self.proposal = Proposal(
+                self.selection.batch,
+                self.selection.role,
+                self.selection.runtime,
+                "work",
+                digest,
+                _text(plan.get("plan_digest")),
+                document,
+            )
+        return result
+
+    def create(self, approved_by: str) -> ApiResult:
+        """`dispatch create` with the explicit approval bound to the held proposal's own
+        `transition_digest`. Any outcome consumes the proposal: a refusal makes it stale and a
+        success is not repeatable, so a drifted transition always needs a new propose."""
+        held = self.proposal
+        if held is None or held.stale:
+            raise PermissionError("no live proposal to approve")
+        approver = approved_by.strip()
+        if not approver:
+            raise ValueError("approved_by is required")
+        values = {
+            **self._dispatch_values(held),
+            "approved_by": approver,
+            "approved_at": self._now(),
+            "transition_digest": held.transition_digest,
+        }
+        result = self.api.call(("dispatch", "create"), values)
+        self.created = result
+        if result.ok:
+            dispatch = _text(_obj(result.document).get("dispatch_id"))
+            if dispatch:
+                self.selection.dispatch = dispatch
+            self.proposal = None
+        else:
+            self.proposal = replace(
+                held,
+                stale="отказ ядра: " + (result.problem_text or result.outcome.value),
+            )
+        return result
 
     def tabs(self) -> tuple[Tab, ...]:
         """Every stage with its state and the reason it cannot proceed. A tab stays selectable:
@@ -660,8 +964,16 @@ class RouteSession:
                 STAGE_TITLES[Stage.PREFLIGHT],
                 *preflight_tab_state(self.preflight),
             )
-        plan = Tab(Stage.PLAN, STAGE_TITLES[Stage.PLAN], State.PENDING, "")
-        if not verified:
+        title = STAGE_TITLES[Stage.PLAN]
+        if self.created is not None and self.created.ok:
+            plan = Tab(Stage.PLAN, title, State.OK, "dispatch создан")
+        elif self.proposal is not None and self.proposal.stale:
+            plan = Tab(Stage.PLAN, title, State.WARN, self.proposal.stale)
+        elif self.proposal is not None:
+            plan = Tab(Stage.PLAN, title, State.PENDING, "предложение ждёт одобрения")
+        else:
+            plan = Tab(Stage.PLAN, title, State.PENDING, "предложение не запрашивалось")
+        if not verified and self.proposal is None and self.created is None:
             plan = Tab(
                 Stage.PLAN,
                 STAGE_TITLES[Stage.PLAN],
@@ -700,4 +1012,12 @@ class RouteSession:
             )
         if stage is Stage.PREFLIGHT:
             return preflight_view(self.preflight, self.selection)
+        if stage is Stage.PLAN:
+            return plan_view(
+                self.preflight,
+                self.proposal,
+                self.proposal_result,
+                self.created,
+                self.selection,
+            )
         raise KeyError(stage)
