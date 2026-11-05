@@ -1,7 +1,7 @@
 """Каталог команд раздела Orchestration: декларативные структуры данных стандартной библиотеки,
 полученные интроспекцией активного парсера аргументов координатора (`harness.orchestration.coordinator.parser()`)
 и охватывающие доступные оператору подкоманды координатора, перечисленные в `_TARGETS` (batch, decide,
-decision packet, recovery status, recovery reload, recovery resume, dispatch (включая dispatch
+decision packet, recovery status, reload, resume, fix (превью и запись) и abort, dispatch (включая dispatch
 propose), qa status, risk, context-package, ledger status, ledger lock-status и ledger release-lock).
 
 В отличие от `harness/console/kernel/catalog.py`, где `CatalogEntry.argv` задан вручную, каждый кортеж
@@ -47,6 +47,10 @@ class _Target:
     reversibility: Reversibility
     # The same mutation boundary as `CatalogEntry.read_only`.
     read_only: bool = False
+    # Parser dests never offered as fields, so a client can never pass them.
+    hidden: frozenset[str] = frozenset()
+    # Value-less flags always appended after the fields.
+    fixed_flags: tuple[str, ...] = ()
 
 
 _REVERSIBLE = Reversibility.REVERSIBLE
@@ -109,6 +113,32 @@ _TARGETS: tuple[_Target, ...] = (
         "Возобновить удержанный batch",
         "batch",
         _TERMINAL,
+    ),
+    # The preview never writes: `--apply` is hidden, so no value can smuggle it in.
+    _Target(
+        "recovery-fix",
+        ("recovery", "fix"),
+        "Исправления восстановления: превью",
+        "batch",
+        _REVERSIBLE,
+        hidden=frozenset({"apply"}),
+    ),
+    _Target(
+        "recovery-fix-apply",
+        ("recovery", "fix"),
+        "Применить исправления восстановления",
+        "batch",
+        Reversibility.OVERWRITES_MANAGED_FILES,
+        hidden=frozenset({"apply"}),
+        fixed_flags=("--apply",),
+    ),
+    # Abandons the recovery only: it stops and cleans nothing.
+    _Target(
+        "recovery-abort",
+        ("recovery", "abort"),
+        "Выйти из восстановления batch",
+        "batch",
+        _REVERSIBLE,
     ),
     _Target(
         "batch-decide", ("batch", "decide"), "Решение по batch", "decide", _TERMINAL
@@ -230,6 +260,7 @@ class CoordinatorCommand:
     reversibility: Reversibility
     fields: tuple[CoordinatorField, ...]
     read_only: bool = False
+    fixed_flags: tuple[str, ...] = ()
 
     @property
     def needs_confirmation(self) -> bool:
@@ -275,6 +306,7 @@ class CoordinatorCommand:
                 value = raw.strip()
                 if value:
                     argv.extend([field.flag, value])
+        argv.extend(self.fixed_flags)
         return argv
 
     def cli_line(self, repo: Path, values: Mapping[str, str] | None = None) -> str:
@@ -350,8 +382,13 @@ def _build_commands() -> tuple[CoordinatorCommand, ...]:
                 group=target.group,
                 path=target.path,
                 reversibility=target.reversibility,
-                fields=_fields(subparser(root, target.path)),
+                fields=tuple(
+                    field
+                    for field in _fields(subparser(root, target.path))
+                    if field.dest not in target.hidden
+                ),
                 read_only=target.read_only,
+                fixed_flags=target.fixed_flags,
             )
         )
     return tuple(commands)

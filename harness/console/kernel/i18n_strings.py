@@ -774,6 +774,9 @@ EN_COMMANDS: dict[str, str] = {
     "Состояние ledger": "Ledger status",
     "Состояние lock ledger": "Ledger lock status",
     "Снять lock ledger": "Release the ledger lock",
+    "Исправления восстановления: превью": "Recovery fixes: preview",
+    "Применить исправления восстановления": "Apply recovery fixes",
+    "Выйти из восстановления batch": "Leave the recovery of a batch",
     "Разрешить запрос native permission": "Allow a native permission request",
     "Отклонить запрос native permission": "Deny a native permission request",
 }
