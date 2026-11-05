@@ -74,7 +74,7 @@ def _api(client: FakeClient) -> ServerCoordinatorApi:
 
 def test_the_batch_list_is_the_recovery_history_and_loads_as_the_same_history() -> None:
     client = FakeClient()
-    history = load_history(_api(client))  # type: ignore[arg-type]
+    history = load_history(_api(client))
     assert history.batches[0].batch_id == "b-1" and history.batches[0].open_dispatches == 1
     assert client.calls == [("recovery", "", ())]
 

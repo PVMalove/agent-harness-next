@@ -415,9 +415,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         item = history.highlighted_child if history is not None else None
         batch = item.name if item is not None and item.name else ""
         self.app.push_screen(
-            RecoveryScreen(
-                self.repo, batch=batch, command_runner=self._command_runner
-            )
+            RecoveryScreen(self.repo, self._client, batch=batch)
         )
 
     @on(Button.Pressed, "#container-route")
@@ -436,7 +434,10 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         batch = item.name if item is not None and item.name else ""
         self.app.push_screen(
             ContainerRouteScreen(
-                self.repo, batch=batch, command_runner=self._command_runner
+                self.repo,
+                self._client,
+                batch=batch,
+                command_runner=self._command_runner,
             )
         )
 

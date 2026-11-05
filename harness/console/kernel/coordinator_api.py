@@ -17,7 +17,7 @@ import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Mapping, Sequence, cast
+from typing import Mapping, Protocol, Sequence, cast
 
 from harness.orchestration import coordinator
 
@@ -233,6 +233,22 @@ def cleanup_argv(repo: Path, *, apply_digest: str | None = None) -> list[str]:
     return process_argv(argv)
 
 
+class CoordinatorCalls(Protocol):
+    """What the recovery and container route sessions call: `CoordinatorApi` runs the command
+    itself, a console server client runs it as a server job. `confirmed` is the operator's
+    explicit confirmation that a server job demands; a local run ignores it."""
+
+    def call(
+        self,
+        path: tuple[str, ...],
+        values: Mapping[str, str | Sequence[str] | bool] | None = None,
+        *,
+        confirmed: bool = False,
+    ) -> ApiResult: ...
+
+    def cleanup(self, *, apply_digest: str | None = None) -> ApiResult: ...
+
+
 class CoordinatorApi:
     """Runs the allowed commands of one repository through an injected runner."""
 
@@ -244,7 +260,10 @@ class CoordinatorApi:
         self,
         path: tuple[str, ...],
         values: Mapping[str, str | Sequence[str] | bool] | None = None,
+        *,
+        confirmed: bool = False,
     ) -> ApiResult:
+        """Runs the command; `confirmed` is for a server job and changes nothing here."""
         return self._run(coordinator_argv(self.repo, path, values or {}))
 
     def cleanup(self, *, apply_digest: str | None = None) -> ApiResult:

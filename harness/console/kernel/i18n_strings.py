@@ -838,6 +838,7 @@ EN.update(
         "Сервер консоли не отдал данные леджера": "The console server did not return the ledger",
         "Сервер консоли не нашёл тело этого отчёта": "The console server found no body for this report",
         "Сервер консоли не отдал данные оркестрации": "The console server did not return the orchestration data",
+        "конфигурация не получена от сервера консоли": "configuration not received from the console server",
     }
 )
 EN_PREFIXES.update(
@@ -846,6 +847,7 @@ EN_PREFIXES.update(
         "Сервер консоли не нашёл тело этого отчёта: ": "The console server found no body for this report: ",
         "Хронология батча недоступна: ": "Batch timeline is unavailable: ",
         "Сервер консоли не отдал данные оркестрации: ": "The console server did not return the orchestration data: ",
+        "конфигурация не получена от сервера консоли: ": "configuration not received from the console server: ",
     }
 )
 EN.update(

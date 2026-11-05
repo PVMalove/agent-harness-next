@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .container_route import JsonObject, State, _items, _obj, _text
-from .coordinator_api import ApiResult, CoordinatorApi, Outcome
+from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls, Outcome
 from .home_snapshot import _bool, _fields, _int, _list, _str
 from .runner import CommandRunner, capturing_runner
 
@@ -109,7 +109,7 @@ class RecoveryEntry:
     reason: str
 
 
-def load_history(api: CoordinatorApi) -> History:
+def load_history(api: CoordinatorCalls) -> History:
     """`batch list`, newest first. A failed or unreadable answer is `unavailable` text."""
     result = api.call(("batch", "list"))
     if not result.ok or result.document is None:
@@ -153,9 +153,9 @@ class BatchHistorySource:
         repo: Path,
         runner: CommandRunner = capturing_runner,
         *,
-        api: CoordinatorApi | None = None,
+        api: CoordinatorCalls | None = None,
     ) -> None:
-        self.api = api or CoordinatorApi(repo, runner)
+        self.api: CoordinatorCalls = api or CoordinatorApi(repo, runner)
         self._entries: dict[str, RecoveryEntry] = {}
         self.history = History()
 

@@ -18,7 +18,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
-from .coordinator_api import ApiResult, CoordinatorApi, Outcome
+from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls, Outcome
 from .runner import CommandRunner, capturing_runner
 
 JsonObject = dict[str, object]
@@ -1555,7 +1555,7 @@ class RouteSession:
         repo: Path,
         runner: CommandRunner = capturing_runner,
         *,
-        api: CoordinatorApi | None = None,
+        api: CoordinatorCalls | None = None,
         load_authored: Callable[[Path], Authored] = read_authored,
         load_report: Callable[[str], JsonObject | None] = read_report,
         now: Callable[[], str] = lambda: datetime.now(UTC).isoformat(
@@ -1563,7 +1563,7 @@ class RouteSession:
         ),
     ) -> None:
         self.repo = repo
-        self.api = api or CoordinatorApi(repo, runner)
+        self.api: CoordinatorCalls = api or CoordinatorApi(repo, runner)
         self._load_authored = load_authored
         self._load_report = load_report
         self._now = now

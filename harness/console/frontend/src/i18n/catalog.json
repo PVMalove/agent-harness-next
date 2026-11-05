@@ -613,6 +613,7 @@
     "исходящие": "outgoing",
     "карта для HEAD": "map for HEAD",
     "карты нет": "no map",
+    "конфигурация не получена от сервера консоли": "configuration not received from the console server",
     "кэш": "cache",
     "не наблюдался": "not observed",
     "не подключено": "not connected",
