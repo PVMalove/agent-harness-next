@@ -67,6 +67,10 @@ nav:
       - QA gate и Release Gate: guides/qa-gate.md
       - Примеры: guides/examples.md
       - Troubleshooting: guides/troubleshooting.md
+  - Концепции:
+      - Hooks: concepts/hooks.md
+      - Worktrees: concepts/worktrees.md
+      - Контекст: concepts/context.md
   - Справочник:
       - reference/index.md
       - CLI: reference/cli.md
