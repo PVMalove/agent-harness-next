@@ -24,7 +24,7 @@
 use crate::error::Error;
 use crate::error::Result;
 
-pub const STEPS: [&str; 17] = [
+pub const STEPS: [&str; 22] = [
     "preconditions",
     "locked",
     "snapshot",
@@ -42,6 +42,11 @@ pub const STEPS: [&str; 17] = [
     "rollback-authority",
     "rollback-pointer-replace",
     "rollback-pointer",
+    "approval-backup",
+    "approval-intent",
+    "approval-install",
+    "approval-installed",
+    "approval-authority",
 ];
 
 #[cfg(debug_assertions)]

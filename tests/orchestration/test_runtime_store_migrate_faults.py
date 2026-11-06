@@ -60,6 +60,14 @@ ROLLBACK_STEPS = (
     "rollback-pointer",
 )
 
+APPROVAL_STEPS = (
+    "approval-backup",
+    "approval-intent",
+    "approval-install",
+    "approval-installed",
+    "approval-authority",
+)
+
 
 def _legacy(repo: Path) -> dict[str, bytes]:
     """The legacy generations and the lock audit: migrate never rewrites or deletes them."""
@@ -87,7 +95,7 @@ def test_the_steps_the_tests_stop_at_are_the_steps_the_hooks_name() -> None:
 
     assert (
         tuple(part.split('"')[1] for part in block.split(",") if '"' in part)
-        == STEPS + ROLLBACK_STEPS
+        == STEPS + ROLLBACK_STEPS + APPROVAL_STEPS
     )
 
 

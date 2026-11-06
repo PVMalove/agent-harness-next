@@ -45,7 +45,9 @@ const EXIT_FAILED: u8 = 1;
 const EXIT_REFUSED: u8 = 2;
 const USAGE: &str = "usage: harness-runtime serve [--repo <path>] | harness-runtime migrate \
     [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
-    rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <time> --reason <text>";
+    rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | \
+    harness-runtime repair-import-approval [--check] [--repo <path>] \
+    --approved-by <human> --approved-at <time> --reason <text>";
 
 /// What the command line asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,6 +55,7 @@ enum Command {
     Serve,
     Migrate,
     Rollback,
+    RepairImportApproval,
 }
 
 /// The command and the repository it works on.
@@ -63,6 +66,7 @@ struct Args {
     /// The approval of `migrate` and `rollback`; a missing flag leaves its field blank, and the
     /// command itself refuses a blank field.
     approval: state::approval::Approval,
+    check: bool,
 }
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
@@ -71,16 +75,22 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
         Some("serve") => Command::Serve,
         Some("migrate") => Command::Migrate,
         Some("rollback") => Command::Rollback,
+        Some("repair-import-approval") => Command::RepairImportApproval,
         _ => return Err(USAGE.to_owned()),
     };
     let mut repo = None;
     let mut to_legacy = false;
+    let mut check = false;
     let mut approval = state::approval::Approval::default();
     while let Some(flag) = args.next() {
         let rollback = command == Command::Rollback;
         let approved = command != Command::Serve;
         let field = match flag.to_str() {
             Some("--repo") => None,
+            Some("--check") if command == Command::RepairImportApproval => {
+                check = true;
+                continue;
+            }
             Some("--to-legacy") if rollback => {
                 to_legacy = true;
                 continue;
@@ -116,6 +126,7 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
         command,
         repo,
         approval,
+        check,
     })
 }
 
@@ -256,9 +267,10 @@ fn serve(args: &Args) -> Result<(), Failure> {
     let state_dir = args.repo.join(state::migrate::STATE_REL);
     // A store that an older release wrote is brought to this schema before the first request; a
     // store of a newer schema is refused, and nothing is written.
-    state::schema::upgrade_store(&state_dir)
+    let server = Server::bind_serving(paths, Some(state_dir.clone()))
         .map_err(|err| Failure::Refused(Report::new(err.code(), &err, err.remedy())))?;
-    let server = Server::bind_serving(paths, Some(state_dir))
+    state::import_approval::ensure_no_pending(&state_dir)
+        .and_then(|()| state::schema::upgrade_store(&state_dir))
         .map_err(|err| Failure::Refused(Report::new(err.code(), &err, err.remedy())))?;
     // With the instance lock held, the executions a dead runtime left are adopted or recorded
     // lost before the first request (ADR 0022, section 2); then the periodic reconcile starts.
@@ -307,6 +319,37 @@ fn migrate(args: &Args) -> ExitCode {
             }
         }
         Err(error) => Report::new(error.code(), &error, error.remedy()).print(error.exit_code()),
+    }
+}
+
+/// A compatibility repair is offline and requires the same exclusion as rollback.
+fn repair_import_approval(args: &Args) -> ExitCode {
+    let result =
+        (|| {
+            if args.check {
+                return state::import_approval::check(&args.repo);
+            }
+            state::approval::check(&args.approval, "import approval repair")?;
+            let paths = resolve_paths(&args.repo, &Environment::of_process())
+                .map_err(|err| state::Error::refused(err.code(), err.to_string(), err.remedy()))?;
+            let _instance = ipc::hold_instance_lock(&paths).map_err(|err| {
+            state::Error::refused(err.code(), err.to_string(),
+                "stop harness-runtime serve of this repository, then repeat repair-import-approval")
+        })?;
+            state::import_approval::run(&args.repo, &args.approval)
+        })();
+    match result {
+        Ok(value) => {
+            println!("{value}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            let remedy = match &error {
+                state::Error::Refused { remedy, .. } => remedy.as_str(),
+                _ => state::import_approval::REMEDY,
+            };
+            Report::new(error.code(), &error, remedy).print(error.exit_code())
+        }
     }
 }
 
@@ -377,6 +420,7 @@ fn main() -> ExitCode {
     match args.command {
         Command::Migrate => return migrate(&args),
         Command::Rollback => return rollback(&args),
+        Command::RepairImportApproval => return repair_import_approval(&args),
         Command::Serve => {}
     }
     match serve(&args) {

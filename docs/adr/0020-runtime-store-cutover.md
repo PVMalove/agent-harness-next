@@ -153,6 +153,70 @@ Operational state живёт ровно в одной эпохе:
   противник с правом записи во весь state-каталог и в снимок может переписать всё — это вне scope,
   как и сейчас.
 
+#### Совместимость с импортом до #826: восстановление approval (#970)
+
+Store, мигрированный до обязательного human approval, может не содержать ни одного из полей
+`approved_by`, `approved_at`, `reason` одновременно в `legacy-import` и `AUTHORITY.json`.
+После проверки остальных инвариантов `ledger validate --full` возвращает для такого store
+`approval_mismatch` с фактом `check=import_approval_missing` и remedy
+`harness-runtime repair-import-approval`. Проверка не предлагает восстановить старый снимок:
+такое восстановление потеряет batch, отчёты, операции и audit после cutover.
+
+Порядок для оператора:
+
+1. Сначала испытать консистентную копию установки. Для работающего WAL нельзя копировать один
+   `runtime.db` через файловый менеджер: использовать SQLite backup API с исходником в режиме
+   `mode=ro`, сохранить стабильные `ledger.json` и `AUTHORITY.json`, а также внешние артефакты,
+   отчёты и исходный снимок по относительным путям. Если указатели менялись во время копирования,
+   повторить копирование. Зафиксировать списки и хэши operational rows, revisions, operations,
+   отчётов и артефактов, включая записи после cutover.
+2. В изолированном checkout копии вызвать
+   `harness-runtime repair-import-approval --check --repo .`. Режим проверяет содержимое и
+   approval без изменения записей и checkpoint: 0 — store уже валиден, 2 с
+   `approval_mismatch` — распознан старый импорт; другие ошибки требуют расследования.
+3. Использовать runtime текущего релиза. Если repair сообщает несовместимую старую версию схемы,
+   запустить `harness-runtime serve --repo .` для штатного обновления схемы и остановить его.
+   Перед repair закончить execution и QA, освободить их lease/очередь и остановить все writer-ы.
+   Команда не останавливает процессы сама и отказывает, пока работает `serve` либо execution
+   остаётся `launching`, `running`, `stopping` или `unknown`.
+4. Получить явное решение человека о принятии импортированного состояния. Выполнить
+   `harness-runtime repair-import-approval --repo . --approved-by <human> --approved-at <RFC3339> --reason <text>`,
+   заменив значения данными этого решения. Это нынешнее approval восстановления, а не доказательство
+   исторического approval cutover. Поля обязательны, дата не может быть будущей, approver с
+   префиксом `policy:` запрещён. Ошибка approval возвращает 2 до изменения state.
+5. Сохранить путь `backup` из JSON-ответа. Команда удерживает instance lock, проверяет исходную
+   цепочку от genesis, manifest, legacy evidence, SQLite и связи business rows с audit. Затем
+   переводит остановленный store из WAL в DELETE, полностью сбрасывая WAL в основной файл.
+   В `state/import-approval-backups/<random>/` она сохраняет и синхронизирует текущие
+   `runtime.db`, `AUTHORITY.json`, `ledger.json`. Этот backup содержит post-cutover данные;
+   `snapshot`, `cutover_at`, `store_id` и manifest исходной миграции сохраняются.
+6. Команда исправляет отдельную подготовленную копию SQLite: добавляет approval в anchor,
+   пересчитывает его record hash и всю цепочку, сохраняя прочие старые `seq`, время, action,
+   details, business rows и revisions. Это единственное явное исключение из append-only audit.
+   Она добавляет событие `import-approval-repair` с нынешним approval, причиной, старым anchor/tail,
+   новым anchor/tail и ссылкой/хэшем backup, обновляет checkpoint и проверяет результат.
+7. Перед установкой команда повторно сверяет исходные хэши и атомарно пишет durable intent
+   `state/IMPORT_APPROVAL_REPAIR.json`. Затем атомарно заменяет SQLite и `AUTHORITY.json`,
+   синхронизирует каталог и удаляет intent. Подготовка новой цепочки и полные проверки идут
+   вне короткой транзакции; активный store не переписывается по строкам.
+8. При обрыве сохранить intent и backup, держать writer-ы остановленными и повторить ту же команду
+   с тем же approval. Повтор сверяет backup, pointer, исходный или подготовленный SQLite и один
+   из двух точных marker. Он завершает одну операцию без повторной audit-записи. Пока intent
+   существует, `serve` отказывает до обновления схемы и reconcile. Изменённый backup или иной
+   store/marker требуют оператора; чужой intent не даёт права переписать данные. Сбой после начала
+   имеет код 3, нарушение инварианта — 4, remedy указывает повтор repair, а не migrate.
+9. После успеха выполнить `--check`, запустить runtime, затем
+   `python .harness/orchestration/coordinator.py --repo . ledger validate` и ту же команду с
+   `--full`: обе должны дать 0. Сравнить inventory с шагом 1, проверить совпадение approval
+   в anchor и marker и сохранность всех post-cutover записей. Повтор repair с валидным approval
+   на уже здоровом store возвращает `already_repaired: true` и ничего не переписывает.
+   Записать результат проверки копии и ограничения в issue перед применением к живой установке.
+
+Частичные, явно пустые, некорректные или несовпадающие approval не считаются старым форматом.
+Repair не исправляет другие нарушения audit, manifest и business rows. Восстановление исходного
+cutover snapshot остаётся отдельным разрушительным действием с отдельным разрешением владельца;
+оно не служит автоматическим запасным путём этой команды.
+
 ### 5. Миграция, cutover и откат
 
 Команда `harness-runtime migrate --repo <repo> --approved-by <human> --approved-at <RFC 3339>

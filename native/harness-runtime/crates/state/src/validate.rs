@@ -51,7 +51,7 @@ fn meta(connection: &Connection, key: &str) -> Result<Option<String>, Broken> {
 }
 
 /// The `legacy-import` record that anchors the chain: its details.
-fn anchor_details(connection: &Connection) -> Result<Value, Broken> {
+pub(crate) fn anchor_details(connection: &Connection) -> Result<Value, Broken> {
     let text: Option<String> = connection
         .query_row(
             "SELECT details_json FROM audit WHERE seq = 1 AND action = 'legacy-import'",
@@ -292,16 +292,41 @@ fn check_rows(connection: &Connection) -> Result<(), Broken> {
     Ok(())
 }
 
-fn full_check(connection: &Connection, authority: &Authority) -> Result<Verified, Broken> {
+/// Verify everything except approval, so repair cannot bless damaged evidence.
+pub(crate) fn check_content(
+    connection: &Connection,
+    authority: &Authority,
+) -> Result<Verified, Broken> {
     let verified = audit::verify(connection, None)?;
     if verified.last.is_none() {
         return Err(broken("audit_anchor", "the audit chain is empty"));
     }
     check_manifest(connection, authority)?;
-    check_approval(connection, authority)?;
     check_legacy(connection)?;
     check_sqlite(connection)?;
     check_rows(connection)?;
+    Ok(verified)
+}
+
+pub(crate) fn full_check(
+    connection: &Connection,
+    authority: &Authority,
+    state: &Path,
+) -> Result<Verified, Broken> {
+    let verified = check_content(connection, authority)?;
+    let marker = std::fs::read(state.join(crate::authority::AUTHORITY_NAME))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .unwrap_or(Value::Null);
+    if crate::import_approval::absent(&anchor_details(connection)?)
+        && crate::import_approval::absent(&marker)
+    {
+        return Err(broken(
+            "import_approval_missing",
+            "this pre-#826 store has no import approval",
+        ));
+    }
+    check_approval(connection, authority)?;
     Ok(verified)
 }
 
@@ -365,7 +390,7 @@ pub fn validate(state: &Path, full: bool) -> Result<Value, ErrorBody> {
     let result = (|| -> Result<Verified, Broken> {
         connection.execute_batch("BEGIN")?;
         let verified = if full {
-            full_check(&connection, &authority)
+            full_check(&connection, &authority, state)
         } else {
             audit::verify_tail(&connection)
         };
