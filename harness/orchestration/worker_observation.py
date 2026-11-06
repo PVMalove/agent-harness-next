@@ -7,8 +7,9 @@ import os
 import re
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import BinaryIO
 
 from harness.orchestration.core.utils import JsonObject
 
@@ -284,3 +285,211 @@ def read_terminal(repo: Path, receipt: object) -> JsonObject | None:
         return {"exit_code": code, "source": "runtime-supervisor"}
     except (OSError, ValueError, TypeError, AttributeError):
         return None
+
+
+# Step pages for console clients. Reading is ``open("rb")`` and ``stat`` only: no lock, no write.
+STEP_REASON_MESSAGES = {
+    "no_log": "Worker supplied no observable log; worker outcome is independent",
+    "log_missing": "Worker log does not exist yet; worker outcome is independent",
+    "log_unreadable": "Worker log is unreadable; worker outcome is independent",
+    "log_outside_storage": "Worker log is outside harness storage and is not read",
+}
+MAX_STEP_LINE_BYTES = 1024 * 1024
+MAX_PAGE_RAW_BYTES = 4 * 1024 * 1024
+PLAIN_HEADER_WINDOW_BYTES = 65536
+_PLAIN_TOOL_SECTIONS = ("exec", "apply_patch", "mcp tool call")
+_PLAIN_SECTIONS = ("codex", "thinking", "user", "tokens used", *_PLAIN_TOOL_SECTIONS)
+_PLAIN_HEADER = re.compile(
+    r"^(?:\[[^\]\n]*\]\s+(?P<stamped>"
+    + "|".join(re.escape(name) for name in _PLAIN_SECTIONS)
+    + r")(?::|\s|$)|(?P<bare>"
+    + "|".join(re.escape(name) for name in _PLAIN_SECTIONS)
+    + r")$)"
+)
+
+
+def unavailable_page(source: str, reason: str, offset: int = 0) -> JsonObject:
+    """An explicit observation state; it never decides or changes the worker outcome."""
+    return {
+        "source": source,
+        "structure": "available" if source == "structured" else "unavailable",
+        "state": "unavailable",
+        "reason": reason,
+        "message": STEP_REASON_MESSAGES[reason],
+        "steps": [],
+        "offset": max(0, offset),
+        "reset": False,
+        "more": False,
+        "last_step_age_seconds": None,
+    }
+
+
+def structured_log_path(
+    repo: Path, receipt: object, dispatch_id: object
+) -> tuple[Path | None, str | None]:
+    """A bound runtime receipt names its event log; only the project's logs storage is read.
+
+    ``repo`` is the main checkout that owns the storage; the path is built without asking Git,
+    so observation starts no process."""
+    if (
+        not isinstance(receipt, Mapping)
+        or receipt.get("protocol") != PROTOCOL
+        or receipt.get("dispatch_id") != dispatch_id
+        or not isinstance(receipt.get("log_path"), str)
+        or not receipt["log_path"]
+    ):
+        return None, "no_log"
+    path = Path(receipt["log_path"]).resolve()
+    if not path.is_relative_to((repo / ".harness/.sandboxes/logs").resolve()):
+        return None, "log_outside_storage"
+    return path, None
+
+
+def external_log_path(
+    repo: Path, dispatch: Mapping[str, object]
+) -> tuple[Path | None, str | None]:
+    """The standalone adapters' rule: ``<staging>/../../worker-logs/<dispatch_id>.log``."""
+    staging = dispatch.get("report_staging_path")
+    dispatch_id = dispatch.get("dispatch_id")
+    if not isinstance(staging, str) or not staging or not isinstance(dispatch_id, str):
+        return None, "no_log"
+    path = (
+        Path(staging).parent.parent / "worker-logs" / f"{dispatch_id}.log"
+    ).resolve()
+    allowed = (repo / ".harness/.sandboxes/scratch/worker-logs").resolve()
+    if path.parent != allowed:
+        return None, "log_outside_storage"
+    return path, None
+
+
+def _structured_line(line: bytes, _section: list[str]) -> list[JsonObject]:
+    import json
+
+    try:
+        return visible_events(json.loads(line))
+    except (ValueError, UnicodeDecodeError):
+        return []  # incomplete/foreign output is not trusted text to expose
+
+
+def _plain_header(text: str) -> str | None:
+    match = _PLAIN_HEADER.match(text.strip())
+    return (match.group("stamped") or match.group("bare")) if match else None
+
+
+def _plain_line(line: bytes, section: list[str]) -> list[JsonObject]:
+    """Fail closed: only agent-message lines and tool section names are visible."""
+    import json
+
+    text = line.decode("utf-8", errors="replace").rstrip("\r\n")
+    header = _plain_header(text)
+    if header is not None:
+        section[0] = header
+        if header in _PLAIN_TOOL_SECTIONS:
+            return [{"kind": "tool", "text": header}]
+        return []
+    if section[0] != "codex" or not text.strip():
+        return []
+    try:
+        if isinstance(json.loads(text), (dict, list)):
+            return []
+    except ValueError:
+        pass
+    visible = redact_visible(text)
+    return [{"kind": "log", "text": visible}] if visible else []
+
+
+def _plain_section_before(reader: BinaryIO, offset: int) -> str:
+    """The last recognised header in a bounded window before ``offset`` sets the section."""
+    start = max(0, offset - PLAIN_HEADER_WINDOW_BYTES)
+    reader.seek(start)
+    window = reader.read(offset - start)
+    lines = window.split(b"\n")
+    if start:
+        lines = lines[1:]  # the first line may be cut in the middle
+    section = ""
+    for raw in lines:
+        header = _plain_header(raw.decode("utf-8", errors="replace"))
+        if header is not None:
+            section = header
+    return section
+
+
+def _read_step_page(
+    path: Path,
+    offset: int,
+    budget: int,
+    source: str,
+    parse_line: Callable[[bytes, list[str]], list[JsonObject]],
+) -> JsonObject:
+    """``budget`` bounds the encoded size of the page's steps, so the reply stays bounded."""
+    import json
+
+    offset = max(0, offset)
+    try:
+        with path.open("rb") as stream:
+            size = stream.seek(0, 2)
+            reset = offset > size
+            position = 0 if reset else offset
+            section = [
+                _plain_section_before(stream, position)
+                if source == "plain" and position
+                else ""
+            ]
+            stream.seek(position)
+            steps: list[JsonObject] = []
+            used = 0
+            more = False
+            consumed = 0
+            while True:
+                line = stream.readline(MAX_STEP_LINE_BYTES + 1)
+                if not line:
+                    break
+                if not line.endswith(b"\n"):
+                    if len(line) <= MAX_STEP_LINE_BYTES:
+                        break  # the writer has not finished this line yet
+                    while line and not line.endswith(b"\n"):
+                        line = stream.readline(MAX_STEP_LINE_BYTES)
+                    if not line:
+                        break  # oversized and unfinished: wait at its start
+                    position = stream.tell()  # oversized records are never parsed
+                    continue
+                found = parse_line(line, section)
+                # ASCII-escaped JSON is an upper bound of a step's bytes in any reply.
+                cost = sum(len(json.dumps(step)) + 1 for step in found)
+                if steps and used + cost > budget:
+                    more = True
+                    break
+                steps.extend(found)
+                used += cost
+                position = stream.tell()
+                consumed += len(line)
+                if used >= budget or consumed >= MAX_PAGE_RAW_BYTES:
+                    more = position < size
+                    break
+            age = max(0, int(time.time() - path.stat().st_mtime)) if size else None
+    except FileNotFoundError:
+        return unavailable_page(source, "log_missing", offset)
+    except OSError:
+        return unavailable_page(source, "log_unreadable", offset)
+    return {
+        "source": source,
+        "structure": "available" if source == "structured" else "unavailable",
+        "state": "connected" if size else "waiting",
+        "reason": None,
+        "message": "",
+        "steps": steps,
+        "offset": position,
+        "reset": reset,
+        "more": more,
+        "last_step_age_seconds": age,
+    }
+
+
+def read_structured_steps(path: Path, offset: int, budget: int) -> JsonObject:
+    """One page of allowlisted stream-json steps from a byte offset."""
+    return _read_step_page(path, offset, budget, "structured", _structured_line)
+
+
+def read_plain_steps(path: Path, offset: int, budget: int) -> JsonObject:
+    """One page of a plain worker log tail; structure is explicitly unavailable."""
+    return _read_step_page(path, offset, budget, "plain", _plain_line)
