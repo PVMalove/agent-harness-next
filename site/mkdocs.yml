@@ -69,3 +69,10 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/PVMalove/claude-agent-harness
       name: GitHub
+
+validation:
+  links:
+    not_found: warn
+    absolute_links: relative_to_docs
+    unrecognized_links: warn
+    anchors: warn
