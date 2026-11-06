@@ -815,7 +815,7 @@ class DashboardScreen(ConsoleShell):
         if isinstance(self.app, HarnessConsoleApp) and self.app.commands_running:
             self.notify("Дождитесь окончания команды", severity="warning")
             return
-        screen = UpdateHarnessScreen(self.repo, command_runner=self._command_runner)
+        screen = UpdateHarnessScreen(self.repo, client=self._home_client)
         await self.app.push_screen(screen, lambda _result: self._refresh_dashboard())
 
     async def open_section(self, index: int) -> None:
