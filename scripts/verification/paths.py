@@ -7,4 +7,5 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DOCS_AGENTS_TEMPLATE = ROOT / "harness" / "project" / "docs-agents"
 CAPABILITIES = ROOT / "harness" / "CAPABILITIES.json"
-HARNESS_GUIDE = ROOT / "docs" / "harness-guide.md"
+SITE_REFERENCE_SKILLS = ROOT / "site" / "docs" / "reference" / "skills.md"
+SITE_PROJECT_STRUCTURE = ROOT / "site" / "docs" / "project" / "structure.md"

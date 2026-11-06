@@ -7,7 +7,7 @@ Archify (`*.json`), а в `previews/` — статичный PNG той же д�
 | Диаграмма | О чём |
 |---|---|
 | [Пайплайн доставки](./delivery-pipeline.workflow.html) | Полный маршрут от идеи до merge: `/grill-with-docs` → `/to-spec` → `/to-tickets` → `/implement` → `/to-pull-requests`, с ветками `hitl` (`/to-guide`) и коротким `/fast-implement`. |
-| [Навигация по справочнику](./harness-guide-navigation.workflow.html) | Установка, выбор capability, работа над задачей и команды проверки. |
+| [Навигация по Harness Next](./harness-guide-navigation.workflow.html) | Схема установки, выбора capability, работы над задачей и команд проверки. |
 | [Discovery Pipeline](./discovery-pipeline.workflow.html) | Explicit opt-in `Live Artifact` → `Relevant Files` → ticket-specific Path inventory → один cheap advisory → LLM-free Context Package. |
 | [Конвейер `/implement`](./implement-pipeline.workflow.html) | Пять гейтов одного тикета: архитектор → approve → разработчик → code review → approve → QA (с циклом на исправления) → итоговый отчёт → публикация. |
 | [Маршруты восстановления `/implement`](./recovery-routes.workflow.html) | Как решение coordinator по отчёту выбирает маршрут из закрытого набора `RECOVERY_ROUTES` по триггеру: дефект кода, пробел в требованиях, база, инструмент, обход блокировки, неполные пункты, инфраструктура, тупик. Схема показывает, тратит ли маршрут `max_developer_retries` и кто его утверждает. |
@@ -57,8 +57,8 @@ ARCHIFY_CHROME=<путь к Chrome/Chromium> \
 PNG в `previews/` — светлый снимок HTML шириной 1440 px: диаграмма вместе с блоками пояснений под
 ней, без блока «Node index», который Archify 3.0 добавляет ниже (окно расширяется до нижнего края
 блоков пояснений перед снимком). После перегенерации HTML обновите
-снимок, иначе README покажет устаревшую картинку. Справочник [`harness-guide.md`](../harness-guide.md)
-ссылается на эти же файлы, и `scripts/verify.py` проверяет, что каждая такая ссылка существует.
+снимок, иначе README покажет устаревшую картинку. На эти же файлы ссылаются внутренние документы
+`docs/` (включая `docs/skills/`), и `scripts/verify.py` проверяет, что каждая такая ссылка существует.
 
 Содержимое диаграмм ведётся на русском. Интерфейс самого просмотрщика (`Light`/`Dark`, `Present`,
 `Export`, `Legend`) и подписи легенды в lifecycle остаются английскими: это фиксированный UI

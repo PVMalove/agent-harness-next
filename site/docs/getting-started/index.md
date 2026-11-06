@@ -125,6 +125,8 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
 
 ## Дальше
 
+- [Рабочий поток](../guides/workflow.md)
+- [CLI и конфигурация](../reference/cli.md)
 - [Обзор архитектуры](../architecture/overview.md)
 - [Rust runtime](../architecture/runtime.md)
 - [Справочник](../reference/index.md)

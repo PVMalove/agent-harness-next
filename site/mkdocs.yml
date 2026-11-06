@@ -56,12 +56,33 @@ markdown_extensions:
 
 nav:
   - Docs: index.md
-  - Guides: getting-started/index.md
-  - Reference: reference/index.md
+  - Начало:
+      - getting-started/index.md
+  - Руководства:
+      - Рабочий поток: guides/workflow.md
+      - "/implement": guides/implement.md
+      - "/fast-implement": guides/fast-implement.md
+      - TDD: guides/tdd.md
+      - Code review: guides/code-review.md
+      - QA gate и Release Gate: guides/qa-gate.md
+      - Примеры: guides/examples.md
+      - Troubleshooting: guides/troubleshooting.md
+  - Концепции:
+      - Hooks: concepts/hooks.md
+      - Worktrees: concepts/worktrees.md
+      - Контекст: concepts/context.md
+  - Справочник:
+      - reference/index.md
+      - CLI: reference/cli.md
+      - Метки: reference/labels.md
+      - Hooks: reference/hooks.md
+      - Скиллы: reference/skills.md
   - Архитектура:
       - architecture/index.md
       - Обзор: architecture/overview.md
       - Rust runtime: architecture/runtime.md
+  - Проект:
+      - Структура: project/structure.md
   - Demo: demo/index.md
 
 copyright: © 2026 Agent Harness Next · MIT
