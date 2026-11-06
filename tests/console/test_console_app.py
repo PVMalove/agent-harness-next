@@ -416,3 +416,15 @@ def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> 
     assert bare["Harness"]["Модули"] == "—"
     assert set(bare["Repo Map"]) == {"Уровень", "Актуальность"}
     assert bare["Память проекта"] == {"Состояние": "—"}
+
+
+def test_the_diagnostics_screen_is_a_console_server_client() -> None:
+    """Diagnostics reads its report and applies its fixes through the server client only."""
+    import inspect
+
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
+
+    parameters = inspect.signature(DiagnosticsScreen).parameters
+    assert parameters["client"].default is inspect.Parameter.empty
+    assert parameters["client"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert not {"collect_diagnostics", "apply_local_fixes"} & set(parameters)

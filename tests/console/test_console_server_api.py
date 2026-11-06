@@ -300,3 +300,17 @@ def test_a_refused_or_failed_server_job_is_an_os_error_with_the_server_text(
     assert run is not None
     runs.execute(run, runner, REPO)
     assert run.error.startswith("не удалось запустить: ") and text in run.error
+
+
+def test_the_diagnostics_screen_neither_collects_nor_fixes_health_itself() -> None:
+    """The screen module names no local health collection or fix; its fixes go through
+    `apply_health_fixes`, the server job above."""
+    import ast
+
+    from harness.console.tui.screens import diagnostics
+
+    tree = ast.parse(Path(diagnostics.__file__).read_text(encoding="utf-8"))
+    names = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+    names |= {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    assert not {"collect_diagnostics", "apply_local_fixes", "run_health"} & names
+    assert "apply_health_fixes" in names
