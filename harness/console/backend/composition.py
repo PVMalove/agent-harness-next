@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..kernel.catalog import (
+    CONFIGURATION_COMMANDS,
     DIAGNOSTICS_COMMANDS,
     HARNESS_COMMANDS,
     MEMORY_COMMANDS,
     REPO_MAP_COMMANDS,
     SETUP_COMMANDS,
+    UPDATE_SEED_SELECTED,
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from .api.request_router import RequestRouter
@@ -149,13 +151,16 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, Diagnostics, Repo Map, installation, memory, coordinator
-    and native permission commands; without `executor` the commands run as subprocesses."""
+    """The job service over the harness, the selected seed update, Diagnostics, Repo Map,
+    installation, configuration, memory, coordinator and native permission commands; without
+    `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
+        UPDATE_SEED_SELECTED,
         *DIAGNOSTICS_COMMANDS,
         *REPO_MAP_COMMANDS,
         *SETUP_COMMANDS,
+        *CONFIGURATION_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
