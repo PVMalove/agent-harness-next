@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...kernel.protocol import MESSAGE_BYTES, _clip
-from ..domain.events import Event, compact, diff, format_cursor, parse_cursor
+from ..domain.events import Event, View, compact, diff, format_cursor, parse_cursor
 from .ports import (
     EventJournal,
     JournalUnavailable,
@@ -63,6 +63,19 @@ class EventsItem:
 
     cursor: str
     events: list[Event]
+
+
+@dataclass(frozen=True)
+class JournalPage:
+    """What a reader of the journal sees: its id and kept range, up to `limit` events after a
+    position inside that range, the view of the last poll and whether the source is readable."""
+
+    journal_id: str
+    floor: int
+    head: int
+    events: list[Event]
+    view: View | None
+    available: bool
 
 
 class OrchestrationEvents:
@@ -206,6 +219,30 @@ class OrchestrationEvents:
         if self._task is None:
             self._task = asyncio.create_task(self._run())
         await self._first_poll.wait()
+
+    async def ensure_started(self) -> None:
+        """Start the poller once and wait for its first poll."""
+        await self._started()
+
+    @property
+    def available(self) -> bool:
+        return self._source["state"] == "available"
+
+    def read_after(self, position: int, limit: int) -> JournalPage | None:
+        """The journal as a reader sees it; no events for a position outside the kept range,
+        and None while no journal is loaded. Reads only: the poller stays the one writer."""
+        journal = self._journal
+        if journal is None:
+            return None
+        inside = journal.floor <= position <= journal.head
+        return JournalPage(
+            journal_id=journal.journal_id,
+            floor=journal.floor,
+            head=journal.head,
+            events=journal.events_after(position, limit) if inside else [],
+            view=journal.view,
+            available=self.available,
+        )
 
     @staticmethod
     def _position(journal: EventJournal, cursor: object) -> int:
