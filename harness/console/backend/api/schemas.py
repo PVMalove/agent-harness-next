@@ -158,6 +158,25 @@ class TaskBoardSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class DiagnosticsSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["diagnostics.snapshot"]
+    online: bool = False
+    force: bool = False
+
+
+class HarnessSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["harness.snapshot"]
+    force: bool = False
+
+
+class HarnessMaintenanceRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["harness.maintenance"]
+    force: bool = False
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
@@ -203,6 +222,9 @@ ConsoleRequest = Annotated[
     | ContainerRouteSnapshotRequest
     | TaskBoardSpecsRequest
     | TaskBoardSnapshotRequest
+    | DiagnosticsSnapshotRequest
+    | HarnessSnapshotRequest
+    | HarnessMaintenanceRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
     | WorkerSubscribeRequest,
@@ -302,6 +324,9 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "container_route.snapshot",
         "task_board.specs",
         "task_board.snapshot",
+        "diagnostics.snapshot",
+        "harness.snapshot",
+        "harness.maintenance",
     ]
     ok: Literal[True]
     snapshot_id: int

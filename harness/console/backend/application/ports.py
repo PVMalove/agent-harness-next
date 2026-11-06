@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from ....json_types import JsonObject
 from ...kernel.batch_history import History
 from ...kernel.catalog import Reversibility
 from ...kernel.container_route import Authored
@@ -63,6 +64,27 @@ class RouteReader(Protocol):
     def preflight(
         self, repo: Path, batch: str, role: str, runtime: str
     ) -> ApiResult: ...
+
+
+class HealthCollector(Protocol):
+    """The `harness health --json` report of a project, offline or `online`, for the Diagnostics
+    screen; blocks until every check ran and never applies a fix."""
+
+    def __call__(self, repo: Path, online: bool, /) -> JsonObject: ...
+
+
+class HarnessCollector(Protocol):
+    """What the harness installed in a project (`state`), the package version and the drift
+    state of the managed files, for the Harness screen; blocks until read and never writes."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
+class MaintenanceCollector(Protocol):
+    """The cleanup plans with their sizes and the worktree facts (`maintenance`, or null with the
+    `error` text) for the Harness screen; blocks until read and never deletes."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
 class JobExecutor(Protocol):

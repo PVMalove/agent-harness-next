@@ -1,6 +1,7 @@
-"""The screen snapshots of Reports, Orchestration, Recovery and Container route: collect them off
-the event loop, keep the ledger and the batch history in a short single-flight cache and hand out
-every snapshot as the first page of its JSON text, kept for `snapshot.page`."""
+"""The screen snapshots of Reports, Orchestration, Recovery, Container route, Diagnostics and
+Harness: collect them off the event loop, keep the ledger, the batch history, the health reports
+and the Harness facts in a short single-flight cache and hand out every snapshot as the first page
+of its JSON text, kept for `snapshot.page`."""
 
 from __future__ import annotations
 
@@ -14,7 +15,17 @@ from typing import Generic, TypeVar
 from ...kernel.batch_history import History
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
-from .ports import Clock, LedgerCollector, LockReader, RecoveryReader, RouteReader
+from ....json_types import JsonObject
+from .ports import (
+    Clock,
+    HarnessCollector,
+    HealthCollector,
+    LedgerCollector,
+    LockReader,
+    MaintenanceCollector,
+    RecoveryReader,
+    RouteReader,
+)
 from .task_board import TaskBoardService
 
 T = TypeVar("T")
@@ -121,6 +132,9 @@ class ScreenService:
         lock: LockReader,
         recovery: RecoveryReader,
         route: RouteReader,
+        health: HealthCollector | None = None,
+        harness: HarnessCollector | None = None,
+        maintenance: MaintenanceCollector | None = None,
         board: TaskBoardService | None = None,
     ) -> None:
         self._repo = repo
@@ -129,9 +143,19 @@ class ScreenService:
         self._read_lock = lock
         self._recovery = recovery
         self._route = route
+        self._collect_health = health
+        self._collect_harness = harness
+        self._collect_maintenance = maintenance
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
+        # The offline and the online report are separate checks; one never answers for the other.
+        self._health: dict[bool, _Source[JsonObject]] = {
+            False: _Source(ttl, clock),
+            True: _Source(ttl, clock),
+        }
+        self._harness: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._maintenance: _Source[dict[str, object]] = _Source(ttl, clock)
         self._pages = TextPages()
 
     async def _paged(
@@ -227,6 +251,41 @@ class ScreenService:
                 "preflight": preflight.to_payload() if preflight is not None else None,
             }
         )
+
+    async def diagnostics(self, *, online: bool = False, force: bool = False) -> Paged:
+        """The `harness health --json` report, offline or `online`, each cached on its own;
+        `NotFound` without a health collector."""
+        collect = self._collect_health
+        if collect is None:
+            raise NotFound("diagnostics")
+        report, cached, age = await self._health[online].get(
+            lambda: collect(self._repo, online), force=force
+        )
+        return await self._paged(report, cached, age)
+
+    async def harness(self, *, force: bool = False) -> Paged:
+        """The installed harness, the package version and the drift state, with the ledger of
+        the pipeline usage from the same cache as Reports and Orchestration; `NotFound`
+        without a Harness collector."""
+        collect = self._collect_harness
+        if collect is None:
+            raise NotFound("harness")
+        facts, cached, age = await self._harness.get(
+            lambda: collect(self._repo), force=force
+        )
+        ledger, _, _ = await self._cached_ledger(force)
+        return await self._paged({**facts, "ledger": ledger.payload}, cached, age)
+
+    async def maintenance(self, *, force: bool = False) -> Paged:
+        """The cleanup plans with their sizes and the worktree facts of the Harness screen;
+        `NotFound` without a maintenance collector."""
+        collect = self._collect_maintenance
+        if collect is None:
+            raise NotFound("maintenance")
+        facts, cached, age = await self._maintenance.get(
+            lambda: collect(self._repo), force=force
+        )
+        return await self._paged(facts, cached, age)
 
     async def task_board_specs(self, *, force: bool = False) -> Paged:
         """The open specs of the task board; `NotFound` without a configured board."""

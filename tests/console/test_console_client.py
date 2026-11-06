@@ -640,3 +640,121 @@ def test_every_server_step_reason_is_accepted_and_has_screen_text() -> None:
     assert [page.reason if page else None for page in pages] == list(REASONS)
     assert "log_unrecognised" in REASONS
     assert set(REASONS) <= set(STEP_REASONS)
+
+
+def test_the_diagnostics_and_harness_snapshots_are_decoded_with_the_kernel_codecs() -> None:
+    from harness.console.kernel.harness_facts import HarnessState
+    from harness.health.model import CheckResult, Report
+    from harness.health.report_json import to_json
+
+    report = Report(1, "/r", True, [CheckResult("a.b", "core", "warn", "x")])
+    state = HarnessState(True, "1.0.0", ("suite",), 1, 2, "t", False)
+    view = reports.LedgerView(batches=[reports.BatchSummary("b-1", "#1", "active", "t")])
+    payloads: dict[str, object] = {
+        "diagnostics.snapshot": to_json(report),
+        "harness.snapshot": {
+            "state": state.to_payload(),
+            "package_version": "1.0.1",
+            "drift": "drift",
+            "ledger": reports.ledger_payload(view),
+        },
+        "harness.maintenance": {"maintenance": None, "error": "Git unavailable"},
+    }
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> str:
+        requests.append(request)
+        text = json.dumps(payloads[str(request["type"])])
+        return _ok(request, snapshot_id=5, text=text, next=len(text), done=True)
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            assert client.diagnostics(online=True, force=True) == report
+            facts = client.harness()
+            assert client.harness_maintenance(force=True) == (None, "Git unavailable")
+        finally:
+            client.close()
+    assert (facts.state, facts.package_version, facts.drift) == (state, "1.0.1", "drift")
+    assert facts.ledger.batches[0].batch_id == "b-1"
+    assert [{k: v for k, v in item.items() if k != "id"} for item in requests] == [
+        {"type": "diagnostics.snapshot", "online": True, "force": True},
+        {"type": "harness.snapshot", "force": False},
+        {"type": "harness.maintenance", "force": True},
+    ]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"schema_version": 1},
+        {"state": {}, "package_version": "1", "drift": "clean", "ledger": {}},
+        {"maintenance": {"soft": {}}, "error": ""},
+    ],
+    ids=["report", "harness", "maintenance"],
+)
+def test_a_diagnostics_or_harness_snapshot_off_the_schema_is_malformed(
+    payload: dict[str, object],
+) -> None:
+    text = json.dumps(payload)
+
+    def answer(request: dict[str, object]) -> str:
+        return _ok(request, snapshot_id=5, text=text, next=len(text), done=True)
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            with pytest.raises(MalformedReply):
+                if "schema_version" in payload:
+                    client.diagnostics()
+                elif "state" in payload:
+                    client.harness()
+                else:
+                    client.harness_maintenance()
+        finally:
+            client.close()
+
+
+def test_a_job_carries_its_confirmation_and_plan_digest_and_streams_its_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from harness.console.tui import client as console_client
+
+    monkeypatch.setattr(console_client, "JOB_POLL_SECONDS", 0.01)
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> str:
+        requests.append(request)
+        if request["type"] == "job.start":
+            return _ok(request, job=_job("running", 1, [{"channel": "stdout", "text": "a"}]))
+        return _ok(
+            request,
+            job=_job("completed", 2, [{"channel": "stderr", "text": "b"}], returncode=0),
+        )
+
+    seen: list[tuple[str, str]] = []
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            result = client.run_job(
+                "cleanup-apply",
+                {},
+                confirmed=True,
+                confirmation="CLEAN",
+                plan_digest="d" * 64,
+                on_output=lambda channel, text: seen.append((channel, text)),
+            )
+        finally:
+            client.close()
+    assert (result.stdout, result.stderr) == ("a", "b")
+    assert seen == [("stdout", "a"), ("stderr", "b")]
+    assert requests[0] == {
+        "id": 1,
+        "type": "job.start",
+        "command_id": "cleanup-apply",
+        "values": {},
+        "confirmed": True,
+        "confirmation": "CLEAN",
+        "plan_digest": "d" * 64,
+        "client": "tui",
+    }

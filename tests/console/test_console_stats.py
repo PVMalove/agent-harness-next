@@ -62,3 +62,17 @@ def test_pipeline_stats_are_the_same_through_the_substituted_client() -> None:
     assert stats.batches_in_state(served, stats.ALL_STATES) == stats.batches_in_state(
         view, stats.ALL_STATES
     )
+
+
+def test_the_harness_state_survives_its_json_payload(tmp_path: Path) -> None:
+    import pytest
+
+    from harness.console.kernel.harness_facts import HarnessState
+
+    state = HarnessState(True, "0.9.0", ("engineering-suite",), 3, 7, "2026", True)
+    assert stats.HarnessState is HarnessState
+    assert HarnessState.from_payload(json.loads(json.dumps(state.to_payload()))) == state
+    broken: object
+    for broken in ({**state.to_payload(), "skills": "3"}, {"installed": True}, []):
+        with pytest.raises(ValueError):
+            HarnessState.from_payload(broken)

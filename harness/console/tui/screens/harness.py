@@ -3,6 +3,10 @@
 без параметров запускаются немедленно; любые другие команды открывают модальный экран `CommandFormScreen`,
 запрашивающий параметры, поясняющий причины подтверждения для необратимых действий и требующий ввода
 контрольного слова (например, RESET). Отмена формы ничего не выполняет.
+
+Состояние, дрейф, использование пайплайна и факты обслуживания экран читает у сервера консоли
+(`harness.snapshot`, `harness.maintenance`), а каждая команда выполняется job сервера
+(`ServerJobRunner`): локальный `process_argv` нужен только для строки CLI на экране.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ import asyncio
 import re
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Mapping, Sequence, NoReturn
 from collections import Counter
 
 from rich.text import Text
@@ -23,8 +27,6 @@ from textual.message import Message
 from textual.widgets import Button, Collapsible, Input, ListItem, ListView, Static
 
 from ...kernel import brand, i18n
-from ...kernel import data as console_data
-from ...kernel import reports as console_reports
 from .. import stats as console_stats
 from ...kernel.catalog import (
     HARNESS_COMMANDS,
@@ -34,17 +36,16 @@ from ...kernel.catalog import (
     CatalogEntry,
     process_argv,
 )
-from harness.cleanup import plan_cleanup, plan_digest, worktree_facts
-from ..maintenance import (
+from harness.cleanup import plan_digest
+from ...kernel.maintenance import (
     MaintenanceView,
-    load_maintenance,
-    summarize,
     summary_text,
     reason_text,
     format_size,
-    path_size,
 )
-from ...kernel.runner import CommandRunner, HarnessRun, capturing_runner
+from ...kernel.runner import HarnessRun
+from ..client import HarnessFacts, ScreenClient
+from ..server_api import ServerJobRunner
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from .commands import (
     CommandForm,
@@ -122,6 +123,11 @@ class HarnessCommandList(ListView):
             self.post_message(self.Activate(self.highlighted_child))
 
 
+def _no_local_runner(argv: Sequence[str], **kwargs: object) -> NoReturn:
+    """Harness commands run only as console server jobs; nothing starts a local process."""
+    raise OSError("команды Harness выполняет сервер консоли")
+
+
 class CommandFormScreen(CommandForm):
     """Модальная форма параметров для команд раздела Harness."""
 
@@ -132,12 +138,16 @@ class CommandFormScreen(CommandForm):
         entry: CatalogEntry,
         repo: Path,
         *,
+        client: ScreenClient | None = None,
         values: Mapping[str, str] | None = None,
     ) -> None:
-        """Инициализирует форму параметров команды каталога для репозитория."""
+        """Инициализирует форму параметров команды каталога для репозитория; факты
+        подтверждения очистки и удаления worktree она читает у сервера консоли через `client`,
+        без него такая команда не подтверждается."""
         super().__init__()
         self.entry = entry
         self.repo = repo
+        self._client = client
         self._values = dict(values or {})
         self._facts_required = entry.key in (
             "cleanup-apply",
@@ -223,22 +233,24 @@ class CommandFormScreen(CommandForm):
             digest, error = "", ""
             render: Callable[[str], str]
             try:
+                # Fresh facts: the confirmation binds to what the server would delete now.
+                if self._client is None:
+                    raise ValueError("maintenance facts need the console server")
+                view, failure = self._client.harness_maintenance(force=True)
+                if view is None:
+                    raise ValueError(failure or "maintenance facts unavailable")
                 if self.entry.key == "worktree-remove":
+                    if view.worktree_error:
+                        raise ValueError(view.worktree_error)
                     path = Path(value).expanduser()
                     path = (path if path.is_absolute() else self.repo / path).resolve()
                     fact = next(
-                        (
-                            item
-                            for item in worktree_facts(self.repo)
-                            if item.path == path
-                        ),
+                        (item for item in view.worktrees if item.path == path),
                         None,
                     )
                     error = fact.reason if fact else "worktree is not registered"
-                    try:
-                        size_label = format_size(path_size(path).bytes) if fact else "?"
-                    except OSError:
-                        size_label = "?"
+                    size = view.tree_sizes.get(path) if fact else None
+                    size_label = format_size(size.bytes) if size else "?"
 
                     def render(language: str) -> str:
                         dirty = (
@@ -253,13 +265,10 @@ class CommandFormScreen(CommandForm):
                             )
                         )
                 else:
-                    summary = summarize(
-                        plan_cleanup(
-                            self.repo,
-                            "hard"
-                            if self.entry.key == "cleanup-hard-apply"
-                            else "soft",
-                        )
+                    summary = (
+                        view.hard
+                        if self.entry.key == "cleanup-hard-apply"
+                        else view.soft
                     )
                     digest = plan_digest(summary.plan)
 
@@ -432,19 +441,17 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         self,
         repo: Path,
         *,
-        command_runner: CommandRunner = capturing_runner,
+        client: ScreenClient,
         catalog: Sequence[CatalogEntry] = HARNESS_COMMANDS,
-        load_drift: Callable[[Path], str] = console_data.drift_state,
-        load_view: Callable[
-            [Path], console_reports.LedgerView
-        ] = console_reports.load_ledger_view,
     ) -> None:
-        """Инициализирует экран раздела Harness со списком доступных команд."""
-        super().__init__(repo, command_runner=command_runner)
-        self._load_view = load_view
-        self._load_drift = load_drift
-        self._drift = "loading"
-        self._drift_epoch = 0
+        """Инициализирует экран раздела Harness со списком доступных команд над клиентом
+        сервера консоли."""
+        super().__init__(repo, command_runner=_no_local_runner)
+        self._client = client
+        # None until the server answers `harness.snapshot`; then the error stays empty.
+        self._facts: HarnessFacts | None = None
+        self._facts_error = ""
+        self._facts_epoch = 0
         self._filter = "all"
         self._expanded_group = "Проверки"
         self._selected_key: str | None = None
@@ -452,8 +459,6 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         self._rebuilding = False
         self._menu_lock = asyncio.Lock()
         self._last_narrow: bool | None = None
-        self._state = console_stats.harness_state(repo)
-        self._view = load_view(repo)
         self._owned_run: HarnessRun | None = None
         self._rendered_run: tuple[int, str, str, int] | None = None
         self._maintenance: MaintenanceView | None = None
@@ -710,12 +715,32 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         )
 
     def _paint_state(self) -> None:
-        fields = console_stats.harness_summary_fields(
-            self._state, console_data.harness_version()
-        )
+        facts = self._facts
+        if facts is None:
+            ru = self._language != "en"
+            if self._facts_error:
+                line = (
+                    "○ Состояние харнесса недоступно: "
+                    if ru
+                    else "○ Harness state unavailable: "
+                ) + self._facts_error
+            else:
+                line = (
+                    "○ Состояние харнесса загружается…"
+                    if ru
+                    else "○ Loading the Harness state…"
+                )
+            self.query_one("#harness-state", Static).update(
+                Text(line, style=brand.PALETTE["muted"])
+            )
+            self.query_one("#harness-state").tooltip = None
+            self.query_one("#harness-usage", Static).update("")
+            return
+        state, version, view = facts.state, facts.package_version, facts.ledger
+        fields = console_stats.harness_summary_fields(state, version)
         text = Text()
         if self.narrow:
-            if self._state.installed:
+            if state.installed:
                 fields = [
                     field
                     for field in fields
@@ -736,37 +761,37 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             "drift": "⚠ дрейф есть",
             "missing": "○ дрейф: нет lock",
         }
-        drift = drift_labels.get(self._drift, "○ дрейф неизвестен")
+        drift = drift_labels.get(facts.drift, "○ дрейф неизвестен")
         text.append(
             " · " + self._t(drift),
-            style=brand.STATUS_COLORS["ok" if self._drift == "clean" else "warn"],
+            style=brand.STATUS_COLORS["ok" if facts.drift == "clean" else "warn"],
         )
         self.query_one("#harness-state", Static).update(text)
         self.query_one("#harness-state").tooltip = self._t(
-            console_stats.harness_state_text(
-                self._state, console_data.harness_version()
-            )
+            console_stats.harness_state_text(state, version)
         )
-        usage = console_stats.usage_text(self._view)
+        usage = console_stats.usage_text(view)
         if self.narrow:
-            if self._view.unavailable:
-                usage = "○ Ledger: " + self._t(self._view.unavailable)
+            if view.unavailable:
+                usage = "○ Ledger: " + self._t(view.unavailable)
             else:
-                stats = console_stats.pipeline_stats(self._view)
+                stats = console_stats.pipeline_stats(view)
                 usage = self._t(
                     f"Пайплайн: запусков {stats.batches} · тикетов {stats.tickets} · диспатчей {sum(stats.dispatches_by_role.values())} · отчётов {sum(stats.reports_by_outcome.values())}"
                 )
-        elif self._view.unavailable:
+        elif view.unavailable:
             usage = "○ " + usage
         badges = Text(self._t(usage))
-        if not self._view.unavailable:
+        if not view.unavailable:
             for match in re.finditer(r"\b\d+\b", badges.plain):
                 badges.stylize(
                     f"bold on {brand.PALETTE['panel']}", match.start(), match.end()
                 )
         self.query_one("#harness-usage", Static).update(badges)
 
-    def _load_maintenance(self) -> None:
+    def _load_maintenance(self, *, force: bool = True) -> None:
+        """Read the maintenance facts from the server; `force` rebuilds them there (refresh and
+        after a command), the first read may come from its short cache."""
         self._maintenance_epoch += 1
         epoch = self._maintenance_epoch
         self._maintenance = None
@@ -775,9 +800,11 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
 
         def load() -> None:
             try:
-                view, error = load_maintenance(self.repo), ""
+                view, error = self._client.harness_maintenance(force=force)
             except Exception as exc:
-                view, error = None, str(exc)
+                view, error = None, str(exc) or type(exc).__name__
+            if view is None and not error:
+                error = "maintenance facts unavailable"
 
             def apply() -> None:
                 if epoch != self._maintenance_epoch or not self.is_mounted:
@@ -1111,11 +1138,12 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                 self._run(entry, values)
 
         self.app.push_screen(
-            CommandFormScreen(entry, self.repo, values=values), on_form_closed
+            CommandFormScreen(entry, self.repo, client=self._client, values=values),
+            on_form_closed,
         )
 
     def _run(self, entry: CatalogEntry, values: Mapping[str, str]) -> None:
-        """Формирует аргументы и запускает процесс выбранной команды каталога."""
+        """Запускает команду каталога как job сервера консоли; `argv` — только для экрана."""
         argv = process_argv(
             entry.cli_argv(self.repo, values),
             self.repo,
@@ -1134,8 +1162,9 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         if self.narrow:
             self.query_one("#detail-fold", Fold).collapsed = True
         self._sync_run()
+        runner = ServerJobRunner(self._client, entry, values)
         self.run_worker(
-            lambda: state.execute(run, self._command_runner, self.repo),
+            lambda: state.execute(run, runner, self.repo),
             thread=True,
             group="harness-command",
         )
@@ -1152,29 +1181,31 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
     def on_mount(self) -> None:
         self._paint_state()
         self._paint_menu_title()
-        self._load_maintenance()
+        self._load_maintenance(force=False)
         self.query_one("#command-retry").display = False
         self.query_one("#run-status").display = False
         self.query_one("#run-feedback").display = False
         self.set_interval(0.1, self._sync_run)
         self._sync_run()
-        self._drift_epoch += 1
-        epoch = self._drift_epoch
+        self._facts_epoch += 1
+        epoch = self._facts_epoch
 
         def load() -> None:
+            facts: HarnessFacts | None = None
+            error = ""
             try:
-                value = self._load_drift(self.repo)
-            except Exception:
-                value = "unknown"
+                facts = self._client.harness()
+            except Exception as exc:
+                error = str(exc) or type(exc).__name__
 
             def apply() -> None:
-                if epoch == self._drift_epoch:
-                    self._drift = value
+                if epoch == self._facts_epoch and self.is_mounted:
+                    self._facts, self._facts_error = facts, error
                     self._paint_state()
 
             call_from_worker(self, apply)
 
-        self.run_worker(load, thread=True, group="harness-drift")
+        self.run_worker(load, thread=True, group="harness-facts")
 
     def on_screen_resume(self) -> None:
         self._receiving = True
@@ -1187,7 +1218,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             harness_runs(self).abandon_pending(self._owned_run)
 
     def on_unmount(self) -> None:
-        self._drift_epoch += 1
+        self._facts_epoch += 1
         self._maintenance_epoch += 1
         self._receiving = False
         if self._owned_run is not None:

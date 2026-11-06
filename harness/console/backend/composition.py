@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS
+from ..kernel.catalog import DIAGNOSTICS_COMMANDS, HARNESS_COMMANDS, MEMORY_COMMANDS
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from .api.request_router import RequestRouter
 from .application.decisions import DecisionService
@@ -17,10 +17,13 @@ from .application.jobs import JobService
 from .application.ports import (
     Clock,
     CommandSpec,
+    HarnessCollector,
+    HealthCollector,
     HomeCollector,
     JobExecutor,
     LedgerCollector,
     LockReader,
+    MaintenanceCollector,
     OrchestrationReader,
     RecoveryReader,
     RouteReader,
@@ -43,8 +46,11 @@ from .infrastructure.orchestration_reader import ProjectReader
 from .infrastructure.processes import run_command
 from .infrastructure.screen_facts import (
     CoordinatorFacts,
+    HealthFacts,
     collect_ledger,
     collect_ledger_online,
+    harness_facts,
+    maintenance_facts,
     read_lock,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
@@ -83,6 +89,9 @@ def screen_service(
     lock: LockReader | None = None,
     recovery: RecoveryReader | None = None,
     route: RouteReader | None = None,
+    health: HealthCollector | None = None,
+    harness: HarnessCollector | None = None,
+    maintenance: MaintenanceCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -98,6 +107,9 @@ def screen_service(
         lock=read_lock if lock is None else lock,
         recovery=facts if recovery is None else recovery,
         route=facts if route is None else route,
+        health=HealthFacts() if health is None else health,
+        harness=harness_facts if harness is None else harness,
+        maintenance=maintenance_facts if maintenance is None else maintenance,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger
@@ -109,10 +121,11 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, memory, coordinator and native permission commands;
-    without `executor` the commands run as subprocesses."""
+    """The job service over the harness, Diagnostics, memory, coordinator and native permission
+    commands; without `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
+        *DIAGNOSTICS_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,

@@ -1,5 +1,6 @@
-"""Fake screen facts for the console server tests: an in-memory ledger, a lock reader and the
-recovery and container route readers, each counting its calls."""
+"""Fake screen facts for the console server tests: an in-memory ledger, a lock reader, the
+recovery and container route readers and the Diagnostics and Harness collectors, each counting
+its calls."""
 
 from __future__ import annotations
 
@@ -10,12 +11,15 @@ from harness.console.backend.application.screens import ScreenService
 from harness.console.kernel.batch_history import History, HistoryBatch
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult, Outcome
+from harness.console.kernel.harness_facts import HarnessState
 from harness.console.kernel.reports import (
     BatchSummary,
     LedgerView,
     ReportEntry,
     StageEntry,
 )
+from harness.health.model import CheckResult, JsonObject, Report
+from harness.health.report_json import to_json
 
 BODY = "результат " * 20000  # far above one WebSocket message
 
@@ -36,12 +40,25 @@ def ledger(body: str = BODY) -> LedgerView:
     return view
 
 
+def health_report(online: bool = False) -> Report:
+    return Report(
+        1,
+        "/work/project",
+        online,
+        [CheckResult("core.lock", "core", "fail", "нет lock")],
+    )
+
+
+HARNESS_STATE = HarnessState(True, "1.0.0", ("engineering-suite",), 3, 7, "t", True)
+
+
 class Facts:
     """Every screen port with call counters."""
 
     def __init__(self) -> None:
         self.calls: dict[str, int] = {}
         self.lock_error: Exception | None = None
+        self.collect_error: Exception | None = None
         self.statuses: list[tuple[str, tuple[str, ...]]] = []
         self.preflights: list[tuple[str, str, str]] = []
 
@@ -80,6 +97,25 @@ class Facts:
         return ApiResult(Outcome.REFUSED, ("preflight",), ({"verified": False},), 2)
 
 
+    def health(self, repo: Path, online: bool, /) -> JsonObject:
+        self._count("health_online" if online else "health")
+        if self.collect_error is not None:
+            raise self.collect_error
+        return to_json(health_report(online))
+
+    def harness(self, repo: Path, /) -> dict[str, object]:
+        self._count("harness")
+        return {
+            "state": HARNESS_STATE.to_payload(),
+            "package_version": "1.0.1",
+            "drift": "clean",
+        }
+
+    def maintenance(self, repo: Path, /) -> dict[str, object]:
+        self._count("maintenance")
+        return {"maintenance": None, "error": "Git unavailable"}
+
+
 class Clock:
     def __init__(self) -> None:
         self.now = 100.0
@@ -100,4 +136,7 @@ def service(
         lock=facts.lock,
         recovery=facts,
         route=facts,
+        health=facts.health,
+        harness=facts.harness,
+        maintenance=facts.maintenance,
     )

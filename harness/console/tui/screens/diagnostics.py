@@ -1,7 +1,9 @@
 """Экран Diagnostics: полный отчёт `harness health` и три действия — «Онлайн» (аналог запуска
 `harness health --online`), «Исправить» (аналог запуска `harness health --fix`, применяющий только
-внутрипроцессные фиксеры FIXERS после явного подтверждения) и «Экспорт» (экспорт отчёта в Markdown).
-Каждое действие отображает эквивалент команды CLI, а сбор данных выполняется в фоновом потоке.
+фиксеры FIXERS после явного подтверждения) и «Экспорт» (экспорт отчёта в Markdown). Каждое действие
+отображает эквивалент команды CLI. Отчёт экран читает у сервера консоли, а фиксы выполняет job
+сервера (`apply_health_fixes`); сам экран проверки не запускает, ожидание ответа идёт в фоновом
+потоке.
 
 Команды из блока «Как исправить» предназначены для ручного выполнения разработчиком и только отображаются
 на экране: они изменяют настройки машины или удаляют данные, что исключено из автоматического применения.
@@ -13,7 +15,7 @@ import re
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable
 
 from rich.text import Text
 from rich.markup import escape
@@ -41,6 +43,8 @@ from ...kernel import data as console_data
 from ....health.model import CheckResult, Report
 from ....health.render import GROUP_LABELS_RU
 from ...kernel.export import MarkdownDocument, MarkdownSection
+from ..client import ScreenClient
+from ..server_api import apply_health_fixes
 from .commands import call_from_worker, short_repo
 from .export import EXPORT_BINDING_KEY, export_document
 
@@ -50,7 +54,6 @@ _CONFIRM_LABEL = "Подтвердить фиксы"
 _MANUAL_NOTE = "Команды «Как исправить» консоль не выполняет — запустите их вручную."
 _SUBTITLE = "Отчёт harness health. " + _MANUAL_NOTE
 _RUNNING = "health выполняется…"
-_CORE_LOCK = threading.Lock()
 
 
 def _now() -> datetime:
@@ -178,22 +181,6 @@ def health_document(report: Report, language: str = "ru") -> MarkdownDocument:
     )
 
 
-class _CollectDiagnostics(Protocol):
-    """Протокол функции сбора диагностического отчёта health."""
-
-    def __call__(self, repo: Path, *, online: bool = False) -> Report:
-        """Выполняет проверку состояния репозитория и возвращает отчёт."""
-        ...
-
-
-class _ApplyLocalFixes(Protocol):
-    """Протокол функции применения локальных автоматических исправлений."""
-
-    def __call__(self, repo: Path, *, online: bool = False) -> Report:
-        """Применяет локальные исправления и возвращает обновлённый отчёт проверок."""
-        ...
-
-
 class _CheckCard(SectionCard):
     """Real health data stays literal; only labels belong to the interface."""
 
@@ -286,14 +273,12 @@ class DiagnosticsScreen(ConsoleShell):
         self,
         repo: Path,
         *,
-        collect_diagnostics: _CollectDiagnostics = console_data.collect_diagnostics,
-        apply_local_fixes: _ApplyLocalFixes = console_data.apply_local_fixes,
+        client: ScreenClient,
     ) -> None:
-        """Инициализирует экран диагностики для указанного репозитория."""
+        """Инициализирует экран диагностики репозитория над клиентом сервера консоли."""
         super().__init__()
         self.repo = repo
-        self._collect_diagnostics = collect_diagnostics
-        self._apply_local_fixes = apply_local_fixes
+        self._client = client
         self._report: Report | None = None
         self._confirming_apply = False
         self._generation = 0
@@ -352,7 +337,7 @@ class DiagnosticsScreen(ConsoleShell):
         """Запускает первичное построение отчёта проверок при монтировании экрана."""
         self._language = getattr(self.app, "language", "ru")
         self.app.message_signal.subscribe(self, self._observe_input, immediate=True)
-        self._run_health(lambda: self._collect_diagnostics(self.repo))
+        self._run_health(lambda: self._client.diagnostics())
 
     def _observe_input(self, message: Message) -> None:
         if not self._confirming_apply:
@@ -393,11 +378,11 @@ class DiagnosticsScreen(ConsoleShell):
             return
         if event.button.id == "offline-checks":
             self._reset_apply()
-            self._run_health(lambda: self._collect_diagnostics(self.repo))
+            self._run_health(lambda: self._client.diagnostics(force=True))
         elif event.button.id == "online-checks":
             self._reset_apply()
             self._run_health(
-                lambda: self._collect_diagnostics(self.repo, online=True), online=True
+                lambda: self._client.diagnostics(online=True, force=True), online=True
             )
         elif event.button.id == "apply-fixes":
             self._on_apply_fixes_pressed()
@@ -455,7 +440,7 @@ class DiagnosticsScreen(ConsoleShell):
         self._reset_apply()
         online = self._report.online
         self._run_health(
-            lambda: self._apply_local_fixes(self.repo, online=online), online=online
+            lambda: apply_health_fixes(self._client, online=online), online=online
         )
 
     def _reset_apply(self) -> None:
@@ -489,7 +474,8 @@ class DiagnosticsScreen(ConsoleShell):
         self.workers.cancel_node(self)
 
     def _run_health(self, run: Callable[[], Report], *, online: bool = False) -> None:
-        """Запускает процедуру проверки health в фоновом потоке worker."""
+        """Ждёт ответа сервера консоли в фоновом потоке worker. Новая проверка или уход с экрана
+        только отбрасывают ответ: job фикса на сервере продолжается и не отменяется."""
         self._cancel.set()
         self._cancel = cancel = threading.Event()
         self._generation += 1
@@ -519,21 +505,14 @@ class DiagnosticsScreen(ConsoleShell):
                     self._show(report)
 
         def work() -> None:
-            while not cancel.is_set():
-                if _CORE_LOCK.acquire(timeout=0.05):
-                    break
-            else:
+            if cancel.is_set():
                 return
             report = None
             failure = ""
             try:
-                if cancel.is_set():
-                    return
                 report = run()
             except Exception as exc:
                 failure = str(exc) or type(exc).__name__
-            finally:
-                _CORE_LOCK.release()
             if current():
                 call_from_worker(self, lambda: publish(report, failure))
 
