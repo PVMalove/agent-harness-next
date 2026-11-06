@@ -1,4 +1,4 @@
-site_name: Agent Harness Next
+site_name: Agent Harness Next · beta
 site_description: Портативный harness для Claude Code и Codex.
 site_url: https://pvmalove.github.io/claude-agent-harness/
 repo_url: https://github.com/PVMalove/claude-agent-harness
@@ -29,6 +29,7 @@ theme:
         icon: material/weather-night
         name: Тёмная тема
   features:
+    - navigation.tabs
     - navigation.tracking
     - navigation.sections
     - navigation.indexes
@@ -54,12 +55,11 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Начало: index.md
-  - Документация:
-      - Быстрый старт: getting-started/index.md
-      - Архитектура: architecture/index.md
-      - Справочник: reference/index.md
-  - Демо: demo/index.md
+  - Docs: index.md
+  - Guides: getting-started/index.md
+  - Reference: reference/index.md
+  - Архитектура: architecture/index.md
+  - Demo: demo/index.md
 
 copyright: © 2026 Agent Harness Next · MIT
 
