@@ -40,6 +40,9 @@ HELP_REQUEST = "help.snapshot"
 # diff of one file the drift report lists against what `harness update` writes there.
 UPDATE_HARNESS_REQUEST = "update_harness.snapshot"
 UPDATE_DIFF_REQUEST = "update_harness.diff"
+# «Настройка»: the configuration files with their secrets masked and their digests, the version
+# store, a pending transaction and the runtime adapter preview; never written or recovered.
+CONFIGURATION_REQUEST = "configuration.snapshot"
 # The longest project-relative path a request may name.
 MAX_PATH_CHARS = 512
 # Worker steps: one page of a dispatch's worker log from a byte offset the client keeps, and a

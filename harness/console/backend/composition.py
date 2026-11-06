@@ -22,6 +22,7 @@ from .application.events import POLL_INTERVAL_SECONDS, OrchestrationEvents
 from .application.jobs import JobService
 from .application.ports import (
     Clock,
+    ConfigurationCollector,
     CommandSpec,
     HarnessCollector,
     HealthCollector,
@@ -59,6 +60,7 @@ from .infrastructure.screen_facts import (
     HealthFacts,
     collect_ledger,
     collect_ledger_online,
+    configuration_facts,
     harness_facts,
     maintenance_facts,
     open_project_facts,
@@ -110,6 +112,7 @@ def screen_service(
     open_project: OpenProjectCollector | None = None,
     update_harness: UpdateHarnessCollector | None = None,
     update_diff: UpdateDiffReader | None = None,
+    configuration: ConfigurationCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -134,6 +137,7 @@ def screen_service(
             update_harness_facts if update_harness is None else update_harness
         ),
         update_diff=read_update_diff if update_diff is None else update_diff,
+        configuration=configuration_facts if configuration is None else configuration,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger

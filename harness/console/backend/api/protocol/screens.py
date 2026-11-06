@@ -1,12 +1,13 @@
 """The screen snapshot requests of Reports, Orchestration, Recovery, Container route, Diagnostics,
-Harness, Repo Map, «Открыть проект», «Справка» and «Обновить Harness» and the `snapshot.page`
-request that completes them: parsing and the replies."""
+Harness, Repo Map, «Открыть проект», «Справка», «Обновить Harness» and «Настройка» and the
+`snapshot.page` request that completes them: parsing and the replies."""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
 from ....kernel.protocol import (
+    CONFIGURATION_REQUEST,
     DIAGNOSTICS_REQUEST,
     HARNESS_REQUEST,
     HELP_REQUEST,
@@ -63,6 +64,8 @@ _FIELDS: dict[str, frozenset[str]] = {
     UPDATE_HARNESS_REQUEST: frozenset({"force"}),
     # The path is checked against the drift report before anything is read.
     UPDATE_DIFF_REQUEST: frozenset({"path", "force"}),
+    # Read only: a pending transaction is reported, never recovered.
+    CONFIGURATION_REQUEST: frozenset({"force"}),
 }
 # The replies that carry whether they came from the cache and how old it is.
 _CACHED_TYPES = frozenset(
@@ -181,6 +184,9 @@ def _call(
     if kind == UPDATE_DIFF_REQUEST:
         path, force = _path(body), _flag(body, "force")
         return lambda: screens.update_diff(path, force=force)
+    if kind == CONFIGURATION_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.configuration(force=force)
     batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
     runtime = _id(body, "runtime", "")
     if not role:

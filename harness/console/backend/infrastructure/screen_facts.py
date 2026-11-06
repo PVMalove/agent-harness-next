@@ -2,7 +2,7 @@
 coordinator commands of the Recovery and Container route screens (`batch list`, `recovery status`,
 `dispatch preflight`), the health report of Diagnostics, the installation, drift and
 maintenance facts of Harness, the Repo Map facts, the «Открыть проект» facts and the drift and
-update diff of «Обновить Harness». Nothing here writes, locks the ledger, applies a fix, installs,
+update diff of «Обновить Harness» and the masked configuration of «Настройка». Nothing here writes, locks the ledger, applies a fix, installs,
 updates or starts a worker."""
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from ....json_types import JsonObject
 from ....repo_map.bundle_fetch import ParserStatus, parser_status
 from ...kernel import data as console_data
 from ...kernel.batch_history import History, load_history
+from ...kernel.configuration_snapshot import collect_configuration
 from ...kernel.container_route import Authored, read_authored
 from ...kernel.coordinator_api import ApiResult, CoordinatorApi
 from ...kernel.harness_facts import harness_state
@@ -202,3 +203,9 @@ def update_harness_facts(repo: Path) -> dict[str, object]:
 def update_diff(repo: Path, relative: str) -> str:
     """The unified diff of `relative` against what `harness update` writes there."""
     return console_data.update_diff_text(repo, relative)
+
+
+def configuration_facts(repo: Path) -> dict[str, object]:
+    """The masked configuration files with their digests, a pending transaction and the runtime
+    adapter preview; never writes or recovers."""
+    return collect_configuration(repo).to_payload()

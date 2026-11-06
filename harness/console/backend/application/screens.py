@@ -1,7 +1,7 @@
 """The screen snapshots of Reports, Orchestration, Recovery, Container route, Diagnostics, Harness,
-Repo Map, «Открыть проект», «Справка» and «Обновить Harness»: collect them off the event loop, keep
-the ledger, the batch history, the health reports, the Harness, the Repo Map, the «Открыть проект»
-and the «Обновить Harness» facts in a short single-flight cache and hand out every snapshot as the
+Repo Map, «Открыть проект», «Справка», «Обновить Harness» and «Настройка»: collect them off the
+event loop, keep the ledger, the batch history, the health reports, the Harness, the Repo Map, the
+«Открыть проект», the «Обновить Harness» and the «Настройка» facts in a short single-flight cache and hand out every snapshot as the
 first page of its JSON text, kept for `snapshot.page`."""
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
 from ....json_types import JsonObject
 from .ports import (
     Clock,
+    ConfigurationCollector,
     HarnessCollector,
     HealthCollector,
     LedgerCollector,
@@ -146,6 +147,7 @@ class ScreenService:
         open_project: OpenProjectCollector | None = None,
         update_harness: UpdateHarnessCollector | None = None,
         update_diff: UpdateDiffReader | None = None,
+        configuration: ConfigurationCollector | None = None,
         board: TaskBoardService | None = None,
     ) -> None:
         self._repo = repo
@@ -161,6 +163,7 @@ class ScreenService:
         self._collect_open_project = open_project
         self._collect_update_harness = update_harness
         self._read_update_diff = update_diff
+        self._collect_configuration = configuration
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
@@ -174,6 +177,7 @@ class ScreenService:
         self._repo_map: _Source[dict[str, object]] = _Source(ttl, clock)
         self._open_project: _Source[dict[str, object]] = _Source(ttl, clock)
         self._update_harness: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._configuration: _Source[dict[str, object]] = _Source(ttl, clock)
         self._pages = TextPages()
 
     async def _paged(
@@ -359,6 +363,17 @@ class ScreenService:
             raise NotFound(path)
         text = await asyncio.to_thread(reader, self._repo, path)
         return await self._paged({"path": path, "text": text})
+
+    async def configuration(self, *, force: bool = False) -> Paged:
+        """The masked configuration files with their digests, a pending transaction and the
+        runtime adapter preview of «Настройка»; `NotFound` without its collector."""
+        collect = self._collect_configuration
+        if collect is None:
+            raise NotFound("configuration")
+        facts, cached, age = await self._configuration.get(
+            lambda: collect(self._repo), force=force
+        )
+        return await self._paged(facts, cached, age)
 
     async def task_board_specs(self, *, force: bool = False) -> Paged:
         """The open specs of the task board; `NotFound` without a configured board."""

@@ -1,5 +1,41 @@
 {
   "$defs": {
+    "ConfigurationSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "configuration.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ConfigurationSnapshotRequest",
+      "type": "object"
+    },
     "ConsoleReply": {
       "anyOf": [
         {
@@ -46,6 +82,7 @@
     "ConsoleRequest": {
       "discriminator": {
         "mapping": {
+          "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
@@ -156,6 +193,9 @@
         },
         {
           "$ref": "#/$defs/UpdateHarnessDiffRequest"
+        },
+        {
+          "$ref": "#/$defs/ConfigurationSnapshotRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"
@@ -1815,7 +1855,8 @@
             "repo_map.snapshot",
             "open_project.snapshot",
             "help.snapshot",
-            "update_harness.snapshot"
+            "update_harness.snapshot",
+            "configuration.snapshot"
           ],
           "title": "Type",
           "type": "string"

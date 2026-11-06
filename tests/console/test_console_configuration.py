@@ -176,3 +176,44 @@ def test_bundle_diff_masks_a_secret_under_an_overridden_duplicate_key() -> None:
         "new",
     )
     assert '-{"url": "https://host", "url": "https://other"}' in shown
+
+
+def test_a_draft_from_the_snapshot_starts_unchanged_from_its_masked_documents(
+    tmp_path: Path,
+) -> None:
+    from harness.configuration import SECRET_MASK
+    from harness.configuration_store import json_bytes
+    from harness.console.kernel.configuration_snapshot import collect_configuration
+
+    root = tmp_path / ".harness"
+    (root / "orchestration/roles").mkdir(parents=True)
+    (root / "project.json").write_text(
+        json.dumps({"language": "ru", "tracker": {"type": "local", "token": "abc"}}),
+        encoding="utf-8",
+    )
+    facts = collect_configuration(tmp_path)
+
+    draft = ConfigurationDraft.from_snapshot(
+        tmp_path, facts, ("project.json", "orchestration.json")
+    )
+
+    assert draft.documents["project.json"]["tracker"] == {
+        "type": "local",
+        "token": SECRET_MASK,
+    }
+    assert draft.original == {
+        "project.json": json_bytes(facts.files["project.json"].document),
+        "orchestration.json": None,
+    }
+    assert draft.digests == {
+        name: facts.files[name].digest for name in ("project.json", "orchestration.json")
+    }
+    # A missing file counts as changed, as in `ConfigurationDraft.load`; a present one does not.
+    assert draft.changed()
+    project = ConfigurationDraft.from_snapshot(tmp_path, facts, ("project.json",))
+    assert not project.changed()
+    project.set_value("project.json", ("language",), "en")
+    assert project.changed()
+    draft.documents["project.json"]["language"] = "ru"
+    facts.files["project.json"].document["language"] = "x"
+    assert draft.documents["project.json"]["language"] == "ru"

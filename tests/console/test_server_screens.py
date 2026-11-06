@@ -491,3 +491,40 @@ def test_the_update_harness_snapshot_and_a_diff_of_a_drifted_file_round_trip(
             assert facts.diffs == ["AGENTS.md"]
 
     asyncio.run(scenario())
+
+
+def test_the_configuration_snapshot_round_trips_and_is_cached(tmp_path: Path) -> None:
+    from harness.console.kernel.configuration_snapshot import ConfigurationFacts
+
+    from ._screen_facts import CONFIGURATION_FACTS
+
+    facts = Facts()
+    runtime = _runtime(tmp_path, facts)
+
+    async def ask(
+        socket: AsgiWebSocket, request: dict[str, object]
+    ) -> dict[str, object]:
+        await socket.send_text(json.dumps({"id": 1, **request}))
+        reply = json.loads(await socket.receive_text())
+        assert isinstance(reply, dict)
+        return reply
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            found = await _read(socket, {"type": "configuration.snapshot"})
+            assert ConfigurationFacts.from_payload(found) == CONFIGURATION_FACTS
+            cached = await ask(socket, {"type": "configuration.snapshot"})
+            assert cached["cached"] is True and facts.calls["configuration"] == 1
+            forced = await ask(socket, {"type": "configuration.snapshot", "force": True})
+            assert forced["cached"] is False and facts.calls["configuration"] == 2
+            requests: list[dict[str, object]] = [
+                {"type": "configuration.snapshot", "recover": True},
+                {"type": "configuration.snapshot", "force": "yes"},
+            ]
+            for broken in requests:
+                refused = await ask(socket, broken)
+                error = refused["error"]
+                assert refused["ok"] is False and isinstance(error, dict)
+                assert error["code"] == "bad_request"
+
+    asyncio.run(scenario())

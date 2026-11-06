@@ -1,6 +1,6 @@
 """Fake screen facts for the console server tests: an in-memory ledger, a lock reader, the
 recovery and container route readers and the Diagnostics, Harness, Repo Map, «Открыть проект» and
-«Обновить Harness» collectors, each counting its calls."""
+«Обновить Harness» and «Настройка» collectors, each counting its calls."""
 
 from __future__ import annotations
 
@@ -9,6 +9,11 @@ from pathlib import Path
 
 from harness.console.backend.application.screens import ScreenService
 from harness.console.kernel.batch_history import History, HistoryBatch
+from harness.console.kernel.configuration_snapshot import (
+    AdapterFacts,
+    ConfigFile,
+    ConfigurationFacts,
+)
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult, Outcome
 from harness.console.kernel.harness_facts import HarnessState
@@ -60,6 +65,18 @@ def health_report(online: bool = False) -> Report:
 HARNESS_STATE = HarnessState(True, "1.0.0", ("engineering-suite",), 3, 7, "t", True)
 
 HEAD = "a" * 40
+
+CONFIGURATION_FACTS = ConfigurationFacts(
+    schema_installed=True,
+    orchestration_installed=False,
+    transaction_pending=False,
+    store_root="/work/project/.harness/config_versions",
+    files={
+        "project.json": ConfigFile(True, "d" * 64, {"tracker": {"token": "••••••"}}, ""),
+        "orchestration.json": ConfigFile(False, "", {"roles": {}}, ""),
+    },
+    adapters=AdapterFacts(None, "Сначала установите харнесс проекта"),
+)
 
 UPDATE_DRIFT: dict[str, object] = {
     "state": "drift",
@@ -176,6 +193,10 @@ class Facts:
             "drift": UPDATE_DRIFT,
         }
 
+    def configuration(self, repo: Path, /) -> dict[str, object]:
+        self._count("configuration")
+        return CONFIGURATION_FACTS.to_payload()
+
     def update_diff(self, repo: Path, relative: str, /) -> str:
         self.diffs.append(relative)
         return f"--- проект/{relative}\n+++ после обновления/{relative}\n"
@@ -208,4 +229,5 @@ def service(
         open_project=facts.open_project,
         update_harness=facts.update_harness,
         update_diff=facts.update_diff,
+        configuration=facts.configuration,
     )

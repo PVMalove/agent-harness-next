@@ -5,9 +5,10 @@ from __future__ import annotations
 import copy
 import difflib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from harness.runtime_adapters import AdapterStatus
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from harness.configuration import (
     mask_secrets,
@@ -21,6 +22,9 @@ from harness.health.project_files import validate_project_data
 from harness.json_types import JsonObject
 
 from . import i18n
+
+if TYPE_CHECKING:
+    from .configuration_snapshot import ConfigurationFacts
 
 CONFIG_NAMES = ("project.json", "orchestration.json")
 
@@ -155,6 +159,34 @@ class ConfigurationDraft:
     repo: Path
     documents: dict[str, JsonObject]
     original: dict[str, bytes | None]
+    # The digests of the files the draft was read from (`config_digest`); a write through the
+    # console server refuses to apply over a file whose digest has changed since.
+    digests: dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_snapshot(
+        cls, repo: Path, facts: ConfigurationFacts, names: tuple[str, ...]
+    ) -> ConfigurationDraft:
+        """A draft of `names` from a `configuration.snapshot`: its masked documents (the default
+        for a missing file) are the base, so an untouched secret never leaves the server."""
+        documents: dict[str, JsonObject] = {}
+        original: dict[str, bytes | None] = {}
+        for name in names:
+            if name not in CONFIG_NAMES:
+                raise ValueError("Неизвестный файл конфигурации")
+            if name == "orchestration.json" and not facts.orchestration_installed:
+                raise ValueError("Сначала установите capability backend-orchestration")
+            found = facts.files[name]
+            if found.error:
+                raise ValueError(found.error)
+            documents[name] = copy.deepcopy(found.document)
+            original[name] = json_bytes(found.document) if found.exists else None
+        return cls(
+            repo,
+            documents,
+            original,
+            {name: facts.files[name].digest for name in names},
+        )
 
     @classmethod
     def load(

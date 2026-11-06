@@ -116,6 +116,14 @@ class UpdateDiffReader(Protocol):
     def __call__(self, repo: Path, relative: str, /) -> str: ...
 
 
+class ConfigurationCollector(Protocol):
+    """The «Настройка» facts (`ConfigurationFacts.to_payload`): the masked configuration files
+    with their digests, a pending transaction and the runtime adapter preview; blocks until read,
+    never writes, never creates the version store and never recovers a transaction."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
 class JobExecutor(Protocol):
     """Emit on the event loop, and finish all output callbacks before returning an exit code.
 

@@ -94,6 +94,7 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "help.snapshot": schemas.HelpSnapshotRequest,
         "update_harness.snapshot": schemas.UpdateHarnessSnapshotRequest,
         "update_harness.diff": schemas.UpdateHarnessDiffRequest,
+        "configuration.snapshot": schemas.ConfigurationSnapshotRequest,
     }
     assert set(by_type) == screens.SCREEN_TYPES
     for kind, model in by_type.items():
@@ -120,6 +121,7 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 15, "type": "help.snapshot", "language": "en"},
         {"id": 16, "type": "update_harness.snapshot", "force": True},
         {"id": 17, "type": "update_harness.diff", "path": "AGENTS.md", "force": True},
+        {"id": 18, "type": "configuration.snapshot", "force": True},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -141,6 +143,7 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "update_harness.diff"},
         {"type": "update_harness.diff", "path": ""},
         {"type": "update_harness.diff", "path": "a" * 513},
+        {"type": "configuration.snapshot", "names": ["project.json"]},
     ):
         with pytest.raises(ValueError):
             schemas.REQUESTS.validate_python(broken)
@@ -176,6 +179,7 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
             "harness.snapshot",
             "harness.maintenance",
             "update_harness.snapshot",
+            "configuration.snapshot",
         )
     )
     replies.append(

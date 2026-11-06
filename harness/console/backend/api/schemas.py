@@ -208,6 +208,12 @@ class UpdateHarnessDiffRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class ConfigurationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["configuration.snapshot"]
+    force: bool = False
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
@@ -261,6 +267,7 @@ ConsoleRequest = Annotated[
     | HelpSnapshotRequest
     | UpdateHarnessSnapshotRequest
     | UpdateHarnessDiffRequest
+    | ConfigurationSnapshotRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
     | WorkerSubscribeRequest,
@@ -367,6 +374,7 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "open_project.snapshot",
         "help.snapshot",
         "update_harness.snapshot",
+        "configuration.snapshot",
     ]
     ok: Literal[True]
     snapshot_id: int
