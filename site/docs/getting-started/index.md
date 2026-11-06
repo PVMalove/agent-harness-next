@@ -30,13 +30,6 @@ python3 bin/install-global.py --target-home "$HOME" \
   --runtime claude --runtime codex
 ```
 
-В PowerShell:
-
-```powershell
-python bin\install-global.py --target-home $HOME `
-  --runtime claude --runtime codex
-```
-
 `--check` показывает статус без записи, `--replace-conflicts` заменяет конфликтующие файлы,
 предварительно сохраняя их backup. MCP, модели, плагины, credentials и permissions установщик
 не трогает.

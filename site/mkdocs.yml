@@ -1,5 +1,5 @@
 site_name: Agent Harness Next · beta
-site_description: Портативный harness для Claude Code и Codex.
+site_description: Портативный harness для coding-агентов.
 site_url: https://pvmalove.github.io/claude-agent-harness/
 repo_url: https://github.com/PVMalove/claude-agent-harness
 repo_name: PVMalove/claude-agent-harness
@@ -67,6 +67,106 @@ nav:
       - QA gate и Release Gate: guides/qa-gate.md
       - Примеры: guides/examples.md
       - Troubleshooting: guides/troubleshooting.md
+      - Скиллы:
+          - skills/index.md
+          - skills/architect.md
+          - skills/ask-matt.md
+          - skills/code-review-role.md
+          - skills/code-review.md
+          - skills/conflict-resolver.md
+          - skills/coordinator.md
+          - skills/database-migrations.md
+          - skills/delivery-stats.md
+          - skills/developer.md
+          - skills/diagnosing-bugs.md
+          - skills/fast-implement.md
+          - skills/grill-me.md
+          - skills/grill-with-docs.md
+          - skills/grilling.md
+          - skills/implement.md
+          - skills/integrate-project.md
+          - skills/messaging-integration.md
+          - skills/pilot.md
+          - skills/playbook.md
+          - skills/qa-gate.md
+          - skills/qa.md
+          - skills/setup-labels.md
+          - skills/start-project.md
+          - skills/tdd.md
+          - skills/to-guide.md
+          - skills/to-pull-requests.md
+          - skills/to-spec.md
+          - skills/to-tickets.md
+          - skills/triage.md
+          - skills/wayfinder.md
+          - Upstream:
+              - skills/vendor/index.md
+              - skills/vendor/ask-matt.md
+              - skills/vendor/code-review.md
+              - skills/vendor/codebase-design.md
+              - skills/vendor/diagnosing-bugs.md
+              - skills/vendor/domain-modeling.md
+              - skills/vendor/grill-me.md
+              - skills/vendor/grill-with-docs.md
+              - skills/vendor/grilling.md
+              - skills/vendor/handoff.md
+              - skills/vendor/implement.md
+              - skills/vendor/improve-codebase-architecture.md
+              - skills/vendor/prototype.md
+              - skills/vendor/research.md
+              - skills/vendor/resolving-merge-conflicts.md
+              - skills/vendor/setup-matt-pocock-skills.md
+              - skills/vendor/tdd.md
+              - skills/vendor/teach.md
+              - skills/vendor/to-questionnaire.md
+              - skills/vendor/to-spec.md
+              - skills/vendor/to-tickets.md
+              - skills/vendor/triage.md
+              - skills/vendor/wait-what.md
+              - skills/vendor/wayfinder.md
+              - skills/vendor/wizard.md
+              - skills/vendor/writing-for-agents.md
+      - Агенты:
+          - agents/index.md
+          - agents/artifacts.md
+          - agents/code-review-spec.md
+          - agents/code-review-standards.md
+          - agents/console-web-home-checklist.md
+          - agents/git-workflow.md
+          - agents/issue-tracker.md
+          - agents/pr-composer.md
+          - agents/releases.md
+          - agents/test-author.md
+          - agents/triage-labels.md
+          - agents/worktrees.md
+      - Hooks:
+          - hooks/index.md
+          - hooks/block-dangerous-git.md
+          - hooks/block-direct-master.md
+          - hooks/block-pr-merge.md
+          - hooks/block-public-attribution.md
+          - hooks/block-scratch-outside-docs-tasks.md
+          - hooks/check-branch-name.md
+          - hooks/check-worktree-branch-name.md
+          - hooks/count-skill-usage.md
+          - hooks/hook-response.md
+          - hooks/impact-first-touch.md
+          - hooks/install-and-update.md
+          - hooks/mark-qa-gate-passed.md
+          - hooks/protect-hook-policy.md
+          - hooks/record-qa-gate-pass.md
+          - hooks/require-bounded-check.md
+          - hooks/require-qa-gate.md
+          - hooks/run-test.md
+          - hooks/sensitive-path-recheck.md
+          - hooks/targeted-check-reminder.md
+          - hooks/test-author-guard.md
+          - hooks/test-author-preflight.md
+      - Оркестрация:
+          - backend-orchestration.md
+          - runtime-discovery.md
+          - console-configuration.md
+      - Схемы: diagrams/index.md
   - Концепции:
       - Hooks: concepts/hooks.md
       - Worktrees: concepts/worktrees.md

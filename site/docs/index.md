@@ -1,6 +1,6 @@
 ---
 title: Agent Harness Next
-description: Портативный harness для Claude Code и Codex.
+description: Портативный harness для coding-агентов.
 hide:
   - navigation
   - toc
@@ -9,7 +9,7 @@ hide:
 <div class="ah-hero">
   <div>
     <span class="ah-eyebrow">Agent Harness Next · beta</span>
-    <h1>Harness для Claude Code и Codex</h1>
+    <h1>Harness для coding-агентов</h1>
     <p class="ah-lead">Agent Harness Next разворачивает в проект скиллы, hooks и контекстные
       документы и ведёт оркестрацию через Rust runtime и локальный runtime-store, оставляя Python
       policy-слоем.</p>
@@ -34,10 +34,10 @@ hide:
       <div class="ah-terminal-bar"><i></i><i></i><i></i><span>harness · runtime-store</span><span style="margin-left:auto">beta</span></div>
 <pre><code>$ harness health .
 == Оркестрация ==
-✓ ledger: authority=runtime-store schema_version=4
+✓ ledger: authority=runtime-store schema_version=7
 ✓ незавершённых batch нет
 ✓ активные dispatch посылают heartbeat вовремя
-ℹ Rust runtime: protocol 1.6 · serving
+ℹ Rust runtime: protocol 1.7 · serving
 ⚠ Repo Map: minimal (parser bundle отсутствует)
 == Итог ==
 ok=40 warn=4 fail=1 skipped=11</code></pre>
@@ -48,7 +48,7 @@ ok=40 warn=4 fail=1 skipped=11</code></pre>
 
 <div class="ah-status">
   <div><div class="k">Runtime</div><div class="v">Rust + Tokio</div><div class="s">supervisor, OCI, reconcile</div></div>
-  <div><div class="k">State</div><div class="v">SQLite WAL</div><div class="s">schema 4 · audit chain</div></div>
+  <div><div class="k">State</div><div class="v">SQLite WAL</div><div class="s">schema 7 · audit chain</div></div>
   <div><div class="k">Runtimes</div><div class="v">Claude Code · Codex</div><div class="s">hooks и skills нативно</div></div>
   <div><div class="k">Platforms</div><div class="v">Linux · Windows</div><div class="s">UDS и named pipe</div></div>
 </div>

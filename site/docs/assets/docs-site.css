@@ -212,7 +212,7 @@ body {
 
 .ah-mascot {
   display: flex;
-  align-items: end;
+  align-items: flex-start;
   gap: 0.7rem;
   margin-left: 0.1rem;
 }
@@ -226,7 +226,7 @@ body {
 .ah-bubble {
   position: relative;
   max-width: 18rem;
-  margin-bottom: 0.6rem;
+  margin-top: 0.6rem;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--ah-rule);
   border-radius: 8px;
@@ -678,6 +678,52 @@ body {
   .ah-demo-empty img {
     width: 4.6rem;
   }
+}
+
+.ah-diagram-frame {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  min-height: 520px;
+  border: 1px solid var(--ah-edge);
+  border-radius: 9px;
+  background: #101419;
+}
+
+.ah-diagram-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.ah-diagram {
+  display: block;
+  padding: 0.45rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 9px;
+  background: var(--ah-surface);
+  color: var(--ah-fg);
+  text-decoration: none;
+}
+
+.ah-diagram:hover {
+  border-color: var(--ah-edge);
+  text-decoration: none;
+}
+
+.ah-diagram img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--ah-rule);
+  border-radius: 5px;
+}
+
+.ah-diagram span {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--ah-muted);
+  font: 0.6rem/1.4 var(--ah-mono);
 }
 
 .ah-footer-brand {

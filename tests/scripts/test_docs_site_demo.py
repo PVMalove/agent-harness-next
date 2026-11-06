@@ -13,17 +13,16 @@ SCREENS = ["home", "board", "orchestration", "reports"]
 def _demo() -> tuple[str, str]:
     return (
         (DEMO / "index.md").read_text(encoding="utf-8"),
-        (DEMO / "console.html").read_text(encoding="utf-8"),
+        (DEMO / "execution-console.js").read_text(encoding="utf-8"),
     )
 
 
 def test_switcher_targets_the_console_screens() -> None:
     page, console = _demo()
     targets = re.findall(r'data-screen="([a-z]+)"', page)
-    screens = re.findall(r'class="screen[^"]*" id="([a-z]+)"', console)
 
     assert targets == SCREENS
-    assert set(targets) == set(screens)
+    assert all(f"id:'{screen}'" in console for screen in targets)
 
 
 def test_demo_loads_the_console_lazily_with_a_fallback() -> None:
