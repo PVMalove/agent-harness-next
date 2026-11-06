@@ -23,3 +23,7 @@
 /* Agent activity: the mockup's .work-* rows hold the live step list; a Codex step's pill sits
    under its details. */
 .work-event-main .orch-pill { margin-top: 4px; }
+/* Live Repo Map facts include long hashes and paths absent from the demonstration values. */
+.repo-page .repo-index-row > b { min-width: 0; overflow-wrap: anywhere; }
+.repo-page .repo-index-row > span { flex-shrink: 0; }
+.repo-page .repo-index-body > p { overflow-wrap: anywhere; }

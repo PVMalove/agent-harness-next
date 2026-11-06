@@ -9,6 +9,7 @@ import { AgentActivity } from "./routes/AgentActivity";
 import { Harness } from "./routes/Harness";
 import { Home } from "./routes/Home";
 import { Placeholder } from "./routes/Placeholder";
+import { RepoMap } from "./routes/RepoMap";
 import { ConsoleProvider, useConsole } from "./useConsole";
 import type { ConsoleClient } from "./ws/client";
 
@@ -23,6 +24,7 @@ function Layout() {
 
 /** The sections the web console shows; the others are placeholders. */
 const ROUTES: Readonly<Record<string, ReactElement>> = {
+  "repo-map": <RepoMap />,
   harness: <Harness />,
   "agent-activity": <AgentActivity />,
 };

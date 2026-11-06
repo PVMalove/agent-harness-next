@@ -75,6 +75,9 @@ export function useJobs(section: Section): Jobs {
     });
     const stopOpen = client.subscribe((event) => {
       if (event.type === "open") client.requestCommands(section);
+      // A lost start reply has no known job id. Reconcile the server's active job on reopen;
+      // never resend the mutation whose outcome is unknown.
+      if (event.type === "closed" && shownId.current === "start") shownId.current = null;
     });
     client.requestCommands(section);
     client.listJobs();

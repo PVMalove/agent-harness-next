@@ -20,6 +20,8 @@ import { parseStepsReply } from "./steps";
 import type { StepsEvent } from "./steps";
 import { parseHomeSnapshot } from "./types";
 import type { HomeSnapshot } from "./types";
+import { repoMapReader } from "./repoMap";
+import type { RepoMapEvent } from "./repoMap";
 
 export const FIRST_DELAY_MS = 500;
 export const MAX_DELAY_MS = 8000;
@@ -87,6 +89,8 @@ export interface HomeRequest {
 }
 
 export interface ConsoleClient {
+  requestRepoMap(force?: boolean): boolean;
+  subscribeRepoMap(listener: (event: RepoMapEvent) => void): () => void;
   start(): void;
   stop(): void;
   /** Reconnect now instead of waiting for the backoff timer. */
@@ -129,6 +133,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   const timeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   const listeners = new Set<(event: ClientEvent) => void>();
   const jobListeners = new Set<(event: JobEvent) => void>();
+  const mapListeners = new Set<(event: RepoMapEvent) => void>();
   // The followed jobs by id: the held output and cursor survive reconnects.
   const followed = new Map<string, LocalJob | null>();
   // Open job requests of the current socket by request id.
@@ -190,6 +195,10 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     if (timer !== undefined) timers.clearTimeout(timer);
     pending.delete(id);
   };
+
+  const mapReader = repoMapReader(send, settle, (event) => {
+    for (const listener of [...mapListeners]) listener(event);
+  });
 
   const subscribeOrchestration = () => {
     const request: OrchestrationSubscribeRequest =
@@ -290,6 +299,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   const onReply = (reply: Record<string, unknown>) => {
     const id = reply.id;
     if (typeof id !== "string" || !id.startsWith(`${generation}-`)) return;
+    if (mapReader.reply(reply)) return;
     if (jobRequests.has(id)) {
       onJobReply(id, reply);
       return;
@@ -365,6 +375,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     timers.clearTimeout(reconnectTimer);
     reconnectTimer = null;
     clearPending();
+    mapReader.reset();
     latestHome = null;
     subscription = null;
     stepsSubscription = null;
@@ -401,6 +412,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     next.onclose = () => {
       if (current !== generation || stopped) return;
       clearPending();
+      mapReader.reset();
       socket = null;
       stepsSubscription = null;
       attempt += 1;
@@ -420,6 +432,11 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   }
 
   return {
+    requestRepoMap: mapReader.request,
+    subscribeRepoMap(listener) {
+      mapListeners.add(listener);
+      return () => mapListeners.delete(listener);
+    },
     start() {
       if (!stopped) return;
       stopped = false;
