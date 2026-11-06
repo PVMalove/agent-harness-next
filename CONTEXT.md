@@ -648,7 +648,7 @@ _Avoid_: dual-write, переходный период с двумя writer-ам
 Транзакционное хранилище operational state, которое пишет Rust `harness-runtime` в эпохе
 `runtime-store` (ADR 0020). В нём лежат записи lifecycle и записи восстановления; решения принимает
 Python, а store только пишет их через `state.write`. Восстановление сверяет записи восстановления с
-зафиксированным lifecycle (ADR 0028).
+зафиксированным lifecycle (ADR 0030).
 _Avoid_: Python store `runtimeState.v1` (заменён, ADR 0026), второй writer, база данных консоли.
 
 **Нормализация конфигурации** (`normalization.v1`):
