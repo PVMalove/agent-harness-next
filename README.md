@@ -206,6 +206,14 @@ allowlist хостов, блокеры, очистку и пример прое�
 [инструкции обновления и включения памяти](./docs/harness-guide.md#обновление-существующего-проекта-и-включение-памяти):
 обновление сохраняет `project.json`, поэтому schema и opt-in поля памяти нужно перенести отдельно.
 
+Конфиг оркестрации проверяет `coordinator.py config validate --canonical --json`: при загрузке
+coordinator лишь нормализует enum-поля в памяти с предупреждением и файл не меняет. После
+`harness-runtime migrate` состояние batch хранит runtime store, а остановленный или удержанный batch
+восстанавливают команды `recovery status|reload|resume|fix|abort`; `recovery status`, `reload` и
+`resume` доступны и в разделе Orchestration консоли. Recovery не перезапускает принятые этапы и не восстанавливает потерянный
+контекст модели и незакоммиченные файлы. Подробности:
+[руководство по backend-оркестрации](./docs/backend-orchestration.md#удержание-batch-и-команды-recovery).
+
 При любой capability установщик ставит общий
 [контракт технического английского](./harness/docs/technical-english.md) как
 `.harness/docs/technical-english.md` и обновляет его в составе управляемого snapshot. `diff` и
