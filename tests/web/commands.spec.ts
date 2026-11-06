@@ -1,4 +1,4 @@
-/* Harness · Commands in the real build over a mocked socket: a run streams its output, a dropped
+/* Harness · Commands (the «Команды» tab) in the real build over a mocked socket: a run streams its output, a dropped
    socket resumes it from the held cursor, and the panel and its confirmation dialog match the
    baselines at 1440 and 390 px. Update only these with
    `npm run test:e2e:update -- commands.spec.ts`. */
@@ -11,6 +11,8 @@ const base = () => process.env.CONSOLE_BASE_URL!;
 const read = (name: string) => JSON.parse(readFileSync(resolve(__dirname, "fixtures", name), "utf-8")) as unknown;
 const HOME = read("home-snapshot.json");
 const CATALOG = read("job-catalog.json") as Body;
+const OVERVIEW = read("harness-overview.json") as Body;
+const MAINTENANCE = JSON.stringify(read("harness-maintenance.json"));
 
 type Body = Record<string, unknown>;
 
@@ -44,6 +46,11 @@ async function mockSocket(page: Page, onJob: (ws: WebSocketRoute, request: Body,
       const id = request.id;
       if (request.type === "home.snapshot") {
         send(ws, { id, type: "home.snapshot", cached: true, age_seconds: 3, snapshot: HOME });
+      } else if (request.type === "harness.overview") {
+        send(ws, { id, type: "harness.overview", cached: true, age_seconds: 3, ...OVERVIEW });
+      } else if (request.type === "harness.maintenance") {
+        const text = MAINTENANCE;
+        send(ws, { id, type: "harness.maintenance", snapshot_id: 2, text, next: text.length, done: true, cached: false, age_seconds: 0 });
       } else if (request.type === "job.catalog") {
         send(ws, { id, type: "job.catalog", ...CATALOG });
       } else if (request.type === "job.list") {
@@ -60,6 +67,7 @@ async function open(page: Page, width: number) {
   await page.clock.setFixedTime(new Date("2026-11-05T10:41:00Z"));
   await page.goto(`${base()}/#/harness`);
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
+  await page.getByRole("tab", { name: "Команды" }).click();
   await expect(page.locator('[data-command="diff"]')).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }

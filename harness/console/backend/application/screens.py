@@ -16,6 +16,7 @@ from typing import Generic, TypeVar
 from ...kernel.batch_history import History
 from ...kernel.help_text import help_sections
 from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
+from ...kernel.pipeline_stats import pipeline_usage
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
 from ...kernel.update_harness_snapshot import diff_paths
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
@@ -313,6 +314,26 @@ class ScreenService:
         )
         ledger, _, _ = await self._cached_ledger(force)
         return await self._paged({**facts, "ledger": ledger.payload}, cached, age)
+
+    async def harness_overview(self, *, force: bool = False) -> dict[str, object]:
+        """The installed harness, the package version, the drift state and the pipeline usage
+        counts, from the same Harness and ledger caches as `harness`; `NotFound` without a
+        Harness collector."""
+        collect = self._collect_harness
+        if collect is None:
+            raise NotFound("harness")
+        facts, cached, age = await self._harness.get(
+            lambda: collect(self._repo), force=force
+        )
+        ledger, _, _ = await self._cached_ledger(force)
+        return {
+            "state": facts["state"],
+            "package_version": facts["package_version"],
+            "drift": facts["drift"],
+            "usage": pipeline_usage(ledger.view),
+            "cached": cached,
+            "age_seconds": round(age, 3),
+        }
 
     async def maintenance(self, *, force: bool = False) -> Paged:
         """The cleanup plans with their sizes and the worktree facts of the Harness screen;

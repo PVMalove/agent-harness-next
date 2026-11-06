@@ -7,7 +7,9 @@ import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
 import {
   LanguageProvider,
   factLabel,
+  groupLabel,
   initialLanguage,
+  reasonText,
   useI18n,
   sectionLabel,
   translate,
@@ -54,6 +56,17 @@ describe("the translation catalog", () => {
     expect(sectionLabel("ru", "Home")).toBe("Главная");
     expect(factLabel("en", "Ветка")).toBe("Branch");
     expect(factLabel("ru", "Ветка")).toBe("Ветка");
+  });
+
+  test("words cleanup reasons and check groups with the server's tables", () => {
+    expect(reasonText("ru", "")).toBe("Можно удалить");
+    expect(reasonText("en", "")).toBe(catalog.en["Можно удалить"]);
+    expect(reasonText("ru", "worktree has uncommitted changes")).toBe(catalog.reasons["worktree has uncommitted changes"]);
+    expect(reasonText("en", "worktree has uncommitted changes")).toBe("worktree has uncommitted changes");
+    expect(reasonText("ru", "a reason the table lacks")).toBe("a reason the table lacks");
+    expect(groupLabel("ru", "hooks")).toBe(catalog.groups.hooks);
+    expect(groupLabel("en", "hooks")).toBe(catalog.en[catalog.groups.hooks as keyof typeof catalog.en]);
+    expect(groupLabel("en", "unknown-group")).toBe("unknown-group");
   });
 
   test("starts from the URL language, then the stored one, then Russian", () => {

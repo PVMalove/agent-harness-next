@@ -1,0 +1,23 @@
+{
+  "state": {
+    "installed": true,
+    "installed_version": "2.0.0",
+    "capabilities": [
+      "engineering-suite",
+      "orchestration"
+    ],
+    "skills": 32,
+    "managed_files": 259,
+    "updated_at": "2026-11-05 09:12 UTC",
+    "orchestration": true
+  },
+  "package_version": "2.0.1",
+  "drift": "drift",
+  "usage": {
+    "unavailable": null,
+    "batches": 48,
+    "tickets": 31,
+    "dispatches": 212,
+    "reports": 187
+  }
+}

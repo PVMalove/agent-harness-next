@@ -5,7 +5,7 @@ import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { useConsole } from "../useConsole";
-import type { HomeSnapshot, Problem } from "../ws/types";
+import type { HealthCounters, Problem } from "../ws/types";
 import { healthTotal } from "../ws/types";
 
 /** Offline mode asks again this long after each reply. */
@@ -76,9 +76,9 @@ function ProblemRows({ problems, attention }: { problems: Problem[]; attention: 
   );
 }
 
-function HealthStrip({ snapshot }: { snapshot: HomeSnapshot }) {
+/** The health strip of Home and Diagnostics: one bar per status, sized by the server's counts. */
+export function HealthStrip({ health }: { health: HealthCounters }) {
   const { t } = useI18n();
-  const health = snapshot.health;
   const total = healthTotal(health);
   const parts: [keyof typeof health, string, string][] = [
     ["ok", "var(--ok)", "bar-ok"],
@@ -387,7 +387,7 @@ export function Home() {
                 <small>{t("пропущено")}</small>
               </div>
             </div>
-            {snapshot ? <HealthStrip snapshot={snapshot} /> : null}
+            {snapshot ? <HealthStrip health={snapshot.health} /> : null}
             <div className="health-cols">
               <section id="home-areas" className="health-areas">
                 <div className="subhead">

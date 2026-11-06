@@ -29,6 +29,9 @@ TASK_BOARD_REQUEST = "task_board.snapshot"
 DIAGNOSTICS_REQUEST = "diagnostics.snapshot"
 HARNESS_REQUEST = "harness.snapshot"
 MAINTENANCE_REQUEST = "harness.maintenance"
+# The Harness screen of the Web console: the same state and drift as `harness.snapshot` with the
+# pipeline usage counted on the server, one typed reply instead of the paged ledger.
+HARNESS_OVERVIEW_REQUEST = "harness.overview"
 # The Repo Map screen: HEAD, its cached map, the tier, the parser bundle and the memory status.
 REPO_MAP_REQUEST = "repo_map.snapshot"
 # «Открыть проект»: the installation state of the served project and the candidate projects, each

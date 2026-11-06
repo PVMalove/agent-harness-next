@@ -90,6 +90,7 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "task_board.snapshot": schemas.TaskBoardSnapshotRequest,
         "diagnostics.snapshot": schemas.DiagnosticsSnapshotRequest,
         "harness.snapshot": schemas.HarnessSnapshotRequest,
+        "harness.overview": schemas.HarnessOverviewRequest,
         "harness.maintenance": schemas.HarnessMaintenanceRequest,
         "repo_map.snapshot": schemas.RepoMapSnapshotRequest,
         "open_project.snapshot": schemas.OpenProjectSnapshotRequest,
@@ -124,6 +125,7 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 16, "type": "update_harness.snapshot", "force": True},
         {"id": 17, "type": "update_harness.diff", "path": "AGENTS.md", "force": True},
         {"id": 18, "type": "configuration.snapshot", "force": True},
+        {"id": 19, "type": "harness.overview", "force": True},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -138,6 +140,7 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "task_board.specs", "spec": "#1"},
         {"type": "harness.snapshot", "online": True},
         {"type": "harness.maintenance", "online": True},
+        {"type": "harness.overview", "online": True},
         {"type": "open_project.snapshot", "repo": "/work/other"},
         {"type": "help.snapshot"},
         {"type": "help.snapshot", "language": "de"},
@@ -192,6 +195,32 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
     )
     for reply in replies:
         assert schemas.REPLIES.validate_python(reply).type == reply["type"]
+
+
+def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() -> None:
+    state = {
+        "installed": True, "installed_version": "1.0.0", "capabilities": ["core"],
+        "skills": 3, "managed_files": 7, "updated_at": "t", "orchestration": True,
+    }
+    usage = {"unavailable": None, "batches": 2, "tickets": 1, "dispatches": 5,
+             "reports": 4}
+    reply: dict[str, object] = {
+        "v": 1, "id": 1, "type": "harness.overview", "ok": True, "state": state,
+        "package_version": "1.0.1", "drift": "clean", "usage": usage,
+        "cached": False, "age_seconds": 0.0,
+    }
+    assert schemas.REPLIES.validate_python(reply).type == "harness.overview"
+    assert _fields(schemas.HarnessStatePayload) == set(state)
+    assert _fields(schemas.PipelineUsage) == set(usage)
+    assert _fields(schemas.HarnessOverviewReply) == set(reply)
+    for broken in (
+        {**reply, "ledger": {}},
+        {**reply, "state": {**state, "extra": 1}},
+        {**reply, "usage": {**usage, "batches": -1}},
+        {**reply, "usage": {**usage, "qa_runs": 0}},
+    ):
+        with pytest.raises(ValueError):
+            schemas.REPLIES.validate_python(broken)
 
 
 

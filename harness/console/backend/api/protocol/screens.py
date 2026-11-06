@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from ....kernel.protocol import (
     CONFIGURATION_REQUEST,
     DIAGNOSTICS_REQUEST,
+    HARNESS_OVERVIEW_REQUEST,
     HARNESS_REQUEST,
     HELP_REQUEST,
     LOCK_REQUEST,
@@ -56,6 +57,8 @@ _FIELDS: dict[str, frozenset[str]] = {
     TASK_BOARD_REQUEST: frozenset({"spec", "force"}),
     DIAGNOSTICS_REQUEST: frozenset({"online", "force"}),
     HARNESS_REQUEST: frozenset({"force"}),
+    # A typed reply, not paged: the state, the drift and the pipeline usage counts.
+    HARNESS_OVERVIEW_REQUEST: frozenset({"force"}),
     MAINTENANCE_REQUEST: frozenset({"force"}),
     REPO_MAP_REQUEST: frozenset({"force"}),
     # No project field: the server serves one project and never switches it.
@@ -164,6 +167,9 @@ def _call(
     if kind == HARNESS_REQUEST:
         force = _flag(body, "force")
         return lambda: screens.harness(force=force)
+    if kind == HARNESS_OVERVIEW_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.harness_overview(force=force)
     if kind == MAINTENANCE_REQUEST:
         force = _flag(body, "force")
         return lambda: screens.maintenance(force=force)

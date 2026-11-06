@@ -73,6 +73,25 @@ describe("the build in harness/console/frontend/dist", () => {
     expect(scripts).toContain("структура недоступна");
   });
 
+  test("ships Diagnostics and Harness over the screen snapshots of the same server", () => {
+    const scripts = ofType(".js").map(text).join("\n");
+    for (const request of ["diagnostics.snapshot", "harness.overview", "harness.maintenance", "snapshot.page"]) {
+      expect(scripts).toContain(request);
+    }
+    // The export is a Blob download: no data: URL, no inline script.
+    expect(scripts).toContain("createObjectURL");
+    expect(scripts).not.toMatch(/data:application\/json/);
+  });
+
+  test("the server's CSP for the build stays strict", () => {
+    const source = readFileSync(join(REPO, "harness/console/backend/api/static.py"), "utf-8");
+    expect(source).toContain(
+      `"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; "`,
+    );
+    expect(source).toContain(`f"img-src 'self'; connect-src 'self' ws://127.0.0.1:{port}; base-uri 'none'; "`);
+    expect(source).not.toMatch(/unsafe-(inline|eval)/);
+  });
+
   test("scripts contain no URL outside the not-loaded allowlist", () => {
     for (const path of ofType(".js")) {
       const foreign = (text(path).match(URL_PATTERN) ?? []).filter(

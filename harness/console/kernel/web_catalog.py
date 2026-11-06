@@ -1,7 +1,8 @@
 """The translation catalog of the web console, generated from the console's own tables.
 
 The SPA in `harness/console/frontend` reads the same Russian-to-English strings as the TUI:
-`render()` turns `EN`, `FACT_LABELS_EN` and the section labels into one JSON document, and the
+`render()` turns `EN`, `FACT_LABELS_EN`, `TAB_LABELS_EN`, the section labels, the Russian texts
+of the cleanup and worktree reasons and the Russian labels of the health check groups into one JSON document, and the
 committed `catalog.json` must equal it. Regenerate with `python -m harness.console.kernel.web_catalog`."""
 
 from __future__ import annotations
@@ -9,8 +10,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ...health.render import GROUP_LABELS_RU
 from .i18n import sections
-from .i18n_strings import EN, FACT_LABELS_EN
+from .i18n_strings import EN, FACT_LABELS_EN, TAB_LABELS_EN
+from .maintenance import REASONS_RU
 
 CATALOG_PATH = (
     Path(__file__).resolve().parents[1] / "frontend" / "src" / "i18n" / "catalog.json"
@@ -20,7 +23,14 @@ REGENERATE = "python -m harness.console.kernel.web_catalog"
 
 def render() -> str:
     """The catalog JSON text: sorted keys, UTF-8 text, a trailing newline."""
-    catalog = {"en": EN, "facts": FACT_LABELS_EN, "sections": sections()}
+    catalog = {
+        "en": EN,
+        "facts": FACT_LABELS_EN,
+        "sections": sections(),
+        "reasons": REASONS_RU,
+        "groups": GROUP_LABELS_RU,
+        "tabs": TAB_LABELS_EN,
+    }
     return json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 

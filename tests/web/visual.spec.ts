@@ -28,7 +28,8 @@ async function open(page: Page, width: number, route: string) {
 
 for (const width of [1440, 390]) {
   test(`shell at ${width} px`, async ({ page }) => {
-    await open(page, width, "diagnostics");
+    // A section the web console does not show yet: the shell around its placeholder.
+    await open(page, width, "reports");
     if (width < 600) {
       await page.getByRole("button", { name: "Открыть меню" }).click();
       await expect(page.locator("#nav-scrim")).toBeVisible();

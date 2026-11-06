@@ -576,6 +576,12 @@ FACT_LABELS_EN: dict[str, str] = {
     "Лимит поиска": "Search limit",
 }
 
+# Labels of the web console's page tabs. Kept apart from `EN`: `Обзор` names a page's overview
+# tab here but folder browsing in `EN`.
+TAB_LABELS_EN: dict[str, str] = {
+    "Обзор": "Overview",
+}
+
 # Prefixes of dynamic lines whose rest (a path, an id) is kept: "Цель: /x" -> "Target: /x".
 EN_PREFIXES: dict[str, str] = {
     "Проект: ": "Project: ",
@@ -1792,5 +1798,65 @@ EN.update(
         "Нет ожидающих решений": "No pending decisions",
         "Показана часть решений. Обновите список после обработки.": "Only part of the decisions is shown. Refresh the list after handling them.",
         "Сначала предложите переход и прочитайте вывод. Для approval введите его transition_digest.": "Propose the transition and read its output first. Enter its transition_digest to approve it.",
+    }
+)
+
+# Web console: the Diagnostics and Harness routes. Facts, drift labels and status words reuse the
+# TUI strings above; the reasons and the check groups come from their own catalog tables.
+EN.update(
+    {
+        "Сводка здоровья": "Health summary",
+        "Детали проверки": "Check details",
+        "Проверка не выбрана": "No check selected",
+        "Выберите строку слева.": "Select a row on the left.",
+        "Найти проверку": "Find a check",
+        "Проблемы": "Problems",
+        "Пройдено": "Passed",
+        "Пропущено": "Skipped",
+        "Сбросить": "Reset",
+        "Полный отчёт": "Full report",
+        "групп: {count}": "groups: {count}",
+        "Отчёт не построен": "Report not built",
+        "Отчёт строится…": "Building the report…",
+        "Исправление не удалось": "The fix failed",
+        "Команды «Как исправить» консоль не выполняет — запустите их вручную.": "The console does not run the “How to fix” commands — run them manually.",
+        "Пропуск не считается успехом. Онлайн-проверки требуют сети и прав.": "A skip is not a pass. Online checks need network access and permissions.",
+        "Установка, использование пайплайна и обслуживание. Команды выполняются как job сервера после подтверждения.": "Installation, pipeline usage and maintenance. Commands run as server jobs after confirmation.",
+        "Установка": "Installation",
+        "Установлено": "Installed",
+        "установлен": "installed",
+        "Пакет": "Package",
+        "Скилов": "Skills",
+        "Управляемых файлов": "Managed files",
+        "Lock обновлён": "Lock updated",
+        "✔ подключена": "✔ connected",
+        "○ не подключена": "○ not connected",
+        "Харнесс не установлен: нет читаемого .harness/harness.lock.": "Harness is not installed: no readable .harness/harness.lock.",
+        "Состояние харнесса загружается…": "Loading the Harness state…",
+        "○ Состояние харнесса недоступно: ": "○ Harness state unavailable: ",
+        "{count} скилов": "{count} skills",
+        "{count} управляемых файлов": "{count} managed files",
+        "{count} объектов": "{count} items",
+        "Пайплайн": "Pipeline",
+        "Использование пайплайна": "Pipeline usage",
+        "Запусков (batch)": "Runs (batch)",
+        "Тикетов": "Tickets",
+        "Диспатчей": "Dispatches",
+        "Отчётов": "Reports",
+        "тикетов {tickets} · диспатчей {dispatches} · отчётов {reports}": "tickets {tickets} · dispatches {dispatches} · reports {reports}",
+        "недоступно": "unavailable",
+        "леджер оркестрации не найден или не инициализирован": "the orchestration ledger is not found or not initialized",
+        "Обслуживание": "Maintenance",
+        "Временные файлы": "Temporary files",
+        "Временных файлов нет": "No temporary files",
+        "Статистика считается…": "Calculating statistics…",
+        "Ошибка плана очистки: ": "Cleanup plan error: ",
+        "Жёсткий режим: +": "Hard mode: +",
+        "файлов": "files",
+        "Очистить…": "Clean…",
+        "Удалить…": "Remove…",
+        "можно удалить": "can remove",
+        "Можно удалить": "Can remove",
+        "Repo Map": "Repo Map",
     }
 )

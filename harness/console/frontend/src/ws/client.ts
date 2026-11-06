@@ -1,10 +1,11 @@
 /* One WebSocket to the console server with reconnects, an orchestration cursor, the cursors
-   of the followed jobs and the one live step feed. Every effect (socket, timers, the /health/live probe) is injected, so
+   of the followed jobs, the one live step feed and the screen snapshots of Diagnostics and Harness. Every effect (socket, timers, the /health/live probe) is injected, so
    tests drive it deterministically. */
 import { mergeOutput, parseCommands, parseJobSnapshot, parseJobSummary } from "./jobs";
 import type { CommandDescriptor, JobSummary, LocalJob } from "./jobs";
 import type {
   ErrorReply,
+  HarnessOverviewReply,
   HomeSnapshotReply,
   HomeSnapshotRequest,
   JobCancelRequest,
@@ -14,6 +15,8 @@ import type {
   OrchestrationEventsReply,
   OrchestrationSourceReply,
   OrchestrationSubscribeRequest,
+  ScreenSnapshotReply,
+  SnapshotPageReply,
   StepsSubscribeRequest,
 } from "./protocol.gen";
 import { parseStepsReply } from "./steps";
@@ -68,12 +71,35 @@ export type JobEvent =
   | { type: "job"; job: LocalJob }
   | { type: "job-error"; request: JobRequestType; code: string; message: string; jobId: string | null };
 
+/** The screen snapshots the web console reads: the paged health report and maintenance facts,
+    and the typed Harness overview. */
+export type ScreenType = "diagnostics.snapshot" | "harness.maintenance" | "harness.overview";
+
+export interface ScreenRequest {
+  type: ScreenType;
+  force?: boolean;
+  /** Diagnostics only: the online report, cached apart from the offline one. */
+  online?: boolean;
+}
+
+/** What a screen request brings: the parsed JSON value of a snapshot (or the overview reply
+    without its envelope) with its cache facts, or a refusal with its code. */
+export type ScreenEvent =
+  | { type: "screen"; key: string; value: unknown; cached: boolean; ageSeconds: number }
+  | { type: "screen-error"; key: string; code: string; message: string };
+
+/** The key a screen request is answered under: the latest request per key wins. */
+export const screenKey = (request: ScreenRequest): string =>
+  request.type === "diagnostics.snapshot" && request.online ? `${request.type}:online` : request.type;
+
 export interface StartJob {
   command_id: string;
   values?: Record<string, string>;
   confirmed?: boolean;
   /** The typed word of a command whose description asks for one; the server checks it. */
   confirmation?: string;
+  /** The digest of the cleanup plan the page showed; the server deletes only that plan. */
+  plan_digest?: string;
 }
 
 export interface ClientOptions {
@@ -121,6 +147,10 @@ export interface ConsoleClient {
       reconnect; a second call on the same connection sends nothing. */
   followSteps(): boolean;
   subscribeSteps(listener: (event: StepsEvent) => void): () => void;
+  /** Read a screen snapshot to its end; a newer request of the same key supersedes this one.
+      False when no socket is open. */
+  requestScreen(request: ScreenRequest): boolean;
+  subscribeScreens(listener: (event: ScreenEvent) => void): () => void;
 }
 
 const OPEN = 1;
@@ -157,6 +187,13 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   let cursor: string | null = null;
   let subscription: string | null = null;
   let latestHome: string | null = null;
+  const screenListeners = new Set<(event: ScreenEvent) => void>();
+  // The open screen reads: the request id waiting for a reply -> its key; the key -> its read.
+  const screenRequests = new Map<string, string>();
+  const screenReads = new Map<
+    string,
+    { id: string; text: string; snapshotId: number | null; cached: boolean; ageSeconds: number }
+  >();
 
   const emit = (event: ClientEvent) => {
     for (const listener of [...listeners]) listener(event);
@@ -170,6 +207,10 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     for (const listener of [...stepListeners]) listener(event);
   };
 
+  const emitScreen = (event: ScreenEvent) => {
+    for (const listener of [...screenListeners]) listener(event);
+  };
+
   const subscribeSteps = (): boolean => {
     if (stepsSubscription !== null) return true;
     const request: StepsSubscribeRequest = { type: "steps.subscribe" };
@@ -181,6 +222,8 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     for (const timer of pending.values()) timers.clearTimeout(timer);
     pending.clear();
     jobRequests.clear();
+    screenRequests.clear();
+    screenReads.clear();
   };
 
   const send = (body: Record<string, unknown>): string | null => {
@@ -227,6 +270,87 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     if (latestHome !== null) settle(latestHome);
     latestHome = id;
     return true;
+  };
+
+  const requestScreen = (request: ScreenRequest): boolean => {
+    const key = screenKey(request);
+    const body: Record<string, unknown> = { type: request.type, force: request.force ?? false };
+    if (request.type === "diagnostics.snapshot") body.online = request.online ?? false;
+    const id = send(body);
+    if (id === null) return false;
+    const previous = screenReads.get(key);
+    if (previous) {
+      settle(previous.id);
+      screenRequests.delete(previous.id);
+    }
+    screenRequests.set(id, key);
+    screenReads.set(key, { id, text: "", snapshotId: null, cached: false, ageSeconds: 0 });
+    return true;
+  };
+
+  const screenFailed = (key: string, code: string, message: string) => {
+    screenReads.delete(key);
+    emitScreen({ type: "screen-error", key, code, message });
+  };
+
+  /** One reply of a screen read: a first page, a further page or the overview. */
+  const onScreenReply = (id: string, reply: Record<string, unknown>) => {
+    const key = screenRequests.get(id);
+    screenRequests.delete(id);
+    settle(id);
+    const read = key === undefined ? undefined : screenReads.get(key);
+    if (key === undefined || !read || read.id !== id) return;
+    if (reply.ok !== true) {
+      const error = (reply as unknown as ErrorReply).error;
+      screenFailed(key, error?.code ?? "unknown", error?.message ?? "");
+      return;
+    }
+    if (reply.type === "harness.overview") {
+      const { v: _v, id: _id, type: _type, ok: _ok, cached, age_seconds, ...value } =
+        reply as unknown as HarnessOverviewReply;
+      if (typeof cached !== "boolean" || typeof age_seconds !== "number") {
+        screenFailed(key, "invalid", "");
+        return;
+      }
+      screenReads.delete(key);
+      emitScreen({ type: "screen", key, value, cached, ageSeconds: age_seconds });
+      return;
+    }
+    const page = reply as unknown as ScreenSnapshotReply | SnapshotPageReply;
+    if (typeof page.text !== "string" || typeof page.done !== "boolean" || typeof page.next !== "number") {
+      screenFailed(key, "invalid", "");
+      return;
+    }
+    if (reply.type !== "snapshot.page") {
+      const first = reply as unknown as ScreenSnapshotReply;
+      if (typeof first.snapshot_id !== "number" || typeof first.cached !== "boolean") {
+        screenFailed(key, "invalid", "");
+        return;
+      }
+      read.snapshotId = first.snapshot_id;
+      read.cached = first.cached;
+      read.ageSeconds = typeof first.age_seconds === "number" ? first.age_seconds : 0;
+    }
+    read.text += page.text;
+    if (!page.done) {
+      const next = send({ type: "snapshot.page", snapshot_id: read.snapshotId, offset: page.next });
+      if (next === null) {
+        screenReads.delete(key);
+        return;
+      }
+      read.id = next;
+      screenRequests.set(next, key);
+      return;
+    }
+    screenReads.delete(key);
+    let value: unknown;
+    try {
+      value = JSON.parse(read.text);
+    } catch {
+      emitScreen({ type: "screen-error", key, code: "invalid", message: "" });
+      return;
+    }
+    emitScreen({ type: "screen", key, value, cached: read.cached, ageSeconds: read.ageSeconds });
   };
 
   const sendJob = (type: JobRequestType, key: string, body: Record<string, unknown>): boolean => {
@@ -311,6 +435,10 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     if (decisionReader.reply(reply)) return;
     if (jobRequests.has(id)) {
       onJobReply(id, reply);
+      return;
+    }
+    if (screenRequests.has(id)) {
+      onScreenReply(id, reply);
       return;
     }
     if (reply.type === "home.snapshot") {
@@ -493,6 +621,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
         values: request.values ?? {},
         confirmed: request.confirmed ?? false,
         ...(request.confirmation === undefined ? {} : { confirmation: request.confirmation }),
+        ...(request.plan_digest === undefined ? {} : { plan_digest: request.plan_digest }),
         client: "browser",
       };
       return sendJob("job.start", request.command_id, { ...body });
@@ -524,6 +653,11 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     subscribeSteps(listener) {
       stepListeners.add(listener);
       return () => stepListeners.delete(listener);
+    },
+    requestScreen,
+    subscribeScreens(listener) {
+      screenListeners.add(listener);
+      return () => screenListeners.delete(listener);
     },
   };
 }
