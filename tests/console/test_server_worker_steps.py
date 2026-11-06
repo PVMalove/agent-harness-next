@@ -248,3 +248,78 @@ def test_a_full_page_stays_below_the_message_limit(tmp_path: Path) -> None:
         assert reply["page"]["steps"]
 
     asyncio.run(scenario())
+
+
+def test_one_record_with_many_large_steps_stays_below_the_limit_and_moves_on(
+    tmp_path: Path,
+) -> None:
+    events = _project(tmp_path)
+    with events.open("a") as stream:
+        record = {
+            "type": "user",
+            "message": {
+                "content": [
+                    {"type": "tool_result", "content": '"\\' * 4500} for _ in range(12)
+                ]
+            },
+        }
+        stream.write(json.dumps(record) + "\n")
+    runtime = _runtime(tmp_path)
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            offset = 0
+            for request_id in range(1, 4):
+                await socket.send_text(
+                    json.dumps(
+                        {
+                            "id": request_id,
+                            "type": "worker.steps",
+                            "dispatch_id": "dispatch-s",
+                            "offset": offset,
+                        }
+                    )
+                )
+                raw = await socket.receive_text()
+                assert len(raw.encode("utf-8")) <= MESSAGE_LIMIT
+                page = json.loads(raw)["page"]
+                if not page["more"]:
+                    break
+                assert page["offset"] > offset
+                offset = page["offset"]
+        assert page["offset"] == events.stat().st_size
+        assert page["more"] is False
+
+    asyncio.run(scenario())
+
+
+def test_external_text_log_reports_the_unrecognised_reason(tmp_path: Path) -> None:
+    _project(tmp_path)
+    logs = tmp_path / ".harness/.sandboxes/scratch/worker-logs"
+    logs.mkdir(parents=True)
+    (logs / "dispatch-p.log").write_text("claude text output SECRET\n")
+    runtime = _runtime(tmp_path)
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            reply = await _ask(
+                socket,
+                {
+                    "id": 1,
+                    "type": "worker.steps",
+                    "dispatch_id": "dispatch-p",
+                    "offset": 0,
+                },
+            )
+        assert reply["ok"] is True, reply
+        page = cast(dict[str, object], reply["page"])
+        assert (page["source"], page["state"], page["reason"], page["steps"]) == (
+            "plain",
+            "unavailable",
+            "log_unrecognised",
+            [],
+        )
+        assert "SECRET" not in json.dumps(reply)
+        REPLIES.validate_python(reply)
+
+    asyncio.run(scenario())

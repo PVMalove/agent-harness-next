@@ -351,7 +351,14 @@ class WorkerStepsPage(_Strict):  # type: ignore[explicit-any]
     structure: Literal["available", "unavailable"]
     state: Literal["connected", "waiting", "unavailable"]
     reason: (
-        Literal["no_log", "log_missing", "log_unreadable", "log_outside_storage"] | None
+        Literal[
+            "no_log",
+            "log_missing",
+            "log_unreadable",
+            "log_outside_storage",
+            "log_unrecognised",
+        ]
+        | None
     )
     message: str
     offset: Annotated[int, Field(ge=0)]

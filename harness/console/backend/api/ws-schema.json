@@ -1852,7 +1852,8 @@
                 "no_log",
                 "log_missing",
                 "log_unreadable",
-                "log_outside_storage"
+                "log_outside_storage",
+                "log_unrecognised"
               ],
               "type": "string"
             },
