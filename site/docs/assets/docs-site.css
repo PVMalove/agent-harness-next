@@ -726,7 +726,7 @@ body {
 
 /* Heading permalink: a visible link icon, larger than the old triangle. */
 .md-typeset .headerlink {
-  font-size: 1.3em;
+  font-size: 1.1em;
   line-height: 1;
   opacity: 0.8;
   text-decoration: none;
