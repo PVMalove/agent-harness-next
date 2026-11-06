@@ -251,8 +251,6 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
                     "Пайплайн batch, рабочие сессии и команды координатора.",
                     id="orchestration-subtitle",
                 )
-                yield Button("Доска задач", id="open-board", compact=True)
-                yield Button("Публикация", id="open-publish", compact=True)
                 yield Button("Восстановление", id="open-recovery", compact=True)
                 yield Button("Контейнерный маршрут", id="container-route", compact=True)
                 yield Button(self._sessions_label(), id="worker-sessions", compact=True)

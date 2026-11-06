@@ -171,9 +171,9 @@ class NativePermissionDialog(Translated, ModalScreen[bool | None]):
 class WorkerObservationScreen(ConsoleShell):
     """A passive view. Closing/reconnecting never starts or terminates a worker."""
 
-    SECTION = "Orchestration"
-    IS_SECTION_ROOT = False
-    CRUMBS = "Главная › Оркестрация › Worker / Наблюдение"
+    SECTION = "Agent activity"
+    IS_SECTION_ROOT = True
+    CRUMBS = "Главная › Ход работы"
     HAS_CONTEXT = True
     IDS = ShellIds(
         navigation="worker-navigation",
@@ -194,7 +194,7 @@ class WorkerObservationScreen(ConsoleShell):
     ]
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
-    WorkerObservationScreen #worker-sessions { width: 27; height: 1fr; background: $surface; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-sessions { width: 27; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
     WorkerObservationScreen #worker-live { width: 2; height: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
@@ -235,7 +235,7 @@ class WorkerObservationScreen(ConsoleShell):
     """)
     # The shell's rules plus this screen's own, which must outrank the app's generic widget rules.
     CSS = SHELL_CSS + brand.shell_css("""
-    .shell #worker-sessions { background: $surface; }
+    .shell #worker-sessions { background: transparent; }
     .shell #worker-picker, .shell #worker-picker:focus { border: none; background: transparent; }
     .shell #worker-picker > ListItem.-highlight, .shell #worker-picker:focus > ListItem.-highlight {
         background: $row-highlight; color: $foreground; text-style: none;

@@ -434,6 +434,9 @@ class DashboardScreen(ConsoleShell):
             "Repo Map": self._repo_map,
             CONFIGURATION_SECTION: self._configuration,
             "Help": self._help,
+            "Board": self._board,
+            "Agent activity": self._activity,
+            "Publish": self._publish,
         }
 
     def compose(self) -> ComposeResult:
@@ -824,7 +827,7 @@ class DashboardScreen(ConsoleShell):
     async def action_open_section(self, index: int) -> None:
         name = SECTIONS[index]
         menu = self.query_one("#section-menu", ListView)
-        menu.index = index
+        menu.index = self.menu_position(name)
         menu.focus()
         await self._open_section(name)
 
@@ -939,6 +942,21 @@ class DashboardScreen(ConsoleShell):
         from .configuration import ConfigurationScreen
 
         return ConfigurationScreen(self.repo)
+
+    def _board(self) -> Screen[None]:
+        from .board import BoardScreen
+
+        return BoardScreen(self.repo, self._home_client)
+
+    def _activity(self) -> Screen[None]:
+        from .worker_observation import WorkerObservationScreen
+
+        return WorkerObservationScreen(self.repo)
+
+    def _publish(self) -> Screen[None]:
+        from .publish import PublishScreen
+
+        return PublishScreen(self.repo, self._home_client)
 
     def _help(self) -> Screen[None]:
         from .help import HelpScreen

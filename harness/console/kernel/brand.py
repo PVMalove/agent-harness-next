@@ -126,9 +126,9 @@ def frame_title(title: str) -> str:
 
 
 def section_title(title: str, note: str = "") -> str:
-    """A section card's title for its top border: the title in capitals, then its counter or
-    note, if any (`" ТРЕБУЕТ ВНИМАНИЯ  2 "`)."""
-    heading = title.strip().upper()
+    """A section card's title for its top border: the title as written, then its counter or note
+    (`" Требует внимания  2 "`), like the Web console's panel header."""
+    heading = title.strip()
     return frame_title(f"{heading}  {note.strip()}" if note.strip() else heading)
 
 

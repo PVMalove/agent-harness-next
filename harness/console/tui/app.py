@@ -74,7 +74,7 @@ class HarnessConsoleApp(App[None]):
     # filled by default. Informational panes stay transparent; selected data rows and primary
     # actions may use a fill. Modal dialogs mask the screen behind them.
     CSS = """
-    Screen { background: $background; }
+    Screen { background: $background !important; }
     Screen * { background: transparent; }
     ModalScreen { background: $background 70%; }
     * {
@@ -193,6 +193,8 @@ class HarnessConsoleApp(App[None]):
     def on_mount(self) -> None:
         self.register_theme(HARNESS_THEME)
         self.theme = brand.THEME_NAME
+        self.ansi_color = False
+        self.call_after_refresh(self._restore_theme)
         # Home reads the console server: without a client there is no home screen to show.
         if self.home_client is not None:
             try:
@@ -209,6 +211,12 @@ class HarnessConsoleApp(App[None]):
                     snapshot=snapshot,
                 )
             )
+
+    def _restore_theme(self) -> None:
+        """A terminal profile or a palette command must not replace the approved console theme."""
+        if self.theme != brand.THEME_NAME:
+            self.theme = brand.THEME_NAME
+        self.ansi_color = False
 
     def _tracked_runner(
         self,

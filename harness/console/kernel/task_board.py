@@ -15,7 +15,7 @@ class BoardSpec:
     """One open spec (epic) and its ticket counters."""
 
     id: str
-    n: int
+    n: int | None
     title: str
     url: str | None
     branch: str | None
@@ -30,7 +30,7 @@ class BoardSpecs:
     tracker: str
     specs: tuple[BoardSpec, ...]
     stale: str | None
-    age_seconds: int | None
+    age_seconds: float | None
     truncated: bool
 
 
@@ -130,18 +130,42 @@ def _optional_str(value: object, what: str) -> str | None:
     return _str(value, what)
 
 
+def _stale(value: object) -> str | None:
+    """The server adds a `{reason, message}` object when the tracker read is stale; the TUI only
+    needs its human text. Older payloads may carry a plain string."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("message", "reason"):
+            found = value.get(key)
+            if isinstance(found, str) and found.strip():
+                return found
+    return None
+
+
+def _optional_number(value: object, what: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{what} is not a number")
+    return float(value)
+
+
 def _spec(value: object, *, totals: bool) -> BoardSpec:
     found = _dict(value, "spec")
     return BoardSpec(
-        id=_str(found.get("id"), "spec.id"),
-        n=_int(found.get("n"), "spec.n"),
-        title=_str(found.get("title"), "spec.title"),
+        id=_str(found.get("id", ""), "spec.id"),
+        n=_optional_int(found.get("n"), "spec.n"),
+        title=_str(found.get("title", ""), "spec.title"),
         url=_optional_str(found.get("url"), "spec.url"),
         branch=_optional_str(found.get("branch"), "spec.branch"),
-        tickets_total=_int(found.get("tickets_total"), "spec.tickets_total")
+        tickets_total=_optional_int(found.get("tickets_total"), "spec.tickets_total")
+        or 0
         if totals
         else 0,
-        tickets_open=_int(found.get("tickets_open"), "spec.tickets_open")
+        tickets_open=_optional_int(found.get("tickets_open"), "spec.tickets_open") or 0
         if totals
         else 0,
     )
@@ -150,27 +174,30 @@ def _spec(value: object, *, totals: bool) -> BoardSpec:
 def specs_from_payload(value: object) -> BoardSpecs:
     """The `task_board.specs` payload; `ValueError` when it is outside the schema."""
     found = _dict(value, "specs")
-    specs = tuple(
-        _spec(item, totals=True) for item in _list(found.get("specs"), "specs.specs")
+    raw_specs = found.get("specs")
+    specs = (
+        tuple(_spec(item, totals=True) for item in raw_specs if isinstance(item, dict))
+        if isinstance(raw_specs, list)
+        else ()
     )
     return BoardSpecs(
-        tracker=_str(found.get("tracker"), "specs.tracker"),
+        tracker=_str(found.get("tracker", ""), "specs.tracker"),
         specs=specs,
-        stale=_optional_str(found.get("stale"), "specs.stale"),
-        age_seconds=_optional_int(found.get("age_seconds"), "specs.age_seconds"),
+        stale=_stale(found.get("stale")),
+        age_seconds=_optional_number(found.get("age_seconds"), "specs.age_seconds"),
         truncated=bool(found.get("truncated", False)),
     )
 
 
 def _blocker(value: object) -> BoardBlocker:
     found = _dict(value, "blocker")
-    state = _str(found.get("state"), "blocker.state")
+    state = _str(found.get("state", "unknown"), "blocker.state")
     if state not in {"open", "closed", "unknown"}:
-        raise ValueError("blocker.state is unknown")
+        state = "unknown"
     return BoardBlocker(
-        id=_str(found.get("id"), "blocker.id"),
+        id=_str(found.get("id", ""), "blocker.id"),
         n=_optional_int(found.get("n"), "blocker.n"),
-        why=_str(found.get("why"), "blocker.why"),
+        why=_str(found.get("why", ""), "blocker.why"),
         state=state,
     )
 
@@ -187,43 +214,55 @@ def _pull(value: object) -> BoardPull | None:
 
 def _card(value: object) -> BoardCard:
     found = _dict(value, "ticket")
-    labels = tuple(
-        _str(item, "ticket.labels[]")
-        for item in _list(found.get("labels"), "ticket.labels")
+    raw_labels = found.get("labels")
+    labels = (
+        tuple(_str(item, "ticket.labels[]") for item in raw_labels)
+        if isinstance(raw_labels, list)
+        else ()
     )
-    criteria = tuple(
-        _str(item, "ticket.criteria[]")
-        for item in _list(found.get("criteria"), "ticket.criteria")
+    raw_criteria = found.get("criteria")
+    criteria = (
+        tuple(_str(item, "ticket.criteria[]") for item in raw_criteria)
+        if isinstance(raw_criteria, list)
+        else ()
     )
     files = []
-    for item in _list(found.get("files"), "ticket.files"):
+    raw_files = found.get("files")
+    for item in raw_files if isinstance(raw_files, list) else ():
         file = _dict(item, "ticket.files[]")
         files.append(
-            (_str(file.get("path"), "file.path"), _str(file.get("why"), "file.why"))
+            (
+                _str(file.get("path", ""), "file.path"),
+                _str(file.get("why", ""), "file.why"),
+            )
         )
-    blockers = tuple(
-        _blocker(item) for item in _list(found.get("blockers"), "ticket.blockers")
+    raw_blockers = found.get("blockers")
+    blockers = (
+        tuple(_blocker(item) for item in raw_blockers)
+        if isinstance(raw_blockers, list)
+        else ()
     )
-    column = _str(found.get("column"), "ticket.column")
+    column = _str(found.get("column", "backlog"), "ticket.column")
     if column not in {"backlog", "ready", "progress", "review", "done"}:
-        raise ValueError("ticket.column is unknown")
+        column = "backlog"
     return BoardCard(
-        id=_str(found.get("id"), "ticket.id"),
+        id=_str(found.get("id", ""), "ticket.id"),
         n=_optional_int(found.get("n"), "ticket.n"),
-        title=_str(found.get("title"), "ticket.title"),
+        title=_str(found.get("title", ""), "ticket.title"),
         url=_optional_str(found.get("url"), "ticket.url"),
         closed=bool(found.get("closed", False)),
         column=column,
         labels=labels,
         priority=_optional_str(found.get("priority"), "ticket.priority"),
         sp=_optional_int(found.get("sp"), "ticket.sp"),
-        command=_str(found.get("command"), "ticket.command"),
+        command=_str(found.get("command", ""), "ticket.command"),
         branch=_optional_str(found.get("branch"), "ticket.branch"),
-        what=_str(found.get("what"), "ticket.what"),
+        what=_str(found.get("what", ""), "ticket.what"),
         criteria=criteria,
         files=tuple(files),
         blockers=blockers,
-        open_blockers=_int(found.get("open_blockers"), "ticket.open_blockers"),
+        open_blockers=_optional_int(found.get("open_blockers"), "ticket.open_blockers")
+        or 0,
         pr=_pull(found.get("pr")),
         batch=_optional_str(found.get("batch"), "ticket.batch"),
         batch_state=_optional_str(found.get("batch_state"), "ticket.batch_state"),
@@ -231,7 +270,7 @@ def _card(value: object) -> BoardCard:
         dispatch_state=_optional_str(
             found.get("dispatch_state"), "ticket.dispatch_state"
         ),
-        prompt=_str(found.get("prompt"), "ticket.prompt"),
+        prompt=_str(found.get("prompt", ""), "ticket.prompt"),
         truncated=bool(found.get("truncated", False)),
     )
 
@@ -239,19 +278,23 @@ def _card(value: object) -> BoardCard:
 def board_from_payload(value: object) -> BoardSnapshot:
     """The `task_board.snapshot` payload; `ValueError` when it is outside the schema."""
     found = _dict(value, "board")
-    columns = tuple(
-        _str(_dict(item, "column").get("id"), "column.id")
-        for item in _list(found.get("columns"), "board.columns")
+    raw_columns = found.get("columns")
+    columns = (
+        tuple(
+            _str(_dict(item, "column").get("id"), "column.id") for item in raw_columns
+        )
+        if isinstance(raw_columns, list)
+        else ()
     )
-    kpis_value = _dict(found.get("kpis"), "board.kpis")
+    kpis_value = _dict(found.get("kpis", {}), "board.kpis")
     kpis = {
-        key: _int(kpis_value.get(key), f"kpis.{key}")
+        key: _optional_int(kpis_value.get(key), f"kpis.{key}") or 0
         for key in ("open", "total", "with_open_blockers", "active_batch")
     }
     return BoardSnapshot(
-        tracker=_str(found.get("tracker"), "board.tracker"),
-        ledger=_str(found.get("ledger"), "board.ledger"),
-        spec=_spec(found.get("spec"), totals=False),
+        tracker=_str(found.get("tracker", ""), "board.tracker"),
+        ledger=_str(found.get("ledger", "ok"), "board.ledger"),
+        spec=_spec(found.get("spec", {}), totals=False),
         columns=columns,
         kpis=kpis,
         tickets=tuple(

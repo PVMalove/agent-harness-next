@@ -30,7 +30,7 @@ class TopBar(Horizontal):
     DEFAULT_CSS = brand.shell_css("""
     TopBar {
         height: 2; margin: 0 1; padding: 0 1; color: $foreground;
-        background: $surface; border-bottom: solid $border-subtle;
+        background: transparent; border-bottom: solid $border-subtle;
     }
     TopBar #topbar-left { width: 1fr; text-wrap: nowrap; text-overflow: ellipsis; }
     TopBar #topbar-right { width: auto; padding-left: 2; text-align: right; color: $text-muted; }
@@ -95,7 +95,7 @@ class WorkspaceHeader(TopBar):
     """Product identity stays in the window bar; breadcrumbs belong to the content below it."""
 
     DEFAULT_CSS = brand.shell_css("""
-    WorkspaceHeader { height: 2; margin: 0; padding: 0 2; background: $surface; color: $foreground; border-bottom: solid $border-subtle; }
+    WorkspaceHeader { height: 2; margin: 0; padding: 0 2; background: transparent; color: $foreground; border-bottom: solid $border-subtle; }
     WorkspaceHeader #topbar-left { width: 1fr; }
     WorkspaceHeader #topbar-right { width: 1fr; color: $text-muted; }
     """)

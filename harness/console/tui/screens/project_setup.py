@@ -209,7 +209,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     ProjectSetupScreen #setup-scroll { width: 100%; height: 1fr; overflow-x: hidden; padding: 0 2; }
     ProjectSetupScreen #setup-title { height: 1; text-style: bold; }
     ProjectSetupScreen #setup-subtitle { height: auto; color: $text-muted; }
-    ProjectSetupScreen #setup-stage { height: auto; border: round $border-subtle; background: $surface; padding: 0 1; }
+    ProjectSetupScreen #setup-stage { height: auto; border: round $border-subtle; background: transparent; padding: 0 1; }
     ProjectSetupScreen #setup-columns { width: 100%; height: auto; layout: vertical; }
     ProjectSetupScreen.-spacious #setup-columns { layout: horizontal; }
     ProjectSetupScreen #setup-left, ProjectSetupScreen #setup-right { width: 1fr; height: auto; }
@@ -225,7 +225,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     ProjectSetupScreen #project-path { width: 1fr; }
     ProjectSetupScreen #target-status { margin-top: 1; }
     ProjectSetupScreen #browser-panel { height: auto; margin-top: 1; }
-    ProjectSetupScreen #directory-browser { height: 12; background: $surface; border: round $border-subtle; padding: 0 1; }
+    ProjectSetupScreen #directory-browser { height: 12; background: transparent; border: round $border-subtle; padding: 0 1; }
     ProjectSetupScreen #directory-browser > .tree--guides, ProjectSetupScreen #directory-browser > .tree--guides-hover, ProjectSetupScreen #directory-browser > .tree--guides-selected { color: $background; }
     ProjectSetupScreen #directory-browser > .tree--cursor { background: $row-highlight; color: $foreground; }
     ProjectSetupScreen #directory-browser:focus > .tree--cursor { background: $selection-background; color: $selection-foreground; text-style: none; }
@@ -234,7 +234,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     ProjectSetupScreen RadioSet { height: auto; border: none; padding: 0; background: transparent; }
     ProjectSetupScreen RadioButton { padding: 0; background: transparent; }
     ProjectSetupScreen #capability-detail { color: $text-muted; }
-    ProjectSetupScreen #plan-command { border: round $border-subtle; background: $surface; padding: 0 1; }
+    ProjectSetupScreen #plan-command { border: round $border-subtle; background: transparent; padding: 0 1; }
     ProjectSetupScreen #plan-hint { color: $text-muted; }
     ProjectSetupScreen #install-note { width: auto; height: 3; padding-left: 1; content-align: left middle; color: $text-muted; }
     ProjectSetupScreen #checks-summary { margin-top: 1; }

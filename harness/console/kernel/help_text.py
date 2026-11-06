@@ -26,6 +26,9 @@ HELP_MARKDOWN = """\
 
 Выбор пункта меню, вкладки или сессии не запускает команду.
 
+Меню сгруппировано как в Веб-консоли: **Обзор**, **Работа**, **Контекст**. Клавиши `0`–`9`
+сохраняют прежние разделы, а `b`, `w` и `p` открывают доску задач, ход работы и публикацию.
+
 ## Разделы
 
 | Клавиша | Раздел | Что внутри |
@@ -40,6 +43,9 @@ HELP_MARKDOWN = """\
 | `7` | Repo Map | Карта для HEAD: сводка, дерево файлов со статусом парсера, символы, связи (на узком терминале — раскрывающийся блок) и хабы. Вкладка «Диагностики» проверяет полноту карты; «Настройки»: режим minimal / full, парсеры языков и память проекта. |
 | `8` | Настройка | Шаги `project.json` и `orchestration.json`, черновик, проверка и diff, версии и откат, необязательные CLI-подсказки. |
 | `9` | Справка | Окно консоли, разделы, клавиши, статусы, безопасность и документация. |
+| `b` | Доска задач | Спеки, пять колонок, фильтры и карточка тикета с промптом; трекер только читается. |
+| `w` | Ход работы | Сессии worker, наблюдаемые шаги и доступы без запуска нового процесса. |
+| `p` | Публикация | Пакеты, PR/MR, кандидат и preflight; PR и merge остаются человеку. |
 
 ## Клавиши
 
@@ -129,6 +135,9 @@ its logic.
 
 Selecting a menu item, tab or session never runs a command.
 
+The menu is grouped like the Web console: **Overview**, **Work**, **Context**. Keys `0`–`9`
+keep the original sections, while `b`, `w` and `p` open the task board, agent activity and publish.
+
 ## Sections
 
 | Key | Section | What is inside |
@@ -143,6 +152,9 @@ Selecting a menu item, tab or session never runs a command.
 | `7` | Repo Map | The map for HEAD: summary, file tree with parser status, symbols, relations (a foldable block on a narrow terminal) and hubs. Diagnostics checks map completeness; Settings covers minimal / full mode, language parsers and project memory. |
 | `8` | Configuration | `project.json` and `orchestration.json` steps, draft, check and diff, versions and restore, optional CLI hints. |
 | `9` | Help | Console window, sections, keys, statuses, safety and documentation. |
+| `b` | Task board | Specs, five columns, filters and a ticket card with the prompt; the tracker is read-only. |
+| `w` | Agent activity | Worker sessions, observed steps and access without starting a new process. |
+| `p` | Publish | Batches, PR/MR, candidate and preflight; the PR and merge remain human actions. |
 
 ## Keys
 

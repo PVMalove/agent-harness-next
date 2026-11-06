@@ -39,9 +39,9 @@ def _candidate(stages: list[StageEntry]) -> str:
 class PublishScreen(ConsoleShell):
     """Candidate, PR/MR and evidence for the selected batch; all facts are read from the ledger."""
 
-    SECTION = "Orchestration"
-    IS_SECTION_ROOT = False
-    CRUMBS = "Главная › Оркестрация › Публикация"
+    SECTION = "Publish"
+    IS_SECTION_ROOT = True
+    CRUMBS = "Главная › Публикация"
     HAS_CONTEXT = False
     NARROW_FOOTER_KEYS = ("escape", "r", "f2")
     AUTO_FOCUS = "#publish-batches"

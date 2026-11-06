@@ -202,9 +202,9 @@ class BoardScreen(ConsoleShell):
     """The task board of one spec, opened from Orchestration: specs, five columns, filters and
     the card modal. It reads the tracker only; the status and tickets stay the tracker's."""
 
-    SECTION = "Orchestration"
-    IS_SECTION_ROOT = False
-    CRUMBS = "Главная › Оркестрация › Доска задач"
+    SECTION = "Board"
+    IS_SECTION_ROOT = True
+    CRUMBS = "Главная › Доска задач"
     HAS_CONTEXT = False
     NARROW_FOOTER_KEYS = ("escape", "r", "f2")
     AUTO_FOCUS = "#board-spec"
@@ -226,7 +226,9 @@ class BoardScreen(ConsoleShell):
     BoardScreen #board-refresh { width: auto; }
     BoardScreen #board-filters { height: auto; margin-top: 1; }
     BoardScreen #board-filter-fields { height: auto; }
-    BoardScreen #board-search { width: 1fr; margin-bottom: 1; }
+    BoardScreen #board-search { width: 1fr; margin-right: 1; }
+    BoardScreen #board-priority { width: 30; margin-right: 1; }
+    BoardScreen #board-free { width: auto; }
     BoardScreen #board-status-line { height: 1; margin-bottom: 1; }
     BoardScreen #board-live { width: 2; height: 1; color: $primary; }
     BoardScreen #board-status { width: 1fr; height: 1; color: $text-muted; }
@@ -238,13 +240,15 @@ class BoardScreen(ConsoleShell):
     BoardScreen TabPane { height: 1fr; }
     BoardScreen.-narrow #board-columns-wide { display: none; }
     BoardScreen.-narrow #board-tabs { display: block; }
-    BoardScreen .board-list { height: 1fr; border: round $border-subtle; background: $surface; }
+    BoardScreen .board-list { height: 1fr; border: round $border-subtle; background: transparent; }
     BoardScreen .board-list > ListItem { height: auto; padding: 1; border-left: solid transparent; border-bottom: solid $border-subtle; }
     BoardScreen .board-list > ListItem.-highlight, BoardScreen .board-list:focus > ListItem.-highlight { background: $row-highlight; color: $foreground; border-left: solid $selection-edge; }
     BoardScreen .board-empty { color: $text-muted; height: auto; padding: 1; }
     BoardScreen .board-error { color: $error; height: auto; }
     BoardScreen.-narrow #board-controls { height: auto; }
     BoardScreen.-narrow #board-spec, BoardScreen.-narrow #board-search { width: 100%; margin-right: 0; }
+    BoardScreen.-narrow #board-filter-fields { layout: vertical; }
+    BoardScreen.-narrow #board-priority { width: 100%; margin-right: 0; }
     """)
 
     def __init__(self, repo: Path, client: ScreenClient) -> None:
@@ -287,7 +291,7 @@ class BoardScreen(ConsoleShell):
                     collapsed=True,
                     id="board-filters",
                 ):
-                    with Vertical(id="board-filter-fields"):
+                    with Horizontal(id="board-filter-fields"):
                         yield Input(
                             placeholder=i18n.tr(self._language(), "Поиск по тикетам"),
                             id="board-search",
