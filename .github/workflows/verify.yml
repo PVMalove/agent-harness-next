@@ -18,7 +18,8 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Screenshot baselines use this distribution's font rendering; do not follow ubuntu-latest.
+    runs-on: ubuntu-26.04
     # The complete suite reached 81% after almost an hour on a hosted runner (#943).
     timeout-minutes: 120
     steps:
