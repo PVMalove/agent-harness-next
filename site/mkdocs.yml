@@ -60,6 +60,9 @@ nav:
       - getting-started/index.md
   - Руководства:
       - Рабочий поток: guides/workflow.md
+      - "/implement": guides/implement.md
+      - "/fast-implement": guides/fast-implement.md
+      - TDD: guides/tdd.md
   - Reference: reference/index.md
   - Архитектура:
       - architecture/index.md
