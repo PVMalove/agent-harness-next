@@ -239,6 +239,35 @@ def require_current(
         _refuse("preserved writer progress changed after human approval")
 
 
+def _historical_source_matches(
+    root: Path,
+    batch: JsonObject,
+    entry: JsonObject,
+    commit: object,
+    *,
+    retired: bool,
+) -> bool:
+    """Accept the immutable blocked-report boundary supported by #850, including imported events."""
+    if entry.get("report"):
+        from harness.orchestration.workflow.history import _pending_report
+
+        report = _pending_report(root, batch, entry)
+        return (
+            (
+                entry.get("state") == "reported"
+                or (retired and entry.get("state") == "abandoned")
+            )
+            and report.get("outcome") == "blocked"
+            and report.get("commit_sha") == commit
+            and entry.get("decision", {}).get("decision")
+            not in {"accept", "accept-conditional", "override-warning"}
+        )
+    return (
+        entry.get("state") == "cancelled"
+        and entry.get("cancellation", {}).get("runtime_stopped") is True
+    )
+
+
 def validate_event(root: Path, batch: JsonObject, event: JsonObject) -> None:
     """Validate historical binding without comparing it to a checkout that can advance."""
     progress = event["evidence"].get("preserved_progress")
@@ -272,9 +301,13 @@ def validate_event(root: Path, batch: JsonObject, event: JsonObject) -> None:
             event["next_action"]
         )
         or brief.get("purpose") != "work"
-        or entry.get("report")
-        or entry.get("state") != "cancelled"
-        or not entry.get("cancellation", {}).get("runtime_stopped")
+        or not _historical_source_matches(
+            root,
+            batch,
+            entry,
+            progress.get("head_commit"),
+            retired=source in event["evidence"].get("retired_dispatches", []),
+        )
         or progress.get("snapshot_commit") != brief.get("snapshot_commit")
         or progress.get("head_commit") != event["evidence"].get("writer_start_commit")
         or not isinstance(progress.get("head_commit"), str)

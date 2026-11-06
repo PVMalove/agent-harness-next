@@ -548,5 +548,9 @@ pub fn upgrade_store(state: &std::path::Path) -> Result<bool> {
     )?;
     connection.busy_timeout(std::time::Duration::from_secs(5))?;
     connection.execute_batch("PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;")?;
-    upgrade(&mut connection)
+    let changed = upgrade(&mut connection)?;
+    // An offline repair may have drained WAL before it could publish its intent. Every serve
+    // restores the normal journal mode, even when no schema migration was necessary.
+    seal(connection)?;
+    Ok(changed)
 }

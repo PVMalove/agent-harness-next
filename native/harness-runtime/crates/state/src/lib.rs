@@ -12,6 +12,7 @@ pub mod export;
 pub mod hooks;
 pub mod identity;
 pub mod import;
+pub mod import_approval;
 pub mod lease;
 pub mod legacy;
 pub mod lock;
