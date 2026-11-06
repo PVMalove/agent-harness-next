@@ -58,14 +58,18 @@ def test_every_russian_page_has_an_english_twin() -> None:
         if not _english_twin(path).is_file()
     ]
 
-    assert missing == [], f"нет английской пары ({len(missing)}):\n" + "\n".join(missing)
+    assert missing == [], f"нет английской пары ({len(missing)}):\n" + "\n".join(
+        missing
+    )
 
 
 def test_english_pages_have_no_russian_prose() -> None:
     found: list[str] = []
     for path in sorted(SITE_DOCS.rglob("*.en.md")):
         fence: str | None = None
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
             marker = FENCE.match(line)
             if marker:
                 fence = marker.group(1)[0] if fence is None else None
@@ -75,4 +79,6 @@ def test_english_pages_have_no_russian_prose() -> None:
             if CYRILLIC.search(INLINE_CODE.sub("", line)):
                 found.append(f"{path.relative_to(SITE_DOCS).as_posix()}:{number}")
 
-    assert found == [], f"кириллица в английских страницах ({len(found)}):\n" + "\n".join(found[:50])
+    assert found == [], (
+        f"кириллица в английских страницах ({len(found)}):\n" + "\n".join(found[:50])
+    )

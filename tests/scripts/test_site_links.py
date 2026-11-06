@@ -82,3 +82,50 @@ def test_link_escaping_the_docs_directory_is_reported(tmp_path: Path) -> None:
     (docs / "index.md").write_text("[outside](../../README.md)", encoding="utf-8")
 
     assert find_broken_links(docs) == ["index.md: ../../README.md"]
+
+
+def test_english_page_resolves_raw_html_from_the_en_url(tmp_path: Path) -> None:
+    docs = _docs(tmp_path)
+    (docs / "assets").mkdir()
+    (docs / "assets" / "mascot.svg").write_text("<svg/>", encoding="utf-8")
+    (docs / "index.md").write_text('<img src="assets/mascot.svg">', encoding="utf-8")
+    (docs / "index.en.md").write_text(
+        '<img src="../assets/mascot.svg">\n<img src="assets/mascot.svg">\n',
+        encoding="utf-8",
+    )
+
+    assert find_broken_links(docs) == ["index.en.md: assets/mascot.svg"]
+
+
+def test_english_static_html_needs_a_twin_or_a_root_path(tmp_path: Path) -> None:
+    docs = _docs(tmp_path)
+    (docs / "demo").mkdir()
+    (docs / "demo" / "site.css").write_text("body{}", encoding="utf-8")
+    (docs / "demo" / "data.js").write_text("", encoding="utf-8")
+    (docs / "demo" / "data.en.js").write_text("", encoding="utf-8")
+    (docs / "demo" / "console.html").write_text(
+        '<link href="site.css">', encoding="utf-8"
+    )
+    (docs / "demo" / "console.en.html").write_text(
+        '<link href="../../demo/site.css">\n'
+        '<script src="data.js"></script>\n'
+        '<link href="site.css">\n',
+        encoding="utf-8",
+    )
+
+    assert find_broken_links(docs) == ["demo/console.en.html: site.css"]
+
+
+def test_english_page_may_link_to_a_page_served_by_fallback(tmp_path: Path) -> None:
+    docs = _docs(tmp_path)
+    (docs / "guides").mkdir()
+    (docs / "guides" / "workflow.md").write_text("# Workflow\n", encoding="utf-8")
+    (docs / "guides" / "index.md").write_text("# Guides\n", encoding="utf-8")
+    (docs / "index.en.md").write_text(
+        '<a href="guides/">guides</a>\n<a href="guides/workflow/">workflow</a>\n'
+        '<a href="guides/gone/">gone</a>\n',
+        encoding="utf-8",
+    )
+    (docs / "index.md").write_text("# Home\n", encoding="utf-8")
+
+    assert find_broken_links(docs) == ["index.en.md: guides/gone/"]

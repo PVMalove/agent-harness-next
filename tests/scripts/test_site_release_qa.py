@@ -57,7 +57,9 @@ def test_public_pages_have_no_internal_issue_numbers() -> None:
                 relative = path.relative_to(SITE_DOCS).as_posix()
                 found.append(f"{relative}:{number}: {line.strip()[:120]}")
 
-    assert found == [], "внутренние номера задач на публичных страницах:\n" + "\n".join(found)
+    assert found == [], "внутренние номера задач на публичных страницах:\n" + "\n".join(
+        found
+    )
 
 
 IMG_TAG = re.compile(r"<img\b[^>]*>", re.IGNORECASE | re.DOTALL)
@@ -91,7 +93,9 @@ def test_hero_has_the_mascot_with_alt() -> None:
 
 
 def test_footer_has_the_mascot_with_alt() -> None:
-    footer = (SITE / "overrides" / "partials" / "copyright.html").read_text(encoding="utf-8")
+    footer = (SITE / "overrides" / "partials" / "copyright.html").read_text(
+        encoding="utf-8"
+    )
 
     image = re.search(r"<img[^>]*assets/mascot\.svg[^>]*>", footer)
     assert image is not None
