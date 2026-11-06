@@ -68,6 +68,7 @@ from scripts.verification.process import (
     run_ok,
     run_stage,
 )
+from scripts.verification.site_links import check_site_links
 from scripts.verification.text_checks import check_no_todo, grep_contains, grep_line
 from scripts.verification.vendor_pin import check_vendor_pin
 
@@ -168,6 +169,7 @@ def _check_documentation() -> None:
     grep_contains(agents_seed, "For code discovery, run the Repo Map")
     grep_contains(agents_seed, "then use targeted `rg` searches and reads.")
     check_docs_agents_enumeration()
+    check_site_links()
     check_pvmalove_override_docs_sync()
     check_pvmalove_additions_docs_sync()
     check_pvmalove_suite_summary_sync()

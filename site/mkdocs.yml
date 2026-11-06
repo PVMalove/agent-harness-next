@@ -95,6 +95,8 @@ extra:
       name: GitHub
 
 validation:
+  nav:
+    omitted_files: warn
   links:
     not_found: warn
     absolute_links: relative_to_docs

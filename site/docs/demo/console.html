@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Agent Harness Next — веб-консоль</title>
-  <link rel="icon" href="mascot.svg" type="image/svg+xml">
+  <link rel="icon" href="../assets/mascot.svg" type="image/svg+xml">
   <link rel="stylesheet" href="site.css">
   <style>
     body.console-body { padding: 0; background: #101419; overflow: hidden; }
@@ -122,6 +122,7 @@
     .report b { display: block; font-size: 10px; font-weight: 500; }
     .report small { color: var(--muted); font-size: 9px; }
     @media (max-width: 760px) {
+      .console-top { overflow-x: auto; }
       .console-layout { grid-template-columns: 1fr; }
       .console-nav { display: flex; gap: 4px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: 6px; }
       .console-nav .group { display: contents; }
