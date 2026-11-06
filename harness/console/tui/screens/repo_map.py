@@ -1,15 +1,16 @@
-"""Раздел Repo Map: карта для HEAD, отображаемая сразу из кэша результатов Repo Map либо строящаяся
-по запросу. Модальное окно `BuildConfirmScreen` предупреждает, что CLI может установить parser bundle,
+"""Раздел Repo Map: карта для HEAD из кэша результатов Repo Map, прочитанная снимком
+`repo_map.snapshot` сервера консоли, либо построенная по запросу job сервера `repo-map-build`.
+Модальное окно `BuildConfirmScreen` предупреждает, что CLI может установить parser bundle,
 а отмена ничего не запускает. Вкладки: сводка с информацией о происхождении парсера (provenance);
 дерево файлов с сигнатурами и статусом parser_status, поиск символов и связи выбранного файла
 по типам и достоверности; хабы по входящей степени; диагностики. Экспорт карты в Markdown (`e`)
-и JSON (`j`) выполняется через screens/export.py. Все данные берутся из harness.console.kernel.repo_map.
+и JSON (`j`) выполняется через screens/export.py. Представление карты строит
+harness.console.kernel.repo_map.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
 
 from rich.text import Text
 from textual import events
@@ -32,12 +33,14 @@ from ...kernel.status import Status
 from ..translate import Translated
 from ...kernel import repo_map as console_repo_map
 from ...kernel.repo_map import RepoMapView
+from ...kernel.repo_map_snapshot import RepoMapFacts, shown_view
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel import brand, i18n
 from ...kernel import repo_map_settings
+from ..client import ConsoleClientError, ScreenClient
+from ..server_api import build_repo_map
 from .commands import call_from_worker
 from .repo_map_settings import RepoMapSettings
-from harness.repo_map.bundle_fetch import ParserStatus, parser_status
 from .export import (
     EXPORT_BINDING_KEY,
     EXPORT_JSON_BINDING_KEY,
@@ -159,31 +162,27 @@ class RepoMapScreen(ConsoleShell):
         self,
         repo: Path,
         *,
+        client: ScreenClient,
         command_runner: CommandRunner = capturing_runner,
-        find_head: Callable[[Path], str | None] = console_repo_map.head_commit,
-        load_cached: Callable[
-            [Path, str], RepoMapView | None
-        ] = console_repo_map.cached_map,
-        load_parsers: Callable[[Path], ParserStatus] = parser_status,
     ) -> None:
-        """Инициализирует экран Repo Map для указанного репозитория."""
+        """Инициализирует экран Repo Map для указанного репозитория: снимок и построение карты
+        идут через `client` сервера консоли, `command_runner` запускает установку парсеров."""
         super().__init__()
         self.repo = repo
+        self._client = client
         self._command_runner = command_runner
-        self._load_parsers = load_parsers
-        self.head = find_head(repo)
-        self.view: RepoMapView | None = (
-            load_cached(repo, self.head) if self.head is not None else None
-        )
-        self._status_text, self._status_kind = self._initial_status()
+        self.facts: RepoMapFacts | None = None
+        self.head: str | None = None
+        self.view: RepoMapView | None = None
+        self._status_text, self._status_kind = "читаю снимок Repo Map…", "running"
         self._check_serial = 0
-        self._check_inputs: tuple[ParserStatus | None, dict[str, int]] | None = None
         self._narrow = False
         self._tab = "tab-summary"
         self._selected: str | None = None
 
-    def _initial_status(self) -> tuple[str, str]:
-        """The status line at opening, with the kind that gives it its symbol."""
+    def _facts_status(self) -> tuple[str, str]:
+        """The status line once the first snapshot is read, with the kind that gives it its
+        symbol."""
         if self.head is None:
             return (
                 "HEAD не найден: это не Git-репозиторий или в нём нет коммитов",
@@ -300,8 +299,8 @@ class RepoMapScreen(ConsoleShell):
             with TabPane(_TABS["tab-settings"][narrow], id="tab-settings"):
                 yield RepoMapSettings(
                     self.repo,
+                    client=self._client,
                     command_runner=self._command_runner,
-                    load_parsers=self._load_parsers,
                 )
 
     # -- language and width --------------------------------------------------------------------
@@ -362,10 +361,11 @@ class RepoMapScreen(ConsoleShell):
             i18n.tr_text(self._language, self._context_note())
         )
         if event.pane.id == "tab-diagnostics":
-            self._run_checks()
+            self._load(force=True)
 
-    def _run_checks(self) -> None:
-        """Read the parsers, languages and memory in a worker, then show the checks."""
+    def _load(self, *, force: bool) -> None:
+        """Read the `repo_map.snapshot` of the server in a worker, then show it; `force` asks
+        for fresh facts instead of the server's short cache."""
         self.query_one("#map-checks", Static).update(
             i18n.tr_text(self._language, "Проверяю…")
         )
@@ -375,32 +375,45 @@ class RepoMapScreen(ConsoleShell):
 
         def work() -> None:
             try:
-                parsers: ParserStatus | None = self._load_parsers(self.repo)
-            except Exception:
-                parsers = None
-            files = repo_map_settings.language_files(self.repo)
-            call_from_worker(self, lambda: self._checked(serial, parsers, files))
+                facts: RepoMapFacts | str = self._client.repo_map(force=force)
+            except ConsoleClientError as exc:
+                facts = str(exc)
+            call_from_worker(self, lambda: self._loaded(serial, facts))
 
         self.run_worker(work, thread=True, group="repo-map-checks")
 
-    def _checked(
-        self, serial: int, parsers: ParserStatus | None, files: dict[str, int]
-    ) -> None:
+    def _loaded(self, serial: int, facts: RepoMapFacts | str) -> None:
         if serial != self._check_serial:
             return
-        self._check_inputs = (parsers, files)
+        if isinstance(facts, str):
+            failure = f"снимок Repo Map не прочитан: {facts}"
+            self.query_one("#map-checks", Static).update(
+                i18n.tr_text(self._language, failure)
+            )
+            if self.facts is None:
+                self._set_status(failure, "error")
+            return
+        first = self.facts is None
+        self.facts, self.head = facts, facts.head
+        self.view = shown_view(facts, self.view)
+        if first:
+            self._set_status(*self._facts_status())
+        self.query_one("#build-map", Button).disabled = facts.head is None
+        for pane in self.query(RepoMapSettings):
+            pane.show_facts(facts)
+        self._render_map()
         self._paint_checks()
 
     def _paint_checks(self) -> None:
-        if self._check_inputs is None:
+        facts = self.facts
+        if facts is None:
             return
-        parsers, files = self._check_inputs
         checks = repo_map_settings.repo_map_checks(
             head=self.head,
-            tier=repo_map_settings.tier_setting(self.repo),
-            parsers=parsers,
-            files=files,
-            memory=repo_map_settings.memory_status(self.repo),
+            tier=facts.tier,
+            parsers=facts.parsers,
+            files=facts.language_files,
+            memory=facts.memory,
             view=self.view,
             t=lambda text: i18n.tr_text(self._language, text),
         )
@@ -421,7 +434,7 @@ class RepoMapScreen(ConsoleShell):
         self._narrow = self.app.size.width < brand.NARROW_WIDTH
         self._apply_layout()
         self._render_map()
-        self._run_checks()
+        self._load(force=False)
 
     # -- the map -------------------------------------------------------------------------------
 
@@ -589,7 +602,7 @@ class RepoMapScreen(ConsoleShell):
         elif event.button.id == "export-json":
             self.action_export_json()
         elif event.button.id == "run-checks":
-            self._run_checks()
+            self._load(force=True)
 
     def action_build(self) -> None:
         head = self.head
@@ -613,9 +626,7 @@ class RepoMapScreen(ConsoleShell):
         def work() -> None:
             outcome: RepoMapView | str
             try:
-                outcome = console_repo_map.build_map(
-                    self.repo, head, self._command_runner
-                )
+                outcome = build_repo_map(self._client, head)
             except Exception as exc:
                 # An unhandled worker error would exit the whole TUI; show it as the build outcome.
                 outcome = f"сбой построения: {exc!r}"

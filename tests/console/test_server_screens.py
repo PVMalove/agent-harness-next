@@ -23,10 +23,19 @@ from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult
 from harness.console.kernel.harness_facts import HarnessState
 from harness.console.kernel.health_report import report_from_payload
+from harness.console.kernel.repo_map_settings import MemoryStatus
+from harness.console.kernel.repo_map_snapshot import RepoMapFacts
 from harness.console.kernel.reports import ledger_from_payload, timeline_from_payload
 
 from ._asgi_ws import AsgiWebSocket, Rejected
-from ._screen_facts import BODY, HARNESS_STATE, Facts, health_report, service
+from ._screen_facts import (
+    BODY,
+    HARNESS_STATE,
+    Facts,
+    health_report,
+    repo_map_facts,
+    service,
+)
 
 PORT = 48123
 TOKEN = "t" * 43
@@ -190,6 +199,106 @@ def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
             facts.collect_error = RuntimeError("secret /home/x")
             failed = await ask(socket, {"type": "diagnostics.snapshot", "force": True})
             assert failed["error"] == {"code": "collect_failed", "message": "RuntimeError"}
+
+    asyncio.run(scenario())
+
+
+def test_the_repo_map_snapshot_round_trips_and_is_cached(tmp_path: Path) -> None:
+    facts = Facts()
+    runtime = _runtime(tmp_path, facts)
+
+    async def ask(socket: AsgiWebSocket, request: dict[str, object]) -> dict[str, object]:
+        await socket.send_text(json.dumps({"id": 1, **request}))
+        reply = json.loads(await socket.receive_text())
+        assert isinstance(reply, dict)
+        return reply
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            found = await _read(socket, {"type": "repo_map.snapshot"})
+            assert RepoMapFacts.from_payload(found) == repo_map_facts()
+            cached = await ask(socket, {"type": "repo_map.snapshot"})
+            assert cached["cached"] is True and facts.calls["repo_map"] == 1
+            forced = await ask(socket, {"type": "repo_map.snapshot", "force": True})
+            assert forced["cached"] is False and facts.calls["repo_map"] == 2
+            requests: list[dict[str, object]] = [
+                {"type": "repo_map.snapshot", "extra": 1},
+                {"type": "repo_map.snapshot", "force": "yes"},
+            ]
+            for broken in requests:
+                refused = await ask(socket, broken)
+                error = refused["error"]
+                assert refused["ok"] is False and isinstance(error, dict)
+                assert error["code"] == "bad_request"
+
+    asyncio.run(scenario())
+
+
+def test_the_repo_map_facts_of_a_project_without_git_have_no_head_and_no_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console.backend.infrastructure import screen_facts
+
+    def unreadable(repo: Path) -> object:
+        raise OSError("no registry")
+
+    monkeypatch.setattr(screen_facts, "parser_status", unreadable)
+    monkeypatch.setattr(screen_facts, "head_commit", lambda repo: None)
+    monkeypatch.setattr(screen_facts, "language_files", lambda repo: {})
+    memory = MemoryStatus(False, False, (), None, "нет Git")
+    monkeypatch.setattr(screen_facts, "memory_status", lambda repo: memory)
+    found = RepoMapFacts.from_payload(screen_facts.repo_map_facts(tmp_path))
+    assert (found.head, found.view, found.parsers) == (None, None, None)
+    assert found.tier.editable is False and found.language_files == {}
+    assert found.memory == memory
+    assert composition.screen_service(tmp_path)._collect_repo_map is (
+        screen_facts.repo_map_facts
+    )
+
+
+def test_the_job_service_builds_the_repo_map_of_the_given_commit(tmp_path: Path) -> None:
+    """The map is built by the server as the `repo-map-build` job for the commit the screen
+    showed, with the Repo Map CLI of the harness package, so a project without an installed copy
+    still builds, and `-B` keeps `__pycache__` out of the project."""
+    from harness.console.backend.domain.jobs import JobRejected
+    from harness.console.kernel.catalog import REPO_MAP_BUILD, REPO_MAP_COMMANDS
+
+    from ._screen_facts import HEAD
+
+    ran: list[list[str]] = []
+
+    async def executor(
+        argv: object, *, cwd: Path, on_output: object, cancel_event: object
+    ) -> int:
+        ran.append(list(cast(list[str], argv)))
+        cast(Callable[[str, str], None], on_output)("stdout", "{}")
+        return 0
+
+    async def scenario() -> None:
+        served = composition.job_service(tmp_path, executor=executor)
+        # A known command without its commit is a bad request, never an unknown command.
+        with pytest.raises(JobRejected) as refused:
+            served.start({"command_id": "repo-map-build", "client": "tui"})
+        assert refused.value.code == "bad_request" and ran == []
+        jobs = JobService(
+            tmp_path,
+            catalog={entry.key: entry for entry in REPO_MAP_COMMANDS},
+            executor=executor,
+            journal=lambda repo, record: None,
+            new_id=lambda: "job-1",
+            now=lambda: "t",
+        )
+        job = jobs.start(
+            {"command_id": "repo-map-build", "values": {"commit": HEAD}, "client": "tui"}
+        )
+        while job.phase == "running":
+            await asyncio.sleep(0.01)
+        assert (job.phase, job.returncode) == ("completed", 0)
+        script = Path(ran[0][2])
+        assert ran[0][1] == "-B" and script.is_absolute() and script.is_file()
+        assert (script.parent.name, script.name) == ("repo_map", "repo_map.py")
+        assert ran[0][3:] == ["--repo", str(tmp_path), "--commit", HEAD]
+        assert not REPO_MAP_BUILD.read_only and not REPO_MAP_BUILD.needs_confirmation
 
     asyncio.run(scenario())
 

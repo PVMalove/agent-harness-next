@@ -398,6 +398,7 @@
     "Последние задачи": "Recent tasks",
     "Последний снимок устарел": "Last snapshot is stale",
     "Построить Repo Map для HEAD": "Build the Repo Map for HEAD",
+    "Построить Repo Map для показанного HEAD": "Build the Repo Map for the shown HEAD",
     "Построить карту": "Build map",
     "Поток": "Stream",
     "Потребуется подтверждение": "Confirmation is required",

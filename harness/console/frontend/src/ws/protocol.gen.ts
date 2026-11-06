@@ -99,7 +99,8 @@ export type Type8 =
   | "task_board.snapshot"
   | "diagnostics.snapshot"
   | "harness.snapshot"
-  | "harness.maintenance";
+  | "harness.maintenance"
+  | "repo_map.snapshot";
 export type V8 = 1;
 export type Done3 = boolean;
 export type Id10 = string | number | null;
@@ -167,6 +168,7 @@ export type ConsoleRequest =
   | DiagnosticsSnapshotRequest
   | HarnessSnapshotRequest
   | HarnessMaintenanceRequest
+  | RepoMapSnapshotRequest
   | SnapshotPageRequest
   | WorkerStepsRequest
   | WorkerSubscribeRequest;
@@ -249,18 +251,21 @@ export type Type32 = "harness.snapshot";
 export type Force8 = boolean;
 export type Id34 = string | number | null;
 export type Type33 = "harness.maintenance";
+export type Force9 = boolean;
 export type Id35 = string | number | null;
+export type Type34 = "repo_map.snapshot";
+export type Id36 = string | number | null;
 export type Offset2 = number;
 export type SnapshotId3 = number;
-export type Type34 = "snapshot.page";
+export type Type35 = "snapshot.page";
 export type DispatchId2 = string;
-export type Id36 = string | number | null;
-export type Offset3 = number;
-export type Type35 = "worker.steps";
-export type DispatchId3 = string;
 export type Id37 = string | number | null;
+export type Offset3 = number;
+export type Type36 = "worker.steps";
+export type DispatchId3 = string;
+export type Id38 = string | number | null;
 export type Offset4 = number;
-export type Type36 = "worker.subscribe";
+export type Type37 = "worker.subscribe";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
@@ -702,13 +707,22 @@ export interface HarnessMaintenanceRequest {
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "RepoMapSnapshotRequest".
+ */
+export interface RepoMapSnapshotRequest {
+  force?: Force9;
+  id?: Id35;
+  type: Type34;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "SnapshotPageRequest".
  */
 export interface SnapshotPageRequest {
-  id?: Id35;
+  id?: Id36;
   offset: Offset2;
   snapshot_id: SnapshotId3;
-  type: Type34;
+  type: Type35;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -716,9 +730,9 @@ export interface SnapshotPageRequest {
  */
 export interface WorkerStepsRequest {
   dispatch_id: DispatchId2;
-  id?: Id36;
+  id?: Id37;
   offset: Offset3;
-  type: Type35;
+  type: Type36;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -726,7 +740,7 @@ export interface WorkerStepsRequest {
  */
 export interface WorkerSubscribeRequest {
   dispatch_id: DispatchId3;
-  id?: Id37;
+  id?: Id38;
   offset?: Offset4;
-  type: Type36;
+  type: Type37;
 }

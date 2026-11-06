@@ -39,12 +39,14 @@ from ..kernel.protocol import (
     PAGE_REQUEST,
     PROTOCOL_VERSION,
     RECOVERY_REQUEST,
+    REPO_MAP_REQUEST,
     REPORT_REQUEST,
     REPORTS_REQUEST,
     ROUTE_REQUEST,
     TIMELINE_REQUEST,
     WORKER_STEPS_REQUEST,
 )
+from ..kernel.repo_map_snapshot import RepoMapFacts
 from ..kernel.reports import (
     BatchTimeline,
     LedgerView,
@@ -278,6 +280,8 @@ class ScreenClient(HomeClient, Protocol):
     def harness_maintenance(
         self, *, force: bool = False
     ) -> tuple[MaintenanceView | None, str]: ...
+
+    def repo_map(self, *, force: bool = False) -> RepoMapFacts: ...
 
     def run_job(
         self,
@@ -528,6 +532,12 @@ class ConsoleClient:
             else self._decoded(MaintenanceView.from_payload, view, "обслуживание"),
             found["error"],
         )
+
+    def repo_map(self, *, force: bool = False) -> RepoMapFacts:
+        """HEAD, the map cached for it, the tier, the parser bundle, the project languages and
+        the memory status of Repo Map; a map off schema v1 is `MalformedReply`."""
+        found = self._paged({"type": REPO_MAP_REQUEST, "force": force})
+        return self._decoded(RepoMapFacts.from_payload, found, "снимок Repo Map")
 
     def run_job(
         self,

@@ -29,6 +29,8 @@ TASK_BOARD_REQUEST = "task_board.snapshot"
 DIAGNOSTICS_REQUEST = "diagnostics.snapshot"
 HARNESS_REQUEST = "harness.snapshot"
 MAINTENANCE_REQUEST = "harness.maintenance"
+# The Repo Map screen: HEAD, its cached map, the tier, the parser bundle and the memory status.
+REPO_MAP_REQUEST = "repo_map.snapshot"
 # Worker steps: one page of a dispatch's worker log from a byte offset the client keeps, and a
 # stream of such pages in a subscription slot.
 WORKER_STEPS_REQUEST = "worker.steps"

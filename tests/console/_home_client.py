@@ -24,6 +24,8 @@ from harness.console.kernel.home_snapshot import (
     build_home_snapshot,
 )
 from harness.console.kernel.maintenance import MaintenanceView
+from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
+from harness.console.kernel.repo_map_snapshot import RepoMapFacts
 from harness.console.tui.client import (
     HarnessFacts,
     JobResult,
@@ -81,6 +83,9 @@ class FakeHomeClient:
         self.health = Report(1, str(repo), False)
         self.drift = "clean"
         self.maintenance: tuple[MaintenanceView | None, str] = (None, "")
+        self.repo_map_facts = RepoMapFacts(
+            None, None, TierSetting("full", False), MemoryStatus(False, False, (), None), None, {}
+        )
         self.closed = False
 
     def home(self, *, force: bool = False, online: bool = False) -> HomeSnapshot:
@@ -160,6 +165,10 @@ class FakeHomeClient:
         if view is None:
             return None, error
         return MaintenanceView.from_payload(_wire(view.to_payload())), error
+
+    def repo_map(self, *, force: bool = False) -> RepoMapFacts:
+        self.screen_requests.append(("repo_map", force))
+        return RepoMapFacts.from_payload(_wire(self.repo_map_facts.to_payload()))
 
     def run_job(
         self,

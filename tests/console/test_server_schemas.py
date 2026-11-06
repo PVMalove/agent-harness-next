@@ -89,6 +89,7 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "diagnostics.snapshot": schemas.DiagnosticsSnapshotRequest,
         "harness.snapshot": schemas.HarnessSnapshotRequest,
         "harness.maintenance": schemas.HarnessMaintenanceRequest,
+        "repo_map.snapshot": schemas.RepoMapSnapshotRequest,
     }
     assert set(by_type) == screens.SCREEN_TYPES
     for kind, model in by_type.items():

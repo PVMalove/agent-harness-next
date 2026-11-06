@@ -1,7 +1,7 @@
-"""The screen snapshots of Reports, Orchestration, Recovery, Container route, Diagnostics and
-Harness: collect them off the event loop, keep the ledger, the batch history, the health reports
-and the Harness facts in a short single-flight cache and hand out every snapshot as the first page
-of its JSON text, kept for `snapshot.page`."""
+"""The screen snapshots of Reports, Orchestration, Recovery, Container route, Diagnostics, Harness
+and Repo Map: collect them off the event loop, keep the ledger, the batch history, the health
+reports, the Harness and the Repo Map facts in a short single-flight cache and hand out every
+snapshot as the first page of its JSON text, kept for `snapshot.page`."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from .ports import (
     LockReader,
     MaintenanceCollector,
     RecoveryReader,
+    RepoMapCollector,
     RouteReader,
 )
 from .task_board import TaskBoardService
@@ -135,6 +136,7 @@ class ScreenService:
         health: HealthCollector | None = None,
         harness: HarnessCollector | None = None,
         maintenance: MaintenanceCollector | None = None,
+        repo_map: RepoMapCollector | None = None,
         board: TaskBoardService | None = None,
     ) -> None:
         self._repo = repo
@@ -146,6 +148,7 @@ class ScreenService:
         self._collect_health = health
         self._collect_harness = harness
         self._collect_maintenance = maintenance
+        self._collect_repo_map = repo_map
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
@@ -156,6 +159,7 @@ class ScreenService:
         }
         self._harness: _Source[dict[str, object]] = _Source(ttl, clock)
         self._maintenance: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._repo_map: _Source[dict[str, object]] = _Source(ttl, clock)
         self._pages = TextPages()
 
     async def _paged(
@@ -283,6 +287,17 @@ class ScreenService:
         if collect is None:
             raise NotFound("maintenance")
         facts, cached, age = await self._maintenance.get(
+            lambda: collect(self._repo), force=force
+        )
+        return await self._paged(facts, cached, age)
+
+    async def repo_map(self, *, force: bool = False) -> Paged:
+        """HEAD, the map cached for it, the tier, the parser bundle, the project languages and
+        the memory status of the Repo Map screen; `NotFound` without a Repo Map collector."""
+        collect = self._collect_repo_map
+        if collect is None:
+            raise NotFound("repo_map")
+        facts, cached, age = await self._repo_map.get(
             lambda: collect(self._repo), force=force
         )
         return await self._paged(facts, cached, age)

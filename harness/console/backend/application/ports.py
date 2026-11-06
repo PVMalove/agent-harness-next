@@ -87,6 +87,14 @@ class MaintenanceCollector(Protocol):
     def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
+class RepoMapCollector(Protocol):
+    """The Repo Map screen's facts (`RepoMapFacts.to_payload`): HEAD, the map cached for it, the
+    tier, the parser bundle, the project languages and the memory status; blocks until read and
+    never builds a map or runs the Repo Map CLI."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
 class JobExecutor(Protocol):
     """Emit on the event loop, and finish all output callbacks before returning an exit code.
 

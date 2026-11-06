@@ -1,6 +1,6 @@
 """Fake screen facts for the console server tests: an in-memory ledger, a lock reader, the
-recovery and container route readers and the Diagnostics and Harness collectors, each counting
-its calls."""
+recovery and container route readers and the Diagnostics, Harness and Repo Map collectors, each
+counting its calls."""
 
 from __future__ import annotations
 
@@ -12,6 +12,9 @@ from harness.console.kernel.batch_history import History, HistoryBatch
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult, Outcome
 from harness.console.kernel.harness_facts import HarnessState
+from harness.console.kernel.repo_map import parse_map
+from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
+from harness.console.kernel.repo_map_snapshot import RepoMapFacts
 from harness.console.kernel.reports import (
     BatchSummary,
     LedgerView,
@@ -20,6 +23,9 @@ from harness.console.kernel.reports import (
 )
 from harness.health.model import CheckResult, JsonObject, Report
 from harness.health.report_json import to_json
+from harness.repo_map.bundle_fetch import ParserStatus
+
+from ._console_repo_map_fixture import map_payload
 
 BODY = "результат " * 20000  # far above one WebSocket message
 
@@ -50,6 +56,23 @@ def health_report(online: bool = False) -> Report:
 
 
 HARNESS_STATE = HarnessState(True, "1.0.0", ("engineering-suite",), 3, 7, "t", True)
+
+HEAD = "a" * 40
+
+
+def repo_map_facts() -> RepoMapFacts:
+    view = parse_map(map_payload(HEAD), origin="кэш")
+    assert not isinstance(view, str)
+    return RepoMapFacts(
+        head=HEAD,
+        view=view,
+        tier=TierSetting("full", True),
+        memory=MemoryStatus(True, True, ("adr",), 4, top_k=5, max_tokens=1000),
+        parsers=ParserStatus(
+            Path("/work/project/registry"), "cp312-linux", "bundle", ("python",), None
+        ),
+        language_files={"python": 3},
+    )
 
 
 class Facts:
@@ -115,6 +138,10 @@ class Facts:
         self._count("maintenance")
         return {"maintenance": None, "error": "Git unavailable"}
 
+    def repo_map(self, repo: Path, /) -> dict[str, object]:
+        self._count("repo_map")
+        return repo_map_facts().to_payload()
+
 
 class Clock:
     def __init__(self) -> None:
@@ -139,4 +166,5 @@ def service(
         health=facts.health,
         harness=facts.harness,
         maintenance=facts.maintenance,
+        repo_map=facts.repo_map,
     )

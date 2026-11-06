@@ -92,7 +92,10 @@ class CatalogEntry:
         """Проверяет доступность команды для запуска в репозитории (существование необходимого скрипта)."""
         if self.argv[0] != "python":
             return True
-        return (repo / self.argv[1]).is_file()
+        # The script is the first argument after the interpreter flags (`-B`); a script of the
+        # harness package is given by its absolute path, a project script relative to `repo`.
+        script = Path(next(part for part in self.argv[1:] if not part.startswith("-")))
+        return (script if script.is_absolute() else repo / script).is_file()
 
     @property
     def inputs(self) -> tuple[str, ...]:
@@ -405,6 +408,27 @@ DIAGNOSTICS_COMMANDS: tuple[CatalogEntry, ...] = (
         f"{_HARNESS_CLI}:cmd_health",
     ),
 )
+
+# The Repo Map screen's build of the map for the HEAD it showed, run as a console server job whose
+# stdout is the map; it is not listed in the Harness menu.
+# The CLI of the harness package the server runs, so the build never depends on a copy installed
+# in the project; `-B` keeps `__pycache__` out of the project, as the context builder does.
+REPO_MAP_BUILD = CatalogEntry(
+    "repo-map-build",
+    "Построить Repo Map для показанного HEAD",
+    (
+        "python",
+        "-B",
+        str(BIN_HARNESS_PATH.parents[1] / "repo_map" / "repo_map.py"),
+        "--repo",
+        "{repo}",
+        "--commit",
+        "{commit}",
+    ),
+    Reversibility.REVERSIBLE,
+    "harness/repo_map/repo_map.py:main",
+)
+REPO_MAP_COMMANDS: tuple[CatalogEntry, ...] = (REPO_MAP_BUILD,)
 
 # The Repo Map section's own commands; they are not listed in the Harness menu.
 MEMORY_COMMANDS: tuple[CatalogEntry, ...] = (

@@ -715,6 +715,37 @@ def test_a_diagnostics_or_harness_snapshot_off_the_schema_is_malformed(
             client.close()
 
 
+def test_the_repo_map_snapshot_is_decoded_and_a_map_off_schema_v1_is_malformed() -> None:
+    from harness.console.kernel.repo_map_snapshot import RepoMapFacts
+
+    from ._screen_facts import repo_map_facts
+
+    expected = repo_map_facts()
+    good = expected.to_payload()
+    broken = {**good, "map": {"schema_version": 1}}
+    texts = [json.dumps(good), json.dumps(broken)]
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> str:
+        requests.append(request)
+        text = texts[len(requests) - 1]
+        return _ok(request, snapshot_id=5, text=text, next=len(text), done=True)
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            found = client.repo_map(force=True)
+            with pytest.raises(MalformedReply):
+                client.repo_map()
+        finally:
+            client.close()
+    assert isinstance(found, RepoMapFacts) and found == expected
+    assert [{k: v for k, v in item.items() if k != "id"} for item in requests] == [
+        {"type": "repo_map.snapshot", "force": True},
+        {"type": "repo_map.snapshot", "force": False},
+    ]
+
+
 def test_a_job_carries_its_confirmation_and_plan_digest_and_streams_its_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
