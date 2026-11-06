@@ -230,6 +230,109 @@ def test_plain_lines_before_any_known_header_stay_hidden(tmp_path: Path) -> None
     assert page["state"] == "connected"
 
 
+def test_unknown_stamped_sections_after_codex_hide_tool_input_and_diff(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_text(
+        "[t] codex\nhi\n"
+        '[t] tool srv.fn({"q":"SECRET-INPUT"})\n'
+        "[t] turn diff:\nSECRET-DIFF\n"
+        "[t] exec ls\nSECRET-OUT\n"
+        "[t] codex\nbye\n"
+    )
+
+    page = read_plain_steps(log, 0, 4096)
+
+    assert [(step["kind"], step["text"]) for step in page["steps"]] == [
+        ("log", "hi"),
+        ("tool", "exec"),
+        ("log", "bye"),
+    ]
+    assert "SECRET" not in _texts(page)
+
+
+@pytest.mark.parametrize(
+    "opener",
+    [
+        "[2026-11-06T08:00:00] file update:",
+        "[t] some future section",
+        "[t]codex-like",
+        "[t] codex extra SECRET-TRAIL",
+        "[t] codex:",
+        "[t]",
+        "[2026-11-06T08:00",
+        "[unclosed stamp SECRET-STAMP",
+        "\x1b[1m[t] codex\x1b[0m",
+        "  [t] indented header",
+        "turn diff:",
+        "User instructions:",
+    ],
+)
+def test_any_line_that_can_start_a_section_ends_the_visible_codex_section(
+    tmp_path: Path, opener: str
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_text(f"[t] codex\nhi\n{opener}\nSECRET-BODY\n[t] codex\nbye\n")
+
+    page = read_plain_steps(log, 0, 4096)
+    after_opener = read_plain_steps(
+        log, len(f"[t] codex\nhi\n{opener}\n".encode()), 4096
+    )
+
+    assert [step["text"] for step in page["steps"]] == ["hi", "bye"]
+    assert [step["text"] for step in after_opener["steps"]] == ["bye"]
+    assert "SECRET" not in _texts(page) + _texts(after_opener)
+
+
+def test_carriage_returns_cannot_smuggle_a_header_or_hide_one(tmp_path: Path) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_bytes(
+        b"[t] codex\r\nhi\r\n"
+        b"ok\r[t] tool x SECRET-CR\nSECRET-AFTER-CR\r\n"
+        b"[t] codex\r\nbye\r\n"
+    )
+
+    page = read_plain_steps(log, 0, 4096)
+    resumed = read_plain_steps(
+        log, len(b"[t] codex\r\nhi\r\nok\r[t] tool x SECRET-CR\n"), 4096
+    )
+
+    assert [step["text"] for step in page["steps"]] == ["hi", "ok", "bye"]
+    assert [step["text"] for step in resumed["steps"]] == ["bye"]
+    assert "SECRET" not in _texts(page) + _texts(resumed)
+
+
+def test_unfinished_final_line_is_not_shown_until_complete(tmp_path: Path) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_bytes(b"[t] codex\nhi\n[t] tool SECRET-PARTIAL")
+
+    page = read_plain_steps(log, 0, 4096)
+    with log.open("ab") as stream:
+        stream.write(b"\nSECRET-BODY\n")
+    later = read_plain_steps(log, page["offset"], 4096)
+
+    assert [step["text"] for step in page["steps"]] == ["hi"]
+    assert page["offset"] == len(b"[t] codex\nhi\n")
+    assert later["steps"] == []
+    assert "SECRET" not in _texts(page) + _texts(later)
+
+
+def test_unknown_section_at_an_offset_stays_hidden_from_the_window(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_text("[t] codex\nhi\n[t] turn diff:\nSECRET-1\n")
+    middle = log.stat().st_size
+    with log.open("a") as stream:
+        stream.write("SECRET-2\n")
+
+    page = read_plain_steps(log, middle, 4096)
+
+    assert page["steps"] == []
+    assert page["state"] == "connected"
+
+
 def test_plain_log_without_codex_sections_is_an_explicit_unrecognised_state(
     tmp_path: Path,
 ) -> None:

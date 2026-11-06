@@ -306,13 +306,10 @@ _PLAIN_SECTIONS = ("codex", "thinking", "user", "tokens used", *_PLAIN_TOOL_SECT
 OMITTED_STEP_KIND = "omitted"
 _OMITTED_RESERVE_BYTES = 160
 _MAX_ESCAPED_CHAR_BYTES = 12  # a surrogate pair escaped as two ``\uXXXX`` sequences
-_PLAIN_HEADER = re.compile(
-    r"^(?:\[[^\]\n]*\]\s+(?P<stamped>"
-    + "|".join(re.escape(name) for name in _PLAIN_SECTIONS)
-    + r")(?::|\s|$)|(?P<bare>"
-    + "|".join(re.escape(name) for name in _PLAIN_SECTIONS)
-    + r")$)"
-)
+_UNKNOWN_SECTION = "?"  # any section outside the allowlist; it is never visible
+# A stamped line, or any line that opens with ``[`` or an escape sequence, starts a section.
+_PLAIN_STAMPED = re.compile(r"\[[^\]\n]*\]\s*(?P<rest>.*)")
+_PLAIN_BARE_LABEL = re.compile(r"[A-Za-z][\w .-]*:")
 
 
 def unavailable_page(source: str, reason: str, offset: int = 0) -> JsonObject:
@@ -379,46 +376,84 @@ def _structured_line(line: bytes, _section: list[str]) -> list[JsonObject]:
 
 
 def _plain_header(text: str) -> str | None:
-    match = _PLAIN_HEADER.match(text.strip())
-    return (match.group("stamped") or match.group("bare")) if match else None
+    """The section a line starts, or ``None`` for a body line.
+
+    Fail closed: only a line that is exactly the ``codex`` header opens the visible section.
+    Every other stamped, bracketed, escaped or labelled line starts a hidden section."""
+    line = text.strip()
+    if not line:
+        return None
+    stamped = _PLAIN_STAMPED.fullmatch(line)
+    if stamped:
+        rest = stamped.group("rest").strip()
+        for name in _PLAIN_SECTIONS:
+            if name != "codex" and re.fullmatch(
+                re.escape(name) + r"(?:[:\s].*)?", rest
+            ):
+                return name
+    elif line[0] in "[\x1b":
+        return _UNKNOWN_SECTION
+    else:
+        rest = line
+        if rest in _PLAIN_SECTIONS or rest.removesuffix(":") in _PLAIN_TOOL_SECTIONS:
+            return rest.removesuffix(":")
+    if rest == "codex":
+        return "codex"
+    if stamped or _PLAIN_BARE_LABEL.fullmatch(rest):
+        return _UNKNOWN_SECTION
+    return None
+
+
+def _plain_segments(line: bytes) -> list[str]:
+    """A carriage return starts a new segment, so it cannot hide a header inside a line."""
+    return line.decode("utf-8", errors="replace").removesuffix("\n").split("\r")
 
 
 def _plain_line(line: bytes, section: list[str]) -> list[JsonObject]:
     """Fail closed: only agent-message lines and tool section names are visible."""
     import json
 
-    text = line.decode("utf-8", errors="replace").rstrip("\r\n")
-    header = _plain_header(text)
-    if header is not None:
-        section[0] = header
-        if header in _PLAIN_TOOL_SECTIONS:
-            return [{"kind": "tool", "text": header}]
-        return []
-    if section[0] != "codex" or not text.strip():
-        return []
-    try:
-        if isinstance(json.loads(text), (dict, list)):
-            return []
-    except ValueError:
-        pass
-    visible = redact_visible(text)
-    return [{"kind": "log", "text": visible}] if visible else []
+    steps: list[JsonObject] = []
+    for text in _plain_segments(line):
+        header = _plain_header(text)
+        if header is not None:
+            section[0] = header
+            if header in _PLAIN_TOOL_SECTIONS:
+                steps.append({"kind": "tool", "text": header})
+            continue
+        if section[0] != "codex" or not text.strip():
+            continue
+        try:
+            if isinstance(json.loads(text), (dict, list)):
+                continue
+        except ValueError:
+            pass
+        visible = redact_visible(text)
+        if visible:
+            steps.append({"kind": "log", "text": visible})
+    return steps
 
 
-def _plain_section_before(reader: BinaryIO, offset: int) -> str:
-    """The last recognised header in a bounded window before ``offset`` sets the section."""
+def _plain_headers_before(reader: BinaryIO, offset: int) -> list[str]:
+    """Section headers in a bounded window before ``offset``, in order."""
     start = max(0, offset - PLAIN_HEADER_WINDOW_BYTES)
     reader.seek(start)
     window = reader.read(offset - start)
     lines = window.split(b"\n")
     if start:
         lines = lines[1:]  # the first line may be cut in the middle
-    section = ""
-    for raw in lines:
-        header = _plain_header(raw.decode("utf-8", errors="replace"))
-        if header is not None:
-            section = header
-    return section
+    return [
+        header
+        for raw in lines
+        for text in _plain_segments(raw)
+        if (header := _plain_header(text)) is not None
+    ]
+
+
+def _plain_section_before(reader: BinaryIO, offset: int) -> str:
+    """The last header in a bounded window before ``offset`` sets the section."""
+    headers = _plain_headers_before(reader, offset)
+    return headers[-1] if headers else ""
 
 
 def _step_cost(step: JsonObject) -> int:
@@ -461,8 +496,11 @@ def _fit_record(found: list[JsonObject], budget: int) -> list[JsonObject]:
 
 def _plain_log_unrecognised(reader: BinaryIO, size: int) -> bool:
     """A non-empty plain log whose head holds no Codex section header has no visible text."""
-    return bool(size) and not _plain_section_before(
-        reader, min(size, PLAIN_HEADER_WINDOW_BYTES)
+    return bool(size) and not any(
+        header in _PLAIN_SECTIONS
+        for header in _plain_headers_before(
+            reader, min(size, PLAIN_HEADER_WINDOW_BYTES)
+        )
     )
 
 
