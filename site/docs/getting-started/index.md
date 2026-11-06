@@ -9,6 +9,19 @@ Claude Code и Codex, а оркестрация использует Rust runtim
     Сайт описывает текущую версию, но поведение и флаги ещё меняются. Перед установкой в рабочий
     проект сделайте backup и проверьте требования.
 
+## Путь установки
+
+Выберите сборку: схема покажет, какой snapshot окажется в проекте. Узлы кликабельны.
+
+<div class="ah-flow" id="ah-install-flow">
+  <button class="ah-diagram-expand ah-core-expand" id="ah-install-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+  <div class="ah-core-scroll"><div class="ah-core is-fit" id="ah-install-map"></div></div>
+  <div class="ah-flow-note" id="ah-install-note" aria-live="polite">
+    <b>Выберите сборку</b>
+    <span>Нажмите на capability или на любой узел схемы.</span>
+  </div>
+</div>
+
 ## Требования
 
 | Компонент | Требование |
@@ -27,13 +40,6 @@ Claude Code и Codex, а оркестрация использует Rust runtim
 
 ```bash
 python3 bin/install-global.py --target-home "$HOME" \
-  --runtime claude --runtime codex
-```
-
-В PowerShell:
-
-```powershell
-python bin\install-global.py --target-home $HOME `
   --runtime claude --runtime codex
 ```
 

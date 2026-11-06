@@ -1,294 +1,66 @@
 <!doctype html>
-<html lang="ru" data-theme="dark">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Agent Harness Next — веб-консоль</title>
-  <link rel="icon" href="mascot.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="site.css">
-  <style>
-    body.console-body { padding: 0; background: #101419; overflow: hidden; }
-    .console-app {
-      display: grid; grid-template-rows: 48px minmax(0, 1fr) 26px;
-      height: 100dvh; min-height: 480px; background: var(--bg); color: var(--fg);
-      font: 12px/1.5 var(--mono);
-    }
-    .console-top {
-      display: flex; align-items: center; gap: 10px; padding: 0 12px;
-      border-bottom: 1px solid var(--rule); background: #171c23;
-    }
-    .console-brand { display: flex; align-items: center; gap: 8px; color: var(--fg); }
-    .console-brand .mark {
-      display: grid; place-items: center; width: 25px; height: 25px;
-      border: 1px solid var(--edge); border-radius: 6px;
-      color: var(--accent); font: 700 13px/1 var(--mono);
-    }
-    .console-brand b { font-size: 11.5px; }
-    .console-brand .tag {
-      padding: 1px 5px; border: 1px solid var(--rule); border-radius: 999px;
-      color: var(--muted); font-size: 9px;
-    }
-    .console-where { color: var(--muted); font-size: 10px; }
-    .console-where b { color: var(--fg); font-weight: 500; }
-    .console-top .grow { flex: 1; }
-    .console-chip {
-      display: inline-flex; align-items: center; gap: 5px;
-      padding: 2px 7px; border: 1px solid var(--rule); border-radius: 999px;
-      color: var(--muted); font-size: 9.5px;
-    }
-    .console-chip i { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); }
-    .console-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); min-height: 0; }
-    .console-nav {
-      padding: 10px 8px; border-right: 1px solid var(--rule); background: #171c23;
-      overflow-y: auto;
-    }
-    .console-nav .group { margin-bottom: 12px; }
-    .console-nav .label {
-      margin: 0 0 4px 7px; color: var(--muted);
-      font: 8.5px/1.5 var(--mono); letter-spacing: .08em; text-transform: uppercase;
-    }
-    .console-nav a {
-      display: flex; align-items: center; gap: 7px;
-      padding: 6px 8px; border-radius: 5px; color: var(--muted);
-      font-size: 10.5px; text-decoration: none;
-    }
-    .console-nav a:hover { background: var(--row); color: var(--fg); text-decoration: none; }
-    .console-nav a[aria-current="page"] { background: var(--sel); color: var(--selfg); }
-    .console-nav .ico { width: 14px; color: var(--primary); text-align: center; }
-    .console-main { min-width: 0; overflow-y: auto; padding: 16px 18px 24px; }
-    .console-main h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
-    .console-main .sub { margin: 3px 0 14px; color: var(--muted); font-size: 10.5px; }
-    .console-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
-    .console-btn {
-      padding: 5px 8px; border: 1px solid var(--rule); border-radius: 5px;
-      background: var(--surface); color: var(--muted); font: 9.5px/1.4 var(--mono);
-    }
-    .console-btn:hover { border-color: var(--edge); color: var(--fg); }
-    .console-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
-    .console-kpi {
-      padding: 9px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface);
-    }
-    .console-kpi .k { color: var(--muted); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase; }
-    .console-kpi .v { margin-top: 2px; font: 600 16px/1.2 var(--mono); }
-    .console-kpi .v.ok { color: var(--ok); }
-    .console-kpi .v.warn { color: var(--warn); }
-    .console-kpi .v.err { color: var(--err); }
-    .console-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 10px; }
-    .console-panel { border: 1px solid var(--rule); border-radius: 7px; background: var(--surface); overflow: hidden; }
-    .console-panel h2 {
-      display: flex; align-items: center; justify-content: space-between;
-      margin: 0; padding: 9px 11px; border-bottom: 1px solid var(--rule);
-      color: var(--fg); font: 600 10.5px/1.4 var(--mono);
-    }
-    .console-panel h2 span { color: var(--muted); font-weight: 400; font-size: 9px; }
-    .console-row { display: flex; gap: 8px; align-items: start; padding: 9px 11px; border-bottom: 1px solid var(--rule); }
-    .console-row:last-child { border-bottom: 0; }
-    .console-row .dot { margin-top: 4px; }
-    .console-row .body { flex: 1; min-width: 0; }
-    .console-row b { display: block; color: var(--fg); font-size: 10.5px; font-weight: 500; }
-    .console-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 9.5px; line-height: 1.5; }
-    .console-row .link { color: var(--primary); font-size: 9px; white-space: nowrap; }
-    .console-empty { padding: 11px; color: var(--muted); font-size: 10px; }
-    .console-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 11px; }
-    .console-flow .node {
-      padding: 7px 5px; border: 1px solid var(--rule); border-radius: 5px;
-      color: var(--muted); font-size: 8.5px; text-align: center; line-height: 1.4;
-    }
-    .console-flow .node b { display: block; color: var(--fg); font-size: 9.5px; }
-    .console-flow .node.on { border-color: var(--primary); color: var(--selfg); background: var(--sel); }
-    .console-foot {
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      padding: 0 12px; border-top: 1px solid var(--rule);
-      color: var(--muted); font: 8.5px/1.5 var(--mono);
-    }
-    .screen { display: none; }
-    .screen.active { display: block; }
-    .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-    .board-col { border: 1px solid var(--rule); border-radius: 7px; background: var(--surface); overflow: hidden; }
-    .board-col h3 { margin: 0; padding: 8px 9px; border-bottom: 1px solid var(--rule); color: var(--muted); font: 9px/1.4 var(--mono); text-transform: uppercase; letter-spacing: .05em; }
-    .task-card { margin: 6px; padding: 8px; border: 1px solid var(--rule); border-radius: 5px; background: var(--panel); }
-    .task-card b { display: block; font-size: 9.5px; font-weight: 500; }
-    .task-card span { display: block; margin-top: 3px; color: var(--muted); font-size: 8.5px; }
-    .task-card .tag { display: inline-block; margin-top: 5px; padding: 1px 4px; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); font-size: 8px; }
-    .pipeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 10px; }
-    .stage { padding: 8px 5px; border: 1px solid var(--rule); border-radius: 5px; text-align: center; font-size: 8.5px; color: var(--muted); }
-    .stage b { display: block; color: var(--fg); font-size: 9.5px; }
-    .stage.done { border-color: color-mix(in srgb, var(--ok) 45%, var(--rule)); }
-    .stage.now { border-color: var(--warn); color: var(--warn); }
-    .report { display: flex; gap: 8px; align-items: start; padding: 9px 11px; border-bottom: 1px solid var(--rule); }
-    .report:last-child { border-bottom: 0; }
-    .report .icon { width: 18px; color: var(--ok); }
-    .report b { display: block; font-size: 10px; font-weight: 500; }
-    .report small { color: var(--muted); font-size: 9px; }
-    @media (max-width: 760px) {
-      .console-layout { grid-template-columns: 1fr; }
-      .console-nav { display: flex; gap: 4px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: 6px; }
-      .console-nav .group { display: contents; }
-      .console-nav .label { display: none; }
-      .console-nav a { white-space: nowrap; }
-      .console-grid { grid-template-columns: 1fr; }
-      .console-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .board { grid-template-columns: 1fr; }
-      .pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-  </style>
+  <title>Harness Console 2.0.0</title>
+  <link rel="icon" href="../assets/mascot.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="execution-console.css">
 </head>
-<body class="console-body">
-  <div class="console-app">
-    <header class="console-top">
-      <div class="console-brand">
-        <span class="mark" aria-hidden="true">H›</span>
-        <b>Agent Harness Next</b>
-        <span class="tag">beta</span>
+<body>
+  <div class="app" id="app">
+    <header class="top">
+      <button id="menu-toggle" class="icon-btn menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="navigation"></button>
+      <button id="nav-collapse" class="icon-btn nav-collapse" type="button" aria-label="Свернуть меню" aria-expanded="true" title="Свернуть меню" aria-controls="navigation"></button>
+      <a class="brand" href="#home">
+        <span class="logo" aria-hidden="true">H›</span>
+        <b>Harness next</b>
+        <span class="version">2.0.0</span>
+        <span class="channel">pre-release</span>
+      </a>
+      <span id="project" class="where mono">claude-agent-harness</span>
+      <span id="branch" class="where mono muted">⑂ integration/harness-runtime-reliability</span>
+      <div class="top-actions">
+        <button id="connection-state" class="conn-chip connected" type="button" data-connection-cycle aria-label="Демо: переключить состояние соединения" title="Демо: переключить состояние соединения"><i></i><span>online</span></button>
+        <span class="where muted demo-note">данные симулируются</span>
+        <a class="icon-btn" href="#help" aria-label="Справка" title="Справка">?</a>
       </div>
-      <span class="console-where"><b>agent-harness-next</b></span>
-      <span class="console-where">⑂ feature/issue-104-console</span>
-      <span class="grow"></span>
-      <span class="console-chip"><i></i> online</span>
-      <span class="console-where">данные демонстрационные</span>
-      <span class="console-where">?</span>
     </header>
 
-    <div class="console-layout">
-      <nav class="console-nav" aria-label="Разделы консоли">
-        <div class="group">
-          <div class="label">Обзор</div>
-          <a href="#home" data-screen="home" aria-current="page"><span class="ico">◈</span> Главная</a>
-          <a href="#board" data-screen="board"><span class="ico">▤</span> Доска задач</a>
-          <a href="#orchestration" data-screen="orchestration"><span class="ico">⌁</span> Оркестрация</a>
-          <a href="#reports" data-screen="reports"><span class="ico">◫</span> Отчёты</a>
-        </div>
-      </nav>
-
-      <main class="console-main">
-        <section class="screen active" id="home">
-          <h1>Состояние harness</h1>
-          <p class="sub">Здоровье, runtime-store, навыки и последние задачи проекта.</p>
-          <div class="console-actions">
-            <button class="console-btn" type="button">↻ Проверить</button>
-            <button class="console-btn" type="button">Диагностика</button>
-            <button class="console-btn" type="button">Настройки</button>
-          </div>
-          <div class="console-kpis">
-            <div class="console-kpi"><div class="k">Проверки</div><div class="v ok">42 ok</div></div>
-            <div class="console-kpi"><div class="k">Внимание</div><div class="v warn">1</div></div>
-            <div class="console-kpi"><div class="k">Ошибки</div><div class="v err">2</div></div>
-            <div class="console-kpi"><div class="k">Пропущено</div><div class="v">11</div></div>
-          </div>
-          <div class="console-grid">
-            <div class="console-panel">
-              <h2>Требует внимания <span>2 ошибки · 1 предупреждение</span></h2>
-              <div class="console-row"><span class="dot dot-red"></span><div class="body"><b>В снэпшоте скиллов есть расхождения</b><small>Managed snapshot отличается от установленного пакета. <code>harness diff</code> покажет файлы.</small></div><span class="link">Открыть →</span></div>
-              <div class="console-row"><span class="dot dot-red"></span><div class="body"><b>effective policy не записана</b><small>Нет <code>.harness/hook-policy.json</code>; hooks подключены, policy не зафиксирована.</small></div><span class="link">Открыть →</span></div>
-              <div class="console-row"><span class="dot dot-yellow"></span><div class="body"><b>Индекс памяти отсутствует</b><small>FTS5 работает без модели; постройте индекс из главного checkout.</small></div><span class="link">Открыть →</span></div>
-            </div>
-            <div class="console-panel">
-              <h2>Контур harness</h2>
-              <div class="console-flow">
-                <div class="node on"><b>Policy</b>skills</div>
-                <div class="node on"><b>IPC</b>UDS</div>
-                <div class="node on"><b>Runtime</b>Rust</div>
-                <div class="node on"><b>Store</b>WAL</div>
-              </div>
-              <div class="console-row"><div class="body"><b>runtime-store</b><small>authority=runtime-store · schema 4</small></div></div>
-              <div class="console-row"><div class="body"><b>Repo Map</b><small>tier=minimal · parser bundle не найден</small></div></div>
-            </div>
-          </div>
-          <div class="console-panel" style="margin-top:10px">
-            <h2>Последние задачи <span>agent-harness-next</span></h2>
-            <div class="console-row"><span class="dot dot-blue"></span><div class="body"><b>#104 · Консоль: экран «Главная»</b><small>Architect выполняется · Developer / Review / QA не начаты</small></div><span class="link">Открыть →</span></div>
-            <div class="console-row"><span class="dot dot-green"></span><div class="body"><b>#101 · Runtime: reconcile после SIGKILL</b><small>QA passed · evidence сохранён</small></div><span class="link">Открыть →</span></div>
-            <div class="console-row"><span class="dot dot-yellow"></span><div class="body"><b>#98 · Hooks: strict boundary</b><small>blocked · ждёт решения человека</small></div><span class="link">Открыть →</span></div>
-          </div>
-        </section>
-
-        <section class="screen" id="board">
-          <h1>Доска задач</h1>
-          <p class="sub">Спеки, колонки и карточки. Каждая карточка — тикет с веткой и evidence.</p>
-          <div class="board">
-            <div class="board-col"><h3>Спека</h3><div class="task-card"><b>#110 · Публичный сайт</b><span>RFC · docs-site</span><span class="tag">spec</span></div></div>
-            <div class="board-col"><h3>В работе</h3><div class="task-card"><b>#104 · Веб-консоль</b><span>developer · feature/issue-104</span><span class="tag">in-progress</span></div><div class="task-card"><b>#108 · Store recovery</b><span>developer · feature/issue-108</span></div></div>
-            <div class="board-col"><h3>Review</h3><div class="task-card"><b>#101 · Runtime reconcile</b><span>code-review · 2 замечания</span><span class="tag">review</span></div></div>
-            <div class="board-col"><h3>QA / готово</h3><div class="task-card"><b>#97 · Hook profiles</b><span>qa passed · clean-room</span><span class="tag">done</span></div></div>
-          </div>
-        </section>
-
-        <section class="screen" id="orchestration">
-          <h1>Оркестрация</h1>
-          <p class="sub">Батчи, dispatch и стадии пайплайна. QA-lane — singleton с fencing.</p>
-          <div class="console-kpis">
-            <div class="console-kpi"><div class="k">Батчи</div><div class="v">3</div></div>
-            <div class="console-kpi"><div class="k">Dispatch</div><div class="v">3</div></div>
-            <div class="console-kpi"><div class="k">Активны</div><div class="v ok">2</div></div>
-            <div class="console-kpi"><div class="k">QA внимание</div><div class="v warn">1</div></div>
-          </div>
-          <div class="console-panel">
-            <h2>Пайплайн #104 <span>batch-7f2a</span></h2>
-            <div class="pipeline">
-              <div class="stage done"><b>Architect</b>accepted</div>
-              <div class="stage now"><b>Developer</b>working</div>
-              <div class="stage"><b>Review</b>waiting</div>
-              <div class="stage"><b>QA</b>waiting</div>
-              <div class="stage"><b>Publish</b>waiting</div>
-            </div>
-          </div>
-          <div class="console-panel" style="margin-top:10px">
-            <h2>Dispatch <span>3</span></h2>
-            <div class="console-row"><span class="dot dot-blue"></span><div class="body"><b>#104 · developer · working</b><small>provider claude · heartbeat 12s · attempt 1</small></div><span class="link">Открыть →</span></div>
-            <div class="console-row"><span class="dot dot-yellow"></span><div class="body"><b>#98 · developer · blocked</b><small>ждёт решения человека · retry 2/3</small></div><span class="link">Открыть →</span></div>
-            <div class="console-row"><span class="dot dot-green"></span><div class="body"><b>#101 · qa · passed</b><small>clean-room · evidence 8 файлов</small></div><span class="link">Открыть →</span></div>
-          </div>
-        </section>
-
-        <section class="screen" id="reports">
-          <h1>Отчёты</h1>
-          <p class="sub">Отчёты ролей и evidence. Отчёт не заменяет решение человека.</p>
-          <div class="console-panel">
-            <h2>Последние отчёты <span>6</span></h2>
-            <div class="report"><span class="icon">✓</span><div class="body"><b>QA #101 · passed</b><small>clean-room · 8 evidence · 12m 40s</small></div></div>
-            <div class="report"><span class="icon" style="color:var(--warn)">!</span><div class="body"><b>Code review #104 · attention</b><small>2 замечания · standards + spec</small></div></div>
-            <div class="report"><span class="icon" style="color:var(--err)">×</span><div class="body"><b>Developer #98 · blocked</b><small>strict boundary · нужен человек</small></div></div>
-            <div class="report"><span class="icon">✓</span><div class="body"><b>QA #97 · passed</b><small>clean-room · 6 evidence</small></div></div>
-          </div>
-        </section>
-      </main>
+    <div class="layout">
+      <div id="connection-banner" class="connection-banner" role="status" aria-live="polite" hidden></div>
+      <nav id="navigation" aria-label="Разделы консоли"></nav>
+      <div id="nav-scrim" class="nav-scrim" hidden></div>
+      <main id="content"></main>
     </div>
 
-    <footer class="console-foot">
-      <span>beta · runtime-store · read-only</span>
-      <span>agent-harness-next · demo</span>
+    <footer class="foot">
+      <div class="keys">
+        <span><b class="k">?</b>справка</span>
+        <span><b class="k">g</b> главная</span>
+        <span><b class="k">d</b> диагностика</span>
+        <span><b class="k">o</b> оркестрация</span>
+      </div>
+      <span id="foot-status" class="r">2.0.0 · runtime-store · read-only</span>
     </footer>
   </div>
 
-  <script>
-    (function () {
-      const screens = Array.from(document.querySelectorAll(".screen"));
-      const links = Array.from(document.querySelectorAll("[data-screen]"));
-      function show(name) {
-        const target = screens.find((screen) => screen.id === name) || screens[0];
-        screens.forEach((screen) => screen.classList.toggle("active", screen === target));
-        links.forEach((link) => {
-          const active = link.getAttribute("data-screen") === target.id;
-          if (active) link.setAttribute("aria-current", "page");
-          else link.removeAttribute("aria-current");
-        });
-      }
-      function fromHash() {
-        const name = window.location.hash.replace(/^#/, "") || "home";
-        show(name);
-      }
-      window.addEventListener("hashchange", fromHash);
-      links.forEach((link) => {
-        link.addEventListener("click", (event) => {
-          event.preventDefault();
-          const name = link.getAttribute("data-screen");
-          history.replaceState(null, "", "#" + name);
-          show(name);
-        });
-      });
-      fromHash();
-    })();
-  </script>
+  <dialog id="reader" aria-labelledby="reader-title">
+    <form method="dialog">
+      <header>
+        <b id="reader-title"></b>
+        <div><button id="expand" type="button" aria-pressed="false">Развернуть</button> <button aria-label="Закрыть окно">✕</button></div>
+      </header>
+    </form>
+    <label class="search">Поиск по содержимому<input id="reader-search" type="search" placeholder="Строка или фрагмент текста"></label>
+    <pre id="reader-output"></pre>
+    <div id="reader-status" role="status"></div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="harness-icons.js"></script>
+  <script src="execution-console.js"></script>
 </body>
 </html>

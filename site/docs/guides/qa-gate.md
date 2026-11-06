@@ -39,6 +39,15 @@ Gate подтверждает пару `{candidate_sha, target_sha}` и свер
 пройден, даже когда коммит-предок совпадает. Так squash-merge и ручная правка при разрешении
 конфликта не проходят незамеченными.
 
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>План проверок, полный прогон на финальном SHA и сверка дерева в Release Gate.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/qa-release-gate.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/qa-release-gate.html" title="QA gate и Release Gate" loading="lazy"></iframe>
+</figure>
+
 ## CI-доказательство вместо локального прогона
 
 Если трекер отдаёт полный прогон CI, вместо локального QA принимается CI-доказательство для

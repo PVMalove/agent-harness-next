@@ -1,0 +1,13 @@
+{% extends "main.html" %}
+
+{% block content %}
+  <div class="ah-404">
+    <img src="{{ 'assets/mascot.svg' | url }}" alt="Воксельный маскот Agent Harness Next" width="120" height="156">
+    <h1>Страница не найдена</h1>
+    <p>Такой страницы нет. Вернитесь на <a href="{{ '' | url }}">главную</a> или откройте
+      <a href="{{ 'getting-started/' | url }}">документацию</a>.</p>
+    <p><a class="md-button md-button--primary" href="{{ '' | url }}">На главную</a>
+      <a class="md-button" href="{{ 'demo/' | url }}">Демо</a>
+      <a class="md-button" href="{{ 'reference/' | url }}">Справочник</a></p>
+  </div>
+{% endblock %}

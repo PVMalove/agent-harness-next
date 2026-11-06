@@ -3,7 +3,7 @@
 Команды и конфигурация проекта, метки процесса, hooks и каталог скиллов. Каждый раздел отвечает на
 вопрос «как это настроено», а не «как это сделать»: пошаговые сценарии живут в руководствах.
 
-<div class="ah-cards">
+<div class="ah-cards ah-cards--four">
   <a class="ah-card" href="cli/">
     <span class="i">⌘</span>
     <b>CLI и конфигурация</b>
@@ -24,6 +24,28 @@
     <b>Скиллы</b>
     <span>Переопределения, апстримный набор и first-party дополнения.</span>
   </a>
+</div>
+
+## Глоссарий
+
+<div class="ah-ref-glossary" id="ah-ref-glossary">
+  <div class="ah-ref-glossary-head">
+    <div>
+      <b>Все термины проекта</b>
+      <span>Определения, английские эквиваленты и пометки, как эти понятия не стоит называть. Словарь для документации, CLI и конфигурации.</span>
+    </div>
+    <a class="md-button md-button--primary" href="glossary/">Открыть глоссарий</a>
+  </div>
+  <form class="ah-ref-glossary-search" action="glossary/" method="get" role="search">
+    <input type="search" name="term" placeholder="Найти термин: capability, lease, supervisor…" aria-label="Поиск по глоссарию" autocomplete="off" spellcheck="false">
+    <button type="submit">Найти</button>
+  </form>
+  <div class="ah-ref-glossary-links" role="group" aria-label="Категории терминов">
+    <a href="glossary/?category=architecture">Архитектура и код <span>42</span></a>
+    <a href="glossary/?category=files">Файловая система и рантайм <span>23</span></a>
+    <a href="glossary/?category=tasks">Задачи и артефакты <span>45</span></a>
+    <a href="glossary/?sort=az">По алфавиту А–Я</a>
+  </div>
 </div>
 
 ## Как это устроено

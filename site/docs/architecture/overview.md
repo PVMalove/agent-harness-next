@@ -7,25 +7,25 @@ operational state и запускает процессы, а Git остаётс�
   <div class="panel">
     <div class="layer">
       <div class="tag">Policy</div>
-      <div class="nodes"><span class="node">coordinator</span><span class="node">approvals</span><span class="node primary">человек</span></div>
+      <div class="nodes"><span class="node">coordinator</span> <span class="node">approvals</span> <span class="node primary">человек</span></div>
     </div>
     <div class="layer">
       <div class="tag">Runtime</div>
-      <div class="nodes"><span class="node ok">supervisor</span><span class="node ok">reconcile</span><span class="node ok">engine</span></div>
+      <div class="nodes"><span class="node ok">supervisor</span> <span class="node ok">reconcile</span> <span class="node ok">engine</span></div>
     </div>
     <div class="layer">
       <div class="tag">State</div>
-      <div class="nodes"><span class="node">SQLite WAL</span><span class="node">audit</span><span class="node">leases</span></div>
+      <div class="nodes"><span class="node">SQLite WAL</span> <span class="node">audit</span> <span class="node">leases</span></div>
     </div>
   </div>
   <div class="panel">
     <div class="layer">
       <div class="tag">Git</div>
-      <div class="nodes"><span class="node">candidate</span><span class="node">branch</span><span class="node">worktree</span></div>
+      <div class="nodes"><span class="node">candidate</span> <span class="node">branch</span> <span class="node">worktree</span></div>
     </div>
     <div class="layer">
       <div class="tag">Проект</div>
-      <div class="nodes"><span class="node">project.json</span><span class="node">harness.lock</span><span class="node">REGISTRY.md</span></div>
+      <div class="nodes"><span class="node">project.json</span> <span class="node">harness.lock</span> <span class="node">REGISTRY.md</span></div>
     </div>
   </div>
 </div>

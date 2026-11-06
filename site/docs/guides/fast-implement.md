@@ -41,6 +41,15 @@
    сообщив хеш и результат push.
 5. **Предложить публикацию.** Назвать `/to-pull-requests` и остановиться: PR открывает человек.
 
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>Выбор маршрута по меткам тикета и пять шагов однопроходного пути.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/fast-implement-route.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/fast-implement-route.html" title="/fast-implement: маршрут и шаги" loading="lazy"></iframe>
+</figure>
+
 ## Чем отличается от /implement
 
 | Аспект | `/fast-implement` | `/implement` |

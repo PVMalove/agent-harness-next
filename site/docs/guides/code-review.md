@@ -25,6 +25,15 @@
 чужие замечания молча, а решает по каждому. Язык отчёта берётся из поля `language` конфигурации
 проекта, а не из языка комментариев в коде.
 
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>Дифф и тикет расходятся по осям Standards и Spec, отчёты остаются раздельными.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/review-axes.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/review-axes.html" title="Code review: две независимые оси" loading="lazy"></iframe>
+</figure>
+
 Пример фрагмента отчёта:
 
 ```text
