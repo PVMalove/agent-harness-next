@@ -35,6 +35,8 @@ from .application.ports import (
     RecoveryReader,
     RepoMapCollector,
     RouteReader,
+    UpdateDiffReader,
+    UpdateHarnessCollector,
 )
 from .application.screens import ScreenService
 from .application.task_board import TaskBoardService
@@ -62,6 +64,8 @@ from .infrastructure.screen_facts import (
     open_project_facts,
     read_lock,
     repo_map_facts,
+    update_diff as read_update_diff,
+    update_harness_facts,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
 from .infrastructure.worker_steps import read_worker_facts, read_worker_log
@@ -104,6 +108,8 @@ def screen_service(
     maintenance: MaintenanceCollector | None = None,
     repo_map: RepoMapCollector | None = None,
     open_project: OpenProjectCollector | None = None,
+    update_harness: UpdateHarnessCollector | None = None,
+    update_diff: UpdateDiffReader | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -124,6 +130,10 @@ def screen_service(
         maintenance=maintenance_facts if maintenance is None else maintenance,
         repo_map=repo_map_facts if repo_map is None else repo_map,
         open_project=open_project_facts if open_project is None else open_project,
+        update_harness=(
+            update_harness_facts if update_harness is None else update_harness
+        ),
+        update_diff=read_update_diff if update_diff is None else update_diff,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger

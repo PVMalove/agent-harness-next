@@ -36,6 +36,12 @@ REPO_MAP_REQUEST = "repo_map.snapshot"
 OPEN_PROJECT_REQUEST = "open_project.snapshot"
 # «Справка»: the console guide in the requested language, split into its sections.
 HELP_REQUEST = "help.snapshot"
+# «Обновить Harness»: the installed harness, the package version and the drift report, and the
+# diff of one file the drift report lists against what `harness update` writes there.
+UPDATE_HARNESS_REQUEST = "update_harness.snapshot"
+UPDATE_DIFF_REQUEST = "update_harness.diff"
+# The longest project-relative path a request may name.
+MAX_PATH_CHARS = 512
 # Worker steps: one page of a dispatch's worker log from a byte offset the client keeps, and a
 # stream of such pages in a subscription slot.
 WORKER_STEPS_REQUEST = "worker.steps"

@@ -102,7 +102,8 @@ export type Type8 =
   | "harness.maintenance"
   | "repo_map.snapshot"
   | "open_project.snapshot"
-  | "help.snapshot";
+  | "help.snapshot"
+  | "update_harness.snapshot";
 export type V8 = 1;
 export type Done3 = boolean;
 export type Id10 = string | number | null;
@@ -110,7 +111,7 @@ export type Next2 = number;
 export type Ok9 = true;
 export type SnapshotId1 = number;
 export type Text2 = string;
-export type Type9 = "reports.report" | "reports.timeline";
+export type Type9 = "reports.report" | "reports.timeline" | "update_harness.diff";
 export type V9 = 1;
 export type Done4 = boolean;
 export type Id11 = string | number | null;
@@ -173,6 +174,8 @@ export type ConsoleRequest =
   | RepoMapSnapshotRequest
   | OpenProjectSnapshotRequest
   | HelpSnapshotRequest
+  | UpdateHarnessSnapshotRequest
+  | UpdateHarnessDiffRequest
   | SnapshotPageRequest
   | WorkerStepsRequest
   | WorkerSubscribeRequest;
@@ -264,18 +267,25 @@ export type Type35 = "open_project.snapshot";
 export type Id37 = string | number | null;
 export type Language = "ru" | "en";
 export type Type36 = "help.snapshot";
+export type Force11 = boolean;
 export type Id38 = string | number | null;
+export type Type37 = "update_harness.snapshot";
+export type Force12 = boolean;
+export type Id39 = string | number | null;
+export type Path = string;
+export type Type38 = "update_harness.diff";
+export type Id40 = string | number | null;
 export type Offset2 = number;
 export type SnapshotId3 = number;
-export type Type37 = "snapshot.page";
+export type Type39 = "snapshot.page";
 export type DispatchId2 = string;
-export type Id39 = string | number | null;
+export type Id41 = string | number | null;
 export type Offset3 = number;
-export type Type38 = "worker.steps";
+export type Type40 = "worker.steps";
 export type DispatchId3 = string;
-export type Id40 = string | number | null;
+export type Id42 = string | number | null;
 export type Offset4 = number;
-export type Type39 = "worker.subscribe";
+export type Type41 = "worker.subscribe";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
@@ -431,7 +441,7 @@ export interface ScreenSnapshotReply {
   v: V8;
 }
 /**
- * The first page of a report body or a batch chronology as JSON text.
+ * The first page of a report body, a batch chronology or an update diff as JSON text.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "PagedReply".
@@ -744,13 +754,32 @@ export interface HelpSnapshotRequest {
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "UpdateHarnessSnapshotRequest".
+ */
+export interface UpdateHarnessSnapshotRequest {
+  force?: Force11;
+  id?: Id38;
+  type: Type37;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "UpdateHarnessDiffRequest".
+ */
+export interface UpdateHarnessDiffRequest {
+  force?: Force12;
+  id?: Id39;
+  path: Path;
+  type: Type38;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "SnapshotPageRequest".
  */
 export interface SnapshotPageRequest {
-  id?: Id38;
+  id?: Id40;
   offset: Offset2;
   snapshot_id: SnapshotId3;
-  type: Type37;
+  type: Type39;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -758,9 +787,9 @@ export interface SnapshotPageRequest {
  */
 export interface WorkerStepsRequest {
   dispatch_id: DispatchId2;
-  id?: Id39;
+  id?: Id41;
   offset: Offset3;
-  type: Type38;
+  type: Type40;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -768,7 +797,7 @@ export interface WorkerStepsRequest {
  */
 export interface WorkerSubscribeRequest {
   dispatch_id: DispatchId3;
-  id?: Id40;
+  id?: Id42;
   offset?: Offset4;
-  type: Type39;
+  type: Type41;
 }

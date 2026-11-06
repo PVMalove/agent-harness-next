@@ -1,8 +1,9 @@
 """Screen facts read from the project: the orchestration ledger, the ledger lock, the read-only
 coordinator commands of the Recovery and Container route screens (`batch list`, `recovery status`,
 `dispatch preflight`), the health report of Diagnostics, the installation, drift and
-maintenance facts of Harness, the Repo Map facts and the «Открыть проект» facts. Nothing here
-writes, locks the ledger, applies a fix, installs or starts a worker."""
+maintenance facts of Harness, the Repo Map facts, the «Открыть проект» facts and the drift and
+update diff of «Обновить Harness». Nothing here writes, locks the ledger, applies a fix, installs,
+updates or starts a worker."""
 
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ from ...kernel.repo_map_settings import language_files, memory_status, tier_sett
 from ...kernel.repo_map_snapshot import RepoMapFacts
 from ...kernel.reports import LedgerView, load_ledger_view
 from ...kernel.runner import CommandRunner, capturing_runner
+from ...kernel.update_harness_snapshot import UpdateHarnessFacts
 
 
 def collect_ledger(repo: Path) -> LedgerView:
@@ -184,3 +186,19 @@ def open_project_facts(repo: Path) -> dict[str, object]:
     return OpenProjectFacts(
         str(repo), target, error, blockers, _candidates(repo)
     ).to_payload()
+
+
+def update_harness_facts(repo: Path) -> dict[str, object]:
+    """The installed harness, the package version and the `harness diff --json` report (in a
+    subprocess); a project without the harness is never diffed, and an unreadable report is
+    null."""
+    state = harness_state(repo)
+    drift = console_data.drift_report(repo) if state.installed else None
+    return UpdateHarnessFacts(
+        state, console_data.harness_version(), drift
+    ).to_payload()
+
+
+def update_diff(repo: Path, relative: str) -> str:
+    """The unified diff of `relative` against what `harness update` writes there."""
+    return console_data.update_diff_text(repo, relative)

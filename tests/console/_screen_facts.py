@@ -1,6 +1,6 @@
 """Fake screen facts for the console server tests: an in-memory ledger, a lock reader, the
-recovery and container route readers and the Diagnostics, Harness, Repo Map and «Открыть проект»
-collectors, each counting its calls."""
+recovery and container route readers and the Diagnostics, Harness, Repo Map, «Открыть проект» and
+«Обновить Harness» collectors, each counting its calls."""
 
 from __future__ import annotations
 
@@ -61,6 +61,12 @@ HARNESS_STATE = HarnessState(True, "1.0.0", ("engineering-suite",), 3, 7, "t", T
 
 HEAD = "a" * 40
 
+UPDATE_DRIFT: dict[str, object] = {
+    "state": "drift",
+    "conflict": ["AGENTS.md"],
+    "seed_differing": [".harness/project.json"],
+}
+
 
 def repo_map_facts() -> RepoMapFacts:
     view = parse_map(map_payload(HEAD), origin="кэш")
@@ -99,6 +105,7 @@ class Facts:
         self.collect_error: Exception | None = None
         self.statuses: list[tuple[str, tuple[str, ...]]] = []
         self.preflights: list[tuple[str, str, str]] = []
+        self.diffs: list[str] = []
 
     def _count(self, name: str) -> None:
         self.calls[name] = self.calls.get(name, 0) + 1
@@ -161,6 +168,18 @@ class Facts:
         self._count("open_project")
         return open_project_facts().to_payload()
 
+    def update_harness(self, repo: Path, /) -> dict[str, object]:
+        self._count("update_harness")
+        return {
+            "state": HARNESS_STATE.to_payload(),
+            "package_version": "1.0.1",
+            "drift": UPDATE_DRIFT,
+        }
+
+    def update_diff(self, repo: Path, relative: str, /) -> str:
+        self.diffs.append(relative)
+        return f"--- проект/{relative}\n+++ после обновления/{relative}\n"
+
 
 class Clock:
     def __init__(self) -> None:
@@ -187,4 +206,6 @@ def service(
         maintenance=facts.maintenance,
         repo_map=facts.repo_map,
         open_project=facts.open_project,
+        update_harness=facts.update_harness,
+        update_diff=facts.update_diff,
     )
