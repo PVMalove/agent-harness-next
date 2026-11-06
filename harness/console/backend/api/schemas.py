@@ -259,6 +259,11 @@ class WorkerSubscribeRequest(_Strict):  # type: ignore[explicit-any]
     offset: Annotated[int, Field(ge=0)] = 0
 
 
+class StepsSubscribeRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["steps.subscribe"]
+
+
 ConsoleRequest = Annotated[
     HomeSnapshotRequest
     | HomeProblemsRequest
@@ -290,7 +295,8 @@ ConsoleRequest = Annotated[
     | ConfigurationSnapshotRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
-    | WorkerSubscribeRequest,
+    | WorkerSubscribeRequest
+    | StepsSubscribeRequest,
     Field(discriminator="type"),
 ]
 
@@ -490,6 +496,72 @@ class WorkerStepsReply(_Envelope):  # type: ignore[explicit-any]
     page: WorkerStepsPage
 
 
+class RosterDispatch(_Strict):  # type: ignore[explicit-any]
+    dispatch_id: str
+    batch_id: str
+    ticket: str
+    role: str
+    state: str
+
+
+class StepsRosterReply(_Envelope):  # type: ignore[explicit-any]
+    """The dispatches the live step list knows; `reset` drops the steps the client holds."""
+
+    type: Literal["steps.subscribe"]
+    ok: Literal[True]
+    kind: Literal["roster"]
+    reset: bool
+    orchestration: Literal["available", "unavailable"]
+    dispatches: list[RosterDispatch]
+
+
+class AgentStep(_Strict):  # type: ignore[explicit-any]
+    """A visible worker step: kind and text only, never thinking, tool inputs or raw JSON."""
+
+    origin: Literal["agent"]
+    dispatch_id: str
+    batch_id: str
+    role: str
+    source: Literal["structured", "plain"]
+    structure: Literal["available", "unavailable"]
+    kind: str
+    text: str
+    observed_at: str
+
+
+class OrchestrationStep(_Strict):  # type: ignore[explicit-any]
+    """An orchestration event with the allowlisted fields its text needs."""
+
+    origin: Literal["orchestration"]
+    seq: int
+    observed_at: str
+    event: Literal[
+        "batch.transition",
+        "dispatch.transition",
+        "gate.decision",
+        "qa.run",
+        "qa.attempt",
+    ]
+    batch_id: str | None
+    dispatch_id: str | None
+    ticket: str | None
+    role: str | None
+    from_state: str | None
+    to_state: str | None
+    decision: str | None
+    next_role: str | None
+    outcome: str | None
+    stage: str | None
+    message: str
+
+
+class StepsReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["steps.subscribe"]
+    ok: Literal[True]
+    kind: Literal["steps"]
+    steps: list[Annotated[AgentStep | OrchestrationStep, Field(discriminator="origin")]]
+
+
 ConsoleReply = (
     ErrorReply
     | HomeSnapshotReply
@@ -505,6 +577,8 @@ ConsoleReply = (
     | SnapshotPageReply
     | OrchestrationLockReply
     | WorkerStepsReply
+    | StepsRosterReply
+    | StepsReply
 )
 
 REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)
