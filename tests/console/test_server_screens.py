@@ -14,6 +14,7 @@ import pytest
 from harness.console.backend import composition
 from harness.console.backend.api.app import create_app
 from harness.console.backend.api.request_router import RequestRouter
+from harness.console.backend.api.schemas import REPLIES
 from harness.console.backend.application.decisions import DecisionService
 from harness.console.backend.application.events import OrchestrationEvents
 from harness.console.backend.application.jobs import JobService
@@ -181,6 +182,21 @@ def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
             assert (await ask(socket, {"type": "harness.snapshot"}))["cached"] is True
             assert facts.calls["harness"] == 1
 
+            overview = await ask(socket, {"type": "harness.overview"})
+            assert REPLIES.validate_python(overview) is not None
+            assert HarnessState.from_payload(overview["state"]) == HARNESS_STATE
+            assert (overview["package_version"], overview["drift"]) == ("1.0.1", "clean")
+            # The same counts the TUI shows in its usage line for this ledger.
+            assert overview["usage"] == {
+                "unavailable": None,
+                "batches": 1,
+                "tickets": 1,
+                "dispatches": 1,
+                "reports": 1,
+            }
+            assert overview["cached"] is True and facts.calls["harness"] == 1
+            assert "ledger" not in overview and "snapshot_id" not in overview
+
             maintenance = await _read(socket, {"type": "harness.maintenance"})
             assert maintenance == {"maintenance": None, "error": "Git unavailable"}
             again = await ask(socket, {"type": "harness.maintenance", "force": True})
@@ -190,6 +206,8 @@ def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
                 {"type": "diagnostics.snapshot", "extra": 1},
                 {"type": "diagnostics.snapshot", "online": "yes"},
                 {"type": "harness.snapshot", "online": True},
+                {"type": "harness.overview", "online": True},
+                {"type": "harness.overview", "force": "yes"},
                 {"type": "harness.maintenance", "force": 1},
             ]
             for broken in requests:

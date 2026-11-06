@@ -251,6 +251,9 @@
           "$ref": "#/$defs/ScreenSnapshotReply"
         },
         {
+          "$ref": "#/$defs/HarnessOverviewReply"
+        },
+        {
           "$ref": "#/$defs/PagedReply"
         },
         {
@@ -278,6 +281,7 @@
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
           "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
+          "harness.overview": "#/$defs/HarnessOverviewRequest",
           "harness.snapshot": "#/$defs/HarnessSnapshotRequest",
           "help.snapshot": "#/$defs/HelpSnapshotRequest",
           "home.problems": "#/$defs/HomeProblemsRequest",
@@ -371,6 +375,9 @@
         },
         {
           "$ref": "#/$defs/HarnessSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessOverviewRequest"
         },
         {
           "$ref": "#/$defs/HarnessMaintenanceRequest"
@@ -766,6 +773,114 @@
       "title": "HarnessMaintenanceRequest",
       "type": "object"
     },
+    "HarnessOverviewReply": {
+      "additionalProperties": false,
+      "description": "The Harness state, the package version, the drift state and the pipeline usage.",
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "drift": {
+          "title": "Drift",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "package_version": {
+          "title": "Package Version",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/HarnessStatePayload"
+        },
+        "type": {
+          "const": "harness.overview",
+          "title": "Type",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/PipelineUsage"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "state",
+        "package_version",
+        "drift",
+        "usage",
+        "cached",
+        "age_seconds"
+      ],
+      "title": "HarnessOverviewReply",
+      "type": "object"
+    },
+    "HarnessOverviewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.overview",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessOverviewRequest",
+      "type": "object"
+    },
     "HarnessSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
@@ -800,6 +915,56 @@
         "type"
       ],
       "title": "HarnessSnapshotRequest",
+      "type": "object"
+    },
+    "HarnessStatePayload": {
+      "additionalProperties": false,
+      "description": "What is installed in the project, read from `.harness/harness.lock`.",
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "installed": {
+          "title": "Installed",
+          "type": "boolean"
+        },
+        "installed_version": {
+          "title": "Installed Version",
+          "type": "string"
+        },
+        "managed_files": {
+          "minimum": 0,
+          "title": "Managed Files",
+          "type": "integer"
+        },
+        "orchestration": {
+          "title": "Orchestration",
+          "type": "boolean"
+        },
+        "skills": {
+          "minimum": 0,
+          "title": "Skills",
+          "type": "integer"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "installed",
+        "installed_version",
+        "capabilities",
+        "skills",
+        "managed_files",
+        "updated_at",
+        "orchestration"
+      ],
+      "title": "HarnessStatePayload",
       "type": "object"
     },
     "HelpSnapshotRequest": {
@@ -2157,6 +2322,52 @@
         "done"
       ],
       "title": "PagedReply",
+      "type": "object"
+    },
+    "PipelineUsage": {
+      "additionalProperties": false,
+      "description": "Pipeline usage counted from the ledger; with `unavailable` every count is 0.",
+      "properties": {
+        "batches": {
+          "minimum": 0,
+          "title": "Batches",
+          "type": "integer"
+        },
+        "dispatches": {
+          "minimum": 0,
+          "title": "Dispatches",
+          "type": "integer"
+        },
+        "reports": {
+          "minimum": 0,
+          "title": "Reports",
+          "type": "integer"
+        },
+        "tickets": {
+          "minimum": 0,
+          "title": "Tickets",
+          "type": "integer"
+        },
+        "unavailable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unavailable"
+        }
+      },
+      "required": [
+        "unavailable",
+        "batches",
+        "tickets",
+        "dispatches",
+        "reports"
+      ],
+      "title": "PipelineUsage",
       "type": "object"
     },
     "RecoverySnapshotRequest": {

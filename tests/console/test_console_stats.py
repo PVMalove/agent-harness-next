@@ -76,3 +76,31 @@ def test_the_harness_state_survives_its_json_payload(tmp_path: Path) -> None:
     for broken in ({**state.to_payload(), "skills": "3"}, {"installed": True}, []):
         with pytest.raises(ValueError):
             HarnessState.from_payload(broken)
+
+
+def test_the_pipeline_usage_counts_are_the_numbers_of_the_tui_usage_line(
+    tmp_path: Path,
+) -> None:
+    import re
+
+    from harness.console.kernel import pipeline_stats
+    from ._screen_facts import ledger
+
+    view = ledger()
+    usage = pipeline_stats.pipeline_usage(view)
+    numbers = [int(found) for found in re.findall(r"\d+", stats.usage_text(view))]
+    assert numbers == [
+        usage["batches"], usage["tickets"], usage["dispatches"], usage["reports"]
+    ]
+    assert usage["unavailable"] is None
+    assert stats.pipeline_stats is pipeline_stats.pipeline_stats
+    assert stats.PipelineStats is pipeline_stats.PipelineStats
+
+    missing = reports.load_ledger_view(tmp_path)
+    assert pipeline_stats.pipeline_usage(missing) == {
+        "unavailable": missing.unavailable,
+        "batches": 0,
+        "tickets": 0,
+        "dispatches": 0,
+        "reports": 0,
+    }

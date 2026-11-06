@@ -190,6 +190,12 @@ class HarnessSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class HarnessOverviewRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["harness.overview"]
+    force: bool = False
+
+
 class HarnessMaintenanceRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["harness.maintenance"]
@@ -286,6 +292,7 @@ ConsoleRequest = Annotated[
     | TaskBoardSnapshotRequest
     | DiagnosticsSnapshotRequest
     | HarnessSnapshotRequest
+    | HarnessOverviewRequest
     | HarnessMaintenanceRequest
     | RepoMapSnapshotRequest
     | OpenProjectSnapshotRequest
@@ -446,6 +453,41 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
     age_seconds: float
 
 
+class HarnessStatePayload(_Strict):  # type: ignore[explicit-any]
+    """What is installed in the project, read from `.harness/harness.lock`."""
+
+    installed: bool
+    installed_version: str
+    capabilities: list[str]
+    skills: Annotated[int, Field(ge=0)]
+    managed_files: Annotated[int, Field(ge=0)]
+    updated_at: str
+    orchestration: bool
+
+
+class PipelineUsage(_Strict):  # type: ignore[explicit-any]
+    """Pipeline usage counted from the ledger; with `unavailable` every count is 0."""
+
+    unavailable: str | None
+    batches: Annotated[int, Field(ge=0)]
+    tickets: Annotated[int, Field(ge=0)]
+    dispatches: Annotated[int, Field(ge=0)]
+    reports: Annotated[int, Field(ge=0)]
+
+
+class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
+    """The Harness state, the package version, the drift state and the pipeline usage."""
+
+    type: Literal["harness.overview"]
+    ok: Literal[True]
+    state: HarnessStatePayload
+    package_version: str
+    drift: str
+    usage: PipelineUsage
+    cached: bool
+    age_seconds: float
+
+
 class PagedReply(_Envelope):  # type: ignore[explicit-any]
     """The first page of a report body, a batch chronology or an update diff as JSON text."""
 
@@ -585,6 +627,7 @@ ConsoleReply = (
     | OrchestrationSourceReply
     | OrchestrationEventsReply
     | ScreenSnapshotReply
+    | HarnessOverviewReply
     | PagedReply
     | SnapshotPageReply
     | OrchestrationLockReply
