@@ -3,11 +3,14 @@ prompt, the batch stages of the ledger and the bounded board payloads."""
 
 from __future__ import annotations
 
+import json
+import time
 from dataclasses import dataclass, field
 
 import pytest
 
 from harness.console.backend.domain.task_board import (
+    BOARD_BYTES,
     BODY_READ_BYTES,
     CRITERIA_MAX,
     COLUMNS,
@@ -17,6 +20,7 @@ from harness.console.backend.domain.task_board import (
     BatchStage,
     BlockerFact,
     PullRef,
+    SpecList,
     SpecTickets,
     TrackerSpec,
     TrackerTicket,
@@ -123,6 +127,36 @@ def test_parse_body_without_sections_is_empty() -> None:
     assert body.blocked_by == ()
     assert body.branch is None
     assert body.story_points is None
+
+
+# Hostile ticket bodies that a backtracking section parser reads in seconds to minutes.
+PARSE_SECONDS = 1.0
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "## a" + " " * 60000 + "x",
+        "## a" + " " * 30000 + "#####" + " " * 30000 + "x",
+        "## Blocked by\n- #1" + " " * 60000 + "x",
+        "## Blocked by\n- #1" + " " * 60000 + "\u2014x",
+        "## Discovery Context\n- a" + " " * 60000 + "x",
+        "## Discovery Context\n- a" + " " * 60000 + ":x",
+    ],
+    ids=["heading", "heading-hashes", "blocked-by", "blocked-by-dash", "files", "files-colon"],
+)
+def test_parse_body_reads_hostile_whitespace_in_linear_time(hostile: str) -> None:
+    started = time.perf_counter()
+    parse_body(hostile)
+
+    assert time.perf_counter() - started < PARSE_SECONDS
+
+
+def test_parse_body_heading_ignores_closing_hashes_and_spaces() -> None:
+    body = parse_body("## Blocked by ##  \n- #7 \u2014 waits\n## Story Points\t#\n3\n")
+
+    assert body.blocked_by == (("#7", 7, "waits"),)
+    assert body.story_points == 3
 
 
 def test_parse_body_none_blockers_give_nothing() -> None:
@@ -472,3 +506,41 @@ def test_specs_payload_lists_specs_with_branch() -> None:
 
 def test_specs_payload_without_specs() -> None:
     assert build_specs_payload("local", ())["specs"] == []
+
+
+def test_specs_payload_flags_a_truncated_tracker_listing() -> None:
+    payload = build_specs_payload("gitlab", SpecList((SPEC,), truncated=True))
+
+    assert payload["truncated"] is True
+    assert build_specs_payload("gitlab", SpecList((SPEC,)))["truncated"] is False
+
+
+def test_board_payload_flags_a_truncated_tracker_listing() -> None:
+    board = _board()
+    listed = SpecTickets(board.spec, board.tickets, board.blocker_states, truncated=True)
+
+    assert build_board_payload("github", listed, {}, True)["truncated"] is True
+
+
+def test_board_payload_total_size_is_bounded() -> None:
+    body = (
+        "## What to build\n"
+        + "w" * WHAT_BYTES
+        + "\n## Acceptance criteria\n"
+        + "".join(f"- {'c' * 590}\n" for _ in range(CRITERIA_MAX))
+        + "## Relevant Files (Discovery Context)\n"
+        + "".join(f"- `{'p' * 290}` \u2014 {'y' * 290}\n" for _ in range(40))
+    )
+    tickets = tuple(
+        _ticket("status::ready", ref=f"#{n}", n=n, body=body)
+        for n in range(1, MAX_TICKETS + 1)
+    )
+
+    payload = build_board_payload("github", SpecTickets(SPEC, tickets, {}), {}, True)
+
+    size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8", "surrogatepass"))
+    assert size <= BOARD_BYTES
+    assert payload["truncated"] is True
+    cards = payload["tickets"]
+    assert isinstance(cards, list)
+    assert 0 < len(cards) < MAX_TICKETS

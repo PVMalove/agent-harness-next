@@ -4,6 +4,7 @@ Pure: the tracker facts and the ledger view come from the caller; nothing here d
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -35,6 +36,8 @@ BLOCKER_BYTES = 300
 BRANCH_BYTES = 200
 MAX_TICKETS = 200
 MAX_SPECS = 200
+# The JSON size of one board payload; the cards past it are left out.
+BOARD_BYTES = 8 * 1024 * 1024
 REASON_BYTES = MESSAGE_BYTES
 
 _TERMINAL = frozenset(str(state) for state in TERMINAL_BATCH_STATES)
@@ -87,12 +90,22 @@ class TrackerSpec:
 
 
 @dataclass(frozen=True)
+class SpecList:
+    """The open specs the tracker returned; `truncated` when its listing stopped at a limit."""
+
+    specs: tuple[TrackerSpec, ...]
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class SpecTickets:
-    """A spec with its sub-tickets and the known closed state of tickets referenced as blockers."""
+    """A spec with its sub-tickets and the known closed state of tickets referenced as blockers;
+    `truncated` when the tracker listing stopped at a limit."""
 
     spec: TrackerSpec
     tickets: tuple[TrackerTicket, ...]
     blocker_states: Mapping[str, bool]
+    truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -170,12 +183,15 @@ class _Caps:
         return len(values)
 
 
-_HEADING = re.compile(r"^##\s+(.*?)\s*#*\s*$")
+# Every pattern runs on untrusted ticket text: no two adjacent quantifiers may match the same
+# characters, or a long whitespace run costs quadratic or cubic time while holding the GIL.
+_HEADING = re.compile(r"^##\s+(.*)$")
 _FIELD = re.compile(r"^\*\*([^*]+?):\*\*\s*(.*)$")
 _ITEM = re.compile(r"^\s{0,3}(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d{1,4}[.)]\s+)(.*)$")
 _CHECKBOX = re.compile(r"^[-*+]\s+\[[ xX]\]\s+(.*)$")
 _MENTION = re.compile(r"(?<![\w/])([#!]?)(\d{1,9})\b")
-_REASON = re.compile(r"\s+[—–-]\s+|:\s*|\s*[—–]\s*")
+_REASON = re.compile(r"(?<!\s)\s+[—–-]\s+|:\s*|(?<!\s)\s*[—–]\s*")
+_FILE_SPLIT = re.compile(r"(?<!\s)\s+[—–-]\s+|:\s+")
 _BLOCKED_PREFIX = re.compile(r"^(?:[-*+]\s+)?(?:\*\*)?blocked by:?(?:\*\*)?:?\s*", re.I)
 _BACKTICK = re.compile(r"`([^`]+)`")
 _INT = re.compile(r"\d{1,6}")
@@ -215,7 +231,7 @@ def _file(item: str) -> tuple[str, str]:
         end = item.index("`", 1)
         path, rest = item[1:end], item[end + 1 :]
     else:
-        parts = re.split(r"\s+[—–-]\s+|:\s+", item, maxsplit=1)
+        parts = _FILE_SPLIT.split(item, maxsplit=1)
         path, rest = parts[0], (parts[1] if len(parts) > 1 else "")
     why = re.sub(r"^\s*[—–:-]\s*", "", rest).strip()
     return path.strip(), why
@@ -267,7 +283,7 @@ def parse_body(body: str) -> TicketBody:
     for line in text.split("\n"):
         heading = _HEADING.match(line)
         if heading:
-            current = _section(heading.group(1))
+            current = _section(heading.group(1).rstrip().rstrip("#").rstrip())
             if current is not None:
                 sections.setdefault(current, [])
             continue
@@ -443,11 +459,13 @@ def _spec_branch(spec: TrackerSpec) -> str | None:
 
 
 def build_specs_payload(
-    tracker_type: str, specs: Sequence[TrackerSpec]
+    tracker_type: str, specs: SpecList | Sequence[TrackerSpec]
 ) -> dict[str, object]:
     """The `task_board.specs` payload: the open specs, at most `MAX_SPECS`."""
+    listing = specs if isinstance(specs, SpecList) else SpecList(tuple(specs))
     caps = _Caps()
-    shown = specs[: caps.items(specs, MAX_SPECS)]
+    caps.fired = listing.truncated
+    shown = listing.specs[: caps.items(listing.specs, MAX_SPECS)]
     return {
         "tracker": tracker_type,
         "stale": None,
@@ -502,6 +520,12 @@ def _blocker_cards(
     return cards
 
 
+def _json_bytes(value: object) -> int:
+    """An upper bound of the bytes `value` takes as JSON on the wire: every non-ASCII character
+    counted as its `\\uXXXX` escape."""
+    return len(json.dumps(value))
+
+
 def _sort_key(ticket: TrackerTicket) -> tuple[int, int, str]:
     return (ticket.n is None, ticket.n or 0, ticket.ref)
 
@@ -515,6 +539,7 @@ def build_board_payload(
     """The `task_board.snapshot` payload of one spec: its cards with columns, blockers, batch
     stage and prompt, and the KPIs. Closed `resolution::wontfix` tickets are left out."""
     caps = _Caps()
+    caps.fired = board.truncated
     shown = sorted(
         (
             ticket
@@ -538,6 +563,8 @@ def build_board_payload(
         "branch": branch,
     }
     cards: list[dict[str, object]] = []
+    # The spec card, the KPIs and the other fields stay far below the reserve.
+    used = _json_bytes(spec_card) + 4096
     for ticket, body in zip(shown, bodies, strict=True):
         own = _Caps()
         stage = stages.get(ticket.ref)
@@ -582,6 +609,10 @@ def build_board_payload(
         }
         card["prompt"] = agent_prompt(card, spec_card)
         card["truncated"] = own.fired or body.truncated
+        used += _json_bytes(card)
+        if used > BOARD_BYTES:
+            caps.fired = True
+            break
         caps.fired = caps.fired or bool(card["truncated"])
         cards.append(card)
     return {
