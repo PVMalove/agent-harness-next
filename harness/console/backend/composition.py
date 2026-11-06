@@ -26,6 +26,7 @@ from .application.ports import (
     RouteReader,
 )
 from .application.screens import ScreenService
+from .application.task_board import TaskBoardService
 from .application.snapshots import SnapshotService
 from .domain.approvals import DecisionsSnapshot
 from .domain.snapshots import HOME_TTL_SECONDS
@@ -45,6 +46,7 @@ from .infrastructure.screen_facts import (
     collect_ledger_online,
     read_lock,
 )
+from .infrastructure.task_board_tracker import TrackerBoardReader
 
 
 def snapshot_service(
@@ -79,18 +81,28 @@ def screen_service(
     lock: LockReader | None = None,
     recovery: RecoveryReader | None = None,
     route: RouteReader | None = None,
+    board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
     facts = CoordinatorFacts()
+    clock = monotonic if clock is None else clock
+    ledger = collect_ledger if ledger is None else ledger
     return ScreenService(
         repo,
         ttl=ttl,
-        clock=monotonic if clock is None else clock,
-        ledger=collect_ledger if ledger is None else ledger,
+        clock=clock,
+        ledger=ledger,
         ledger_online=collect_ledger_online if ledger_online is None else ledger_online,
         lock=read_lock if lock is None else lock,
         recovery=facts if recovery is None else recovery,
         route=facts if route is None else route,
+        board=(
+            TaskBoardService(
+                repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger
+            )
+            if board is None
+            else board
+        ),
     )
 
 

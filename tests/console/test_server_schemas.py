@@ -83,6 +83,8 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "recovery.snapshot": schemas.RecoverySnapshotRequest,
         "container_route.snapshot": schemas.ContainerRouteSnapshotRequest,
         "snapshot.page": schemas.SnapshotPageRequest,
+        "task_board.specs": schemas.TaskBoardSpecsRequest,
+        "task_board.snapshot": schemas.TaskBoardSnapshotRequest,
     }
     assert set(by_type) == screens.SCREEN_TYPES
     for kind, model in by_type.items():
@@ -100,6 +102,8 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 6, "type": "recovery.snapshot", "batch": "b-1", "skip": ["x"]},
         {"id": 7, "type": "container_route.snapshot", "batch": "b", "role": "qa"},
         {"id": 8, "type": "snapshot.page", "snapshot_id": 1, "offset": 10},
+        {"id": 9, "type": "task_board.specs", "force": True},
+        {"id": 10, "type": "task_board.snapshot", "spec": "#862"},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -109,6 +113,9 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "recovery.snapshot", "skip": ["x"] * 33},
         {"type": "orchestration.lock", "force": True},
         {"type": "snapshot.page", "snapshot_id": 1, "offset": -1},
+        {"type": "task_board.snapshot"},
+        {"type": "task_board.snapshot", "spec": ""},
+        {"type": "task_board.specs", "spec": "#1"},
     ):
         with pytest.raises(ValueError):
             schemas.REQUESTS.validate_python(broken)
@@ -125,6 +132,14 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
          "done": True},
         {"v": 1, "id": 4, "type": "orchestration.lock", "ok": True, "lock": None,
          "error": "boom"},
+        {
+            "v": 1, "id": 5, "type": "task_board.specs", "ok": True, "snapshot_id": 3,
+            "text": "{}", "next": 2, "done": True, "cached": False, "age_seconds": 0.0,
+        },
+        {
+            "v": 1, "id": 6, "type": "task_board.snapshot", "ok": True, "snapshot_id": 4,
+            "text": "{", "next": 1, "done": False, "cached": True, "age_seconds": 12.5,
+        },
     ]
     for reply in replies:
         assert schemas.REPLIES.validate_python(reply).type == reply["type"]

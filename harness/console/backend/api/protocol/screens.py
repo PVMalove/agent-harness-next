@@ -16,14 +16,18 @@ from ....kernel.protocol import (
     REPORT_REQUEST,
     REPORTS_REQUEST,
     ROUTE_REQUEST,
+    TASK_BOARD_REQUEST,
+    TASK_BOARD_SPECS_REQUEST,
     TIMELINE_REQUEST,
 )
+from ...application.ports import SpecNotFound
 from ...application.screens import NotFound, Paged, ScreenService
 from . import Rejected, encode, error_reply, parse_envelope
 
 _ERRORS = {
     "not_found": "The ledger has no such report or batch.",
     "snapshot_expired": "The snapshot is no longer kept; request it again.",
+    "spec_not_found": "The tracker has no such open spec.",
 }
 
 # Every request type with the fields it may carry beside `id` and `type`.
@@ -36,6 +40,8 @@ _FIELDS: dict[str, frozenset[str]] = {
     RECOVERY_REQUEST: frozenset({"batch", "skip", "force"}),
     ROUTE_REQUEST: frozenset({"batch", "role", "runtime"}),
     PAGE_REQUEST: frozenset({"snapshot_id", "offset"}),
+    TASK_BOARD_SPECS_REQUEST: frozenset({"force"}),
+    TASK_BOARD_REQUEST: frozenset({"spec", "force"}),
 }
 SCREEN_TYPES = frozenset(_FIELDS)
 
@@ -109,6 +115,12 @@ def _call(
     if kind == RECOVERY_REQUEST:
         batch, skip, force = _id(body, "batch", ""), _skip(body), _flag(body, "force")
         return lambda: screens.recovery(batch, skip, force=force)
+    if kind == TASK_BOARD_SPECS_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.task_board_specs(force=force)
+    if kind == TASK_BOARD_REQUEST:
+        spec, force = _id(body, "spec"), _flag(body, "force")
+        return lambda: screens.task_board(spec, force=force)
     batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
     runtime = _id(body, "runtime", "")
     if not role:
@@ -158,6 +170,8 @@ async def respond(raw: str, screens: ScreenService) -> str:
         return error_reply("bad_request", request_id, kind)
     try:
         served = await call()
+    except SpecNotFound:
+        return error_reply("not_found", request_id, kind, _ERRORS["spec_not_found"])
     except NotFound:
         return error_reply("not_found", request_id, kind, _ERRORS["not_found"])
     except Exception as exc:
@@ -170,6 +184,6 @@ async def respond(raw: str, screens: ScreenService) -> str:
         "next": served.next,
         "done": served.done,
     }
-    if kind.endswith(".snapshot"):
+    if kind.endswith(".snapshot") or kind == TASK_BOARD_SPECS_REQUEST:
         fields.update(cached=served.cached, age_seconds=served.age_seconds)
     return _ok(request_id, kind, **fields)

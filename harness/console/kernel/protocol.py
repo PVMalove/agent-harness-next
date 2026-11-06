@@ -21,6 +21,9 @@ LOCK_REQUEST = "orchestration.lock"
 RECOVERY_REQUEST = "recovery.snapshot"
 ROUTE_REQUEST = "container_route.snapshot"
 PAGE_REQUEST = "snapshot.page"
+# The task board: the open specs and the board of one spec, paged like the screen snapshots.
+TASK_BOARD_SPECS_REQUEST = "task_board.specs"
+TASK_BOARD_REQUEST = "task_board.snapshot"
 # How many diagnostics one `recovery.snapshot` may skip.
 MAX_SKIPPED = 32
 

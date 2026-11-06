@@ -14,7 +14,9 @@ from ...kernel.container_route import Authored
 from ...kernel.coordinator_api import ApiResult
 from ...kernel.home_snapshot import HomeSnapshot
 from ...kernel.reports import LedgerView
+from ...kernel.protocol import _clip
 from ..domain.events import Event, Observation, View
+from ..domain.task_board import REASON_BYTES, SpecList, SpecTickets, TrackerSpec
 
 
 class Clock(Protocol):
@@ -182,3 +184,44 @@ class OpenJournal(Protocol):
     """The project's event journal, not loaded yet; runs in a thread."""
 
     def __call__(self) -> EventJournal: ...
+
+
+TRACKER_FAILURES = frozenset(
+    {
+        "not_configured",
+        "tool_missing",
+        "timeout",
+        "auth",
+        "failed",
+        "bad_output",
+        "not_found",
+    }
+)
+
+
+class TrackerUnavailable(Exception):
+    """The tracker cannot be read now: ``reason`` is one of `TRACKER_FAILURES`, ``message``
+    is clipped for the wire."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        if reason not in TRACKER_FAILURES:
+            raise ValueError(reason)
+        clipped = _clip(message, REASON_BYTES)
+        super().__init__(clipped)
+        self.reason, self.message = reason, clipped
+
+
+class SpecNotFound(LookupError):
+    """The tracker has no open spec with the requested id."""
+
+
+class TaskBoardReader(Protocol):
+    """Read-only tracker facts of the task board; blocks until read and raises
+    ``TrackerUnavailable`` or ``SpecNotFound``. Never changes the tracker or local state.
+    ``specs`` returns a plain tuple when the source has no listing limit to report."""
+
+    def tracker_type(self, repo: Path) -> str: ...
+
+    def specs(self, repo: Path) -> SpecList | tuple[TrackerSpec, ...]: ...
+
+    def board(self, repo: Path, spec_ref: str) -> SpecTickets: ...

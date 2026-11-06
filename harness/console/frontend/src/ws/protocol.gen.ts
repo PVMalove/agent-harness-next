@@ -89,7 +89,13 @@ export type Next1 = number;
 export type Ok8 = true;
 export type SnapshotId = number;
 export type Text1 = string;
-export type Type8 = "reports.snapshot" | "orchestration.snapshot" | "recovery.snapshot" | "container_route.snapshot";
+export type Type8 =
+  | "reports.snapshot"
+  | "orchestration.snapshot"
+  | "recovery.snapshot"
+  | "container_route.snapshot"
+  | "task_board.specs"
+  | "task_board.snapshot";
 export type V8 = 1;
 export type Done3 = boolean;
 export type Id10 = string | number | null;
@@ -135,6 +141,8 @@ export type ConsoleRequest =
   | OrchestrationLockRequest
   | RecoverySnapshotRequest
   | ContainerRouteSnapshotRequest
+  | TaskBoardSpecsRequest
+  | TaskBoardSnapshotRequest
   | SnapshotPageRequest;
 export type Force = boolean;
 export type Id13 = string | number | null;
@@ -198,10 +206,17 @@ export type Id28 = string | number | null;
 export type Role = string;
 export type Runtime = string;
 export type Type27 = "container_route.snapshot";
+export type Force4 = boolean;
 export type Id29 = string | number | null;
+export type Type28 = "task_board.specs";
+export type Force5 = boolean;
+export type Id30 = string | number | null;
+export type Spec = string;
+export type Type29 = "task_board.snapshot";
+export type Id31 = string | number | null;
 export type Offset1 = number;
 export type SnapshotId3 = number;
-export type Type28 = "snapshot.page";
+export type Type30 = "snapshot.page";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
@@ -558,11 +573,30 @@ export interface ContainerRouteSnapshotRequest {
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "TaskBoardSpecsRequest".
+ */
+export interface TaskBoardSpecsRequest {
+  force?: Force4;
+  id?: Id29;
+  type: Type28;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "TaskBoardSnapshotRequest".
+ */
+export interface TaskBoardSnapshotRequest {
+  force?: Force5;
+  id?: Id30;
+  spec: Spec;
+  type: Type29;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "SnapshotPageRequest".
  */
 export interface SnapshotPageRequest {
-  id?: Id29;
+  id?: Id31;
   offset: Offset1;
   snapshot_id: SnapshotId3;
-  type: Type28;
+  type: Type30;
 }
