@@ -296,3 +296,37 @@ def test_infrastructure_reports_typed_reasons_for_unusable_paths(
     assert read_worker_log(tmp_path, missing, "plain", 0, 100)["reason"] == (
         "log_missing"
     )
+
+
+def test_external_text_log_without_codex_sections_keeps_its_typed_reason(
+    tmp_path: Path,
+) -> None:
+    _ledger(tmp_path)
+    logs = tmp_path / ".harness/.sandboxes/scratch/worker-logs"
+    logs.mkdir(parents=True)
+    (logs / "dispatch-a.log").write_text("claude text output SECRET\n")
+    facts = WorkerFacts(
+        dispatch_id="dispatch-a",
+        dispatch={
+            "dispatch_id": "dispatch-a",
+            "resolved_transport": "external",
+            "report_staging_path": str(
+                tmp_path / ".harness/.sandboxes/scratch/inbox/x.json"
+            ),
+        },
+        status=None,
+    )
+
+    page = page_from_reading(
+        "dispatch-a", read_worker_log(tmp_path, facts, "plain", 0, 4096)
+    )
+
+    assert (page.source, page.structure, page.state, page.reason) == (
+        "plain",
+        "unavailable",
+        "unavailable",
+        "log_unrecognised",
+    )
+    assert page.steps == ()
+    assert page.message
+    assert "SECRET" not in json.dumps(page.to_wire())

@@ -19,7 +19,13 @@ STEP_BUDGET_BYTES = 48 * 1024
 RECEIPT_PROTOCOL = "harness-worker-v1"
 SOURCES = ("structured", "plain", "none")
 STATES = ("connected", "waiting", "unavailable")
-REASONS = ("no_log", "log_missing", "log_unreadable", "log_outside_storage")
+REASONS = (
+    "no_log",
+    "log_missing",
+    "log_unreadable",
+    "log_outside_storage",
+    "log_unrecognised",
+)
 NO_LOG_MESSAGE = "Worker supplied no observable log; worker outcome is independent"
 _DISPATCH_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
 
