@@ -1,7 +1,7 @@
 """A console server client for tests: answers the Home snapshot from injected collect seams, the
-way the server builds it, and the screen snapshots from an injected ledger and fake lock, recovery
-and route facts passed through the same payload codecs the server uses, so no test opens a
-socket."""
+way the server builds it, and the screen snapshots from an injected ledger and fake lock, recovery,
+route, health and Harness facts passed through the same payload codecs the server uses, so no
+test opens a socket."""
 
 from __future__ import annotations
 
@@ -16,18 +16,24 @@ from harness.console.kernel import reports as ledger
 from harness.console.kernel.batch_history import History
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.data import DashboardData
+from harness.console.kernel.harness_facts import HarnessState, harness_state
+from harness.console.kernel.health_report import report_from_payload
 from harness.console.kernel.home_snapshot import (
     HomeContext,
     HomeSnapshot,
     build_home_snapshot,
 )
+from harness.console.kernel.maintenance import MaintenanceView
 from harness.console.tui.client import (
+    HarnessFacts,
     JobResult,
     LockUnavailable,
     OrchestrationView,
     RecoveryFacts,
     RouteFacts,
 )
+from harness.health.model import Report
+from harness.health.report_json import to_json
 from harness.orchestration.ledger.lifecycle import JsonObject
 
 
@@ -72,6 +78,9 @@ class FakeHomeClient:
         self.recovery_facts = RecoveryFacts(History(), None)
         self.route_facts = RouteFacts(Authored(None, "нет конфигурации"), None)
         self.job_result = JobResult("completed", 0, "{}", "", False, None)
+        self.health = Report(1, str(repo), False)
+        self.drift = "clean"
+        self.maintenance: tuple[MaintenanceView | None, str] = (None, "")
         self.closed = False
 
     def home(self, *, force: bool = False, online: bool = False) -> HomeSnapshot:
@@ -125,10 +134,48 @@ class FakeHomeClient:
         self.screen_requests.append(("route", batch, role, runtime))
         return self.route_facts
 
+    def diagnostics(self, *, online: bool = False, force: bool = False) -> Report:
+        self.screen_requests.append(("diagnostics", online, force))
+        report = Report(
+            self.health.schema_version,
+            self.health.repo,
+            online,
+            list(self.health.checks),
+            list(self.health.fixes_applied),
+        )
+        return report_from_payload(_wire(to_json(report)))
+
+    def harness(self, *, force: bool = False) -> HarnessFacts:
+        self.screen_requests.append(("harness", force))
+        state = HarnessState.from_payload(_wire(harness_state(self.repo).to_payload()))
+        return HarnessFacts(
+            state, console_data.harness_version(), self.drift, self.reports()
+        )
+
+    def harness_maintenance(
+        self, *, force: bool = False
+    ) -> tuple[MaintenanceView | None, str]:
+        self.screen_requests.append(("maintenance", force))
+        view, error = self.maintenance
+        if view is None:
+            return None, error
+        return MaintenanceView.from_payload(_wire(view.to_payload())), error
+
     def run_job(
-        self, command_id: str, values: Mapping[str, str], *, confirmed: bool = False
+        self,
+        command_id: str,
+        values: Mapping[str, str],
+        *,
+        confirmed: bool = False,
+        confirmation: str | None = None,
+        plan_digest: str | None = None,
+        on_output: Callable[[str, str], None] | None = None,
     ) -> JobResult:
         self.screen_requests.append(("job", command_id, dict(values), confirmed))
+        if confirmation is not None or plan_digest is not None:
+            self.screen_requests.append(("job-extra", confirmation, plan_digest))
+        if on_output is not None and self.job_result.stdout:
+            on_output("stdout", self.job_result.stdout)
         return self.job_result
 
     def close(self) -> None:

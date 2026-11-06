@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -20,10 +21,12 @@ from harness.console.backend.application.snapshots import SnapshotService
 from harness.console.kernel.batch_history import History
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult
+from harness.console.kernel.harness_facts import HarnessState
+from harness.console.kernel.health_report import report_from_payload
 from harness.console.kernel.reports import ledger_from_payload, timeline_from_payload
 
 from ._asgi_ws import AsgiWebSocket, Rejected
-from ._screen_facts import BODY, Facts, service
+from ._screen_facts import BODY, HARNESS_STATE, Facts, health_report, service
 
 PORT = 48123
 TOKEN = "t" * 43
@@ -136,6 +139,61 @@ def test_every_screen_request_round_trips_through_the_websocket_route(
     asyncio.run(scenario())
 
 
+def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
+    tmp_path: Path,
+) -> None:
+    facts = Facts()
+    runtime = _runtime(tmp_path, facts)
+
+    async def ask(socket: AsgiWebSocket, request: dict[str, object]) -> dict[str, object]:
+        await socket.send_text(json.dumps({"id": 1, **request}))
+        reply = json.loads(await socket.receive_text())
+        assert isinstance(reply, dict)
+        return reply
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            offline = await _read(socket, {"type": "diagnostics.snapshot"})
+            assert report_from_payload(offline) == health_report()
+            online = await _read(socket, {"type": "diagnostics.snapshot", "online": True})
+            assert report_from_payload(online) == health_report(online=True)
+            cached = await ask(socket, {"type": "diagnostics.snapshot"})
+            assert cached["cached"] is True and cached["done"] is True
+            forced = await ask(socket, {"type": "diagnostics.snapshot", "force": True})
+            assert forced["cached"] is False
+            assert (facts.calls["health"], facts.calls["health_online"]) == (2, 1)
+
+            harness = await _read(socket, {"type": "harness.snapshot"})
+            assert isinstance(harness, dict)
+            assert HarnessState.from_payload(harness["state"]) == HARNESS_STATE
+            assert (harness["package_version"], harness["drift"]) == ("1.0.1", "clean")
+            assert ledger_from_payload(harness["ledger"]).batches[0].batch_id == "b-1"
+            assert (await ask(socket, {"type": "harness.snapshot"}))["cached"] is True
+            assert facts.calls["harness"] == 1
+
+            maintenance = await _read(socket, {"type": "harness.maintenance"})
+            assert maintenance == {"maintenance": None, "error": "Git unavailable"}
+            again = await ask(socket, {"type": "harness.maintenance", "force": True})
+            assert again["cached"] is False and facts.calls["maintenance"] == 2
+
+            requests: list[dict[str, object]] = [
+                {"type": "diagnostics.snapshot", "extra": 1},
+                {"type": "diagnostics.snapshot", "online": "yes"},
+                {"type": "harness.snapshot", "online": True},
+                {"type": "harness.maintenance", "force": 1},
+            ]
+            for broken in requests:
+                refused = await ask(socket, broken)
+                error = refused["error"]
+                assert refused["ok"] is False and refused["type"] == broken["type"]
+                assert isinstance(error, dict) and error["code"] == "bad_request"
+            facts.collect_error = RuntimeError("secret /home/x")
+            failed = await ask(socket, {"type": "diagnostics.snapshot", "force": True})
+            assert failed["error"] == {"code": "collect_failed", "message": "RuntimeError"}
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "headers",
     [
@@ -164,3 +222,52 @@ def test_the_security_middleware_refuses_a_screen_client_without_the_session(
 
     asyncio.run(scenario())
     assert facts.calls == {} and runtime.clients == 0
+
+
+def test_the_job_service_runs_a_diagnostics_fix_only_as_confirmed(tmp_path: Path) -> None:
+    """An online fix changes the tracker: it starts only confirmed, then runs as a server job
+    whose stdout is the `--json` report."""
+    from harness.console.backend.domain.jobs import JobRejected
+    from harness.console.kernel.catalog import DIAGNOSTICS_COMMANDS
+    from harness.health.report_json import to_json
+
+    from ._screen_facts import health_report
+
+    ran: list[list[str]] = []
+    journal: list[dict[str, object]] = []
+
+    async def executor(
+        argv: object, *, cwd: Path, on_output: object, cancel_event: object
+    ) -> int:
+        ran.append(list(cast(list[str], argv)))
+        cast(Callable[[str, str], None], on_output)(
+            "stdout", json.dumps(to_json(health_report()))
+        )
+        return 1
+
+    async def scenario() -> None:
+        served = composition.job_service(tmp_path, executor=executor)
+        with pytest.raises(JobRejected) as refused:
+            served.start({"command_id": "diagnostics-online-fix", "client": "tui"})
+        assert refused.value.code == "confirmation_required" and ran == []
+        # The same catalog entry with an in-memory journal: the real one resolves Git.
+        jobs = JobService(
+            tmp_path,
+            catalog={entry.key: entry for entry in DIAGNOSTICS_COMMANDS},
+            executor=executor,
+            journal=lambda repo, record: journal.append(dict(record)),
+            new_id=lambda: "job-1",
+            now=lambda: "t",
+        )
+        job = jobs.start(
+            {"command_id": "diagnostics-online-fix", "client": "tui", "confirmed": True}
+        )
+        while job.phase == "running":
+            await asyncio.sleep(0.01)
+        assert (job.phase, job.returncode) == ("completed", 1)
+        output = "".join(fragment.text for fragment in job.output)
+        assert report_from_payload(json.loads(output)) == health_report()
+        assert ran[0][-3:] == ["--online", "--fix", "--json"]
+        assert journal[0]["command_id"] == "diagnostics-online-fix"
+
+    asyncio.run(scenario())

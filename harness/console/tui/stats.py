@@ -6,13 +6,12 @@ already read by harness.console.kernel.reports."""
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
 
-from ..kernel.json_fields import strings, text
+from ..kernel.harness_facts import HarnessState as HarnessState
+from ..kernel.harness_facts import harness_state as harness_state
+from ..kernel.json_fields import text
 from ..kernel.reports import BatchSummary, LedgerView
 
 # The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state.
@@ -145,48 +144,6 @@ def batches_in_state(view: LedgerView, state: str) -> list[BatchSummary]:
 def batch_label(batch: BatchSummary) -> str:
     state = STATE_LABELS.get(batch.state, batch.state)
     return f"{batch.ticket} · {state} · {short_time(batch.created_at) or 'дата неизвестна'}\n  {batch.batch_id}"
-
-
-@dataclass(frozen=True)
-class HarnessState:
-    """What is installed in the repository."""
-
-    installed: bool
-    installed_version: str
-    capabilities: tuple[str, ...]
-    skills: int
-    managed_files: int
-    updated_at: str
-    orchestration: bool
-
-
-def harness_state(repo: Path) -> HarnessState:
-    lock_path = repo / ".harness" / "harness.lock"
-    try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        payload = None
-    skills_dir = repo / ".harness" / "skills"
-    skills = (
-        sum(1 for path in skills_dir.iterdir() if (path / "SKILL.md").is_file())
-        if skills_dir.is_dir()
-        else 0
-    )
-    if not isinstance(payload, dict):
-        return HarnessState(False, "", (), skills, 0, "", False)
-    files = payload.get("files")
-    updated = datetime.fromtimestamp(lock_path.stat().st_mtime, tz=timezone.utc)
-    return HarnessState(
-        installed=True,
-        installed_version=text(payload.get("package_version"), "?"),
-        capabilities=tuple(strings(payload.get("capabilities"))),
-        skills=skills,
-        managed_files=len(files) if isinstance(files, dict) else 0,
-        updated_at=updated.strftime("%Y-%m-%d %H:%M UTC"),
-        orchestration=(
-            repo / ".harness" / "orchestration" / "coordinator.py"
-        ).is_file(),
-    )
 
 
 def harness_state_text(state: HarnessState, harness_version: str) -> str:

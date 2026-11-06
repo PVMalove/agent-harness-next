@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS
+from ..kernel.catalog import DIAGNOSTICS_COMMANDS, HARNESS_COMMANDS, MEMORY_COMMANDS
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from .api.request_router import RequestRouter
 from .application.decisions import DecisionService
@@ -17,10 +17,13 @@ from .application.jobs import JobService
 from .application.ports import (
     Clock,
     CommandSpec,
+    HarnessCollector,
+    HealthCollector,
     HomeCollector,
     JobExecutor,
     LedgerCollector,
     LockReader,
+    MaintenanceCollector,
     OrchestrationReader,
     RecoveryReader,
     RouteReader,
@@ -28,6 +31,7 @@ from .application.ports import (
 from .application.screens import ScreenService
 from .application.task_board import TaskBoardService
 from .application.snapshots import SnapshotService
+from .application.worker_steps import POLL_SECONDS, WorkerStepsQuery
 from .domain.approvals import DecisionsSnapshot
 from .domain.snapshots import HOME_TTL_SECONDS
 from .infrastructure import command_journal
@@ -42,11 +46,15 @@ from .infrastructure.orchestration_reader import ProjectReader
 from .infrastructure.processes import run_command
 from .infrastructure.screen_facts import (
     CoordinatorFacts,
+    HealthFacts,
     collect_ledger,
     collect_ledger_online,
+    harness_facts,
+    maintenance_facts,
     read_lock,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
+from .infrastructure.worker_steps import read_worker_facts, read_worker_log
 
 
 def snapshot_service(
@@ -81,6 +89,9 @@ def screen_service(
     lock: LockReader | None = None,
     recovery: RecoveryReader | None = None,
     route: RouteReader | None = None,
+    health: HealthCollector | None = None,
+    harness: HarnessCollector | None = None,
+    maintenance: MaintenanceCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -96,6 +107,9 @@ def screen_service(
         lock=read_lock if lock is None else lock,
         recovery=facts if recovery is None else recovery,
         route=facts if route is None else route,
+        health=HealthFacts() if health is None else health,
+        harness=harness_facts if harness is None else harness,
+        maintenance=maintenance_facts if maintenance is None else maintenance,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger
@@ -107,10 +121,11 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, memory, coordinator and native permission commands;
-    without `executor` the commands run as subprocesses."""
+    """The job service over the harness, Diagnostics, memory, coordinator and native permission
+    commands; without `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
+        *DIAGNOSTICS_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
@@ -153,6 +168,18 @@ def orchestration_events(
     )
 
 
+def worker_steps_query(
+    repo: Path, *, poll_seconds: float = POLL_SECONDS
+) -> WorkerStepsQuery:
+    """Worker steps read from the project's ledger records and worker logs, without the lock."""
+    return WorkerStepsQuery(
+        repo,
+        facts=read_worker_facts,
+        log=read_worker_log,
+        poll_seconds=poll_seconds,
+    )
+
+
 @dataclass(frozen=True)
 class Composition:
     """Everything one console server is built from. `discovery` makes the project's discovery
@@ -163,6 +190,7 @@ class Composition:
     decisions: DecisionService
     events: OrchestrationEvents
     screens: ScreenService
+    workers: WorkerStepsQuery
     router: RequestRouter
     discovery: Callable[[Path], Discovery]
 
@@ -175,6 +203,7 @@ def compose(
     decisions: DecisionService | None = None,
     events: OrchestrationEvents | None = None,
     screens: ScreenService | None = None,
+    workers: WorkerStepsQuery | None = None,
 ) -> Composition:
     """The services of one console server, with the given ones kept, and its request router."""
     snapshots = snapshots or snapshot_service(repo)
@@ -182,12 +211,14 @@ def compose(
     decisions = decisions or decision_service(repo)
     events = events or orchestration_events(repo)
     screens = screens or screen_service(repo)
+    workers = workers or worker_steps_query(repo)
     return Composition(
         snapshots,
         jobs,
         decisions,
         events,
         screens,
-        RequestRouter(snapshots, jobs, decisions, events, screens),
+        workers,
+        RequestRouter(snapshots, jobs, decisions, events, screens, workers),
         Discovery,
     )

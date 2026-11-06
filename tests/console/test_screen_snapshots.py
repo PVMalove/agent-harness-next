@@ -228,3 +228,35 @@ def test_a_failed_collect_names_only_the_exception_class() -> None:
     facts.ledger = broken  # type: ignore[method-assign,assignment]
     reply = _ask(service(facts), type="reports.snapshot")
     assert reply["error"] == {"code": "collect_failed", "message": "RuntimeError"}
+
+
+def test_a_health_report_survives_its_json_contract() -> None:
+    from harness.console.kernel.health_report import report_from_payload
+    from harness.health.model import CheckResult, Fix, Report
+    from harness.health.report_json import to_json
+
+    report = Report(
+        1,
+        "/repo",
+        True,
+        [
+            CheckResult("a.b", "core", "ok", "fine"),
+            CheckResult("c.d", "core", "fail", "bad", Fix("run it", "harness x")),
+            CheckResult("e.f", "core", "warn", "meh", Fix("by hand")),
+        ],
+        ["c.d"],
+    )
+    assert report_from_payload(json.loads(json.dumps(to_json(report)))) == report
+    payload = to_json(report)
+    checks = payload["checks"]
+    assert isinstance(checks, list)
+    broken: object
+    for broken in (
+        {**payload, "schema_version": 2},
+        {**payload, "checks": [{**checks[0], "status": "great"}]},
+        {**payload, "fixes_applied": "c.d"},
+        {key: value for key, value in payload.items() if key != "online"},
+        [],
+    ):
+        with pytest.raises(ValueError):
+            report_from_payload(broken)

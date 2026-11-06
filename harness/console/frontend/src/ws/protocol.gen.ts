@@ -17,7 +17,8 @@ export type ConsoleReply =
   | ScreenSnapshotReply
   | PagedReply
   | SnapshotPageReply
-  | OrchestrationLockReply;
+  | OrchestrationLockReply
+  | WorkerStepsReply;
 export type Code = string;
 export type JobId = string | null;
 export type Message = string;
@@ -95,7 +96,10 @@ export type Type8 =
   | "recovery.snapshot"
   | "container_route.snapshot"
   | "task_board.specs"
-  | "task_board.snapshot";
+  | "task_board.snapshot"
+  | "diagnostics.snapshot"
+  | "harness.snapshot"
+  | "harness.maintenance";
 export type V8 = 1;
 export type Done3 = boolean;
 export type Id10 = string | number | null;
@@ -120,6 +124,23 @@ export type Lock = {
 export type Ok11 = true;
 export type Type11 = "orchestration.lock";
 export type V11 = 1;
+export type Id13 = string | number | null;
+export type Ok12 = true;
+export type DispatchId = string;
+export type LastStepAgeSeconds = number | null;
+export type Message1 = string;
+export type More = boolean;
+export type Offset = number;
+export type Reason = ("no_log" | "log_missing" | "log_unreadable" | "log_outside_storage" | "log_unrecognised") | null;
+export type Reset = boolean;
+export type Source1 = "structured" | "plain" | "none";
+export type State = "connected" | "waiting" | "unavailable";
+export type Kind2 = string;
+export type Text4 = string;
+export type Steps = WorkerStep[];
+export type Structure = "available" | "unavailable";
+export type Type12 = "worker.steps" | "worker.subscribe";
+export type V12 = 1;
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "ConsoleRequest".
@@ -143,80 +164,103 @@ export type ConsoleRequest =
   | ContainerRouteSnapshotRequest
   | TaskBoardSpecsRequest
   | TaskBoardSnapshotRequest
-  | SnapshotPageRequest;
+  | DiagnosticsSnapshotRequest
+  | HarnessSnapshotRequest
+  | HarnessMaintenanceRequest
+  | SnapshotPageRequest
+  | WorkerStepsRequest
+  | WorkerSubscribeRequest;
 export type Force = boolean;
-export type Id13 = string | number | null;
-export type Online = boolean;
-export type Type12 = "home.snapshot";
 export type Id14 = string | number | null;
-export type Offset = number;
+export type Online = boolean;
+export type Type13 = "home.snapshot";
+export type Id15 = string | number | null;
+export type Offset1 = number;
 export type SnapshotId2 = number;
-export type Type13 = "home.problems";
+export type Type14 = "home.problems";
 export type Client = string;
 export type CommandId1 = string;
 export type Confirmation = string | null;
 export type Confirmed = boolean;
-export type Id15 = string | number | null;
-export type PlanDigest = string | null;
-export type Type14 = "job.start";
-export type Cursor3 = number;
 export type Id16 = string | number | null;
-export type JobId1 = string;
-export type Type15 = "job.get";
-export type Cursor4 = number;
+export type PlanDigest = string | null;
+export type Type15 = "job.start";
+export type Cursor3 = number;
 export type Id17 = string | number | null;
-export type JobId2 = string;
-export type Type16 = "job.subscribe";
-export type Confirmed1 = boolean;
+export type JobId1 = string;
+export type Type16 = "job.get";
+export type Cursor4 = number;
 export type Id18 = string | number | null;
-export type JobId3 = string;
-export type Type17 = "job.cancel";
+export type JobId2 = string;
+export type Type17 = "job.subscribe";
+export type Confirmed1 = boolean;
 export type Id19 = string | number | null;
-export type Type18 = "job.list";
+export type JobId3 = string;
+export type Type18 = "job.cancel";
 export type Id20 = string | number | null;
-export type Type19 = "decisions.snapshot";
-export type Cursor5 = string | null;
+export type Type19 = "job.list";
 export type Id21 = string | number | null;
-export type Type20 = "orchestration.subscribe";
-export type Force1 = boolean;
+export type Type20 = "decisions.snapshot";
+export type Cursor5 = string | null;
 export type Id22 = string | number | null;
-export type Online1 = boolean;
-export type Type21 = "reports.snapshot";
-export type DispatchId = string;
+export type Type21 = "orchestration.subscribe";
+export type Force1 = boolean;
 export type Id23 = string | number | null;
-export type Type22 = "reports.report";
-export type BatchId = string;
+export type Online1 = boolean;
+export type Type22 = "reports.snapshot";
+export type DispatchId1 = string;
 export type Id24 = string | number | null;
-export type Type23 = "reports.timeline";
-export type Force2 = boolean;
+export type Type23 = "reports.report";
+export type BatchId = string;
 export type Id25 = string | number | null;
-export type Type24 = "orchestration.snapshot";
+export type Type24 = "reports.timeline";
+export type Force2 = boolean;
 export type Id26 = string | number | null;
-export type Type25 = "orchestration.lock";
+export type Type25 = "orchestration.snapshot";
+export type Id27 = string | number | null;
+export type Type26 = "orchestration.lock";
 export type Batch = string;
 export type Force3 = boolean;
-export type Id27 = string | number | null;
+export type Id28 = string | number | null;
 /**
  * @maxItems 32
  */
 export type Skip = string[];
-export type Type26 = "recovery.snapshot";
+export type Type27 = "recovery.snapshot";
 export type Batch1 = string;
-export type Id28 = string | number | null;
+export type Id29 = string | number | null;
 export type Role = string;
 export type Runtime = string;
-export type Type27 = "container_route.snapshot";
+export type Type28 = "container_route.snapshot";
 export type Force4 = boolean;
-export type Id29 = string | number | null;
-export type Type28 = "task_board.specs";
-export type Force5 = boolean;
 export type Id30 = string | number | null;
-export type Spec = string;
-export type Type29 = "task_board.snapshot";
+export type Type29 = "task_board.specs";
+export type Force5 = boolean;
 export type Id31 = string | number | null;
-export type Offset1 = number;
+export type Spec = string;
+export type Type30 = "task_board.snapshot";
+export type Force6 = boolean;
+export type Id32 = string | number | null;
+export type Online2 = boolean;
+export type Type31 = "diagnostics.snapshot";
+export type Force7 = boolean;
+export type Id33 = string | number | null;
+export type Type32 = "harness.snapshot";
+export type Force8 = boolean;
+export type Id34 = string | number | null;
+export type Type33 = "harness.maintenance";
+export type Id35 = string | number | null;
+export type Offset2 = number;
 export type SnapshotId3 = number;
-export type Type30 = "snapshot.page";
+export type Type34 = "snapshot.page";
+export type DispatchId2 = string;
+export type Id36 = string | number | null;
+export type Offset3 = number;
+export type Type35 = "worker.steps";
+export type DispatchId3 = string;
+export type Id37 = string | number | null;
+export type Offset4 = number;
+export type Type36 = "worker.subscribe";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
@@ -414,23 +458,61 @@ export interface OrchestrationLockReply {
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "WorkerStepsReply".
+ */
+export interface WorkerStepsReply {
+  id: Id13;
+  ok: Ok12;
+  page: WorkerStepsPage;
+  type: Type12;
+  v: V12;
+}
+/**
+ * Allowlisted worker steps from a log byte offset; never thinking, tool inputs or raw JSON.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "WorkerStepsPage".
+ */
+export interface WorkerStepsPage {
+  dispatch_id: DispatchId;
+  last_step_age_seconds: LastStepAgeSeconds;
+  message: Message1;
+  more: More;
+  offset: Offset;
+  reason: Reason;
+  reset: Reset;
+  source: Source1;
+  state: State;
+  steps: Steps;
+  structure: Structure;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "WorkerStep".
+ */
+export interface WorkerStep {
+  kind: Kind2;
+  text: Text4;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HomeSnapshotRequest".
  */
 export interface HomeSnapshotRequest {
   force?: Force;
-  id?: Id13;
+  id?: Id14;
   online?: Online;
-  type: Type12;
+  type: Type13;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HomeProblemsRequest".
  */
 export interface HomeProblemsRequest {
-  id?: Id14;
-  offset: Offset;
+  id?: Id15;
+  offset: Offset1;
   snapshot_id: SnapshotId2;
-  type: Type13;
+  type: Type14;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -441,9 +523,9 @@ export interface JobStartRequest {
   command_id: CommandId1;
   confirmation?: Confirmation;
   confirmed?: Confirmed;
-  id?: Id15;
+  id?: Id16;
   plan_digest?: PlanDigest;
-  type: Type14;
+  type: Type15;
   values?: Values;
 }
 export interface Values {
@@ -455,9 +537,9 @@ export interface Values {
  */
 export interface JobGetRequest {
   cursor?: Cursor3;
-  id?: Id16;
+  id?: Id17;
   job_id: JobId1;
-  type: Type15;
+  type: Type16;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -465,9 +547,9 @@ export interface JobGetRequest {
  */
 export interface JobSubscribeRequest {
   cursor?: Cursor4;
-  id?: Id17;
+  id?: Id18;
   job_id: JobId2;
-  type: Type16;
+  type: Type17;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -475,25 +557,25 @@ export interface JobSubscribeRequest {
  */
 export interface JobCancelRequest {
   confirmed?: Confirmed1;
-  id?: Id18;
+  id?: Id19;
   job_id: JobId3;
-  type: Type17;
+  type: Type18;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "JobListRequest".
  */
 export interface JobListRequest {
-  id?: Id19;
-  type: Type18;
+  id?: Id20;
+  type: Type19;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "DecisionsSnapshotRequest".
  */
 export interface DecisionsSnapshotRequest {
-  id?: Id20;
-  type: Type19;
+  id?: Id21;
+  type: Type20;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -501,8 +583,8 @@ export interface DecisionsSnapshotRequest {
  */
 export interface OrchestrationSubscribeRequest {
   cursor?: Cursor5;
-  id?: Id21;
-  type: Type20;
+  id?: Id22;
+  type: Type21;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -510,18 +592,18 @@ export interface OrchestrationSubscribeRequest {
  */
 export interface ReportsSnapshotRequest {
   force?: Force1;
-  id?: Id22;
+  id?: Id23;
   online?: Online1;
-  type: Type21;
+  type: Type22;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "ReportRequest".
  */
 export interface ReportRequest {
-  dispatch_id: DispatchId;
-  id?: Id23;
-  type: Type22;
+  dispatch_id: DispatchId1;
+  id?: Id24;
+  type: Type23;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -529,8 +611,8 @@ export interface ReportRequest {
  */
 export interface TimelineRequest {
   batch_id: BatchId;
-  id?: Id24;
-  type: Type23;
+  id?: Id25;
+  type: Type24;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -538,16 +620,16 @@ export interface TimelineRequest {
  */
 export interface OrchestrationSnapshotRequest {
   force?: Force2;
-  id?: Id25;
-  type: Type24;
+  id?: Id26;
+  type: Type25;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "OrchestrationLockRequest".
  */
 export interface OrchestrationLockRequest {
-  id?: Id26;
-  type: Type25;
+  id?: Id27;
+  type: Type26;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -556,9 +638,9 @@ export interface OrchestrationLockRequest {
 export interface RecoverySnapshotRequest {
   batch?: Batch;
   force?: Force3;
-  id?: Id27;
+  id?: Id28;
   skip?: Skip;
-  type: Type26;
+  type: Type27;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -566,10 +648,10 @@ export interface RecoverySnapshotRequest {
  */
 export interface ContainerRouteSnapshotRequest {
   batch?: Batch1;
-  id?: Id28;
+  id?: Id29;
   role?: Role;
   runtime?: Runtime;
-  type: Type27;
+  type: Type28;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -577,8 +659,8 @@ export interface ContainerRouteSnapshotRequest {
  */
 export interface TaskBoardSpecsRequest {
   force?: Force4;
-  id?: Id29;
-  type: Type28;
+  id?: Id30;
+  type: Type29;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -586,17 +668,65 @@ export interface TaskBoardSpecsRequest {
  */
 export interface TaskBoardSnapshotRequest {
   force?: Force5;
-  id?: Id30;
+  id?: Id31;
   spec: Spec;
-  type: Type29;
+  type: Type30;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "DiagnosticsSnapshotRequest".
+ */
+export interface DiagnosticsSnapshotRequest {
+  force?: Force6;
+  id?: Id32;
+  online?: Online2;
+  type: Type31;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "HarnessSnapshotRequest".
+ */
+export interface HarnessSnapshotRequest {
+  force?: Force7;
+  id?: Id33;
+  type: Type32;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "HarnessMaintenanceRequest".
+ */
+export interface HarnessMaintenanceRequest {
+  force?: Force8;
+  id?: Id34;
+  type: Type33;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "SnapshotPageRequest".
  */
 export interface SnapshotPageRequest {
-  id?: Id31;
-  offset: Offset1;
+  id?: Id35;
+  offset: Offset2;
   snapshot_id: SnapshotId3;
-  type: Type30;
+  type: Type34;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "WorkerStepsRequest".
+ */
+export interface WorkerStepsRequest {
+  dispatch_id: DispatchId2;
+  id?: Id36;
+  offset: Offset3;
+  type: Type35;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "WorkerSubscribeRequest".
+ */
+export interface WorkerSubscribeRequest {
+  dispatch_id: DispatchId3;
+  id?: Id37;
+  offset?: Offset4;
+  type: Type36;
 }

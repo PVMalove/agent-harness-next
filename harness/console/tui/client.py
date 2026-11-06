@@ -18,15 +18,22 @@ from typing import TYPE_CHECKING, Protocol, cast
 
 from harness.orchestration.ledger.lifecycle import JsonObject
 
+from ...health.model import Report
 from ..kernel.batch_history import History
 from ..kernel.container_route import Authored
 from ..kernel.coordinator_api import ApiResult
 from ..kernel.discovery import ServerEndpoint
+from ..kernel.harness_facts import HarnessState
+from ..kernel.health_report import report_from_payload
 from ..kernel.home_snapshot import HomeSnapshot, Problem, problems_from_text
+from ..kernel.maintenance import MaintenanceView
 from ..kernel.protocol import (
+    DIAGNOSTICS_REQUEST,
+    HARNESS_REQUEST,
     HOME_PROBLEMS_REQUEST,
     HOME_REQUEST,
     LOCK_REQUEST,
+    MAINTENANCE_REQUEST,
     MESSAGE_LIMIT,
     ORCHESTRATION_REQUEST,
     PAGE_REQUEST,
@@ -36,6 +43,7 @@ from ..kernel.protocol import (
     REPORTS_REQUEST,
     ROUTE_REQUEST,
     TIMELINE_REQUEST,
+    WORKER_STEPS_REQUEST,
 )
 from ..kernel.reports import (
     BatchTimeline,
@@ -121,6 +129,17 @@ class RouteFacts:
 
 
 @dataclass(frozen=True)
+class HarnessFacts:
+    """The Harness screen's installed state, package version, drift state and the ledger of its
+    pipeline usage."""
+
+    state: HarnessState
+    package_version: str
+    drift: str
+    ledger: LedgerView
+
+
+@dataclass(frozen=True)
 class JobResult:
     """A finished server job: its phase, exit code, output by channel and error text."""
 
@@ -132,9 +151,107 @@ class JobResult:
     error: str | None
 
 
+_STEP_PAGE_FIELDS = frozenset(
+    {
+        "dispatch_id",
+        "source",
+        "structure",
+        "state",
+        "reason",
+        "message",
+        "offset",
+        "reset",
+        "more",
+        "last_step_age_seconds",
+        "steps",
+    }
+)
+_STEP_REASONS = frozenset(
+    {
+        "no_log",
+        "log_missing",
+        "log_unreadable",
+        "log_outside_storage",
+        "log_unrecognised",
+    }
+)
+
+
+@dataclass(frozen=True)
+class WorkerSteps:
+    """One page of worker steps from the console server; `offset` is where the next page
+    starts. `structure` is `unavailable` for a plain log tail; a `state` of `unavailable` comes
+    with its `reason`. Each step is its kind and visible text only."""
+
+    source: str
+    structure: str
+    state: str
+    reason: str | None
+    message: str
+    offset: int
+    reset: bool
+    more: bool
+    last_step_age_seconds: int | None
+    steps: tuple[tuple[str, str], ...]
+
+
+def _int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _worker_steps(value: object) -> WorkerSteps:
+    """The page of a `worker.steps` reply; anything outside the protocol is malformed."""
+    malformed = MalformedReply("шаги worker сервера консоли не по схеме")
+    page = _object(value, "шаги worker")
+    if set(page) != _STEP_PAGE_FIELDS:
+        raise malformed
+    steps, reason, offset, age = (
+        page["steps"],
+        page["reason"],
+        page["offset"],
+        page["last_step_age_seconds"],
+    )
+    if (
+        page["source"] not in {"structured", "plain", "none"}
+        or page["structure"] not in {"available", "unavailable"}
+        or page["state"] not in {"connected", "waiting", "unavailable"}
+        or not (reason is None or reason in _STEP_REASONS)
+        or not isinstance(page["message"], str)
+        or not _int(offset)
+        or cast(int, offset) < 0
+        or not isinstance(page["reset"], bool)
+        or not isinstance(page["more"], bool)
+        or not (age is None or _int(age))
+        or not isinstance(steps, list)
+    ):
+        raise malformed
+    found: list[tuple[str, str]] = []
+    for step in steps:
+        if (
+            not isinstance(step, dict)
+            or set(step) != {"kind", "text"}
+            or not isinstance(step["kind"], str)
+            or not isinstance(step["text"], str)
+        ):
+            raise malformed
+        found.append((step["kind"], step["text"]))
+    return WorkerSteps(
+        source=page["source"],
+        structure=page["structure"],
+        state=page["state"],
+        reason=reason,
+        message=page["message"],
+        offset=cast(int, offset),
+        reset=page["reset"],
+        more=page["more"],
+        last_step_age_seconds=cast(int | None, age),
+        steps=tuple(found),
+    )
+
+
 class ScreenClient(HomeClient, Protocol):
-    """What the Reports, Orchestration, Recovery and Container route screens need from the
-    console server."""
+    """What the Reports, Orchestration, Recovery, Container route, Diagnostics and Harness
+    screens need from the console server."""
 
     def reports(self, *, force: bool = False, online: bool = False) -> LedgerView: ...
 
@@ -154,8 +271,23 @@ class ScreenClient(HomeClient, Protocol):
         self, batch: str = "", role: str = "developer", runtime: str = ""
     ) -> RouteFacts: ...
 
+    def diagnostics(self, *, online: bool = False, force: bool = False) -> Report: ...
+
+    def harness(self, *, force: bool = False) -> HarnessFacts: ...
+
+    def harness_maintenance(
+        self, *, force: bool = False
+    ) -> tuple[MaintenanceView | None, str]: ...
+
     def run_job(
-        self, command_id: str, values: Mapping[str, str], *, confirmed: bool = False
+        self,
+        command_id: str,
+        values: Mapping[str, str],
+        *,
+        confirmed: bool = False,
+        confirmation: str | None = None,
+        plan_digest: str | None = None,
+        on_output: Callable[[str, str], None] | None = None,
     ) -> JobResult: ...
 
 
@@ -270,6 +402,24 @@ class ConsoleClient:
             raise
         return self._decoded(timeline_from_payload, payload, "хронология")
 
+    def worker_steps(self, dispatch_id: str, offset: int) -> WorkerSteps | None:
+        """One page of the worker steps of `dispatch_id` from the log byte `offset`; None when
+        the ledger has no such dispatch. A short request, like `job.get`."""
+        try:
+            with self._lock:
+                reply = self._request(
+                    {
+                        "type": WORKER_STEPS_REQUEST,
+                        "dispatch_id": dispatch_id,
+                        "offset": offset,
+                    }
+                )
+        except ServerError as error:
+            if error.code == "not_found":
+                return None
+            raise
+        return _worker_steps(reply.get("page"))
+
     def orchestration(self, *, force: bool = False) -> OrchestrationView:
         """The ledger of the Orchestration screen with the ledger lock state."""
         found = _object(
@@ -337,26 +487,79 @@ class ConsoleClient:
             else self._decoded(ApiResult.from_payload, preflight, "preflight"),
         )
 
+    def diagnostics(self, *, online: bool = False, force: bool = False) -> Report:
+        """The `harness health` report of Diagnostics, offline or `online`."""
+        found = self._paged(
+            {"type": DIAGNOSTICS_REQUEST, "online": online, "force": force}
+        )
+        return self._decoded(report_from_payload, found, "отчёт health")
+
+    def harness(self, *, force: bool = False) -> HarnessFacts:
+        """The installed harness, the package version, the drift state and the ledger."""
+        found = _object(
+            self._paged({"type": HARNESS_REQUEST, "force": force}), "снимок Harness"
+        )
+        if set(found) != {"state", "package_version", "drift", "ledger"}:
+            raise MalformedReply("снимок Harness сервера консоли не по схеме")
+        version, drift = found["package_version"], found["drift"]
+        if not isinstance(version, str) or not isinstance(drift, str):
+            raise MalformedReply("снимок Harness сервера консоли не по схеме")
+        return HarnessFacts(
+            self._decoded(HarnessState.from_payload, found["state"], "состояние"),
+            version,
+            drift,
+            self._decoded(ledger_from_payload, found["ledger"], "леджер"),
+        )
+
+    def harness_maintenance(
+        self, *, force: bool = False
+    ) -> tuple[MaintenanceView | None, str]:
+        """The maintenance facts of Harness, or none with the text of why they are unknown."""
+        found = _object(
+            self._paged({"type": MAINTENANCE_REQUEST, "force": force}),
+            "снимок обслуживания",
+        )
+        if set(found) != {"maintenance", "error"} or not isinstance(found["error"], str):
+            raise MalformedReply("снимок обслуживания сервера консоли не по схеме")
+        view = found["maintenance"]
+        return (
+            None
+            if view is None
+            else self._decoded(MaintenanceView.from_payload, view, "обслуживание"),
+            found["error"],
+        )
+
     def run_job(
-        self, command_id: str, values: Mapping[str, str], *, confirmed: bool = False
+        self,
+        command_id: str,
+        values: Mapping[str, str],
+        *,
+        confirmed: bool = False,
+        confirmation: str | None = None,
+        plan_digest: str | None = None,
+        on_output: Callable[[str, str], None] | None = None,
     ) -> JobResult:
         """Start the catalog command `command_id` as a server job and follow it to its end. A
         refused start (for example `confirmation_required`) is a `ServerError` with its code.
+        `confirmation` is the typed word and `plan_digest` the cleanup plan the operator saw;
+        `on_output` gets every output fragment as it is read.
         The running job is polled with `job.get` every `JOB_POLL_SECONDS`, one short request at
         a time, so other requests go in between and a quiet job never hits `REPLY_TIMEOUT`."""
+        start: dict[str, object] = {
+            "type": "job.start",
+            "command_id": command_id,
+            "values": dict(values),
+            "confirmed": confirmed,
+        }
+        if confirmation is not None:
+            start["confirmation"] = confirmation
+        if plan_digest is not None:
+            start["plan_digest"] = plan_digest
+        start["client"] = "tui"
         with self._lock:
-            job = self._job(
-                self._request(
-                    {
-                        "type": "job.start",
-                        "command_id": command_id,
-                        "values": dict(values),
-                        "confirmed": confirmed,
-                        "client": "tui",
-                    }
-                )
-            )
+            job = self._job(self._request(start))
         outputs = [job]
+        self._stream(job, on_output)
         while not outputs[-1]["done"]:
             time.sleep(JOB_POLL_SECONDS)
             with self._lock:
@@ -371,7 +574,20 @@ class ConsoleClient:
                         )
                     )
                 )
+            self._stream(outputs[-1], on_output)
         return self._job_result(outputs)
+
+    @staticmethod
+    def _stream(
+        batch: dict[str, object], on_output: Callable[[str, str], None] | None
+    ) -> None:
+        if on_output is None:
+            return
+        for fragment in cast(list[object], batch["output"]):
+            item = _object(fragment, "вывод задачи")
+            channel, text = item.get("channel"), item.get("text")
+            if channel in ("stdout", "stderr") and isinstance(text, str):
+                on_output(channel, text)
 
     @staticmethod
     def _job(reply: dict[str, object]) -> dict[str, object]:

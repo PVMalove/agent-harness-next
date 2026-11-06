@@ -158,11 +158,49 @@ class TaskBoardSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class DiagnosticsSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["diagnostics.snapshot"]
+    online: bool = False
+    force: bool = False
+
+
+class HarnessSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["harness.snapshot"]
+    force: bool = False
+
+
+class HarnessMaintenanceRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["harness.maintenance"]
+    force: bool = False
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
     snapshot_id: Annotated[int, Field(ge=0)]
     offset: Annotated[int, Field(ge=0)]
+
+
+DispatchId = Annotated[
+    str, Field(min_length=1, max_length=100, pattern="^[A-Za-z0-9][A-Za-z0-9_-]*$")
+]
+
+
+class WorkerStepsRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["worker.steps"]
+    dispatch_id: DispatchId
+    offset: Annotated[int, Field(ge=0)]
+
+
+class WorkerSubscribeRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["worker.subscribe"]
+    dispatch_id: DispatchId
+    offset: Annotated[int, Field(ge=0)] = 0
 
 
 ConsoleRequest = Annotated[
@@ -184,7 +222,12 @@ ConsoleRequest = Annotated[
     | ContainerRouteSnapshotRequest
     | TaskBoardSpecsRequest
     | TaskBoardSnapshotRequest
-    | SnapshotPageRequest,
+    | DiagnosticsSnapshotRequest
+    | HarnessSnapshotRequest
+    | HarnessMaintenanceRequest
+    | SnapshotPageRequest
+    | WorkerStepsRequest
+    | WorkerSubscribeRequest,
     Field(discriminator="type"),
 ]
 
@@ -281,6 +324,9 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "container_route.snapshot",
         "task_board.specs",
         "task_board.snapshot",
+        "diagnostics.snapshot",
+        "harness.snapshot",
+        "harness.maintenance",
     ]
     ok: Literal[True]
     snapshot_id: int
@@ -317,6 +363,42 @@ class OrchestrationLockReply(_Envelope):  # type: ignore[explicit-any]
     error: str | None
 
 
+class WorkerStep(_Strict):  # type: ignore[explicit-any]
+    kind: str
+    text: str
+
+
+class WorkerStepsPage(_Strict):  # type: ignore[explicit-any]
+    """Allowlisted worker steps from a log byte offset; never thinking, tool inputs or raw JSON."""
+
+    dispatch_id: str
+    source: Literal["structured", "plain", "none"]
+    structure: Literal["available", "unavailable"]
+    state: Literal["connected", "waiting", "unavailable"]
+    reason: (
+        Literal[
+            "no_log",
+            "log_missing",
+            "log_unreadable",
+            "log_outside_storage",
+            "log_unrecognised",
+        ]
+        | None
+    )
+    message: str
+    offset: Annotated[int, Field(ge=0)]
+    reset: bool
+    more: bool
+    last_step_age_seconds: int | None
+    steps: list[WorkerStep]
+
+
+class WorkerStepsReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["worker.steps", "worker.subscribe"]
+    ok: Literal[True]
+    page: WorkerStepsPage
+
+
 ConsoleReply = (
     ErrorReply
     | HomeSnapshotReply
@@ -330,6 +412,7 @@ ConsoleReply = (
     | PagedReply
     | SnapshotPageReply
     | OrchestrationLockReply
+    | WorkerStepsReply
 )
 
 REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)

@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from ....json_types import JsonObject
 from ...kernel.batch_history import History
 from ...kernel.catalog import Reversibility
 from ...kernel.container_route import Authored
@@ -17,6 +18,7 @@ from ...kernel.reports import LedgerView
 from ...kernel.protocol import _clip
 from ..domain.events import Event, Observation, View
 from ..domain.task_board import REASON_BYTES, SpecList, SpecTickets, TrackerSpec
+from ..domain.worker_steps import WorkerFacts
 
 
 class Clock(Protocol):
@@ -62,6 +64,27 @@ class RouteReader(Protocol):
     def preflight(
         self, repo: Path, batch: str, role: str, runtime: str
     ) -> ApiResult: ...
+
+
+class HealthCollector(Protocol):
+    """The `harness health --json` report of a project, offline or `online`, for the Diagnostics
+    screen; blocks until every check ran and never applies a fix."""
+
+    def __call__(self, repo: Path, online: bool, /) -> JsonObject: ...
+
+
+class HarnessCollector(Protocol):
+    """What the harness installed in a project (`state`), the package version and the drift
+    state of the managed files, for the Harness screen; blocks until read and never writes."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
+class MaintenanceCollector(Protocol):
+    """The cleanup plans with their sizes and the worktree facts (`maintenance`, or null with the
+    `error` text) for the Harness screen; blocks until read and never deletes."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
 class JobExecutor(Protocol):
@@ -225,3 +248,26 @@ class TaskBoardReader(Protocol):
     def specs(self, repo: Path) -> SpecList | tuple[TrackerSpec, ...]: ...
 
     def board(self, repo: Path, spec_ref: str) -> SpecTickets: ...
+
+
+class WorkerFactsReader(Protocol):
+    """The dispatch record and its status record, read without the ledger lock; ``None`` when
+    the ledger has no such dispatch. Blocks until read and never writes."""
+
+    def __call__(self, repo: Path, dispatch_id: str, /) -> WorkerFacts | None: ...
+
+
+class StepsLogReader(Protocol):
+    """One page of the worker log of ``source`` (``structured`` or ``plain``) from a byte
+    offset, whose steps take at most ``budget`` bytes as JSON. Opens the log for reading and stats it
+    only; an unusable log is a page with ``state`` ``unavailable`` and a typed ``reason``."""
+
+    def __call__(
+        self,
+        repo: Path,
+        facts: WorkerFacts,
+        source: str,
+        offset: int,
+        budget: int,
+        /,
+    ) -> Mapping[str, object]: ...

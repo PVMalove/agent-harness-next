@@ -24,6 +24,10 @@ from .protocol.screens import is_screen_request
 from .protocol.screens import respond as respond_screens
 from ..application.snapshots import SnapshotService
 from .protocol.snapshots import busy, respond
+from ..application.worker_steps import WorkerStepsQuery
+from ...kernel.protocol import WORKER_SUBSCRIBE_REQUEST
+from .protocol.workers import worker_request_type
+from .protocol.workers import replies as worker_replies
 
 MAX_UNFINISHED_REQUESTS = 4
 # A subscription stays unfinished while its job runs or its stream is open, so it never takes a
@@ -58,7 +62,9 @@ class RouterConnection:
         job_type = job_request_type(raw)
         pending, limit = (
             (self._subscriptions, MAX_SUBSCRIPTIONS)
-            if job_type == "job.subscribe" or is_orchestration_request(raw)
+            if job_type == "job.subscribe"
+            or is_orchestration_request(raw)
+            or worker_request_type(raw) == WORKER_SUBSCRIBE_REQUEST
             else (self._requests, MAX_UNFINISHED_REQUESTS)
         )
         if len(pending) >= limit:
@@ -83,6 +89,11 @@ class RouterConnection:
         try:
             if job_type is not None:
                 async with contextlib.aclosing(job_replies(raw, router.jobs)) as replies:
+                    await self._stream(replies)
+            elif worker_request_type(raw) is not None:
+                async with contextlib.aclosing(
+                    worker_replies(raw, router.workers)
+                ) as replies:
                     await self._stream(replies)
             elif is_orchestration_request(raw):
                 async with contextlib.aclosing(event_replies(raw, router.events)) as replies:
@@ -116,12 +127,14 @@ class RequestRouter:
         decisions: DecisionService,
         events: OrchestrationEvents,
         screens: ScreenService,
+        workers: WorkerStepsQuery,
     ) -> None:
         self.snapshots = snapshots
         self.jobs = jobs
         self.decisions = decisions
         self.events = events
         self.screens = screens
+        self.workers = workers
 
     def open(
         self, send: Send, on_failure: Callable[[], None] | None = None

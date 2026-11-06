@@ -907,12 +907,12 @@ class DashboardScreen(ConsoleShell):
     def _diagnostics(self) -> Screen[None]:
         from .diagnostics import DiagnosticsScreen
 
-        return DiagnosticsScreen(self.repo)
+        return DiagnosticsScreen(self.repo, client=self._home_client)
 
     def _harness(self) -> Screen[None]:
         from .harness import HarnessScreen
 
-        return HarnessScreen(self.repo, command_runner=self._command_runner)
+        return HarnessScreen(self.repo, client=self._home_client)
 
     def _orchestration(self) -> Screen[None]:
         from .orchestration import OrchestrationScreen

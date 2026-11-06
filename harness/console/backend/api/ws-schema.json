@@ -37,6 +37,9 @@
         },
         {
           "$ref": "#/$defs/OrchestrationLockReply"
+        },
+        {
+          "$ref": "#/$defs/WorkerStepsReply"
         }
       ]
     },
@@ -45,6 +48,9 @@
         "mapping": {
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
+          "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
+          "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
+          "harness.snapshot": "#/$defs/HarnessSnapshotRequest",
           "home.problems": "#/$defs/HomeProblemsRequest",
           "home.snapshot": "#/$defs/HomeSnapshotRequest",
           "job.cancel": "#/$defs/JobCancelRequest",
@@ -61,7 +67,9 @@
           "reports.timeline": "#/$defs/TimelineRequest",
           "snapshot.page": "#/$defs/SnapshotPageRequest",
           "task_board.snapshot": "#/$defs/TaskBoardSnapshotRequest",
-          "task_board.specs": "#/$defs/TaskBoardSpecsRequest"
+          "task_board.specs": "#/$defs/TaskBoardSpecsRequest",
+          "worker.steps": "#/$defs/WorkerStepsRequest",
+          "worker.subscribe": "#/$defs/WorkerSubscribeRequest"
         },
         "propertyName": "type"
       },
@@ -121,7 +129,22 @@
           "$ref": "#/$defs/TaskBoardSnapshotRequest"
         },
         {
+          "$ref": "#/$defs/DiagnosticsSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessMaintenanceRequest"
+        },
+        {
           "$ref": "#/$defs/SnapshotPageRequest"
+        },
+        {
+          "$ref": "#/$defs/WorkerStepsRequest"
+        },
+        {
+          "$ref": "#/$defs/WorkerSubscribeRequest"
         }
       ]
     },
@@ -257,6 +280,47 @@
       "title": "DecisionsSnapshotRequest",
       "type": "object"
     },
+    "DiagnosticsSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "online": {
+          "default": false,
+          "title": "Online",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "diagnostics.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "DiagnosticsSnapshotRequest",
+      "type": "object"
+    },
     "ErrorBody": {
       "additionalProperties": false,
       "properties": {
@@ -339,6 +403,78 @@
         "error"
       ],
       "title": "ErrorReply",
+      "type": "object"
+    },
+    "HarnessMaintenanceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.maintenance",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessMaintenanceRequest",
+      "type": "object"
+    },
+    "HarnessSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessSnapshotRequest",
       "type": "object"
     },
     "HomeProblemsReply": {
@@ -1539,7 +1675,10 @@
             "recovery.snapshot",
             "container_route.snapshot",
             "task_board.specs",
-            "task_board.snapshot"
+            "task_board.snapshot",
+            "diagnostics.snapshot",
+            "harness.snapshot",
+            "harness.maintenance"
           ],
           "title": "Type",
           "type": "string"
@@ -1781,6 +1920,269 @@
         "batch_id"
       ],
       "title": "TimelineRequest",
+      "type": "object"
+    },
+    "WorkerStep": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "WorkerStep",
+      "type": "object"
+    },
+    "WorkerStepsPage": {
+      "additionalProperties": false,
+      "description": "Allowlisted worker steps from a log byte offset; never thinking, tool inputs or raw JSON.",
+      "properties": {
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "last_step_age_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Step Age Seconds"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "more": {
+          "title": "More",
+          "type": "boolean"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "no_log",
+                "log_missing",
+                "log_unreadable",
+                "log_outside_storage",
+                "log_unrecognised"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason"
+        },
+        "reset": {
+          "title": "Reset",
+          "type": "boolean"
+        },
+        "source": {
+          "enum": [
+            "structured",
+            "plain",
+            "none"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "connected",
+            "waiting",
+            "unavailable"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/WorkerStep"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "structure": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Structure",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatch_id",
+        "source",
+        "structure",
+        "state",
+        "reason",
+        "message",
+        "offset",
+        "reset",
+        "more",
+        "last_step_age_seconds",
+        "steps"
+      ],
+      "title": "WorkerStepsPage",
+      "type": "object"
+    },
+    "WorkerStepsReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "page": {
+          "$ref": "#/$defs/WorkerStepsPage"
+        },
+        "type": {
+          "enum": [
+            "worker.steps",
+            "worker.subscribe"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "page"
+      ],
+      "title": "WorkerStepsReply",
+      "type": "object"
+    },
+    "WorkerStepsRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "type": {
+          "const": "worker.steps",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "dispatch_id",
+        "offset"
+      ],
+      "title": "WorkerStepsRequest",
+      "type": "object"
+    },
+    "WorkerSubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "type": {
+          "const": "worker.subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "dispatch_id"
+      ],
+      "title": "WorkerSubscribeRequest",
       "type": "object"
     }
   },
