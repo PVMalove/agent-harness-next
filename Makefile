@@ -64,8 +64,8 @@ test-author-probe: $(HARNESS_ENV_STAMP) ## Подтвердить test-author н
 
 WEB_DIR := harness/console/frontend
 
-web-install: ## Установить зависимости SPA консоли (npm ci)
-	cd $(WEB_DIR) && npm ci
+web-install: ## Установить зависимости SPA консоли (npm ci) и Chromium для Playwright
+	cd $(WEB_DIR) && npm ci && npx playwright install chromium
 
 web-build: ## Собрать SPA консоли в harness/console/frontend/dist
 	cd $(WEB_DIR) && npm run build

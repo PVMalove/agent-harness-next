@@ -93,14 +93,23 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         self.assertIn("name: junit-docker-smoke", smoke)
         self.assertIn("docker-smoke", blocks["dashboard"].split("runs-on:", 1)[0])
 
-    def test_console_ci_uses_units_without_a_browser_or_screenshots(self) -> None:
+    def test_console_ci_runs_playwright_without_comparing_screenshots(self) -> None:
         _, blocks = self._jobs()
         job = blocks["verify"]
         self.assertIn("npm run typecheck", job)
         self.assertIn("npm run build", job)
         self.assertIn("run: npm test", job)
-        for ui_check in ("playwright", "test:e2e", "__screenshots__"):
-            self.assertNotIn(ui_check, job.lower())
+        self.assertIn("npx playwright install --with-deps chromium", job)
+        self.assertIn("run: npm run test:e2e", job)
+        self.assertNotIn("__screenshots__", job)
+        self.assertNotIn("update-snapshots", job)
+        web = ROOT / "tests/web"
+        self.assertFalse((web / "__screenshots__").exists())
+        for spec in sorted(web.glob("*.spec.ts")):
+            self.assertNotIn("toHaveScreenshot", spec.read_text(encoding="utf-8"), spec.name)
+        config = (web / "playwright.config.ts").read_text(encoding="utf-8")
+        self.assertNotIn("toHaveScreenshot", config)
+        self.assertNotIn("snapshotPathTemplate", config)
 
     def test_the_podman_smoke_runs_only_on_the_self_hosted_runner_outside_pull_requests(
         self,
