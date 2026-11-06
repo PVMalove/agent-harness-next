@@ -1585,3 +1585,32 @@ EN.update(
         "Некорректный запрос": "Bad request",
     }
 )
+# Web console: the "Agent activity" route lists the observed agent steps and the orchestration
+# events of one feed. Codex logs carry no structure; the event texts follow `domain/events.py`.
+EN.update(
+    {
+        "структура доступна": "structure available",
+        "структура недоступна": "structure unavailable",
+        "Пакет {batch}: {from} → {to}": "Batch {batch}: {from} → {to}",
+        "Dispatch {dispatch}: {from} → {to}": "Dispatch {dispatch}: {from} to {to}",
+        "Гейт {dispatch}: {decision}": "Gate {dispatch}: {decision}",
+        "Прогон QA {dispatch}: {outcome}": "QA run {dispatch}: {outcome}",
+        "Попытка QA {dispatch} не прошла этап {stage}": "QA attempt {dispatch} failed at stage {stage}",
+        "Наблюдаемые шаги, роли и события. Внутренние рассуждения не отображаются.": "Observed steps, roles and events. Internal reasoning is not shown.",
+        "Источники шагов": "Step sources",
+        "наблюдаемые данные": "observed data",
+        "Шаги, роли и инструменты приходят структурированными.": "Steps, roles and tools arrive structured.",
+        "Только plain-хвост лога. Не выдаём его за шаги и не показываем thinking.": "Only the plain log tail. It is not passed off as steps and thinking is not shown.",
+        "Все сессии": "All sessions",
+        "{shown} из {total}": "{shown} of {total}",
+        "Все роли": "All roles",
+        "Фильтр по роли": "Filter by role",
+        "Только наблюдаемые события; отсутствие события не доказывает остановку.": "Observed events only; a missing event does not prove a stop.",
+        "Шаги и события": "Steps and events",
+        "наблюдаемые факты": "observed facts",
+        "Шагов пока нет": "No steps yet",
+        "Сессий пока нет": "No sessions yet",
+        "Источник оркестрации недоступен": "The orchestration source is unavailable",
+        "дальше: {role}": "next: {role}",
+    }
+)
