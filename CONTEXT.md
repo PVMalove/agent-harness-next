@@ -529,6 +529,13 @@ _Avoid_: suspended, quarantine, `blocked` (lifecycle-состояние), abando
 finish пишет, только пока сохранённый correlation ID принадлежит этой команде.
 _Avoid_: журнал recovery, lock восстановления.
 
+**Подтверждённая граница** (confirmed boundary):
+Последняя проверка документа `recovery status`, которую ядро подтвердило до первой
+неподтверждённой. Экран восстановления показывает её до любого действия: всё до границы
+восстановление сохраняет, после неё — проверяет заново. Нет границы, если не пройдена уже первая
+проверка.
+_Avoid_: checkpoint (точка сохранения worker), последний успешный шаг.
+
 **Retry idempotency key** (`retry_idempotency_key`):
 SHA-256 от роли, candidate SHA, base SHA, review scope, reason category и digest verification commands
 для `architect`/`code-review`/`qa`/publish. Два активных dispatch с одним ключом запрещены; завершённый
@@ -636,6 +643,20 @@ _Avoid_: RAG-хранилище, база знаний, долгосрочная
 `harness-runtime rollback --to-legacy`; признак — `ledger.json.version` и `state/AUTHORITY.json`
 (ADR 0020). Релиз 2.0.0 работает только в эпохе `runtime-store`.
 _Avoid_: dual-write, переходный период с двумя writer-ами, Python fallback-writer.
+
+**Runtime store**:
+Транзакционное хранилище operational state, которое пишет Rust `harness-runtime` в эпохе
+`runtime-store` (ADR 0020). В нём лежат записи lifecycle и записи восстановления; решения принимает
+Python, а store только пишет их через `state.write`. Восстановление сверяет записи восстановления с
+зафиксированным lifecycle (ADR 0030).
+_Avoid_: Python store `runtimeState.v1` (заменён, ADR 0026), второй writer, база данных консоли.
+
+**Нормализация конфигурации** (`normalization.v1`):
+Исправление в памяти перечисленных enum-полей конфигурации оркестрации: пробелы по краям, регистр и
+документированные алиасы. Каждое исправление даёт предупреждение, файл не меняется; записывает
+нормализацию только явный `config validate --fix` или `recovery fix --apply`, а
+`config validate --canonical` и CI отвергают написание, которое её требует.
+_Avoid_: автокоррекция, fuzzy-исправление, нормализация ID, моделей, путей и команд.
 
 **Release Gate**:
 Условие, при котором кандидат вливается в целевую ветку, будь то integration-ветка или `master`:

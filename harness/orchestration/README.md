@@ -78,6 +78,13 @@ brief и report, независимый review и clean-room QA. Capability вы
 выполните `harness health`. Команда проверяет конфиг полностью: схему полей, ссылки на профили,
 совместимость capability с role manifest'ами, fallback и обязательный `code-review`.
 
+При загрузке coordinator нормализует в памяти только перечисленные enum-поля (`normalization.v1`:
+регистр, пробелы по краям и документированные алиасы вроде `in_process` → `in-process`), пишет
+предупреждение и никогда не меняет файл. `config validate --json` показывает диагностику без записи,
+`config validate --canonical` отклоняет любое написание, которое требует нормализации, а
+`config validate --fix [--dry-run]` явно записывает безопасную нормализацию с резервной копией.
+Подробности: [Configuration validation](playbook.md#configuration-validation-and-pinned-evidence).
+
 **Без конфига** coordinator тоже работает: потолок записи ролей — весь репозиторий, а границу
 задаёт `--allowed-path` batch. Проверки coordinator берёт из `qa_gate_commands` в
 `.harness/project.json`, бюджет параллелизма равен 1, `model` и `effort` передаются в
@@ -370,6 +377,14 @@ abandon. `dispatch heartbeat`, `dispatch cancel`, `batch abandon`, `batch attent
 запрашивает подтверждение терминального действия. Удержание и durable intent решает Python, а
 пишет Rust store (`state.write`, протокол 1.5, feature `state.recovery`). Подробности:
 [Operator recovery](playbook.md#operator-recovery).
+
+Recovery восстанавливает только durable подтверждённую работу: записанный lifecycle, принятые этапы
+с закреплённым evidence, intent и удержание в runtime store. Принятый этап не запускается повторно:
+после сбоя следующего этапа, невалидной конфигурации или перезапуска runtime `recovery resume`
+называет следующий переход и не создаёт dispatch. Потерянный контекст модели, незакоммиченные файлы
+worktree и неотправленный отчёт recovery не восстанавливает, а внешний эффект не получает гарантии
+exactly-once: исполнение с неизвестным эффектом отклоняется как `ambiguous-effect` и ждёт решения
+человека, второй worker не запускается.
 
 Новые recovery-команды работают на установленном runtime. Ручное событие связывает старый pin с
 новым control runtime; plan и прежние brief/report не переписываются. Ранний 429 writer-а сохраняет

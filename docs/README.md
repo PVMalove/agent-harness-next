@@ -13,6 +13,7 @@
 | --- | --- |
 | [Архитектура](./ARCHITECTURE.md) | Слои, discovery, backend-оркестрация и границы процессов. |
 | [ADR](./adr/) | Девять действующих архитектурных контрактов по доменам. |
+| [Восстановление и runtime store](./adr/0030-runtime-store-ledger-reconciliation.md) | ADR 0030: записи восстановления в runtime store, сверка с authority lifecycle и граница гарантии. |
 | [Диаграммы](./diagrams/README.md) | Archify JSON, интерактивные HTML и PNG. |
 | [HTML-макеты консоли](./design/console-mockups/README.md) | Принятые интерактивные макеты Harness console (дизайн-источник эпика #720). |
 | [Справочник харнесса](./harness-guide.md) | Установка, команды CLI, `health`, `console`, skills и hooks. |

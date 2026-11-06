@@ -250,6 +250,12 @@ shell сохраняется между командами, поэтому од�
 worktree читаются по абсолютным путям: `git -C <worktree> …`, `rg <шаблон> <путь в worktree>` и
 инструменты чтения файлов. Если сессия всё же сместилась, верните её в main checkout до следующей
 команды.
+Если runtime store удерживает batch (attention `operational-hold` или отказ, чей `REMEDY` называет
+recovery), запустите `recovery status --batch <id> --json`, устраните причину, разрешите открытое
+attention и выполните `recovery resume --batch <id>`. Recovery не перезапускает принятый этап и не
+запускает worker: продолжайте командой из поля `next`. Отказ `ambiguous-effect` ждёт решения
+человека. После правки конфигурации перед следующим переходом выполните
+`config validate --canonical --json`.
 Подробные ограничения задаёт `.harness/orchestration/playbook.md`, раздел Operator recovery.
 
 ### Сбой запуска worker
