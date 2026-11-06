@@ -331,7 +331,7 @@ class DashboardScreen(ConsoleShell):
     HAS_CONTEXT = True
     # Home is the bottom of the screen stack: Esc has nowhere to go.
     CAN_GO_BACK = False
-    NARROW_FOOTER_KEYS = ("p", "f1", "f2")
+    NARROW_FOOTER_KEYS = ("f1", "f2")
     # Beside the content from 140 columns; narrower, one folded card under it.
     CONTEXT_SIDE_MIN = 140
     CONTEXT_TITLE = "Контекст проекта"
@@ -348,7 +348,6 @@ class DashboardScreen(ConsoleShell):
     BINDINGS = [
         Binding("r", "checks_offline", "Офлайн"),
         Binding("o", "checks_online", "Онлайн"),
-        Binding("p", "open_project", "Проект"),
     ]
     DEFAULT_CSS = brand.shell_css("""
     DashboardScreen { overflow: hidden hidden; }
