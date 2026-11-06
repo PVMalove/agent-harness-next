@@ -15,7 +15,7 @@ PYTHON_BOOTSTRAP ?= python3
 HARNESS_PYTHON := $(HARNESS_VENV)/bin/python
 endif
 
-.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint web-install web-build web-test web-e2e docs-build docs-serve
+.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint web-install web-build web-test web-typecheck web-e2e docs-build docs-serve
 
 help: ## Показать список команд с описанием
 	@$(PYTHON_BOOTSTRAP) -c "import re, sys; print('Доступные команды:'); lines = open(sys.argv[1], encoding='utf-8').readlines(); matches = [re.match(r'^([a-zA-Z0-9_-]+):.*?## (.*)$$', line) for line in lines]; [print(f'  {m.group(1):<16} - {m.group(2)}') for m in matches if m]" $(MAKEFILE_LIST)
@@ -64,11 +64,14 @@ test-author-probe: $(HARNESS_ENV_STAMP) ## Подтвердить test-author н
 
 WEB_DIR := harness/console/frontend
 
-web-install: ## Установить зависимости SPA консоли (npm ci) и Chromium для Playwright
-	cd $(WEB_DIR) && npm ci && npx playwright install chromium
+web-install: ## Установить зависимости SPA консоли (npm ci)
+	cd $(WEB_DIR) && npm ci
 
 web-build: ## Собрать SPA консоли в harness/console/frontend/dist
 	cd $(WEB_DIR) && npm run build
+
+web-typecheck: ## Проверить типы SPA консоли и её unit-тестов
+	cd $(WEB_DIR) && npm run typecheck
 
 web-test: ## Vitest-тесты SPA консоли из tests/web (нужна сборка: make web-build)
 	cd $(WEB_DIR) && npm test

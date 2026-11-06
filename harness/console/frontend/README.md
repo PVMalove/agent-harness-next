@@ -14,31 +14,20 @@ npm ci                 # точные версии из package-lock.json
 npm run build          # проверка типов и сборка в dist/
 npm test               # Vitest: tests/web/**/*.test.ts(x), включая проверки dist/
 npm run typecheck      # tsc для src/ и tests/web/
-npx playwright install chromium   # один раз: браузер для Playwright
-npm run test:e2e       # Playwright: tests/web/*.spec.ts против настоящего сервера консоли
-npm run test:e2e:update           # переснять эталонные скриншоты
 ```
 
 Из корня репозитория те же шаги запускают `make web-install`, `make web-build`, `make web-test` и
-`make web-e2e`.
+`make web-typecheck`.
 
 `npm test` проверяет и готовую сборку (`tests/web/dist.test.ts`), поэтому сначала выполните
 `npm run build`.
 
-## Playwright
+## Граница автоматических проверок
 
-`tests/web/global-setup.ts` запускает `python -m tests.web.serve_console`: настоящий
-`ConsoleServer` над временным пустым Git-проектом со сборкой из `dist/`, с настоящими CSP, cookie и
-WebSocket. Интерпретатор задаёт `HARNESS_PYTHON` (по умолчанию `<repo>/.harness/.venv/bin/python`,
-его создаёт `make bootstrap`). Нужна свежая сборка: `npm run build`.
-
-Эталонные скриншоты оболочки и Главной (1440 и 390 px) лежат в `tests/web/__screenshots__/`, по
-одному на имя, без суффикса платформы. Допуск сравнения: `maxDiffPixelRatio: 0.01` (не больше 1 %
-отличающихся пикселей) и `threshold: 0.2` (порог цветового отличия пикселя), анимации и курсор
-отключены. Эталонное окружение — Ubuntu 26.04 (job `verify` в GitHub Actions) и Chromium из
-закреплённого `@playwright/test`. Обновляйте снимки в том же окружении: даже другой Linux-дистрибутив
-может отрисовать шрифты иначе и превысить допуск. После просмотра diff запускайте тесты повторно
-без `--update-snapshots`.
+Для консоли выполняются только unit-тесты: состояния, протокол, команды, переводы и компоненты
+с подставленными внешними границами в Vitest/happy-dom и Python. CI также проверяет типы и сборку.
+Настоящий браузер, сквозные UI-сценарии и сравнение скриншотов в CI не запускаются.
+Отрисовку и взаимодействие с TUI и Веб-консолью владелец проверяет вручную.
 
 ## Устройство
 

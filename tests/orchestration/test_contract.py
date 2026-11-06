@@ -58,7 +58,7 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         self.assertNotRegex(workflow, r"(?<!uv )\bpip install|-m pip\b")
         self.assertNotIn("run: python scripts/verify.py", workflow)
-        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 7)
+        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 8)
         self.assertEqual(workflow.count("run: make bootstrap"), 7)
         self.assertEqual(workflow.count("make verify"), 2)
 
@@ -92,6 +92,15 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
             self.assertIn(f"-t {tag}", smoke)
         self.assertIn("name: junit-docker-smoke", smoke)
         self.assertIn("docker-smoke", blocks["dashboard"].split("runs-on:", 1)[0])
+
+    def test_console_ci_uses_units_without_a_browser_or_screenshots(self) -> None:
+        _, blocks = self._jobs()
+        job = blocks["verify"]
+        self.assertIn("npm run typecheck", job)
+        self.assertIn("npm run build", job)
+        self.assertIn("run: npm test", job)
+        for ui_check in ("playwright", "test:e2e", "__screenshots__"):
+            self.assertNotIn(ui_check, job.lower())
 
     def test_the_podman_smoke_runs_only_on_the_self_hosted_runner_outside_pull_requests(
         self,

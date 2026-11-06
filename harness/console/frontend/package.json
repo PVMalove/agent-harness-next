@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p ../../../tests/web/tsconfig.json",
     "gen:protocol": "node scripts/gen-protocol.mjs",
     "test:e2e": "playwright test -c ../../../tests/web/playwright.config.ts",
-    "test:e2e:update": "playwright test -c ../../../tests/web/playwright.config.ts --update-snapshots=changed"
+    "test:e2e:update": "playwright test -c ../../../tests/web/playwright.config.ts --update-snapshots"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "5.3.0",
