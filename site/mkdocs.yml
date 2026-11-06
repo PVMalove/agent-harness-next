@@ -184,6 +184,7 @@ nav:
       - Rust runtime: architecture/runtime.md
   - Проект:
       - Структура: project/structure.md
+  - Релизы: releases/index.md
   - Demo: demo/index.md
 
 copyright: © 2026 Agent Harness Next · MIT
