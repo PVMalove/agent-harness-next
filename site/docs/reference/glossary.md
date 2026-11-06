@@ -1,0 +1,660 @@
+---
+title: Глоссарий
+description: "Термины Agent Harness Next: определения, английские эквиваленты и пометки, как не стоит называть."
+---
+
+# Глоссарий
+
+Глоссарий терминов проекта, который разворачивает переносимый набор скиллов и правил для
+coding agents. Операционные процессы и архитектурные решения находятся в разделе «Агенты» и в ADR,
+а не в этом файле.
+
+Актуальный словарь триаж-меток (`type::*`, `priority::*`, `severity::*`, `status::*`,
+`resolution::wontfix`, `hitl`/`afk`, `pipeline::*`) описан в
+[triage-labels.md](../agents/triage-labels.md) — не дублируется здесь.
+
+## Термины
+
+**Харнесс проекта** (project harness):
+Установленный в целевой репозиторий набор инструкций, snapshot скиллов, discovery-ссылок,
+реестра и lock-файлов, работающий независимо от исходного репозитория харнесса.
+_Avoid_: инсталляция, харнесс без уточнения «проекта», Python-пакет `harness` (см. ниже — другое
+понятие под тем же словом).
+
+**Python-пакет `harness`** (import-неймспейс):
+Каталог `harness/` как обычный импортируемый Python-пакет (`__init__.py` + относительные импорты
+в `harness.orchestration`, `harness.context_builder`, `harness.gate_runner`, `harness.reporting`),
+не pip-устанавливаемый — см. ADR 0001.
+Не путать с «Харнесс проекта» ниже: это разные понятия под одним словом — одно про Python-импорты
+в этом репозитории, другое — про артефакт, который харнесс устанавливает в целевой репозиторий.
+_Avoid_: харнесс без уточнения «Python-пакет» или «проекта».
+
+**Песочницы харнесса** (`.harness/.sandboxes/`):
+Единая структурированная директория для всех временных данных и кэшей харнесса: `cache/` (кэши repo_map
+и parser_bundle), `logs/` (логи тестов и выполнения), `scratch/` (инбокс ролей),
+`pr_body/` (тела PR и комментариев),
+`runs/` (временные тестовые и QA окружения), `reports/` (генерируемые отчёты) и `worktrees/` (управляемые
+Git worktree). Очищается через `harness cleanup` (в режимах `soft` и `hard`), предотвращая засорение корня `.harness`.
+
+**Публикационные файлы** (`.harness/.sandboxes/pr_body/`):
+Единый, runtime-независимый корень внутри `.harness/.sandboxes/` для одноразового тела PR/комментария (`pr-body-<issue>-<slug>.md`),
+удаляемого сразу после успешной публикации и сохраняемого при сбое для повторной попытки. Не
+хранит черновики спек/тикетов (см. `docs/tasks/`), QA/orchestration evidence и не смешивается с
+durable-записью локального трекера (см. ADR 0006).
+
+**Постоянный локальный архив задач** (`docs/tasks/issue-<N-или-slug>-<slug>/`):
+Не эфемерный черновик под удаление, а gitignored (не коммитится, но и не удаляется инструментами)
+исторический архив для человека-мейнтейнера: `issue-<N>-spec-<slug>.md` (спека), `tickets/`
+(дочерние тикеты, один файл на тикет) и `artifacts/` (Discovery Context из `/grilling`). Папка
+создаётся по описательному slug ещё до публикации и переименовывается в `issue-<N>-<slug>` только
+после фактического создания тикета трекером.
+_Avoid_: временный черновик, харнесс-скретч.
+
+**Durable-запись трекера** (`.scratch/<feature-slug>/`):
+Коммитящийся `spec.md` и `issues/` локального markdown-трекера (когда нет GitHub/GitLab remote) —
+постоянная запись состояния тикетов. Отдельно от постоянного локального архива задач: тот всегда
+gitignored и специфичен для любого трекера, этот коммитится и существует только при отсутствии
+GitHub/GitLab remote.
+_Avoid_: скретч без уточнения, temp-файлы.
+
+**Сидируемые файлы** (seed files):
+Проектные файлы, которые CLI добавляет при отсутствии и после этого передаёт во владение целевому
+проекту: инструкции, документы, hooks, rules, subagents и project config.
+_Avoid_: шаблонные артефакты, foundation-файлы.
+
+**Капабилити** (capability):
+Именованный состав скиллов, описанный в `harness/CAPABILITIES.json`; состав может наследовать,
+заменять или добавлять скиллы.
+_Avoid_: пакет, набор скиллов.
+
+В текущем составе `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
+
+**Vendor-скилл**:
+Скилл из байт-в-байт snapshot закреплённого upstream-источника в `skills/vendor/`, связанный с
+его revision, license и provenance.
+_Avoid_: ванильный скилл, оригинальный скилл.
+
+**First-party-скилл**:
+Скилл, поддерживаемый в этом репозитории под `skills/first-party/`, включая новый скилл или
+полную замену одноимённого vendor-скилла.
+_Avoid_: кастомный скилл, если речь не о замене vendor-скилла.
+
+**Переопределение капабилити** (capability override):
+Механизм `extends`/`overrides`/`additions`, которым capability меняет источник унаследованного
+скилла или добавляет новый без дублирования полного списка; подробный состав задаёт
+`harness/CAPABILITIES.json`.
+_Avoid_: патч, патчинг.
+
+**Snapshot харнесса**:
+Набор managed-файлов скиллов в `.harness/skills/`, зафиксированный в `.harness/harness.lock`.
+_Avoid_: исходники скиллов — они находятся в `skills/` этого репозитория.
+
+**Дрейф** (drift):
+Неподтверждённое расхождение snapshot-файлов целевого проекта с ожидаемым содержимым в lock.
+_Avoid_: рассинхронизация, устаревание.
+
+**Проектный конфиг** (`.harness/project.json`):
+Источник проектных значений для `qa-gate`, `pr-composer`, `code-review`, `to-guide` и branch
+hooks: `language`, `base_branch`, `branch_pattern` и `qa_gate_commands`; необязательны `$schema`,
+`story_points`, `test_paths` (тестовые пути, единственная зона записи тест-автора; без поля
+тест-автор выключен) и `shell` (какой шелл `qa-gate` использует для `qa_gate_commands` — `bash` по
+умолчанию или `powershell` для native-Windows checkout) и `tracker` (явный трекер проекта:
+`type`, `host`, `project`). Форма описана в
+`harness/project/project.schema.json`, а `harness health` применяет тот же строгий контракт и
+отклоняет неизвестные поля.
+_Avoid_: конфигурация проекта, settings.
+
+**Трекер проекта** (project tracker):
+Система задач, через которую харнесс ведёт тикеты, ветки и PR/MR целевого репозитория: GitHub,
+GitLab (включая self-hosted) или локальный markdown-трекер. Определяется тройкой тип, хост (с портом)
+и путь проекта; внутренний таск-трекер команды, чьи ключи встречаются в именах веток, трекером
+проекта не является.
+_Avoid_: таск-трекер команды, remote, хостинг кода.
+
+**Интеграционная ветка эпика** (`integration/<service-or-team>`):
+Ветка, которую `/to-spec` создаёт от `base_branch` после публикации эпика. `/to-tickets` переносит
+её в дочерние тикеты; issue-ветки создаются от неё, а их PR направляются обратно в неё. Такой PR
+ссылается на тикет через `Related to #<ID>`, но не закрывает его: после подтверждённого merge
+тикет закрывают через CLI трекера. `Closes #<ID>` применяется только для PR в default branch;
+после merge состояние тикета проверяют, поскольку GitLab может отключить или изменить closing pattern.
+_Avoid_: project-level base branch, ветка реализации отдельного тикета.
+
+**Проверка публичных метаданных** (`block-public-attribution.sh`):
+Локальный PreToolUse hook, который разбирает только `tool_input.command` и проверяет содержимое
+commit message, PR/MR title/body и явно переданного literal-файла сообщения; путь к этому файлу не
+является метаданными. Неразбираемый payload, незакрытая кавычка или недоступный/переменный путь
+блокируют публикацию; CI повторяет проверку уже опубликованных Git-метаданных.
+_Avoid_: проверка всей команды, проверка пути body-файла.
+
+**Реестр скиллов проекта** (`.harness/skills/REGISTRY.md`):
+Компактный каталог имён, путей и описаний скиллов, используемый как fallback-маршрут для runtime
+без native project skill root.
+_Avoid_: `skills/` — это исходный каталог этого репозитория.
+
+**Provenance-лок проекта** (`.harness/overlays/project-local.lock`):
+Фиксация sha256-файлов project-owned скиллов, не покрытых выбранной capability.
+_Avoid_: overlay-лок без уточнения «проекта».
+
+**Инвентарь интеграций** (`.harness/integrations.json`):
+Описание native runtime-конфигов с их путями, sha256, runtime-целями, verify-действиями и именами
+секретных env-переменных; значения секретов сюда не входят.
+_Avoid_: проектный конфиг, секреты.
+
+**Роль оркестрации** (orchestration role):
+Короткая декларация ответственности агента, её разрешённых границ, требуемого доказательства результата
+и подходящего назначения. Первая backend-наборка ролей: `developer`, `architect`, `qa`,
+`database-migrations`, `messaging-integration`, `code-review`.
+_Avoid_: модель, provider, job title.
+
+**Code-review role**:
+Независимый read-only исполнитель review-гейта; не заменяет автора изменения и не владеет
+интеграцией. Его назначение, охват и порог определяются риск-классификацией изменения.
+_Avoid_: автоматический мержер, интегратор.
+
+**Ядро оркестрации** (orchestration core):
+Переносимый контракт ролей, назначений, batch и handoff, не зависящий от конкретного coding runtime.
+_Avoid_: workflow конкретного провайдера, scheduler конкретного провайдера.
+
+**Runtime adapter**:
+Необязательная реализация ядра для конкретной среды запуска; переводит назначение в
+команды среды, но не определяет правила ролей или workflow.
+_Avoid_: ядро оркестрации, role manifest.
+
+**Dispatch approval**:
+Явное решение человека запустить один согласованный dispatch. Оно нужно отдельно для каждого
+developer, review, QA, publish или retry dispatch: готовый report не даёт права запускать следующий.
+После него конфиг может разрешить роль, агента и модель; одноразовый override действует только на
+этот запуск.
+_Avoid_: автономный запуск, свободный выбор модели воркером.
+
+**Coordinator**:
+Человек или назначенная им управляющая сессия, которая планирует batch, сравнивает зоны, утверждает
+dispatch, сохраняет immutable brief и принимает completion report. Это не роль-исполнитель и не
+автономный scheduler.
+_Avoid_: воркер, сам меняющий свой scope или состояние batch.
+
+**Baseline оркестрации**:
+Начальный замер запусков агентов на закрытый тикет, токенов на batch, wall-clock quality gate и
+дефектов после интеграции, по которому задаются последующие численные цели.
+_Avoid_: лимиты игрового референса, оценка на глаз.
+
+**Role manifest**:
+Переносимый Markdown-файл в `harness/orchestration/roles/`, один на роль: зона записи или read-only
+граница, требуемое доказательство, capability и fallback-потребности. Он не хранит конкретные модели
+проекта.
+_Avoid_: проектная настройка агента, JSON-конфигурация роли, prompt задачи.
+
+**Project orchestration config** (`.harness/orchestration.json`):
+Валидируемое project-owned отображение роли на agent/model/fallback, бюджеты и команды проверки;
+дополняет, но не смешивается с переносимым role manifest.
+_Avoid_: `harness/CAPABILITIES.json`, role manifest.
+
+**Write role**:
+Роль, которой разрешено менять production-код только в объявленной зоне: `developer`,
+`database-migrations` или `messaging-integration`.
+_Avoid_: architect, qa, code-review.
+
+**Read-only role**:
+Роль, создающая решение, проверку или findings без изменения production-кода: `architect`, `qa` или
+`code-review`.
+_Avoid_: write role.
+
+**Batch boundary**:
+Одна issue-ветка и worktree, принадлежащие одному связанному набору работ. Параллельные batch не
+пересекают service, bounded context или infrastructure zone; handoff роли внутри batch последователен.
+_Avoid_: общая ветка нескольких воркеров, параллельная запись в одну zone.
+
+**Risk review gate**:
+Обязательный code-review для API/public contract, миграций, outbox/очередей, транзакций,
+auth/security и concurrency/retry; остальные изменения проходят review по решению автора и разработчика.
+_Avoid_: review каждой правки, отсутствие review для инфраструктурной границы.
+
+**Assignment resolution**:
+Слоистое разрешение назначения `role manifest → project mapping → one-run override`; более узкий
+слой переопределяет предыдущий только после проверки capability и ограничений роли.
+_Avoid_: свободный выбор агента воркером, role manifest с именем модели.
+
+**Provider profile**:
+Именованная project-owned запись о доступном агенте: capability, default model, fallback и known
+limitations. Роль ссылается на требуемую
+capability, а не на provider profile напрямую.
+_Avoid_: agent name в role manifest, глобальная таблица моделей.
+
+**Handoff brief**:
+Неизменяемый стартовый контракт batch: ticket, zone, branch/worktree, DoD, запреты и команды.
+_Avoid_: поток уточнений в исходной задаче, свободный prompt.
+
+**Completion report**:
+Единственный отчёт роли о завершении: commit SHA для write work, changed files, выполненные проверки и
+их результат, риски и blockers. После приёма он оставляет dispatch в `reported`: это фактическое
+evidence, а не право двигать batch. Новая информация после dispatch требует решения coordinator-а.
+Опциональные `lessons` и `used_memory` — списки непустых строк (можно пустые): первые сохраняют
+исторические выводы со статусом «не подтверждено человеком» и без повышенного поискового веса;
+второй перечисляет идентификаторы использованных хитов как слабый сигнал, не гейт. Старые отчёты
+без обоих полей валидны; индексирование lessons требует явного opt-in `completion_report` и путей.
+_Avoid_: сообщение «готово», изменение brief задним числом.
+
+**Quality-gate lane**:
+Сериализованная FIFO-очередь тяжёлых integration/quality gate; независимые write batch и read-only
+work могут идти параллельно, но лимит активных batch задаётся project config после baseline. Lease
+с истёкшим владельцем снимает только coordinator после явной проверки stale owner.
+_Avoid_: конкурентные тяжёлые gate, фиксированный лимит без замера.
+
+**Architecture decision brief**:
+Read-only результат роли `architect`: границы, варианты, выбранное решение, риски и acceptance
+criteria. ADR нужен только для труднообратимого решения с существенным trade-off.
+_Avoid_: implementation prompt, production change.
+
+**QA finding**:
+Воспроизводимое read-only свидетельство роли `qa` о результате независимой проверки или дефекте;
+не включает изменение теста или fixture самим QA.
+_Avoid_: исправление, self-authored proof.
+
+**Two-axis review gate**:
+Read-only результат роли `code-review` для high-risk batch: самостоятельные отчёты Standards и Spec,
+которые не смешиваются и не заменяются одним reviewer-ом.
+_Avoid_: общий рейтинг findings, один универсальный review report.
+
+**Specialist trigger**:
+Граница, при которой write work назначается `database-migrations` (schema/data) или
+`messaging-integration` (outbox, message schema/routing, retry/DLQ), а не `developer`.
+_Avoid_: специализация каждой сервисной правки, параллельные writers в одном batch.
+
+**Backend orchestration capability**:
+Необязательная capability `backend-orchestration`, расширяющая `engineering-suite` и доставляющая
+role manifests, config contract, lifecycle, handoff и optional runtime adapter без изменения
+существующих проектов. Практический порядок включения и запуска —
+`docs/backend-orchestration.md`.
+_Avoid_: неявное включение orchestration, изменение базовой capability.
+
+**Batch lifecycle**:
+Coordinator-owned последовательность `planned → awaiting-approval ↔ active`; `paused`, `blocked`
+и `failed` допускают ручное восстановление, `completed` и `abandoned` терминальны. Batch хранит ticket, issue-ветку, worktree и историю evidence; он содержит несколько
+последовательных dispatch с отдельными immutable brief и terminal outcome. Повторная попытка — новый
+dispatch с новым immutable brief. Rewind выбирает предыдущий gate через sealed audit event,
+сохраняет Git history и исключает зависимое старое evidence. После recovery действует manual_all.
+_Avoid_: self-transition воркера, повторное использование старого dispatch.
+
+**Worker session**:
+Одно фактическое runtime-исполнение роли — от cold start до завершения (успешного, по 429 или по
+сбою): живой контакт роли с dispatch между `dispatch send`/`dispatch resume` и следующим
+`dispatch checkpoint` или completion report. Один dispatch может состоять из нескольких
+последовательных worker session, только если это явно разрешено ролью (сейчас — только write-роли с
+итеративным TDD: `developer`, `database-migrations`, `messaging-integration`); каждая новая сессия
+заново проходит model self-report и heartbeat — `dispatch resume` для checkpointed dispatch
+стартует новую worker session под тем же dispatch ID.
+_Avoid_: dispatch (один dispatch может пройти несколько worker session), попытка, запуск воркера.
+
+**Checkpoint**:
+Проверяемая non-terminal ledger-запись write-роли (`coordinator.py dispatch checkpoint`) на зелёной
+границе TDD-цикла: commit SHA, изменённые файлы, оставшийся DoD, пройденные проверки, краткие
+риски/блокеры и ссылка на Context Package. Переводит dispatch-status в `checkpointed` и не меняет
+outcome enum (`completed`/`blocked`/`failed`). Не переносит историю чата, логи прошлых неудач или
+скрытые рассуждения и не является completion report. Доступен только write-роли: read-only роль
+(architect, qa, code-review) не может растянуть себя на несколько worker session.
+_Avoid_: completion report, промежуточный отчёт, снапшот сессии, промежуточный commit без
+ledger-записи.
+
+**Continuation**:
+Coordinator decision о запуске новой worker session того же active dispatch из последнего
+checkpoint, без изменения scope, DoD, рисков и зависимостей. Не создаёт новый dispatch и не требует
+нового immutable brief; любое изменение scope или DoD обязано закрыть текущий dispatch и открыть
+новый через обычный approval.
+_Avoid_: retry, продолжение чата, повторный dispatch.
+
+**Context Package**:
+Ledger-owned immutable бандл для Разработчика, детерминированно построенный отдельным модулем без участия LLM до
+dispatch: цель и DoD, integration base и candidate SHA, точный diff, стартовые файлы с причиной
+включения, ограниченный граф символов/зависимостей, связанные тесты, релевантные ADR-карточки и
+hash каждого включённого файла. Собирается `context_builder.py` из Discovery Context: локальные
+импорты разворачиваются на 1 уровень вглубь, из них берутся только сигнатуры. Coordinator проверяет
+его свежесть перед каждым новым dispatch и отказывается создавать brief, если пакет устарел.
+_Avoid_: brief, discovery-лог, произвольное чтение репозитория, контекст разработчика, пакет
+контекста.
+
+**Repo Map**:
+Детерминированная семантическая карта репозитория на pinned commit: сигнатуры определений и связи
+между файлами без тел функций, укладывающаяся в заданный бюджет токенов. Даёт агенту обзор всей
+кодовой базы; Context Package берёт из неё срез под конкретный dispatch. Это вычисляемое
+представление, а не авторитетная запись: не хранится в ledger и не проверяется на freshness.
+_Avoid_: Path inventory (список путей без сигнатур), Context Package (срез под один dispatch).
+
+**Path inventory**:
+Список путей без содержимого и сигнатур, который `/to-tickets` строит по директориям Discovery Context для
+проверки cheap advisory-вызовом.
+_Avoid_: Repo Map (семантическая карта с сигнатурами).
+
+**Advisory output** (`harness/orchestration/advisory.py`):
+Недетерминированный эфемерный, неавторитетный вывод дешёвой модели (ранжирование файлов, сводка
+логов, первичная риск-классификация), полученный как non-role tool call вне
+brief/report/self-report/heartbeat контракта роли. Не создаёт dispatch и не пишет ledger-запись, не
+входит в Context Package и не версионируется; пересчитывается при каждом вызове и нигде не хранится
+как ground truth. Coordinator/contract validation path не принимает его как основание разрешить
+dispatch, снизить риск, принять QA или изменить scope — эти решения остаются за ролью и человеком.
+_Avoid_: recommendation, findings, автономное решение, risk assessment (`coordinator.py risk assess`
+— ledger-owned и authoritative), completion report.
+
+**Lifecycle ledger**:
+Версионируемый модуль ядра оркестрации, который хранит state batch/dispatch и применяет их
+переходы, approvals, immutable records и audit как один контракт.
+_Avoid_: набор CLI handlers, совместимость старых записей на лету.
+
+**Execution policy**:
+Явный набор правил запуска quality gate: checkout, изоляция, команды и форма evidence. Он выбирается
+вызывающим модулем и не владеет очередью или решением coordinator-а.
+_Avoid_: скрытый режим запуска, policy очереди.
+
+**Gate-runner**:
+Модуль, исполняющий команды quality gate по execution policy и возвращающий checks и
+санитизированный QA-артефакт; `qa-gate` и clean-room QA используют его через разные adapter-ы.
+_Avoid_: `qa-gate` как реализация clean-room QA, coordinator как runner.
+
+**Candidate commit**:
+Commit SHA, созданный developer dispatch, к которому привязываются оценка рисков, composite review,
+clean-room QA и publish. Новая версия кода возвращает batch к оценке риска; publish отправляет только
+принятый и проверенный SHA.
+_Avoid_: QA или publish произвольного HEAD, reuse evidence для другого commit.
+
+**Integration record**:
+Неизменяемая запись, которую `coordinator integration prepare` создаёт после accepted publish и
+которая связывает тикет, issue-ветку, source batch, опубликованный candidate SHA и target SHA
+integration ref вместе с ссылками на исходные QA и publish по digest. Лежит в `reports/integration*`
+рядом с историей, не переписывает завершённый batch и его reports; повтор `prepare` идемпотентен.
+Новые проверки пары (CI, local-QA, resolver) привязываются отдельными записями через
+`integration link-evidence` со статусом `unverified`.
+_Avoid_: переоткрытие completed batch, правка batch или reports вручную, перенос старого QA на
+другую пару candidate/target.
+
+**Stale integration record**:
+Состояние, которое `integration status` показывает, когда integration ref ушёл от записанного target
+SHA. Это только наблюдение (`refresh_required`): оно не создаёт dispatch, ничего не записывает и не
+принимает старое QA для новой пары; обновление идёт обычным путём (developer rebase и новое QA).
+_Avoid_: автоматический rebase или dispatch по факту сдвига ref, «QA всё ещё действует».
+
+**Санитизированный QA-артефакт**:
+Полный stdout/stderr clean-room gate, очищенный от secret-shaped значений, сохранённый локально вне
+Git с checksum; canonical JSON report содержит только краткое evidence и ссылку на артефакт.
+_Avoid_: сырые логи в Git, report с секретами, удаление evidence ролью.
+
+**External runtime adapter**:
+Необязательная project-owned runtime-граница в `backend-orchestration`: после ручного approval
+передаёт валидный JSON brief во внешнюю среду запуска. Он не выбирает scope, не утверждает запуск,
+не выполняет project checks и не мержит PR.
+_Avoid_: обязательная зависимость от конкретного provider, config-only ядро с командами provider.
+
+**Контейнерный исполнитель**:
+Встроенная реализация доступа `docker`, через которую `harness-runtime` запускает один утверждённый
+external dispatch, а при заданном `operations.qa.container` и каждую команду QA, в отдельном
+контейнере Docker или Podman: монтирует только ресурсы плана доступа, пропускает в сеть только хосты
+плана через egress-proxy и передаёт только названные в плане переменные окружения. Образы собирает
+пользователь, а исполнитель запускает только id, закреплённые при `dispatch propose`. Не меняет
+флаги агента, не подтверждает действия за человека и не исполняет in-process роли. Настоящим smoke
+проверен только rootful Docker.
+_Avoid_: Docker sandbox, песочница (занято `.harness/.sandboxes/`), постоянный dev-контейнер.
+
+**Базовый образ worker-а** (`Dockerfile.sandbox`):
+Необязательный Dockerfile из payload `.harness/container/`: Debian slim с `git`, `curl`, `jq`,
+Python с `uv` и Node.js, без `ENTRYPOINT`, `USER`, `VOLUME` и секретов. Проект собирает его сам и
+строит на нём свой образ worker-а; исполнитель принимает и любой другой совместимый образ.
+_Avoid_: обязательный образ харнесса, образ, который харнесс скачивает.
+
+**Docker smoke**:
+Тесты с маркером `docker_smoke` на настоящем rootful Docker: публичные команды coordinator,
+настоящий `harness-runtime`, Git worktree и store проверяют worker-а и контейнерный QA. Прогоны
+pytest по умолчанию их отбрасывают; запускает их только CI job `docker-smoke` с `-m docker_smoke`.
+_Avoid_: smoke в `make verify`, проверка Podman или rootless Docker.
+
+**Role common contract** (`harness/orchestration/roles/_common.md`):
+Общий Markdown-контракт для всех ролей: handoff, completion report, branch/worktree, commit proof и
+escalation. Индивидуальный role manifest содержит только уникальные границы, trigger и доказательства.
+_Avoid_: копирование общих правил в шесть role files, глобальный AGENTS.md.
+
+**Role metadata**:
+Минимальный YAML frontmatter role manifest: `name`, `mode`, `required_capabilities`, `risk_triggers`.
+Он служит validator-у и dispatcher-у; поведение роли остаётся в Markdown-body.
+_Avoid_: provider/model в role file, business logic во frontmatter.
+
+**Role assignment plan**:
+Упорядоченный список совместимых provider profile ID для роли в project config: первый default,
+остальные fallback. Фактически выбранный профиль записывается в immutable brief.
+_Avoid_: неупорядоченный пул, скрытый fallback runtime-а.
+
+**Manifest authority**:
+Принцип, по которому project config выбирает provider, budget и stack-команды, но не может расширить
+write-zone, отменить proof или снять risk-gate переносимого role manifest.
+_Avoid_: project override правил роли, runtime policy вместо manifest.
+
+**Skill discovery roots**:
+`.agents/skills` для Codex и `.claude/skills` для Claude Code — ссылки на один установленный
+snapshot `.harness/skills`. `REGISTRY.md` индексирует этот набор для проверки и навигации.
+
+**Implement (default pipeline)**:
+`/implement` по умолчанию — не одна сессия, а coordinator-driven конвейер: `architect` →
+human-approve → `developer` → `code-review` → human-approve → `qa` (с циклом fix↔qa) →
+human-approve → publish. Сама сессия `/implement` выступает coordinator-ом и ведёт `coordinator.py`
+за человека; PR остаётся отдельной явной командой `/to-pull-requests`.
+_Avoid_: `/implement` как одна сессия без гейтов (это `fast-implement`), автоматический PR.
+
+**Fast-implement**:
+Короткий путь без coordinator, architect, qa и approval-гейтов: TDD, тесты, `/code-review`, commit.
+Наследует исходный upstream `mattpocock` `implement` и остаётся выбором для задач, которым не нужен
+gated-конвейер.
+_Avoid_: использование как путь по умолчанию для обычных тикетов.
+
+**Model self-report**:
+Проверка целостности resolved runtime: роль при первом контакте подтверждает фактически активную
+модель, а coordinator сравнивает её с `resolved_model` immutable brief и немедленно останавливает
+dispatch при расхождении.
+_Avoid_: доверие только статической валидации config до отправки без проверки после запуска.
+
+**Dispatch watchdog**:
+Coordinator-owned проверка liveness, останавливающая или эскалирующая dispatch без heartbeat дольше
+заданного порога — обобщение существующего QA-lease-expiry на любой dispatch, а не только на
+clean-room QA lane.
+_Avoid_: полагаться только на самодисциплину воркера слать heartbeat.
+
+**Role transport**:
+Project-owned выбор в assignment plan роли — исполнять её через project-owned внешний adapter или как
+in-process субагент текущей сессии. Оба варианта подчиняются одному brief/report контракту и обязаны
+проходить model self-report.
+_Avoid_: жёсткая привязка роли к одному транспортному механизму.
+
+**Тест-автор** (test author):
+In-session субагент developer, не роль оркестрации: пока `test-author-preflight.sh` возвращает `ok`,
+developer вызывает его перед каждым шагом реализации и передаёт требование, seam, публичные сигнатуры
+и fixtures. Автор пишет один тест следующего шага цикла Red→Green→Refactor только в тестовых путях
+проекта, сам запускает его и коротко возвращает `status` (`red`, `needs_skeleton`, `contract_gap`),
+идентификатор теста и санитизированное доказательство Red. Production-код, включая скелет под тест,
+пишет developer; границы и seams берутся из architect brief (в `/fast-implement` — из заранее
+согласованных seams). Не имеет manifest, dispatch, brief и report и не меняет ledger.
+_Avoid_: QA, write role, независимый reviewer, роль оркестрации.
+
+**Discovery Context**:
+Собранный агентом и выверенный человеком (explicit opt-in) список релевантных путей файлов, передаваемый от Эпика к тикетам для исключения слепого поиска при разработке. В момент `/grilling` сохраняется в `docs/tasks/issue-<N-или-slug>-<slug>/artifacts/` (постоянный локальный архив задач); `/to-spec` дополнительно вписывает тот же список в текст эпика под «## Relevant Files (Discovery Context)».
+_Avoid_: Relevant Files, стартовый контекст.
+
+**Continuation authorization**:
+Правило, авторизующее `dispatch resume` checkpointed dispatch под новую worker session. Recognized
+rate-limit termination reason (`rate_limit`/`rate-limit`/`429`) от runtime adapter авторизует
+автоматически, без нового решения человека/coordinator-а. Любая другая причина — planned trigger
+(`context-limit`/`tdd-cycles`/`failure-log`/`vertical-slice`), safe default в сторону approval:
+требует то же coordinator decision, что accept/retry/block/fail (новый тип записи не вводится), и
+для измеримых trigger — `--measured-value` не ниже порога project-owned
+`adaptive_continuation_policy`. Расхождение восстановленных фактов (remaining DoD/risks из
+checkpoint, dependencies из dispatch) с текущими — блокер: dispatch закрывается, новый открывается
+через обычный approval, а не резюмируется. Blockers в это сравнение не входят — их формулировка
+может естественно меняться между сессиями без реального дрейфа scope/DoD/risks/dependencies.
+_Avoid_: automatic continuation как безусловное поведение (только для recognized rate limit),
+planned trigger без coordinator decision.
+
+**Context advisory** (`context_advisory`, `coordinator.py dispatch telemetry`/`dispatch status`):
+Чистая, non-authoritative оценка `max_context_tokens` против `adaptive_continuation_policy.
+context_limit` и доли `context_warn_ratio` (по умолчанию `0.8`) — `{"level": "ok"|"warn"|"over",
+"limit", "warn_at", "observed"}`. Живёт только в возвращаемом значении `dispatch telemetry`
+(intentionally data-only) и в чтении `dispatch status`; не пишется в ledger-запись телеметрии, не
+триггерит checkpoint автоматически и не меняет state/approvals/routing — решение о checkpoint
+остаётся coordinator-ом, как и для любого сигнала, кроме auto-resume по recognized rate limit.
+_Avoid_: Continuation authorization (это авторизует `dispatch resume`, context advisory ничего не
+авторизует), скрытый лимит вместо baseline-ориентира.
+
+**Context pressure** (`context_pressure`, `coordinator.py dispatch context-pressure`):
+Записанное в batch наблюдение `observed_tokens`/`context_limit`/`warning_threshold`/`level`
+(`ok`/`warning`/`critical`)/`recorded_at` для одного dispatch. Источник — только provider или runtime
+(`probe`, `provider-usage`, `runtime-adapter`), никогда self-report модели. Чистое наблюдение: не
+меняет `next_action`, не создаёт retry и не снимает approval; при `critical` требует от worker-а
+checkpoint на зелёной границе TDD или structured blocker. Даёт единственное основание для категории
+retry `context-pressure`.
+_Avoid_: Context advisory (расчёт на чтении из telemetry, без записи и без обязанности worker-а),
+самооценка контекста моделью.
+
+**Transition digest** (`transition_digest`, `coordinator.py dispatch propose`):
+SHA-256 канонического перехода: batch, предыдущий dispatch и роль, reason category, следующая
+роль/действие, candidate SHA, base SHA, review scope, verification commands, Context Package ID,
+required gates. Хранится в approval и immutable brief; явное approval действует только для точно
+этого digest.
+_Avoid_: подпись brief (`brief_sha256` защищает целостность записи, digest — соответствие
+одобренному переходу).
+
+**Attention state** (`needs_attention`, `batch attention check`/`resolve`):
+Флаг batch, а не lifecycle-состояние: поднимается на unknown-reason retry, повторных operational
+retry, долго стоящем retry, устаревшем Context Package/base и stale dispatch. Пока он стоит, следующий
+dispatch не создаётся; evidence и candidate не трогаются. Снимает его только человек.
+_Avoid_: `blocked` (терминальное состояние), автоматический сброс по таймауту.
+
+**Операционное удержание** (operational hold, `recovery/hold/<batch_id>.json`):
+Запись runtime store (`operationalHold.v1`), которая останавливает batch на неизвестных,
+отсутствующих или нечитаемых системных данных вместо решения. Удержанный batch отказывает в
+переходах lifecycle и запуске worker-ов до `recovery resume`; запись решает Python, а пишет Rust
+store. Удержание не меняет lifecycle, решения и approval; терминальный batch не удерживается.
+_Avoid_: suspended, quarantine, `blocked` (lifecycle-состояние), abandon по умолчанию.
+
+**Durable intent восстановления** (recovery intent, `recovery/intent/<batch_id>.json`):
+Запись runtime store (`recoveryIntent.v1`), которую команда `recovery` пишет до действия и
+завершает после него. Прерванное действие остаётся `interrupted`, и повтор команды его завершает;
+finish пишет, только пока сохранённый correlation ID принадлежит этой команде.
+_Avoid_: журнал recovery, lock восстановления.
+
+**Retry idempotency key** (`retry_idempotency_key`):
+SHA-256 от роли, candidate SHA, base SHA, review scope, reason category и digest verification commands
+для `architect`/`code-review`/`qa`/publish. Два активных dispatch с одним ключом запрещены; завершённый
+retry не мешает новому dispatch с новым immutable ID.
+
+**Маршрут восстановления** (recovery route):
+Coordinator decision о том, как продолжить batch, когда после отчёта воркера что-то пошло не по
+плану: отчёт расходится с планом или содержит дефект, ушла integration base, инструмент (hook,
+ledger) помешал законному действию. Выбирается так, чтобы сохранить уже проверенное evidence и не
+перезапускать batch; переписывание истории кандидата допустимо только по явному решению человека.
+_Avoid_: retry (лишь один из маршрутов), обход блокировки инструмента воркером, abandon по умолчанию.
+
+**Находка координатора** (coordinator finding):
+Дефект, который coordinator сам заметил в чистом принятом отчёте. Это не причина для retry до
+review: находка уходит в brief code-review как перенесённый пункт, и её закрывает тот же
+developer-retry, что и findings ревьюера.
+_Avoid_: QA finding, review finding, retry без accept по умолчанию.
+
+**Fix-forward**:
+Developer-retry, который дописывает коммиты поверх candidate и закрывает закрытый список
+перенесённых пунктов, не переписывая историю. Если brief утверждает перенос на новую integration
+base, тот же retry переносит прежние коммиты, и каждый из них остаётся сопоставлен со своим
+оригиналом. Уже проверенные коммиты не ревьюятся заново, если не появились новые риски.
+_Avoid_: amend, squash, новый batch с cherry-pick, отдельный тип перехода.
+
+**Неполный пункт** (incomplete item):
+Пункт задания read-only роли, который она не выполнила, с причиной и ролью, которой его можно
+передать. Отчёт с неполными пунктами не принимается автоматически: человек выбирает перенос пункта
+в следующую роль или суженный retry той же роли.
+_Avoid_: blocker в свободном тексте, частичный checkpoint read-only роли.
+
+**Перенесённый пункт** (carried item):
+Пункт в immutable brief следующего dispatch, пришедший из предыдущего этапа: находка координатора,
+неполный пункт или finding к исправлению. Хранит источник и ожидаемое доказательство закрытия.
+_Avoid_: заметка в prompt, изменение DoD.
+
+**Сбой инструмента** (`tooling`):
+Причина retry, когда hook, классификатор безопасности или ledger помешал законному действию роли.
+Признаётся только по структурному evidence (инструмент, команда, сообщение), не расходует
+developer-бюджет и повторяет тот же этап. Обход блокировки другой формой команды — нарушение
+протокола, а не маршрут.
+_Avoid_: `verification-infrastructure`, `unknown`, обход hook-а.
+
+**Замещающий batch** (`--supersedes`):
+Новый batch, созданный на месте abandoned batch с approval человека. Переносит принятый отчёт
+architect, план коммитов и последний принятый candidate как snapshot; risk, review и QA проходят
+заново, решения оператора остаются ссылкой на прежний batch.
+_Avoid_: повторное открытие abandoned batch, копирование evidence.
+
+**Health-отчёт** (`harness health`):
+Сводка готовности проекта и машины к работе харнесса: файлы харнесса, окружение (ОС, git, uv, bash),
+Repo Map, каталоги и — при оркестрации — state. Каждая проверка получает один из трёх статусов:
+✅ готово, ⚠️ риск (работа возможна), ❌ харнесс работать не может. Отчёт только диагностирует; менять
+что-либо он может лишь по явному запросу исправления и только в пределах проекта и трекера, но не
+машинных настроек.
+_Avoid_: doctor (такого названия нет), QA-gate (проверяет код, а не окружение).
+
+**Harness console** (`harness console`):
+Интерактивный пульт харнесса: одно место, откуда человек смотрит Health-отчёт, state оркестрации,
+отчёты и Repo Map и запускает все команды харнесса и coordinator. Пульт не дублирует логику команд,
+а вызывает их. Необратимые действия (удаление данных, терминальные решения coordinator, внешние
+изменения, перезапись управляемых файлов) выполняются только после переспроса.
+_Avoid_: doctor, dashboard (дашборд — лишь главный экран пульта), Health-отчёт (неинтерактивное ядро).
+
+**Веб-консоль** (Web Console, `harness console --web`):
+Полная браузерная альтернатива терминальному пульту: те же факты, команды и подтверждения
+необратимых действий, плюс живой просмотр шагов worker и оркестрации.
+_Avoid_: web UI, textual-serve (он показывает тот же терминал), веб-дашборд.
+
+**Сервер консоли** (console server):
+Локальный процесс проекта, через который терминальный пульт и Веб-консоль получают факты, запускают
+команды и следят за событиями. Выполняемая им команда (job) принадлежит серверу и переживает
+отключение клиента.
+_Avoid_: runtime (так называется Rust-процесс authority), daemon, backend.
+
+**Дашборд выполнения** (execution dashboard):
+Главный обзор текущего проекта в Harness console, связывающий batch и вложенные dispatch с
+сигналами для проверки и переходами к evidence. Его предупреждения являются наблюдениями:
+они не изменяют lifecycle и не заменяют решения coordinator.
+_Avoid_: scheduler, worker monitor с гарантией жизни процесса, источник разрешения dispatch.
+
+**Память проекта** (project memory):
+Вычисляемый из уже существующих артефактов проекта (ADR, `CONTEXT.md`, постоянный локальный архив
+задач, закрытые тикеты, PR и Completion report, QA findings и Lifecycle ledger) поисковый индекс
+«как это решали раньше». Не источник истины: любой хит указывает на исходный артефакт и его hash,
+индекс можно удалить и пересобрать. Включается проектом явно; хиты попадают в Context Package
+как advisory-контекст с пометкой статуса источника.
+_Avoid_: RAG-хранилище, база знаний, долгосрочная память агента, вектор-стор.
+
+**Receipt запуска worker** (`harness-worker-v1`):
+Сведения adapter о конкретном dispatch/launch, идентичности процесса и канале существующих
+событий. Не заменяет model self-report, отчёт роли или решение о приёмке.
+
+**Наблюдение worker** (worker observation):
+Локальное представление уже существующих событий runtime, без дополнительных LLM-вызовов
+и сообщений в контекст модели. Native permissions остаются отдельными действиями человека.
+
+**Передача отчёта** (report relay):
+Доставка координатором неизменного файла worker с раздельным учётом автора, отправителя и hash
+исходных байтов. Сама передача не принимает работу и не расходует developer retry.
+
+**Эпоха authority** (`file-ledger` | `runtime-store`):
+Период, в котором operational state пишет ровно один writer: Python `LifecycleLedger` установки
+1.x или Rust runtime store. Эпоху меняют только `harness-runtime migrate` и
+`harness-runtime rollback --to-legacy`; признак — `ledger.json.version` и `state/AUTHORITY.json`
+(ADR 0020). Релиз 2.0.0 работает только в эпохе `runtime-store`.
+_Avoid_: dual-write, переходный период с двумя writer-ами, Python fallback-writer.
+
+**Release Gate**:
+Условие, при котором кандидат вливается в целевую ветку, будь то integration-ветка или `master`:
+правила пары `{candidate_sha, target_sha}` и дерева кандидата из ADR 0026, раздел 4.
+_Avoid_: merge gate, release QA, QA-gate (проверка кода в checkout, а не допуск к merge).
+
+**Harness Next**:
+Программа эпика #784: Rust runtime, транзакционный store, инкрементальная проверка и профили
+hooks. Работа идёт в `integration/harness-runtime-reliability` и выходит одним релизом 2.0.0
+(ADR 0019–0026).
+_Avoid_: harness-next-runtime (такой ветки нет), HN как имя ветки.
+
+**Superseded-by-Harness-Next**:
+Статус issue или коммита, чью Python-реализацию заменяет компонент Harness Next. Критерии такой
+задачи переходят на новый компонент; сама реализация в Harness Next не импортируется (ADR 0020,
+раздел 6; ADR 0026, раздел 1).
+_Avoid_: отменено, won't fix, закрыто без замены.

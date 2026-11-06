@@ -179,6 +179,7 @@ nav:
       - Метки: reference/labels.md
       - Hooks: reference/hooks.md
       - Скиллы: reference/skills.md
+      - Глоссарий: reference/glossary.md
   - Архитектура:
       - architecture/index.md
       - Обзор: architecture/overview.md
