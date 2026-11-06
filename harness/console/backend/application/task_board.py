@@ -106,12 +106,14 @@ class TaskBoardService:
             value = await asyncio.to_thread(collect)
         except TrackerUnavailable as failure:
             now = self._clock()
-            entry = self._store(key)
-            entry.failure = {"reason": failure.reason, "message": failure.message}
-            entry.failure_at = now
-            if entry.value is not None:
-                return self._served(entry.value, True, now - entry.stamp, entry.failure)
-            return self._served(empty(), False, None, entry.failure)
+            stale = {"reason": failure.reason, "message": failure.message}
+            known = self._entries.get(key)
+            if known is None or known.value is None:
+                # A key without a good payload is not kept: it would evict good boards.
+                return self._served(empty(), False, None, stale)
+            self._store(key)
+            known.failure, known.failure_at = stale, now
+            return self._served(known.value, True, now - known.stamp, stale)
         finally:
             self._building.pop(key, None)
         entry = self._store(key)
@@ -126,6 +128,11 @@ class TaskBoardService:
         force: bool,
     ) -> BoardServed:
         task = self._building.get(key)
+        if task is not None and force:
+            # The collect under way may have read the tracker before this request: wait for it,
+            # then join the collect started after it or start one.
+            await asyncio.wait({task})
+            task = self._building.get(key)
         if task is None:
             if not force and (cached := self._cached(key)) is not None:
                 self._entries.move_to_end(key)

@@ -154,6 +154,58 @@ def test_force_rebuilds_and_shows_a_new_sub_ticket() -> None:
     asyncio.run(scenario())
 
 
+class EarlyReader(FakeReader):
+    """Reads the tickets before it waits on the gate, like a collect already under way."""
+
+    def board(self, repo: Path, spec_ref: str) -> SpecTickets:
+        self.calls.append(f"board {spec_ref}")
+        tickets = tuple(self.tickets)
+        if self.gate is not None:
+            self.gate.wait(5)
+        return SpecTickets(
+            TrackerSpec(spec_ref, None, spec_ref, None, "", None, None), tickets, {}
+        )
+
+
+def test_force_during_a_collect_reads_the_tracker_again() -> None:
+    reader, clock = EarlyReader(), Clock()
+    reader.gate = threading.Event()
+    service = _service(reader, clock)
+
+    async def scenario() -> None:
+        first = asyncio.create_task(service.board("#862"))
+        await asyncio.sleep(0.05)
+        reader.tickets.append(_ticket(914))
+        forced = asyncio.create_task(service.board("#862", force=True))
+        await asyncio.sleep(0.05)
+        assert reader.gate is not None
+        reader.gate.set()
+        assert [card["id"] for card in _cards(await first)] == ["#913"]
+        assert [card["id"] for card in _cards(await forced)] == ["#913", "#914"]
+        assert reader.calls == ["board #862", "board #862"]
+
+    asyncio.run(scenario())
+
+
+def test_failures_of_unknown_boards_keep_the_last_good_boards() -> None:
+    reader, clock = FakeReader(), Clock()
+    service = _service(reader, clock)
+
+    async def scenario() -> None:
+        for n in range(KEPT_BOARDS):
+            await service.board(f"#{n}")
+        reader.failure = TrackerUnavailable("timeout", "gh did not answer in time")
+        for n in range(100, 100 + KEPT_BOARDS):
+            failed = await service.board(f"#{n}")
+            assert failed.payload["tickets"] == [] and failed.stale is not None
+        reader.calls.clear()
+        kept = await service.board("#0")
+        assert kept.cached is True and _cards(kept)
+        assert reader.calls == []
+
+    asyncio.run(scenario())
+
+
 def test_tracker_failure_serves_the_last_payload_with_age_and_reason() -> None:
     reader, clock = FakeReader(), Clock()
     service = _service(reader, clock)
