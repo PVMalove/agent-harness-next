@@ -58,7 +58,10 @@ nav:
   - Docs: index.md
   - Guides: getting-started/index.md
   - Reference: reference/index.md
-  - Архитектура: architecture/index.md
+  - Архитектура:
+      - architecture/index.md
+      - Обзор: architecture/overview.md
+      - Rust runtime: architecture/runtime.md
   - Demo: demo/index.md
 
 copyright: © 2026 Agent Harness Next · MIT
