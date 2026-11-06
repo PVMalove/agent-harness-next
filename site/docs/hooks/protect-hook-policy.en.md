@@ -1,0 +1,43 @@
+# protect-hook-policy
+
+## 1. Name and localization
+- **English name:** protect-hook-policy (PreToolUse Hook)
+- **Translation / Gist:**
+
+```text
+Hook policy protection: the agent must not change the hook_policy key, the hooks settings and directories, or write to .harness/project.json through the shell.
+```
+## 2. Full description
+A critical `PreToolUse` hook for Bash and the file tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, and `apply_patch` of the second runtime). It blocks in all profiles (`minimal`, `standard`, `strict`) and does not depend on the role or the environment: `HOOK_PROFILE` and similar variables are not read. A human changes the hook policy (ADR 0024, section 1).
+
+`protect_hook_policy.py` makes the decision on the fail-closed principle: only code `0` and the word `allow` mean permission. A missing Python, any other code, and a partial copy of the module give code `2`. Through the `hook_response.py` envelope, the hook answers with a verdict that has `hook_id` `protect-hook-policy` and one of the `reason_code` values, which the script names with the prefix `[reason_code]` in the first line of stderr.
+
+**File tools.** The path from `file_path`/`notebook_path` is resolved through `realpath` relative to the payload `cwd` and compared by its tail. So a symlink to a protected file, a directory symlink, and another checkout or worktree do not change the decision. Letter case of names is not distinguished.
+- `.claude/settings*.json`, `.codex/hooks.json`, and everything inside the `.claude/hooks` and `.codex/hooks` directories — block, `agent-config-edit`.
+- `.harness/project.json` — an edit is allowed only if the parsed `hook_policy` key is the same before and after it (parsed values are compared, not bytes; a missing key is also a value). If the key is added, changed, or removed — `hook-policy-changed`. If the JSON before or after the edit does not parse, is not an object, or contains a duplicate key, or if the result of the edit cannot be computed in advance (`old_string` is not found or is ambiguous, `NotebookEdit`) — `hook-policy-unparseable`. An edit of other keys is allowed.
+
+**Bash.** Any write to `.harness/project.json` is a block, `project-json-shell-write`. A write is:
+- a redirection to this file (`>`, `>>`, `>|`, `&>`, `<>`, with a descriptor number and heredoc): the strict lexer `pr_commands.StrictLexer` records the redirection targets (`strict_redirections`);
+- a mention of the file as an argument of any program except the reading ones (`cat`, `grep`, `rg`, `head`, `tail`, `wc`, `ls`, `jq`, `diff`, `sed` without `-i`/`--in-place`, `echo`, `printf`, `cd`, and the safe git subcommands: `status`, `diff`, `log`, `show`, `add`, `commit`, `blame`, `ls-files`, and so on): `tee`, `cp`, `mv`, `install`, `dd of=`, `truncate`, `ln`, `sed -i`, `git checkout|restore`, interpreter code (`python -c`, `perl -pi`), `bash -c`;
+- a program behind the wrapper `command`, `env`, `sudo`, or `timeout` is decided the same way as without the wrapper: `command ls .harness` and `timeout 5 sed -n 1,5p .harness/project.json` are allowed, `sudo cp a .harness/project.json` is a block. The wrapper options are parsed by the `WRAPPERS` table. A wrapper with an option that is not in the table (`env -C`, `env -S`, `sudo -D`, `sudo -e`) itself counts as a writing program. The assignment `env F=.harness/project.json` before a writing program is also a mention;
+- a word that points to the `.harness` directory, for any writing program (not one of the reading programs; for git, not one of the safe subcommands): `git checkout <ref> -- .harness`, `git restore --source=<ref> .harness`, `cp -r <directory>/. .harness/`, `tar -C .harness -xf <archive>`, `unzip … -d .harness`, `rsync`, `mv .harness …`, `rm -rf .harness` replace or delete the file together with the `hook_policy` key. Reading the directory (`ls`, `git -C .harness status`) and writing to other files under it (`cp a .harness/notes.txt`) are allowed;
+- a word that names the file by the name `project.json`, by a path after `realpath` relative to `cwd`, the project root, and the targets of the command's `cd` (including through a symlink), or by a glob (`.harness/proj*.json`).
+
+**apply_patch of the second runtime.** The second runtime sends a file edit as `tool_name: "apply_patch"` with the patch body in `tool_input.command`. The `apply_patch_payload.py` adapter parses the patch the same way as the runtime does (a heredoc wrapper `<<EOF`, spaces around the markers, `*** Environment ID:`, `*** End of File`, `*** Move to:`) and turns the header paths `*** Add File:`, `*** Update File:`, `*** Delete File:`, `*** Move to:` into absolute paths from the payload `cwd`. Each path gets the same decision as `Write`/`Edit`. A patch for several files is blocked if even one path is blocked. For `.harness/project.json`, the `hook_policy` key before and after is computed by the runtime's semantics: for Add, the patch content; for Delete and for Move away from the file, the file no longer exists; for Update, the applied chunks (a search for lines tolerant of spaces and typographic characters, as in the runtime). An Update whose lines are not found in the file is `hook-policy-unparseable`. A patch that the runtime itself would reject (no `*** Begin Patch`/`*** End Patch`, an empty path, an empty Update, junk after `*** End Patch`), and a `tool_input.command` that is not a string, is blocked as `apply-patch-unparseable` with a remedy: which patch format to send. A Delete or Move of a file without the `hook_policy` key is allowed: the key does not change.
+
+**apply_patch in Bash.** This check supplements the Bash rules above and never lifts their denial. If the command contains the word `apply_patch` and the line `*** Begin Patch`, the shell form `[cd <directory> &&] apply_patch <<'EOF'` is parsed by the adapter, and each operation is checked as a patch above. An unparseable body of such a form is `apply-patch-unparseable`. For a command of another form, the hook parses by the patch headers in the text: a path to the hooks settings or directories (from `cwd`, the project root, and the `cd` targets) is `agent-config-edit`, and a path to `.harness/project.json` is `hook-policy-unparseable`.
+
+A command outside the strict bash subset (`$`, backticks, parentheses) is parsed by the general parser `pr_commands.parse`. In it, the redirection target is searched for by text. An assignment of a value with `project.json` to a variable, and interpreter code with this name, are blocked. Reading the file and writing to other files are allowed.
+
+The block works by mention, not by proven write (fail closed): a writing program that has the text `project.json` in its arguments gets a denial even if it does not write the file (`gh issue comment 1 --body "edit project.json"`, `python3 -m json.tool .harness/project.json`). Pass the text for the tracker through `--body-file`, and read the file with the `Read` tool. The test `test_naming_the_file_without_a_write_fails_closed` pins this behavior.
+
+Remaining limitations: a write through a script in a file, indirection through variables and through programs whose arguments do not name the file, and a shell write to the hooks settings and directories (only the file tools protect these).
+
+## 3. Contracts
+- **Input (Input/Brief):** The PreToolUse JSON payload through stdin: `tool_name`, `tool_input` (`command`, or `file_path`/`notebook_path` with the edit content; for `apply_patch`, the patch is in `command`), and `cwd`.
+- **Output (Output/Report):**
+  - **Allow:** code `0`; the last line of stderr is the verdict `allow`.
+  - **Block:** code `2`, a message with the prefix `[reason_code]` in stderr, and the verdict `block`. Codes: `hook-policy-changed`, `hook-policy-unparseable`, `project-json-shell-write`, `agent-config-edit`, `apply-patch-unparseable` (the `apply_patch` patch does not parse), `hook-policy-protected` (the payload is not parsed or has neither a path nor a command, the module gave no decision). All are registered in `harness/orchestration/system_fields.v1.json` (`hook.reason_code`).
+## Source
+
+[protect-hook-policy.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/protect-hook-policy.sh), [protect_hook_policy.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/protect_hook_policy.py), [pr_commands.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/pr_commands.py), [apply_patch_payload.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/apply_patch_payload.py), [hook_response.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/hook_response.py)
