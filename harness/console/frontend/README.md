@@ -14,20 +14,26 @@ npm ci                 # точные версии из package-lock.json
 npm run build          # проверка типов и сборка в dist/
 npm test               # Vitest: tests/web/**/*.test.ts(x), включая проверки dist/
 npm run typecheck      # tsc для src/ и tests/web/
+npx playwright install chromium   # один раз: браузер для Playwright
+npm run test:e2e       # Playwright: tests/web/*.spec.ts против настоящего сервера консоли
 ```
 
-Из корня репозитория те же шаги запускают `make web-install`, `make web-build`, `make web-test` и
-`make web-typecheck`.
+Из корня репозитория те же шаги запускают `make web-install`, `make web-build`, `make web-test`,
+`make web-typecheck` и `make web-e2e`.
 
 `npm test` проверяет и готовую сборку (`tests/web/dist.test.ts`), поэтому сначала выполните
 `npm run build`.
 
-## Граница автоматических проверок
+## Playwright
 
-Для консоли выполняются только unit-тесты: состояния, протокол, команды, переводы и компоненты
-с подставленными внешними границами в Vitest/happy-dom и Python. CI также проверяет типы и сборку.
-Настоящий браузер, сквозные UI-сценарии и сравнение скриншотов в CI не запускаются.
-Отрисовку и взаимодействие с TUI и Веб-консолью владелец проверяет вручную.
+`tests/web/global-setup.ts` запускает `python -m tests.web.serve_console`: настоящий
+`ConsoleServer` над временным пустым Git-проектом со сборкой из `dist/`, с настоящими CSP, cookie и
+WebSocket. Интерпретатор задаёт `HARNESS_PYTHON` (по умолчанию `<repo>/.harness/.venv/bin/python`,
+его создаёт `make bootstrap`). Нужна свежая сборка: `npm run build`.
+
+Сценарии Playwright проверяют поведение: данные, фильтры, команды, диалоги подтверждения и
+отсутствие горизонтального переполнения на 1440 и 390 px. Скриншоты не сравниваются, эталонных
+снимков в репозитории нет: отрисовку шрифтов и пиксели владелец проверяет вручную по макетам.
 
 ## Устройство
 
