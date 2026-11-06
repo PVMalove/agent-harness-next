@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { formatSize } from "../../harness/console/frontend/src/harness/format";
-import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
+import { LanguageProvider, translate } from "../../harness/console/frontend/src/i18n";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import {
   CANCEL_REASON,
@@ -141,5 +141,12 @@ describe("the Harness route", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Installation" })).toBeTruthy();
     expect(document.querySelector("#harness-drift")?.textContent).toBe("⚠ drift detected");
     expect(screen.getByText(/worktree has uncommitted changes/)).toBeTruthy();
+  });
+
+  test("in English the overview tab reads Overview, apart from folder browsing", () => {
+    renderHarness(HARNESS_OVERVIEW, "?lang=en");
+    expect(screen.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Commands" })).toBeTruthy();
+    expect(translate("en", "Обзор папок")).toBe("Browse folders");
   });
 });

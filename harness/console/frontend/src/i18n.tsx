@@ -12,6 +12,7 @@ type Values = Readonly<Record<string, string | number>>;
 
 const EN: Readonly<Record<string, string>> = catalog.en;
 const FACTS: Readonly<Record<string, string>> = catalog.facts;
+const TABS: Readonly<Record<string, string>> = catalog.tabs;
 const SECTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = catalog.sections;
 // The Russian texts of the cleanup and worktree reasons (kernel/maintenance.py REASONS_RU) and
 // the Russian labels of the health check groups (harness/health/render.py GROUP_LABELS_RU).
@@ -36,6 +37,11 @@ export function sectionLabel(language: Language, key: string): string {
 
 export function factLabel(language: Language, label: string): string {
   return language === "en" ? (FACTS[label] ?? label) : label;
+}
+
+/** A page tab label: `Обзор` is a page overview here, folder browsing in the main table. */
+export function tabLabel(language: Language, label: string): string {
+  return language === "en" ? (TABS[label] ?? translate(language, label)) : label;
 }
 
 /** A cleanup or worktree reason as the TUI words it: an empty reason means removable; Russian
@@ -76,6 +82,7 @@ export interface I18n {
   t: (text: string, values?: Values) => string;
   section: (key: string) => string;
   fact: (label: string) => string;
+  tab: (label: string) => string;
 }
 
 const I18nContext = createContext<I18n | null>(null);
@@ -102,6 +109,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       t: (text, values) => translate(language, text, values),
       section: (key) => sectionLabel(language, key),
       fact: (label) => factLabel(language, label),
+      tab: (label) => tabLabel(language, label),
     }),
     [language, setLanguage],
   );

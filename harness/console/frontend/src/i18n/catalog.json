@@ -1097,5 +1097,8 @@
       "en": "Agent activity",
       "ru": "Ход работы"
     }
+  },
+  "tabs": {
+    "Обзор": "Overview"
   }
 }

@@ -21,7 +21,7 @@ def test_committed_catalog_equals_the_rendered_tables() -> None:
 
 def test_the_catalog_carries_strings_facts_and_sections() -> None:
     catalog = json.loads(web_catalog.render())
-    assert set(catalog) == {"en", "facts", "sections", "reasons", "groups"}
+    assert set(catalog) == {"en", "facts", "sections", "reasons", "groups", "tabs"}
     assert catalog["en"] == EN
     assert catalog["facts"]["Ветка"] == "Branch"
     assert catalog["sections"]["Home"] == {
@@ -29,6 +29,12 @@ def test_the_catalog_carries_strings_facts_and_sections() -> None:
         "en": section_label("en", "Home"),
     }
     assert catalog["en"]["Нет сервера"] == "No server"
+
+
+def test_the_overview_tab_has_its_own_label_apart_from_folder_browsing() -> None:
+    catalog = json.loads(web_catalog.render())
+    assert catalog["tabs"]["Обзор"] == "Overview"
+    assert catalog["en"]["Обзор папок"] == "Browse folders"
 
 
 def test_the_catalog_carries_the_reason_and_group_tables_with_english_labels() -> None:

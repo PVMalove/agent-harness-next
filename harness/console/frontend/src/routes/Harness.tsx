@@ -21,7 +21,7 @@ export const PLAN_OF_COMMAND = { "cleanup-apply": "soft", "cleanup-hard-apply": 
 type Tab = "overview" | "commands";
 
 export function Harness() {
-  const { t, section } = useI18n();
+  const { t, section, tab: tabLabel } = useI18n();
   const [tab, setTab] = useState<Tab>("overview");
   const [request, setRequest] = useState<RunRequest | null>(null);
   const overview = useScreen({ type: "harness.overview" }, parseHarnessOverview);
@@ -46,8 +46,8 @@ export function Harness() {
   };
 
   const tabs: [Tab, string][] = [
-    ["overview", t("Обзор")],
-    ["commands", t("Команды")],
+    ["overview", tabLabel("Обзор")],
+    ["commands", tabLabel("Команды")],
   ];
   const unavailable = t("Недоступно в текущем снимке");
   return (

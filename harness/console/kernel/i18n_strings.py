@@ -576,6 +576,12 @@ FACT_LABELS_EN: dict[str, str] = {
     "Лимит поиска": "Search limit",
 }
 
+# Labels of the web console's page tabs. Kept apart from `EN`: `Обзор` names a page's overview
+# tab here but folder browsing in `EN`.
+TAB_LABELS_EN: dict[str, str] = {
+    "Обзор": "Overview",
+}
+
 # Prefixes of dynamic lines whose rest (a path, an id) is kept: "Цель: /x" -> "Target: /x".
 EN_PREFIXES: dict[str, str] = {
     "Проект: ": "Project: ",
