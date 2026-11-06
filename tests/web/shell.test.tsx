@@ -47,13 +47,14 @@ describe("the shell", () => {
   test("a section route moves aria-current and shows its placeholder", async () => {
     renderApp();
     await act(async () => {
-      window.location.hash = "#/diagnostics";
+      window.location.hash = "#/reports";
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
-    const current = within(navigation()).getByRole("link", { name: "Диагностика" });
+    const current = within(navigation()).getByRole("link", { name: "Отчёты" });
     expect(current.getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Диагностика");
-    expect(document.title).toBe("Harness Console · Диагностика");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Отчёты");
+    expect(document.title).toBe("Harness Console · Отчёты");
+    expect(screen.getByText("Этот раздел ещё недоступен в веб-консоли")).toBeTruthy();
   });
 
   test("the Harness route renders its commands inside the shell, not a placeholder", async () => {
@@ -65,8 +66,22 @@ describe("the shell", () => {
     const current = within(navigation()).getByRole("link", { name: "Harness" });
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Harness");
-    expect(screen.getByRole("heading", { level: 2, name: "Команды" })).toBeTruthy();
+    // The command panel lives in the "Команды" tab, mounted even while another tab is shown.
+    expect(screen.getByRole("heading", { level: 2, name: "Команды", hidden: true })).toBeTruthy();
     expect(document.querySelector(".command-panel")?.closest("main")).toBeTruthy();
+    expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
+  });
+
+  test("the Diagnostics route renders the health report inside the shell, not a placeholder", async () => {
+    renderApp();
+    await act(async () => {
+      window.location.hash = "#/diagnostics";
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    const current = within(navigation()).getByRole("link", { name: "Диагностика" });
+    expect(current.getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Диагностика");
+    expect(screen.getByRole("heading", { level: 2, name: "Сводка здоровья" }).closest("main")).toBeTruthy();
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
 

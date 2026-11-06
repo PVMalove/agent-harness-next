@@ -6,6 +6,7 @@ import { AppShell } from "./AppShell";
 import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
 import { NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
+import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
 import { Decisions } from "./routes/Decisions";
 import { Home } from "./routes/Home";
@@ -26,6 +27,7 @@ function Layout() {
 /** The sections the web console shows; the others are placeholders. */
 const ROUTES: Readonly<Record<string, ReactElement>> = {
   "repo-map": <RepoMap />,
+  diagnostics: <Diagnostics />,
   harness: <Harness />,
   "agent-activity": <AgentActivity />,
   orchestration: <Decisions section="Orchestration" />,
