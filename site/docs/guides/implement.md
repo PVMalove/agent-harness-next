@@ -90,3 +90,9 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
 `batch decision-packet` собирает компактные доказательства для approval, `dispatch status` показывает
 живость ролей, `ledger validate` проверяет целостность аудиторской цепочки. Все три команды
 read-only.
+
+## Дальше
+
+- [«/fast-implement»](fast-implement.md)
+- [QA gate и Release Gate](qa-gate.md)
+- [Примеры](examples.md)

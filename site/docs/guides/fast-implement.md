@@ -51,3 +51,9 @@
 | Независимый QA | нет, полный прогон в конце сессии | да, clean-room на закреплённом кандидате |
 | Артефакты | commit в issue-ветке | candidate commit, brief, отчёты, ledger |
 | Требует capability | нет | `backend-orchestration` |
+
+## Дальше
+
+- [«/implement»](implement.md)
+- [TDD](tdd.md)
+- [Code review](code-review.md)

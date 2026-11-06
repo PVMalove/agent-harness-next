@@ -164,4 +164,5 @@ URL без открытия. Сервер консоли — это тот же 
 
 - [«/implement»](../guides/implement.md)
 - [QA gate и Release Gate](../guides/qa-gate.md)
+- [Метки](labels.md)
 - [Справочник](index.md)

@@ -1,37 +1,33 @@
 # Справочник
 
-## CLI
+Команды и конфигурация проекта, метки процесса, hooks и каталог скиллов. Каждый раздел отвечает на
+вопрос «как это настроено», а не «как это сделать»: пошаговые сценарии живут в руководствах.
 
-| Команда | Назначение |
-| --- | --- |
-| `harness init <repo>` | Установить snapshot в новый проект |
-| `harness adopt <repo>` | Установить поверх существующих скиллов |
-| `harness update <repo>` | Обновить managed-файлы и hooks |
-| `harness health <repo>` | Проверить окружение, hooks, ledger и память |
-| `harness diff <repo>` | Показать расхождения с залоченным snapshot |
-| `harness cleanup <repo>` | План и применение очистки sandboxes |
-| `harness uninstall <repo>` | Полное удаление harness из проекта |
+<div class="ah-cards">
+  <a class="ah-card" href="cli/">
+    <span class="i">⌘</span>
+    <b>CLI и конфигурация</b>
+    <span>Команды установки и обновления, поля конфигурации, health, память, граф проекта.</span>
+  </a>
+  <a class="ah-card" href="labels/">
+    <span class="i">◇</span>
+    <b>Метки</b>
+    <span>Оси меток, правило одной метки состояния и переходы по пайплайну.</span>
+  </a>
+  <a class="ah-card" href="hooks/">
+    <span class="i">⌁</span>
+    <b>Hooks</b>
+    <span>Профили, критические guard-ы и таблица подключённых проверок.</span>
+  </a>
+  <a class="ah-card" href="skills/">
+    <span class="i">✓</span>
+    <b>Скиллы</b>
+    <span>Переопределения, апстримный набор и first-party дополнения.</span>
+  </a>
+</div>
 
-## Конфигурация
+## Как это устроено
 
-```json
-{
-  "language": "ru",
-  "base_branch": "main",
-  "qa_gate_commands": ["make verify"],
-  "hook_policy": { "profile": "standard" }
-}
-```
-
-Схемы и валидаторы — в `harness/project/project.schema.json` и
-`harness/orchestration/orchestration.schema.json`.
-
-## Hooks
-
-`minimal`, `standard` и `strict` меняют поведенческую строгость, не ослабляя критические
-guard-ы. Профиль задаётся в `.harness/project.json`, источник — только конфиг проекта.
-
-## Агенты
-
-`code-review-spec`, `code-review-standards`, `pr-composer` и optional `test-author`
-описаны в `docs/agents/`. Внутренние ADR — в `docs/adr/`.
+Все команды принимают путь к целевому проекту и не зависят от текущего каталога. Конфигурация
+проекта — строгий контракт: незнакомое поле останавливает работу, а не игнорируется. Подробности —
+в [справочнике CLI](cli.md).

@@ -88,3 +88,9 @@ Context Package — детерминированный набор данных �
 пакет в ledger и сверяет его свежесть по хешам источников перед каждым dispatch.
 
 Подробнее об устройстве runtime и хранилища — в [обзоре архитектуры](../architecture/overview.md).
+
+## Дальше
+
+- [«/implement»](implement.md)
+- [«/fast-implement»](fast-implement.md)
+- [Обзор архитектуры](../architecture/overview.md)

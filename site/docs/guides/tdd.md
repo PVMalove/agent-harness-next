@@ -34,3 +34,8 @@
 
 Роль не заменяет `/tdd`: она снимает с реализующей роли выбор ожидаемого поведения, а цикл
 red → green → refactor остаётся тем же.
+
+## Дальше
+
+- [Code review](code-review.md)
+- [QA gate и Release Gate](qa-gate.md)
