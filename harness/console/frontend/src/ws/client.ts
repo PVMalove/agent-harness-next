@@ -1,5 +1,5 @@
-/* One WebSocket to the console server with reconnects, an orchestration cursor and the cursors
-   of the followed jobs. Every effect (socket, timers, the /health/live probe) is injected, so
+/* One WebSocket to the console server with reconnects, an orchestration cursor, the cursors
+   of the followed jobs and the one live step feed. Every effect (socket, timers, the /health/live probe) is injected, so
    tests drive it deterministically. */
 import { mergeOutput, parseCommands, parseJobSnapshot, parseJobSummary } from "./jobs";
 import type { CommandDescriptor, JobSummary, LocalJob } from "./jobs";
@@ -14,7 +14,10 @@ import type {
   OrchestrationEventsReply,
   OrchestrationSourceReply,
   OrchestrationSubscribeRequest,
+  StepsSubscribeRequest,
 } from "./protocol.gen";
+import { parseStepsReply } from "./steps";
+import type { StepsEvent } from "./steps";
 import { parseHomeSnapshot } from "./types";
 import type { HomeSnapshot } from "./types";
 
@@ -106,6 +109,10 @@ export interface ConsoleClient {
   /** The held copy of a followed job. */
   job(jobId: string): LocalJob | undefined;
   subscribeJobs(listener: (event: JobEvent) => void): () => void;
+  /** Follow the live step feed: one steps.subscribe per connection, sent again after a
+      reconnect; a second call on the same connection sends nothing. */
+  followSteps(): boolean;
+  subscribeSteps(listener: (event: StepsEvent) => void): () => void;
 }
 
 const OPEN = 1;
@@ -127,6 +134,9 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   // Open job requests of the current socket by request id.
   const jobRequests = new Map<string, { type: JobRequestType; key: string }>();
   let jobsWanted = false;
+  const stepListeners = new Set<(event: StepsEvent) => void>();
+  let stepsWanted = false;
+  let stepsSubscription: string | null = null;
   const pending = new Map<string, unknown>();
   let socket: SocketLike | null = null;
   let generation = 0;
@@ -144,6 +154,17 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
 
   const emitJob = (event: JobEvent) => {
     for (const listener of [...jobListeners]) listener(event);
+  };
+
+  const emitSteps = (event: StepsEvent) => {
+    for (const listener of [...stepListeners]) listener(event);
+  };
+
+  const subscribeSteps = (): boolean => {
+    if (stepsSubscription !== null) return true;
+    const request: StepsSubscribeRequest = { type: "steps.subscribe" };
+    stepsSubscription = send({ ...request });
+    return stepsSubscription !== null;
   };
 
   const clearPending = () => {
@@ -291,6 +312,19 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       }
       return;
     }
+    if (reply.type === "steps.subscribe" && id === stepsSubscription) {
+      // The stream stays on its id: its first reply clears the timeout.
+      settle(id);
+      if (reply.ok !== true) {
+        stepsSubscription = null;
+        const error = (reply as unknown as ErrorReply).error;
+        emitSteps({ type: "steps-error", code: error?.code ?? "unknown", message: error?.message ?? "" });
+        return;
+      }
+      const event = parseStepsReply(reply);
+      emitSteps(event ?? { type: "steps-error", code: "invalid", message: "" });
+      return;
+    }
     if (reply.type === "orchestration.subscribe" && id === subscription) {
       settle(id);
       if (reply.ok !== true) {
@@ -333,6 +367,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     clearPending();
     latestHome = null;
     subscription = null;
+    stepsSubscription = null;
     const current = ++generation;
     sequence = 0;
     const previous = socket;
@@ -350,6 +385,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       requestHome();
       for (const [jobId, job] of followed) if (!job?.done) subscribeJob(jobId);
       if (jobsWanted) sendJob("job.list", "", {});
+      if (stepsWanted) subscribeSteps();
     };
     next.onmessage = (event) => {
       if (current !== generation || stopped) return;
@@ -366,6 +402,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       if (current !== generation || stopped) return;
       clearPending();
       socket = null;
+      stepsSubscription = null;
       attempt += 1;
       emit({ type: "closed", wasOpen, attempt, delayMs: backoff(attempt) });
       scheduleReconnect();
@@ -446,6 +483,14 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     subscribeJobs(listener) {
       jobListeners.add(listener);
       return () => jobListeners.delete(listener);
+    },
+    followSteps() {
+      stepsWanted = true;
+      return subscribeSteps();
+    },
+    subscribeSteps(listener) {
+      stepListeners.add(listener);
+      return () => stepListeners.delete(listener);
     },
   };
 }
