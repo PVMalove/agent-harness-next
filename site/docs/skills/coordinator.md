@@ -72,7 +72,7 @@ Coordinator записывает ровно одно текущее состоя
   не считаются. Результат `collect-ci` несёт подсказку `next` (`wait` либо `local-qa`).
 
 Записи лежат в `reports/integration*` существующего каталога `reports`: схема ledger и
-`ledger migrate` не меняются. Подробности — `docs/backend-orchestration.md`.
+`ledger migrate` не меняются. Подробности — `backend-orchestration.md`.
 
 ## Память в Context Package
 

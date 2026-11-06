@@ -23,9 +23,9 @@ logs.
   `bin/` — global entry skills and installer; `scripts/` — registry, drift, verification, and
   clean-room checks.
 - `docs/README.md` — documentation index; `docs/agents/` — operations, releases, and Russian
-  agent descriptions; `docs/adr/` — architectural decisions; `docs/skills/`, `docs/hooks/` —
+  agent descriptions; `docs/adr/` — architectural decisions; `site/docs/skills/`, `site/docs/hooks/` —
   Russian descriptions; `docs/technical-russian.md` — Russian technical writing style guide;
-  `docs/runtime-discovery.md` — runtime skill routes.
+  `site/docs/runtime-discovery.md` — runtime skill routes.
 - `third_party/mattpocock-skills/` — upstream manifest, lock, license, and checksums;
   `.github/workflows/` — CI.
 - `harness/CAPABILITIES.json` is the capability source of truth. `.harness/` and root

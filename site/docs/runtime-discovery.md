@@ -30,7 +30,7 @@ Claude Code и в `.codex/hooks.json` для Codex, не трогая запис
 и `Edit` hooks ChangeImpact к `apply_patch` не подключаются, а проектные hooks
 работают после того, как пользователь доверит слою `.codex/` и каждому hook по хэшу. Проверка
 `hooks.policy` в `harness health` показывает подключённые и отсутствующие hooks каждого runtime;
-подробности — в [docs/hooks/install-and-update.md](hooks/install-and-update.md).
+подробности — в [install-and-update](hooks/install-and-update.md).
 
 CLI и исходники могут содержать маршруты для других runtime. Они не входят в заявленную
 совместимость v1.0.0, поскольку их работа не была проверена в этом проекте.

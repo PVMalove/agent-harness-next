@@ -26,7 +26,7 @@ ENV_VAR = "HARNESS_PRIVATE_TERMS"
 TERMS_FILE = ".private-terms.txt"
 SKIP_NOTICE = (
     f"private-terms: skipped: no term list (set {ENV_VAR} or create {TERMS_FILE} "
-    "in the main checkout; see docs/agents/releases.md)"
+    "in the main checkout)"
 )
 # Same patch shape for staged changes and commits: every added line with its new line number.
 DIFF_OPTIONS = (

@@ -28,8 +28,6 @@ PATH_INVENTORY_ROOTS = (
     ROOT / "skills" / "first-party" / "engineering" / "to-tickets",
     ROOT / "docs" / "agents",
     DOCS_AGENTS_TEMPLATE,
-    ROOT / "docs" / "skills",
-    ROOT / "docs" / "diagrams",
     ROOT / "site" / "docs",
     ROOT / "README.md",
 )
@@ -79,9 +77,8 @@ def check_docs_agents_mirror() -> None:
 def check_diagram_previews() -> None:
     """Проверить, что каждая ссылка на превью диаграммы ведёт на существующий PNG.
 
-    Превью лежат в docs/diagrams/previews/ и не входят в публичный сайт, поэтому ссылаться на них
-    из внутренних документов можно только относительным путём. Проверка покрывает и корневой docs/,
-    и site/docs: битая картинка ловится там, где она появилась.
+    Превью лежат в site/docs/diagrams/previews/. Проверка покрывает и корневой docs/, и site/docs:
+    битая картинка ловится там, где она появилась.
     """
     for base in STATIC_IMAGE_ROOTS:
         for path in sorted(base.rglob("*.md")) if base.is_dir() else []:

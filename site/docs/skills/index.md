@@ -33,6 +33,6 @@ overrides с совпадающими именами описаны здесь �
   правила собраны в [backend-orchestration](../backend-orchestration.md), актуальное устройство
   описывает ADR 0003, а конвейер —
   ADR 0005.
-- Агенты: [`docs/agents/`](../agents/index.md)
-- Hooks: [`docs/hooks/`](../hooks/index.md)
-- Схемы конкретных процессов (`/implement`, `/to-spec`, `/wayfinder`, `/triage` и др.): [`docs/diagrams/`](../diagrams/index.md)
+- Агенты: [Агенты](../agents/index.md)
+- Hooks: [Hooks](../hooks/index.md)
+- Схемы конкретных процессов (`/implement`, `/to-spec`, `/wayfinder`, `/triage` и др.): [Схемы](../diagrams/index.md)

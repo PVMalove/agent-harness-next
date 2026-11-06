@@ -990,7 +990,7 @@ result. A command that is killed and run again builds a new `operation_id`, beca
 holds times, and gets `revision_conflict`; the remedy is to run the command again. `store_busy`,
 `revision_conflict` and `runtime_unavailable` are different errors: exit code 2 and the code in
 brackets on the first `REMEDY:` line. `coordinator.py ledger validate --full` recomputes the whole
-audit chain without the checkpoint; the details are in `docs/backend-orchestration.md`.
+audit chain without the checkpoint; the details are in `site/docs/backend-orchestration.md`.
 
 Parallel batches in the runtime-store epoch (store schema 3). Commands of different batches write
 in parallel: each command reads from one read snapshot of the store (`state.read` with

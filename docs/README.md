@@ -22,16 +22,15 @@
 | Раздел | Содержимое |
 | --- | --- |
 | [ADR](./adr/) | Действующие архитектурные контракты по доменам. |
-| [Руководства и агенты](./agents/README.md) | Git, тикеты, артефакты, worktrees и описания агентов. |
-| [Skills](./skills/README.md) | Русские описания first-party, global, role и vendor skills. |
-| [Hooks](./hooks/) | Описания проектных hooks и вспомогательных скриптов. |
-| [Диаграммы](./diagrams/README.md) | Archify JSON, интерактивные HTML и PNG. |
-| [Backend-оркестрация](./backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
-| [Конфигурация консоли](./console-configuration.md) | Целевой проект, мастер JSON, версии и откат. |
+| [Руководства для агентов](./agents/) | Git, тикеты, артефакты, worktrees (английские источники). Описания агентов — на [сайте](../site/docs/agents/index.md). |
+| [Skills](../site/docs/skills/index.md) | Русские описания first-party, global, role и vendor skills (на сайте). |
+| [Hooks](../site/docs/hooks/index.md) | Описания проектных hooks и вспомогательных скриптов (на сайте). |
+| [Backend-оркестрация](../site/docs/backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
+| [Конфигурация консоли](../site/docs/console-configuration.md) | Целевой проект, мастер JSON, версии и откат. |
 | [Technical English](../harness/docs/technical-english.md) | Контракт английской координации агентов. |
 | [Technical Russian](./technical-russian.md) | Правила технического русского языка и Keep a Changelog. |
-| [Runtime discovery](./runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
+| [Runtime discovery](../site/docs/runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
 
-Порядок выпуска описан в [releases.md](./agents/releases.md), рабочий процесс — в
+Порядок выпуска описан в [releases.md](../site/docs/agents/releases.md), рабочий процесс — в
 [git-workflow.md](./agents/git-workflow.md). Дизайн публичного сайта и макеты — в
 [design/](./design/) и [rfc/docs-site.md](./rfc/docs-site.md).

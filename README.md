@@ -70,7 +70,7 @@ python3 harness/bin/harness.py health /path/to/repository
 developer, review и QA, `/to-pull-requests` готовит ветку к публикации.
 PR требует отдельного подтверждения; изменения проходят через issue, ветку и PR по
 [правилам Git](./docs/agents/git-workflow.md); полный гейт — `make verify`. Заметки о выпуске — в
-[CHANGELOG.md](./CHANGELOG.md), порядок выпуска — в [releases.md](./docs/agents/releases.md).
+[CHANGELOG.md](./CHANGELOG.md), порядок выпуска — в [releases.md](./site/docs/agents/releases.md).
 
 Проект распространяется по лицензии [MIT](./LICENSE). Лицензия закреплённого upstream-snapshot
 находится в [`third_party/mattpocock-skills/LICENSE`](./third_party/mattpocock-skills/LICENSE).

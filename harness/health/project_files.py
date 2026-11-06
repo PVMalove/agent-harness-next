@@ -87,7 +87,7 @@ TRACKER_PROJECT_RULE = (
     "must be the full project path with subgroups (group/sub/project), "
     "without a leading or trailing slash"
 )
-# The optional `test_paths` and `test_runner` fields (docs/hooks/run-test.md and
+# The optional `test_paths` and `test_runner` fields (site/docs/hooks/run-test.md and
 # docs/agents/test-author.md): both settings are required for test-author activation. A `test_paths`
 # glob is relative - no leading slash or backslash, no drive letter - and has no `..` segment.
 # `project.schema.json` repeats the pattern verbatim; tests keep the two in step.
