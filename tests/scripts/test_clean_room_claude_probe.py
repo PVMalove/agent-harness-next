@@ -90,6 +90,18 @@ def project(tmp_path: Path) -> Path:
         "def add(a, b):\n    return a + b\n", encoding="utf-8"
     )
     (tmp_path / "tests").mkdir()
+    (tmp_path / ".harness").mkdir()
+    (tmp_path / ".harness/project.json").write_text(
+        json.dumps(
+            {
+                "test_author": {
+                    "runtime": "claude",
+                    "model": "chosen-model",
+                    "effort": "high",
+                }
+            }
+        )
+    )
     return tmp_path
 
 
@@ -448,3 +460,69 @@ def test_red_cycle_judges_the_runner_call_not_a_denied_look_at_its_source(
     )
 
     claude_probe.check_red_cycle(project, [look, *_red_calls()], digest)
+
+
+def test_probe_uses_project_model_and_effort(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return _completed(0, "{}")
+
+    monkeypatch.setattr(claude_probe, "run_step", run)
+    monkeypatch.setattr(claude_probe, "_record_probe", lambda *args: None)
+    claude_probe._run_claude("/bin/claude", project, {}, "scenario", "Read")
+    assert commands[0][commands[0].index("--model") + 1] == "chosen-model"
+    assert commands[0][commands[0].index("--effort") + 1] == "high"
+
+
+def test_probe_refuses_unsupported_config_before_calling_claude(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (project / ".harness/project.json").write_text(
+        json.dumps(
+            {
+                "test_author": {
+                    "runtime": "codex",
+                    "model": "chosen-model",
+                    "effort": "high",
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(
+        claude_probe,
+        "run_step",
+        lambda *args, **kwargs: pytest.fail("wrong provider started"),
+    )
+    with pytest.raises(SystemExit, match="runtime_unsupported"):
+        claude_probe._run_claude("/bin/claude", project, {}, "scenario", "Read")
+
+
+def test_worker_probe_checks_selected_adapter_before_linking_credentials(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (project / ".harness/project.json").write_text(
+        json.dumps(
+            {
+                "test_author": {
+                    "runtime": "codex",
+                    "model": "chosen-model",
+                    "effort": "high",
+                }
+            }
+        )
+    )
+    monkeypatch.setenv(claude_probe.VERIFY_VARIABLE, "1")
+    monkeypatch.setattr(claude_probe.shutil, "which", lambda name: "/bin/claude")
+    monkeypatch.setattr(
+        claude_probe,
+        "claude_environment",
+        lambda *args, **kwargs: pytest.fail(
+            "Credentials linked before checking the selected adapter"
+        ),
+    )
+    with pytest.raises(SystemExit, match="runtime_unsupported"):
+        claude_probe.verify_worker_cycle(project, project)

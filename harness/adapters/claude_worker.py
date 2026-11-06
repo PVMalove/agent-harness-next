@@ -112,7 +112,9 @@ def build_prompt(
         prompt += (
             "\nOptional test-author: before the first test, run "
             f"{shlex.quote(str(worktree / '.claude/hooks/test-author-preflight.sh'))} "
-            f"--worktree {shlex.quote(str(worktree))}. Only exactly {{\"status\":\"ok\"}} enables "
+            f"--worktree {shlex.quote(str(worktree))} --brief {shlex.quote(str(brief_path))}. "
+            "The author inherits your approved resolved_runtime, resolved_model and resolved_effort. "
+            "Call Agent without model or effort overrides. Only exactly {\"status\":\"ok\"} enables "
             "the named test-author Agent; any refusal keeps ordinary TDD with its reason. "
             "Give the author the requirement, agreed seam, one scenario and a test path within "
             "the brief's allowed paths, never a proposed algorithm. "

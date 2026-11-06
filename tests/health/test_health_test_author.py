@@ -1,4 +1,4 @@
-"""Health reports Claude author readiness through the real installed preflight."""
+"""Health resolves the configured author before probing the selected protected adapter."""
 
 from __future__ import annotations
 
@@ -42,7 +42,8 @@ def test_health_reports_preflight_readiness_without_claiming_a_live_hook(
     assert "preflight: ok" in result.message
     assert "external" in result.message
     assert "live" in result.message
-    assert "Codex" in result.message
+    assert "runtime=claude" in result.message
+    assert "model=configured-model" in result.message
 
 
 def test_health_never_executes_a_hook_before_exact_workspace_trust(
@@ -108,3 +109,28 @@ def test_health_json_contains_the_registered_activation_check(project: Path) -> 
 
     entry = next(row for row in report["checks"] if row["id"] == "hooks.test_author")
     assert entry["status"] == "ok"
+
+
+def test_health_reports_the_configured_runtime_without_running_another_adapter(
+    project: Path,
+) -> None:
+    path = project / ".harness/project.json"
+    config = json.loads(path.read_text())
+    config["test_author"] = {
+        "runtime": "codex",
+        "model": "configured-codex-model",
+        "effort": "high",
+    }
+    path.write_text(json.dumps(config))
+    sentinel = project / "wrong-adapter"
+    (project / ".claude/hooks/test-author-preflight.sh").write_text(
+        f'#!/bin/sh\ntouch "{sentinel}"\n'
+    )
+
+    result = hooks.check_test_author(HealthContext(repo=project, lock={}, online=False))
+
+    assert "runtime=codex" in result.message
+    assert "model=configured-codex-model" in result.message
+    assert "runtime_unsupported" in result.message
+    assert result.status == "warn"
+    assert not sentinel.exists()

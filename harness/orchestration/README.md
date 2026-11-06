@@ -163,6 +163,16 @@ brief и report, независимый review и clean-room QA. Capability вы
 выбирают `auto`, в batch нет `auto_stop` и не было ручного восстановления. В остальных случаях каждый шаг такого batch согласует
 человек.
 
+### Исполнитель test-author
+
+В полном маршруте test-author наследует runtime/model/effort из утверждённого brief developer.
+Отдельного назначения роли нет; профиль `project.json.test_author` используется только коротким
+маршрутом. Профиль требует явные `runtime`, `model`, `effort`; отсутствие не выбирает Claude или
+другую модель по умолчанию. Общий selector — `.harness/health/test_author.py`; Health помечает
+выбор из плана developer как `planned`, а исполнение берёт поля именно из brief. Неподдержанный
+защищённый адаптер возвращает `runtime_unsupported`, без запуска другого CLI. Поддержка адаптера
+и выбор исполнителя — отдельные условия; текущий защищённый адаптер реализован для Claude Code.
+
 ### `tool_policy`
 
 Без поля роль получает набор по режиму manifest'а: `read-only` — `Read`, `Grep`, `Glob`, `Bash`;

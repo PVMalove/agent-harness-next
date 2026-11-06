@@ -150,10 +150,13 @@ main checkout, and `EnterWorktree` refuses it there. Two paths exist; state whic
   paths for every file. Its self-report then proves the checkout it works in, not its CWD; say so in
   the final report.
 
-**Test author in the full route.** An `external` Claude Code developer can call the author in
-`send.worker_worktree`. Before dispatch, install the harness in that exact checkout; the human
+**Test author in the full route.** The author inherits runtime/model/effort from the approved
+developer brief, without a separate role assignment or project-profile override. A selected runtime
+without a protected adapter returns `runtime_unsupported` and keeps ordinary TDD. The current
+protected adapter lets an `external` Claude Code developer call the author in
+`send.worker_worktree`, using `Agent(test-author)` without model/effort overrides. Before dispatch, install the harness in that exact checkout; the human
 accepts its exact-path trust in Claude Code. Never copy the main checkout's runtime state or trust.
-The developer checks its own `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree>`
+The developer checks its own `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <approved brief path>`
 and enables the author only after exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent`
 permission in the approved brief. The default developer role policy includes the named permission;
 a project override remains authoritative. Missing permission gives `agent_tool_unavailable` and
@@ -162,7 +165,7 @@ prompt to the author along with one test path within the brief's scope.
 
 For `in-process`, the main preflight with `--worktree <send.worker_worktree>` still answers
 `checkout_mismatch` for a separate worker. Preserve ordinary TDD there and name the reason;
-Codex and other runtimes do not support this helper. A preflight refusal or unavailable author
+Keep the selected executor visible in refusals; never substitute Claude for an unsupported runtime. A preflight refusal or unavailable author
 never creates a blocker or changes the Rust ledger. State this in the worker prompt.
 
 `dispatch send` checks the adapter's flags against its `dispatch --help` before the handoff and
