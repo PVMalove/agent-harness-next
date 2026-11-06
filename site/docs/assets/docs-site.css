@@ -661,6 +661,35 @@ body {
   }
 }
 
+.ah-release-title {
+  margin-top: 2.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--ah-rule);
+}
+
+.ah-release-meta {
+  margin: 0.2rem 0 0.3rem;
+  color: var(--ah-muted);
+  font: 0.66rem/1.6 var(--ah-mono);
+}
+
+.ah-release-summary {
+  margin: 0 0 0.8rem;
+  color: var(--ah-fg);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.ah-release-title:first-of-type {
+  margin-top: 1.6rem;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.ah-releases details > *:not(summary) {
+  max-width: 60rem;
+}
+
 .ah-footer-brand {
 
   display: inline-flex;
