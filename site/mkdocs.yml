@@ -34,7 +34,6 @@ theme:
     - navigation.sections
     - navigation.indexes
     - navigation.top
-    - toc.integrate
     - search.suggest
     - search.highlight
     - content.code.copy
@@ -42,6 +41,9 @@ theme:
 
 extra_css:
   - assets/docs-site.css
+
+extra_javascript:
+  - assets/nav-filter.js
 
 markdown_extensions:
   - admonition
@@ -71,36 +73,41 @@ nav:
       - Troubleshooting: guides/troubleshooting.md
       - Скиллы:
           - skills/index.md
-          - skills/architect.md
-          - skills/ask-matt.md
-          - skills/code-review-role.md
-          - skills/code-review.md
-          - skills/conflict-resolver.md
-          - skills/coordinator.md
-          - skills/database-migrations.md
-          - skills/delivery-stats.md
-          - skills/developer.md
-          - skills/diagnosing-bugs.md
-          - skills/fast-implement.md
-          - skills/grill-me.md
-          - skills/grill-with-docs.md
-          - skills/grilling.md
-          - skills/implement.md
-          - skills/integrate-project.md
-          - skills/messaging-integration.md
-          - skills/pilot.md
-          - skills/playbook.md
-          - skills/qa-gate.md
-          - skills/qa.md
-          - skills/setup-labels.md
-          - skills/start-project.md
-          - skills/tdd.md
-          - skills/to-guide.md
-          - skills/to-pull-requests.md
-          - skills/to-spec.md
-          - skills/to-tickets.md
-          - skills/triage.md
-          - skills/wayfinder.md
+          - Идея и исследование:
+              - ask-matt: skills/ask-matt.md
+              - wayfinder: skills/wayfinder.md
+              - grilling: skills/grilling.md
+              - grill-me: skills/grill-me.md
+              - grill-with-docs: skills/grill-with-docs.md
+              - diagnosing-bugs: skills/diagnosing-bugs.md
+              - triage: skills/triage.md
+          - Спецификация и тикеты:
+              - to-spec: skills/to-spec.md
+              - to-tickets: skills/to-tickets.md
+              - to-guide: skills/to-guide.md
+          - Реализация:
+              - architect: skills/architect.md
+              - implement: skills/implement.md
+              - fast-implement: skills/fast-implement.md
+              - tdd: skills/tdd.md
+              - developer: skills/developer.md
+              - coordinator: skills/coordinator.md
+              - playbook: skills/playbook.md
+              - pilot: skills/pilot.md
+          - Качество и публикация:
+              - code-review: skills/code-review.md
+              - code-review-role: skills/code-review-role.md
+              - qa: skills/qa.md
+              - qa-gate: skills/qa-gate.md
+              - conflict-resolver: skills/conflict-resolver.md
+              - delivery-stats: skills/delivery-stats.md
+              - to-pull-requests: skills/to-pull-requests.md
+          - Настройка:
+              - start-project: skills/start-project.md
+              - integrate-project: skills/integrate-project.md
+              - setup-labels: skills/setup-labels.md
+              - database-migrations: skills/database-migrations.md
+              - messaging-integration: skills/messaging-integration.md
           - Upstream:
               - skills/vendor/index.md
               - skills/vendor/ask-matt.md

@@ -2156,3 +2156,497 @@ body {
     margin-right: 0.85rem;
   }
 }
+
+/* Workflow guide: interactive route map, scenario selector and tool cards. */
+.md-content:has(#workflow-guide) .md-typeset > p,
+.md-content:has(#workflow-guide) .md-typeset > ul,
+.md-content:has(#workflow-guide) .md-typeset > ol {
+  max-width: 72ch;
+}
+
+.md-content:has(#workflow-guide) .md-typeset :not(pre) > code {
+  padding: 0.06em 0.3em;
+  border: 1px solid var(--ah-rule);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ah-fg);
+}
+
+.md-sidebar--primary .md-nav__link {
+  line-height: 1.35;
+}
+
+.ah-scenarios {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0.7rem 0;
+}
+
+.ah-scenario {
+  display: block;
+  width: 100%;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 8px;
+  background: var(--ah-surface);
+  color: var(--ah-fg);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-scenario:hover {
+  border-color: var(--ah-edge);
+  background: var(--ah-panel);
+}
+
+.ah-scenario.is-active {
+  border-color: var(--ah-primary);
+  background: color-mix(in srgb, var(--ah-primary) 7%, var(--ah-surface));
+  box-shadow: 0 0 0 1px var(--ah-primary), 0 10px 28px rgba(111, 168, 220, 0.08);
+}
+
+.ah-scenario-kicker {
+  display: block;
+  color: var(--ah-muted);
+  font: 0.54rem/1.4 var(--ah-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ah-scenario b {
+  display: block;
+  margin: 0.2rem 0 0.3rem;
+  color: var(--ah-fg);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.ah-scenario-desc {
+  display: block;
+  color: var(--ah-muted);
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+.ah-scenario-desc code {
+  font-size: 0.95em;
+}
+
+.ah-scenario-skip {
+  display: block;
+  margin-top: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--ah-rule);
+  color: var(--ah-warn);
+  font: 0.55rem/1.4 var(--ah-mono);
+}
+
+.ah-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 8px;
+  background: var(--ah-panel);
+}
+
+.ah-route-label {
+  margin-right: 0.15rem;
+  color: var(--ah-muted);
+  font: 0.54rem/1.4 var(--ah-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ah-route-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ah-route-arrow {
+  color: var(--ah-muted);
+  font: 0.7rem/1 var(--ah-mono);
+}
+
+.ah-route-or {
+  color: var(--ah-muted);
+  font: 0.55rem/1.4 var(--ah-mono);
+}
+
+.ah-route-skip {
+  padding: 0.08rem 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--ah-warn) 40%, var(--ah-rule));
+  border-radius: 3px;
+  color: var(--ah-warn);
+  font: 0.54rem/1.4 var(--ah-mono);
+}
+
+.ah-status-pill {
+  color: var(--ah-primary);
+}
+
+.ah-command {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ah-primary);
+  font: 0.61rem/1.5 var(--ah-mono);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.ah-command:hover {
+  border-color: var(--ah-primary);
+  background: color-mix(in srgb, var(--ah-primary) 10%, transparent);
+  color: var(--ah-fg);
+  text-decoration: none;
+}
+
+.ah-command.is-skipped {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+.ah-pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0.6rem 0;
+}
+
+.ah-step {
+  position: relative;
+  padding: 0.7rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 8px;
+  background: var(--ah-surface);
+  transition: opacity 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-step.is-active {
+  border-color: color-mix(in srgb, var(--ah-primary) 32%, var(--ah-rule));
+}
+
+.ah-step.is-skipped {
+  opacity: 0.4;
+  background: color-mix(in srgb, var(--ah-surface) 65%, transparent);
+}
+
+.ah-step:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: -0.42rem;
+  z-index: 1;
+  color: var(--ah-muted);
+  font: 0.7rem/1 var(--ah-mono);
+  transform: translateY(-50%);
+}
+
+.ah-step-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+
+.ah-step-num {
+  color: var(--ah-primary);
+  font: 0.58rem/1.4 var(--ah-mono);
+}
+
+.ah-step-skip {
+  padding: 0.08rem 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--ah-warn) 40%, var(--ah-rule));
+  border-radius: 3px;
+  color: var(--ah-warn);
+  font: 0.5rem/1.4 var(--ah-mono);
+  letter-spacing: 0.04em;
+}
+
+.ah-step-skip[hidden],
+.ah-wayfinder-note[hidden] {
+  display: none;
+}
+
+.ah-step-guard {
+  color: var(--ah-warn);
+  font: 0.5rem/1.4 var(--ah-mono);
+}
+
+.md-typeset .ah-step h3 {
+  margin: 0.25rem 0;
+  color: var(--ah-fg);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.ah-step p {
+  margin: 0 0 0.45rem;
+  color: var(--ah-muted);
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+.ah-step-label {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--ah-muted);
+  font: 0.5rem/1.4 var(--ah-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ah-step-commands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.ah-step-commands .ah-command {
+  padding: 0.06rem 0.28rem;
+  font-size: 0.56rem;
+}
+
+.ah-wayfinder-note {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--ah-warn);
+  font: 0.54rem/1.4 var(--ah-mono);
+}
+
+.ah-guardrail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-left: 2px solid var(--ah-warn);
+  background: color-mix(in srgb, var(--ah-warn) 7%, transparent);
+  color: var(--ah-muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
+.ah-guardrail svg {
+  flex: none;
+  margin-top: 0.05rem;
+  color: var(--ah-warn);
+}
+
+.ah-guardrail b {
+  color: var(--ah-fg);
+}
+
+.ah-askmatt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0.4rem 0 0.9rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 8px;
+  background: var(--ah-panel);
+  color: var(--ah-muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
+.ah-askmatt-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border: 1px solid color-mix(in srgb, var(--ah-primary) 45%, var(--ah-rule));
+  border-radius: 50%;
+  color: var(--ah-primary);
+  font: 0.7rem/1 var(--ah-mono);
+}
+
+.ah-askmatt b {
+  color: var(--ah-fg);
+}
+
+.ah-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.6rem 0 1rem;
+}
+
+.ah-tool-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0.8rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 9px;
+  background: var(--ah-surface);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.ah-tool-card:hover {
+  border-color: var(--ah-edge);
+  background: var(--ah-panel);
+}
+
+.ah-tool-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ah-tool-head code {
+  color: var(--ah-primary);
+}
+
+.ah-tool-tag {
+  margin-left: auto;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 999px;
+  color: var(--ah-muted);
+  font: 0.54rem/1.4 var(--ah-mono);
+}
+
+.ah-tool-card p {
+  max-width: none;
+  margin: 0.5rem 0;
+  color: var(--ah-muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.ah-tool-foot {
+  margin-top: auto;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--ah-rule);
+  color: var(--ah-muted);
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.ah-tool-foot b {
+  color: var(--ah-fg);
+}
+
+.ah-blueprint {
+  margin: 0.6rem 0 1rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 9px;
+  background: var(--ah-surface);
+  overflow: hidden;
+}
+
+.ah-blueprint-row {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.8rem;
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--ah-rule);
+}
+
+.ah-blueprint-row:first-child {
+  border-top: 0;
+}
+
+.ah-blueprint-row code {
+  color: var(--ah-fg);
+  font-size: 0.66rem;
+}
+
+.ah-blueprint-row span:not(.ah-badge) {
+  color: var(--ah-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.ah-badge {
+  justify-self: end;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 999px;
+  color: var(--ah-muted);
+  font: 0.52rem/1.4 var(--ah-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ah-badge--primary {
+  border-color: color-mix(in srgb, var(--ah-primary) 40%, var(--ah-rule));
+  color: var(--ah-primary);
+}
+
+.ah-badge--warn {
+  border-color: color-mix(in srgb, var(--ah-warn) 40%, var(--ah-rule));
+  color: var(--ah-warn);
+}
+
+@media (max-width: 1300px) {
+  .ah-pipeline {
+    grid-template-columns: 1fr;
+  }
+  .ah-step:not(:last-child)::after {
+    content: "↓";
+    top: auto;
+    right: auto;
+    bottom: -0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .ah-scenarios {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .ah-scenarios,
+  .ah-tool-grid {
+    grid-template-columns: 1fr;
+  }
+  .ah-blueprint-row {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+  .ah-badge {
+    justify-self: start;
+  }
+}
+
+.md-sidebar--primary .md-nav__item[hidden] {
+  display: none !important;
+}
+
+.ah-skill-filter {
+  width: calc(100% - 1rem);
+  margin: 0.35rem 0.5rem 0.45rem;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 4px;
+  background: var(--ah-surface);
+  color: var(--ah-fg);
+  font: 0.6rem/1.4 var(--ah-mono);
+}
+
+.ah-skill-filter::placeholder {
+  color: var(--ah-muted);
+}
+
+.ah-skill-filter:focus {
+  border-color: var(--ah-primary);
+  outline: none;
+}
