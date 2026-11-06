@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..kernel.catalog import (
+    CONFIGURATION_COMMANDS,
     DIAGNOSTICS_COMMANDS,
     HARNESS_COMMANDS,
     MEMORY_COMMANDS,
     REPO_MAP_COMMANDS,
     SETUP_COMMANDS,
+    UPDATE_SEED_SELECTED,
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from .api.request_router import RequestRouter
@@ -22,6 +24,7 @@ from .application.events import POLL_INTERVAL_SECONDS, OrchestrationEvents
 from .application.jobs import JobService
 from .application.ports import (
     Clock,
+    ConfigurationCollector,
     CommandSpec,
     HarnessCollector,
     HealthCollector,
@@ -35,6 +38,8 @@ from .application.ports import (
     RecoveryReader,
     RepoMapCollector,
     RouteReader,
+    UpdateDiffReader,
+    UpdateHarnessCollector,
 )
 from .application.screens import ScreenService
 from .application.task_board import TaskBoardService
@@ -57,11 +62,14 @@ from .infrastructure.screen_facts import (
     HealthFacts,
     collect_ledger,
     collect_ledger_online,
+    configuration_facts,
     harness_facts,
     maintenance_facts,
     open_project_facts,
     read_lock,
     repo_map_facts,
+    update_diff as read_update_diff,
+    update_harness_facts,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
 from .infrastructure.worker_steps import read_worker_facts, read_worker_log
@@ -104,6 +112,9 @@ def screen_service(
     maintenance: MaintenanceCollector | None = None,
     repo_map: RepoMapCollector | None = None,
     open_project: OpenProjectCollector | None = None,
+    update_harness: UpdateHarnessCollector | None = None,
+    update_diff: UpdateDiffReader | None = None,
+    configuration: ConfigurationCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -124,6 +135,11 @@ def screen_service(
         maintenance=maintenance_facts if maintenance is None else maintenance,
         repo_map=repo_map_facts if repo_map is None else repo_map,
         open_project=open_project_facts if open_project is None else open_project,
+        update_harness=(
+            update_harness_facts if update_harness is None else update_harness
+        ),
+        update_diff=read_update_diff if update_diff is None else update_diff,
+        configuration=configuration_facts if configuration is None else configuration,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger
@@ -135,13 +151,16 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, Diagnostics, Repo Map, installation, memory, coordinator
-    and native permission commands; without `executor` the commands run as subprocesses."""
+    """The job service over the harness, the selected seed update, Diagnostics, Repo Map,
+    installation, configuration, memory, coordinator and native permission commands; without
+    `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
+        UPDATE_SEED_SELECTED,
         *DIAGNOSTICS_COMMANDS,
         *REPO_MAP_COMMANDS,
         *SETUP_COMMANDS,
+        *CONFIGURATION_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,

@@ -1,6 +1,6 @@
 """A console server client for tests: answers the Home snapshot from injected collect seams, the
 way the server builds it, and the screen snapshots from an injected ledger and fake lock, recovery,
-route, health and Harness facts passed through the same payload codecs the server uses, so no
+route, health, Harness, «Обновить Harness» and «Настройка» facts passed through the same payload codecs the server uses, so no
 test opens a socket."""
 
 from __future__ import annotations
@@ -14,6 +14,10 @@ from harness.console.backend.infrastructure import home_facts
 from harness.console.kernel import data as console_data
 from harness.console.kernel import reports as ledger
 from harness.console.kernel.batch_history import History
+from harness.console.kernel.configuration_snapshot import (
+    ConfigurationFacts,
+    collect_configuration,
+)
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.data import DashboardData
 from harness.console.kernel.harness_facts import HarnessState, harness_state
@@ -28,6 +32,7 @@ from harness.console.kernel.maintenance import MaintenanceView
 from harness.console.kernel.open_project_snapshot import OpenProjectFacts
 from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
+from harness.console.kernel.update_harness_snapshot import UpdateHarnessFacts
 from harness.console.tui.client import (
     HarnessFacts,
     JobResult,
@@ -91,6 +96,9 @@ class FakeHomeClient:
         self.open_project_facts = OpenProjectFacts(
             str(repo), None, "Это не Git-проект", {}, ()
         )
+        # The drift report of «Обновить Harness» and the diff text of every file it lists.
+        self.update_drift: dict[str, object] | None = None
+        self.update_diffs: dict[str, str] = {}
         self.closed = False
 
     def home(self, *, force: bool = False, online: bool = False) -> HomeSnapshot:
@@ -184,6 +192,25 @@ class FakeHomeClient:
     def help(self, language: str) -> HelpSections:
         self.screen_requests.append(("help", language))
         return HelpSections.from_payload(_wire(help_sections(language).to_payload()))
+
+    def update_harness(self, *, force: bool = False) -> UpdateHarnessFacts:
+        self.screen_requests.append(("update_harness", force))
+        state = harness_state(self.repo)
+        facts = UpdateHarnessFacts(
+            state,
+            console_data.harness_version(),
+            self.update_drift if state.installed else None,
+        )
+        return UpdateHarnessFacts.from_payload(_wire(facts.to_payload()))
+
+    def update_diff(self, path: str, *, force: bool = False) -> str | None:
+        self.screen_requests.append(("update_diff", path))
+        return self.update_diffs.get(path)
+
+    def configuration(self, *, force: bool = False) -> ConfigurationFacts:
+        self.screen_requests.append(("configuration", force))
+        facts = collect_configuration(self.repo)
+        return ConfigurationFacts.from_payload(_wire(facts.to_payload()))
 
     def run_job(
         self,

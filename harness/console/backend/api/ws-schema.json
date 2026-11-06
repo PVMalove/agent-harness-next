@@ -1,5 +1,41 @@
 {
   "$defs": {
+    "ConfigurationSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "configuration.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ConfigurationSnapshotRequest",
+      "type": "object"
+    },
     "ConsoleReply": {
       "anyOf": [
         {
@@ -46,6 +82,7 @@
     "ConsoleRequest": {
       "discriminator": {
         "mapping": {
+          "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
@@ -71,6 +108,8 @@
           "snapshot.page": "#/$defs/SnapshotPageRequest",
           "task_board.snapshot": "#/$defs/TaskBoardSnapshotRequest",
           "task_board.specs": "#/$defs/TaskBoardSpecsRequest",
+          "update_harness.diff": "#/$defs/UpdateHarnessDiffRequest",
+          "update_harness.snapshot": "#/$defs/UpdateHarnessSnapshotRequest",
           "worker.steps": "#/$defs/WorkerStepsRequest",
           "worker.subscribe": "#/$defs/WorkerSubscribeRequest"
         },
@@ -148,6 +187,15 @@
         },
         {
           "$ref": "#/$defs/HelpSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/UpdateHarnessSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/UpdateHarnessDiffRequest"
+        },
+        {
+          "$ref": "#/$defs/ConfigurationSnapshotRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"
@@ -1511,7 +1559,7 @@
     },
     "PagedReply": {
       "additionalProperties": false,
-      "description": "The first page of a report body or a batch chronology as JSON text.",
+      "description": "The first page of a report body, a batch chronology or an update diff as JSON text.",
       "properties": {
         "done": {
           "title": "Done",
@@ -1552,7 +1600,8 @@
         "type": {
           "enum": [
             "reports.report",
-            "reports.timeline"
+            "reports.timeline",
+            "update_harness.diff"
           ],
           "title": "Type",
           "type": "string"
@@ -1805,7 +1854,9 @@
             "harness.maintenance",
             "repo_map.snapshot",
             "open_project.snapshot",
-            "help.snapshot"
+            "help.snapshot",
+            "update_harness.snapshot",
+            "configuration.snapshot"
           ],
           "title": "Type",
           "type": "string"
@@ -2047,6 +2098,85 @@
         "batch_id"
       ],
       "title": "TimelineRequest",
+      "type": "object"
+    },
+    "UpdateHarnessDiffRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "type": {
+          "const": "update_harness.diff",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "UpdateHarnessDiffRequest",
+      "type": "object"
+    },
+    "UpdateHarnessSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "update_harness.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "UpdateHarnessSnapshotRequest",
       "type": "object"
     },
     "WorkerStep": {

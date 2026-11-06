@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
-from ...kernel.protocol import MAX_ID_CHARS, MAX_SKIPPED
+from ...kernel.protocol import MAX_ID_CHARS, MAX_PATH_CHARS, MAX_SKIPPED
 from .request_router import RequestRouter
 
 REGENERATE = "python -m harness.console.backend.api.schemas"
@@ -195,6 +195,25 @@ class HelpSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     language: Literal["ru", "en"]
 
 
+class UpdateHarnessSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["update_harness.snapshot"]
+    force: bool = False
+
+
+class UpdateHarnessDiffRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["update_harness.diff"]
+    path: Annotated[str, Field(min_length=1, max_length=MAX_PATH_CHARS)]
+    force: bool = False
+
+
+class ConfigurationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["configuration.snapshot"]
+    force: bool = False
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
@@ -246,6 +265,9 @@ ConsoleRequest = Annotated[
     | RepoMapSnapshotRequest
     | OpenProjectSnapshotRequest
     | HelpSnapshotRequest
+    | UpdateHarnessSnapshotRequest
+    | UpdateHarnessDiffRequest
+    | ConfigurationSnapshotRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
     | WorkerSubscribeRequest,
@@ -351,6 +373,8 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "repo_map.snapshot",
         "open_project.snapshot",
         "help.snapshot",
+        "update_harness.snapshot",
+        "configuration.snapshot",
     ]
     ok: Literal[True]
     snapshot_id: int
@@ -362,9 +386,9 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
 
 
 class PagedReply(_Envelope):  # type: ignore[explicit-any]
-    """The first page of a report body or a batch chronology as JSON text."""
+    """The first page of a report body, a batch chronology or an update diff as JSON text."""
 
-    type: Literal["reports.report", "reports.timeline"]
+    type: Literal["reports.report", "reports.timeline", "update_harness.diff"]
     ok: Literal[True]
     snapshot_id: int
     text: str

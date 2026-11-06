@@ -92,6 +92,9 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "repo_map.snapshot": schemas.RepoMapSnapshotRequest,
         "open_project.snapshot": schemas.OpenProjectSnapshotRequest,
         "help.snapshot": schemas.HelpSnapshotRequest,
+        "update_harness.snapshot": schemas.UpdateHarnessSnapshotRequest,
+        "update_harness.diff": schemas.UpdateHarnessDiffRequest,
+        "configuration.snapshot": schemas.ConfigurationSnapshotRequest,
     }
     assert set(by_type) == screens.SCREEN_TYPES
     for kind, model in by_type.items():
@@ -116,6 +119,9 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 13, "type": "harness.maintenance"},
         {"id": 14, "type": "open_project.snapshot", "force": True},
         {"id": 15, "type": "help.snapshot", "language": "en"},
+        {"id": 16, "type": "update_harness.snapshot", "force": True},
+        {"id": 17, "type": "update_harness.diff", "path": "AGENTS.md", "force": True},
+        {"id": 18, "type": "configuration.snapshot", "force": True},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -133,6 +139,11 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "open_project.snapshot", "repo": "/work/other"},
         {"type": "help.snapshot"},
         {"type": "help.snapshot", "language": "de"},
+        {"type": "update_harness.snapshot", "path": "x"},
+        {"type": "update_harness.diff"},
+        {"type": "update_harness.diff", "path": ""},
+        {"type": "update_harness.diff", "path": "a" * 513},
+        {"type": "configuration.snapshot", "names": ["project.json"]},
     ):
         with pytest.raises(ValueError):
             schemas.REQUESTS.validate_python(broken)
@@ -163,7 +174,19 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
             "v": 1, "id": 7, "type": kind, "ok": True, "snapshot_id": 5,
             "text": "{}", "next": 2, "done": True, "cached": False, "age_seconds": 0.0,
         }
-        for kind in ("diagnostics.snapshot", "harness.snapshot", "harness.maintenance")
+        for kind in (
+            "diagnostics.snapshot",
+            "harness.snapshot",
+            "harness.maintenance",
+            "update_harness.snapshot",
+            "configuration.snapshot",
+        )
+    )
+    replies.append(
+        {
+            "v": 1, "id": 8, "type": "update_harness.diff", "ok": True,
+            "snapshot_id": 6, "text": "{}", "next": 2, "done": True,
+        }
     )
     for reply in replies:
         assert schemas.REPLIES.validate_python(reply).type == reply["type"]

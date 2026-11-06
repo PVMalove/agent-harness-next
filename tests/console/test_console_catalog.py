@@ -258,3 +258,55 @@ def test_diagnostics_fixes_print_the_json_report_through_cmd_health() -> None:
     online = by_key["diagnostics-online-fix"]
     assert online.reversibility is ENTRIES["health-online-fix"].reversibility
     assert online.needs_confirmation and online.typed_confirmation is None
+
+
+@pytest.mark.parametrize(
+    "paths",
+    ["", "\n", "-x", "/abs/file.md", "a/../b.md", "..", "a\n-b", "a\\b.md"],
+)
+def test_the_seed_update_job_refuses_unsafe_or_empty_paths(paths: str) -> None:
+    from harness.console.kernel.catalog import UPDATE_SEED_SELECTED
+
+    assert not UPDATE_SEED_SELECTED.accepts({"paths": paths})
+
+
+def test_the_seed_update_job_overwrites_the_given_files_as_seed_update_entry() -> None:
+    from harness.console.kernel.catalog import UPDATE_SEED_SELECTED, seed_update_entry
+
+    values = {"paths": ".claude/rules/one.md\n\nAGENTS.md\n"}
+    assert UPDATE_SEED_SELECTED.accepts(values)
+    assert not UPDATE_SEED_SELECTED.accepts({"paths": "a.md", "extra": "x"})
+    assert UPDATE_SEED_SELECTED.cli_argv(REPO, values) == seed_update_entry(
+        [".claude/rules/one.md", "AGENTS.md"]
+    ).cli_argv(REPO)
+    assert UPDATE_SEED_SELECTED.key == "update-seed-selected"
+    assert UPDATE_SEED_SELECTED.reversibility is Reversibility.OVERWRITES_MANAGED_FILES
+    assert UPDATE_SEED_SELECTED.needs_confirmation and not UPDATE_SEED_SELECTED.read_only
+    assert UPDATE_SEED_SELECTED.available(REPO)
+    cli = runpy.run_path(str(BIN_HARNESS_PATH))
+    args = cli["parser"]().parse_args(UPDATE_SEED_SELECTED.cli_argv(REPO, values)[1:])
+    assert args.func.__name__ == "cmd_update"
+
+
+def test_the_configuration_writes_run_the_configuration_cli_by_reversibility() -> None:
+    from harness.console.kernel.catalog import CONFIGURATION_COMMANDS
+    from harness.console.kernel.i18n_strings import EN
+
+    by_key = {entry.key: entry for entry in CONFIGURATION_COMMANDS}
+    assert {key: entry.reversibility for key, entry in by_key.items()} == {
+        "configuration-save-draft": Reversibility.REVERSIBLE,
+        "configuration-save-current": Reversibility.REVERSIBLE,
+        "configuration-apply": Reversibility.OVERWRITES_MANAGED_FILES,
+        "configuration-adapters": Reversibility.OVERWRITES_MANAGED_FILES,
+        "configuration-recover": Reversibility.REVERSIBLE,
+        "configuration-restore": Reversibility.OVERWRITES_MANAGED_FILES,
+    }
+    assert not set(by_key) & set(ENTRIES)
+    for entry in CONFIGURATION_COMMANDS:
+        script = Path(entry.argv[2])
+        assert entry.argv[:2] == ("python", "-B") and script.is_absolute()
+        assert entry.function == "harness/console/kernel/configuration_cli.py:main"
+        assert "\ndef main(" in script.read_text(encoding="utf-8")
+        assert entry.available(REPO) and not entry.read_only and entry.title in EN
+        assert entry.typed_confirmation is None
+        assert entry.inputs == (() if entry.key == "configuration-recover" else ("request",))

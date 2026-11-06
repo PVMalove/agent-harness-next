@@ -102,6 +102,28 @@ class OpenProjectCollector(Protocol):
     def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
+class UpdateHarnessCollector(Protocol):
+    """The «Обновить Harness» facts (`UpdateHarnessFacts.to_payload`): the installed harness, the
+    package version and the drift report; blocks until read and never updates."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
+class UpdateDiffReader(Protocol):
+    """The unified diff of one project file against what `harness update` writes there; the
+    caller has already checked that the drift report lists the file."""
+
+    def __call__(self, repo: Path, relative: str, /) -> str: ...
+
+
+class ConfigurationCollector(Protocol):
+    """The «Настройка» facts (`ConfigurationFacts.to_payload`): the masked configuration files
+    with their digests, a pending transaction and the runtime adapter preview; blocks until read,
+    never writes, never creates the version store and never recovers a transaction."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
 class JobExecutor(Protocol):
     """Emit on the event loop, and finish all output callbacks before returning an exit code.
 

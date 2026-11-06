@@ -1,5 +1,5 @@
-"""The commands of the Recovery, Container route, Diagnostics, Harness, Repo Map and «Открыть
-проект» screens through the console server. Reads come from the screen snapshots (`batch list` from
+"""The commands of the Recovery, Container route, Diagnostics, Harness, Repo Map, «Открыть
+проект» and «Обновить Harness» screens through the console server. Reads come from the screen snapshots (`batch list` from
 `recovery.snapshot`, `recovery status`, `dispatch preflight`), recovery actions, health fixes,
 Harness commands, the Repo Map build, the memory commands and the installation into the served
 project run as server jobs under its confirmation rules, and nothing here starts a process: a path
@@ -19,6 +19,7 @@ from ..kernel.catalog import (
     REPO_MAP_BUILD,
     SETUP_COMMANDS,
     CatalogEntry,
+    SeedUpdateCommand,
 )
 from ..kernel.coordinator_api import (
     ApiResult,
@@ -195,15 +196,18 @@ class ServerJobRefused(OSError):
 
 
 class ServerJobRunner:
-    """A `CommandRunner` for one Harness catalog command, run as a console server job. The
-    form already checked the confirmation, so the job carries it with the typed word and the
-    cleanup plan digest the operator approved (`__plan_digest`). `argv` is only shown: the
-    server builds the command from the catalog entry."""
+    """A `CommandRunner` for one Harness catalog command (or the selected seed update), run as a
+    console server job. The form already checked the confirmation, so the job carries it with
+    the typed word and the cleanup plan digest the operator approved (`__plan_digest`). `argv` is
+    only shown: the server builds the command from the catalog entry."""
 
     streams_output = True
 
     def __init__(
-        self, client: ScreenClient, entry: CatalogEntry, values: Mapping[str, str]
+        self,
+        client: ScreenClient,
+        entry: CatalogEntry | SeedUpdateCommand,
+        values: Mapping[str, str],
     ) -> None:
         self._client = client
         self._entry = entry
@@ -226,7 +230,9 @@ class ServerJobRunner:
                 entry.key,
                 self._values,
                 confirmed=entry.needs_confirmation,
-                confirmation=entry.typed_confirmation,
+                confirmation=(
+                    entry.typed_confirmation if isinstance(entry, CatalogEntry) else None
+                ),
                 plan_digest=self._plan_digest,
                 on_output=on_output,
             )
