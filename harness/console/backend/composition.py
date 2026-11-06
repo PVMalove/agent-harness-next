@@ -8,7 +8,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..kernel.catalog import DIAGNOSTICS_COMMANDS, HARNESS_COMMANDS, MEMORY_COMMANDS
+from ..kernel.catalog import (
+    DIAGNOSTICS_COMMANDS,
+    HARNESS_COMMANDS,
+    MEMORY_COMMANDS,
+    REPO_MAP_COMMANDS,
+)
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from .api.request_router import RequestRouter
 from .application.decisions import DecisionService
@@ -26,6 +31,7 @@ from .application.ports import (
     MaintenanceCollector,
     OrchestrationReader,
     RecoveryReader,
+    RepoMapCollector,
     RouteReader,
 )
 from .application.screens import ScreenService
@@ -52,6 +58,7 @@ from .infrastructure.screen_facts import (
     harness_facts,
     maintenance_facts,
     read_lock,
+    repo_map_facts,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
 from .infrastructure.worker_steps import read_worker_facts, read_worker_log
@@ -92,6 +99,7 @@ def screen_service(
     health: HealthCollector | None = None,
     harness: HarnessCollector | None = None,
     maintenance: MaintenanceCollector | None = None,
+    repo_map: RepoMapCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -110,6 +118,7 @@ def screen_service(
         health=HealthFacts() if health is None else health,
         harness=harness_facts if harness is None else harness,
         maintenance=maintenance_facts if maintenance is None else maintenance,
+        repo_map=repo_map_facts if repo_map is None else repo_map,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger
@@ -121,11 +130,12 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, Diagnostics, memory, coordinator and native permission
-    commands; without `executor` the commands run as subprocesses."""
+    """The job service over the harness, Diagnostics, Repo Map, memory, coordinator and native
+    permission commands; without `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
         *DIAGNOSTICS_COMMANDS,
+        *REPO_MAP_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,

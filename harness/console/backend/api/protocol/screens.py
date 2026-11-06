@@ -1,5 +1,6 @@
-"""The screen snapshot requests of Reports, Orchestration, Recovery, Container route, Diagnostics
-and Harness and the `snapshot.page` request that completes them: parsing and the replies."""
+"""The screen snapshot requests of Reports, Orchestration, Recovery, Container route, Diagnostics,
+Harness and Repo Map and the `snapshot.page` request that completes them: parsing and the
+replies."""
 
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from ....kernel.protocol import (
     PAGE_REQUEST,
     PROTOCOL_VERSION,
     RECOVERY_REQUEST,
+    REPO_MAP_REQUEST,
     REPORT_REQUEST,
     REPORTS_REQUEST,
     ROUTE_REQUEST,
@@ -48,6 +50,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     DIAGNOSTICS_REQUEST: frozenset({"online", "force"}),
     HARNESS_REQUEST: frozenset({"force"}),
     MAINTENANCE_REQUEST: frozenset({"force"}),
+    REPO_MAP_REQUEST: frozenset({"force"}),
 }
 # The replies that carry whether they came from the cache and how old it is.
 _CACHED_TYPES = frozenset(
@@ -141,6 +144,9 @@ def _call(
     if kind == MAINTENANCE_REQUEST:
         force = _flag(body, "force")
         return lambda: screens.maintenance(force=force)
+    if kind == REPO_MAP_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.repo_map(force=force)
     batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
     runtime = _id(body, "runtime", "")
     if not role:

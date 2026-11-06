@@ -1,8 +1,8 @@
 """Screen facts read from the project: the orchestration ledger, the ledger lock, the read-only
 coordinator commands of the Recovery and Container route screens (`batch list`, `recovery status`,
-`dispatch preflight`), the health report of Diagnostics and the installation, drift and
-maintenance facts of Harness. Nothing here writes, locks the ledger, applies a fix or starts a
-worker."""
+`dispatch preflight`), the health report of Diagnostics, the installation, drift and
+maintenance facts of Harness and the Repo Map facts. Nothing here writes, locks the ledger, applies
+a fix or starts a worker."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ....health.report_json import to_json
 from ....json_types import JsonObject
+from ....repo_map.bundle_fetch import ParserStatus, parser_status
 from ...kernel import data as console_data
 from ...kernel.batch_history import History, load_history
 from ...kernel.container_route import Authored, read_authored
@@ -20,6 +21,9 @@ from ...kernel.coordinator_api import ApiResult, CoordinatorApi
 from ...kernel.harness_facts import harness_state
 from ...kernel.maintenance import load_maintenance
 from ...kernel.pr_timings import load_reports_view
+from ...kernel.repo_map import cached_map, head_commit
+from ...kernel.repo_map_settings import language_files, memory_status, tier_setting
+from ...kernel.repo_map_snapshot import RepoMapFacts
 from ...kernel.reports import LedgerView, load_ledger_view
 from ...kernel.runner import CommandRunner, capturing_runner
 
@@ -103,3 +107,21 @@ def maintenance_facts(repo: Path) -> dict[str, object]:
     except Exception as exc:  # shown to the operator, never hidden
         return {"maintenance": None, "error": str(exc) or type(exc).__name__}
     return {"maintenance": view.to_payload(), "error": ""}
+
+
+def repo_map_facts(repo: Path) -> dict[str, object]:
+    """HEAD, the map cached for it, the tier, the parser bundle (null when it cannot be read),
+    the project languages and the memory status; never runs the Repo Map CLI."""
+    head = head_commit(repo)
+    try:
+        parsers: ParserStatus | None = parser_status(repo)
+    except Exception:  # an unreadable bundle is shown as unknown, never as installed
+        parsers = None
+    return RepoMapFacts(
+        head=head,
+        view=cached_map(repo, head) if head is not None else None,
+        tier=tier_setting(repo),
+        memory=memory_status(repo),
+        parsers=parsers,
+        language_files=language_files(repo),
+    ).to_payload()

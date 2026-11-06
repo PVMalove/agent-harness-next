@@ -2,8 +2,9 @@
 
 One pane of the Repo Map screen. It shows the current state of each and offers the actions as
 buttons: switch minimal / full, open the setup wizard on the parser policy, install the parser of a
-language, initialise or refresh project memory. Anything that downloads or builds runs the CLI
-command shown in the confirmation form; configuration is written through a validated draft."""
+language, initialise or refresh project memory. The state comes from the `repo_map.snapshot` of
+the console server; memory commands run as its jobs, the parser install runs the CLI command shown
+in the confirmation form, and configuration is written through a validated draft."""
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, RadioButton, RadioSet, SelectionList, Static
 from textual.widgets.selection_list import Selection
 
-from harness.repo_map.bundle_fetch import ParserStatus, parser_status
+from harness.repo_map.bundle_fetch import ParserStatus
 from harness.repo_map.bundle_pins import LANGUAGES
 
 from ...kernel import brand, i18n, repo_map_settings
@@ -27,8 +28,12 @@ from ...kernel.catalog import (
     parsers_install_entry,
     process_argv,
 )
+from ...kernel.repo_map_settings import MemoryStatus, TierSetting
+from ...kernel.repo_map_snapshot import RepoMapFacts
+from ..client import ConsoleClientError, ScreenClient
 from ..logtext import colorize_log
 from ...kernel.runner import CommandRunner, capturing_runner
+from ..server_api import settings_runner
 from ..shell import SectionCard
 from ...kernel.status import Status
 from ..widgets import CheckList, RoundRadioButton
@@ -40,6 +45,7 @@ _TIER_CHOICES = (
     ("full", "full — сигнатуры и связи (нужен парсер языка)"),
 )
 _MEMORY = {entry.key: entry for entry in MEMORY_COMMANDS}
+_UNREAD = "снимок Repo Map ещё не прочитан"
 # Why the parser bundle is not usable (`DegradationReason`), in words the user can act on.
 _REASONS = {
     "offline parser bundle unavailable": "парсер не установлен: выберите языки и нажмите «Установить выбранные»",
@@ -79,14 +85,15 @@ class RepoMapSettings(Vertical):
         self,
         repo: Path,
         *,
+        client: ScreenClient,
         command_runner: CommandRunner = capturing_runner,
-        load_parsers: Callable[[Path], ParserStatus] = parser_status,
     ) -> None:
         super().__init__(id="repo-map-settings")
         self.repo = repo
+        self._client = client
         self._runner = command_runner
-        self._load_parsers = load_parsers
         self.busy = False
+        self.facts: RepoMapFacts | None = None
         self.parsers: ParserStatus | None = None
         self.files: dict[str, int] = {}
         self._output = ""
@@ -142,7 +149,7 @@ class RepoMapSettings(Vertical):
                         yield Static("", id="settings-output", classes="no-i18n")
 
     def on_mount(self) -> None:
-        self.reload()
+        self.repaint()
 
     # -- state ---------------------------------------------------------------------------------
 
@@ -154,7 +161,8 @@ class RepoMapSettings(Vertical):
         return i18n.tr_text(self.language, text)
 
     def reload(self) -> None:
-        """Re-read the tier, parsers and memory in a worker, then repaint."""
+        """Re-read the tier, parsers and memory from a fresh server snapshot in a worker, then
+        repaint; a snapshot that cannot be read keeps the last one and says why."""
 
         # Reads never cancel each other (a cancelled worker is an error to whoever waits for it);
         # a read that is no longer the latest is ignored when it arrives.
@@ -163,45 +171,69 @@ class RepoMapSettings(Vertical):
 
         def work() -> None:
             try:
-                parsers: ParserStatus | None = self._load_parsers(self.repo)
-            except Exception:
-                parsers = None
-            files = repo_map_settings.language_files(self.repo)
-            call_from_worker(self, lambda: self._loaded(serial, parsers, files))
+                facts = self._client.repo_map(force=True)
+            except ConsoleClientError as exc:
+                failure = str(exc)
+                call_from_worker(self, lambda: self._unread(serial, failure))
+                return
+            call_from_worker(self, lambda: self._loaded(serial, facts))
 
         self.run_worker(work, thread=True, group="settings-load")
 
-    def _loaded(
-        self, serial: int, parsers: ParserStatus | None, files: dict[str, int]
-    ) -> None:
-        if serial != self._load_serial:
-            return
-        self.parsers = parsers
-        self.files = files
+    def _unread(self, serial: int, failure: str) -> None:
+        if serial == self._load_serial:
+            self._show(self.t("Снимок Repo Map не прочитан: ") + failure)
+
+    def _loaded(self, serial: int, facts: RepoMapFacts) -> None:
+        if serial == self._load_serial:
+            self.show_facts(facts)
+
+    def show_facts(self, facts: RepoMapFacts) -> None:
+        """Show the tier, parsers, languages and memory of a `repo_map.snapshot` reply."""
+        self.facts = facts
+        self.parsers = facts.parsers
+        self.files = facts.language_files
         self._seeded = False
         self.repaint()
+
+    def _tier(self) -> TierSetting | None:
+        """The tier of the last snapshot; None before the first, when the policy is unknown."""
+        return None if self.facts is None else self.facts.tier
+
+    def _memory(self) -> MemoryStatus:
+        facts = self.facts
+        return (
+            MemoryStatus(False, False, (), None, _UNREAD)
+            if facts is None
+            else facts.memory
+        )
 
     def repaint(self) -> None:
         """Show the current state in the current language."""
         t = self.t
-        tier = repo_map_settings.tier_setting(self.repo)
-        text = Text(t("В политике проекта: ") + tier.tier)
-        effective = self._effective_note(tier.tier)
-        if effective:
-            text.append("\n")
-            text.append_text(_marked("warning", effective))
-        if tier.reason:
-            text.append("\n")
-            text.append_text(_marked("not_started", t(tier.reason)))
-        self.query_one("#tier-status", Static).update(text)
+        tier = self._tier()
         choice = self.query_one("#tier-choice", RadioSet)
-        if tier.tier != self._policy_tier:
-            # Only when the policy changed: a repaint must not undo a choice not yet applied.
-            self.query_one(f"#tier-{tier.tier}", RadioButton).value = True
-            self._policy_tier = tier.tier
-        choice.disabled = not tier.editable or self.busy
-        self.query_one("#tier-apply", Button).disabled = not tier.editable or self.busy
-        self.query_one("#parser-settings", Button).disabled = not tier.editable
+        if tier is None:
+            # The policy is not known yet: no tier is claimed and nothing can be written.
+            text = _marked("not_started", t(_UNREAD))
+        else:
+            text = Text(t("В политике проекта: ") + tier.tier)
+            effective = self._effective_note(tier.tier)
+            if effective:
+                text.append("\n")
+                text.append_text(_marked("warning", effective))
+            if tier.reason:
+                text.append("\n")
+                text.append_text(_marked("not_started", t(tier.reason)))
+            if tier.tier != self._policy_tier:
+                # Only when the policy changed: a repaint must not undo a choice not yet applied.
+                self.query_one(f"#tier-{tier.tier}", RadioButton).value = True
+                self._policy_tier = tier.tier
+        self.query_one("#tier-status", Static).update(text)
+        editable = tier is not None and tier.editable
+        choice.disabled = not editable or self.busy
+        self.query_one("#tier-apply", Button).disabled = not editable or self.busy
+        self.query_one("#parser-settings", Button).disabled = not editable
         self._repaint_parsers()
         self._repaint_memory()
         self.query_one("#settings-output", Static).update(
@@ -264,7 +296,7 @@ class RepoMapSettings(Vertical):
 
     def _repaint_memory(self) -> None:
         t = self.t
-        status = repo_map_settings.memory_status(self.repo)
+        status = self._memory()
         if status.problem:
             line = _marked("error", t("Память недоступна: ") + status.problem)
         else:
@@ -336,7 +368,10 @@ class RepoMapSettings(Vertical):
         from .configuration import ConfirmConfiguration
 
         tier = self._selected_tier()
-        current = repo_map_settings.tier_setting(self.repo).tier
+        known = self._tier()
+        if known is None:
+            return
+        current = known.tier
         if tier == current:
             note = self._effective_note(tier)
             self._show(
@@ -480,7 +515,8 @@ class RepoMapSettings(Vertical):
 
         def work() -> None:
             try:
-                result = self._runner(argv, cwd=self.repo)
+                runner = settings_runner(self._client, entry, self._runner)
+                result = runner(argv, cwd=self.repo)
                 text, success = render_result(line, result), result.returncode == 0
             except OSError as exc:
                 text, success = f"$ {line}\nне удалось запустить: {exc}", False

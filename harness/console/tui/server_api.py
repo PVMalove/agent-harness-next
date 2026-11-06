@@ -1,8 +1,9 @@
-"""The commands of the Recovery, Container route, Diagnostics and Harness screens through the
-console server. Reads come from the screen snapshots (`batch list` from `recovery.snapshot`,
-`recovery status`, `dispatch preflight`), recovery actions, health fixes and Harness commands run
-as server jobs under its confirmation rules, and nothing here starts a process: a path the server
-does not serve goes to the `fallback` client, or is refused when there is none."""
+"""The commands of the Recovery, Container route, Diagnostics, Harness and Repo Map screens through
+the console server. Reads come from the screen snapshots (`batch list` from `recovery.snapshot`,
+`recovery status`, `dispatch preflight`), recovery actions, health fixes, Harness commands, the
+Repo Map build and the memory commands run as server jobs under its confirmation rules, and
+nothing here starts a process: a path the server does not serve goes to the `fallback` client, or
+is refused when there is none."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ...health.model import Report
-from ..kernel.catalog import CatalogEntry
+from ..kernel.catalog import MEMORY_COMMANDS, REPO_MAP_BUILD, CatalogEntry
 from ..kernel.coordinator_api import (
     ApiResult,
     ArgvError,
@@ -23,6 +24,8 @@ from ..kernel.coordinator_api import (
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from ..kernel.health_report import report_from_payload
+from ..kernel.repo_map import RepoMapView, read_build
+from ..kernel.runner import CommandRunner
 from .client import ConsoleClientError, JobResult, ScreenClient
 
 Values = Mapping[str, str | Sequence[str] | bool]
@@ -228,3 +231,28 @@ class ServerJobRunner:
         return subprocess.CompletedProcess(
             list(argv), result.returncode, result.stdout, result.stderr
         )
+
+
+def build_repo_map(client: ScreenClient, head: str) -> RepoMapView | str:
+    """The Repo Map of `head`, built by the `repo-map-build` server job and read from its stdout;
+    a refused start, a job without an exit code, a cut output or a failed build is the text the
+    screen shows instead of a map."""
+    try:
+        result = client.run_job(REPO_MAP_BUILD.key, {"commit": head})
+    except ConsoleClientError as exc:
+        return f"сервер консоли не запустил построение: {exc}"
+    if result.returncode is None:
+        return f"построение не завершилось: {_failure(result)}"
+    if result.truncated:
+        return "вывод Repo Map CLI обрезан сервером консоли: карта слишком велика"
+    return read_build(result.returncode, result.stdout, result.stderr)
+
+
+def settings_runner(
+    client: ScreenClient, entry: CatalogEntry, local: CommandRunner
+) -> CommandRunner:
+    """The runner of a Repo Map settings command: a memory command runs as a console server job,
+    any other (the parser install for the chosen languages) through `local`."""
+    if entry in MEMORY_COMMANDS:
+        return ServerJobRunner(client, entry, {})
+    return local

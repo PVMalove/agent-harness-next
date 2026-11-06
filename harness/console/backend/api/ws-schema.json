@@ -62,6 +62,7 @@
           "orchestration.snapshot": "#/$defs/OrchestrationSnapshotRequest",
           "orchestration.subscribe": "#/$defs/OrchestrationSubscribeRequest",
           "recovery.snapshot": "#/$defs/RecoverySnapshotRequest",
+          "repo_map.snapshot": "#/$defs/RepoMapSnapshotRequest",
           "reports.report": "#/$defs/ReportRequest",
           "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
           "reports.timeline": "#/$defs/TimelineRequest",
@@ -136,6 +137,9 @@
         },
         {
           "$ref": "#/$defs/HarnessMaintenanceRequest"
+        },
+        {
+          "$ref": "#/$defs/RepoMapSnapshotRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"
@@ -1541,6 +1545,42 @@
       "title": "RecoverySnapshotRequest",
       "type": "object"
     },
+    "RepoMapSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "repo_map.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "RepoMapSnapshotRequest",
+      "type": "object"
+    },
     "ReportRequest": {
       "additionalProperties": false,
       "properties": {
@@ -1678,7 +1718,8 @@
             "task_board.snapshot",
             "diagnostics.snapshot",
             "harness.snapshot",
-            "harness.maintenance"
+            "harness.maintenance",
+            "repo_map.snapshot"
           ],
           "title": "Type",
           "type": "string"

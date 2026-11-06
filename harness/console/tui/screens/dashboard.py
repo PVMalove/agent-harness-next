@@ -929,7 +929,9 @@ class DashboardScreen(ConsoleShell):
     def _repo_map(self) -> Screen[None]:
         from .repo_map import RepoMapScreen
 
-        return RepoMapScreen(self.repo, command_runner=self._command_runner)
+        return RepoMapScreen(
+            self.repo, client=self._home_client, command_runner=self._command_runner
+        )
 
     def _configuration(self) -> Screen[None]:
         from .configuration import ConfigurationScreen

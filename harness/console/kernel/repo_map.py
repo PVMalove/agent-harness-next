@@ -5,16 +5,15 @@
 Считываются только поля схемы v1 (harness/repo_map/repo_map.schema.json, .harness/repo_map/README.md),
 а данные принимаются только после успешной проверки `harness.repo_map.contract.validation_error`.
 Кэш читается через `harness.repo_map.cache.read_cache`, который перепроверяет ключ записи, SHA-256,
-коммит и схему; открытие раздела никогда не запускает CLI. Построение карты запускает CLI через
-переданный CommandRunner (`python -B <repo_map.py> --repo --commit`), при этом экран предварительно
-запрашивает подтверждение (`BUILD_WARNING`), так как уровень full может устанавливать оффлайн parser bundle.
+коммит и схему; открытие раздела никогда не запускает CLI. Карту строит job сервера консоли
+`repo-map-build`, а `read_build` разбирает её вывод; экран предварительно запрашивает подтверждение
+(`BUILD_WARNING`), так как уровень full может устанавливать оффлайн parser bundle.
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,11 +24,8 @@ from ...repo_map.contract import validation_error
 from ...storage import storage_path
 from .export import MarkdownDocument, MarkdownSection
 from .json_fields import strings, text
-from .runner import CommandRunner
 from .status import Status
 
-REPO_MAP_SCRIPT_REL = Path(".harness") / "repo_map" / "repo_map.py"
-_PACKAGE_SCRIPT = Path(__file__).resolve().parents[2] / "repo_map" / "repo_map.py"
 HUBS_LIMIT = 10
 _ERROR_TAIL_LINES = 20
 
@@ -202,39 +198,16 @@ def cached_map(repo: Path, commit: str) -> RepoMapView | None:
     return best[1] if best is not None else None
 
 
-def repo_map_script(repo: Path) -> Path:
-    """Возвращает путь к скрипту repo_map.py проекта или к копии из пакета харнесса."""
-    installed = repo / REPO_MAP_SCRIPT_REL
-    return installed if installed.is_file() else _PACKAGE_SCRIPT
-
-
-def build_argv(repo: Path, commit: str) -> list[str]:
-    """Формирует список аргументов запуска CLI построения карты для указанного коммита."""
-    # -B: no __pycache__ inside the target repository, as context_builder runs the same CLI.
-    return [
-        sys.executable,
-        "-B",
-        str(repo_map_script(repo)),
-        "--repo",
-        str(repo),
-        "--commit",
-        commit,
-    ]
-
-
-def build_map(repo: Path, commit: str, runner: CommandRunner) -> RepoMapView | str:
-    """Запускает CLI построения карты для коммита через runner и возвращает результат или сообщение об ошибке."""
+def read_build(
+    returncode: int, stdout: str | None, stderr: str | None
+) -> RepoMapView | str:
+    """Возвращает карту из вывода завершённого запуска Repo Map CLI либо причину, по которой её нет:
+    код выхода с хвостом stderr, вывод не в формате JSON или карту вне схемы v1."""
+    if returncode != 0:
+        tail = (stderr or "").strip().splitlines()[-_ERROR_TAIL_LINES:]
+        return "\n".join([f"Repo Map CLI завершился с кодом {returncode}", *tail])
     try:
-        result = runner(build_argv(repo, commit), cwd=repo)
-    except OSError as exc:
-        return f"не удалось запустить Repo Map CLI: {exc}"
-    if result.returncode != 0:
-        tail = (result.stderr or "").strip().splitlines()[-_ERROR_TAIL_LINES:]
-        return "\n".join(
-            [f"Repo Map CLI завершился с кодом {result.returncode}", *tail]
-        )
-    try:
-        payload: object = json.loads(result.stdout or "")
+        payload: object = json.loads(stdout or "")
     except json.JSONDecodeError as exc:
         return f"Repo Map CLI вернул не JSON: {exc}"
     return parse_map(payload, origin="построена")

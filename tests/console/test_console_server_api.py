@@ -335,3 +335,84 @@ def test_a_harness_command_streams_its_server_job_output_into_the_run() -> None:
         "report",
     )
     assert client.calls == [("job", "health", {}, False)]
+
+
+def test_the_repo_map_is_built_by_a_server_job_for_the_shown_head() -> None:
+    from harness.console.kernel.repo_map import RepoMapView
+    from harness.console.tui.server_api import build_repo_map
+
+    from ._console_repo_map_fixture import map_payload
+
+    head = "c" * 40
+    client = FakeClient()
+    client.job = JobResult("completed", 0, json.dumps(map_payload(head)), "", False, None)
+    built = build_repo_map(client, head)  # type: ignore[arg-type]
+    assert isinstance(built, RepoMapView) and built.commit == head
+    assert client.calls == [("job", "repo-map-build", {"commit": head}, False)]
+
+    client.job = JobResult("completed", 0, "{", "", True, None)
+    truncated = build_repo_map(client, head)  # type: ignore[arg-type]
+    assert isinstance(truncated, str) and "обрез" in truncated
+
+    client.job = JobResult("completed", 2, "", "parser bundle broken", False, None)
+    failed = build_repo_map(client, head)  # type: ignore[arg-type]
+    assert isinstance(failed, str) and "parser bundle broken" in failed
+
+    client.failure = ServerError("unavailable_command", "not installed")
+    refused = build_repo_map(client, head)  # type: ignore[arg-type]
+    assert isinstance(refused, str) and "not installed" in refused
+
+
+def test_the_repo_map_screen_neither_reads_its_facts_nor_builds_the_map_itself() -> None:
+    """The screen and its settings pane take HEAD, the cached map, the tier, the parsers, the
+    languages and the memory status from the `repo_map.snapshot` reply, and build through
+    `build_repo_map`, the server job above."""
+    import ast
+
+    from harness.console.tui.screens import repo_map, repo_map_settings
+
+    def names(module: object) -> set[str]:
+        """What the module imports and calls; a data field of the same name is neither."""
+        tree = ast.parse(Path(str(getattr(module, "__file__"))).read_text(encoding="utf-8"))
+        found = {
+            alias.asname or alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+        }
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                if isinstance(func, ast.Name):
+                    found.add(func.id)
+                elif isinstance(func, ast.Attribute):
+                    found.add(func.attr)
+        return found
+
+    local_reads = {
+        "head_commit",
+        "cached_map",
+        "parser_status",
+        "language_files",
+        "memory_status",
+        "tier_setting",
+        "build_map",
+    }
+    screen, pane = names(repo_map), names(repo_map_settings)
+    assert not local_reads & screen and not local_reads & pane
+    assert {"build_repo_map", "repo_map"} <= screen
+
+
+def test_a_memory_command_of_the_settings_pane_runs_as_a_server_job() -> None:
+    from harness.console.kernel.catalog import MEMORY_COMMANDS, parsers_install_entry
+    from harness.console.tui.server_api import ServerJobRunner, settings_runner
+
+    client, local = FakeClient(), NoRunner()
+    for entry in MEMORY_COMMANDS:
+        runner = settings_runner(client, entry, local)  # type: ignore[arg-type]
+        assert isinstance(runner, ServerJobRunner)
+        runner(["harness"], cwd=REPO)
+    assert [call[1] for call in client.calls] == [entry.key for entry in MEMORY_COMMANDS]
+    install = parsers_install_entry(["python"])
+    kept: object = settings_runner(client, install, local)  # type: ignore[arg-type]
+    assert kept is local

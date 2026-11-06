@@ -177,6 +177,12 @@ class HarnessMaintenanceRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class RepoMapSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["repo_map.snapshot"]
+    force: bool = False
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
@@ -225,6 +231,7 @@ ConsoleRequest = Annotated[
     | DiagnosticsSnapshotRequest
     | HarnessSnapshotRequest
     | HarnessMaintenanceRequest
+    | RepoMapSnapshotRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
     | WorkerSubscribeRequest,
@@ -327,6 +334,7 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "diagnostics.snapshot",
         "harness.snapshot",
         "harness.maintenance",
+        "repo_map.snapshot",
     ]
     ok: Literal[True]
     snapshot_id: int
