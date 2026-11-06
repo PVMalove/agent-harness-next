@@ -76,10 +76,13 @@ nav:
       - CLI: reference/cli.md
       - Метки: reference/labels.md
       - Hooks: reference/hooks.md
+      - Скиллы: reference/skills.md
   - Архитектура:
       - architecture/index.md
       - Обзор: architecture/overview.md
       - Rust runtime: architecture/runtime.md
+  - Проект:
+      - Структура: project/structure.md
   - Demo: demo/index.md
 
 copyright: © 2026 Agent Harness Next · MIT
