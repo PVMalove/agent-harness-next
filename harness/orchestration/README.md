@@ -168,7 +168,11 @@ brief и report, независимый review и clean-room QA. Capability вы
 Без поля роль получает набор по режиму manifest'а: `read-only` — `Read`, `Grep`, `Glob`, `Bash`;
 `write` — те же плюс `Edit`, `Write`. Переопределяют набор `modes` (ключи `read-only`/`write`) и
 `roles` (имена ролей), причём запись роли важнее записи режима. Это рабочий набор роли, а не запрет
-глобальных инструментов runtime.
+глобальных инструментов runtime. Для external Claude Code developer с opt-in тест-автора
+(`test_paths` и `test_runner`) встроенный fallback также включает `Agent(test-author)`.
+Новый шаблон задаёт это разрешение через `tool_policy.roles.developer`; существующий явный
+`tool_policy` сохраняет точный набор и требует ручного добавления именованного разрешения.
+Digest списка по-прежнему фиксируется до approval; adapter не добавляет инструменты.
 
 ```json
 "tool_policy": {"modes": {"read-only": ["Read", "Grep", "Glob"]}, "roles": {"qa": ["Read", "Grep", "Glob", "Bash"]}}

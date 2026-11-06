@@ -1421,7 +1421,17 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         orchestration_policy = _orchestration_policy(config)
         # The hook policy and the tool list are pinned with the approval (issue #794): a later
         # edit of hook_policy or of the role tool policy does not change an approved dispatch.
-        allowed_tools = resolve_allowed_tools(config, role_name, role["mode"])
+        allowed_tools = resolve_allowed_tools(
+            config,
+            role_name,
+            role["mode"],
+            test_author=(
+                resolved_runtime == "claude"
+                and transport == "external"
+                and bool(project_snapshot.get("test_paths"))
+                and bool(project_snapshot.get("test_runner"))
+            ),
+        )
         hook_policy_sha256 = hook_policy.hook_policy_sha256(project_hook_policy)
         transition = operational_guards.bind_transition(
             transition,

@@ -21,6 +21,53 @@ def _stream(*events: dict[str, object]) -> str:
     return "\n".join(json.dumps(event) for event in events)
 
 
+def test_probe_usage_reports_actual_values_instead_of_the_budget() -> None:
+    stream = _stream(
+        {
+            "type": "result",
+            "total_cost_usd": 0.023,
+            "usage": {
+                "input_tokens": 21,
+                "output_tokens": 7,
+                "cache_read_input_tokens": 100,
+                "cache_creation_input_tokens": 30,
+            },
+            "result": "private-token",
+        }
+    )
+
+    assert claude_probe.probe_usage(stream) == {
+        "cost_usd": 0.023,
+        "usage": {
+            "input_tokens": 21,
+            "output_tokens": 7,
+            "cache_read_input_tokens": 100,
+            "cache_creation_input_tokens": 30,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "stream",
+    [
+        "",
+        "not json",
+        '{"type":"result"}',
+        '{"type":"result","total_cost_usd":NaN,"usage":{"input_tokens":true}}',
+    ],
+)
+def test_unreported_or_invalid_probe_usage_stays_unknown(stream: str) -> None:
+    assert claude_probe.probe_usage(stream) == {
+        "cost_usd": None,
+        "usage": {
+            "input_tokens": None,
+            "output_tokens": None,
+            "cache_read_input_tokens": None,
+            "cache_creation_input_tokens": None,
+        },
+    }
+
+
 def _use(call_id: str, name: str, tool_input: dict[str, object]) -> dict[str, object]:
     block = {"type": "tool_use", "id": call_id, "name": name, "input": tool_input}
     return {"type": "assistant", "message": {"content": [block]}}

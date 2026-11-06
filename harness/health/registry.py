@@ -78,6 +78,7 @@ REGISTRY: list[tuple[str, CheckFn]] = [
     ("environment.symlinks", windows_checks.check_symlinks),
     ("environment.hook_bash", windows_checks.check_hook_bash),
     ("hooks.policy", hooks_checks.check_policy),
+    ("hooks.test_author", hooks_checks.check_test_author),
     ("tracker.project", tracker_checks.check_project),
     ("tracker.auth", tracker_checks.check_auth),
     ("tracker.reachability", tracker_checks.check_reachability),

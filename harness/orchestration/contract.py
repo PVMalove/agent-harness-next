@@ -1099,7 +1099,11 @@ def resolve_min_repo_map_tier(
 
 
 def resolve_allowed_tools(
-    config: Mapping[str, object], role_name: str, mode: str
+    config: Mapping[str, object],
+    role_name: str,
+    mode: str,
+    *,
+    test_author: bool = False,
 ) -> list[str]:
     """Инструменты, фиксируемые в brief роли: запись роли в проекте, иначе запись для режима, иначе встроенный дефолт режима манифеста."""
     policy = config.get("tool_policy")
@@ -1108,7 +1112,10 @@ def resolve_allowed_tools(
             entries = policy.get(section)
             if isinstance(entries, dict) and key in entries:
                 return list(entries[key])
-    return list(DEFAULT_ALLOWED_TOOLS[mode])
+    tools = list(DEFAULT_ALLOWED_TOOLS[mode])
+    if test_author and role_name == "developer" and mode == "write":
+        tools.append("Agent(test-author)")
+    return tools
 
 
 def valid_tool_list(value: object) -> TypeGuard[list[str]]:

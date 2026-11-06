@@ -33,7 +33,9 @@ Return a compact English reply to the developer with exactly these facts:
 - the test identifier passed to the runner;
 - for `red`, the Red evidence: the runner's sanitized JSON answer and, in a few lines, the failed
   assertion, the expectation and the actual result. The JSON has fixed keys only, so read those
-  three facts from the run's `log.txt` (the run directory named by `run_id`).
+  three facts from `<runner log root>/isolated-test-<run_id>/log.txt`. The developer supplies
+  the runner log root: linked worktrees share the main checkout's sandbox. If that root was not
+  supplied, report the missing evidence path instead of guessing another checkout.
 
 Use `contract_gap` when the requirement or seam does not determine the expectation. Pick the status
 by the cause of the failure:

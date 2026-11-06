@@ -45,6 +45,12 @@ current implementation.
 
 ## Optional test-author subagent
 
+In `/implement`, this helper is supported only by an external Claude Code developer in its exact
+trusted worker checkout, with `Agent(test-author)` or `Agent` in the approved brief. An in-process
+worker keeps ordinary TDD on `checkout_mismatch`; Codex and other runtimes do not enable it.
+Linked workers read runner evidence from the shared log root supplied by the developer, not from
+an assumed checkout-local `.harness` directory. See `docs/agents/test-author.md` for activation.
+
 The developer delegates the next Red test to the installed Claude Code `test-author` subagent
 only after running `.claude/hooks/test-author-preflight.sh`. The preflight must return exactly
 `{"status":"ok"}`. Any `disabled` result keeps the ordinary developer route; pass its sanitized

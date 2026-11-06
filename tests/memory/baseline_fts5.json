@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "engine": "sqlite3 FTS5 bm25, path tie-break",
   "corpus": "Tracked ADRs and CONTEXT.md; excludes task archives and tracker snapshots",
   "k_values": [
@@ -17,7 +17,7 @@
     "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
     "docs/adr/0003-orchestration-core.md": "3e4e61af72ab7701013cba42f1faa8cdc2b3f4b9c23e7f2d0fc884f03f957854",
     "docs/adr/0004-role-assignments.md": "3721543a888daea209f74e3ca92ea920074213b0b758cbc6c1497b53ba782bd0",
-    "docs/adr/0005-implement-pipeline.md": "21ec43eadc8428a7fe665adfe335cb82b3bef89279ca0f8bb39b5da2a53bb3c9",
+    "docs/adr/0005-implement-pipeline.md": "37819c5ce6a65dbeeba2046d27501814dedc57161fdfa171e5713ceb68e01e1c",
     "docs/adr/0006-scratch-artifacts.md": "67fea598a768ec5513a0818654e98b7e9c3bc9605161a33d85b2e66ab98c870f",
     "docs/adr/0007-python-quality.md": "866c0aa5cddae54238750e54733e281d0ed8cdd5e4c4336713c82ca4f30a6677",
     "docs/adr/0008-repo-map.md": "a1efc331e1f698c964b04593c8665595e667a0f24acc5a3bc8d0b447ccdc329e",
@@ -32,7 +32,7 @@
       "3": 0.95,
       "5": 0.95
     },
-    "mean_noise_ratio": 0.6,
+    "mean_noise_ratio": 0.61,
     "query_results": [
       {
         "ticket_id": 165,
@@ -83,8 +83,8 @@
         "query": "Цель: Проверять каталоги харнесса и права записи в harness health с локальным --fix. DoD: Отсутствующий каталог с записываемым родителем получает ok; незаписываемый — fail; fix создаёт каталоги и registry, не меняя машинных настроек.",
         "retrieved": [
           "CONTEXT.md",
-          "docs/adr/0010-project-memory.md",
           "docs/adr/0005-implement-pipeline.md",
+          "docs/adr/0010-project-memory.md",
           "docs/adr/0001-portable-capability-delivery.md",
           "docs/adr/0003-orchestration-core.md"
         ],
@@ -108,7 +108,7 @@
           "CONTEXT.md",
           "docs/adr/0010-project-memory.md",
           "docs/adr/0008-repo-map.md",
-          "docs/adr/0004-role-assignments.md"
+          "docs/adr/0005-implement-pipeline.md"
         ],
         "expected": [
           "docs/adr/0006-scratch-artifacts.md",
@@ -128,9 +128,9 @@
         "retrieved": [
           "CONTEXT.md",
           "docs/adr/0010-project-memory.md",
-          "docs/adr/0003-orchestration-core.md",
           "docs/adr/0005-implement-pipeline.md",
-          "docs/adr/0006-scratch-artifacts.md"
+          "docs/adr/0003-orchestration-core.md",
+          "docs/adr/0009-harness-console.md"
         ],
         "expected": [
           "docs/adr/0007-python-quality.md",
@@ -142,7 +142,7 @@
           "3": 1.0,
           "5": 1.0
         },
-        "noise_ratio": 0.6,
+        "noise_ratio": 0.8,
         "search_status": "ok"
       },
       {
@@ -265,7 +265,7 @@
           "CONTEXT.md",
           "docs/adr/0009-harness-console.md",
           "docs/adr/0003-orchestration-core.md",
-          "docs/adr/0008-repo-map.md"
+          "docs/adr/0005-implement-pipeline.md"
         ],
         "expected": [
           "docs/adr/0010-project-memory.md",
@@ -483,5 +483,5 @@
     "gate_passed": true
   },
   "annotation_revision": "Version 2 corrected source-grounded multi-label annotations; versions 3, 4 and 5 re-evaluate updated corpora. Initial single-label measurement remains unchanged in baseline_fts5_initial.json.",
-  "corpus_revision": "Issue #716 updates worker observation/recovery in CONTEXT.md and ADR 0003, and session scratchpad binding in ADR 0006; issue #555 updates the test author in CONTEXT.md and ADR 0005; the import of integration/console-redesign into Harness Next merges them with the Harness Next CONTEXT.md and ADR 0003 changes (#635, #662, #786, #789). Re-evaluated the merged source set; dataset, labels, engine, windows and thresholds are unchanged. The initial corpus remains preserved in tests/memory/fixtures/initial-corpus.json."
+  "corpus_revision": "Issue #716 updates worker observation/recovery in CONTEXT.md and ADR 0003, and session scratchpad binding in ADR 0006; issue #555 updates the test author in CONTEXT.md and ADR 0005; the import of integration/console-redesign into Harness Next merges them with the Harness Next CONTEXT.md and ADR 0003 changes (#635, #662, #786, #789). Re-evaluated the merged source set; dataset, labels, engine, windows and thresholds are unchanged. The initial corpus remains preserved in tests/memory/fixtures/initial-corpus.json. Issue #971 clarifies the external developer test-author route in ADR 0005. Re-evaluated the same source set; dataset, labels, engine, windows and thresholds remain unchanged."
 }
