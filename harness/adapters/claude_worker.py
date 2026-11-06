@@ -130,6 +130,15 @@ def worker_command(brief: Brief, binary: str = "claude") -> list[str]:
     return command
 
 
+def log_path(brief: Brief) -> Path:
+    """The worker's stdout+stderr log; console observation reads it by the same rule."""
+    return (
+        Path(brief["report_staging_path"]).parent.parent
+        / "worker-logs"
+        / f"{brief['dispatch_id']}.log"
+    )
+
+
 def start(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     brief_path = Path(args.brief).resolve()
@@ -169,10 +178,9 @@ def start(args: argparse.Namespace) -> int:
     if args.dry_run:
         print(json.dumps({"cwd": str(worktree), "command": command, "prompt": prompt}))
         return 0
-    log = Path(brief["report_staging_path"]).parent.parent / "worker-logs"
-    log.mkdir(parents=True, exist_ok=True)
-    log_path = log / f"{brief['dispatch_id']}.log"
-    with log_path.open("ab") as sink:
+    log = log_path(brief)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("ab") as sink:
         process = subprocess.Popen(
             command,
             cwd=worktree,
@@ -190,7 +198,7 @@ def start(args: argparse.Namespace) -> int:
     time.sleep(STARTUP_CHECK_SECONDS)
     code = process.poll()
     if code is not None:
-        tail = log_path.read_text(encoding="utf-8", errors="replace")[-500:]
+        tail = log.read_text(encoding="utf-8", errors="replace")[-500:]
         print(f"claude worker exited with {code} at startup: {tail}", file=sys.stderr)
         return 1
     return 0
