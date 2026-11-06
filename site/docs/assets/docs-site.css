@@ -761,3 +761,426 @@ body {
   height: auto;
   box-shadow: none;
 }
+
+/* Glossary: scannable term cards, local filter and a sticky term index. */
+.ah-glossary-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem 0.8rem;
+  align-items: center;
+  margin: 1.2rem 0 0.2rem;
+}
+
+.ah-glossary-search {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.38rem 0.6rem;
+  border: 1px solid var(--ah-edge);
+  border-radius: 7px;
+  background: var(--ah-surface);
+  color: var(--ah-muted);
+}
+
+.ah-glossary-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ah-fg);
+  font: 0.74rem/1.5 var(--ah-mono);
+}
+
+.ah-glossary-search input::placeholder {
+  color: var(--ah-muted);
+}
+
+.ah-glossary-search kbd {
+  flex: none;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ah-muted);
+  font: 0.6rem/1.4 var(--ah-mono);
+}
+
+.ah-glossary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.ah-glossary-chip {
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ah-muted);
+  font: 0.64rem/1.4 var(--ah-mono);
+  cursor: pointer;
+}
+
+.ah-glossary-chip:hover {
+  border-color: var(--ah-edge);
+  color: var(--ah-fg);
+}
+
+.ah-glossary-chip.is-active {
+  border-color: var(--ah-primary);
+  background: color-mix(in srgb, var(--ah-primary) 14%, transparent);
+  color: var(--ah-fg);
+}
+
+.ah-glossary-chip span {
+  color: var(--ah-muted);
+  font-size: 0.58rem;
+}
+
+.ah-glossary-count {
+  color: var(--ah-muted);
+  font: 0.64rem/1.4 var(--ah-mono);
+  white-space: nowrap;
+}
+
+.ah-glossary-empty {
+  margin: 1rem 0;
+  padding: 0.8rem 0.9rem;
+  border-left: 2px solid var(--ah-warn);
+  background: color-mix(in srgb, var(--ah-warn) 7%, transparent);
+  color: var(--ah-muted);
+  font-size: 0.78rem;
+}
+
+.ah-glossary-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 2.2rem;
+  align-items: start;
+  margin-top: 0.9rem;
+}
+
+.ah-glossary-main {
+  min-width: 0;
+}
+
+.ah-term {
+  padding: 1.15rem 0 1.25rem;
+  border-top: 1px solid var(--ah-rule);
+  scroll-margin-top: 6.5rem;
+}
+
+.ah-term:first-child {
+  padding-top: 0.4rem;
+  border-top: 0;
+}
+
+.ah-term.is-target {
+  animation: ah-term-target 1.5s ease;
+}
+
+@keyframes ah-term-target {
+  0%, 35% { background: color-mix(in srgb, var(--ah-primary) 12%, transparent); }
+  100% { background: transparent; }
+}
+
+.ah-term-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.md-typeset .ah-term-name {
+  margin: 0;
+  color: var(--ah-fg);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.md-typeset .ah-term-name code {
+  padding: 0 0.15rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.92em;
+}
+
+.ah-term-alias {
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ah-muted);
+  font: 0.64rem/1.5 var(--ah-mono);
+  white-space: normal;
+}
+
+.ah-term-alias--path {
+  color: var(--ah-primary);
+  border-color: color-mix(in srgb, var(--ah-primary) 32%, var(--ah-rule));
+}
+
+.ah-term-copy {
+  display: inline-grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ah-muted);
+  cursor: pointer;
+  opacity: 0.45;
+}
+
+.ah-term:hover .ah-term-copy,
+.ah-term:focus-within .ah-term-copy,
+.ah-term-copy:focus-visible {
+  opacity: 1;
+}
+
+.ah-term-copy:hover {
+  color: var(--ah-fg);
+  opacity: 1;
+}
+
+.ah-term-copy.is-copied {
+  color: var(--ah-ok);
+  opacity: 1;
+}
+
+.ah-term-anchor {
+  margin-left: auto;
+  color: var(--ah-muted);
+  font: 0.78rem/1 var(--ah-mono);
+  text-decoration: none;
+  opacity: 0;
+}
+
+.ah-term:hover .ah-term-anchor,
+.ah-term:focus-within .ah-term-anchor,
+.ah-term-anchor:focus-visible {
+  opacity: 0.75;
+}
+
+.ah-term-anchor:hover {
+  color: var(--ah-fg);
+  opacity: 1;
+}
+
+.ah-term-body {
+  max-width: 72ch;
+  margin-top: 0.45rem;
+  color: var(--ah-muted);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.ah-term-body p {
+  margin: 0 0 0.55rem;
+}
+
+.ah-term-body p:last-child {
+  margin-bottom: 0;
+}
+
+.ah-term-body a {
+  color: var(--ah-primary);
+}
+
+.ah-term-body code {
+  font-size: 0.86em;
+}
+
+.ah-term-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.25rem 1.2rem;
+  max-width: 72ch;
+  margin: 0.45rem 0 0.6rem;
+}
+
+.ah-term-list > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.ah-term-list code {
+  flex: none;
+  color: var(--ah-primary);
+}
+
+.ah-term-list span {
+  color: var(--ah-muted);
+}
+
+.ah-term-avoid {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  max-width: 72ch;
+  margin-top: 0.55rem;
+  padding: 0.35rem 0.55rem;
+  border-left: 2px solid var(--ah-warn);
+  background: color-mix(in srgb, var(--ah-warn) 7%, transparent);
+  color: var(--ah-muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.ah-term-avoid-badge {
+  flex: none;
+  color: var(--ah-warn);
+  font: 0.56rem/1.5 var(--ah-mono);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.ah-term-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  max-width: 72ch;
+  margin-top: 0.45rem;
+  color: var(--ah-warn);
+  font-size: 0.72rem;
+}
+
+.ah-term-pair a {
+  color: var(--ah-warn);
+}
+
+.ah-term-related {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem;
+  max-width: 72ch;
+  margin-top: 0.5rem;
+}
+
+.ah-term-related-label {
+  margin-right: 0.15rem;
+  color: var(--ah-muted);
+  font: 0.56rem/1.5 var(--ah-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ah-term-chip {
+  padding: 0.06rem 0.4rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 999px;
+  color: var(--ah-muted);
+  font: 0.63rem/1.5 var(--ah-mono);
+  text-decoration: none;
+}
+
+.ah-term-chip:hover {
+  border-color: var(--ah-edge);
+  color: var(--ah-fg);
+  text-decoration: none;
+}
+
+.ah-term-chip--adr {
+  color: var(--ah-primary);
+  border-color: color-mix(in srgb, var(--ah-primary) 30%, var(--ah-rule));
+}
+
+.ah-term-chip--pair {
+  color: var(--ah-warn);
+  border-color: color-mix(in srgb, var(--ah-warn) 35%, var(--ah-rule));
+}
+
+.ah-glossary-toc {
+  position: sticky;
+  top: 5.8rem;
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.ah-glossary-toc-title {
+  margin-bottom: 0.4rem;
+  color: var(--ah-muted);
+  font: 0.6rem/1.5 var(--ah-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ah-glossary-toc-list {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--ah-rule);
+}
+
+.ah-glossary-toc-link {
+  display: block;
+  margin-left: -1px;
+  padding: 0.2rem 0 0.2rem 0.6rem;
+  border-left: 2px solid transparent;
+  color: var(--ah-muted);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.ah-glossary-toc-link:hover {
+  color: var(--ah-fg);
+  text-decoration: none;
+}
+
+.ah-glossary-toc-link.is-active {
+  border-left-color: var(--ah-primary);
+  background: color-mix(in srgb, var(--ah-primary) 9%, transparent);
+  color: var(--ah-fg);
+}
+
+.ah-glossary-mark {
+  padding: 0 0.08rem;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ah-warn) 32%, transparent);
+  color: var(--ah-fg);
+}
+
+@media (max-width: 1200px) {
+  .ah-glossary-layout {
+    grid-template-columns: 1fr;
+  }
+  .ah-glossary-toc {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .ah-glossary-toolbar {
+    align-items: stretch;
+  }
+  .ah-glossary-search {
+    flex-basis: 100%;
+  }
+  .ah-glossary-count {
+    margin-left: auto;
+  }
+  .ah-term-head {
+    align-items: flex-start;
+  }
+  .ah-term-copy {
+    opacity: 0.7;
+  }
+  .ah-term-anchor {
+    opacity: 0.55;
+  }
+}
