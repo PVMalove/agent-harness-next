@@ -593,34 +593,52 @@ body {
 }
 
 .ah-demo-about {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
   margin-top: 0.8rem;
-  padding: 1rem 1.2rem;
+  padding: 1.2rem;
   border: 1px solid var(--ah-rule);
   border-radius: 9px;
   background: var(--ah-surface);
+  overflow: hidden;
 }
 
-.ah-demo-about img {
-  width: 4.6rem;
+.ah-demo-about img.ah-demo-about-mascot {
+  float: left;
+  width: 5rem;
   height: auto;
-  flex: none;
+  margin: 0 1.2rem 0.8rem 0;
 }
 
-.ah-demo-about h2 {
-  margin: 0 0 0.25rem;
-  color: var(--ah-fg);
-  font-size: 1rem;
-}
-
-.ah-demo-about p {
-  max-width: 60rem;
+.ah-demo-about-kicker {
   margin: 0;
   color: var(--ah-muted);
-  font-size: 0.8rem;
+  font: 0.58rem/1.5 var(--ah-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ah-demo-about-title {
+  margin: 0.15rem 0 0.25rem;
+  color: var(--ah-fg);
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.ah-demo-about-text {
+  margin: 0 0 0.2rem;
+  color: var(--ah-muted);
+  font-size: 0.82rem;
   line-height: 1.6;
+}
+
+.ah-demo-about h2,
+.ah-demo-about h3 {
+  max-width: 60rem;
+}
+
+.ah-demo-about p,
+.ah-demo-about li,
+.ah-demo-about table {
+  max-width: 60rem;
 }
 
 .ah-demo-note {
@@ -635,12 +653,11 @@ body {
     height: 68vh;
     min-height: 480px;
   }
-  .ah-demo-about {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .ah-demo-about img {
+  .ah-demo-about img.ah-demo-about-mascot {
+    float: none;
+    display: block;
     width: 3.8rem;
+    margin: 0 0 0.6rem;
   }
 }
 
