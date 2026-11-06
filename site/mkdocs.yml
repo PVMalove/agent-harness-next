@@ -44,6 +44,9 @@ extra_css:
 
 extra_javascript:
   - assets/nav-filter.js
+  - assets/diagram-embed.js
+  - assets/core-diagram.js
+  - assets/install-diagram.js
 
 markdown_extensions:
   - admonition
@@ -59,7 +62,7 @@ markdown_extensions:
       permalink_title: "Ссылка на этот раздел"
 
 nav:
-  - Docs: index.md
+  - Главная: index.md
   - Начало:
       - getting-started/index.md
   - Руководства:
@@ -137,40 +140,49 @@ nav:
               - skills/vendor/writing-for-agents.md
       - Агенты:
           - agents/index.md
-          - agents/artifacts.md
-          - agents/code-review-spec.md
-          - agents/code-review-standards.md
-          - agents/console-web-home-checklist.md
-          - agents/git-workflow.md
-          - agents/issue-tracker.md
-          - agents/pr-composer.md
-          - agents/releases.md
-          - agents/test-author.md
-          - agents/triage-labels.md
-          - agents/worktrees.md
+          - Субагенты:
+              - code-review-standards: agents/code-review-standards.md
+              - code-review-spec: agents/code-review-spec.md
+              - pr-composer: agents/pr-composer.md
+              - test-author: agents/test-author.md
+          - Процесс и Git:
+              - git-workflow: agents/git-workflow.md
+              - issue-tracker: agents/issue-tracker.md
+              - triage-labels: agents/triage-labels.md
+              - worktrees: agents/worktrees.md
+          - Артефакты и релизы:
+              - artifacts: agents/artifacts.md
+              - releases: agents/releases.md
+          - Приёмка:
+              - console-web-home-checklist: agents/console-web-home-checklist.md
       - Hooks:
           - hooks/index.md
-          - hooks/block-dangerous-git.md
-          - hooks/block-direct-master.md
-          - hooks/block-pr-merge.md
-          - hooks/block-public-attribution.md
-          - hooks/block-scratch-outside-docs-tasks.md
-          - hooks/check-branch-name.md
-          - hooks/check-worktree-branch-name.md
-          - hooks/count-skill-usage.md
-          - hooks/hook-response.md
-          - hooks/impact-first-touch.md
-          - hooks/install-and-update.md
-          - hooks/mark-qa-gate-passed.md
-          - hooks/protect-hook-policy.md
-          - hooks/record-qa-gate-pass.md
-          - hooks/require-bounded-check.md
-          - hooks/require-qa-gate.md
-          - hooks/run-test.md
-          - hooks/sensitive-path-recheck.md
-          - hooks/targeted-check-reminder.md
-          - hooks/test-author-guard.md
-          - hooks/test-author-preflight.md
+          - Git и ветки:
+              - block-dangerous-git: hooks/block-dangerous-git.md
+              - block-direct-master: hooks/block-direct-master.md
+              - block-pr-merge: hooks/block-pr-merge.md
+              - block-public-attribution: hooks/block-public-attribution.md
+              - check-branch-name: hooks/check-branch-name.md
+              - check-worktree-branch-name: hooks/check-worktree-branch-name.md
+          - QA и проверки:
+              - require-qa-gate: hooks/require-qa-gate.md
+              - record-qa-gate-pass: hooks/record-qa-gate-pass.md
+              - mark-qa-gate-passed: hooks/mark-qa-gate-passed.md
+              - require-bounded-check: hooks/require-bounded-check.md
+              - targeted-check-reminder: hooks/targeted-check-reminder.md
+              - run-test: hooks/run-test.md
+          - Политика и рискованные пути:
+              - protect-hook-policy: hooks/protect-hook-policy.md
+              - block-scratch-outside-docs-tasks: hooks/block-scratch-outside-docs-tasks.md
+              - impact-first-touch: hooks/impact-first-touch.md
+              - sensitive-path-recheck: hooks/sensitive-path-recheck.md
+          - Test-author:
+              - test-author-guard: hooks/test-author-guard.md
+              - test-author-preflight: hooks/test-author-preflight.md
+          - Служебные:
+              - hook-response: hooks/hook-response.md
+              - install-and-update: hooks/install-and-update.md
+              - count-skill-usage: hooks/count-skill-usage.md
       - Оркестрация:
           - backend-orchestration.md
           - runtime-discovery.md
@@ -187,12 +199,12 @@ nav:
       - Hooks: reference/hooks.md
       - Скиллы: reference/skills.md
       - Глоссарий: reference/glossary.md
-  - Архитектура:
-      - architecture/index.md
-      - Обзор: architecture/overview.md
-      - Rust runtime: architecture/runtime.md
   - Проект:
       - Структура: project/structure.md
+      - Архитектура:
+          - architecture/index.md
+          - Обзор: architecture/overview.md
+          - Rust runtime: architecture/runtime.md
   - Релизы: releases/index.md
   - Demo: demo/index.md
 

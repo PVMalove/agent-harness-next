@@ -11,20 +11,21 @@
 
 ## 2. Полный перевод текста скила
 
-````text
----
+<div class="ah-skill-text" markdown="1">
+
+```yaml
 name: implement
 description: Провести один backend-тикет через утверждённые handoff архитектора, разработчика, review, QA и publish.
 disable-model-invocation: true
----
+```
 
-# Реализация
+### Реализация
 
 **Цель:** Провести ровно один тикет через `architect → developer → code-review → qa → publish`,
 затем предложить `/to-pull-requests`. Эта сессия — coordinator: она создаёт и наблюдает dispatch,
 но не реализует тикет сама.
 
-## Маршрут
+#### Маршрут
 
 Это opt-in маршрут `backend-orchestration`. Подтвердите, что установленный coordinator доступен:
 
@@ -50,7 +51,7 @@ dispatch: состояние worker, классификацию сбоя и то
 него без этого одобрения. `ledger clean` удаляет только осиротевшие evidence, а `ledger reset` не
 очищает активный batch.
 
-## Контракт coordinator-а
+#### Контракт coordinator-а
 
 Разрешите тикет, integration-ветку и блокеры по tracker/Git guidance. Статус тикета — часть этого
 pre-flight, до `batch create` и до создания issue-ветки: проверьте блокеры при любой текущей метке
@@ -134,7 +135,7 @@ Write-роли могут записать checkpoint и продолжить т
 blockers и ссылку на package. Read-only роли не могут checkpoint/resume. Rate-limit resume разрешён
 автоматически, остальные planned triggers требуют coordinator decision.
 
-## Промпт воркера
+#### Промпт воркера
 
 Каждый промпт воркера — этот шаблон, заполненный из результата `dispatch send` и вызова CLI,
 которым его отправили. Brief и Context Package несут задачу; промпт также несёт обязательный
@@ -189,7 +190,7 @@ developer-сессии. Decision packet preflight-а несёт `retry_context_e
 меняется только их промпт. Handoff, порог smart zone и компакт определены в разделе
 "Developer-retry handoff" playbook.
 
-## Авторитетные guidance
+#### Авторитетные guidance
 
 Это короткий coordinator contract, а не вторая orchestration-процедура. Полные правила —
 module-owned guidance:
@@ -205,7 +206,7 @@ module-owned guidance:
 Следуйте этим файлам, не дублируя и не ослабляя их правила. Не придумывайте token metrics:
 используйте только provider- или runtime-observed telemetry и сохраняйте missing-data notes.
 
-## Завершение
+#### Завершение
 
 После accepted publish зафиксируйте integration-связь до merge или удаления ветки:
 `python .harness/orchestration/coordinator.py --repo . integration prepare --ticket "#<ID>" --branch "<issue-branch>"`
@@ -217,7 +218,8 @@ remedy и не обходите его. Завершённый batch и его r
 не открывайте и не мержьте PR, не пишите в integration-ветку и не закрывайте тикет этим скилом. Оставьте на тикете
 `status::in-progress`: закрытие и перевод разблокированных зависимых в `status::ready` делает
 `/to-pull-requests` после merge.
-````
+
+</div>
 
 ## 3. Контракты
 

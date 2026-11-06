@@ -7,9 +7,11 @@ hide:
 ---
 
 <div class="ah-hero">
-  <div class="ah-hero-copy">
+  <div class="ah-hero-head">
     <span class="ah-eyebrow"><i></i> Agent Harness Next · beta</span>
     <h1>Harness для coding-агентов</h1>
+  </div>
+  <div class="ah-hero-copy">
     <p class="ah-lead">Agent Harness Next разворачивает в проект скиллы, hooks и контекстные
       документы и ведёт оркестрацию через Rust runtime и локальный runtime-store, оставляя Python
       policy-слоем.</p>
@@ -36,6 +38,7 @@ hide:
     <p class="ah-install-note">
       <span>Требуются</span>
       <span class="ah-req"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M13 6l-2 12"></path></svg> Python 3.12+</span>
+      <span class="ah-req" title="rust-version 1.89 в native/harness-runtime/Cargo.toml"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"></path></svg> Rust 1.89+</span>
       <span class="ah-req"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.2"></circle><circle cx="18" cy="6" r="2.2"></circle><circle cx="12" cy="18" r="2.2"></circle><path d="M8 7.5 11 16M16 7.5 13 16"></path></svg> Git</span>
       <span>Подробнее — в <a href="getting-started/index.html">быстром старте</a>.</span>
     </p>
@@ -45,7 +48,7 @@ hide:
     <div class="ah-terminal-wrap">
       <div class="ah-mascot ah-mascot--perch">
         <img src="assets/mascot.svg" alt="Воксельный маскот Agent Harness Next" width="108" height="140">
-        <div class="ah-bubble" id="ah-hero-bubble"><b>Привет, я H›.</b> Коротко о том, как устроен harness.</div>
+        <div class="ah-bubble" id="ah-hero-bubble"><b>Привет, я H›.</b> Запускаю <code>harness health</code>.</div>
       </div>
       <div class="ah-terminal" id="ah-hero-terminal">
         <div class="ah-terminal-bar">
@@ -62,14 +65,13 @@ hide:
 <span class="ah-t-dim">Нажмите «Демо», чтобы запустить сценарий.</span><span class="ah-cursor"></span></code></pre>
       </div>
     </div>
-    <div class="ah-note">Демонстрационный вывод; реальные цифры зависят от проекта.</div>
   </div>
 </div>
 
 <div class="ah-specs">
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"></path></svg></span>
-    <div><div class="k">Runtime</div><div class="v">Rust <em>+ Tokio</em></div><div class="s">supervisor, OCI, reconcile</div></div>
+    <div><div class="k">Runtime</div><div class="v">Rust <em>std-потоки</em></div><div class="s">supervisor, OCI, reconcile</div></div>
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="3"></ellipse><path d="M5 5.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6M5 11.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg></span>
@@ -81,7 +83,7 @@ hide:
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg></span>
-    <div><div class="k">Platforms</div><div class="v"><em>Linux</em> · <em>Windows</em></div><div class="s"><em>UDS</em> и <em>named pipe</em></div></div>
+    <div><div class="k">Platforms</div><div class="v"><em>Linux</em> · <em>Windows</em></div><div class="s"><em>UDS</em> и <em>named pipe</em> · контейнеры только на Linux</div></div>
   </div>
 </div>
 
@@ -92,7 +94,7 @@ hide:
     <code>engineering-suite</code> расширяет <code>mattpocock-suite</code>,
     <code>backend-orchestration</code> — <code>engineering-suite</code>, а
     <code>project-foundation</code> выбирается отдельно. Выберите сборку — команда установки
-    и демонстрация ниже обновятся.</p>
+    и демонстрация выше обновятся.</p>
 </div>
 
 <div class="ah-cap-grid" id="ah-cap-grid" role="radiogroup" aria-label="Сборка harness">
@@ -177,46 +179,15 @@ hide:
 <div class="ah-section">
   <span class="ah-kicker">Архитектура</span>
   <h2>Слои и границы</h2>
-  <p>Python решает policy, Rust исполняет и хранит. Один writer на состояние,
-    один протокол IPC, один аудит.</p>
+  <p>Python решает policy, Rust исполняет и хранит.</p>
 </div>
 
 <div class="ah-flow" id="ah-flow">
-  <div class="ah-flow-clients">
-    <span class="ah-flow-clients-label">Clients</span>
-    <span class="ah-flow-chip">CLI</span>
-    <span class="ah-flow-chip">TUI</span>
-    <span class="ah-flow-chip ah-flow-chip--primary">Web console</span>
-    <span class="ah-flow-chip">Skills</span>
-  </div>
-  <div class="ah-flow-track">
-    <button class="ah-flow-node ah-flow-node--python" type="button" data-flow="python" aria-describedby="ah-flow-note">
-      <span class="ah-flow-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m8 8-5 4 5 4M16 8l5 4-5 4M13 5l-2 14"></path></svg></span>
-      <span class="ah-flow-kicker">Policy · решения</span>
-      <b>Python</b>
-      <span class="ah-flow-items">Lifecycle · Approvals · Hook policy · Verification</span>
-    </button>
-    <div class="ah-flow-link" aria-hidden="true"><span>IPC</span><i></i><b>⇄</b></div>
-    <div class="ah-authority">
-      <span class="ah-authority-label">runtime authority · единственный writer</span>
-      <button class="ah-flow-node ah-flow-node--rust" type="button" data-flow="rust" aria-describedby="ah-flow-note">
-        <span class="ah-flow-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"></path></svg></span>
-        <span class="ah-flow-kicker">Runtime · исполнение</span>
-        <b>Rust runtime</b>
-        <span class="ah-flow-items">harness-runtime · Supervisor · OCI engine · Reconcile</span>
-      </button>
-      <div class="ah-flow-link" aria-hidden="true"><span>SQL / WAL</span><i></i><b>⇄</b></div>
-      <button class="ah-flow-node ah-flow-node--store" type="button" data-flow="store" aria-describedby="ah-flow-note">
-        <span class="ah-flow-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="3"></ellipse><path d="M5 5.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6M5 11.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg></span>
-        <span class="ah-flow-kicker">State · хранение</span>
-        <b>SQLite / ФС</b>
-        <span class="ah-flow-items">SQLite WAL · Audit chain · Leases · AUTHORITY</span>
-      </button>
-    </div>
-  </div>
+  <p class="ah-core-hint">Выберите клиента: запрос пройдёт по слоям до runtime-store. Узлы кликабельны.</p>
+  <div class="ah-core-scroll"><div class="ah-core" id="ah-core"></div></div>
   <div class="ah-flow-note" id="ah-flow-note" aria-live="polite">
-    <b>Rust runtime · исполнение</b>
-    <span>Только Rust управляет процессами ОС, очередью и supervisor — без утечек ресурсов. Python не обходит runtime.</span>
+    <b>Web console · маршрут</b>
+    <span>Выберите клиента или узел схемы.</span>
   </div>
   <div class="ah-flow-principles">
     <div class="ah-principle"><span class="tag">01</span><b>Один writer.</b> Python не пишет operational state в обход runtime.</div>
@@ -225,18 +196,6 @@ hide:
     <div class="ah-principle"><span class="tag">04</span><b>Recovery.</b> После SIGKILL runtime находит исполнение по меткам и завершает остановку.</div>
   </div>
 </div>
-
-<div class="ah-section">
-  <span class="ah-kicker">Демо</span>
-  <h2>Веб-консоль целиком</h2>
-  <p>Задачи, оркестрация, отчёты и восстановление в одном интерфейсе. Ниже — интерактивный
-    макет на демонстрационных данных.</p>
-</div>
-
-<iframe class="ah-demo" src="demo/console.html" title="Демонстрация веб-консоли" loading="lazy"></iframe>
-
-<p class="ah-note">Данные демонстрационные, команды не выполняются.
-  <a href="demo/index.html">Открыть демо отдельно</a>.</p>
 
 <div class="ah-section">
   <span class="ah-kicker">Документация</span>
@@ -298,7 +257,7 @@ hide:
         lines: [
           ['dim', '== Skills =='],
           ['ok', '✓ upstream: 25 skills pinned'],
-          ['ok', '✓ snapshot: commit 6a7f748'],
+          ['ok', '✓ snapshot: v1.2.3 · 6acc160'],
           ['info', 'ℹ orchestration: не выбран — coordinator не нужен'],
           ['dim', '== Итог =='],
           ['sum', '<span class="ah-t-ok">ok=18</span> <span class="ah-t-warn">warn=2</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=3</span>']
@@ -315,10 +274,9 @@ hide:
           ['ok', '✓ engineering-suite: 32 skills'],
           ['ok', '✓ runtime-store: read-only · schema 7'],
           ['info', 'ℹ Rust runtime: protocol 1.7 · serving'],
-          ['info', 'ℹ веб-консоль: 13 экранов готовы'],
           ['warn', '⚠ Repo Map: minimal (parser bundle отсутствует)'],
           ['dim', '== Итог =='],
-          ['sum', '<span class="ah-t-ok">ok=40</span> <span class="ah-t-warn">warn=4</span> <span class="ah-t-fail">fail=1</span> <span class="ah-t-dim">skipped=11</span>']
+          ['sum', '<span class="ah-t-ok">ok=40</span> <span class="ah-t-warn">warn=4</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=11</span>']
         ]
       },
       "backend-orchestration": {
@@ -332,7 +290,7 @@ hide:
           ['ok', '✓ активные dispatch посылают heartbeat вовремя'],
           ['warn', '⚠ QA lane: ожидает evidence'],
           ['dim', '== Итог =='],
-          ['sum', '<span class="ah-t-ok">ok=46</span> <span class="ah-t-warn">warn=3</span> <span class="ah-t-fail">fail=1</span> <span class="ah-t-dim">skipped=9</span>']
+          ['sum', '<span class="ah-t-ok">ok=46</span> <span class="ah-t-warn">warn=3</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=9</span>']
         ]
       }
     };
@@ -373,21 +331,6 @@ hide:
         desc: "Изоляция исполнителя, allowlist egress и сохранение native approval.",
         code: "supervisor: outside sandbox\nsockets:    mount denied\negress:     allowlist\nrootless:   Podman · SELinux",
         href: "architecture/index.html"
-      }
-    };
-
-    const flow = {
-      python: {
-        title: "Python · policy",
-        text: "Решает, что запускать: lifecycle, approvals, hook policy, verification. Operational state не пишет."
-      },
-      rust: {
-        title: "Rust runtime · исполнение",
-        text: "Только Rust управляет процессами ОС, очередью и supervisor — без утечек ресурсов. Python не обходит runtime."
-      },
-      store: {
-        title: "runtime-store · состояние",
-        text: "Единственный writer operational state: SQLite WAL, audit chain, leases, AUTHORITY. Чтение — через runtime."
       }
     };
 
@@ -515,32 +458,7 @@ hide:
       if (event.target === dialog) dialog.close();
     });
 
-    const flowNodes = Array.from(document.querySelectorAll("[data-flow]"));
-    const flowNote = document.getElementById("ah-flow-note");
-    let defaultFlow = "rust";
-
-    function setFlow(name) {
-      const entry = flow[name];
-      if (!entry) return;
-      flowNodes.forEach((node) => {
-        node.classList.toggle("is-active", node.dataset.flow === name);
-      });
-      flowNote.innerHTML = "<b>" + entry.title + "</b><span>" + entry.text + "</span>";
-    }
-
-    flowNodes.forEach((node) => {
-      node.addEventListener("mouseenter", () => setFlow(node.dataset.flow));
-      node.addEventListener("focus", () => setFlow(node.dataset.flow));
-      node.addEventListener("mouseleave", () => setFlow(defaultFlow));
-      node.addEventListener("blur", () => setFlow(defaultFlow));
-      node.addEventListener("click", () => {
-        defaultFlow = node.dataset.flow;
-        setFlow(defaultFlow);
-      });
-    });
-
     selectCapability(selected, false);
-    setFlow("rust");
     timers.push(window.setTimeout(() => runScenario(selected), 1100));
   })();
 </script>

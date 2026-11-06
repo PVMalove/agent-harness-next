@@ -1,8 +1,16 @@
 (function () {
+  var SECTIONS = [
+    { title: "Скиллы", placeholder: "Фильтр навыков…" },
+    { title: "Агенты", placeholder: "Фильтр агентов…" },
+    { title: "Hooks", placeholder: "Фильтр hooks…" }
+  ];
+
   function init() {
     var labels = Array.from(document.querySelectorAll(".md-sidebar--primary .md-nav__link"));
     labels.forEach(function (label) {
-      if (!(label.textContent || "").trim().startsWith("Скиллы")) return;
+      var text = (label.textContent || "").trim();
+      var section = SECTIONS.filter(function (entry) { return text.startsWith(entry.title); })[0];
+      if (!section) return;
       var item = label.closest("li.md-nav__item");
       if (!item) return;
       var nav = item.querySelector(":scope > nav.md-nav");
@@ -13,8 +21,8 @@
       var input = document.createElement("input");
       input.type = "search";
       input.className = "ah-skill-filter";
-      input.placeholder = "Фильтр навыков…";
-      input.setAttribute("aria-label", "Фильтр навыков");
+      input.placeholder = section.placeholder;
+      input.setAttribute("aria-label", section.placeholder.replace("…", ""));
       nav.insertBefore(input, nav.firstChild);
 
       input.addEventListener("input", function () {

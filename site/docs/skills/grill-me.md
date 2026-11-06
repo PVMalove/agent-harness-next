@@ -11,15 +11,17 @@
 
 ## 2. Полный перевод текста скила
 
-```text
----
+<div class="ah-skill-text" markdown="1">
+
+```yaml
 name: grill-me
 description: Неумолимое интервью для оттачивания плана или дизайна.
 disable-model-invocation: true
----
+```
 
 Запустите сессию `/grilling`.
-```
+
+</div>
 
 ## 3. Контракты
 

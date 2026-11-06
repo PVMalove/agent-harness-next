@@ -7,26 +7,26 @@ Harness ведёт работу от идеи до merge по пяти шага�
 
 ### Точки входа {#entries}
 
-<div class="ah-scenarios" role="group" aria-label="Точка входа в рабочий поток">
-  <button class="ah-scenario is-active" type="button" data-scenario="full" aria-pressed="true">
+<div class="ah-scenarios" role="radiogroup" aria-label="Точка входа в рабочий поток">
+  <button class="ah-scenario is-active" type="button" data-scenario="full" role="radio" aria-checked="true" tabindex="0">
     <span class="ah-scenario-kicker">Сценарий</span>
     <b>Все этапы (Полный цикл)</b>
     <span class="ah-scenario-desc">Идея → спецификация → тикеты → реализация → публикация. Ничего не пропускается.</span>
     <span class="ah-scenario-skip">Пропускается: ничего</span>
   </button>
-  <button class="ah-scenario" type="button" data-scenario="single" aria-pressed="false">
+  <button class="ah-scenario" type="button" data-scenario="single" role="radio" aria-checked="false" tabindex="-1">
     <span class="ah-scenario-kicker">1</span>
     <b>Один тикет извне (Баг / Малая фича)</b>
     <span class="ah-scenario-desc">Баг-репорт или небольшая фича, объём укладывается в одну сессию. <code>/triage</code> доводит issue до <code>status::ready</code> и режима <code>hitl</code>/<code>afk</code>, дальше один шаг реализации.</span>
     <span class="ah-scenario-skip">Пропускается: проектирование, спецификация, декомпозиция</span>
   </button>
-  <button class="ah-scenario" type="button" data-scenario="epic" aria-pressed="false">
+  <button class="ah-scenario" type="button" data-scenario="epic" role="radio" aria-checked="false" tabindex="-1">
     <span class="ah-scenario-kicker">2</span>
     <b>Задача масштаба эпика (Состав известен)</b>
     <span class="ah-scenario-desc">Состав работ известен, нужна декомпозиция. Прорабатывается за одну сессию, затем <code>/to-spec</code> → <code>/to-tickets</code> → реализация по каждому тикету.</span>
     <span class="ah-scenario-skip">Пропускается: Wayfinder</span>
   </button>
-  <button class="ah-scenario" type="button" data-scenario="large" aria-pressed="false">
+  <button class="ah-scenario" type="button" data-scenario="large" role="radio" aria-checked="false" tabindex="-1">
     <span class="ah-scenario-kicker">3</span>
     <b>Крупный объём (Неопределённый путь)</b>
     <span class="ah-scenario-desc"><code>/wayfinder</code> ведёт карту решений, пока не останутся открытые вопросы, затем передаёт работу <code>/to-spec</code>. Работа идёт сессиями.</span>
@@ -41,58 +41,78 @@ Harness ведёт работу от идеи до merge по пяти шага�
   </span>
 </div>
 
-<div class="ah-pipeline">
-  <article class="ah-step is-active" data-step="design">
-    <div class="ah-step-top"><span class="ah-step-num">01</span><span class="ah-step-skip" hidden>SKIPPED</span></div>
-    <h3>Проектирование</h3>
-    <p>Снимается неопределённость, фиксируются решения и границы.</p>
-    <span class="ah-step-label">Кто ведёт</span>
-    <div class="ah-step-commands">
+<ol class="ah-pipeline" aria-label="Пять шагов рабочего потока">
+  <li class="ah-step is-active" data-step="design">
+    <span class="ah-step-num" aria-hidden="true">01</span>
+    <div class="ah-step-body">
+      <div class="ah-step-head"><h3>Проектирование</h3><span class="ah-step-skip" hidden>SKIPPED</span></div>
+      <p>Снимается неопределённость, фиксируются решения и границы.</p>
+    </div>
+    <div class="ah-step-side">
+      <span class="ah-step-label">Кто ведёт</span>
+      <div class="ah-step-commands">
       <a class="ah-command" href="#idea" title="Проработка идеи: ядро этапа">/grilling</a>
       <a class="ah-command" href="#idea" title="Проработка идеи в существующем репозитории">/grill-with-docs</a>
       <a class="ah-command" href="../../skills/wayfinder/" data-command="wayfinder" title="Wayfinder: карта решений для крупного объёма">/wayfinder</a>
     </div>
-    <span class="ah-wayfinder-note" id="ah-wayfinder-note" hidden>Wayfinder не нужен: состав работ уже известен</span>
-  </article>
-  <article class="ah-step is-active" data-step="spec">
-    <div class="ah-step-top"><span class="ah-step-num">02</span><span class="ah-step-skip" hidden>SKIPPED</span></div>
-    <h3>Спецификация</h3>
-    <p>Обсуждение становится единым источником правды и публикуется в трекер.</p>
-    <span class="ah-step-label">Кто ведёт</span>
-    <div class="ah-step-commands">
+      <span class="ah-wayfinder-note" id="ah-wayfinder-note" hidden>Wayfinder не нужен: состав работ уже известен</span>
+    </div>
+  </li>
+  <li class="ah-step is-active" data-step="spec">
+    <span class="ah-step-num" aria-hidden="true">02</span>
+    <div class="ah-step-body">
+      <div class="ah-step-head"><h3>Спецификация</h3><span class="ah-step-skip" hidden>SKIPPED</span></div>
+      <p>Обсуждение становится единым источником правды и публикуется в трекер.</p>
+    </div>
+    <div class="ah-step-side">
+      <span class="ah-step-label">Кто ведёт</span>
+      <div class="ah-step-commands">
       <a class="ah-command" href="#spec" title="Спецификация: /to-spec">/to-spec</a>
     </div>
-  </article>
-  <article class="ah-step is-active" data-step="tickets">
-    <div class="ah-step-top"><span class="ah-step-num">03</span><span class="ah-step-skip" hidden>SKIPPED</span></div>
-    <h3>Тикеты</h3>
-    <p>Спецификация режется на вертикальные слайсы со связями блокировки.</p>
-    <span class="ah-step-label">Кто ведёт</span>
-    <div class="ah-step-commands">
+    </div>
+  </li>
+  <li class="ah-step is-active" data-step="tickets">
+    <span class="ah-step-num" aria-hidden="true">03</span>
+    <div class="ah-step-body">
+      <div class="ah-step-head"><h3>Тикеты</h3><span class="ah-step-skip" hidden>SKIPPED</span></div>
+      <p>Спецификация режется на вертикальные слайсы со связями блокировки.</p>
+    </div>
+    <div class="ah-step-side">
+      <span class="ah-step-label">Кто ведёт</span>
+      <div class="ah-step-commands">
       <a class="ah-command" href="#tickets" title="Декомпозиция: /to-tickets">/to-tickets</a>
     </div>
-  </article>
-  <article class="ah-step is-active" data-step="implementation">
-    <div class="ah-step-top"><span class="ah-step-num">04</span><span class="ah-step-skip" hidden>SKIPPED</span></div>
-    <h3>Реализация</h3>
-    <p>Тест первым, реализация, независимое ревью, QA.</p>
-    <span class="ah-step-label">Кто ведёт</span>
-    <div class="ah-step-commands">
+    </div>
+  </li>
+  <li class="ah-step is-active" data-step="implementation">
+    <span class="ah-step-num" aria-hidden="true">04</span>
+    <div class="ah-step-body">
+      <div class="ah-step-head"><h3>Реализация</h3><span class="ah-step-skip" hidden>SKIPPED</span></div>
+      <p>Тест первым, реализация, независимое ревью, QA.</p>
+    </div>
+    <div class="ah-step-side">
+      <span class="ah-step-label">Кто ведёт</span>
+      <div class="ah-step-commands">
       <a class="ah-command" href="../implement/" title="Полный маршрут реализации">/implement</a>
       <a class="ah-command" href="../fast-implement/" title="Короткий маршрут реализации">/fast-implement</a>
       <a class="ah-command" href="../../skills/to-guide/" title="Руководство для человека на маршруте hitl">/to-guide</a>
     </div>
-  </article>
-  <article class="ah-step is-active" data-step="publish">
-    <div class="ah-step-top"><span class="ah-step-num">05</span><span class="ah-step-guard">merge — человек</span></div>
-    <h3>Публикация</h3>
-    <p>PR в integration-ветку, merge руками человека, закрытие тикета.</p>
-    <span class="ah-step-label">Кто ведёт</span>
-    <div class="ah-step-commands">
+    </div>
+  </li>
+  <li class="ah-step is-active" data-step="publish">
+    <span class="ah-step-num" aria-hidden="true">05</span>
+    <div class="ah-step-body">
+      <div class="ah-step-head"><h3>Публикация</h3><span class="ah-step-guard">merge — человек</span></div>
+      <p>PR в integration-ветку, merge руками человека, закрытие тикета.</p>
+    </div>
+    <div class="ah-step-side">
+      <span class="ah-step-label">Кто ведёт</span>
+      <div class="ah-step-commands">
       <a class="ah-command" href="../../skills/to-pull-requests/" title="Подготовка PR и передача человеку">/to-pull-requests</a>
     </div>
-  </article>
-</div>
+    </div>
+  </li>
+</ol>
 
 <div class="ah-guardrail" role="note">
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7l8-4Z"></path><path d="M9 12h6M12 9v6"></path></svg>
@@ -108,6 +128,15 @@ Harness ведёт работу от идеи до merge по пяти шага�
     багов, и ветки вне этой схемы.
   </div>
 </div>
+
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>Какие команды ведут от каждой точки входа к merge и что пропускается.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/workflow-entries.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/workflow-entries.html" title="Точки входа и пять шагов рабочего потока" loading="lazy"></iframe>
+</figure>
 
 ## Проработка идеи {#idea}
 
@@ -182,6 +211,15 @@ Harness ведёт работу от идеи до merge по пяти шага�
 Тикет получает метку состояния `status::ready`, а если он ждёт другой тикет того же пакета —
 `status::blocked`. Блокировка снимается только подтверждённым merge и закрытием предшественника.
 
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>Как тикет проходит метки <code>status::ready</code>, <code>status::in-progress</code> и <code>status::blocked</code>.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/ticket-status.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/ticket-status.html" title="Метка состояния тикета" loading="lazy"></iframe>
+</figure>
+
 ## Оркестрация Discovery Pipeline {#discovery}
 
 Одобренные на проектировании пути фиксируются как часть договорённости, сохраняются в спецификации
@@ -231,13 +269,15 @@ Context Package — детерминированный набор данных �
     const wayfinder = document.querySelector("[data-command='wayfinder']");
     const wayfinderNote = document.getElementById("ah-wayfinder-note");
 
-    function select(name) {
+    function select(name, focus) {
       const scenario = scenarios[name];
       if (!scenario) return;
       buttons.forEach((button) => {
         const active = button.dataset.scenario === name;
         button.classList.toggle("is-active", active);
-        button.setAttribute("aria-pressed", active ? "true" : "false");
+        button.setAttribute("aria-checked", active ? "true" : "false");
+        button.tabIndex = active ? 0 : -1;
+        if (active && focus) button.focus();
       });
       steps.forEach((step) => {
         const id = step.dataset.step;
@@ -252,11 +292,92 @@ Context Package — детерминированный набор данных �
       }
       wayfinderNote.hidden = scenario.wayfinder !== "skip";
       route.innerHTML = scenario.route;
+      animate(scenario);
     }
 
-    buttons.forEach((button) => {
-      button.addEventListener("click", () => select(button.dataset.scenario));
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const pipeline = document.querySelector(".ah-pipeline");
+    const scenarioGrid = document.querySelector(".ah-scenarios");
+    const pulse = document.createElement("span");
+    pulse.className = "ah-rail-pulse";
+    pulse.setAttribute("aria-hidden", "true");
+    pipeline.appendChild(pulse);
+    let pulseAnimation = null;
+
+    function restart(element, index) {
+      element.style.setProperty("--i", index);
+      element.classList.remove("is-entering");
+      void element.offsetWidth;
+      element.classList.add("is-entering");
+    }
+
+    function animate(scenario) {
+      if (reduced) return;
+      let n = 0;
+      steps.forEach((step) => {
+        if (scenario.active.includes(step.dataset.step)) restart(step, n++);
+      });
+      Array.from(route.children).forEach((child, i) => child.style.setProperty("--i", i));
+      route.classList.remove("is-entering");
+      void route.offsetWidth;
+      route.classList.add("is-entering");
+      movePulse(scenario);
+    }
+
+    function movePulse(scenario) {
+      if (pulseAnimation) pulseAnimation.cancel();
+      const active = steps.filter((step) => scenario.active.includes(step.dataset.step));
+      if (active.length < 2 || !pulse.animate) { pulse.style.opacity = "0"; return; }
+      const center = (step) => step.offsetTop + step.querySelector(".ah-step-num").offsetTop + 16 - 5;
+      const from = center(active[0]);
+      const to = center(active[active.length - 1]);
+      pulseAnimation = pulse.animate([
+        { transform: "translateY(" + from + "px)", opacity: 0 },
+        { opacity: 1, offset: 0.12 },
+        { opacity: 1, offset: 0.88 },
+        { transform: "translateY(" + to + "px)", opacity: 0 }
+      ], { duration: 400 + active.length * 520, iterations: Infinity, easing: "ease-in-out" });
+    }
+
+    if (!reduced && "IntersectionObserver" in window) {
+      scenarioGrid.classList.add("is-motion");
+      Array.from(scenarioGrid.children).forEach((card, i) => card.style.setProperty("--i", i));
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          scenarioGrid.classList.add("is-visible");
+          observer.disconnect();
+        });
+      }, { threshold: 0.15 });
+      observer.observe(scenarioGrid);
+    }
+
+    function remember(name) {
+      try {
+        const url = new URL(window.location.href);
+        if (name === "full") url.searchParams.delete("scenario");
+        else url.searchParams.set("scenario", name);
+        window.history.replaceState(null, "", url);
+      } catch (error) { /* адрес не обязателен для работы переключателя */ }
+    }
+
+    buttons.forEach((button, index) => {
+      button.addEventListener("click", () => {
+        select(button.dataset.scenario);
+        remember(button.dataset.scenario);
+      });
+      button.addEventListener("keydown", (event) => {
+        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+        if (!step && event.key !== "Home" && event.key !== "End") return;
+        event.preventDefault();
+        const next = event.key === "Home" ? 0
+          : event.key === "End" ? buttons.length - 1
+          : (index + step + buttons.length) % buttons.length;
+        select(buttons[next].dataset.scenario, true);
+        remember(buttons[next].dataset.scenario);
+      });
     });
-    select("full");
+    const requested = new URLSearchParams(window.location.search).get("scenario");
+    select(scenarios[requested] ? requested : "full");
   })();
 </script>

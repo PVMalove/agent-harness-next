@@ -12,6 +12,15 @@
 3. **Refactor.** Поведение не меняется, тесты остаются зелёными. Рефакторинг живёт здесь, а не
    внутри перехода red → green.
 
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>Red, Green, Refactor и возврат к красному тесту, когда он упал не по той причине.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/tdd-cycle.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/tdd-cycle.html" title="Цикл TDD" loading="lazy"></iframe>
+</figure>
+
 ## Правила теста
 
 - **Одно поведение на тест.** Имя теста называет поведение, а не метод.

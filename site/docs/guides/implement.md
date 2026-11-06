@@ -44,6 +44,15 @@ architect-отчёта. Политика approval задаётся в конфи
 список остановок (целостность, бюджет, маршрут восстановления) остаётся закрытым и обходится только
 человеком.
 
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>Пять гейтов конвейера и решение человека после каждого из них.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/implement-gates.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/implement-gates.html" title="/implement: гейты и approval" loading="lazy"></iframe>
+</figure>
+
 ## Гибридный контракт публикации
 
 Это строго opt-in маршрут: он включается только выбранной capability, и никакая другая сборка его
@@ -65,6 +74,15 @@ Adapter лишь транспортирует уже утверждённое: �
   Все три требуют approval и причины.
 - **Человеческий след не правится.** Состояние в `.harness/orchestration/state/` читается только
   через CLI: это аудиторский след, а не рабочий файл.
+
+<figure class="ah-diagram">
+  <div class="ah-diagram-bar">
+    <figcaption>Как dispatch переходит между состояниями и где нужно решение человека.</figcaption>
+    <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
+    <a class="ah-diagram-open" href="../../assets/diagrams/dispatch-lifecycle.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
+  </div>
+  <iframe class="ah-diagram-frame" data-theme-sync src="../../assets/diagrams/dispatch-lifecycle.html" title="Жизненный цикл dispatch и batch" loading="lazy"></iframe>
+</figure>
 
 ## Надстройки поверх конвейера
 

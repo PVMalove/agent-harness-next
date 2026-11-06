@@ -11,12 +11,6 @@ hide:
 coding agents. Операционные процессы и архитектурные решения находятся в разделе «Агенты» и в ADR,
 а не в этом файле.
 
-!!! info "Словарь триаж-меток"
-
-    Актуальный словарь триаж-меток (`type::*`, `priority::*`, `severity::*`, `status::*`,
-    `resolution::wontfix`, `hitl`/`afk`, `pipeline::*`) описан в
-    [triage-labels.md](../agents/triage-labels.md) — не дублируется здесь.
-
 <div class="ah-glossary-toolbar">
   <label class="ah-glossary-search" for="ah-glossary-search">
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -29,6 +23,7 @@ coding agents. Операционные процессы и архитектур
     <button class="ah-glossary-chip" type="button" data-category="files" aria-pressed="false">Файловая система и рантайм <span>18</span></button>
     <button class="ah-glossary-chip" type="button" data-category="tasks" aria-pressed="false">Задачи и артефакты <span>45</span></button>
   </div>
+  <button class="ah-glossary-chip ah-glossary-sort" id="ah-glossary-sort" type="button" aria-pressed="false" title="Сортировать по алфавиту">А–Я</button>
   <span class="ah-glossary-count" id="ah-glossary-count">102 терминов</span>
 </div>
 
@@ -270,7 +265,7 @@ Repo Map, каталоги и — при оркестрации — state. Ка�
 hooks. Работа идёт в <code>integration/harness-runtime-reliability</code> и выходит одним релизом 2.0.0
 (ADR 0019–0026).</p></div><div class="ah-term-avoid"><span class="ah-term-avoid-badge">AVOID</span><span>harness-next-runtime (такой ветки нет), HN как имя ветки.</span></div><div class="ah-term-related"><span class="ah-term-related-label">Связано</span><a class="ah-term-chip ah-term-chip--adr" href="https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0019-unified-rust-runtime-verification.md" title="ADR 0019 — ADR 0019 — Unified Rust runtime and incremental verification" target="_blank" rel="noreferrer">ADR 0019</a></div></article><article class="ah-term" id="term-102" data-category="architecture" data-search="superseded-by-harness-next  статус issue или коммита, чью python-реализацию заменяет компонент harness next. критерии такой задачи переходят на новый компонент; сама реализация в harness next не импортируется (adr 0020, раздел 6; adr 0026, раздел 1). отменено, won&#x27;t fix, закрыто без замены. harness next"><div class="ah-term-head"><h3 class="ah-term-name">Superseded-by-Harness-Next</h3><a class="ah-term-anchor" href="#term-102" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Статус issue или коммита, чью Python-реализацию заменяет компонент Harness Next. Критерии такой
 задачи переходят на новый компонент; сама реализация в Harness Next не импортируется (ADR 0020,
-раздел 6; ADR 0026, раздел 1).</p></div><div class="ah-term-avoid"><span class="ah-term-avoid-badge">AVOID</span><span>отменено, won't fix, закрыто без замены.</span></div><div class="ah-term-related"><span class="ah-term-related-label">Связано</span><a class="ah-term-chip" href="#term-101" data-term-target="term-101">Harness Next</a><a class="ah-term-chip ah-term-chip--adr" href="https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0020-runtime-store-cutover.md" title="ADR 0020 — Переход operational state с файлового ledger на Rust SQLite WAL store" target="_blank" rel="noreferrer">ADR 0020</a><a class="ah-term-chip ah-term-chip--adr" href="https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0026-harness-next-consolidation.md" title="ADR 0026 — Консолидация integration-веток Harness Next и Release Gate" target="_blank" rel="noreferrer">ADR 0026</a></div></article>
+раздел 6; ADR 0026, раздел 1).</p></div><div class="ah-term-avoid"><span class="ah-term-avoid-badge">AVOID</span><span>отменено, won't fix, закрыто без замены.</span></div><div class="ah-term-related"><span class="ah-term-related-label">Связано</span><a class="ah-term-chip" href="#term-101" data-term-target="term-101">Harness Next</a><a class="ah-term-chip ah-term-chip--adr" href="https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0020-runtime-store-cutover.md" title="ADR 0020 — Переход operational state с файлового ledger на Rust SQLite WAL store" target="_blank" rel="noreferrer">ADR 0020</a><a class="ah-term-chip ah-term-chip--adr" href="https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0026-harness-next-consolidation.md" title="ADR 0026 — Консолидация integration-веток Harness Next и Release Gate" target="_blank" rel="noreferrer">ADR 0026</a></div></article><article class="ah-term" id="term-103" data-slug="supervisor" data-category="files" data-search="supervisor supervisor часть rust runtime, которая учитывает и останавливает процессы исполнения: группа процессов и transient scope cgroup v2 на linux, именованный job object на windows. исполняет только approved brief и policy не решает. идентичность процесса — boot_id, inode pid-namespace, pid и время старта: один pid ничего не доказывает."><div class="ah-term-head"><h3 class="ah-term-name">Supervisor</h3><code class="ah-term-alias">supervisor</code><a class="ah-term-anchor" href="#term-103" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Часть Rust runtime, которая учитывает и останавливает процессы исполнения: группа процессов и transient scope cgroup v2 на Linux, именованный Job Object на Windows. Исполняет только approved brief и policy не решает. Идентичность процесса — <code>boot_id</code>, inode PID-namespace, pid и время старта: один pid ничего не доказывает.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article><article class="ah-term" id="term-104" data-slug="reconcile" data-category="files" data-search="reconcile reconcile сверка сохранённого intent с фактическим состоянием хоста. если объект уже существует, второй процесс не запускается; если доказанно отсутствует — исполнение получает lost. после sigkill усыновляет контейнерное исполнение по меткам. состояние исполнения — наблюдение rust, а состояние dispatch выбирает python по этому наблюдению."><div class="ah-term-head"><h3 class="ah-term-name">Reconcile</h3><code class="ah-term-alias">reconcile</code><a class="ah-term-anchor" href="#term-104" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Сверка сохранённого intent с фактическим состоянием хоста. Если объект уже существует, второй процесс не запускается; если доказанно отсутствует — исполнение получает <code>lost</code>. После SIGKILL усыновляет контейнерное исполнение по меткам. Состояние исполнения — наблюдение Rust, а состояние dispatch выбирает Python по этому наблюдению.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article><article class="ah-term" id="term-105" data-slug="audit-chain" data-category="files" data-search="audit chain audit-chain хэш-цепочка записей каждой мутации runtime-store с checkpoint для инкрементальной проверки. ledger validate --full пересчитывает цепочку целиком и находит удаление, вставку и перестановку записей."><div class="ah-term-head"><h3 class="ah-term-name">Audit chain</h3><code class="ah-term-alias">audit-chain</code><a class="ah-term-anchor" href="#term-105" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Хэш-цепочка записей каждой мутации runtime-store с checkpoint для инкрементальной проверки. <code>ledger validate --full</code> пересчитывает цепочку целиком и находит удаление, вставку и перестановку записей.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article><article class="ah-term" id="term-106" data-slug="fencing-token" data-category="files" data-search="fencing token fencing_token токен в записи lease, защищающий singleton qa-lane от двух владельцев. истёкший срок lease сам не снимает: сначала проверяется живость владельца, и аренду освобождают только доказанная смерть владельца или его собственная команда с совпадающим токеном."><div class="ah-term-head"><h3 class="ah-term-name">Fencing token</h3><code class="ah-term-alias">fencing_token</code><a class="ah-term-anchor" href="#term-106" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Токен в записи lease, защищающий singleton QA-lane от двух владельцев. Истёкший срок lease сам не снимает: сначала проверяется живость владельца, и аренду освобождают только доказанная смерть владельца или его собственная команда с совпадающим токеном.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article><article class="ah-term" id="term-107" data-slug="operation-id" data-category="architecture" data-search="operation id operation_id детерминированный ключ намерения в конверте ipc. повтор после потерянного ответа возвращает сохранённый результат, а тот же operation_id с другим payload даёт idempotency_conflict. клиент повторяет запрос с тем же id до request_deadline."><div class="ah-term-head"><h3 class="ah-term-name">Operation ID</h3><code class="ah-term-alias">operation_id</code><a class="ah-term-anchor" href="#term-107" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Детерминированный ключ намерения в конверте IPC. Повтор после потерянного ответа возвращает сохранённый результат, а тот же <code>operation_id</code> с другим payload даёт <code>idempotency_conflict</code>. Клиент повторяет запрос с тем же id до <code>request_deadline</code>.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article><article class="ah-term" id="term-108" data-slug="runtime-ipc" data-category="files" data-search="ipc runtime hello · protocol 1.7 протокол между python и rust runtime: unix domain socket на linux и macos или named pipe на windows. кадр — длина и json. рукопожатие hello согласует версию протокола и подтверждает identity клиента (peer uid/sid и токен); каталог 0700, сокет 0600."><div class="ah-term-head"><h3 class="ah-term-name">IPC runtime</h3><code class="ah-term-alias">hello · protocol 1.7</code><a class="ah-term-anchor" href="#term-108" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Протокол между Python и Rust runtime: Unix domain socket на Linux и macOS или named pipe на Windows. Кадр — длина и JSON. Рукопожатие <code>hello</code> согласует версию протокола и подтверждает identity клиента (peer uid/SID и токен); каталог <code>0700</code>, сокет <code>0600</code>.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article><article class="ah-term" id="term-109" data-slug="change-impact" data-category="architecture" data-search="changeimpact impactset множество затронутого изменением, построенное по графу repo map. неизвестное влияние расширяет проверку, а не сужает её."><div class="ah-term-head"><h3 class="ah-term-name">ChangeImpact</h3><code class="ah-term-alias">ImpactSet</code><a class="ah-term-anchor" href="#term-109" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>Множество затронутого изменением, построенное по графу Repo Map. Неизвестное влияние расширяет проверку, а не сужает её.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article><article class="ah-term" id="term-110" data-slug="verification-plan" data-category="architecture" data-search="verificationplan digest в approval план проверок, закреплённый digest-ом в approval: developer и review получают focused-проверки, qa — полный clean-room на финальном sha. подменить набор проверок после согласования нельзя."><div class="ah-term-head"><h3 class="ah-term-name">VerificationPlan</h3><code class="ah-term-alias">digest в approval</code><a class="ah-term-anchor" href="#term-110" title="Ссылка на термин" aria-label="Ссылка на термин">#</a></div><div class="ah-term-body"><p>План проверок, закреплённый digest-ом в approval: developer и review получают focused-проверки, QA — полный clean-room на финальном SHA. Подменить набор проверок после согласования нельзя.</p><p>Подробнее: <a href="../../architecture/runtime/">Rust runtime</a>.</p></div></article>
   </div>
   <aside class="ah-glossary-toc" aria-label="Все термины">
     <div class="ah-glossary-toc-title" id="ah-glossary-toc-title">Термины · 102</div>
@@ -299,7 +294,53 @@ hooks. Работа идёт в <code>integration/harness-runtime-reliability</c
     }
 
     function visibleCards() {
-      return cards.filter((card) => !card.hidden);
+      return Array.from(main.querySelectorAll(".ah-term")).filter((card) => !card.hidden);
+    }
+
+    const original = cards.slice();
+    const sortButton = document.getElementById("ah-glossary-sort");
+    let alpha = false;
+
+    function counts() {
+      const by = { all: total };
+      cards.forEach((card) => { by[card.dataset.category] = (by[card.dataset.category] || 0) + 1; });
+      chips.forEach((chip) => {
+        const badge = chip.querySelector("span");
+        if (badge) badge.textContent = by[chip.dataset.category] || 0;
+      });
+    }
+
+    function syncUrl() {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("term", query.trim());
+      if (category !== "all") params.set("category", category);
+      if (alpha) params.set("sort", "az");
+      const qs = params.toString();
+      history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+    }
+
+    function setCategory(value) {
+      category = value;
+      chips.forEach((chip) => {
+        const active = chip.dataset.category === value;
+        chip.classList.toggle("is-active", active);
+        chip.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    function setAlpha(value) {
+      alpha = value;
+      sortButton.classList.toggle("is-active", value);
+      sortButton.setAttribute("aria-pressed", value ? "true" : "false");
+      const list = value
+        ? cards.slice().sort((a, b) => nameOf(a).localeCompare(nameOf(b), "ru", { sensitivity: "base" }))
+        : original;
+      list.forEach((card) => main.appendChild(card));
+    }
+
+    function resolve(hash) {
+      const id = decodeURIComponent(hash.replace(/^#/, ""));
+      return document.getElementById(id) || cards.find((card) => card.dataset.slug === id) || null;
     }
 
     function buildToc() {
@@ -375,24 +416,27 @@ hooks. Работа идёт в <code>integration/harness-runtime-reliability</c
       target.scrollIntoView({ behavior: "smooth", block: "start" });
       target.classList.add("is-target");
       window.setTimeout(() => target.classList.remove("is-target"), 1600);
-      history.replaceState(null, "", "#" + id);
+      history.replaceState(null, "", location.pathname + location.search + "#" + id);
     }
 
-    chips.forEach((chip) => {
+    chips.filter((chip) => chip.dataset.category).forEach((chip) => {
       chip.addEventListener("click", () => {
-        category = chip.dataset.category;
-        chips.forEach((other) => {
-          const active = other === chip;
-          other.classList.toggle("is-active", active);
-          other.setAttribute("aria-pressed", active ? "true" : "false");
-        });
+        setCategory(chip.dataset.category);
         apply();
+        syncUrl();
       });
+    });
+
+    sortButton.addEventListener("click", () => {
+      setAlpha(!alpha);
+      apply();
+      syncUrl();
     });
 
     search.addEventListener("input", () => {
       query = search.value;
       apply();
+      syncUrl();
     });
 
     document.addEventListener("keydown", (event) => {
@@ -411,6 +455,7 @@ hooks. Работа идёт в <code>integration/harness-runtime-reliability</c
         query = "";
         search.blur();
         apply();
+        syncUrl();
       }
     }, true);
 
@@ -448,6 +493,29 @@ hooks. Работа идёт в <code>integration/harness-runtime-reliability</c
       });
     }, { passive: true });
 
+    counts();
+    const params = new URLSearchParams(location.search);
+    if (params.get("term")) { query = params.get("term"); search.value = query; }
+    const requested = params.get("category");
+    if (requested && chips.some((chip) => chip.dataset.category === requested)) setCategory(requested);
+    if (params.get("sort") === "az") setAlpha(true);
     apply();
+
+    function openHash() {
+      if (location.hash.length < 2) return;
+      const card = resolve(location.hash);
+      if (!card) return;
+      if (card.hidden) {
+        query = "";
+        search.value = "";
+        setCategory("all");
+        apply();
+        syncUrl();
+      }
+      window.setTimeout(() => goTo(card.id), 60);
+    }
+
+    openHash();
+    window.addEventListener("hashchange", openHash);
   })();
 </script>

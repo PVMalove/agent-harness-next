@@ -11,15 +11,17 @@
 
 ## 2. Полный перевод текста скила
 
-```text
----
+<div class="ah-skill-text" markdown="1">
+
+```yaml
 name: grill-with-docs
 description: Неумолимое интервью для оттачивания плана или дизайна, в процессе которого также создаётся документация (ADR и глоссарий).
 disable-model-invocation: true
----
+```
 
 Запустите сессию `/grilling`, используя навык `/domain-modeling`.
-```
+
+</div>
 
 ## 3. Контракты
 
