@@ -8,12 +8,14 @@ import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 
+from ...kernel.i18n import tr_text
 from ...kernel.json_fields import text
 from ...kernel.protocol import _LONE_SURROGATE, ID_BYTES, MESSAGE_BYTES, _clip
 
-CANCEL_KEEPS_CHANGES = (
-    "Cancelling stops the command; the changes it has already made are not rolled back."
-)
+# What a cancel of a mutation warns: the Russian source a client translates, and its English
+# translation the unconfirmed-cancel refusal carries.
+CANCEL_REASON = "Отмена останавливает команду; уже внесённые изменения не откатываются."
+CANCEL_KEEPS_CHANGES = tr_text("en", CANCEL_REASON)
 NATIVE_ANSWER_FIELDS = ("dispatch", "request_id", "request_sha256")
 _DISPATCH = re.compile(r"dispatch-[0-9a-f-]+")
 _SHA256 = re.compile(r"[0-9a-f]{64}")

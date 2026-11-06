@@ -444,6 +444,11 @@ HARNESS_COMMANDS: tuple[CatalogEntry, ...] = (
     ),
 )
 
+# Harness commands the Harness menu does not list: the "Update Harness" screen runs them.
+HARNESS_MENU_HIDDEN = frozenset(
+    {"init", "update", "update-force-managed", "update-force-seed", "adopt"}
+)
+
 # The Diagnostics screen's fixes: `harness health --fix` that prints the `--json` report, so the
 # screen reads back which fixes were applied. They are not listed in the Harness menu.
 DIAGNOSTICS_COMMANDS: tuple[CatalogEntry, ...] = (

@@ -11,6 +11,8 @@ from typing import Literal, NamedTuple
 
 from harness.configuration import SECRET_MASK, mask_secrets
 
+from ...kernel.catalog import CONFIRMATION_REASONS, REVERSIBILITY_LABELS, CatalogEntry
+
 _FRAGMENT_CHARS = 4096
 # A character takes at most six bytes in an encoded reply (a control character as `\u00XX`),
 # so a batch stays well below the server's 64 KiB message limit.
@@ -22,6 +24,15 @@ _PLAN_COMMANDS = frozenset({"cleanup-apply", "cleanup-hard-apply"})
 _PLAN_DIGEST = re.compile(r"[0-9a-f]{64}")
 
 Phase = Literal["running", "completed", "failed", "cancelled"]
+# The console sections whose catalog commands a client lists with `job.catalog`.
+COMMAND_SECTIONS = (
+    "harness",
+    "diagnostics",
+    "repo-map",
+    "setup",
+    "configuration",
+    "memory",
+)
 
 
 class JobRejected(Exception):
@@ -45,6 +56,8 @@ class Fragment(NamedTuple):
 class Job:
     id: str
     command_id: str
+    # The job holds the server's one mutation slot until it ends.
+    mutating: bool = False
     output: list[Fragment] = field(default_factory=list)
     output_chars: int = 0
     truncated: bool = False
@@ -74,6 +87,7 @@ class Job:
         return {
             "id": self.id,
             "command_id": self.command_id,
+            "mutating": self.mutating,
             "phase": self.phase,
             "cursor": len(self.output),
             "done": self.phase != "running",
@@ -100,6 +114,28 @@ class Job:
             "cursor": next_cursor,
             "done": self.phase != "running" and next_cursor == len(self.output),
         }
+
+
+def describe_command(
+    entry: CatalogEntry, *, section: str, available: bool
+) -> dict[str, object]:
+    """What a client shows of a catalog command and what its start must carry: the class with its
+    label, the confirmation with its reason, the typed word, the input fields and whether a
+    cleanup plan digest is needed. The texts are the catalog's Russian source strings."""
+    return {
+        "command_id": entry.key,
+        "title": entry.title,
+        "section": section,
+        "reversibility": entry.reversibility.value,
+        "reversibility_label": REVERSIBILITY_LABELS[entry.reversibility],
+        "needs_confirmation": entry.needs_confirmation,
+        "confirmation_reason": CONFIRMATION_REASONS.get(entry.reversibility),
+        "typed_confirmation": entry.typed_confirmation,
+        "read_only": entry.read_only,
+        "inputs": list(entry.inputs),
+        "plan_required": entry.key in _PLAN_COMMANDS,
+        "available": available,
+    }
 
 
 def plan_digest(command_id: str, body: Mapping[str, object]) -> str | None:

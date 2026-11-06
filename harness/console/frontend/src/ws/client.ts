@@ -1,9 +1,16 @@
-/* One WebSocket to the console server with reconnects and an orchestration cursor. Every effect
-   (socket, timers, the /health/live probe) is injected, so tests drive it deterministically. */
+/* One WebSocket to the console server with reconnects, an orchestration cursor and the cursors
+   of the followed jobs. Every effect (socket, timers, the /health/live probe) is injected, so
+   tests drive it deterministically. */
+import { mergeOutput, parseCommands, parseJobSnapshot, parseJobSummary } from "./jobs";
+import type { CommandDescriptor, JobSummary, LocalJob } from "./jobs";
 import type {
   ErrorReply,
   HomeSnapshotReply,
   HomeSnapshotRequest,
+  JobCancelRequest,
+  JobCatalogRequest,
+  JobStartRequest,
+  JobSubscribeRequest,
   OrchestrationEventsReply,
   OrchestrationSourceReply,
   OrchestrationSubscribeRequest,
@@ -44,6 +51,24 @@ export type ClientEvent =
   | { type: "events"; cursor: string; events: unknown[] }
   | { type: "source"; cursor: string | null };
 
+export type JobRequestType = "job.catalog" | "job.list" | "job.start" | "job.cancel" | "job.subscribe";
+
+/** What the job requests bring: a section's commands, the job list, a followed job with its
+    merged output, or a refusal with its code (and the running job of `busy`). */
+export type JobEvent =
+  | { type: "commands"; section: string; commands: CommandDescriptor[]; cancelReason: string }
+  | { type: "jobs"; jobs: JobSummary[] }
+  | { type: "job"; job: LocalJob }
+  | { type: "job-error"; request: JobRequestType; code: string; message: string; jobId: string | null };
+
+export interface StartJob {
+  command_id: string;
+  values?: Record<string, string>;
+  confirmed?: boolean;
+  /** The typed word of a command whose description asks for one; the server checks it. */
+  confirmation?: string;
+}
+
 export interface ClientOptions {
   url: string;
   WebSocket: SocketFactory;
@@ -68,6 +93,19 @@ export interface ConsoleClient {
   subscribe(listener: (event: ClientEvent) => void): () => void;
   /** The cursor of the last received orchestration reply. */
   readonly cursor: string | null;
+  /** Ask for the catalog commands of a console section; false when no socket is open. */
+  requestCommands(section: JobCatalogRequest["section"]): boolean;
+  /** Ask for the job summaries; asked again after every reconnect once asked. */
+  listJobs(): boolean;
+  /** Start a catalog command as the browser; its output is then followed. */
+  startJob(request: StartJob): boolean;
+  /** Ask to cancel a job; the server refuses without `confirmed`. */
+  cancelJob(jobId: string, confirmed: boolean): boolean;
+  /** Follow a job's output from the held cursor, again after every reconnect until it is done. */
+  followJob(jobId: string): boolean;
+  /** The held copy of a followed job. */
+  job(jobId: string): LocalJob | undefined;
+  subscribeJobs(listener: (event: JobEvent) => void): () => void;
 }
 
 const OPEN = 1;
@@ -83,6 +121,12 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   const { url, timers, probeHealth } = options;
   const timeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   const listeners = new Set<(event: ClientEvent) => void>();
+  const jobListeners = new Set<(event: JobEvent) => void>();
+  // The followed jobs by id: the held output and cursor survive reconnects.
+  const followed = new Map<string, LocalJob | null>();
+  // Open job requests of the current socket by request id.
+  const jobRequests = new Map<string, { type: JobRequestType; key: string }>();
+  let jobsWanted = false;
   const pending = new Map<string, unknown>();
   let socket: SocketLike | null = null;
   let generation = 0;
@@ -98,9 +142,14 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     for (const listener of [...listeners]) listener(event);
   };
 
+  const emitJob = (event: JobEvent) => {
+    for (const listener of [...jobListeners]) listener(event);
+  };
+
   const clearPending = () => {
     for (const timer of pending.values()) timers.clearTimeout(timer);
     pending.clear();
+    jobRequests.clear();
   };
 
   const send = (body: Record<string, unknown>): string | null => {
@@ -142,9 +191,88 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     return true;
   };
 
+  const sendJob = (type: JobRequestType, key: string, body: Record<string, unknown>): boolean => {
+    const id = send({ type, ...body });
+    if (id === null) return false;
+    jobRequests.set(id, { type, key });
+    return true;
+  };
+
+  const subscribeJob = (jobId: string): boolean => {
+    for (const [id, open] of jobRequests) {
+      if (open.type === "job.subscribe" && open.key === jobId) {
+        settle(id);
+        jobRequests.delete(id);
+      }
+    }
+    const request: JobSubscribeRequest = {
+      type: "job.subscribe",
+      job_id: jobId,
+      cursor: followed.get(jobId)?.cursor ?? 0,
+    };
+    return sendJob("job.subscribe", jobId, { ...request });
+  };
+
+  /** Merge a job snapshot into the followed copy; a gap resubscribes from the held cursor. */
+  const onJob = (value: unknown, request: JobRequestType, follow: boolean) => {
+    const snapshot = parseJobSnapshot(value);
+    if (!snapshot) {
+      emitJob({ type: "job-error", request, code: "invalid", message: "", jobId: null });
+      return;
+    }
+    if (!followed.has(snapshot.id)) followed.set(snapshot.id, null);
+    const { job, gap } = mergeOutput(followed.get(snapshot.id) ?? null, snapshot);
+    followed.set(snapshot.id, job);
+    emitJob({ type: "job", job });
+    if (gap || (follow && !job.done)) subscribeJob(snapshot.id);
+  };
+
+  const onJobReply = (id: string, reply: Record<string, unknown>) => {
+    const open = jobRequests.get(id);
+    if (!open || reply.type !== open.type) return;
+    // A subscription streams on one id: its first reply clears the timeout, the stream stays.
+    settle(id);
+    if (reply.ok !== true) {
+      jobRequests.delete(id);
+      const error = (reply as unknown as ErrorReply).error;
+      const code = error?.code ?? "unknown";
+      if (open.type === "job.subscribe" && code === "unknown_job") followed.delete(open.key);
+      emitJob({
+        type: "job-error",
+        request: open.type,
+        code,
+        message: error?.message ?? "",
+        jobId: error?.job_id ?? (open.type === "job.subscribe" || open.type === "job.cancel" ? open.key : null),
+      });
+      return;
+    }
+    if (open.type !== "job.subscribe") jobRequests.delete(id);
+    if (open.type === "job.catalog") {
+      const commands = parseCommands(reply.commands);
+      const cancelReason = reply.cancel_reason;
+      if (commands && typeof cancelReason === "string") {
+        emitJob({ type: "commands", section: open.key, commands, cancelReason });
+      } else emitJob({ type: "job-error", request: open.type, code: "invalid", message: "", jobId: null });
+    } else if (open.type === "job.list") {
+      const jobs = Array.isArray(reply.jobs) ? reply.jobs.map(parseJobSummary) : null;
+      if (jobs && jobs.every((job) => job !== null)) emitJob({ type: "jobs", jobs: jobs as JobSummary[] });
+      else emitJob({ type: "job-error", request: open.type, code: "invalid", message: "", jobId: null });
+    } else if (open.type === "job.subscribe") {
+      onJob(reply.job, open.type, false);
+      // The stream of a finished job ends; a gap already replaced it with a new subscription.
+      if (followed.get(open.key)?.done) jobRequests.delete(id);
+    } else {
+      onJob(reply.job, open.type, true);
+    }
+  };
+
   const onReply = (reply: Record<string, unknown>) => {
     const id = reply.id;
     if (typeof id !== "string" || !id.startsWith(`${generation}-`)) return;
+    if (jobRequests.has(id)) {
+      onJobReply(id, reply);
+      return;
+    }
     if (reply.type === "home.snapshot") {
       if (id !== latestHome) return;
       settle(id);
@@ -220,6 +348,8 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       emit({ type: "open" });
       subscribeOrchestration();
       requestHome();
+      for (const [jobId, job] of followed) if (!job?.done) subscribeJob(jobId);
+      if (jobsWanted) sendJob("job.list", "", {});
     };
     next.onmessage = (event) => {
       if (current !== generation || stopped) return;
@@ -277,6 +407,45 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     },
     get cursor() {
       return cursor;
+    },
+    requestCommands(section) {
+      const request: JobCatalogRequest = { type: "job.catalog", section };
+      return sendJob("job.catalog", section, { ...request });
+    },
+    listJobs() {
+      jobsWanted = true;
+      return sendJob("job.list", "", {});
+    },
+    startJob(request) {
+      const body: JobStartRequest = {
+        type: "job.start",
+        command_id: request.command_id,
+        values: request.values ?? {},
+        confirmed: request.confirmed ?? false,
+        ...(request.confirmation === undefined ? {} : { confirmation: request.confirmation }),
+        client: "browser",
+      };
+      return sendJob("job.start", request.command_id, { ...body });
+    },
+    cancelJob(jobId, confirmed) {
+      const body: JobCancelRequest = { type: "job.cancel", job_id: jobId, confirmed };
+      return sendJob("job.cancel", jobId, { ...body });
+    },
+    followJob(jobId) {
+      if (!followed.has(jobId)) followed.set(jobId, null);
+      const held = followed.get(jobId);
+      if (held?.done) {
+        emitJob({ type: "job", job: held });
+        return true;
+      }
+      return subscribeJob(jobId);
+    },
+    job(jobId) {
+      return followed.get(jobId) ?? undefined;
+    },
+    subscribeJobs(listener) {
+      jobListeners.add(listener);
+      return () => jobListeners.delete(listener);
     },
   };
 }

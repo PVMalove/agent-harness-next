@@ -34,7 +34,14 @@ from ...kernel.process_tree import CommandCancelled
 from ...kernel.protocol import MAX_ID_CHARS
 from ..domain.approvals import cancel_confirmation_message, start_confirmed
 from ..domain.clients import CLIENT_KINDS
-from ..domain.jobs import Job, JobRejected, journal_record, plan_digest
+from ..domain.jobs import (
+    COMMAND_SECTIONS,
+    Job,
+    JobRejected,
+    describe_command,
+    journal_record,
+    plan_digest,
+)
 from .ports import CommandJournal, CommandSpec, IdSource, JobExecutor, WallClock
 
 _KEPT_FINISHED = 32
@@ -74,9 +81,13 @@ class JobService:
         journal: CommandJournal,
         new_id: IdSource,
         now: WallClock,
+        sections: Mapping[str, str] | None = None,
     ) -> None:
         self.repo = repo.resolve()
         self._catalog = catalog
+        # The console section that lists a command; a command without one is started only by
+        # its own flow (decisions, native permission answers, the selected seed update).
+        self._sections = {} if sections is None else dict(sections)
         self._executor = executor
         self._journal = journal
         self._new_id = new_id
@@ -92,6 +103,19 @@ class JobService:
     def jobs(self) -> list[dict[str, object]]:
         """The summaries of the jobs this server keeps."""
         return [run.job.summary() for run in self._jobs.values()]
+
+    def commands(self, section: object) -> list[dict[str, object]]:
+        """The descriptions of a section's kernel catalog commands, with their availability in
+        the served project; an unknown section is a bad request."""
+        if section not in COMMAND_SECTIONS:
+            raise JobRejected("bad_request")
+        return [
+            describe_command(
+                entry, section=str(section), available=entry.available(self.repo)
+            )
+            for key, entry in self._catalog.items()
+            if self._sections.get(key) == section and isinstance(entry, CatalogEntry)
+        ]
 
     def start(self, body: Mapping[str, object]) -> Job:
         client = body.get("client", "unknown")
@@ -168,7 +192,7 @@ class JobService:
         if digest is not None:
             argv += ["--plan-digest", digest]
             journal_argv += ["--plan-digest", SECRET_MASK]
-        run = _Execution(Job(self._new_id(), command_id))
+        run = _Execution(Job(self._new_id(), command_id, mutating=mutating))
         job = run.job
         self._jobs[job.id] = run
         task = asyncio.create_task(

@@ -1548,3 +1548,40 @@ EN.update(
         "Подтвердите выход с сохранением": "Confirm exit with save",
     }
 )
+# Web console: the Harness "Commands" panel runs catalog commands as server jobs. The class
+# reasons are those of `catalog.CONFIRMATION_REASONS`; the refusal labels follow the job codes.
+EN.update(
+    {
+        "Команда удаляет локальные данные — восстановить их нельзя.": "The command deletes local data — it cannot be restored.",
+        "Команда записывает терминальное решение coordinator — отменить его нельзя.": "The command records a terminal coordinator decision — it cannot be undone.",
+        "Команда меняет внешнюю систему: это видят другие люди или это расходует токены.": "The command changes an external system: others see it or it spends tokens.",
+        "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.": "The command overwrites Harness files in the project (managed or seed) — uncommitted changes in them are lost.",
+        "Команда скачивает файлы из сети (PyPI, нужны доступ и время) и заменяет локальный bundle парсеров проекта.": "The command downloads files from the network (PyPI, needs access and time) and replaces the project's local parser bundle.",
+        "Отменить job": "Cancel the job",
+        "Подтвердите отмену job": "Confirm cancelling the job",
+        "Отмена останавливает команду; уже внесённые изменения не откатываются.": "Cancelling stops the command; the changes it has already made are not rolled back.",
+        "Введите {word}, чтобы подтвердить": "Type {word} to confirm",
+        "Занято: {command}": "Busy: {command}",
+        "Показать вывод": "Show output",
+        "Вывод обрезан": "Output truncated",
+        "Код возврата: {code}": "Exit code: {code}",
+        "Выполняется": "Running",
+        "Завершена": "Completed",
+        "Не удалась": "Failed",
+        "Отменена": "Cancelled",
+        "Нужно превью плана очистки: запустите команду из TUI": "Needs a cleanup plan preview: run the command from the TUI",
+        "Загрузка каталога команд…": "Loading the command catalog…",
+        "В этом разделе нет команд": "This section has no commands",
+        "Вывода пока нет": "No output yet",
+        "Неизвестная команда каталога": "Unknown catalog command",
+        "Команда требует явного подтверждения": "The command needs an explicit confirmation",
+        "Сначала нужно превью плана очистки": "Preview the cleanup plan first",
+        "Команда недоступна в этом проекте": "The command is unavailable in this project",
+        "Команду не удалось подготовить": "The command could not be prepared",
+        "Консоль занята": "The console is busy",
+        "Job уже не выполняется": "The job is no longer running",
+        "Неизвестная job": "Unknown job",
+        "Курсор вне вывода job": "The cursor is outside the job output",
+        "Некорректный запрос": "Bad request",
+    }
+)

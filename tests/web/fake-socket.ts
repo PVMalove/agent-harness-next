@@ -112,3 +112,74 @@ export const SNAPSHOT = {
 export function snapshotReply(id: unknown, snapshot: unknown = SNAPSHOT): Record<string, unknown> {
   return { v: 1, id, type: "home.snapshot", ok: true, cached: false, age_seconds: 0, snapshot };
 }
+
+/* Job catalog descriptions and the cancel warning as job.catalog sends them
+   (tests/web/fixtures/job-catalog.json for the Playwright mock). */
+export const CANCEL_REASON = "Отмена останавливает команду; уже внесённые изменения не откатываются.";
+
+export const COMMANDS = [
+  {
+    command_id: "diff",
+    title: "Дрейф управляемых файлов",
+    section: "harness",
+    reversibility: "reversible",
+    reversibility_label: "✔ обратимо",
+    needs_confirmation: false,
+    confirmation_reason: null,
+    typed_confirmation: null,
+    read_only: true,
+    inputs: [],
+    plan_required: false,
+    available: true,
+  },
+  {
+    command_id: "uninstall-apply",
+    title: "Удалить харнесс из проекта (с резервной копией изменённых файлов)",
+    section: "harness",
+    reversibility: "deletes-local-data",
+    reversibility_label: "✖ удаление",
+    needs_confirmation: true,
+    confirmation_reason: "Команда удаляет локальные данные — восстановить их нельзя.",
+    typed_confirmation: "UNINSTALL",
+    read_only: false,
+    inputs: [],
+    plan_required: false,
+    available: true,
+  },
+];
+
+/** A job snapshot of job-1 with `overrides`. */
+export function jobSnapshot(overrides: Record<string, unknown> = {}): {
+  id: string;
+  command_id: string;
+  mutating: boolean;
+  phase: "running" | "completed" | "failed" | "cancelled";
+  cursor: number;
+  done: boolean;
+  truncated: boolean;
+  returncode: number | null;
+  error: string | null;
+  output: { channel: string; text: string }[];
+} {
+  return {
+    id: "job-1",
+    command_id: "uninstall-apply",
+    mutating: true,
+    phase: "running",
+    cursor: 0,
+    done: false,
+    truncated: false,
+    returncode: null,
+    error: "",
+    output: [],
+    ...overrides,
+  } as ReturnType<typeof jobSnapshot>;
+}
+
+export function jobReply(
+  id: unknown,
+  type: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return { v: 1, id, type, ok: true, job: jobSnapshot(overrides) };
+}

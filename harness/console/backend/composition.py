@@ -12,6 +12,7 @@ from ..kernel.catalog import (
     CONFIGURATION_COMMANDS,
     DIAGNOSTICS_COMMANDS,
     HARNESS_COMMANDS,
+    HARNESS_MENU_HIDDEN,
     MEMORY_COMMANDS,
     REPO_MAP_COMMANDS,
     SETUP_COMMANDS,
@@ -165,9 +166,22 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
     )
+    listed = {
+        "harness": tuple(
+            entry for entry in HARNESS_COMMANDS if entry.key not in HARNESS_MENU_HIDDEN
+        ),
+        "diagnostics": DIAGNOSTICS_COMMANDS,
+        "repo-map": REPO_MAP_COMMANDS,
+        "setup": SETUP_COMMANDS,
+        "configuration": CONFIGURATION_COMMANDS,
+        "memory": MEMORY_COMMANDS,
+    }
     return JobService(
         repo,
         catalog={entry.key: entry for entry in entries},
+        sections={
+            entry.key: section for section, group in listed.items() for entry in group
+        },
         executor=run_command if executor is None else executor,
         journal=command_journal.append,
         new_id=new_id,
