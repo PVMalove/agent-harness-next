@@ -357,7 +357,8 @@ class RepoMapSettings(Vertical):
         from .configuration import ConfigurationScreen
 
         self.app.push_screen(
-            ConfigurationScreen(self.repo, (name, path)), lambda _: self.reload()
+            ConfigurationScreen(self.repo, (name, path), client=self._client),
+            lambda _: self.reload(),
         )
 
     def _selected_tier(self) -> str:

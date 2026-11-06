@@ -1,11 +1,12 @@
 """Update Harness: installed and available versions, the managed-file drift, the update mode and a
-confirmed run of `harness update`. The command is the CLI one - the screen only shows what it will
-do and asks for the same confirmation as the Harness section."""
+confirmed run of `harness update`. The versions, the drift and the diff of every file come from the
+console server's `update_harness.snapshot` and `update_harness.diff`, and the update runs as its
+server job; the command is the CLI one - the screen only shows what it will do and asks for the
+same confirmation as the Harness section."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
 
 from rich.cells import cell_len
 from rich.text import Text
@@ -24,20 +25,22 @@ from textual.widgets import (
 from textual.widgets.selection_list import Selection
 
 from ...kernel import brand, i18n
-from ...kernel import data as console_data
 from .. import stats as console_stats
 from ...kernel.catalog import (
     CONFIRMATION_REASONS,
     HARNESS_COMMANDS,
+    UPDATE_SEED_SELECTED,
     CatalogEntry,
-    process_argv,
+    SeedUpdateCommand,
     seed_update_entry,
 )
+from ...kernel.update_harness_snapshot import UpdateHarnessFacts
+from ..client import ConsoleClientError, ScreenClient, job_start_fits
 from ..crumbs import Crumb
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from ...kernel.status import Status
 from ..logtext import colorize_diff, colorize_log
-from ...kernel.runner import CommandRunner, capturing_runner
+from ..server_api import ServerJobRunner
 from ..widgets import CheckList, ReasonNote, RoundRadioButton
 from .commands import call_from_worker, render_result, short_repo
 from .harness import CommandFormScreen
@@ -100,6 +103,24 @@ _DIFF_KINDS = (
     ),
 )
 _LOADING = "проверяется…"
+_ENTRIES = {entry.key: entry for entry in HARNESS_COMMANDS}
+TOO_MANY_SEEDS = (
+    "Слишком много отмеченных файлов для одного запроса к серверу консоли: "
+    "выберите режим перезаписи всех seed-файлов или отметьте меньше файлов."
+)
+
+
+def update_job(
+    mode: str, seeds: list[str]
+) -> tuple[CatalogEntry | SeedUpdateCommand, dict[str, str]]:
+    """The server job of an update `mode` and its values: the seed mode names the ticked files,
+    one per line; more of them than one `job.start` carries is `ValueError(TOO_MANY_SEEDS)`."""
+    if mode != SEED_MODE:
+        return _ENTRIES[mode], {}
+    values = {"paths": "\n".join(seeds)}
+    if not job_start_fits(UPDATE_SEED_SELECTED.key, values):
+        raise ValueError(TOO_MANY_SEEDS)
+    return UPDATE_SEED_SELECTED, values
 _BUSY_REASON = "обновление выполняется"
 _RESULT_STATUS = {
     "empty": Status("not_started", "пока пусто", "empty so far"),
@@ -313,28 +334,14 @@ class UpdateHarnessScreen(ConsoleShell):
     UpdateHarnessScreen #update-output-scroll { height: auto; max-height: 18; }
     """)
 
-    def __init__(
-        self,
-        repo: Path,
-        *,
-        command_runner: CommandRunner = capturing_runner,
-        load_drift: Callable[
-            [Path], dict[str, object] | None
-        ] = console_data.drift_report,
-        load_state: Callable[
-            [Path], console_stats.HarnessState
-        ] = console_stats.harness_state,
-        load_diff: Callable[[Path, str], str] = console_data.update_diff_text,
-    ) -> None:
+    def __init__(self, repo: Path, *, client: ScreenClient) -> None:
+        """The screen of the project `client`'s console server serves."""
         super().__init__()
         self.repo = repo
-        self._runner = command_runner
-        self._load_drift = load_drift
-        self._load_state = load_state
-        self._load_diff = load_diff
+        self._client = client
         self._diff_kinds: dict[str, str] = {}
         self._diff_for = ""
-        self._entries = {entry.key: entry for entry in HARNESS_COMMANDS}
+        self._package_version = ""
         self.busy = False
         self.installed = False
         self._state: console_stats.HarnessState | None = None
@@ -466,7 +473,7 @@ class UpdateHarnessScreen(ConsoleShell):
         mode = self._mode()
         if mode == SEED_MODE:
             return seed_update_entry(self._selected_seeds())
-        return self._entries[mode]
+        return _ENTRIES[mode]
 
     def _language(self) -> str:
         return getattr(self.app, "language", "ru")
@@ -480,7 +487,7 @@ class UpdateHarnessScreen(ConsoleShell):
         if state is None:
             return
         language = self._language()
-        package_version = console_data.harness_version()
+        package_version = self._package_version
         self.query_one("#update-versions", Static).update(
             render_versions(state, package_version, language, narrow=self._narrow)
         )
@@ -515,22 +522,48 @@ class UpdateHarnessScreen(ConsoleShell):
         self._show_seed_note()
         self._show_plan()
 
-    def _reload(self) -> None:
-        state = self._load_state(self.repo)
-        self.installed = state.installed
-        self._state = state
+    def _reload(self, *, force: bool = False) -> None:
+        """Read the snapshot again; after a recheck or an update `force` skips the server's
+        cache, which still holds the drift before the change."""
         self._payload = None
         self._payload_ready = False
-        self._render_state()
-        self._show_plan()
-        if not state.installed:
-            return
+        self.query_one("#update-drift", Static).update(
+            render_drift(None, loading=True, language=self._language())
+        )
 
         def work() -> None:
-            payload = self._load_drift(self.repo)
-            call_from_worker(self, lambda: self._drift_loaded(payload))
+            try:
+                facts: UpdateHarnessFacts | str = self._client.update_harness(force=force)
+            except ConsoleClientError as exc:
+                facts = str(exc)
+            call_from_worker(self, lambda: self._snapshot_loaded(facts))
 
         self.run_worker(work, thread=True, exclusive=True, group="update-drift")
+
+    def _snapshot_loaded(self, facts: UpdateHarnessFacts | str) -> None:
+        if isinstance(facts, str):
+            self.installed = False
+            self._payload_ready = True
+            self.query_one("#update-versions", Static).update(
+                Text(
+                    f"{brand.STATUS_ICONS['fail']} "
+                    + self._t("Сервер консоли не отдал состояние Harness: ")
+                    + facts,
+                    style=brand.STATUS_COLORS["fail"],
+                )
+            )
+            self.query_one("#update-drift", Static).update(
+                render_drift(None, language=self._language(), narrow=self._narrow)
+            )
+            self._show_plan()
+            return
+        self._state = facts.state
+        self._package_version = facts.package_version
+        self.installed = facts.state.installed
+        self._render_state()
+        self._show_plan()
+        if facts.state.installed:
+            self._drift_loaded(facts.drift)
 
     def _drift_loaded(self, payload: dict[str, object] | None) -> None:
         self._payload = payload
@@ -626,9 +659,14 @@ class UpdateHarnessScreen(ConsoleShell):
 
         def work() -> None:
             try:
-                text = self._load_diff(self.repo, relative)
-            except Exception as exc:
-                text = f"diff недоступен: {exc!r}"
+                found = self._client.update_diff(relative)
+                text = (
+                    found
+                    if found is not None
+                    else "diff недоступен: файла больше нет в отчёте дрейфа"
+                )
+            except ConsoleClientError as exc:
+                text = f"diff недоступен: {exc}"
             call_from_worker(self, lambda: self._diff_loaded(relative, text))
 
         self.run_worker(work, thread=True, exclusive=True, group="update-diff")
@@ -779,7 +817,7 @@ class UpdateHarnessScreen(ConsoleShell):
         if self.busy:
             return
         if event.button.id in ("update-recheck", "update-recheck-narrow"):
-            self._reload()
+            self._reload(force=True)
         elif event.button.id in ("seed-all", "seed-none"):
             options = self.query_one("#seed-files", SelectionList)
             if event.button.id == "seed-all":
@@ -788,10 +826,15 @@ class UpdateHarnessScreen(ConsoleShell):
                 options.deselect_all()
         elif event.button.id == "update-run":
             entry = self._entry()
+            try:
+                job, job_values = update_job(self._mode(), self._selected_seeds())
+            except ValueError as exc:
+                self.notify(self._t(str(exc)), severity="warning")
+                return
 
             def confirmed(values: "dict[str, str] | None") -> None:
                 if values is not None:
-                    self._run(entry)
+                    self._run(entry, ServerJobRunner(self._client, job, job_values))
 
             self.app.push_screen(CommandFormScreen(entry, self.repo), confirmed)
 
@@ -808,18 +851,18 @@ class UpdateHarnessScreen(ConsoleShell):
             self.query_one("#" + identifier).disabled = value
         self._show_plan()
 
-    def _run(self, entry: CatalogEntry) -> None:
+    def _run(self, entry: CatalogEntry, runner: ServerJobRunner) -> None:
         self._result = "running"
         self._set_busy(True)
         line = entry.cli_line(self.repo)
         self.query_one("#update-output", Static).update(
             colorize_log(f"$ {line}\n{_RESULT_STATUS['running'].symbol} Выполняется…")
         )
-        argv = process_argv(entry.cli_argv(self.repo), self.repo)
+        argv = entry.cli_argv(self.repo)
 
         def work() -> None:
             try:
-                result = self._runner(argv, cwd=self.repo)
+                result = runner(argv, cwd=self.repo)
                 text, success = render_result(line, result), result.returncode == 0
             except OSError as exc:
                 text, success = f"$ {line}\nне удалось запустить: {exc}", False
@@ -837,7 +880,7 @@ class UpdateHarnessScreen(ConsoleShell):
             self.notify("Harness обновлён")
         else:
             self.notify("Обновление завершилось с ошибкой", severity="error")
-        self._reload()
+        self._reload(force=True)
 
     # Esc, a number key, the menu and the breadcrumbs wait for a running update. Every way out
     # closes the screen with `dismiss(None)`, which runs the push callback that refreshes Home (the

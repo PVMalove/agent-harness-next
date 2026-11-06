@@ -9,19 +9,26 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..kernel.catalog import (
+    CONFIGURATION_COMMANDS,
     DIAGNOSTICS_COMMANDS,
     HARNESS_COMMANDS,
+    HARNESS_MENU_HIDDEN,
     MEMORY_COMMANDS,
     REPO_MAP_COMMANDS,
     SETUP_COMMANDS,
+    UPDATE_SEED_SELECTED,
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
+from harness.orchestration.core.constants import LIVE_DISPATCH_STATES
 from .api.request_router import RequestRouter
 from .application.decisions import DecisionService
 from .application.events import POLL_INTERVAL_SECONDS, OrchestrationEvents
 from .application.jobs import JobService
+from .application.live_steps import POLL_SECONDS as STEPS_POLL_SECONDS
+from .application.live_steps import LiveSteps
 from .application.ports import (
     Clock,
+    ConfigurationCollector,
     CommandSpec,
     HarnessCollector,
     HealthCollector,
@@ -35,6 +42,8 @@ from .application.ports import (
     RecoveryReader,
     RepoMapCollector,
     RouteReader,
+    UpdateDiffReader,
+    UpdateHarnessCollector,
 )
 from .application.screens import ScreenService
 from .application.task_board import TaskBoardService
@@ -57,11 +66,14 @@ from .infrastructure.screen_facts import (
     HealthFacts,
     collect_ledger,
     collect_ledger_online,
+    configuration_facts,
     harness_facts,
     maintenance_facts,
     open_project_facts,
     read_lock,
     repo_map_facts,
+    update_diff as read_update_diff,
+    update_harness_facts,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
 from .infrastructure.worker_steps import read_worker_facts, read_worker_log
@@ -104,6 +116,9 @@ def screen_service(
     maintenance: MaintenanceCollector | None = None,
     repo_map: RepoMapCollector | None = None,
     open_project: OpenProjectCollector | None = None,
+    update_harness: UpdateHarnessCollector | None = None,
+    update_diff: UpdateDiffReader | None = None,
+    configuration: ConfigurationCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -124,6 +139,11 @@ def screen_service(
         maintenance=maintenance_facts if maintenance is None else maintenance,
         repo_map=repo_map_facts if repo_map is None else repo_map,
         open_project=open_project_facts if open_project is None else open_project,
+        update_harness=(
+            update_harness_facts if update_harness is None else update_harness
+        ),
+        update_diff=read_update_diff if update_diff is None else update_diff,
+        configuration=configuration_facts if configuration is None else configuration,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger
@@ -135,20 +155,36 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, Diagnostics, Repo Map, installation, memory, coordinator
-    and native permission commands; without `executor` the commands run as subprocesses."""
+    """The job service over the harness, the selected seed update, Diagnostics, Repo Map,
+    installation, configuration, memory, coordinator and native permission commands; without
+    `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
+        UPDATE_SEED_SELECTED,
         *DIAGNOSTICS_COMMANDS,
         *REPO_MAP_COMMANDS,
         *SETUP_COMMANDS,
+        *CONFIGURATION_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
     )
+    listed = {
+        "harness": tuple(
+            entry for entry in HARNESS_COMMANDS if entry.key not in HARNESS_MENU_HIDDEN
+        ),
+        "diagnostics": DIAGNOSTICS_COMMANDS,
+        "repo-map": REPO_MAP_COMMANDS,
+        "setup": SETUP_COMMANDS,
+        "configuration": CONFIGURATION_COMMANDS,
+        "memory": MEMORY_COMMANDS,
+    }
     return JobService(
         repo,
         catalog={entry.key: entry for entry in entries},
+        sections={
+            entry.key: section for section, group in listed.items() for entry in group
+        },
         executor=run_command if executor is None else executor,
         journal=command_journal.append,
         new_id=new_id,
@@ -196,6 +232,23 @@ def worker_steps_query(
     )
 
 
+def live_steps(
+    events: OrchestrationEvents,
+    workers: WorkerStepsQuery,
+    *,
+    poll_seconds: float = STEPS_POLL_SECONDS,
+) -> LiveSteps:
+    """The live step feed over the server's event journal and worker logs; it follows the
+    dispatches in the coordinator's live states."""
+    return LiveSteps(
+        events,
+        workers,
+        now=utc_now_iso,
+        live_states={state.value for state in LIVE_DISPATCH_STATES},
+        poll_seconds=poll_seconds,
+    )
+
+
 @dataclass(frozen=True)
 class Composition:
     """Everything one console server is built from. `discovery` makes the project's discovery
@@ -207,6 +260,7 @@ class Composition:
     events: OrchestrationEvents
     screens: ScreenService
     workers: WorkerStepsQuery
+    steps: LiveSteps
     router: RequestRouter
     discovery: Callable[[Path], Discovery]
 
@@ -220,6 +274,7 @@ def compose(
     events: OrchestrationEvents | None = None,
     screens: ScreenService | None = None,
     workers: WorkerStepsQuery | None = None,
+    steps: LiveSteps | None = None,
 ) -> Composition:
     """The services of one console server, with the given ones kept, and its request router."""
     snapshots = snapshots or snapshot_service(repo)
@@ -228,6 +283,7 @@ def compose(
     events = events or orchestration_events(repo)
     screens = screens or screen_service(repo)
     workers = workers or worker_steps_query(repo)
+    steps = steps or live_steps(events, workers)
     return Composition(
         snapshots,
         jobs,
@@ -235,6 +291,7 @@ def compose(
         events,
         screens,
         workers,
-        RequestRouter(snapshots, jobs, decisions, events, screens, workers),
+        steps,
+        RequestRouter(snapshots, jobs, decisions, events, screens, workers, steps),
         Discovery,
     )

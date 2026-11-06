@@ -24,6 +24,9 @@ from .protocol.screens import is_screen_request
 from .protocol.screens import respond as respond_screens
 from ..application.snapshots import SnapshotService
 from .protocol.snapshots import busy, respond
+from ..application.live_steps import LiveSteps
+from .protocol.steps import is_steps_request
+from .protocol.steps import replies as step_replies
 from ..application.worker_steps import WorkerStepsQuery
 from ...kernel.protocol import WORKER_SUBSCRIBE_REQUEST
 from .protocol.workers import worker_request_type
@@ -65,6 +68,7 @@ class RouterConnection:
             if job_type == "job.subscribe"
             or is_orchestration_request(raw)
             or worker_request_type(raw) == WORKER_SUBSCRIBE_REQUEST
+            or is_steps_request(raw)
             else (self._requests, MAX_UNFINISHED_REQUESTS)
         )
         if len(pending) >= limit:
@@ -98,6 +102,11 @@ class RouterConnection:
             elif is_orchestration_request(raw):
                 async with contextlib.aclosing(event_replies(raw, router.events)) as replies:
                     await self._stream(replies)
+            elif is_steps_request(raw):
+                async with contextlib.aclosing(
+                    step_replies(raw, router.steps)
+                ) as replies:
+                    await self._stream(replies)
             elif is_decisions_request(raw):
                 await self._reply(await respond_decisions(raw, router.decisions))
             elif is_screen_request(raw):
@@ -128,6 +137,7 @@ class RequestRouter:
         events: OrchestrationEvents,
         screens: ScreenService,
         workers: WorkerStepsQuery,
+        steps: LiveSteps,
     ) -> None:
         self.snapshots = snapshots
         self.jobs = jobs
@@ -135,6 +145,7 @@ class RequestRouter:
         self.events = events
         self.screens = screens
         self.workers = workers
+        self.steps = steps
 
     def open(
         self, send: Send, on_failure: Callable[[], None] | None = None

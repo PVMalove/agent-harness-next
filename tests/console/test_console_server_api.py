@@ -515,3 +515,143 @@ def test_the_open_project_screen_reads_and_installs_the_served_project_through_t
     }
 
     assert {"open_project", "setup_runner"} <= called
+
+
+def test_the_selected_seed_update_is_a_confirmed_server_job_with_one_path_per_line() -> None:
+    from harness.console.kernel.catalog import UPDATE_SEED_SELECTED
+    from harness.console.tui.server_api import ServerJobRunner
+
+    client = FakeClient()
+    client.job = JobResult("completed", 0, "updated", "", False, None)
+    runner = ServerJobRunner(
+        client,  # type: ignore[arg-type]
+        UPDATE_SEED_SELECTED,
+        {"paths": "AGENTS.md\n.claude/rules/one.md"},
+    )
+
+    result = runner(["harness", "update"], cwd=REPO)
+
+    assert (result.returncode, result.stdout) == (0, "updated")
+    assert client.calls == [
+        (
+            "job",
+            "update-seed-selected",
+            {"paths": "AGENTS.md\n.claude/rules/one.md"},
+            True,
+        )
+    ]
+
+
+def _configuration_draft(tmp_path: Path) -> object:
+    from harness.console.kernel.configuration import ConfigurationDraft
+    from harness.console.kernel.configuration_snapshot import collect_configuration
+
+    root = tmp_path / ".harness"
+    root.mkdir()
+    project = {
+        "language": "ru",
+        "base_branch": "main",
+        "branch_pattern": "^feature/issue-[0-9]+-.+",
+        "qa_gate_commands": ["pytest"],
+        "tracker": {"type": "local"},
+    }
+    (root / "project.json").write_text(json.dumps(project), encoding="utf-8")
+    draft = ConfigurationDraft.from_snapshot(
+        tmp_path, collect_configuration(tmp_path), ("project.json",)
+    )
+    draft.set_value("project.json", ("language",), "en")
+    return draft
+
+
+def test_the_server_configuration_runs_each_write_as_a_job_confirmed_by_its_class(
+    tmp_path: Path,
+) -> None:
+    from harness.console.kernel.configuration import ConfigurationDraft
+    from harness.console.kernel.configuration_writes import draft_request
+    from harness.console.tui.configuration_gateway import ServerConfiguration
+
+    draft = _configuration_draft(tmp_path)
+    assert isinstance(draft, ConfigurationDraft)
+    client = FakeClient()
+    client.job = JobResult("completed", 0, "Конфигурация применена.\n", "", False, None)
+    sut = ServerConfiguration(client)  # type: ignore[arg-type]
+
+    assert sut.apply(draft) == "Конфигурация применена."
+    sut.save_draft(draft, "d")
+    sut.save_current("")
+    sut.apply_adapters("f" * 64)
+    sut.recover()
+    sut.restore("v-1", {"project.json": "x"})
+
+    assert client.calls == [
+        ("job", "configuration-apply", {"request": draft_request(draft)}, True),
+        ("job", "configuration-save-draft", {"request": draft_request(draft, "d")}, False),
+        (
+            "job",
+            "configuration-save-current",
+            {"request": json.dumps({"description": ""}, separators=(",", ":"))},
+            False,
+        ),
+        (
+            "job",
+            "configuration-adapters",
+            {"request": json.dumps({"fingerprint": "f" * 64}, separators=(",", ":"))},
+            True,
+        ),
+        ("job", "configuration-recover", {}, False),
+        (
+            "job",
+            "configuration-restore",
+            {
+                "request": json.dumps(
+                    {"version": "v-1", "expected": {"project.json": "x"}},
+                    separators=(",", ":"),
+                )
+            },
+            True,
+        ),
+    ]
+
+
+def test_a_stale_file_a_failed_write_and_an_oversized_draft_are_refused(
+    tmp_path: Path,
+) -> None:
+    from harness.configuration_store import StaleConfiguration
+    from harness.console.kernel.configuration import ConfigurationDraft
+    from harness.console.tui.configuration_gateway import ServerConfiguration
+
+    draft = _configuration_draft(tmp_path)
+    assert isinstance(draft, ConfigurationDraft)
+    client = FakeClient()
+    sut = ServerConfiguration(client)  # type: ignore[arg-type]
+    client.job = JobResult("completed", 3, "", "Файл изменён другим процессом\n", False, None)
+    with pytest.raises(StaleConfiguration, match="другим процессом"):
+        sut.apply(draft)
+    client.job = JobResult("completed", 2, "", "Исправьте ошибки черновика\n", False, None)
+    with pytest.raises(ValueError, match="Исправьте ошибки") as failed:
+        sut.apply(draft)
+    assert not isinstance(failed.value, StaleConfiguration)
+    client.failure = ServerError("busy", "Busy: job-1 (update)")
+    with pytest.raises(ValueError, match="Busy"):
+        sut.recover()
+    client.failure = None
+    calls = len(client.calls)
+    draft.set_value("project.json", ("notes",), "я" * 1000)
+    with pytest.raises(ValueError, match="частями"):
+        sut.apply(draft)
+    assert len(client.calls) == calls
+
+
+def test_the_local_configuration_writes_an_unserved_project_in_process(
+    tmp_path: Path,
+) -> None:
+    from harness.console.kernel.configuration import ConfigurationDraft
+    from harness.console.tui.configuration_gateway import LocalConfiguration
+
+    draft = _configuration_draft(tmp_path)
+    assert isinstance(draft, ConfigurationDraft)
+    sut = LocalConfiguration(tmp_path)
+
+    assert sut.snapshot().files["project.json"].exists
+    assert "Версия сохранена" in sut.save_draft(draft, "d")
+    assert "Текущая конфигурация" in sut.save_current("")

@@ -924,7 +924,10 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
             from .configuration import ConfigurationScreen
 
             self.app.push_screen(
-                ConfigurationScreen(self.target.repo), self._configured
+                ConfigurationScreen(
+                    self.target.repo, client=self._server_for(self.target.repo)
+                ),
+                self._configured,
             )
 
     def action_copy_command(self) -> None:

@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
-from ...kernel.protocol import MAX_ID_CHARS, MAX_SKIPPED
+from ...kernel.protocol import MAX_ID_CHARS, MAX_PATH_CHARS, MAX_SKIPPED
 from .request_router import RequestRouter
 
 REGENERATE = "python -m harness.console.backend.api.schemas"
@@ -82,6 +82,25 @@ class JobCancelRequest(_Strict):  # type: ignore[explicit-any]
 class JobListRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["job.list"]
+
+
+CommandSection = Literal[
+    "harness", "diagnostics", "repo-map", "setup", "configuration", "memory"
+]
+ReversibilityClass = Literal[
+    "reversible",
+    "deletes-local-data",
+    "terminal-coordinator-action",
+    "external-change",
+    "overwrites-managed-files",
+    "downloads-files",
+]
+
+
+class JobCatalogRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["job.catalog"]
+    section: CommandSection
 
 
 class DecisionsSnapshotRequest(_Strict):  # type: ignore[explicit-any]
@@ -195,6 +214,25 @@ class HelpSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     language: Literal["ru", "en"]
 
 
+class UpdateHarnessSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["update_harness.snapshot"]
+    force: bool = False
+
+
+class UpdateHarnessDiffRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["update_harness.diff"]
+    path: Annotated[str, Field(min_length=1, max_length=MAX_PATH_CHARS)]
+    force: bool = False
+
+
+class ConfigurationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["configuration.snapshot"]
+    force: bool = False
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
@@ -221,6 +259,11 @@ class WorkerSubscribeRequest(_Strict):  # type: ignore[explicit-any]
     offset: Annotated[int, Field(ge=0)] = 0
 
 
+class StepsSubscribeRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["steps.subscribe"]
+
+
 ConsoleRequest = Annotated[
     HomeSnapshotRequest
     | HomeProblemsRequest
@@ -229,6 +272,7 @@ ConsoleRequest = Annotated[
     | JobSubscribeRequest
     | JobCancelRequest
     | JobListRequest
+    | JobCatalogRequest
     | DecisionsSnapshotRequest
     | OrchestrationSubscribeRequest
     | ReportsSnapshotRequest
@@ -246,9 +290,13 @@ ConsoleRequest = Annotated[
     | RepoMapSnapshotRequest
     | OpenProjectSnapshotRequest
     | HelpSnapshotRequest
+    | UpdateHarnessSnapshotRequest
+    | UpdateHarnessDiffRequest
+    | ConfigurationSnapshotRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
-    | WorkerSubscribeRequest,
+    | WorkerSubscribeRequest
+    | StepsSubscribeRequest,
     Field(discriminator="type"),
 ]
 
@@ -293,6 +341,7 @@ class HomeProblemsReply(_Envelope):  # type: ignore[explicit-any]
 class JobSummary(_Strict):  # type: ignore[explicit-any]
     id: str
     command_id: str
+    mutating: bool
     phase: Literal["running", "completed", "failed", "cancelled"]
     cursor: int
     done: bool
@@ -305,6 +354,28 @@ class JobListReply(_Envelope):  # type: ignore[explicit-any]
     type: Literal["job.list"]
     ok: Literal[True]
     jobs: list[JobSummary]
+
+
+class CommandDescriptor(_Strict):  # type: ignore[explicit-any]
+    command_id: str
+    title: str
+    section: CommandSection
+    reversibility: ReversibilityClass
+    reversibility_label: str
+    needs_confirmation: bool
+    confirmation_reason: str | None
+    typed_confirmation: str | None
+    read_only: bool
+    inputs: list[str]
+    plan_required: bool
+    available: bool
+
+
+class JobCatalogReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["job.catalog"]
+    ok: Literal[True]
+    commands: list[CommandDescriptor]
+    cancel_reason: str
 
 
 class JobReply(_Envelope):  # type: ignore[explicit-any]
@@ -351,6 +422,8 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "repo_map.snapshot",
         "open_project.snapshot",
         "help.snapshot",
+        "update_harness.snapshot",
+        "configuration.snapshot",
     ]
     ok: Literal[True]
     snapshot_id: int
@@ -362,9 +435,9 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
 
 
 class PagedReply(_Envelope):  # type: ignore[explicit-any]
-    """The first page of a report body or a batch chronology as JSON text."""
+    """The first page of a report body, a batch chronology or an update diff as JSON text."""
 
-    type: Literal["reports.report", "reports.timeline"]
+    type: Literal["reports.report", "reports.timeline", "update_harness.diff"]
     ok: Literal[True]
     snapshot_id: int
     text: str
@@ -423,11 +496,78 @@ class WorkerStepsReply(_Envelope):  # type: ignore[explicit-any]
     page: WorkerStepsPage
 
 
+class RosterDispatch(_Strict):  # type: ignore[explicit-any]
+    dispatch_id: str
+    batch_id: str
+    ticket: str
+    role: str
+    state: str
+
+
+class StepsRosterReply(_Envelope):  # type: ignore[explicit-any]
+    """The dispatches the live step list knows; `reset` drops the steps the client holds."""
+
+    type: Literal["steps.subscribe"]
+    ok: Literal[True]
+    kind: Literal["roster"]
+    reset: bool
+    orchestration: Literal["available", "unavailable"]
+    dispatches: list[RosterDispatch]
+
+
+class AgentStep(_Strict):  # type: ignore[explicit-any]
+    """A visible worker step: kind and text only, never thinking, tool inputs or raw JSON."""
+
+    origin: Literal["agent"]
+    dispatch_id: str
+    batch_id: str
+    role: str
+    source: Literal["structured", "plain"]
+    structure: Literal["available", "unavailable"]
+    kind: str
+    text: str
+    observed_at: str
+
+
+class OrchestrationStep(_Strict):  # type: ignore[explicit-any]
+    """An orchestration event with the allowlisted fields its text needs."""
+
+    origin: Literal["orchestration"]
+    seq: int
+    observed_at: str
+    event: Literal[
+        "batch.transition",
+        "dispatch.transition",
+        "gate.decision",
+        "qa.run",
+        "qa.attempt",
+    ]
+    batch_id: str | None
+    dispatch_id: str | None
+    ticket: str | None
+    role: str | None
+    from_state: str | None
+    to_state: str | None
+    decision: str | None
+    next_role: str | None
+    outcome: str | None
+    stage: str | None
+    message: str
+
+
+class StepsReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["steps.subscribe"]
+    ok: Literal[True]
+    kind: Literal["steps"]
+    steps: list[Annotated[AgentStep | OrchestrationStep, Field(discriminator="origin")]]
+
+
 ConsoleReply = (
     ErrorReply
     | HomeSnapshotReply
     | HomeProblemsReply
     | JobListReply
+    | JobCatalogReply
     | JobReply
     | DecisionsSnapshotReply
     | OrchestrationSourceReply
@@ -437,6 +577,8 @@ ConsoleReply = (
     | SnapshotPageReply
     | OrchestrationLockReply
     | WorkerStepsReply
+    | StepsRosterReply
+    | StepsReply
 )
 
 REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)

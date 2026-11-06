@@ -1,5 +1,207 @@
 {
   "$defs": {
+    "AgentStep": {
+      "additionalProperties": false,
+      "description": "A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.",
+      "properties": {
+        "batch_id": {
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "origin": {
+          "const": "agent",
+          "title": "Origin",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "structured",
+            "plain"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "structure": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Structure",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "dispatch_id",
+        "batch_id",
+        "role",
+        "source",
+        "structure",
+        "kind",
+        "text",
+        "observed_at"
+      ],
+      "title": "AgentStep",
+      "type": "object"
+    },
+    "CommandDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "command_id": {
+          "title": "Command Id",
+          "type": "string"
+        },
+        "confirmation_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmation Reason"
+        },
+        "inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "needs_confirmation": {
+          "title": "Needs Confirmation",
+          "type": "boolean"
+        },
+        "plan_required": {
+          "title": "Plan Required",
+          "type": "boolean"
+        },
+        "read_only": {
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "reversibility": {
+          "enum": [
+            "reversible",
+            "deletes-local-data",
+            "terminal-coordinator-action",
+            "external-change",
+            "overwrites-managed-files",
+            "downloads-files"
+          ],
+          "title": "Reversibility",
+          "type": "string"
+        },
+        "reversibility_label": {
+          "title": "Reversibility Label",
+          "type": "string"
+        },
+        "section": {
+          "enum": [
+            "harness",
+            "diagnostics",
+            "repo-map",
+            "setup",
+            "configuration",
+            "memory"
+          ],
+          "title": "Section",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "typed_confirmation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Typed Confirmation"
+        }
+      },
+      "required": [
+        "command_id",
+        "title",
+        "section",
+        "reversibility",
+        "reversibility_label",
+        "needs_confirmation",
+        "confirmation_reason",
+        "typed_confirmation",
+        "read_only",
+        "inputs",
+        "plan_required",
+        "available"
+      ],
+      "title": "CommandDescriptor",
+      "type": "object"
+    },
+    "ConfigurationSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "configuration.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ConfigurationSnapshotRequest",
+      "type": "object"
+    },
     "ConsoleReply": {
       "anyOf": [
         {
@@ -13,6 +215,9 @@
         },
         {
           "$ref": "#/$defs/JobListReply"
+        },
+        {
+          "$ref": "#/$defs/JobCatalogReply"
         },
         {
           "$ref": "#/$defs/JobReply"
@@ -40,12 +245,19 @@
         },
         {
           "$ref": "#/$defs/WorkerStepsReply"
+        },
+        {
+          "$ref": "#/$defs/StepsRosterReply"
+        },
+        {
+          "$ref": "#/$defs/StepsReply"
         }
       ]
     },
     "ConsoleRequest": {
       "discriminator": {
         "mapping": {
+          "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
@@ -55,6 +267,7 @@
           "home.problems": "#/$defs/HomeProblemsRequest",
           "home.snapshot": "#/$defs/HomeSnapshotRequest",
           "job.cancel": "#/$defs/JobCancelRequest",
+          "job.catalog": "#/$defs/JobCatalogRequest",
           "job.get": "#/$defs/JobGetRequest",
           "job.list": "#/$defs/JobListRequest",
           "job.start": "#/$defs/JobStartRequest",
@@ -69,8 +282,11 @@
           "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
           "reports.timeline": "#/$defs/TimelineRequest",
           "snapshot.page": "#/$defs/SnapshotPageRequest",
+          "steps.subscribe": "#/$defs/StepsSubscribeRequest",
           "task_board.snapshot": "#/$defs/TaskBoardSnapshotRequest",
           "task_board.specs": "#/$defs/TaskBoardSpecsRequest",
+          "update_harness.diff": "#/$defs/UpdateHarnessDiffRequest",
+          "update_harness.snapshot": "#/$defs/UpdateHarnessSnapshotRequest",
           "worker.steps": "#/$defs/WorkerStepsRequest",
           "worker.subscribe": "#/$defs/WorkerSubscribeRequest"
         },
@@ -97,6 +313,9 @@
         },
         {
           "$ref": "#/$defs/JobListRequest"
+        },
+        {
+          "$ref": "#/$defs/JobCatalogRequest"
         },
         {
           "$ref": "#/$defs/DecisionsSnapshotRequest"
@@ -150,6 +369,15 @@
           "$ref": "#/$defs/HelpSnapshotRequest"
         },
         {
+          "$ref": "#/$defs/UpdateHarnessSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/UpdateHarnessDiffRequest"
+        },
+        {
+          "$ref": "#/$defs/ConfigurationSnapshotRequest"
+        },
+        {
           "$ref": "#/$defs/SnapshotPageRequest"
         },
         {
@@ -157,6 +385,9 @@
         },
         {
           "$ref": "#/$defs/WorkerSubscribeRequest"
+        },
+        {
+          "$ref": "#/$defs/StepsSubscribeRequest"
         }
       ]
     },
@@ -784,6 +1015,106 @@
       "title": "JobCancelRequest",
       "type": "object"
     },
+    "JobCatalogReply": {
+      "additionalProperties": false,
+      "properties": {
+        "cancel_reason": {
+          "title": "Cancel Reason",
+          "type": "string"
+        },
+        "commands": {
+          "items": {
+            "$ref": "#/$defs/CommandDescriptor"
+          },
+          "title": "Commands",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "job.catalog",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "commands",
+        "cancel_reason"
+      ],
+      "title": "JobCatalogReply",
+      "type": "object"
+    },
+    "JobCatalogRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "section": {
+          "enum": [
+            "harness",
+            "diagnostics",
+            "repo-map",
+            "setup",
+            "configuration",
+            "memory"
+          ],
+          "title": "Section",
+          "type": "string"
+        },
+        "type": {
+          "const": "job.catalog",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "section"
+      ],
+      "title": "JobCatalogRequest",
+      "type": "object"
+    },
     "JobGetRequest": {
       "additionalProperties": false,
       "properties": {
@@ -1115,6 +1446,10 @@
           "title": "Id",
           "type": "string"
         },
+        "mutating": {
+          "title": "Mutating",
+          "type": "boolean"
+        },
         "phase": {
           "enum": [
             "running",
@@ -1144,6 +1479,7 @@
       "required": [
         "id",
         "command_id",
+        "mutating",
         "phase",
         "cursor",
         "done",
@@ -1466,6 +1802,169 @@
       "title": "OrchestrationSourceReply",
       "type": "object"
     },
+    "OrchestrationStep": {
+      "additionalProperties": false,
+      "description": "An orchestration event with the allowlisted fields its text needs.",
+      "properties": {
+        "batch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Batch Id"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Decision"
+        },
+        "dispatch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dispatch Id"
+        },
+        "event": {
+          "enum": [
+            "batch.transition",
+            "dispatch.transition",
+            "gate.decision",
+            "qa.run",
+            "qa.attempt"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "from_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "From State"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "next_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Role"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "origin": {
+          "const": "orchestration",
+          "title": "Origin",
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcome"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Role"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stage"
+        },
+        "ticket": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ticket"
+        },
+        "to_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "To State"
+        }
+      },
+      "required": [
+        "origin",
+        "seq",
+        "observed_at",
+        "event",
+        "batch_id",
+        "dispatch_id",
+        "ticket",
+        "role",
+        "from_state",
+        "to_state",
+        "decision",
+        "next_role",
+        "outcome",
+        "stage",
+        "message"
+      ],
+      "title": "OrchestrationStep",
+      "type": "object"
+    },
     "OrchestrationSubscribeRequest": {
       "additionalProperties": false,
       "properties": {
@@ -1511,7 +2010,7 @@
     },
     "PagedReply": {
       "additionalProperties": false,
-      "description": "The first page of a report body or a batch chronology as JSON text.",
+      "description": "The first page of a report body, a batch chronology or an update diff as JSON text.",
       "properties": {
         "done": {
           "title": "Done",
@@ -1552,7 +2051,8 @@
         "type": {
           "enum": [
             "reports.report",
-            "reports.timeline"
+            "reports.timeline",
+            "update_harness.diff"
           ],
           "title": "Type",
           "type": "string"
@@ -1744,6 +2244,40 @@
       "title": "ReportsSnapshotRequest",
       "type": "object"
     },
+    "RosterDispatch": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "ticket": {
+          "title": "Ticket",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatch_id",
+        "batch_id",
+        "ticket",
+        "role",
+        "state"
+      ],
+      "title": "RosterDispatch",
+      "type": "object"
+    },
     "ScreenSnapshotReply": {
       "additionalProperties": false,
       "description": "The first page of a screen snapshot's JSON text; `snapshot.page` reads the rest.",
@@ -1805,7 +2339,9 @@
             "harness.maintenance",
             "repo_map.snapshot",
             "open_project.snapshot",
-            "help.snapshot"
+            "help.snapshot",
+            "update_harness.snapshot",
+            "configuration.snapshot"
           ],
           "title": "Type",
           "type": "string"
@@ -1932,6 +2468,180 @@
       "title": "SnapshotPageRequest",
       "type": "object"
     },
+    "StepsReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "steps",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "steps": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent": "#/$defs/AgentStep",
+                "orchestration": "#/$defs/OrchestrationStep"
+              },
+              "propertyName": "origin"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/AgentStep"
+              },
+              {
+                "$ref": "#/$defs/OrchestrationStep"
+              }
+            ]
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "steps"
+      ],
+      "title": "StepsReply",
+      "type": "object"
+    },
+    "StepsRosterReply": {
+      "additionalProperties": false,
+      "description": "The dispatches the live step list knows; `reset` drops the steps the client holds.",
+      "properties": {
+        "dispatches": {
+          "items": {
+            "$ref": "#/$defs/RosterDispatch"
+          },
+          "title": "Dispatches",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "roster",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "orchestration": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Orchestration",
+          "type": "string"
+        },
+        "reset": {
+          "title": "Reset",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "reset",
+        "orchestration",
+        "dispatches"
+      ],
+      "title": "StepsRosterReply",
+      "type": "object"
+    },
+    "StepsSubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "StepsSubscribeRequest",
+      "type": "object"
+    },
     "TaskBoardSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
@@ -2047,6 +2757,85 @@
         "batch_id"
       ],
       "title": "TimelineRequest",
+      "type": "object"
+    },
+    "UpdateHarnessDiffRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "type": {
+          "const": "update_harness.diff",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "UpdateHarnessDiffRequest",
+      "type": "object"
+    },
+    "UpdateHarnessSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "update_harness.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "UpdateHarnessSnapshotRequest",
       "type": "object"
     },
     "WorkerStep": {

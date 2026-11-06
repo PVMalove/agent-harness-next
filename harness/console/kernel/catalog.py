@@ -140,6 +140,60 @@ def seed_update_entry(paths: Sequence[str]) -> CatalogEntry:
     )
 
 
+def _safe_seed_path(path: str) -> bool:
+    """A project-relative POSIX path that cannot be read as a flag or leave the project."""
+    return (
+        bool(path)
+        and not path.startswith(("-", "/"))
+        and "\\" not in path
+        and ".." not in path.split("/")
+    )
+
+
+@dataclass(frozen=True)
+class SeedUpdateCommand:
+    """`harness update` over the seed files a job names in its one repeatable field `paths`
+    (one path per line), as a console server job; the argv is `seed_update_entry`'s."""
+
+    key: str
+    title: str
+    reversibility: Reversibility
+    read_only: bool = False
+    inputs: tuple[str, ...] = ("paths",)
+
+    @property
+    def needs_confirmation(self) -> bool:
+        return self.reversibility is not Reversibility.REVERSIBLE
+
+    def available(self, repo: Path) -> bool:
+        return True
+
+    @staticmethod
+    def paths(values: Mapping[str, str]) -> list[str]:
+        return [line for line in values.get("paths", "").splitlines() if line.strip()]
+
+    def accepts(self, values: Mapping[str, str]) -> bool:
+        """Exactly `paths`, with at least one path and every path safe."""
+        paths = self.paths(values)
+        return (
+            set(values) == {"paths"}
+            and bool(paths)
+            and all(_safe_seed_path(path) for path in paths)
+        )
+
+    def cli_argv(
+        self, repo: Path, values: Mapping[str, str] | None = None
+    ) -> list[str]:
+        return seed_update_entry(self.paths(values or {})).cli_argv(repo)
+
+
+UPDATE_SEED_SELECTED = SeedUpdateCommand(
+    "update-seed-selected",
+    "Обновить харнесс с перезаписью выбранных seed-файлов",
+    Reversibility.OVERWRITES_MANAGED_FILES,
+)
+
+
 def parsers_install_entry(languages: Sequence[str]) -> CatalogEntry:
     """`harness parsers install` for the chosen languages (`--language` per language)."""
     flags = tuple(part for key in languages for part in ("--language", key))
@@ -390,6 +444,11 @@ HARNESS_COMMANDS: tuple[CatalogEntry, ...] = (
     ),
 )
 
+# Harness commands the Harness menu does not list: the "Update Harness" screen runs them.
+HARNESS_MENU_HIDDEN = frozenset(
+    {"init", "update", "update-force-managed", "update-force-seed", "adopt"}
+)
+
 # The Diagnostics screen's fixes: `harness health --fix` that prints the `--json` report, so the
 # screen reads back which fixes were applied. They are not listed in the Harness menu.
 DIAGNOSTICS_COMMANDS: tuple[CatalogEntry, ...] = (
@@ -467,4 +526,73 @@ SETUP_COMMANDS: tuple[CatalogEntry, ...] = tuple(
         f"{_HARNESS_CLI}:cmd_{action}",
     )
     for action in ("init", "adopt", "update")
+)
+
+# «Настройка»: the configuration writes, run as console server jobs by the configuration CLI of
+# the harness package the server runs; a draft travels as one `request` (see
+# `configuration_writes`). Writing the configuration files themselves overwrites seed files of
+# the project; saving a version or recovering an interrupted write does not. They are not listed
+# in the Harness menu.
+_CONFIGURATION_CLI = str(Path(__file__).resolve().parent / "configuration_cli.py")
+_CONFIGURATION_FUNCTION = "harness/console/kernel/configuration_cli.py:main"
+
+
+def _configuration(
+    key: str, title: str, operation: str, reversibility: Reversibility, request: bool = True
+) -> CatalogEntry:
+    return CatalogEntry(
+        f"configuration-{key}",
+        title,
+        (
+            "python",
+            "-B",
+            _CONFIGURATION_CLI,
+            operation,
+            "--repo",
+            "{repo}",
+            *(("--request", "{request}") if request else ()),
+        ),
+        reversibility,
+        _CONFIGURATION_FUNCTION,
+    )
+
+
+CONFIGURATION_COMMANDS: tuple[CatalogEntry, ...] = (
+    _configuration(
+        "save-draft",
+        "Сохранить черновик настройки как версию",
+        "save-draft",
+        Reversibility.REVERSIBLE,
+    ),
+    _configuration(
+        "save-current",
+        "Сохранить текущую конфигурацию как версию",
+        "save-current",
+        Reversibility.REVERSIBLE,
+    ),
+    _configuration(
+        "apply",
+        "Применить конфигурацию",
+        "apply",
+        Reversibility.OVERWRITES_MANAGED_FILES,
+    ),
+    _configuration(
+        "adapters",
+        "Обновить адаптеры runtime",
+        "adapters",
+        Reversibility.OVERWRITES_MANAGED_FILES,
+    ),
+    _configuration(
+        "recover",
+        "Восстановить незавершённую запись конфигурации",
+        "recover",
+        Reversibility.REVERSIBLE,
+        request=False,
+    ),
+    _configuration(
+        "restore",
+        "Восстановить версию конфигурации",
+        "restore",
+        Reversibility.OVERWRITES_MANAGED_FILES,
+    ),
 )

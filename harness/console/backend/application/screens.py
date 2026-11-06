@@ -1,8 +1,8 @@
 """The screen snapshots of Reports, Orchestration, Recovery, Container route, Diagnostics, Harness,
-Repo Map, «Открыть проект» and «Справка»: collect them off the event loop, keep the ledger, the
-batch history, the health reports, the Harness, the Repo Map and the «Открыть проект» facts in a
-short single-flight cache and hand out every snapshot as the first page of its JSON text, kept for
-`snapshot.page`."""
+Repo Map, «Открыть проект», «Справка», «Обновить Harness» and «Настройка»: collect them off the
+event loop, keep the ledger, the batch history, the health reports, the Harness, the Repo Map, the
+«Открыть проект», the «Обновить Harness» and the «Настройка» facts in a short single-flight cache and hand out every snapshot as the
+first page of its JSON text, kept for `snapshot.page`."""
 
 from __future__ import annotations
 
@@ -17,10 +17,12 @@ from ...kernel.batch_history import History
 from ...kernel.help_text import help_sections
 from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
+from ...kernel.update_harness_snapshot import diff_paths
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
 from ....json_types import JsonObject
 from .ports import (
     Clock,
+    ConfigurationCollector,
     HarnessCollector,
     HealthCollector,
     LedgerCollector,
@@ -30,6 +32,8 @@ from .ports import (
     RecoveryReader,
     RepoMapCollector,
     RouteReader,
+    UpdateDiffReader,
+    UpdateHarnessCollector,
 )
 from .task_board import TaskBoardService
 
@@ -145,6 +149,9 @@ class ScreenService:
         maintenance: MaintenanceCollector | None = None,
         repo_map: RepoMapCollector | None = None,
         open_project: OpenProjectCollector | None = None,
+        update_harness: UpdateHarnessCollector | None = None,
+        update_diff: UpdateDiffReader | None = None,
+        configuration: ConfigurationCollector | None = None,
         board: TaskBoardService | None = None,
     ) -> None:
         self._repo = repo
@@ -158,6 +165,9 @@ class ScreenService:
         self._collect_maintenance = maintenance
         self._collect_repo_map = repo_map
         self._collect_open_project = open_project
+        self._collect_update_harness = update_harness
+        self._read_update_diff = update_diff
+        self._collect_configuration = configuration
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
@@ -170,6 +180,8 @@ class ScreenService:
         self._maintenance: _Source[dict[str, object]] = _Source(ttl, clock)
         self._repo_map: _Source[dict[str, object]] = _Source(ttl, clock)
         self._open_project: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._update_harness: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._configuration: _Source[dict[str, object]] = _Source(ttl, clock)
         self._pages = TextPages()
 
     async def _paged(
@@ -338,6 +350,46 @@ class ScreenService:
     async def help(self, language: str) -> Paged:
         """The console guide of «Справка» in `language`, split into its sections."""
         return await self._paged(help_sections(language).to_payload())
+
+    async def _update_facts(
+        self, force: bool
+    ) -> tuple[dict[str, object], bool, float]:
+        collect = self._collect_update_harness
+        if collect is None:
+            raise NotFound("update_harness")
+        return await self._update_harness.get(lambda: collect(self._repo), force=force)
+
+    async def update_harness(self, *, force: bool = False) -> Paged:
+        """The installed harness, the package version and the drift report of «Обновить
+        Harness»; `NotFound` without its collector."""
+        facts, cached, age = await self._update_facts(force)
+        return await self._paged(facts, cached, age)
+
+    async def update_diff(self, path: str, *, force: bool = False) -> Paged:
+        """The diff of `path` against what `harness update` writes there. Only a file the
+        drift report of the same cache lists is read; any other path is `NotFound`, so no
+        request reads an arbitrary file."""
+        reader = self._read_update_diff
+        if reader is None:
+            raise NotFound("update_harness.diff")
+        facts, _, _ = await self._update_facts(force)
+        drift = facts.get("drift")
+        listed = diff_paths(drift if isinstance(drift, dict) else None)
+        if path not in listed:
+            raise NotFound(path)
+        text = await asyncio.to_thread(reader, self._repo, path)
+        return await self._paged({"path": path, "text": text})
+
+    async def configuration(self, *, force: bool = False) -> Paged:
+        """The masked configuration files with their digests, a pending transaction and the
+        runtime adapter preview of «Настройка»; `NotFound` without its collector."""
+        collect = self._collect_configuration
+        if collect is None:
+            raise NotFound("configuration")
+        facts, cached, age = await self._configuration.get(
+            lambda: collect(self._repo), force=force
+        )
+        return await self._paged(facts, cached, age)
 
     async def task_board_specs(self, *, force: bool = False) -> Paged:
         """The open specs of the task board; `NotFound` without a configured board."""

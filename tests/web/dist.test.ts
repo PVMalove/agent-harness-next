@@ -61,6 +61,18 @@ describe("the build in harness/console/frontend/dist", () => {
     }
   });
 
+  test("ships the Harness commands panel over the job protocol of the same server", () => {
+    const scripts = ofType(".js").map(text).join("\n");
+    expect(scripts).toContain("job.catalog");
+    expect(scripts).toContain("job.subscribe");
+  });
+
+  test("ships the live step list over the steps feed of the same server", () => {
+    const scripts = ofType(".js").map(text).join("\n");
+    expect(scripts).toContain("steps.subscribe");
+    expect(scripts).toContain("структура недоступна");
+  });
+
   test("scripts contain no URL outside the not-loaded allowlist", () => {
     for (const path of ofType(".js")) {
       const foreign = (text(path).match(URL_PATTERN) ?? []).filter(

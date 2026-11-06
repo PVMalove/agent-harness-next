@@ -55,7 +55,9 @@ def test_request_models_have_the_field_sets_of_the_services() -> None:
         "job.subscribe": schemas.JobSubscribeRequest,
         "job.cancel": schemas.JobCancelRequest,
         "job.list": schemas.JobListRequest,
+        "job.catalog": schemas.JobCatalogRequest,
     }
+    assert set(by_type) == set(jobs._FIELDS)
     for kind, model in by_type.items():
         assert _fields(model) == jobs._FIELDS[kind], kind
     assert (
@@ -92,6 +94,9 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "repo_map.snapshot": schemas.RepoMapSnapshotRequest,
         "open_project.snapshot": schemas.OpenProjectSnapshotRequest,
         "help.snapshot": schemas.HelpSnapshotRequest,
+        "update_harness.snapshot": schemas.UpdateHarnessSnapshotRequest,
+        "update_harness.diff": schemas.UpdateHarnessDiffRequest,
+        "configuration.snapshot": schemas.ConfigurationSnapshotRequest,
     }
     assert set(by_type) == screens.SCREEN_TYPES
     for kind, model in by_type.items():
@@ -116,6 +121,9 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 13, "type": "harness.maintenance"},
         {"id": 14, "type": "open_project.snapshot", "force": True},
         {"id": 15, "type": "help.snapshot", "language": "en"},
+        {"id": 16, "type": "update_harness.snapshot", "force": True},
+        {"id": 17, "type": "update_harness.diff", "path": "AGENTS.md", "force": True},
+        {"id": 18, "type": "configuration.snapshot", "force": True},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -133,6 +141,11 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "open_project.snapshot", "repo": "/work/other"},
         {"type": "help.snapshot"},
         {"type": "help.snapshot", "language": "de"},
+        {"type": "update_harness.snapshot", "path": "x"},
+        {"type": "update_harness.diff"},
+        {"type": "update_harness.diff", "path": ""},
+        {"type": "update_harness.diff", "path": "a" * 513},
+        {"type": "configuration.snapshot", "names": ["project.json"]},
     ):
         with pytest.raises(ValueError):
             schemas.REQUESTS.validate_python(broken)
@@ -163,7 +176,19 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
             "v": 1, "id": 7, "type": kind, "ok": True, "snapshot_id": 5,
             "text": "{}", "next": 2, "done": True, "cached": False, "age_seconds": 0.0,
         }
-        for kind in ("diagnostics.snapshot", "harness.snapshot", "harness.maintenance")
+        for kind in (
+            "diagnostics.snapshot",
+            "harness.snapshot",
+            "harness.maintenance",
+            "update_harness.snapshot",
+            "configuration.snapshot",
+        )
+    )
+    replies.append(
+        {
+            "v": 1, "id": 8, "type": "update_harness.diff", "ok": True,
+            "snapshot_id": 6, "text": "{}", "next": 2, "done": True,
+        }
     )
     for reply in replies:
         assert schemas.REPLIES.validate_python(reply).type == reply["type"]
@@ -185,6 +210,41 @@ def test_every_documented_request_parses_as_its_model() -> None:
         assert parsed.type == sample["type"]
     with pytest.raises(ValueError):
         schemas.REQUESTS.validate_python({"type": "job.list", "extra": 1})
+
+
+def test_the_job_catalog_models_match_the_job_service_replies(tmp_path: Path) -> None:
+    """The section and class enums are those of the server; a real reply validates."""
+    import asyncio
+    import json
+    from typing import get_args
+
+    from harness.console.backend import composition
+    from harness.console.backend.domain.jobs import COMMAND_SECTIONS
+    from harness.console.kernel.catalog import Reversibility
+
+    assert get_args(schemas.CommandSection) == COMMAND_SECTIONS
+    assert set(get_args(schemas.ReversibilityClass)) == {
+        member.value for member in Reversibility
+    }
+
+    async def idle(
+        argv: object, *, cwd: Path, on_output: object, cancel_event: object
+    ) -> int:
+        return 0
+
+    served = composition.job_service(tmp_path, executor=idle)
+
+    async def answers() -> list[str]:
+        out: list[str] = []
+        for section in COMMAND_SECTIONS:
+            raw = json.dumps({"id": 1, "type": "job.catalog", "section": section})
+            out += [text async for text in jobs.replies(raw, served)]
+        return out
+
+    for text in asyncio.run(answers()):
+        assert schemas.REPLIES.validate_json(text).type == "job.catalog"
+    with pytest.raises(ValueError):
+        schemas.REQUESTS.validate_python({"type": "job.catalog", "section": "nowhere"})
 
 
 def test_worker_request_models_have_the_field_sets_of_the_worker_protocol() -> None:
@@ -225,3 +285,52 @@ def test_the_help_request_schema_accepts_exactly_the_languages_of_the_guide() ->
     annotation = schemas.HelpSnapshotRequest.model_fields["language"].annotation
 
     assert get_args(annotation) == HELP_LANGUAGES
+
+
+def test_step_models_match_the_live_step_items_and_refuse_extra_fields() -> None:
+    from harness.console.backend.api.protocol import steps
+    from harness.console.backend.domain import live_steps
+
+    assert _fields(schemas.StepsSubscribeRequest) == steps.FIELDS
+    roster = live_steps.RosterDispatch("d", "b", "#1", "developer", "working")
+    agent = live_steps.AgentStep(
+        "d",
+        "b",
+        "developer",
+        "plain",
+        "unavailable",
+        "log",
+        "hi",
+        "2026-11-06T10:00:00Z",
+    )
+    event = live_steps.orchestration_step(
+        {"seq": 1, "event": "qa.run", "dispatch_id": "d", "outcome": "pass"}, [roster]
+    )
+    assert event is not None
+    assert set(schemas.RosterDispatch.model_fields) == set(roster.to_wire())
+    assert set(schemas.AgentStep.model_fields) == set(agent.to_wire())
+    assert set(schemas.OrchestrationStep.model_fields) == set(event.to_wire())
+    envelope = {"v": 1, "id": 1, "type": "steps.subscribe", "ok": True}
+    reply = {**envelope, "kind": "steps", "steps": [agent.to_wire(), event.to_wire()]}
+    assert schemas.REPLIES.validate_python(reply).type == "steps.subscribe"
+    schemas.REPLIES.validate_python(
+        {
+            **envelope,
+            "kind": "roster",
+            "reset": True,
+            "orchestration": "available",
+            "dispatches": [roster.to_wire()],
+        }
+    )
+    extras: tuple[dict[str, object], ...] = (
+        {"thinking": "x"},
+        {"input": {}},
+        {"raw": "{}"},
+    )
+    for extra in extras:
+        with pytest.raises(ValueError):
+            schemas.REPLIES.validate_python(
+                {**reply, "steps": [{**agent.to_wire(), **extra}]}
+            )
+    with pytest.raises(ValueError):
+        schemas.REQUESTS.validate_python({"type": "steps.subscribe", "cursor": "x"})

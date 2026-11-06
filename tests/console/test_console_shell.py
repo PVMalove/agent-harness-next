@@ -274,3 +274,22 @@ def test_reports_and_repo_map_show_no_demo_data_from_the_mockups() -> None:
         source = (screens / f"{name}.py").read_text(encoding="utf-8")
         for value in demo:
             assert value not in source, f"{name}: the mockup's sample {value!r}"
+
+
+def test_every_screen_that_opens_the_wizard_hands_it_the_console_server_client() -> None:
+    """The wizard writes the served project through the server; only «Открыть проект» may open it
+    without a client, for a project the server does not serve."""
+    import ast
+
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
+    for name in ("dashboard", "container_route", "recovery", "repo_map_settings", "project_setup"):
+        tree = ast.parse((screens / f"{name}.py").read_text(encoding="utf-8"))
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "id", "") == "ConfigurationScreen"
+        ]
+        assert calls, name
+        for call in calls:
+            assert "client" in {keyword.arg for keyword in call.keywords}, name

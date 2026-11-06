@@ -1,3 +1,25 @@
 /* Only what docs/design/web-console-mockups/execution-console.css lacks; never overrides it. */
 .lang-switch button { min-width: 34px; padding: 3px 8px; font-size: 10px; }
 .lang-switch button:focus-visible { outline: 1px solid var(--primary); outline-offset: -1px; }
+/* Harness · Commands: the run panel over the mockup's harness-command rows and board dialog. */
+.command-panel { display: flex; flex-direction: column; gap: 12px; }
+.command-busy { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 12px; border-color: var(--warn); color: var(--warn); font: 10px var(--mono); }
+.command-busy-actions { display: flex; gap: 6px; }
+.command-refusal { margin: 0; padding: 8px 12px; border: 1px solid var(--err); border-radius: var(--radius); color: var(--err); font-size: 11px; }
+.command-inputs { display: flex; gap: 4px; min-width: 0; }
+.command-inputs input { flex: 1; min-width: 0; padding: 3px 6px; font: 9px var(--mono); }
+.command-output .panel-head h2 code { font-size: 11px; }
+.command-output-state { display: flex; align-items: center; gap: 8px; }
+.command-output pre { margin: 10px 12px; }
+.command-confirm-body { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.command-confirm-body h2 { margin: 0; font-size: 13px; }
+.command-confirm-body p { margin: 0; }
+.command-confirm-typed { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+.command-confirm-typed input { padding: 5px 8px; font: 11px var(--mono); }
+.command-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 600px) {
+  .command-inputs { flex-direction: column; }
+}
+/* Agent activity: the mockup's .work-* rows hold the live step list; a Codex step's pill sits
+   under its details. */
+.work-event-main .orch-pill { margin-top: 4px; }

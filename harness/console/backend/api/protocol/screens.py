@@ -1,18 +1,20 @@
 """The screen snapshot requests of Reports, Orchestration, Recovery, Container route, Diagnostics,
-Harness, Repo Map, «Открыть проект» and «Справка» and the `snapshot.page` request that completes
-them: parsing and the replies."""
+Harness, Repo Map, «Открыть проект», «Справка», «Обновить Harness» and «Настройка» and the
+`snapshot.page` request that completes them: parsing and the replies."""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
 from ....kernel.protocol import (
+    CONFIGURATION_REQUEST,
     DIAGNOSTICS_REQUEST,
     HARNESS_REQUEST,
     HELP_REQUEST,
     LOCK_REQUEST,
     MAINTENANCE_REQUEST,
     MAX_ID_CHARS,
+    MAX_PATH_CHARS,
     MAX_SKIPPED,
     OPEN_PROJECT_REQUEST,
     ORCHESTRATION_REQUEST,
@@ -26,6 +28,8 @@ from ....kernel.protocol import (
     TASK_BOARD_REQUEST,
     TASK_BOARD_SPECS_REQUEST,
     TIMELINE_REQUEST,
+    UPDATE_DIFF_REQUEST,
+    UPDATE_HARNESS_REQUEST,
 )
 from ....kernel.help_text import HELP_LANGUAGES
 from ...application.ports import SpecNotFound
@@ -57,6 +61,11 @@ _FIELDS: dict[str, frozenset[str]] = {
     # No project field: the server serves one project and never switches it.
     OPEN_PROJECT_REQUEST: frozenset({"force"}),
     HELP_REQUEST: frozenset({"language"}),
+    UPDATE_HARNESS_REQUEST: frozenset({"force"}),
+    # The path is checked against the drift report before anything is read.
+    UPDATE_DIFF_REQUEST: frozenset({"path", "force"}),
+    # Read only: a pending transaction is reported, never recovered.
+    CONFIGURATION_REQUEST: frozenset({"force"}),
 }
 # The replies that carry whether they came from the cache and how old it is.
 _CACHED_TYPES = frozenset(
@@ -93,6 +102,14 @@ def _id(body: dict[str, object], name: str, default: str | None = None) -> str:
         raise _Bad(name)
     if default is None and not value:
         raise _Bad(name)
+    return value
+
+
+def _path(body: dict[str, object]) -> str:
+    """A required, bounded project-relative path."""
+    value = body.get("path")
+    if not isinstance(value, str) or not 0 < len(value) <= MAX_PATH_CHARS:
+        raise _Bad("path")
     return value
 
 
@@ -161,6 +178,15 @@ def _call(
         if language not in HELP_LANGUAGES:
             raise _Bad("language")
         return lambda: screens.help(str(language))
+    if kind == UPDATE_HARNESS_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.update_harness(force=force)
+    if kind == UPDATE_DIFF_REQUEST:
+        path, force = _path(body), _flag(body, "force")
+        return lambda: screens.update_diff(path, force=force)
+    if kind == CONFIGURATION_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.configuration(force=force)
     batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
     runtime = _id(body, "runtime", "")
     if not role:
