@@ -220,6 +220,9 @@ EN: dict[str, str] = {
     "лог worker ещё не создан": "the worker log does not exist yet",
     "лог worker не читается": "the worker log is unreadable",
     "лог worker вне хранилища harness": "the worker log is outside harness storage",
+    "формат лога worker не распознан, текст не показывается": (
+        "the worker log format is not recognised; its text is not shown"
+    ),
     "ledger не знает этот dispatch": "the ledger has no such dispatch",
     "нет соединения с сервером консоли": "no connection to the console server",
     "Адаптеры runtime": "Runtime adapters",

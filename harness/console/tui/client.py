@@ -149,7 +149,13 @@ _STEP_PAGE_FIELDS = frozenset(
     }
 )
 _STEP_REASONS = frozenset(
-    {"no_log", "log_missing", "log_unreadable", "log_outside_storage"}
+    {
+        "no_log",
+        "log_missing",
+        "log_unreadable",
+        "log_outside_storage",
+        "log_unrecognised",
+    }
 )
 
 

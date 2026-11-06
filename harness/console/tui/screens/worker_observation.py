@@ -54,6 +54,7 @@ STEP_REASONS = {
     "log_missing": "лог worker ещё не создан",
     "log_unreadable": "лог worker не читается",
     "log_outside_storage": "лог worker вне хранилища harness",
+    "log_unrecognised": "формат лога worker не распознан, текст не показывается",
     "no_dispatch": "ledger не знает этот dispatch",
     "no_server": "нет соединения с сервером консоли",
 }

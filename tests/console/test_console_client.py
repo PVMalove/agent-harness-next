@@ -613,3 +613,30 @@ def test_a_worker_steps_page_outside_the_protocol_is_malformed(page: object) -> 
                 client.worker_steps("dispatch-a", 0)
         finally:
             client.close()
+
+
+def test_every_server_step_reason_is_accepted_and_has_screen_text() -> None:
+    from harness.console.backend.domain.worker_steps import REASONS
+    from harness.console.tui.screens.worker_observation import STEP_REASONS
+
+    def answer(request: dict[str, object]) -> str:
+        return _ok(
+            request,
+            page=_steps_page(
+                state="unavailable",
+                reason=request["dispatch_id"],
+                message="m",
+                steps=[],
+            ),
+        )
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            pages = [client.worker_steps(reason, 0) for reason in REASONS]
+        finally:
+            client.close()
+
+    assert [page.reason if page else None for page in pages] == list(REASONS)
+    assert "log_unrecognised" in REASONS
+    assert set(REASONS) <= set(STEP_REASONS)
