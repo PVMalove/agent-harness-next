@@ -12,6 +12,7 @@ from harness.console.backend.api import schemas
 from harness.console.backend.api.protocol import events as orchestration_events
 from harness.console.backend.api.protocol import jobs
 from harness.console.backend.api.protocol import screens
+from harness.console.backend.api.protocol import workers
 
 
 def _drift_message(path: Path) -> str:
@@ -161,3 +162,33 @@ def test_every_documented_request_parses_as_its_model() -> None:
         assert parsed.type == sample["type"]
     with pytest.raises(ValueError):
         schemas.REQUESTS.validate_python({"type": "job.list", "extra": 1})
+
+
+def test_worker_request_models_have_the_field_sets_of_the_worker_protocol() -> None:
+    for model in (schemas.WorkerStepsRequest, schemas.WorkerSubscribeRequest):
+        assert _fields(model) == workers._FIELDS
+        assert model.model_config.get("extra") == "forbid"
+    parsed = schemas.REQUESTS.validate_python(
+        {"id": 1, "type": "worker.subscribe", "dispatch_id": "dispatch-a"}
+    )
+    assert parsed.type == "worker.subscribe"
+    for broken in (
+        {"type": "worker.steps", "dispatch_id": "dispatch-a"},
+        {"type": "worker.steps", "dispatch_id": "../x", "offset": 0},
+        {"type": "worker.steps", "dispatch_id": "d", "offset": -1},
+        {"type": "worker.subscribe", "dispatch_id": "d", "follow": True},
+    ):
+        with pytest.raises(ValueError):
+            schemas.REQUESTS.validate_python(broken)
+    page = {
+        "dispatch_id": "d", "source": "plain", "structure": "unavailable",
+        "state": "connected", "reason": None, "message": "", "offset": 10,
+        "reset": False, "more": False, "last_step_age_seconds": 1,
+        "steps": [{"kind": "log", "text": "hi"}],
+    }
+    reply = {"v": 1, "id": 1, "type": "worker.steps", "ok": True, "page": page}
+    assert schemas.REPLIES.validate_python(reply).type == "worker.steps"
+    with pytest.raises(ValueError):
+        schemas.REPLIES.validate_python(
+            {**reply, "page": {**page, "steps": [{"kind": "tool", "text": "x", "input": {}}]}}
+        )

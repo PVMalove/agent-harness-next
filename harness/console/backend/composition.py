@@ -28,6 +28,7 @@ from .application.ports import (
 from .application.screens import ScreenService
 from .application.task_board import TaskBoardService
 from .application.snapshots import SnapshotService
+from .application.worker_steps import POLL_SECONDS, WorkerStepsQuery
 from .domain.approvals import DecisionsSnapshot
 from .domain.snapshots import HOME_TTL_SECONDS
 from .infrastructure import command_journal
@@ -47,6 +48,7 @@ from .infrastructure.screen_facts import (
     read_lock,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
+from .infrastructure.worker_steps import read_worker_facts, read_worker_log
 
 
 def snapshot_service(
@@ -153,6 +155,18 @@ def orchestration_events(
     )
 
 
+def worker_steps_query(
+    repo: Path, *, poll_seconds: float = POLL_SECONDS
+) -> WorkerStepsQuery:
+    """Worker steps read from the project's ledger records and worker logs, without the lock."""
+    return WorkerStepsQuery(
+        repo,
+        facts=read_worker_facts,
+        log=read_worker_log,
+        poll_seconds=poll_seconds,
+    )
+
+
 @dataclass(frozen=True)
 class Composition:
     """Everything one console server is built from. `discovery` makes the project's discovery
@@ -163,6 +177,7 @@ class Composition:
     decisions: DecisionService
     events: OrchestrationEvents
     screens: ScreenService
+    workers: WorkerStepsQuery
     router: RequestRouter
     discovery: Callable[[Path], Discovery]
 
@@ -175,6 +190,7 @@ def compose(
     decisions: DecisionService | None = None,
     events: OrchestrationEvents | None = None,
     screens: ScreenService | None = None,
+    workers: WorkerStepsQuery | None = None,
 ) -> Composition:
     """The services of one console server, with the given ones kept, and its request router."""
     snapshots = snapshots or snapshot_service(repo)
@@ -182,12 +198,14 @@ def compose(
     decisions = decisions or decision_service(repo)
     events = events or orchestration_events(repo)
     screens = screens or screen_service(repo)
+    workers = workers or worker_steps_query(repo)
     return Composition(
         snapshots,
         jobs,
         decisions,
         events,
         screens,
-        RequestRouter(snapshots, jobs, decisions, events, screens),
+        workers,
+        RequestRouter(snapshots, jobs, decisions, events, screens, workers),
         Discovery,
     )
