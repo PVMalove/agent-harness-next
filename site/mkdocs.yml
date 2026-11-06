@@ -56,7 +56,10 @@ markdown_extensions:
 
 nav:
   - Docs: index.md
-  - Guides: getting-started/index.md
+  - Начало:
+      - getting-started/index.md
+  - Руководства:
+      - Рабочий поток: guides/workflow.md
   - Reference: reference/index.md
   - Архитектура:
       - architecture/index.md
