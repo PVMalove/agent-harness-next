@@ -348,7 +348,7 @@ def run(ctx: SimpleNamespace) -> None:
             "integration next",
             "verification-failure",
         ),
-        ROOT / "docs" / "harness-guide.md": (
+        ROOT / "site" / "docs" / "guides" / "implement.md": (
             "строго opt-in маршрут",
             "candidate commit",
             "`reported`",
