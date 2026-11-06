@@ -33,6 +33,7 @@ from ._screen_facts import (
     HARNESS_STATE,
     Facts,
     health_report,
+    open_project_facts,
     repo_map_facts,
     service,
 )
@@ -224,6 +225,52 @@ def test_the_repo_map_snapshot_round_trips_and_is_cached(tmp_path: Path) -> None
             requests: list[dict[str, object]] = [
                 {"type": "repo_map.snapshot", "extra": 1},
                 {"type": "repo_map.snapshot", "force": "yes"},
+            ]
+            for broken in requests:
+                refused = await ask(socket, broken)
+                error = refused["error"]
+                assert refused["ok"] is False and isinstance(error, dict)
+                assert error["code"] == "bad_request"
+
+    asyncio.run(scenario())
+
+
+def test_the_open_project_and_help_snapshots_round_trip_and_no_request_switches_the_project(
+    tmp_path: Path,
+) -> None:
+    from harness.console.kernel.help_text import HelpSections, help_sections
+    from harness.console.kernel.open_project_snapshot import OpenProjectFacts
+
+    facts = Facts()
+    runtime = _runtime(tmp_path, facts)
+
+    async def ask(
+        socket: AsgiWebSocket, request: dict[str, object]
+    ) -> dict[str, object]:
+        await socket.send_text(json.dumps({"id": 1, **request}))
+        reply = json.loads(await socket.receive_text())
+        assert isinstance(reply, dict)
+        return reply
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            found = await _read(socket, {"type": "open_project.snapshot"})
+            assert OpenProjectFacts.from_payload(found) == open_project_facts()
+            cached = await ask(socket, {"type": "open_project.snapshot"})
+            assert cached["cached"] is True and facts.calls["open_project"] == 1
+            forced = await ask(socket, {"type": "open_project.snapshot", "force": True})
+            assert forced["cached"] is False and facts.calls["open_project"] == 2
+
+            english = await _read(socket, {"type": "help.snapshot", "language": "en"})
+            assert HelpSections.from_payload(english) == help_sections("en")
+            russian = await _read(socket, {"type": "help.snapshot", "language": "ru"})
+            assert HelpSections.from_payload(russian).intro.startswith("# Справка")
+
+            requests: list[dict[str, object]] = [
+                {"type": "open_project.snapshot", "repo": "/work/other"},
+                {"type": "open_project.snapshot", "force": "yes"},
+                {"type": "help.snapshot"},
+                {"type": "help.snapshot", "language": "de"},
             ]
             for broken in requests:
                 refused = await ask(socket, broken)

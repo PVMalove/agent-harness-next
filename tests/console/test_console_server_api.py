@@ -416,3 +416,102 @@ def test_a_memory_command_of_the_settings_pane_runs_as_a_server_job() -> None:
     install = parsers_install_entry(["python"])
     kept: object = settings_runner(client, install, local)  # type: ignore[arg-type]
     assert kept is local
+
+
+@pytest.mark.parametrize("action", ["init", "adopt", "update"])
+def test_the_installation_into_the_served_project_is_a_confirmed_server_job(
+    action: str,
+) -> None:
+    from typing import Literal, cast
+
+    from harness.console.kernel.project_target import ProjectTarget
+    from harness.console.tui.server_api import setup_runner
+
+    client, local = FakeClient(), NoRunner()
+    target = ProjectTarget(
+        REPO, cast(Literal["init", "adopt", "update"], action), (), ()
+    )
+    sut = setup_runner(client, REPO, target, "engineering-suite", local)  # type: ignore[arg-type]
+
+    result = sut(["harness", action], cwd=REPO)
+
+    assert result.returncode == 0
+    assert client.calls == [
+        ("job", f"setup-{action}", {"capability": "engineering-suite"}, True)
+    ]
+
+
+def test_the_installation_into_another_project_stays_with_the_local_runner() -> None:
+    from harness.console.kernel.project_target import ProjectTarget
+    from harness.console.tui.server_api import setup_runner
+
+    client, local = FakeClient(), NoRunner()
+    other = ProjectTarget(Path("/work/other"), "init", (), ())
+
+    sut: object = setup_runner(client, REPO, other, "engineering-suite", local)  # type: ignore[arg-type]
+
+    assert sut is local and client.calls == []
+
+
+class HelpClient:
+    """The `help` method of a console server client: the guide, or the client error it raises."""
+
+    def __init__(self, failure: Exception | None = None) -> None:
+        self.failure = failure
+        self.languages: list[str] = []
+
+    def help(self, language: str) -> object:
+        from harness.console.kernel.help_text import help_sections
+
+        self.languages.append(language)
+        if self.failure is not None:
+            raise self.failure
+        return help_sections(language)
+
+
+def test_the_help_screen_shows_the_guide_of_the_help_snapshot_in_the_console_language() -> None:
+    from harness.console.tui.screens.help import guide_parts
+
+    client = HelpClient()
+
+    intro, parts = guide_parts(client, "en")  # type: ignore[arg-type]
+
+    assert client.languages == ["en"]
+    assert intro.startswith("# ") and parts[0][0] == "Console window"
+    assert parts[0][1].startswith("## Console window\n")
+
+
+@pytest.mark.parametrize(
+    ("client", "expected"),
+    [
+        (None, "Help is unavailable: the console server is not connected"),
+        (HelpClient(ConnectionLost("server gone")), "Help is unavailable: server gone"),
+    ],
+)
+def test_without_an_answering_server_the_help_screen_shows_why_and_no_sections(
+    client: HelpClient | None, expected: str
+) -> None:
+    from harness.console.tui.screens.help import guide_parts
+
+    intro, parts = guide_parts(client, "en")  # type: ignore[arg-type]
+
+    assert (intro, parts) == (expected, [])
+
+
+def test_the_open_project_screen_reads_and_installs_the_served_project_through_the_server() -> (
+    None
+):
+    import ast
+
+    from harness.console.tui.screens import project_setup
+
+    tree = ast.parse(Path(str(project_setup.__file__)).read_text(encoding="utf-8"))
+    called = {
+        node.func.attr
+        if isinstance(node.func, ast.Attribute)
+        else getattr(node.func, "id", "")
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+    }
+
+    assert {"open_project", "setup_runner"} <= called

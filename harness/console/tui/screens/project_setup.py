@@ -1,4 +1,7 @@
-"""Select, inspect and install a target project through the existing CLI."""
+"""Select, inspect and install a target project through the existing CLI. The project the console
+server serves is inspected from its `open_project.snapshot` and installed by its `setup-<action>`
+job; another chosen path is inspected and installed here, and the console then opens it with its
+own server."""
 
 from __future__ import annotations
 
@@ -30,7 +33,7 @@ from ...kernel.status import Status
 from ...kernel import data
 from ....health.model import Report
 from ...kernel.catalog import process_argv
-from ..project_target import (
+from ...kernel.project_target import (
     ProjectTarget,
     capability_details,
     capability_options,
@@ -41,6 +44,8 @@ from ..project_target import (
     installation_entry,
 )
 from ...kernel.runner import CommandRunner
+from ..client import ConsoleClientError, ScreenClient
+from ..server_api import serves, setup_runner
 from ..translate import retranslate
 from .commands import call_from_worker, render_result
 from .diagnostics import render_report, styled_log
@@ -245,10 +250,17 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     ProjectSetupScreen.-narrow #directory-browser { height: 8; }
     """)
 
-    def __init__(self, repo: Path, *, command_runner: CommandRunner) -> None:
+    def __init__(
+        self,
+        repo: Path,
+        *,
+        command_runner: CommandRunner,
+        client: ScreenClient | None = None,
+    ) -> None:
         super().__init__()
         self.repo = repo
         self.runner = command_runner
+        self._client = client
         self.target: ProjectTarget | None = None
         self.busy = False
         self.stage = 0
@@ -704,7 +716,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
             blocked: tuple[str, ...] = ()
             error: Exception | None = None
             try:
-                blocked = installation_blockers(target, capability)
+                blocked = self._blockers(target, capability, force=False)
             except (ValueError, OSError) as exc:
                 error = exc
             call_from_worker(self, lambda: self._planned(epoch, target, blocked, error))
@@ -858,13 +870,57 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
             self._set_stage(4)
             self._diagnose(self.target.repo, online=False)
 
+    def _server_for(self, path: Path) -> ScreenClient | None:
+        """The console server client when `path` is the project it serves, else None: the
+        server reads and installs its own project only."""
+        client = self._client
+        return client if client is not None and serves(self.repo, path) else None
+
+    @staticmethod
+    def _served_target(client: ScreenClient) -> ProjectTarget:
+        """The served project's plan target from a fresh `open_project.snapshot`; why it cannot
+        be installed into, or why the snapshot was not read, is a `ValueError`."""
+        try:
+            facts = client.open_project(force=True)
+        except ConsoleClientError as exc:
+            raise ValueError(
+                f"Сервер консоли не отдал состояние проекта: {exc}"
+            ) from None
+        if facts.target is None:
+            raise ValueError(facts.error)
+        return facts.target
+
+    def _blockers(
+        self, target: ProjectTarget, capability: str, *, force: bool
+    ) -> tuple[str, ...]:
+        """The paths that stop installing `capability`: for the served project from its
+        snapshot (`force` reads it fresh), for another project read here. A broken lock is a
+        `ValueError`; an unknown answer is an `OSError`, so the plan stays unchecked."""
+        client = self._server_for(target.repo)
+        if client is None:
+            return installation_blockers(target, capability)
+        try:
+            facts = client.open_project(force=force)
+        except ConsoleClientError as exc:
+            raise OSError(str(exc)) from None
+        if facts.target is None:
+            raise ValueError(facts.error)
+        if capability not in facts.blockers:
+            raise OSError(facts.error or capability)
+        return facts.blockers[capability]
+
     def _inspect(self, value: str) -> None:
         self._set_busy(True)
         self._show_target("running", "Проверяется путь…")
 
         def work() -> None:
             try:
-                target = inspect_target(value)
+                client = self._server_for(Path(value)) if value.strip() else None
+                target = (
+                    inspect_target(value)
+                    if client is None
+                    else self._served_target(client)
+                )
             except ValueError as exc:
                 message = str(exc)
                 call_from_worker(self, lambda: self._failed(message))
@@ -883,9 +939,16 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
 
         def work() -> None:
             try:
-                if installation_blockers(target, capability):
+                if self._blockers(target, capability, force=True):
                     raise ValueError("План изменился; заново проверьте пути проекта")
-                result = self.runner(process_argv(argv), cwd=target.repo)
+                runner = (
+                    self.runner
+                    if self._client is None
+                    else setup_runner(
+                        self._client, self.repo, target, capability, self.runner
+                    )
+                )
+                result = runner(process_argv(argv), cwd=target.repo)
                 text, success = (
                     render_result(shlex.join(argv), result),
                     result.returncode == 0,

@@ -1,6 +1,6 @@
 """The screen snapshot requests of Reports, Orchestration, Recovery, Container route, Diagnostics,
-Harness and Repo Map and the `snapshot.page` request that completes them: parsing and the
-replies."""
+Harness, Repo Map, «Открыть проект» and «Справка» and the `snapshot.page` request that completes
+them: parsing and the replies."""
 
 from __future__ import annotations
 
@@ -9,10 +9,12 @@ from collections.abc import Awaitable, Callable
 from ....kernel.protocol import (
     DIAGNOSTICS_REQUEST,
     HARNESS_REQUEST,
+    HELP_REQUEST,
     LOCK_REQUEST,
     MAINTENANCE_REQUEST,
     MAX_ID_CHARS,
     MAX_SKIPPED,
+    OPEN_PROJECT_REQUEST,
     ORCHESTRATION_REQUEST,
     PAGE_REQUEST,
     PROTOCOL_VERSION,
@@ -25,6 +27,7 @@ from ....kernel.protocol import (
     TASK_BOARD_SPECS_REQUEST,
     TIMELINE_REQUEST,
 )
+from ....kernel.help_text import HELP_LANGUAGES
 from ...application.ports import SpecNotFound
 from ...application.screens import NotFound, Paged, ScreenService
 from . import Rejected, encode, error_reply, parse_envelope
@@ -51,6 +54,9 @@ _FIELDS: dict[str, frozenset[str]] = {
     HARNESS_REQUEST: frozenset({"force"}),
     MAINTENANCE_REQUEST: frozenset({"force"}),
     REPO_MAP_REQUEST: frozenset({"force"}),
+    # No project field: the server serves one project and never switches it.
+    OPEN_PROJECT_REQUEST: frozenset({"force"}),
+    HELP_REQUEST: frozenset({"language"}),
 }
 # The replies that carry whether they came from the cache and how old it is.
 _CACHED_TYPES = frozenset(
@@ -147,6 +153,14 @@ def _call(
     if kind == REPO_MAP_REQUEST:
         force = _flag(body, "force")
         return lambda: screens.repo_map(force=force)
+    if kind == OPEN_PROJECT_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.open_project(force=force)
+    if kind == HELP_REQUEST:
+        language = body.get("language")
+        if language not in HELP_LANGUAGES:
+            raise _Bad("language")
+        return lambda: screens.help(str(language))
     batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
     runtime = _id(body, "runtime", "")
     if not role:

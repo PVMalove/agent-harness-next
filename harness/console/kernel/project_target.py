@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -14,7 +14,7 @@ from harness.configuration_schema import PACKAGE
 from harness.health.model import JsonObject
 from harness.health.project_files import canonical_capability
 
-from ..kernel.catalog import CatalogEntry, Reversibility
+from .catalog import SETUP_COMMANDS, CatalogEntry
 
 
 @dataclass(frozen=True)
@@ -164,12 +164,12 @@ def installation_entry(target: ProjectTarget, capability: str) -> CatalogEntry:
     """The CLI command of an installation, expressed as an ordinary catalog entry."""
     if capability not in dict(capability_options()):
         raise ValueError("Неизвестная capability")
-    return CatalogEntry(
-        f"setup-{target.action}",
-        "Установить харнесс в выбранный проект",
-        ("harness", target.action, "{repo}", "--capability", capability),
-        Reversibility.OVERWRITES_MANAGED_FILES,
-        f"harness/bin/harness.py:cmd_{target.action}",
+    # The server job's own entry with the capability filled in, so the shown command and the
+    # confirmation are those of the command the server runs.
+    entry = next(item for item in SETUP_COMMANDS if item.key == f"setup-{target.action}")
+    return replace(
+        entry,
+        argv=tuple(part.replace("{capability}", capability) for part in entry.argv),
     )
 
 

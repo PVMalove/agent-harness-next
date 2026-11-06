@@ -69,8 +69,11 @@ def test_open_project_has_no_escape_binding_of_its_own() -> None:
 def test_the_screen_shows_no_demo_data_from_the_mockup() -> None:
     """The mockup's sample values (branch, counts, paths, version) are not in the sources: the
     screen shows only what the console receives."""
-    root = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui"
-    for source in (root / "screens" / "project_setup.py", root / "project_target.py"):
+    root = Path(__file__).resolve().parents[2] / "harness" / "console"
+    for source in (
+        root / "tui" / "screens" / "project_setup.py",
+        root / "kernel" / "project_target.py",
+    ):
         text = source.read_text(encoding="utf-8")
         for demo in (
             "feature/issue-721",

@@ -90,6 +90,8 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "harness.snapshot": schemas.HarnessSnapshotRequest,
         "harness.maintenance": schemas.HarnessMaintenanceRequest,
         "repo_map.snapshot": schemas.RepoMapSnapshotRequest,
+        "open_project.snapshot": schemas.OpenProjectSnapshotRequest,
+        "help.snapshot": schemas.HelpSnapshotRequest,
     }
     assert set(by_type) == screens.SCREEN_TYPES
     for kind, model in by_type.items():
@@ -112,6 +114,8 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 11, "type": "diagnostics.snapshot", "online": True, "force": True},
         {"id": 12, "type": "harness.snapshot", "force": True},
         {"id": 13, "type": "harness.maintenance"},
+        {"id": 14, "type": "open_project.snapshot", "force": True},
+        {"id": 15, "type": "help.snapshot", "language": "en"},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -126,6 +130,9 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "task_board.specs", "spec": "#1"},
         {"type": "harness.snapshot", "online": True},
         {"type": "harness.maintenance", "online": True},
+        {"type": "open_project.snapshot", "repo": "/work/other"},
+        {"type": "help.snapshot"},
+        {"type": "help.snapshot", "language": "de"},
     ):
         with pytest.raises(ValueError):
             schemas.REQUESTS.validate_python(broken)
@@ -208,3 +215,13 @@ def test_worker_request_models_have_the_field_sets_of_the_worker_protocol() -> N
         schemas.REPLIES.validate_python(
             {**reply, "page": {**page, "steps": [{"kind": "tool", "text": "x", "input": {}}]}}
         )
+
+
+def test_the_help_request_schema_accepts_exactly_the_languages_of_the_guide() -> None:
+    from typing import get_args
+
+    from harness.console.kernel.help_text import HELP_LANGUAGES
+
+    annotation = schemas.HelpSnapshotRequest.model_fields["language"].annotation
+
+    assert get_args(annotation) == HELP_LANGUAGES

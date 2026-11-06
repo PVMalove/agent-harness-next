@@ -1,6 +1,6 @@
 """Fake screen facts for the console server tests: an in-memory ledger, a lock reader, the
-recovery and container route readers and the Diagnostics, Harness and Repo Map collectors, each
-counting its calls."""
+recovery and container route readers and the Diagnostics, Harness, Repo Map and «Открыть проект»
+collectors, each counting its calls."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from harness.console.kernel.batch_history import History, HistoryBatch
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult, Outcome
 from harness.console.kernel.harness_facts import HarnessState
+from harness.console.kernel.open_project_snapshot import Candidate, OpenProjectFacts
+from harness.console.kernel.project_target import ProjectTarget
 from harness.console.kernel.repo_map import parse_map
 from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
@@ -72,6 +74,19 @@ def repo_map_facts() -> RepoMapFacts:
             Path("/work/project/registry"), "cp312-linux", "bundle", ("python",), None
         ),
         language_files={"python": 3},
+    )
+
+
+def open_project_facts() -> OpenProjectFacts:
+    return OpenProjectFacts(
+        repo="/work/project",
+        target=ProjectTarget(Path("/work/project"), "init", (), (), ()),
+        error="",
+        blockers={"engineering-suite": ()},
+        candidates=(
+            Candidate("/work/project", installed=False, current=True),
+            Candidate("/work/other", installed=True, current=False),
+        ),
     )
 
 
@@ -142,6 +157,10 @@ class Facts:
         self._count("repo_map")
         return repo_map_facts().to_payload()
 
+    def open_project(self, repo: Path, /) -> dict[str, object]:
+        self._count("open_project")
+        return open_project_facts().to_payload()
+
 
 class Clock:
     def __init__(self) -> None:
@@ -167,4 +186,5 @@ def service(
         harness=facts.harness,
         maintenance=facts.maintenance,
         repo_map=facts.repo_map,
+        open_project=facts.open_project,
     )

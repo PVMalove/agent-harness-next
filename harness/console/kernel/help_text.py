@@ -1,8 +1,11 @@
 """The console's Help section: a short Russian guide to the sections, keys and safety rules.
 
-Plain Markdown, stdlib-only, so it is testable without textual; screens/help.py renders it."""
+Plain Markdown, stdlib-only, so it is testable without textual; the `help.snapshot` of the console
+server serves it and the TUI screen screens/help.py renders it."""
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 HELP_MARKDOWN = """\
 # Справка по пульту
@@ -210,3 +213,65 @@ Check statuses: ✔ ok — successful; ⚠ warn — warning; ✖ fail — error;
 def help_markdown(language: str) -> str:
     """The guide in `language`."""
     return HELP_MARKDOWN_EN if language == "en" else HELP_MARKDOWN
+
+
+HELP_LANGUAGES = ("ru", "en")
+_FIELDS = frozenset({"language", "intro", "sections"})
+_SECTION_FIELDS = frozenset({"title", "markdown"})
+
+
+@dataclass(frozen=True)
+class HelpSections:
+    """The guide in one language: the introduction before its first `## ` heading and each
+    section as its title and its Markdown, heading included. `to_payload` and `from_payload` are
+    the wire codec of a `help.snapshot` reply; reading it back is strict, so a reply off the
+    schema is a `ValueError`."""
+
+    language: str
+    intro: str
+    sections: tuple[tuple[str, str], ...]
+
+    def to_payload(self) -> dict[str, object]:
+        """The JSON object of a `help.snapshot` reply."""
+        return {
+            "language": self.language,
+            "intro": self.intro,
+            "sections": [
+                {"title": title, "markdown": body} for title, body in self.sections
+            ],
+        }
+
+    @classmethod
+    def from_payload(cls, payload: object) -> HelpSections:
+        """The sections of a `help.snapshot` reply; anything off the schema is a `ValueError`."""
+        if not isinstance(payload, dict) or set(payload) != _FIELDS:
+            raise ValueError("help snapshot fields")
+        language, intro, sections = (
+            payload["language"],
+            payload["intro"],
+            payload["sections"],
+        )
+        if language not in HELP_LANGUAGES or not isinstance(intro, str):
+            raise ValueError("help snapshot language or intro")
+        if not isinstance(sections, list) or not all(
+            isinstance(item, dict)
+            and set(item) == _SECTION_FIELDS
+            and all(isinstance(part, str) for part in item.values())
+            for item in sections
+        ):
+            raise ValueError("help snapshot sections")
+        return cls(
+            language,
+            intro,
+            tuple((item["title"], item["markdown"]) for item in sections),
+        )
+
+
+def help_sections(language: str) -> HelpSections:
+    """The guide in `language` (one of `HELP_LANGUAGES`) split at its `## ` headings."""
+    intro, *parts = help_markdown(language).split("\n## ")
+    return HelpSections(
+        language,
+        intro,
+        tuple((part.split("\n", 1)[0], "## " + part) for part in parts),
+    )

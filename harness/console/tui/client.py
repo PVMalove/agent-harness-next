@@ -36,6 +36,8 @@ from ..kernel.protocol import (
     MAINTENANCE_REQUEST,
     MESSAGE_LIMIT,
     ORCHESTRATION_REQUEST,
+    HELP_REQUEST,
+    OPEN_PROJECT_REQUEST,
     PAGE_REQUEST,
     PROTOCOL_VERSION,
     RECOVERY_REQUEST,
@@ -46,6 +48,8 @@ from ..kernel.protocol import (
     TIMELINE_REQUEST,
     WORKER_STEPS_REQUEST,
 )
+from ..kernel.help_text import HelpSections
+from ..kernel.open_project_snapshot import OpenProjectFacts
 from ..kernel.repo_map_snapshot import RepoMapFacts
 from ..kernel.reports import (
     BatchTimeline,
@@ -282,6 +286,10 @@ class ScreenClient(HomeClient, Protocol):
     ) -> tuple[MaintenanceView | None, str]: ...
 
     def repo_map(self, *, force: bool = False) -> RepoMapFacts: ...
+
+    def open_project(self, *, force: bool = False) -> OpenProjectFacts: ...
+
+    def help(self, language: str) -> HelpSections: ...
 
     def run_job(
         self,
@@ -538,6 +546,20 @@ class ConsoleClient:
         the memory status of Repo Map; a map off schema v1 is `MalformedReply`."""
         found = self._paged({"type": REPO_MAP_REQUEST, "force": force})
         return self._decoded(RepoMapFacts.from_payload, found, "снимок Repo Map")
+
+    def open_project(self, *, force: bool = False) -> OpenProjectFacts:
+        """The installation state of the served project and the candidate projects of «Открыть
+        проект»; a reply off the schema is `MalformedReply`."""
+        found = self._paged({"type": OPEN_PROJECT_REQUEST, "force": force})
+        return self._decoded(
+            OpenProjectFacts.from_payload, found, "снимок «Открыть проект»"
+        )
+
+    def help(self, language: str) -> HelpSections:
+        """The console guide in `language`, split into its sections; a reply off the schema is
+        `MalformedReply`."""
+        found = self._paged({"type": HELP_REQUEST, "language": language})
+        return self._decoded(HelpSections.from_payload, found, "снимок «Справка»")
 
     def run_job(
         self,

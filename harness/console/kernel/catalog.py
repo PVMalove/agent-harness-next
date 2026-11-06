@@ -454,3 +454,17 @@ MEMORY_COMMANDS: tuple[CatalogEntry, ...] = (
         f"{_HARNESS_CLI}:cmd_memory",
     ),
 )
+
+# «Открыть проект»: the installation of the chosen capability into the project the console server
+# serves, run as its job; the plan action (init / adopt / update) is the key. They are not listed
+# in the Harness menu.
+SETUP_COMMANDS: tuple[CatalogEntry, ...] = tuple(
+    CatalogEntry(
+        f"setup-{action}",
+        "Установить харнесс в выбранный проект",
+        ("harness", action, "{repo}", "--capability", "{capability}"),
+        Reversibility.OVERWRITES_MANAGED_FILES,
+        f"{_HARNESS_CLI}:cmd_{action}",
+    )
+    for action in ("init", "adopt", "update")
+)

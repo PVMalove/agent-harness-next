@@ -13,6 +13,7 @@ from ..kernel.catalog import (
     HARNESS_COMMANDS,
     MEMORY_COMMANDS,
     REPO_MAP_COMMANDS,
+    SETUP_COMMANDS,
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from .api.request_router import RequestRouter
@@ -29,6 +30,7 @@ from .application.ports import (
     LedgerCollector,
     LockReader,
     MaintenanceCollector,
+    OpenProjectCollector,
     OrchestrationReader,
     RecoveryReader,
     RepoMapCollector,
@@ -57,6 +59,7 @@ from .infrastructure.screen_facts import (
     collect_ledger_online,
     harness_facts,
     maintenance_facts,
+    open_project_facts,
     read_lock,
     repo_map_facts,
 )
@@ -100,6 +103,7 @@ def screen_service(
     harness: HarnessCollector | None = None,
     maintenance: MaintenanceCollector | None = None,
     repo_map: RepoMapCollector | None = None,
+    open_project: OpenProjectCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -119,6 +123,7 @@ def screen_service(
         harness=harness_facts if harness is None else harness,
         maintenance=maintenance_facts if maintenance is None else maintenance,
         repo_map=repo_map_facts if repo_map is None else repo_map,
+        open_project=open_project_facts if open_project is None else open_project,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger
@@ -130,12 +135,13 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, Diagnostics, Repo Map, memory, coordinator and native
-    permission commands; without `executor` the commands run as subprocesses."""
+    """The job service over the harness, Diagnostics, Repo Map, installation, memory, coordinator
+    and native permission commands; without `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
         *DIAGNOSTICS_COMMANDS,
         *REPO_MAP_COMMANDS,
+        *SETUP_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,

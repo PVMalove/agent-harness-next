@@ -183,6 +183,18 @@ class RepoMapSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class OpenProjectSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["open_project.snapshot"]
+    force: bool = False
+
+
+class HelpSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["help.snapshot"]
+    language: Literal["ru", "en"]
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
@@ -232,6 +244,8 @@ ConsoleRequest = Annotated[
     | HarnessSnapshotRequest
     | HarnessMaintenanceRequest
     | RepoMapSnapshotRequest
+    | OpenProjectSnapshotRequest
+    | HelpSnapshotRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
     | WorkerSubscribeRequest,
@@ -335,6 +349,8 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "harness.snapshot",
         "harness.maintenance",
         "repo_map.snapshot",
+        "open_project.snapshot",
+        "help.snapshot",
     ]
     ok: Literal[True]
     snapshot_id: int

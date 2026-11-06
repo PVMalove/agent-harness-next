@@ -1,9 +1,9 @@
-"""The commands of the Recovery, Container route, Diagnostics, Harness and Repo Map screens through
-the console server. Reads come from the screen snapshots (`batch list` from `recovery.snapshot`,
-`recovery status`, `dispatch preflight`), recovery actions, health fixes, Harness commands, the
-Repo Map build and the memory commands run as server jobs under its confirmation rules, and
-nothing here starts a process: a path the server does not serve goes to the `fallback` client, or
-is refused when there is none."""
+"""The commands of the Recovery, Container route, Diagnostics, Harness, Repo Map and «Открыть
+проект» screens through the console server. Reads come from the screen snapshots (`batch list` from
+`recovery.snapshot`, `recovery status`, `dispatch preflight`), recovery actions, health fixes,
+Harness commands, the Repo Map build, the memory commands and the installation into the served
+project run as server jobs under its confirmation rules, and nothing here starts a process: a path
+the server does not serve goes to the `fallback` client, or is refused when there is none."""
 
 from __future__ import annotations
 
@@ -14,7 +14,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ...health.model import Report
-from ..kernel.catalog import MEMORY_COMMANDS, REPO_MAP_BUILD, CatalogEntry
+from ..kernel.catalog import (
+    MEMORY_COMMANDS,
+    REPO_MAP_BUILD,
+    SETUP_COMMANDS,
+    CatalogEntry,
+)
 from ..kernel.coordinator_api import (
     ApiResult,
     ArgvError,
@@ -24,6 +29,7 @@ from ..kernel.coordinator_api import (
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from ..kernel.health_report import report_from_payload
+from ..kernel.project_target import ProjectTarget
 from ..kernel.repo_map import RepoMapView, read_build
 from ..kernel.runner import CommandRunner
 from .client import ConsoleClientError, JobResult, ScreenClient
@@ -256,3 +262,27 @@ def settings_runner(
     if entry in MEMORY_COMMANDS:
         return ServerJobRunner(client, entry, {})
     return local
+
+
+def serves(served: Path, path: Path) -> bool:
+    """True when `path` is the project `served` by the console server: the server reads and
+    installs it, any other project is the TUI's own."""
+    return path.expanduser().resolve() == served.resolve()
+
+
+def setup_runner(
+    client: ScreenClient,
+    served: Path,
+    target: ProjectTarget,
+    capability: str,
+    local: CommandRunner,
+) -> CommandRunner:
+    """The runner of an installation from «Открыть проект»: into the project the console server
+    serves it is the confirmed `setup-<action>` server job, into another project (the TUI then
+    opens it with its own server) it stays with `local`."""
+    if not serves(served, target.repo):
+        return local
+    entry = next(
+        item for item in SETUP_COMMANDS if item.key == f"setup-{target.action}"
+    )
+    return ServerJobRunner(client, entry, {"capability": capability})

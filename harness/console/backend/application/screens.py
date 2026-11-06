@@ -1,7 +1,8 @@
-"""The screen snapshots of Reports, Orchestration, Recovery, Container route, Diagnostics, Harness
-and Repo Map: collect them off the event loop, keep the ledger, the batch history, the health
-reports, the Harness and the Repo Map facts in a short single-flight cache and hand out every
-snapshot as the first page of its JSON text, kept for `snapshot.page`."""
+"""The screen snapshots of Reports, Orchestration, Recovery, Container route, Diagnostics, Harness,
+Repo Map, «Открыть проект» and «Справка»: collect them off the event loop, keep the ledger, the
+batch history, the health reports, the Harness, the Repo Map and the «Открыть проект» facts in a
+short single-flight cache and hand out every snapshot as the first page of its JSON text, kept for
+`snapshot.page`."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from ...kernel.batch_history import History
+from ...kernel.help_text import help_sections
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
 from ....json_types import JsonObject
@@ -23,6 +25,7 @@ from .ports import (
     LedgerCollector,
     LockReader,
     MaintenanceCollector,
+    OpenProjectCollector,
     RecoveryReader,
     RepoMapCollector,
     RouteReader,
@@ -137,6 +140,7 @@ class ScreenService:
         harness: HarnessCollector | None = None,
         maintenance: MaintenanceCollector | None = None,
         repo_map: RepoMapCollector | None = None,
+        open_project: OpenProjectCollector | None = None,
         board: TaskBoardService | None = None,
     ) -> None:
         self._repo = repo
@@ -149,6 +153,7 @@ class ScreenService:
         self._collect_harness = harness
         self._collect_maintenance = maintenance
         self._collect_repo_map = repo_map
+        self._collect_open_project = open_project
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
@@ -160,6 +165,7 @@ class ScreenService:
         self._harness: _Source[dict[str, object]] = _Source(ttl, clock)
         self._maintenance: _Source[dict[str, object]] = _Source(ttl, clock)
         self._repo_map: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._open_project: _Source[dict[str, object]] = _Source(ttl, clock)
         self._pages = TextPages()
 
     async def _paged(
@@ -301,6 +307,21 @@ class ScreenService:
             lambda: collect(self._repo), force=force
         )
         return await self._paged(facts, cached, age)
+
+    async def open_project(self, *, force: bool = False) -> Paged:
+        """The installation state of the served project and the candidate projects of «Открыть
+        проект»; `NotFound` without its collector."""
+        collect = self._collect_open_project
+        if collect is None:
+            raise NotFound("open_project")
+        facts, cached, age = await self._open_project.get(
+            lambda: collect(self._repo), force=force
+        )
+        return await self._paged(facts, cached, age)
+
+    async def help(self, language: str) -> Paged:
+        """The console guide of «Справка» in `language`, split into its sections."""
+        return await self._paged(help_sections(language).to_payload())
 
     async def task_board_specs(self, *, force: bool = False) -> Paged:
         """The open specs of the task board; `NotFound` without a configured board."""
