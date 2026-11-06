@@ -1702,3 +1702,78 @@ EN.update(
         "дальше: {role}": "next: {role}",
     }
 )
+
+# Web Repo Map: the same facts and build warning as the terminal client.
+EN.update(
+    {
+        "Сервер вернул некорректный снимок Repo Map": "The server returned an invalid Repo Map snapshot",
+        "Результат построения не соответствует схеме Repo Map": "The build result does not match the Repo Map schema",
+        "Вывод Repo Map CLI обрезан: карта слишком велика": "Repo Map CLI output was truncated: the map is too large",
+        "Не удалось построить Repo Map": "Could not build Repo Map",
+        "Снимок Repo Map устарел: обновите страницу": "The Repo Map snapshot expired: refresh the page",
+    }
+)
+EN.update(
+    {
+        key: EN_PHRASES[key]
+        for key in (
+            "не заданы allow_paths",
+            "не заданы source_types",
+            "Режим хранится в orchestration.json: нужна capability backend-orchestration.",
+            "orchestration.json не читается.",
+        )
+    }
+)
+EN.update(
+    {
+        "Bundle не готов": "The bundle is not ready",
+        "Bundle готов, режим full доступен": "The bundle is ready; full mode is available",
+        "HEAD не найден": "HEAD was not found",
+        "В политике проекта": "Project policy",
+        "Все файлы": "All files",
+        "Входящие": "Incoming",
+        "Грамматики": "Grammars",
+        "Граф файлов: показано {shown} из {total}": "File graph: showing {shown} of {total}",
+        "Документов в индексе": "Indexed documents",
+        "Достоверность": "Confidence",
+        "Индекс символов, модулей и импортов.": "Index of symbols, modules and imports.",
+        "Источники": "Sources",
+        "Исходящие": "Outgoing",
+        "Каталог": "Directory",
+        "Коммит": "Commit",
+        "Кэша карты для HEAD нет": "No cached map for HEAD",
+        "Найти символ": "Find a symbol",
+        "Не удалось прочитать Repo Map": "Could not read Repo Map",
+        "Оценка токенов": "Estimated tokens",
+        "Память недоступна": "Memory is unavailable",
+        "Пара": "Pair",
+        "Парсер": "Parser",
+        "Парсеры": "Parsers",
+        "Перестроить": "Rebuild",
+        "Поиск символа": "Symbol search",
+        "Политику можно изменить": "Policy can be edited",
+        "Построение карты запускает Repo Map CLI для HEAD. В режиме tier=full CLI может установить offline parser bundle (uv pip install --offline) в .harness/.sandboxes/cache/repo_map/parser_bundle/; сеть не используется. Результат сохраняется в кэш Repo Map.": "Building the map runs the Repo Map CLI for HEAD. In tier=full mode the CLI may install an offline parser bundle (uv pip install --offline) into .harness/.sandboxes/cache/repo_map/parser_bundle/; no network is used. The result is saved in the Repo Map cache.",
+        "Построить Repo Map для HEAD {commit}?": "Build Repo Map for HEAD {commit}?",
+        "Причина": "Reason",
+        "С сигнатурами": "With signatures",
+        "Связи файлов": "File relations",
+        "Сигнатур нет": "No signatures",
+        "Сигнатура": "Signature",
+        "Сигнатуры": "Signatures",
+        "Символ": "Symbol",
+        "Символов с такими фильтрами нет.": "No symbols match these filters.",
+        "Символы": "Symbols",
+        "Состояние парсеров не прочитано": "Parser status has not been read",
+        "Уровень": "Tier",
+        "Успешно разобраны": "Parsed successfully",
+        "Файлов нет": "No files",
+        "Читаю снимок Repo Map…": "Reading the Repo Map snapshot…",
+        "Языки проекта": "Project languages",
+        "включена": "enabled",
+        "включена, но не читает источники": "enabled, but not reading sources",
+        "выключена": "disabled",
+        "да": "yes",
+        "диагностик нет": "no diagnostics",
+        "не построен": "not built",
+    }
+)

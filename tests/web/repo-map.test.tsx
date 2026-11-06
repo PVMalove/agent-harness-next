@@ -1,0 +1,182 @@
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeEach, expect, test } from "vitest";
+import { App } from "../../harness/console/frontend/src/App";
+import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
+import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
+import FACTS from "./fixtures/repo-map.json";
+import { FakeSocket, ManualClock, snapshotReply, jobReply } from "./fake-socket";
+
+beforeEach(() => FakeSocket.reset());
+
+function open() {
+  window.location.hash = "#/repo-map";
+  const clock = new ManualClock();
+  const client = createConsoleClient({ url: "ws://127.0.0.1:1/ws", WebSocket: FakeSocket,
+    timers: clock, probeHealth: async () => false });
+  render(<LanguageProvider><App client={client} /></LanguageProvider>);
+  const socket = FakeSocket.last;
+  act(() => socket.open());
+  act(() => socket.reply(snapshotReply(socket.request("home.snapshot").id)));
+  return { socket, clock };
+}
+
+function facts(socket: FakeSocket, value: unknown = FACTS) {
+  act(() => socket.reply({ v: 1, id: socket.request("repo_map.snapshot").id,
+    type: "repo_map.snapshot", ok: true, snapshot_id: 1, text: JSON.stringify(value),
+    next: 1000, done: true, cached: true, age_seconds: 2 }));
+}
+
+test("Repo Map shows the TUI snapshot, selected file signatures, settings and memory", () => {
+  const { socket } = open();
+  facts(socket);
+  expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Repo Map");
+  expect(screen.getByText("512")).toBeTruthy();
+  act(() => fireEvent.click(screen.getByRole("button", { name: "pkg/core.py" })));
+  expect(screen.getByText("def load_config(path)")).toBeTruthy();
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
+  expect(screen.getByText("adr")).toBeTruthy();
+  expect(within(screen.getByRole("heading", { name: "Память" }).closest("section")!).getByText("4")).toBeTruthy();
+  expect(within(screen.getByRole("heading", { name: "Парсеры" }).closest("section")!).getByText("python")).toBeTruthy();
+});
+
+test("building requires confirmation, pins the displayed HEAD and displays an uncached degraded result", () => {
+  const { socket } = open();
+  facts(socket, { ...FACTS, map: null });
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Отмена" })));
+  expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
+  const request = socket.request("job.start");
+  expect(request).toMatchObject({ command_id: "repo-map-build", values: { commit: "a".repeat(40) }, client: "browser" });
+  const built = { ...FACTS.map, tier: "minimal", parser: "path-only", files: [{ path: "new.py" }], edges: [], diagnostics: [], estimated_tokens: 8 };
+  act(() => socket.reply(jobReply(request.id, "job.start", { command_id: "repo-map-build", done: true,
+    phase: "completed", returncode: 0, output: [{ channel: "stdout", text: JSON.stringify(built) }], cursor: 1 })));
+  facts(socket, { ...FACTS, map: null });
+  expect(screen.getByRole("button", { name: "new.py" })).toBeTruthy();
+  expect(screen.getByText("minimal")).toBeTruthy();
+});
+
+test("a paged snapshot is assembled before display and an expired page is an explicit error", () => {
+  const { socket } = open();
+  const text = JSON.stringify(FACTS);
+  act(() => socket.reply({ v: 1, id: socket.request("repo_map.snapshot").id, type: "repo_map.snapshot", ok: true,
+    snapshot_id: 42, text: text.slice(0, 100), next: 100, done: false, cached: false, age_seconds: 0 }));
+  expect(socket.request("snapshot.page")).toMatchObject({ snapshot_id: 42, offset: 100 });
+  expect(screen.queryByRole("button", { name: "pkg/core.py" })).toBeNull();
+  act(() => socket.reply({ v: 1, id: socket.request("snapshot.page").id, type: "snapshot.page", ok: true,
+    text: text.slice(100), next: text.length, done: true }));
+  expect(screen.getByRole("button", { name: "pkg/core.py" })).toBeTruthy();
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Обновить" })));
+  act(() => socket.reply({ v: 1, id: socket.request("repo_map.snapshot").id, type: "repo_map.snapshot", ok: false,
+    error: { code: "snapshot_expired", message: "expired" } }));
+  expect(screen.getByRole("alert").getAttribute("data-code")).toBe("snapshot_expired");
+});
+
+test("reconnect discards an incomplete snapshot and never replays a build", () => {
+  const { socket, clock } = open();
+  facts(socket);
+  act(() => socket.close());
+  act(() => clock.advance(500));
+  const next = FakeSocket.last;
+  act(() => next.open());
+  expect(next.request("repo_map.snapshot")).toMatchObject({ force: false });
+  expect(next.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
+  facts(next, { ...FACTS, head: "b".repeat(40), map: null });
+  expect(screen.queryByRole("button", { name: "pkg/core.py" })).toBeNull();
+  expect(screen.getByText("Кэша карты для HEAD нет")).toBeTruthy();
+});
+
+test("a changed HEAD invalidates an open build confirmation", () => {
+  const { socket } = open();
+  facts(socket);
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Обновить" })));
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  facts(socket, { ...FACTS, head: "b".repeat(40), map: null });
+  act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
+  expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
+});
+
+test("truncated build output cannot become a map and its failure survives a snapshot refresh", () => {
+  const { socket } = open();
+  facts(socket, { ...FACTS, map: null });
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
+  act(() => socket.reply(jobReply(socket.request("job.start").id, "job.start", {
+    command_id: "repo-map-build", done: true, phase: "completed", returncode: 0, truncated: true,
+    output: [{ channel: "stdout", text: JSON.stringify(FACTS.map) }], cursor: 1,
+  })));
+  facts(socket, { ...FACTS, map: null });
+  expect(screen.getByRole("alert").getAttribute("data-code")).toBe("truncated");
+  expect(screen.queryByRole("button", { name: "pkg/core.py" })).toBeNull();
+});
+
+test("hubs count unique incoming files like TUI and graph selection filters symbols", () => {
+  const { socket } = open();
+  facts(socket);
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Связи" })));
+  const hubs = screen.getByRole("heading", { name: "Хабы" }).closest("section")!;
+  expect(within(hubs).getByText("pkg/core.py").parentElement?.textContent).toBe("pkg/core.py2");
+  act(() => fireEvent.click(screen.getByRole("button", { name: "pkg/cli.py" })));
+  expect(screen.getByRole("tab", { name: "Символы" }).getAttribute("aria-selected")).toBe("true");
+  expect(document.querySelectorAll(".repo-symbol-row")).toHaveLength(1);
+  expect(screen.getAllByText("def main(argv)").length).toBeGreaterThan(0);
+});
+
+test("parser availability respects the TUI source requirement", () => {
+  const { socket } = open();
+  facts(socket, { ...FACTS, parsers: { ...FACTS.parsers, source: null, problem: null } });
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
+  const parsers = screen.getByRole("heading", { name: "Парсеры" }).closest("section")!;
+  expect(parsers.textContent).not.toContain("Bundle готов, режим full доступен");
+  expect(parsers.textContent).toContain("Bundle не готов");
+});
+
+test("a lost start acknowledgement reconciles the running job without replaying the command", () => {
+  const { socket, clock } = open();
+  facts(socket);
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
+  act(() => socket.close());
+  act(() => clock.advance(500));
+  const next = FakeSocket.last;
+  act(() => next.open());
+  act(() => next.reply(snapshotReply(next.request("home.snapshot").id)));
+  facts(next);
+  act(() => next.reply({ v: 1, id: next.request("job.list").id, type: "job.list", ok: true, jobs: [{
+    id: "recovered", command_id: "repo-map-build", mutating: true, phase: "running", cursor: 0,
+    done: false, truncated: false, returncode: null, error: "",
+  }] }));
+  expect(next.request("job.subscribe")).toMatchObject({ job_id: "recovered", cursor: 0 });
+  expect(next.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
+  act(() => next.reply(jobReply(next.request("job.subscribe").id, "job.subscribe", { id: "recovered",
+    command_id: "repo-map-build", done: true, phase: "completed", returncode: 0, cursor: 1,
+    output: [{ channel: "stdout", text: JSON.stringify(FACTS.map) }],
+  })));
+  expect((screen.getByRole("button", { name: "Перестроить" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+test("a nonzero CLI exit reports a build error and its diagnostic stderr", () => {
+  const { socket } = open();
+  facts(socket);
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
+  act(() => socket.reply(jobReply(socket.request("job.start").id, "job.start", {
+    command_id: "repo-map-build", done: true, phase: "completed", returncode: 2, cursor: 1,
+    output: [{ channel: "stderr", text: "error: bad commit\nremedy: pass HEAD" }],
+  })));
+  expect(screen.getByRole("alert").getAttribute("data-code")).toBe("build_failed");
+  expect(screen.getByText(/error: bad commit/)).toBeTruthy();
+});
+
+test("English settings translate unavailable policy and inactive memory reasons", () => {
+  const { socket } = open();
+  facts(socket, { ...FACTS, tier: { tier: "full", editable: false,
+    reason: "Режим хранится в orchestration.json: нужна capability backend-orchestration." },
+    memory: { ...FACTS.memory, active: false, inactive: "не заданы allow_paths" } });
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+  expect(screen.getByText("allow_paths is empty")).toBeTruthy();
+  expect(screen.getByText("The mode is kept in orchestration.json: the backend-orchestration capability is required.")).toBeTruthy();
+});
