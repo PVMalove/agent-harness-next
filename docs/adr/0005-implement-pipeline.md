@@ -73,3 +73,9 @@ brief architect, получает один тест и санитизирова�
 нового dispatch, состояния или записи ledger нет, независимая QA и её граница прежние. Не
 согласованный в brief seam идёт по обычному пути blocker. Контракт цикла описывает раздел
 «Red-Green-Refactor with the optional test author» в `harness/orchestration/roles/developer.md`.
+
+
+Уточнение #971: в полном маршруте этот цикл доступен external Claude Code developer в его
+worker worktree после точного trust, preflight `ok` и разрешения вызова автора в утверждённом
+brief. In-process сохраняет обычный TDD с `checkout_mismatch`. Границы, диагностика и live-evidence
+определены в ADR 0014, разделе «Автор в worker worktree»; Rust authority не меняется.

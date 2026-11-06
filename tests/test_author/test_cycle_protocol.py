@@ -40,24 +40,27 @@ DEVELOPER_MARKERS = (
     "ordinary blocker path",
 )
 FULL_ROUTE_MARKERS = (
-    '"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree',
+    "test-author-preflight.sh",
+    "--worktree",
     "checkout_mismatch",
-    "transport_unsupported",
-    "ordinary TDD route",
-    "never a blocker",
+    "external",
+    "agent_tool_unavailable",
+    "ordinary TDD",
+    "never creates a blocker",
 )
 FULL_ROUTE_GUIDE_MARKERS = (
     "Полный маршрут `/implement`",
-    'test-author-preflight.sh" --worktree',
+    "test-author-preflight.sh --worktree",
     "`checkout_mismatch`",
-    "`transport_unsupported`",
+    "`agent_tool_unavailable`",
     "обычный TDD",
-    "не blocker",
+    "без blocker",
 )
 FULL_ROUTE_DESCRIPTION_MARKERS = (
     "--worktree",
     "`checkout_mismatch`",
-    "`transport_unsupported`",
+    "`agent_tool_unavailable`",
+    "external",
     "обычный TDD",
 )
 FAST_MARKERS = (

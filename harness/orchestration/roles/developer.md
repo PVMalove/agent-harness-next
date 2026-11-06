@@ -64,17 +64,23 @@ rephrased (see "Never work around a hook" in `_common.md`). A local author retry
 guard denial create no new dispatch, add no ledger state and do not bypass the recovery rules of
 ADR 0012.
 
-**Full `/implement` route.** The author must serve the checkout the developer works in. The
-preflight checks only the checkout that holds the script, so an in-process developer (its CWD is the
-main checkout, its work is in the brief's `worker_worktree`) runs
-`"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <brief worktree>`. The
-answer is `{"status":"ok"}` only when that path is the preflight's own checkout; for a separate
-worker checkout it is `{"status":"disabled","reason":"checkout_mismatch"}`, so the author never
-writes or runs tests against the main checkout. An `external` transport (headless `claude -p` in the
-worktree) does not enable the author: name the reason `transport_unsupported` and run no preflight.
-Any answer other than `{"status":"ok"}` keeps the ordinary TDD route in the worker checkout (write
-the failing test yourself, then make it pass) and names the reason in the report's output; it is
-never a blocker and adds no dispatch or ledger state.
+**Full `/implement` route.** Only an `external` Claude Code developer enables the author: its
+process, `CLAUDE_PROJECT_DIR`, preflight, guard and runner must all serve the brief's canonical
+`worker_worktree`. Install the project harness in that worker checkout before dispatch; the human
+must accept Claude Code trust for that exact path. Do not copy state or trust from the main checkout.
+Run `"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <brief worker_worktree>`.
+Only exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent` permission in the approved
+brief allow calling the named author. Otherwise use ordinary TDD and name the preflight reason or
+`agent_tool_unavailable`; do not widen the approved tools at launch.
+
+Give the author one test path within the brief's allowed scope, the requirement and the runner log
+root from the adapter prompt. Linked worktrees share `<main>/.harness/.sandboxes/runs/`; the author
+reads `isolated-test-<run_id>/log.txt` there. The adapter exposes that evidence directory without
+changing the brief's tool list. Test writes and runner execution remain in the worker checkout.
+An `in-process` developer continues calling the main preflight with `--worktree <worker_worktree>`:
+a separate worker answers `checkout_mismatch`, so this transport keeps ordinary TDD. Other runtimes
+are unsupported. A refusal never creates a blocker, another dispatch or ledger state. The optional
+author does not change independent QA or the Rust runtime authority.
 
 The `/fast-implement` short route runs this same cycle in its single session, with the seam agreed
 by the human before the first test instead of taken from the architect brief. It adds no coordinator,

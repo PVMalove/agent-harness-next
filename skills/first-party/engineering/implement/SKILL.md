@@ -150,14 +150,20 @@ main checkout, and `EnterWorktree` refuses it there. Two paths exist; state whic
   paths for every file. Its self-report then proves the checkout it works in, not its CWD; say so in
   the final report.
 
-**Test author in the full route.** The test-author preflight serves only the checkout that holds
-it. An `in-process` developer runs `"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh"
---worktree <send.worker_worktree>`; for a separate worker checkout the answer is
-`{"status":"disabled","reason":"checkout_mismatch"}`. An `external` developer (headless `claude -p`
-in the worktree, where the trust dialog is skipped and the path has no trust decision) does not
-enable the author and runs no preflight: the reason is `transport_unsupported`. Any answer other
-than `{"status":"ok"}` keeps the ordinary TDD route with the reason named in the worker's output,
-never a blocker. State this in the worker prompt.
+**Test author in the full route.** An `external` Claude Code developer can call the author in
+`send.worker_worktree`. Before dispatch, install the harness in that exact checkout; the human
+accepts its exact-path trust in Claude Code. Never copy the main checkout's runtime state or trust.
+The developer checks its own `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree>`
+and enables the author only after exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent`
+permission in the approved brief. The default developer role policy includes the named permission;
+a project override remains authoritative. Missing permission gives `agent_tool_unavailable` and
+ordinary TDD, never a launch-time tool expansion. Pass the shared runner log root from the adapter
+prompt to the author along with one test path within the brief's scope.
+
+For `in-process`, the main preflight with `--worktree <send.worker_worktree>` still answers
+`checkout_mismatch` for a separate worker. Preserve ordinary TDD there and name the reason;
+Codex and other runtimes do not support this helper. A preflight refusal or unavailable author
+never creates a blocker or changes the Rust ledger. State this in the worker prompt.
 
 `dispatch send` checks the adapter's flags against its `dispatch --help` before the handoff and
 refuses an unsupported one: fix the `--adapter-arg` values and send the same approved dispatch

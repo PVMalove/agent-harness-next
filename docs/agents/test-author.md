@@ -175,19 +175,57 @@ fixtures, останавливается до ответа разработчи�
 
 ## 7. Полный маршрут `/implement`
 
-Preflight обслуживает только тот checkout, где лежит сам. Developer in-process worker работает в
-отдельном worktree из brief, а `CLAUDE_PROJECT_DIR` указывает на основной checkout, поэтому вызов
-без аргументов проверил бы не тот каталог. Такой developer запускает
-`"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <worktree из brief>`.
-Ответ `{"status":"ok"}` возможен, только если канонический путь аргумента совпадает с checkout
-скрипта; для отдельного worker checkout ответ — `checkout_mismatch`. Автор не пишет и не
-запускает тесты в основном checkout: guard и runner обслуживают только checkout скрипта.
+Выбран вариант A задачи #971: автор доступен external developer в worker worktree. Этот
+транспорт запускает `claude -p` прямо в checkout из brief, поэтому `CLAUDE_PROJECT_DIR`, scoped
+hook и runner относятся к тому же коду. Установите харнесс в worker checkout и включите там
+`test_paths` и `test_runner`; состояние оркестрации из основного checkout не копируется.
+Откройте этот точный путь в Claude Code и примите диалог доверия. Ни installer, ни developer,
+ни headless-запуск не создают решение доверия за пользователя.
 
-Внешний transport (`harness/adapters/claude_worker.py`, headless `claude -p` в worktree) автора не
-включает и preflight не запускает: нативный режим `--print` пропускает диалог доверия, а у пути
-worktree нет записи доверия, поэтому причина — `transport_unsupported`. Это решение developer, а не
-ответ preflight.
+External developer запускает свой `.claude/hooks/test-author-preflight.sh --worktree <worker_worktree>`.
+Только точный ответ `{"status":"ok"}` разрешает следующий шаг. В утверждённом brief также должно
+быть разрешение `Agent(test-author)` или `Agent`; без него причина — `agent_tool_unavailable`.
+Новый шаблон orchestration задаёт именованное разрешение только роли developer. Существующие
+проекты с `tool_policy` включают его явно в `tool_policy.roles.developer`, сохраняя остальные
+инструменты роли. Явное ограничение проекта не расширяется автоматически, а список инструментов
+фиксируется digest до approval по ADR 0024.
 
-Любой ответ, кроме `{"status":"ok"}`, оставляет обычный TDD в worker checkout: developer сам пишет
-падающий тест, затем делает его зелёным, и называет причину в выводе. Это не blocker, и ledger не
-меняется.
+Автор пишет тест в `test_paths` worker checkout и запускает его runner. Developer передаёт один
+конкретный тестовый путь в пределах scope brief и корень логов runner из prompt адаптера:
+`<main>/.harness/.sandboxes/runs/`. В linked worktree эти логи общие; `run_id` указывает на
+`isolated-test-<run_id>/log.txt` внутри этого корня. Адаптер открывает доступ к каталогу evidence,
+а scoped guard сохраняет прежние ограничения записи и Bash. Код, тесты и Git-статус основного
+checkout не меняются; общие runtime-логи сохраняются в его игнорируемой песочнице.
+
+In-process developer по-прежнему запускает preflight основного checkout с `--worktree` из brief.
+Отдельный worker даёт `checkout_mismatch`: этот транспорт использует обычный TDD. Любой отказ
+preflight и недоступность инструмента вызова автора также сохраняют обычный TDD в worker,
+с указанной причиной, без blocker и новых записей ledger. Полный маршрут автора требует
+external Claude Code; Codex и другие runtime его не поддерживают.
+
+В этой поставке проверены Python-тесты через unittest и pytest. Rust-тесты
+`native/harness-runtime/crates/*/tests` этим решением не поддержаны: для них не добавлены
+зоны записи и отдельный runner. Настраиваемый argv runner сам по себе не ограничен Python,
+но это не доказательство поддержки другого стека. Обычные Rust QA-команды проекта остаются
+обязательными для изменений Rust.
+
+## 8. Диагностика и живая проверка
+
+`harness health` выводит отдельную проверку `hooks.test_author`: результат preflight для
+целевого Claude Code checkout или санитизированную причину отказа. Это готовность Claude Code,
+даже если Health вызван из Codex; она не включает автора в Codex. Перед исполнением скрипта
+Health отдельно проверяет точное решение доверия. Без opt-in проверка пропускается с причиной,
+недоступный необязательный автор даёт предупреждение и оставляет обычный маршрут рабочим.
+
+Health не запускает Claude, выбранный тест, сборку или БД и не меняет доверие. Probe изоляции
+создаёт и удаляет временную песочницу в общем `runs/`. Статический `preflight: ok` не доказывает,
+что scoped hook сработает в живой сессии. Это проверяет `make test-author-probe`: нужны вход
+в Claude Code и квота. Команда подтверждает guard, поведенческий Red и вызов автора внешним
+developer в worker worktree; fixture developer затем проверяет Green неизменного теста.
+
+Каждый вызов CLI оставляет санитизированный `test-author-probe-*.json` в общем
+`.harness/.sandboxes/reports/`: checkout, этап, код выхода, время, фактические usage/стоимость,
+которые вернул runtime, и отдельно лимит. Отсутствующая метрика остаётся `null`; лимит не
+считается расходом. Эти файлы сохраняются после удаления clean-room проектов, полные
+транскрипты и credentials в них не попадают. Точную долю подписочной квоты runtime может
+не сообщать — она не вычисляется из USD.
