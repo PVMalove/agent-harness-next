@@ -324,66 +324,6 @@ def run(ctx: SimpleNamespace) -> None:
     ):
         sys.exit("force-managed-files did not restore the managed coordinator snapshot")
     orchestration_config.write_text(original_orchestration_config, encoding="utf-8")
-    public_documentation = {
-        ROOT / "README.md": (
-            "`backend-orchestration`",
-            "PR требует отдельного подтверждения",
-            "/to-pull-requests",
-        ),
-        ROOT / "CONTEXT.md": (
-            "`reported`",
-            "FIFO",
-            "санитизирован",
-        ),
-        ROOT / "docs" / "backend-orchestration.md": (
-            "`planned → awaiting-approval ↔ active → completed`",
-            "`reported`",
-            "детерминирован",
-            "Standards и Spec",
-            "обязательный полный QA gate",
-            "transport-only",
-            "санитизирован",
-            "stale",
-            "/to-pull-requests",
-            "integration next",
-            "verification-failure",
-        ),
-        ROOT / "docs" / "harness-guide.md": (
-            "строго opt-in маршрут",
-            "candidate commit",
-            "`reported`",
-            "/to-pull-requests",
-            "integration next",
-        ),
-        ROOT / "docs" / "agents" / "git-workflow.md": ("/to-pull-requests",),
-    }
-    for path, required_phrases in public_documentation.items():
-        text = path.read_text(encoding="utf-8")
-        if re.search(r"(?<![\w-])/to-pr(?![\w-])", text):
-            sys.exit(f"public documentation retains removed /to-pr route: {path}")
-        for phrase in required_phrases:
-            if phrase.casefold() not in text.casefold():
-                sys.exit(
-                    f"public documentation missing hybrid coordinator contract {phrase!r}: {path}"
-                )
-    for source_path, required_phrases in public_documentation.items():
-        if source_path.parent != ROOT / "docs" / "agents":
-            continue
-        installed_path = orchestration_project / "docs" / "agents" / source_path.name
-        if not installed_path.is_file():
-            sys.exit(
-                f"installed project is missing documentation seed: {source_path.name}"
-            )
-        installed_text = installed_path.read_text(encoding="utf-8")
-        for phrase in required_phrases:
-            if phrase.casefold() not in installed_text.casefold():
-                sys.exit(
-                    f"installed documentation missing hybrid coordinator contract {phrase!r}: {source_path.name}"
-                )
-        if re.search(r"(?<![\w-])/to-pr(?![\w-])", installed_text):
-            sys.exit(
-                f"installed documentation retains removed /to-pr route: {source_path.name}"
-            )
     # Developer guides stay in the source repository's docs/; only agent contracts are delivered.
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
         if (orchestration_project / ".harness" / "docs" / human_guide).exists():

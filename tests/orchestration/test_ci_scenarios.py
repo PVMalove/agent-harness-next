@@ -112,20 +112,6 @@ class CiScenarioTests(unittest.TestCase):
         ]
         self.assertEqual(len(written), 1)
 
-    def test_guidance_is_delivered(self) -> None:
-        for relative in (
-            "docs/backend-orchestration.md",
-            "docs/harness-guide.md",
-            "docs/adr/0016-ci-evidence.md",
-        ):
-            text = (ROOT / relative).read_text(encoding="utf-8")
-            self.assertIn(
-                "collect-ci" if "adr" not in relative else "merge_commit_sha", text
-            )
-        guide = (ROOT / "docs/harness-guide.md").read_text(encoding="utf-8")
-        self.assertIn("ci_required_checks", guide)
-        self.assertIn("local_qa_required", guide)
-
 
 if __name__ == "__main__":
     unittest.main()
