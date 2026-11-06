@@ -58,3 +58,56 @@ def test_public_pages_have_no_internal_issue_numbers() -> None:
                 found.append(f"{relative}:{number}: {line.strip()[:120]}")
 
     assert found == [], "внутренние номера задач на публичных страницах:\n" + "\n".join(found)
+
+
+IMG_TAG = re.compile(r"<img\b[^>]*>", re.IGNORECASE | re.DOTALL)
+ALT = re.compile(r"""\balt\s*=\s*(["'])(.*?)\1""", re.IGNORECASE | re.DOTALL)
+
+
+def _alt(tag: str) -> str:
+    match = ALT.search(tag)
+    return match.group(2).strip() if match else ""
+
+
+def _mascot_tags() -> list[tuple[Path, str]]:
+    tags: list[tuple[Path, str]] = []
+    for path in sorted(SITE.rglob("*")):
+        if path.suffix not in {".md", ".html"} or "node_modules" in path.parts:
+            continue
+        for tag in IMG_TAG.findall(path.read_text(encoding="utf-8")):
+            if "mascot.svg" in tag:
+                tags.append((path, tag))
+    return tags
+
+
+def test_hero_has_the_mascot_with_alt() -> None:
+    page = (SITE_DOCS / "index.md").read_text(encoding="utf-8")
+
+    block = re.search(r'class="ah-mascot ah-mascot--perch".*?</div>', page, re.DOTALL)
+    assert block is not None
+    image = re.search(r'<img[^>]*src="assets/mascot\.svg"[^>]*>', block.group(0))
+    assert image is not None
+    assert _alt(image.group(0))
+
+
+def test_footer_has_the_mascot_with_alt() -> None:
+    footer = (SITE / "overrides" / "partials" / "copyright.html").read_text(encoding="utf-8")
+
+    image = re.search(r"<img[^>]*assets/mascot\.svg[^>]*>", footer)
+    assert image is not None
+    assert _alt(image.group(0))
+
+
+def test_every_mascot_image_has_alt() -> None:
+    tags = _mascot_tags()
+
+    assert tags, "маскот не найден ни на одной странице"
+    missing = [path.relative_to(SITE).as_posix() for path, tag in tags if not _alt(tag)]
+    assert missing == []
+
+
+def test_mascot_asset_is_accessible() -> None:
+    svg = (SITE_DOCS / "assets" / "mascot.svg").read_text(encoding="utf-8")
+
+    assert 'role="img"' in svg
+    assert "<title>" in svg
