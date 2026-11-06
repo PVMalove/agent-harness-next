@@ -22,7 +22,7 @@ import asyncio
 import subprocess
 import threading
 from collections.abc import AsyncGenerator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -109,13 +109,17 @@ class JobService:
         the served project; an unknown section is a bad request."""
         if section not in COMMAND_SECTIONS:
             raise JobRejected("bad_request")
-        return [
-            describe_command(
+        commands: list[dict[str, object]] = []
+        for key, entry in self._catalog.items():
+            if self._sections.get(key) != section:
+                continue
+            description = describe_command(
                 entry, section=str(section), available=entry.available(self.repo)
             )
-            for key, entry in self._catalog.items()
-            if self._sections.get(key) == section
-        ]
+            if isinstance(entry, CoordinatorCommand):
+                description["fields"] = [asdict(field) for field in entry.fields]
+            commands.append(description)
+        return commands
 
     def start(self, body: Mapping[str, object]) -> Job:
         client = body.get("client", "unknown")

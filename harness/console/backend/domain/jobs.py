@@ -6,14 +6,13 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Literal, NamedTuple, Protocol
 
 from harness.configuration import SECRET_MASK, mask_secrets
 
 from ...kernel.catalog import CONFIRMATION_REASONS, REVERSIBILITY_LABELS, CatalogEntry
 from ...kernel.catalog import Reversibility
-from ...kernel.coordinator_catalog import CoordinatorCommand
 
 _FRAGMENT_CHARS = 4096
 # A character takes at most six bytes in an encoded reply (a control character as `\u00XX`),
@@ -161,8 +160,6 @@ def describe_command(
         "plan_required": entry.key in _PLAN_COMMANDS,
         "available": available,
     }
-    if isinstance(entry, CoordinatorCommand):
-        result["fields"] = [asdict(field) for field in entry.fields]
     return result
 
 

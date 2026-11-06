@@ -728,6 +728,7 @@
     "Счётчики и список файлов появятся после проверки.": "Counters and the file list appear after the check.",
     "Текстом (JSON)": "As text (JSON)",
     "Текущий проект": "Current project",
+    "Тест-автор недоступен": "The test author is unavailable",
     "Тикет": "Ticket",
     "Токенов (оценка)": "Tokens (estimate)",
     "Только plain-хвост лога. Не выдаём его за шаги и не показываем thinking.": "Only the plain log tail. It is not passed off as steps and thinking is not shown.",
