@@ -62,3 +62,32 @@ def test_the_maintenance_view_survives_its_json_payload(tmp_path: Path) -> None:
     ):
         with pytest.raises(ValueError):
             MaintenanceView.from_payload(broken)
+
+
+def test_a_streaming_runner_gets_the_live_output_callback(tmp_path: Path) -> None:
+    import subprocess
+    from collections.abc import Callable, Mapping, Sequence
+
+    seen: list[str] = []
+
+    class Streaming:
+        streams_output = True
+
+        def __call__(
+            self,
+            argv: Sequence[str],
+            *,
+            env: Mapping[str, str] | None = None,
+            cwd: Path | None = None,
+            on_output: Callable[[str, str], None] | None = None,
+        ) -> "subprocess.CompletedProcess[str]":
+            assert on_output is not None and run is not None
+            on_output("stdout", "part")
+            seen.append(run.output)
+            return subprocess.CompletedProcess(list(argv), 0, "part", "")
+
+    runs = HarnessRuns()
+    run = runs.reserve("health", "harness health", ["harness"], {})
+    assert run is not None
+    runs.execute(run, Streaming(), tmp_path)
+    assert seen == ["part"] and (run.phase, run.stdout) == ("completed", "part")

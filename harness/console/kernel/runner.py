@@ -33,6 +33,18 @@ class CommandRunner(Protocol):
         ...
 
 
+class _StreamingRunner(Protocol):
+    """A `CommandRunner` that also passes every output fragment to `on_output` as it arrives."""
+
+    def __call__(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        on_output: Callable[[str, str], None] | None = None,
+    ) -> "subprocess.CompletedProcess[str]": ...
+
+
 def default_runner(
     argv: Sequence[str],
     *,
@@ -185,6 +197,12 @@ class HarnessRuns:
         try:
             if runner is capturing_runner:
                 result = capturing_runner(run.argv, cwd=repo, on_output=append)
+            elif getattr(runner, "streams_output", False):
+                # A runner that declares `streams_output` (a console server job) takes the same
+                # live output callback as `capturing_runner`.
+                result = cast(_StreamingRunner, runner)(
+                    run.argv, cwd=repo, on_output=append
+                )
             else:
                 result = runner(run.argv, cwd=repo)
         except OSError as exc:

@@ -314,3 +314,24 @@ def test_the_diagnostics_screen_neither_collects_nor_fixes_health_itself() -> No
     names |= {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     assert not {"collect_diagnostics", "apply_local_fixes", "run_health"} & names
     assert "apply_health_fixes" in names
+
+
+def test_a_harness_command_streams_its_server_job_output_into_the_run() -> None:
+    from harness.console.kernel.catalog import HARNESS_COMMANDS
+    from harness.console.kernel.runner import HarnessRuns
+    from harness.console.tui.server_api import ServerJobRunner
+
+    entry = next(item for item in HARNESS_COMMANDS if item.key == "health")
+    client = FakeClient()
+    client.job = JobResult("completed", 0, "report", "", False, None)
+    runs = HarnessRuns()
+    run = runs.reserve("health", "harness health", ["harness"], {})
+    assert run is not None
+    runs.execute(run, ServerJobRunner(client, entry, {}), REPO)  # type: ignore[arg-type]
+    assert (run.phase, run.returncode, run.stdout, run.output) == (
+        "completed",
+        0,
+        "report",
+        "report",
+    )
+    assert client.calls == [("job", "health", {}, False)]
