@@ -53,7 +53,7 @@ markdown_extensions:
       alternate_style: true
   - pymdownx.highlight
   - toc:
-      permalink: "🔗"
+      permalink: "\u200b"
       permalink_title: "Ссылка на этот раздел"
 
 nav:
