@@ -4,7 +4,7 @@
 
 - **Английское название:** `domain-modeling`
 - **Русский перевод:** Моделирование предметной области.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/domain-modeling/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/domain-modeling/SKILL.md)
 
 ## 2. Русское описание
 

@@ -1,6 +1,6 @@
 # Conflict Resolver — Разрешение конфликтов
 
-Источник: [`harness/orchestration/roles/conflict-resolver.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/conflict-resolver.md) и общий контракт [`_common.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/_common.md).
+Источник: [`harness/orchestration/roles/conflict-resolver.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/conflict-resolver.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
 
 ## 1. Название и локализация
 
@@ -25,4 +25,4 @@ Conflict Resolver — write-роль для текстового конфлик�
 
 ## Источник
 
-[conflict-resolver.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/conflict-resolver.md)
+[conflict-resolver.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/conflict-resolver.md)

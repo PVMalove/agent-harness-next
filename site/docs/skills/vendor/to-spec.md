@@ -4,7 +4,7 @@
 
 - **Английское название:** `to-spec`
 - **Русский перевод:** Публикация спецификации.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/to-spec/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/to-spec/SKILL.md)
 
 ## 2. Русское описание
 

@@ -4,7 +4,7 @@
 
 - **Английское название:** `resolving-merge-conflicts`
 - **Русский перевод:** Разрешение конфликтов Git.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/resolving-merge-conflicts/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/resolving-merge-conflicts/SKILL.md)
 
 ## 2. Русское описание
 

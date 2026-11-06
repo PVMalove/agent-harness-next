@@ -83,7 +83,7 @@ disable-model-invocation: true
 - **Подагент** — отправить строго ограниченную задачу в его собственное окно и получить отчёт обратно.
 - **`/compact`** — сжать этот контекст и засеять им новую сессию. **Вариант по умолчанию** внизу дерева, а не первое средство.
 
-Прочитайте [PHASE-BOUNDARIES.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/ask-matt/PHASE-BOUNDARIES.md) для упорядоченного дерева — пяти вопросов, логики каждой ветви и объяснения, почему стоимость первоисточника делает **«Продолжить»** первым вариантом для исключения. Принимайте решение **на** границе; в середине фазы продолжайте или разделите остальное на подагентов.
+Прочитайте [PHASE-BOUNDARIES.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/ask-matt/PHASE-BOUNDARIES.md) для упорядоченного дерева — пяти вопросов, логики каждой ветви и объяснения, почему стоимость первоисточника делает **«Продолжить»** первым вариантом для исключения. Принимайте решение **на** границе; в середине фазы продолжайте или разделите остальное на подагентов.
 
 #### Автономные
 
@@ -113,4 +113,4 @@ disable-model-invocation: true
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/ask-matt/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/ask-matt/SKILL.md)

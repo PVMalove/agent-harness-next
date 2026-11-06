@@ -22,4 +22,4 @@ Database Migrations — write-роль только для schema и data bounda
 
 ## Источник
 
-[database-migrations.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/database-migrations.md)
+[database-migrations.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/database-migrations.md)

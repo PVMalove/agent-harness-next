@@ -1,6 +1,6 @@
 # Pilot — Пилотная базовая линия
 
-Источник: [`harness/orchestration/pilot.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/pilot.md).
+Источник: [`harness/orchestration/pilot.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/pilot.md).
 
 ## 1. Название и локализация
 
@@ -87,4 +87,4 @@
 
 ## Источник
 
-[pilot.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/pilot.md)
+[pilot.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/pilot.md)

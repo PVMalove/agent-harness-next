@@ -33,8 +33,8 @@ disable-model-invocation: true
 
 #### Справочная документация
 
-- [AGENT-BRIEF.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/triage/AGENT-BRIEF.md) — как писать надежные агентские брифы
-- [OUT-OF-SCOPE.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/triage/OUT-OF-SCOPE.md) — как работает база знаний `.out-of-scope/`
+- [AGENT-BRIEF.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/triage/AGENT-BRIEF.md) — как писать надежные агентские брифы
+- [OUT-OF-SCOPE.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/triage/OUT-OF-SCOPE.md) — как работает база знаний `.out-of-scope/`
 
 #### Роли { #roles }
 
@@ -112,14 +112,14 @@ disable-model-invocation: true
 4. **Подготовка (при необходимости).** Если запрос требует конкретизации, вызовите инструмент Skill дважды: для «подготовки» и «моделирования предметной области» — готовьте его, формируя несколько вопросов за раз, уточняя термины предметной области и обновляя `CONTEXT.md`/ADR по мере принятия решений.
 
 5. **Примените результат:**
-   - `status::ready` + `afk` — опубликовать краткий комментарий агента ([AGENT-BRIEF.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/triage/AGENT-BRIEF.md)).
+   - `status::ready` + `afk` — опубликовать краткий комментарий агента ([AGENT-BRIEF.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/triage/AGENT-BRIEF.md)).
    - `status::ready` + `hitl` — та же краткая структура, но обратите внимание, почему ее нельзя делегировать (вынесение оценок, внешний доступ, проектные решения, ручное тестирование).
    - `status::specs` — укажите сопровождающему `/to-spec`, чтобы преобразовать его в правильную спецификацию и декомпозицию; не пишите для этого агентское задание.
    - `status::blocked` — заметки о сортировке сообщений (шаблон ниже): билет зависимости, который нужно ожидать, или недостающая информация от репортера.
    - Отклонено — примените `resolution::wontfix`, удалите все метки `status::*` и закройте с комментарием в зависимости от *почему*:
      - **Уже реализовано** — изменение уже существует в кодовой базе. Укажите, где он живет; **не** записывайте в `.out-of-scope/` (эта КБ предназначена для *отклоненных* запросов, а не для построенных).
      - **Отклонено (отчет в форме ошибки)** — вежливое объяснение и закрытие. Пропустите запись `.out-of-scope/` — эта база знаний предназначена для отклоненных запросов, а не недействительных отчетов об ошибках.
-     - **Отклонено (запрос функции/поведения)** — напишите на `.out-of-scope/`, ссылку на него из комментария, затем закройте ([OUT-OF-SCOPE.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/triage/OUT-OF-SCOPE.md)).
+     - **Отклонено (запрос функции/поведения)** — напишите на `.out-of-scope/`, ссылку на него из комментария, затем закройте ([OUT-OF-SCOPE.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/triage/OUT-OF-SCOPE.md)).
    - После шагов 1–4 все еще не помечено (только частичный прогресс) — оставьте его без пометки или примените только ту ось, которую вы разрешили. Необязательный комментарий, отмечающий, что уже решено.
 
 #### Быстрое переопределение состояния
@@ -162,4 +162,4 @@ disable-model-invocation: true
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/triage/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/triage/SKILL.md)

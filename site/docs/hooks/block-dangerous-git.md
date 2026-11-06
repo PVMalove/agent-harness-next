@@ -18,4 +18,4 @@
 - **Выход (Output/Report):** Возвращает код `0`, если опасных паттернов не найдено. Возвращает код `2` и сообщение в `stderr`, если команда заблокирована.
 ## Источник
 
-[block-dangerous-git.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/block-dangerous-git.sh)
+[block-dangerous-git.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/block-dangerous-git.sh)

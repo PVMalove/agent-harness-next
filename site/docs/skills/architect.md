@@ -2,14 +2,14 @@
 
 ## Интерактивный скилл architect
 
-Источник: [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/architect/SKILL.md).
+Источник: [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/architect/SKILL.md).
 Поставляется в `engineering-suite`, запускается вручную и возвращает brief решения в чате:
 границы, варианты, рекомендацию, компромиссы, риски, критерии приёмки и первые TDD-seams.
 Скилл изучает свидетельства и не изменяет файлы репозитория.
 
 Перед сравнением вариантов, при включённой памяти, выполняет
 `harness memory search . "<решение, граница и модуль>"`. Статус поиска и статус источника
-трактует по [общему контракту](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/docs/project-memory.md), который также задаёт
+трактует по [общему контракту](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/project-memory.md), который также задаёт
 установленный entry point для проекта без внешнего CLI. Возвращённые указатели
 дают кандидатов в прецеденты; исторические, неизвестные и неподтверждённые источники требуют
 проверки, superseded исключаются. Открывает источник только при необходимости, проверяет hash
@@ -21,7 +21,7 @@
 tool policy: прямой вызов поиска памяти остаётся недоступен, недостающие свидетельства
 эскалируются координатору. Следующий контракт относится к роли.
 
-Источник: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/architect.md) и общий контракт [`_common.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/_common.md).
+Источник: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
 
 ## 1. Название и локализация
 
@@ -63,4 +63,4 @@ risk_triggers:
 
 ## Источник
 
-[architect.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/architect.md)
+[architect.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md)

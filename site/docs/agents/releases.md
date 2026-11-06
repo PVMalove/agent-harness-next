@@ -6,13 +6,13 @@
 записана в `harness/VERSION`, `pyproject.toml`, заголовке секции `CHANGELOG.md` и имени тега
 `vMAJOR.MINOR.PATCH`. `harness/VERSION` служит проверяемым источником версии для CD.
 
-GitHub workflow [release.yml](https://github.com/PVMalove/claude-agent-harness/blob/master/.github/workflows/release.yml) запускается при push в `master`
+GitHub workflow [release.yml](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/release.yml) запускается при push в `master`
 и при push тега строго вида `vMAJOR.MINOR.PATCH`. Для push в `master` тег выводится из
 `harness/VERSION`; если такой тег уже существует, workflow завершается без публикации. Затем job
 `preflight` за секунды проверяет равенство тега и `harness/VERSION`, наличие секции и её категорий в
 `CHANGELOG.md` (`python scripts/build_release.py --tag vX.Y.Z --check` — ту же проверку можно
 выполнить локально до merge). После этого вызываются все проверки
-[verify.yml](https://github.com/PVMalove/claude-agent-harness/blob/master/.github/workflows/verify.yml), и только затем собирается архив. При ошибке Release
+[verify.yml](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/verify.yml), и только затем собирается архив. При ошибке Release
 и тег не создаются. Успешный запуск создаёт тег на проверенном коммите (если его ещё нет) и
 GitHub Release с двумя Assets:
 `claude-agent-harness-vX.Y.Z.tar.gz` и `claude-agent-harness-vX.Y.Z.tar.gz.sha256`.
@@ -40,7 +40,7 @@ GitHub Release с двумя Assets:
    ```
 
 3. Дождитесь успешного `release` workflow. Скачайте Assets на странице
-   [GitHub Releases](https://github.com/PVMalove/claude-agent-harness/releases) или через CLI:
+   [GitHub Releases](https://github.com/PVMalove/agent-harness-next/releases) или через CLI:
 
    ```bash
    gh release download vX.Y.Z --pattern 'claude-agent-harness-vX.Y.Z.tar.gz*'
@@ -51,7 +51,7 @@ GitHub Release с двумя Assets:
    `Get-FileHash .\claude-agent-harness-vX.Y.Z.tar.gz -Algorithm SHA256`.
 
 Для отдельного проверенного parser bundle существует ручной
-[release-parser-bundle.yml](https://github.com/PVMalove/claude-agent-harness/blob/master/.github/workflows/release-parser-bundle.yml). Его запускают после
+[release-parser-bundle.yml](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/release-parser-bundle.yml). Его запускают после
 успешного основного релиза с `release_tag` на тот же коммит. Он проверяет закреплённые wheels,
 собирает и аудирует bundle и прикладывает `parser-bundle.tar.gz` к существующему Release. Основной
 архив устанавливается независимо от этого дополнительного Asset; Repo Map при отсутствии parser
@@ -62,7 +62,7 @@ CD релизов реализован только для GitHub. Устана�
 
 ## Проверка приватных терминов
 
-[scripts/check_private_terms.py](https://github.com/PVMalove/claude-agent-harness/blob/master/scripts/check_private_terms.py) не даёт опубликовать
+[scripts/check_private_terms.py](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/check_private_terms.py) не даёт опубликовать
 приватные термины мейнтейнера: имена клиентов, внутренние хосты, коды тикетов. Это инструмент
 только этого репозитория, в архив релиза и в целевые проекты он не попадает. Проверка
 выполняется в трёх местах:
@@ -70,13 +70,13 @@ CD релизов реализован только для GitHub. Устана�
 - `make verify` проверяет staged diff, непубликованные коммиты (`HEAD --not --remotes`) и имя
   текущей ветки;
 - repo-local PreToolUse hook из `.claude/settings.json`
-  ([scripts/hooks/check-private-terms.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/scripts/hooks/check-private-terms.sh)) перед
+  ([scripts/hooks/check-private-terms.sh](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/hooks/check-private-terms.sh)) перед
   `git commit`, `git push` и `gh issue|pr create|edit|comment` проверяет текст команды и её
   body-файлы (`-F`/`--file`/`--body-file`), а также staged diff (при `-a` — `git diff HEAD`)
   для commit, непубликованные коммиты для push и имя ветки. При совпадении команда
   блокируется. Hook начинает работать в сессиях, начатых после того, как изменение попало в
   текущую ветку;
-- job `private-terms` в [verify.yml](https://github.com/PVMalove/claude-agent-harness/blob/master/.github/workflows/verify.yml) для pull request
+- job `private-terms` в [verify.yml](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/verify.yml) для pull request
   проверяет сообщения и добавленные строки каждого коммита PR, head-ветку, title и body.
 
 ### Список терминов

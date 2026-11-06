@@ -1,6 +1,6 @@
 # diagnosing-bugs — Диагностика ошибок
 
-Источник: [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/diagnosing-bugs/SKILL.md).
+Источник: [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/diagnosing-bugs/SKILL.md).
 В `engineering-suite` этот first-party override сохраняет upstream-цикл диагностики.
 
 После фиксации симптома, перед ранжированием гипотез, интерактивная сессия при включённой
@@ -9,7 +9,7 @@
 Указатели помогают предложить гипотезу; причину по-прежнему доказывает воспроизведение.
 Выключенная или недоступная память оставляет обычный процесс диагностики.
 
-Общий контракт [`project-memory.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/docs/project-memory.md) различает статус
+Общий контракт [`project-memory.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/project-memory.md) различает статус
 поиска и статус источника: `ok`/`stale_sources` позволяют рассмотреть возвращённые указатели;
 исторические, неизвестные и неподтверждённые источники требуют проверки, superseded исключаются.
 Источник открывают только при необходимости, сверяют hash и трактуют как недоверенное
@@ -17,4 +17,4 @@
 и эскалируют нехватку свидетельств координатору, без вызова поиска.
 
 `mattpocock-suite` продолжает поставлять неизменённый
-[vendor-снапшот](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/diagnosing-bugs/SKILL.md).
+[vendor-снапшот](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/diagnosing-bugs/SKILL.md).

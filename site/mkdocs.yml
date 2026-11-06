@@ -1,8 +1,8 @@
 site_name: Agent Harness Next · beta
 site_description: Портативный harness для coding-агентов.
-site_url: https://pvmalove.github.io/claude-agent-harness/
-repo_url: https://github.com/PVMalove/claude-agent-harness
-repo_name: PVMalove/claude-agent-harness
+site_url: https://pvmalove.github.io/agent-harness-next/
+repo_url: https://github.com/PVMalove/agent-harness-next
+repo_name: PVMalove/agent-harness-next
 edit_uri: edit/master/site/docs/
 docs_dir: docs
 site_dir: ../site_build
@@ -280,7 +280,7 @@ extra:
   mascot_alt: Воксельный маскот Agent Harness Next
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/PVMalove/claude-agent-harness
+      link: https://github.com/PVMalove/agent-harness-next
       name: GitHub
 
 validation:

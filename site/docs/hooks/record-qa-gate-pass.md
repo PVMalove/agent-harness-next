@@ -18,4 +18,4 @@
 - **Выход (Output/Report):** Создание или обновление файла-маркера `.claude/.qa-gate/passed`, содержащего строку вида `<HEAD_hash>:<diff_hash>`.
 ## Источник
 
-[record-qa-gate-pass.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/record-qa-gate-pass.sh)
+[record-qa-gate-pass.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/record-qa-gate-pass.sh)

@@ -4,7 +4,7 @@
 
 - **Английское название:** `grilling`
 - **Русский перевод:** Стресс-тест идеи.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/productivity/grilling/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/productivity/grilling/SKILL.md)
 
 ## 2. Русское описание
 

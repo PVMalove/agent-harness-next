@@ -4,7 +4,7 @@
 
 - **Английское название:** `tdd`
 - **Русский перевод:** Разработка через тесты.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/tdd/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/tdd/SKILL.md)
 
 ## 2. Русское описание
 

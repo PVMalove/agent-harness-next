@@ -37,4 +37,4 @@
   - **Неизвестный `hook_id` или неверный вызов:** код `2` и сообщение в stderr без вердикта.
 ## Источник
 
-[hook_response.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/hook_response.py), [change_impact_hooks.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py), [hook_policy.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/hook_policy.py), [install-and-update.md](install-and-update.md)
+[hook_response.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/hook_response.py), [change_impact_hooks.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py), [hook_policy.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/hook_policy.py), [install-and-update.md](install-and-update.md)

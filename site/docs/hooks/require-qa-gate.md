@@ -29,4 +29,4 @@
 - **Выход (Output/Report):** Код возврата `0` (разрешение выполнения) или код возврата `2` с выводом сообщения об ошибке в `stderr` (блокировка команды).
 ## Источник
 
-[require-qa-gate.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/require-qa-gate.sh), [qa-gate-state.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/qa-gate-state.py), [pr_commands.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/pr_commands.py)
+[require-qa-gate.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/require-qa-gate.sh), [qa-gate-state.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/qa-gate-state.py), [pr_commands.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/pr_commands.py)

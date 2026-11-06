@@ -1,6 +1,6 @@
 # Coordinator — Координатор
 
-Источник: [`harness/orchestration/playbook.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/playbook.md). Для статусов и файлов доказательств также см. [`docs/skills/playbook.md`](playbook.md).
+Источник: [`harness/orchestration/playbook.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/playbook.md). Для статусов и файлов доказательств также см. [`docs/skills/playbook.md`](playbook.md).
 
 ## 1. Название и локализация
 
@@ -117,4 +117,4 @@ allowlist и eligibility проекции. Изменение, удаление,
 
 ## Источник
 
-[coordinator.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/coordinator.py)
+[coordinator.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/coordinator.py)

@@ -53,7 +53,7 @@ coordinator-а пишется на русском и содержит `"report_l
 разными runtime и сохраняет отчёт читаемым для человека.
 
 Перед первым английским handoff coordinator и workers обязаны прочитать общий контракт
-[Technical English](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/docs/technical-english.md). Он также доступен через playbook и `roles/_common.md`.
+[Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/technical-english.md). Он также доступен через playbook и `roles/_common.md`.
 Источник сам описывает свою область, языковые исключения и примеры review. Действующие правила
 языка, authority, scope, привязки evidence к candidate SHA и human approval сохраняются.
 
@@ -107,7 +107,7 @@ python3 harness/bin/harness.py health /path/to/repository
 этом режиме всегда `in-process`; provider profile нет, поэтому внешний worker запускать нечем.
 `harness health` принимает такой проект. Конфиг нужен, когда проекту требуется более узкий потолок
 записи, разные модели по ролям, внешний транспорт или бюджет параллелизма больше единицы. Справочник
-всех полей с дефолтами — [`.harness/orchestration/README.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/README.md).
+всех полей с дефолтами — [`.harness/orchestration/README.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/README.md).
 
 По умолчанию запускайте coordinator-сессию с `medium` effort, и для architect в assignment plan
 тоже выбирайте `medium`. Более высокий effort — не дефолт каждого ticket: он требует явного решения
@@ -416,7 +416,7 @@ Podman, а при заданном `access_policy.operations.qa.container` — �
 исполнителя описывают ADR 0025 и ADR 0022 (разделы «Решения реализации»); этот раздел
 описывает поставленное поведение. Пошаговую настройку целевого проекта — предпосылки, сборку
 образов, кэши, allowlist, блокеры, очистку и пример проектного адаптера — даёт англоязычное
-руководство [`harness/docs/container-executor.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/docs/container-executor.md), которое
+руководство [`harness/docs/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/container-executor.md), которое
 `backend-orchestration` ставит как `.harness/docs/container-executor.md`. Проектные реализации
 `module:factory` работают, как раньше, а хост-процесс не может зарегистрировать другую реализацию
 под именем `docker`.
@@ -2800,11 +2800,11 @@ post-integration defects, включая источник и отсутству�
 контрактом приоритет у manifest'а, immutable brief и явного approval.
 
 Архитектурный контракт маршрута целиком зафиксирован в
-[ADR 0003](https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0003-orchestration-core.md): opt-in capability, отдельное
+[ADR 0003](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0003-orchestration-core.md): opt-in capability, отдельное
 approval для dispatch, review и QA для одного SHA, локальное санитизированное evidence и adapter
 только для транспорта. Превращение `/implement` в coordinator-driven конвейер по умолчанию, model
 self-report, dispatch watchdog, per-role transport и zero-config дефолты зафиксированы в
-[ADR 0005](https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0005-implement-pipeline.md).
+[ADR 0005](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0005-implement-pipeline.md).
 
 ## Ручное восстановление и повтор этапа
 

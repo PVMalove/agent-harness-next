@@ -44,4 +44,4 @@
   - **Отказ (Блокировка):** Код возврата `2` и текстовое сообщение в `stderr` с объяснением причины запрета, если merge-текст стоит вне инертных команд и вне данных heredoc, если команда выходит за подмножество строгого лексера, если Python не найден или `pr_commands.py` не дал решения.
 ## Источник
 
-[block-pr-merge.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/block-pr-merge.sh), [pr_commands.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/pr_commands.py)
+[block-pr-merge.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/block-pr-merge.sh), [pr_commands.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/pr_commands.py)

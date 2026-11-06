@@ -1,6 +1,6 @@
 # PR Composer — Составитель PR
 
-Источник: [`harness/project/agents/pr-composer.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/agents/pr-composer.md); вызывается скилом [`to-pull-requests`](../skills/to-pull-requests.md) и конвейером [`implement`](../skills/implement.md) перед публикацией PR.
+Источник: [`harness/project/agents/pr-composer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/agents/pr-composer.md); вызывается скилом [`to-pull-requests`](../skills/to-pull-requests.md) и конвейером [`implement`](../skills/implement.md) перед публикацией PR.
 
 ## 1. Название и локализация
 
@@ -41,4 +41,4 @@ maxTurns: 15
 
 ## Источник
 
-[pr-composer.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/agents/pr-composer.md)
+[pr-composer.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/agents/pr-composer.md)

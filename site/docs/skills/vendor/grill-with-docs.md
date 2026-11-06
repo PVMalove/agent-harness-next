@@ -4,7 +4,7 @@
 
 - **Английское название:** `grill-with-docs`
 - **Русский перевод:** Интервью с фиксацией решений.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/grill-with-docs/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/grill-with-docs/SKILL.md)
 
 ## 2. Русское описание
 

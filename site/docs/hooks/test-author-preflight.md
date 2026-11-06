@@ -2,7 +2,7 @@
 
 ## 1. Название и локализация
 
-- **Исходный скрипт:** [`harness/project/hooks/test-author-preflight.sh`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/test-author-preflight.sh)
+- **Исходный скрипт:** [`harness/project/hooks/test-author-preflight.sh`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/test-author-preflight.sh)
 - **Русский перевод:** проверка, что тест-автора можно включить без потери защиты.
 
 ## 2. Полное описание
@@ -49,8 +49,8 @@ hooks; скрипт при значении `1` отвечает `claude_code_un
 ## 3. Проверка реальным Claude Code в clean-room
 
 Срабатывание scoped hook подтверждает не preflight, а сценарий
-[`scripts/clean_room/isolated_test_runner.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/scripts/clean_room/isolated_test_runner.py) с
-модулем [`claude_probe.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/scripts/clean_room/claude_probe.py). Он управляется переменными
+[`scripts/clean_room/isolated_test_runner.py`](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/clean_room/isolated_test_runner.py) с
+модулем [`claude_probe.py`](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/clean_room/claude_probe.py). Он управляется переменными
 окружения:
 
 | Переменная | Эффект |
@@ -86,8 +86,8 @@ production-код не изменён. Изолированный `HOME` с ре
 
 ## Источник
 
-[test-author-preflight.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/test-author-preflight.sh),
-[test_preflight.py](https://github.com/PVMalove/claude-agent-harness/blob/master/tests/test_author/test_preflight.py),
-[claude_probe.py](https://github.com/PVMalove/claude-agent-harness/blob/master/scripts/clean_room/claude_probe.py),
+[test-author-preflight.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/test-author-preflight.sh),
+[test_preflight.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_preflight.py),
+[claude_probe.py](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/clean_room/claude_probe.py),
 [docs/agents/test-author.md](../agents/test-author.md),
 ADR 0014

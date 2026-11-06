@@ -1,6 +1,6 @@
 # Документация Agent Harness Next
 
-Публичная документация — [pvmalove.github.io/claude-agent-harness](https://pvmalove.github.io/claude-agent-harness/).
+Публичная документация — [pvmalove.github.io/agent-harness-next](https://pvmalove.github.io/agent-harness-next/).
 Её исходники лежат в `site/`, локальный просмотр — `make docs-serve`, строгая сборка — `make docs-build`.
 
 Корневой `docs/` — внутренняя документация для разработчика исходного репозитория. Она не

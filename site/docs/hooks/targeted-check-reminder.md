@@ -2,8 +2,8 @@
 
 ## 1. Название и локализация
 
-- **Исходный хук:** [`harness/project/hooks/targeted-check-reminder.sh`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/targeted-check-reminder.sh)
-  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py)
+- **Исходный хук:** [`harness/project/hooks/targeted-check-reminder.sh`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/targeted-check-reminder.sh)
+  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py)
 - **Русский перевод:** напоминание в конце хода роли отчитать targeted-проверки brief.
 
 ## 2. Полное описание
@@ -62,5 +62,5 @@ Hook никогда не продолжает ход: у `Stop` и `SubagentStop
 
 ## Источник
 
-[targeted-check-reminder.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/targeted-check-reminder.sh),
-[change_impact_hooks.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py)
+[targeted-check-reminder.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/targeted-check-reminder.sh),
+[change_impact_hooks.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py)

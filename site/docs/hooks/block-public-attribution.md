@@ -39,4 +39,4 @@
 
 ## Источник
 
-[block-public-attribution.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/block-public-attribution.sh)
+[block-public-attribution.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/block-public-attribution.sh)

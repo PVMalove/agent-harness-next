@@ -4,7 +4,7 @@
 
 - **Английское название:** `setup-matt-pocock-skills`
 - **Русский перевод:** Настройка инженерных навыков.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/setup-matt-pocock-skills/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/setup-matt-pocock-skills/SKILL.md)
 
 ## 2. Русское описание
 

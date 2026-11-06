@@ -2,8 +2,8 @@
 
 ## 1. Название и локализация
 
-- **Исходный скрипт:** [`harness/project/hooks/run-test.sh`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/run-test.sh),
-  ядро — [`harness/health/isolated_runner.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/health/isolated_runner.py)
+- **Исходный скрипт:** [`harness/project/hooks/run-test.sh`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/run-test.sh),
+  ядро — [`harness/health/isolated_runner.py`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/isolated_runner.py)
 - **Русский перевод:** изолированный runner одного выбранного теста.
 
 ## 2. Полное описание
@@ -155,9 +155,9 @@ canary-проверкой guard и opt-in проекта вынесены в о�
 
 ## Источник
 
-[run-test.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/run-test.sh),
-[isolated_runner.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/health/isolated_runner.py),
-[project_files.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/health/project_files.py),
+[run-test.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/run-test.sh),
+[isolated_runner.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/isolated_runner.py),
+[project_files.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/project_files.py),
 ADR 0014
 
 ### Сборка и тестовая БД

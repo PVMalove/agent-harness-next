@@ -76,4 +76,4 @@ python .harness/reporting/delivery_stats.py --repo . --epic <current-epic> \\
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/delivery-stats/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/delivery-stats/SKILL.md)

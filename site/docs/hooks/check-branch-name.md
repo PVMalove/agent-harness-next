@@ -19,4 +19,4 @@
 - **Выход (Output/Report):** В случае успешной проверки — код `0` (разрешение на выполнение). В случае нарушения конвенции ветвления или если задачу не удалось подтвердить (не найдена, issues отключены, нет авторизации, проект недоступен, CLI не ответил за 10 с или завершился с нераспознанной ошибкой) — диагностическое сообщение с причиной в `stderr` и код возврата `2` (блокировка выполнения).
 ## Источник
 
-[check-branch-name.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/check-branch-name.sh)
+[check-branch-name.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/check-branch-name.sh)

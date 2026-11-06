@@ -23,4 +23,4 @@
 - **Выход (Output/Report):** Всегда возвращает `exit 0`. Создает или обновляет файл `.claude/.skill-usage.json`, сохраняя обновленную статистику по навыкам.
 ## Источник
 
-[count-skill-usage.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/count-skill-usage.sh)
+[count-skill-usage.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/count-skill-usage.sh)

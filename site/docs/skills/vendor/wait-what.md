@@ -4,7 +4,7 @@
 
 - **Английское название:** `wait-what`
 - **Русский перевод:** Повторное объяснение.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/productivity/wait-what/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/productivity/wait-what/SKILL.md)
 
 ## 2. Русское описание
 

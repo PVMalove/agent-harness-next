@@ -4,7 +4,7 @@
 
 - **Английское название:** `to-tickets`
 - **Русский перевод:** Декомпозиция на тикеты.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/to-tickets/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/to-tickets/SKILL.md)
 
 ## 2. Русское описание
 

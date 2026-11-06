@@ -7,13 +7,13 @@ toc_depth: 2
 # Релизы
 
 Короткая история изменений: у каждого релиза — дата, состав изменений и свёрнутые полные
-заметки. Канонический список с assets — в [GitHub Releases](https://github.com/PVMalove/claude-agent-harness/releases).
+заметки. Канонический список с assets — в [GitHub Releases](https://github.com/PVMalove/agent-harness-next/releases).
 
 <div class="ah-releases" markdown="1">
 
 ## v1.5.1 — 18 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 4 · Изменено: 2 · Исправлено: 4 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.5.1">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 4 · Изменено: 2 · Исправлено: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.5.1">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Профили проверок batch · Быстрые проверки developer-retry · Состояние lock ledger.</p>
 
@@ -40,7 +40,7 @@ toc_depth: 2
 
 ## v1.5.0 — 18 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 7 · Исправлено: 2 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.5.0">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 7 · Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.5.0">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Тест-автор в fast-implement · Защищённая сборка и БД · Тест-автор.</p>
 
@@ -65,7 +65,7 @@ toc_depth: 2
 
 ## v1.4.6 — 14 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Исправлено: 2 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.4.6">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.6">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: База повторного batch · Context Package.</p>
 
@@ -78,7 +78,7 @@ toc_depth: 2
 
 ## v1.4.5 — 13 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 6 · Исправлено: 3 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.4.5">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 6 · Исправлено: 3 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.5">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Стадии в отчётах консоли · Фильтры и порядок стадий · Время до PR.</p>
 
@@ -101,7 +101,7 @@ toc_depth: 2
 
 ## v1.4.4 — 12 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Исправлено: 1 · Изменено: 1 · Ломающие изменения: 1 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.4.4">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Исправлено: 1 · Изменено: 1 · Ломающие изменения: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.4">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Статусы отчёта · Машинные поля высокого риска · Строгие enum отчёта.</p>
 
@@ -121,7 +121,7 @@ toc_depth: 2
 
 ## v1.4.2 — 12 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Исправлено: 1 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.4.2">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Исправлено: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.2">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Результаты проверок отчёта.</p>
 
@@ -133,7 +133,7 @@ toc_depth: 2
 
 ## v1.4.1 — 12 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 6 · Изменено: 2 · Исправлено: 2 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.4.1">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 6 · Изменено: 2 · Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.1">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Обновление Harness в консоли · Выбор seed-файлов · Язык консоли.</p>
 
@@ -162,7 +162,7 @@ toc_depth: 2
 
 ## v1.4.0 — 11 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 5 · Изменено: 3 · Исправлено: 3 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.4.0">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 5 · Изменено: 3 · Исправлено: 3 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.0">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Настройка в консоли · Версии конфигурации · Подключение другого проекта.</p>
 
@@ -190,7 +190,7 @@ toc_depth: 2
 
 ## v1.3.2 — 11 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 3 · Изменено: 4 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.3.2">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 3 · Изменено: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.3.2">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Ручное восстановление оркестрации · Условное принятие стадии · Порог повтора по замечаниям review.</p>
 
@@ -211,7 +211,7 @@ toc_depth: 2
 
 ## v1.3.1 — 9 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 18 · Изменено: 13 · Исправлено: 26 · Безопасность: 4 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.3.1">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 18 · Изменено: 13 · Исправлено: 26 · Безопасность: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.3.1">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Ограниченные инфраструктурные повторы · Правила технического русского · Раздельная подготовка окружения QA.</p>
 
@@ -292,7 +292,7 @@ toc_depth: 2
 
 ## v1.2.0 — 2 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 8 · Изменено: 1 · Исправлено: 1 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.2.0">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 8 · Изменено: 1 · Исправлено: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.2.0">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Память проекта (RAG): вычисляемый SQLite FTS5 кэш «как это решали раньше» на основе локальных источников (ADR, глоссарий, архив задач, Completion reports, QA findings и Lifecycle ledger) · Команды harness memory: build (построение кэша), search (поиск с ранжированием BM25), rebuild (полная пересборка), sync (санитизированный snapshot тикетов и PR из трекера) и eval (офлайн-оценка качества) · Замороженные указатели памяти в Context Package: подбор релевантных карточек по цели и DoD тикета с метаданными (заголовок, статус, путь, hash) без включения недоверенного текста источников; поддержка флага --no-memory, квот по типам источников и лимита токенов внутри бюджета пакета.</p>
 
@@ -319,7 +319,7 @@ toc_depth: 2
 
 ## v1.1.1 — 2 октября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Исправлено: 2 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.1.1">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.1.1">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Backend-оркестрация: retry developer-отчёта без accept больше не заводит batch в тупик · Backend-оркестрация: dispatch create выполняет те же проверки brief, что dispatch send, включая связь кандидата с risk assessment.</p>
 
@@ -332,7 +332,7 @@ toc_depth: 2
 
 ## v1.1.0 — 28 сентября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 2 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.1.0">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.1.0">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: harness uninstall <repo>: полное удаление харнесса из проекта —  · harness console, раздел Harness: план и применение удаления харнесса (ввод UNINSTALL).</p>
 
@@ -345,7 +345,7 @@ toc_depth: 2
 
 ## v1.0.1 — 28 сентября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 1 · Изменено: 3 · Исправлено: 1 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.0.1">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 1 · Изменено: 3 · Исправлено: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.0.1">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: harness console, раздел Harness: команды update --force-managed-files и update --force-seed-files, предпросмотр hard-очистки; команды очистки soft/hard (план и применение) сгруппированы после команд установки · harness console: фон задан только у экрана — остальные элементы прозрачны и разделены рамками с заголовками (верхняя полоса со значком меню ☰, «Вывод» команд, Diagnostics, Reports, отчёт, хронология, QA-логи, Help, Repo Map); выбранный элемент списков, дерева и вкладок и кнопка под курсором выделяются цветом, без заливки · harness console, Dashboard: в «Состоянии» перечислены ошибки и предупреждения health, факты Repo Map выводятся по одному на строку; панель прокручивается внутри рамки.</p>
 
@@ -367,7 +367,7 @@ toc_depth: 2
 
 ## v1.0.0 — 28 сентября 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Добавлено: 10 · Изменено: 2 · <a href="https://github.com/PVMalove/claude-agent-harness/releases/tag/v1.0.0">Открыть на GitHub</a></p>
+<p class="ah-release-meta">Добавлено: 10 · Изменено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.0.0">Открыть на GitHub</a></p>
 
 <p class="ah-release-summary">Главное: Первый стабильный выпуск переносимого Agent Harness с capability-снимками, CLI установки, оркестрацией и Repo Map · GitHub Release с архивом установки, SHA-256 и заметками из этого раздела; публикуется автоматически после merge в master, если тега версии из harness/VERSION ещё нет · Управляемый пример .</p>
 

@@ -1,6 +1,6 @@
 # Code Review Standards — Ревью по стандартам
 
-Источник: [`harness/project/agents/code-review-standards.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/agents/code-review-standards.md); вызывается осью Standards скила [`code-review`](../skills/code-review.md).
+Источник: [`harness/project/agents/code-review-standards.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/agents/code-review-standards.md); вызывается осью Standards скила [`code-review`](../skills/code-review.md).
 
 ## 1. Название и локализация
 
@@ -40,4 +40,4 @@ maxTurns: 20
 
 ## Источник
 
-[code-review-standards.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/agents/code-review-standards.md)
+[code-review-standards.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/agents/code-review-standards.md)
