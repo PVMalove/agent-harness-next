@@ -1,4 +1,4 @@
-# Issue tracker
+# Issue tracker { #issue-tracker }
 
 The delivery workflow is in [git-workflow.md](git-workflow.md). This guide defines tracker-specific operations.
 
@@ -10,7 +10,7 @@ This repo's triage label vocabulary is a first-party namespaced taxonomy — `ty
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
-### Conventions
+### Conventions { #conventions }
 
 - **Create an issue**: `gh issue create --title "..." --body-file <path>`. Write the body to a file first — inline `--body` heredocs break on nested quotes/backticks (see `/to-spec`, `/to-tickets`).
 - **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
@@ -21,7 +21,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
-### Pull requests as a triage surface
+### Pull requests as a triage surface { #pull-requests-as-a-triage-surface }
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
 
@@ -33,11 +33,11 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
-### When a skill says "publish to the issue tracker"
+### When a skill says "publish to the issue tracker" { #when-a-skill-says-publish-to-the-issue-tracker }
 
 Create a GitHub issue.
 
-### When a skill says "fetch the relevant ticket"
+### When a skill says "fetch the relevant ticket" { #when-a-skill-says-fetch-the-relevant-ticket }
 
 Run `gh issue view <number> --comments`.
 
@@ -45,7 +45,7 @@ Run `gh issue view <number> --comments`.
 
 Issues and specs for this repo live as GitLab issues. Use the [`glab`](https://gitlab.com/gitlab-org/cli) CLI for all operations.
 
-### Conventions
+### Conventions { #conventions_1 }
 
 - **Project addressing**: name the project explicitly in every command instead of letting `glab` choose it. On its own, `glab` picks a remote in the order `upstream` > `gitlab` > `origin`, and `glab api` fills its project placeholders from the current directory's repository and defaults `--hostname` to `gitlab.com` or that repository's host. This guide and the skills write the project with three placeholders:
   - `<host>` — `tracker.host` from `.harness/project.json`, including a web port other than 443 (`gitlab.example.com`, `gitlab.example.test:4443`);
@@ -61,13 +61,13 @@ Issues and specs for this repo live as GitLab issues. Use the [`glab`](https://g
 - **Close**: `glab issue close <number> -R <project-url>`. `glab issue close` does not accept a closing comment, so post the explanation first as a comment (see above), then close.
 - **Merge requests**: GitLab calls PRs "merge requests". Use `glab mr create -R <project-url> --target-branch <target-branch> --title '<title>' --description-file <path> --yes` (target branch and title rules in [git-workflow.md](git-workflow.md) §2), `glab mr update`, `glab mr view`, etc. — the same shape as `gh pr ...` with `mr` in place of `pr`, `--target-branch` in place of `--base`, `--description-file` in place of `--body-file`, and `-R <project-url>` on every command. An MR comment goes through `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests/<number>/notes -F body=@<path>` (`pr-comment-<issue>-<slug>.md`), not `glab mr note --message`.
 
-### `glab` setup
+### `glab` setup { #glab-setup }
 
 - **Minimum version: `glab` 1.117.0.** When the project tracker is GitLab, `harness health` fails its local `environment.glab` check for an older `glab --version`; upgrade by the [installation guide](https://gitlab.com/gitlab-org/cli#installation).
 - **Host with a port.** The tracker host is `tracker.host` in `.harness/project.json`, including the web port when it is not 443 — for example `gitlab.example.test:4443`. Log in to exactly that host with `glab auth login --hostname gitlab.example.test:4443` and check it with `glab auth status --hostname gitlab.example.test:4443`, the same check `harness health --online` runs. Address the project explicitly: `glab <command> -R https://gitlab.example.test:4443/group/sub/project`, and `GITLAB_HOST=gitlab.example.test:4443 glab api projects/group%2Fsub%2Fproject` with the URL-encoded project path.
 - **Personal CA and proxy.** Keep them in your own `glab` configuration and environment, never in `.harness/project.json` or the repository: `glab config set ca_cert /path/to/ca.pem --host gitlab.example.test:4443` for an internal CA, and the standard `HTTPS_PROXY`/`NO_PROXY` environment variables for a proxy. Tokens stay in the storage `glab auth login` uses.
 
-### Merge requests as a triage surface
+### Merge requests as a triage surface { #merge-requests-as-a-triage-surface }
 
 **MRs as a request surface: no.** _(Set to `yes` if this repo treats external merge requests as feature requests; `/triage` reads this flag.)_
 
@@ -79,19 +79,19 @@ When set to `yes`, MRs run through the same labels and states as issues, using t
 
 Unlike GitHub, GitLab numbers issues and MRs separately, so `#42` is unambiguous once you know which surface the maintainer means.
 
-### When a skill says "publish to the issue tracker"
+### When a skill says "publish to the issue tracker" { #when-a-skill-says-publish-to-the-issue-tracker_1 }
 
 Create a GitLab issue.
 
-### When a skill says "fetch the relevant ticket"
+### When a skill says "fetch the relevant ticket" { #when-a-skill-says-fetch-the-relevant-ticket_1 }
 
 Run `glab issue view <number> -R <project-url> --comments`.
 
-## Local markdown
+## Local markdown { #local-markdown }
 
 Issues and specs for this repo live as markdown files in `.scratch/`.
 
-### Conventions
+### Conventions { #conventions_2 }
 
 - One feature per directory: `.scratch/<feature-slug>/`
 - The spec is `.scratch/<feature-slug>/spec.md`
@@ -99,15 +99,15 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 - Triage state is recorded as a `Workflow:` line near the top of each issue file, using the `status::*` vocabulary (see [triage-labels.md](triage-labels.md) for the exact strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
-### When a skill says "publish to the issue tracker"
+### When a skill says "publish to the issue tracker" { #when-a-skill-says-publish-to-the-issue-tracker_2 }
 
 Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
 
-### When a skill says "fetch the relevant ticket"
+### When a skill says "fetch the relevant ticket" { #when-a-skill-says-fetch-the-relevant-ticket_2 }
 
 Read the file at the referenced path. The user will normally pass the path or the issue number directly.
 
-## Wayfinding operations
+## Wayfinding operations { #wayfinding-operations }
 
 Used by `/wayfinder`. The **map** holds the Notes / Decisions-so-far / Fog body; **child** tickets hang off it. Mechanics depend on the tracker section above:
 

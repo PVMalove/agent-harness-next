@@ -1,14 +1,14 @@
-# Triage Labels
+# Triage Labels { #triage-labels }
 
 The delivery workflow is in [git-workflow.md](git-workflow.md). This guide is the authoritative vocabulary for triage labels.
 
 This repo does **not** use the upstream `mattpocock/skills` canonical five-role vocabulary (`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`) as literal labels. `triage/SKILL.md` (`.harness/skills/triage/`) speaks natively in the namespaced taxonomy below — this file is the reference, not a translation table. Every axis, including `type::*`, uses this repo's own enterprise-style values rather than upstream's.
 
-## The taxonomy
+## The taxonomy { #the-taxonomy }
 
 Every triaged issue or PR carries exactly one label from each of the first three axes below, except while it carries `status::specs` — execution mode isn't decided yet at that stage (see [State machine](#state-machine)).
 
-### 1. Type (`type::*`)
+### 1. Type (`type::*`) { #1-type-type }
 
 | Label | Meaning |
 | --- | --- |
@@ -20,7 +20,7 @@ Every triaged issue or PR carries exactly one label from each of the first three
 | `type::performance` | Performance improvement |
 | `type::hotfix` | Urgent production fix |
 
-### 2. Execution mode — who does the work
+### 2. Execution mode — who does the work { #2-execution-mode-who-does-the-work }
 
 | Label | Color | Meaning |
 | --- | --- | --- |
@@ -31,7 +31,7 @@ Documentation tickets — those that change only `docs/`, `site/`, `README.md`, 
 get `hitl`, not `afk`: a person reads the result and decides whether the text is ready to publish.
 `/implement` and `/fast-implement` do not take such tickets into the afk pipeline.
 
-### 3. Status (`status::*`) — where it sits in the pipeline
+### 3. Status (`status::*`) — where it sits in the pipeline { #3-status-status-where-it-sits-in-the-pipeline }
 
 | Label | Color | Meaning |
 | --- | --- | --- |
@@ -40,14 +40,14 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 | `status::in-progress` | blue `#1d76db` | Currently being worked on in an active session |
 | `status::blocked` | red `#b60205` | Blocked by a dependency, or waiting on more info from you |
 
-### Context labels — applied when relevant
+### Context labels — applied when relevant { #context-labels-applied-when-relevant }
 
 | Label | Color | Applied by | Meaning |
 | --- | --- | --- | --- |
 | `task-report::required` | gray `#6a737d` | `/to-spec`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Applied by default to every ticket unless you say to skip it. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
 | `resolution::wontfix` | gray `#c2c2c2` | `/triage` | The request was explicitly rejected. Applied at close time; see `.out-of-scope/` handling in `triage/OUT-OF-SCOPE.md`. |
 
-### 4. Priority (`priority::*`) — optional, purely informational
+### 4. Priority (`priority::*`) — optional, purely informational { #4-priority-priority-optional-purely-informational }
 
 Nothing consumes this automatically yet; it exists so a maintainer can flag urgency.
 
@@ -58,7 +58,7 @@ Nothing consumes this automatically yet; it exists so a maintainer can flag urge
 | `priority::p2` | Medium |
 | `priority::p3` | Low |
 
-### 5. Severity (`severity::*`) — optional, purely informational
+### 5. Severity (`severity::*`) — optional, purely informational { #5-severity-severity-optional-purely-informational }
 
 Nothing consumes this automatically yet; it exists so a maintainer can flag impact.
 
@@ -69,7 +69,7 @@ Nothing consumes this automatically yet; it exists so a maintainer can flag impa
 | `severity::s3` | Minor impact |
 | `severity::s4` | Trivial impact |
 
-### 6. Environment (`env::*`) — target-project only, optional
+### 6. Environment (`env::*`) — target-project only, optional { #6-environment-env-target-project-only-optional }
 
 Which deployed environment an issue or PR relates to. Not part of this harness repository's own
 taxonomy — only seeded into target projects that track deployments.
@@ -91,7 +91,7 @@ Epic grouping uses no label: a ticket decomposed from an epic is linked to it th
 | `wayfinder:grilling` | violet `#6554c0` | HITL ticket type — a conversation, the default case. |
 | `wayfinder:task` | slate `#8993a4` | HITL-or-AFK ticket type — manual work that unblocks a decision. |
 
-### Pipeline hint (`pipeline::*`) — from story points, `afk` only
+### Pipeline hint (`pipeline::*`) — from story points, `afk` only { #pipeline-hint-pipeline-from-story-points-afk-only }
 
 A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets` assigns every `afk` ticket a Fibonacci story-point score (Planning Poker: one primary pass, plus a second cheap advisory pass when the score lands in the gray zone) and derives one of these labels from it on the STOP-AND-ASK gate, where a developer can override the label without changing the score. `hitl` tickets never receive a `pipeline::*` label. The scale and thresholds come from the optional `story_points` field in `.harness/project.json` (schema: `.harness/project.schema.json`); without it, `/to-tickets` falls back to `≤3` fast, `≥5` full, gray zone `4`.
 
@@ -100,7 +100,7 @@ A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets`
 | `pipeline::fast` | pale blue `#c5def5` | Score `≤ fast_threshold` and `Execution: afk` — the short `/fast-implement` path, no gates. |
 | `pipeline::full` | orange-red `#d93f0b` | Score `≥ full_threshold` — the gated `/implement` pipeline. |
 
-## State machine
+## State machine { #state-machine }
 
 An unlabeled issue is implicitly "needs triage" — there's no dedicated label for that state.
 
@@ -114,7 +114,7 @@ An unlabeled issue is implicitly "needs triage" — there's no dedicated label f
 
 Apply `task-report::required` by default when `/to-spec` or `/to-tickets` create a ticket, unless told to skip it.
 
-## Local markdown tracker
+## Local markdown tracker { #local-markdown-tracker }
 
 A local-markdown-tracked ticket (`.scratch/<feature>/issues/NN-*.md`) has no GitHub/GitLab labels — the axes above go in explicit fields in that file instead:
 
@@ -131,6 +131,6 @@ This field block is the vocabulary that [issue-tracker.md](issue-tracker.md)'s `
 
 `status::*`'s values are the same strings as the GitHub/GitLab labels, plus a terminal `done`, which `/to-pull-requests` sets after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `docs/agents/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
 
-## Adapting this taxonomy per project
+## Adapting this taxonomy per project { #adapting-this-taxonomy-per-project }
 
 This is the taxonomy `engineering-suite` ships by default — it's a design choice (namespaced multi-axis labels), not a hardcoded requirement. Renaming an axis or adding project-specific context labels means editing this file **and** `triage/SKILL.md` — the skill speaks the vocabulary documented here as hardcoded prose, not as data read from this file at runtime. Run `harness lock-project-skills` afterward so the customization is recorded as intentional provenance, rather than left as drift a future `harness update --force` could silently overwrite.

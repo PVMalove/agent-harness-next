@@ -2,7 +2,7 @@
 
 This guide defines only the rules for Git, tickets, and PRs. The opt-in backend orchestration, which `/implement` drives, follows `.harness/orchestration/playbook.md`.
 
-### 1. Fundamental Constraints & Tooling
+### 1. Fundamental Constraints & Tooling { #1-fundamental-constraints-tooling }
 * **Zero Direct Commits:** `base_branch` and every `integration/*` branch are protected targets. Agents commit and push only from an isolated issue branch matching `branch_pattern`. `/to-spec` has two exceptions for a new `integration/*` branch that is absent on the remote. First, `/to-spec` may commit the grill docs to that branch. The grill docs are `CONTEXT.md`, `CONTEXT-MAP.md`, `**/CONTEXT.md`, `docs/adr/**`, and `**/docs/adr/**`. The commit must be a standalone `git commit` with only message options. The index must contain only grill docs. Second, `/to-spec` may push that branch to create it. For the commit, the hook checks `origin`; for the push, it checks the remote in the command. The hook blocks the command when the branch exists there or when it cannot check the remote.
 * **CLI Only:** Rely exclusively on `git` and your tracker's CLI — GitHub CLI (`gh`) or GitLab CLI (`glab`) — for repository and task operations. On GitLab, name the project explicitly in every command: each `glab` command takes `-R <project-url>`, and each `glab api` call is written `GITLAB_HOST=<host> glab api projects/<project-id>/...`. `<host>`, `<project-url>` and `<project-id>` are defined in [issue-tracker.md](issue-tracker.md) → GitLab → Conventions.
 * **Body via File, Not Inline:** Every body or comment published through `gh`/`glab` MUST come from a file at a readable literal path — never an inline `--body "..."`, `--description "..."` or `--message "..."`, a shell heredoc, a shell variable, or `-` (stdin). Nested quotes, backticks, and PowerShell's escaping rules all break inline text unpredictably, and the public-metadata hook (`block-public-attribution.sh`) checks the file's content and rejects a shell-variable, stdin, or missing path. Both trackers follow one publication contract:
@@ -15,7 +15,7 @@ This guide defines only the rules for Git, tickets, and PRs. The opt-in backend 
 * **Zero Auto-Merge:** The agent must never merge a pull request itself (`gh pr merge`/`glab mr merge` or equivalent). Merging into `integration/*` or `base_branch` is exclusively a manual action performed by the developer, after they confirm in the Human QA & Merge step below. This is unconditional regardless of the ticket's `hitl`/`afk` execution mode (see `docs/agents/triage-labels.md`) — `afk` means an agent can implement the work unattended, never that it may ship unattended.
 * **PR Confirmation Required:** The agent must not run `gh pr create`/`glab mr create` without first getting the developer's explicit go-ahead that the branch is ready to become a PR. This is a separate, earlier checkpoint than Human QA & Merge below (which covers review *after* the PR already exists) — finishing implementation, tests, and code-review does NOT by itself imply consent to open the PR. Like Zero Auto-Merge above, this gate does not relax for `afk`-labeled tickets.
 
-### 2. Workflow Sequence
+### 2. Workflow Sequence { #2-workflow-sequence }
 
 An epic selects one integration branch named `integration/<service-or-team>`. `/to-spec` creates it
 from `origin/<base_branch>` after publishing the epic when it is absent, records it in the epic, and never switches
@@ -56,7 +56,7 @@ branch is the PR target for child work; `base_branch` is the release target for 
 
      Do not close an issue when its PR/MR merely opens or closes without merging.
 
-### 3. PR Body Template
+### 3. PR Body Template { #3-pr-body-template }
 
 Every PR body (or MR body) MUST start with the following HTML comment verbatim. The comment is the same for every project language. The tracker does not render it; it is a checklist for the author and a navigator for the reviewer. After the comment, write the seven sections for the actual change; the comment items map to the section headings in order. Pass the body through `--body-file` (`--description-file` on GitLab) as §1 requires.
 

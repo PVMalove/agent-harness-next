@@ -1,6 +1,6 @@
-# Artifacts & Scratchpads Management
+# Artifacts & Scratchpads Management { #artifacts-scratchpads-management }
 
-## Local runtime storage
+## Local runtime storage { #local-runtime-storage }
 
 Generated runtime data belongs under the main checkout's `.harness/.sandboxes/`, shared by its linked
 worktrees. The layout is `runs/` for disposable environments (e.g. `runs/tests/` for verification runs,
