@@ -34,6 +34,7 @@ theme:
     - navigation.sections
     - navigation.indexes
     - navigation.top
+    - toc.integrate
     - search.suggest
     - search.highlight
     - content.code.copy
@@ -52,7 +53,8 @@ markdown_extensions:
       alternate_style: true
   - pymdownx.highlight
   - toc:
-      permalink: true
+      permalink: "▸"
+      permalink_title: "Ссылка на этот раздел"
 
 nav:
   - Docs: index.md

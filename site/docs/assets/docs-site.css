@@ -717,6 +717,13 @@ body {
   background-color: var(--ah-muted);
 }
 
+/* Integrated table of contents: air between the sections in the left column. */
+.md-nav--integrated .md-nav__link {
+  margin-top: 0.4rem;
+  padding-block: 0.12rem;
+  line-height: 1.45;
+}
+
 .ah-footer-brand {
 
   display: inline-flex;
