@@ -302,3 +302,62 @@ export function screenPage(
 export function nextPage(id: unknown, text: string, next: number, done: boolean): Record<string, unknown> {
   return { v: 1, id, type: "snapshot.page", ok: true, text, next, done };
 }
+
+/* The Harness facts as harness.overview and harness.maintenance send them. */
+export const HARNESS_OVERVIEW = {
+  state: {
+    installed: true,
+    installed_version: "2.0.0",
+    capabilities: ["engineering-suite"],
+    skills: 32,
+    managed_files: 259,
+    updated_at: "2026-11-05 10:00 UTC",
+    orchestration: true,
+  },
+  package_version: "2.0.1",
+  drift: "drift",
+  usage: { unavailable: null, batches: 4, tickets: 3, dispatches: 12, reports: 9 },
+};
+
+const cleanupSummary = (mode: string, digest: string, bytes: number) => ({
+  plan: {
+    mode,
+    root: "/work/project/.harness",
+    min_age_hours: 24,
+    remove: [{ kind: "directory", path: "/work/project/.harness/.sandboxes/runs/tests/old" }],
+    skipped: [{ path: "/work/project/.harness/.sandboxes/runs/qa/new", reason: "active or newer than minimum age" }],
+  },
+  categories: { "runs/tests": { bytes, files: 3 } },
+  total: { bytes, files: 3 },
+  items: 1,
+  digest,
+});
+
+export const MAINTENANCE = {
+  maintenance: {
+    soft: cleanupSummary("soft", "a".repeat(64), 2048),
+    hard: cleanupSummary("hard", "b".repeat(64), 4096),
+    worktrees: [
+      { path: "/work/project/.harness/.sandboxes/worktrees/issue-1-done", branch: "feature/issue-1-done", dirty: 0, reason: "" },
+      {
+        path: "/work/project/.harness/.sandboxes/worktrees/issue-2-live",
+        branch: "feature/issue-2-live",
+        dirty: 3,
+        reason: "worktree has uncommitted changes",
+      },
+    ],
+    worktree_error: "",
+    tree_sizes: [{ path: "/work/project/.harness/.sandboxes/worktrees/issue-1-done", size: { bytes: 1536, files: 4 } }],
+  },
+  error: "",
+};
+
+/** Answer the open harness.overview and harness.maintenance requests of `socket`. */
+export function answerHarness(socket: FakeSocket, overview: unknown = HARNESS_OVERVIEW, maintenance: unknown = MAINTENANCE): void {
+  for (const body of socket.sent.filter((sent) => sent.type === "harness.overview")) {
+    socket.reply({ v: 1, id: body.id, type: "harness.overview", ok: true, cached: false, age_seconds: 0, ...(overview as object) });
+  }
+  for (const body of socket.sent.filter((sent) => sent.type === "harness.maintenance")) {
+    socket.reply(screenPage(body.id, "harness.maintenance", JSON.stringify(maintenance)));
+  }
+}

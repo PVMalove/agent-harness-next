@@ -9,12 +9,16 @@ import { PHASE_LABELS } from "../../harness/console/frontend/src/commands/JobOut
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
 import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
-import { CANCEL_REASON, COMMANDS, FakeSocket, ManualClock, jobReply, jobSnapshot } from "./fake-socket";
+import { CANCEL_REASON, COMMANDS, FakeSocket, HARNESS_OVERVIEW, MAINTENANCE, ManualClock, answerHarness, jobReply, jobSnapshot } from "./fake-socket";
 import served from "./fixtures/job-catalog.json";
 
 const line = (n: number) => ({ channel: "stdout", text: `line ${n}\n` });
 
-function renderHarness(commands: unknown[] = COMMANDS, cancelReason: string = CANCEL_REASON) {
+function renderHarness(
+  commands: unknown[] = COMMANDS,
+  cancelReason: string = CANCEL_REASON,
+  maintenance: unknown = MAINTENANCE,
+) {
   window.location.hash = "#/harness";
   const clock = new ManualClock();
   const client = createConsoleClient({
@@ -35,6 +39,8 @@ function renderHarness(commands: unknown[] = COMMANDS, cancelReason: string = CA
     socket.reply({ v: 1, id: catalogRequest.id, type: "job.catalog", ok: true, commands, cancel_reason: cancelReason }),
   );
   const list = socket.request("job.list");
+  act(() => answerHarness(socket, HARNESS_OVERVIEW, maintenance));
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Команды" })));
   return { client, clock, socket, list };
 }
 
@@ -187,12 +193,12 @@ describe("the Harness commands panel", () => {
     expect(socket.request("job.subscribe")).toMatchObject({ job_id: "job-7", cursor: 0 });
   });
 
-  test("an unavailable or plan-bound command cannot be started from the web", () => {
+  test("an unavailable command, or a plan-bound one without a shown plan, cannot be started", () => {
     const blocked = [
       { ...COMMANDS[0], command_id: "verify", available: false },
       { ...COMMANDS[1], command_id: "cleanup-apply", typed_confirmation: null, plan_required: true },
     ];
-    renderHarness(blocked);
+    renderHarness(blocked, CANCEL_REASON, { maintenance: null, error: "Git unavailable" });
     for (const name of ["Запустить verify", "Запустить cleanup-apply"]) {
       expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
     }

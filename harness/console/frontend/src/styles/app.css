@@ -58,3 +58,19 @@
 .diag-commands { margin-top: 18px; }
 .diag-action { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .diag-facts dd code { color: var(--selfg); font: 10.5px var(--mono); word-break: break-all; }
+/* Harness · Обзор: the maintenance panel under the installation and pipeline usage panels. */
+.harness-page > .command-refusal { margin-bottom: 12px; }
+.harness-maintenance .panel-head { padding: 10px 14px; }
+.harness-maintenance-actions { display: flex; gap: 6px; }
+.harness-maintenance-actions .btn { padding: 3px 8px; font-size: 10px; }
+.harness-maintenance-body { padding: 10px 14px 12px; font-size: 10.5px; }
+.harness-maintenance-body h3 { margin: 8px 0 4px; color: var(--muted); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.harness-maintenance-body h3:first-child { margin-top: 0; }
+.harness-maintenance-body p { margin: 0 0 6px; }
+.harness-maintenance-lines { margin: 0; padding: 0; list-style: none; font: 10px/1.7 var(--mono); }
+.harness-maintenance-error { color: var(--err); }
+.harness-plan { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: #1b222b; font: 9.5px/1.7 var(--mono); overflow-wrap: anywhere; }
+.worktree-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; border-top: 1px solid #2b3440; font: 10px var(--mono); }
+.worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
+.worktree-row .btn { flex: none; padding: 3px 8px; font-size: 9.5px; }
+.harness-component > em:empty { display: none; }
