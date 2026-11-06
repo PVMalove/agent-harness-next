@@ -690,6 +690,33 @@ body {
   max-width: 60rem;
 }
 
+/* Right-hand page menu: keep the table of contents readable and airy. */
+.md-sidebar--secondary .md-nav__title {
+  padding-bottom: 0.35rem;
+}
+
+.md-sidebar--secondary .md-nav__link {
+  margin-top: 0.4rem;
+  padding-block: 0.12rem;
+  line-height: 1.45;
+}
+
+/* Release notes: thin muted frame instead of the heavy accent panel. */
+.md-typeset .ah-releases details.note {
+  border: 1px solid var(--ah-rule);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.md-typeset .ah-releases details.note > summary {
+  background: transparent;
+  color: var(--ah-muted);
+}
+
+.md-typeset .ah-releases details.note > summary::before {
+  background-color: var(--ah-muted);
+}
+
 .ah-footer-brand {
 
   display: inline-flex;

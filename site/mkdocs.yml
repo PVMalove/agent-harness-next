@@ -34,7 +34,6 @@ theme:
     - navigation.sections
     - navigation.indexes
     - navigation.top
-    - toc.integrate
     - search.suggest
     - search.highlight
     - content.code.copy
