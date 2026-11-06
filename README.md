@@ -20,10 +20,10 @@ Agent Harness Next разворачивает в проект скиллы, hook
 
 | Сборка | Для чего |
 | --- | --- |
-| `project-foundation` | Доменно-нейтральная база из пяти ключевых скиллов. Это вариант по умолчанию. |
+| `project-foundation` | Лёгкая доменно-нейтральная база из пяти ключевых скиллов. Вариант по умолчанию. |
 | `mattpocock-suite` | Полный upstream-набор, закреплённый на проверенном коммите. |
-| `engineering-suite` | Инженерный workflow: эпики и тикеты, триаж, двухосевое review, `qa-gate` и PR. |
-| `backend-orchestration` | Роли и coordinator поверх `engineering-suite` для распределённых систем. |
+| `engineering-suite` | Эпики и тикеты, триаж, двухосевое review, `qa-gate` и подготовка PR. |
+| `backend-orchestration` | Роли и coordinator для распределённых систем: briefs, worktrees и ledger. |
 
 Старое имя `pvmalove-suite` поддерживается как совместимый alias.
 
@@ -69,8 +69,8 @@ python3 harness/bin/harness.py health /path/to/repository
 `backend-orchestration` проводит тикет через роли и coordinator: `/implement` ведёт этапы architect,
 developer, review и QA, `/to-pull-requests` готовит ветку к публикации.
 PR требует отдельного подтверждения; изменения проходят через issue, ветку и PR по
-[правилам Git](./docs/agents/git-workflow.md); полный гейт — `make verify`. Порядок выпуска описан в
-[CHANGELOG.md](./CHANGELOG.md) и [releases.md](./docs/agents/releases.md).
+[правилам Git](./docs/agents/git-workflow.md); полный гейт — `make verify`. Заметки о выпуске — в
+[CHANGELOG.md](./CHANGELOG.md), порядок выпуска — в [releases.md](./docs/agents/releases.md).
 
 Проект распространяется по лицензии [MIT](./LICENSE). Лицензия закреплённого upstream-snapshot
 находится в [`third_party/mattpocock-skills/LICENSE`](./third_party/mattpocock-skills/LICENSE).

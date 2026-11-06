@@ -56,8 +56,10 @@ ok=40 warn=4 fail=1 skipped=11</code></pre>
 <div class="ah-section">
   <span class="ah-kicker">Сборки (Capabilities)</span>
   <h2>Соберите harness под задачу</h2>
-  <p>Capability задаёт состав скиллов и поведение агента. Одна сборка остаётся основой,
-    остальные подключаются поверх неё.</p>
+  <p>Capability задаёт состав скиллов и поведение агента. Сборки взаимоисключающие:
+    <code>engineering-suite</code> расширяет <code>mattpocock-suite</code>,
+    <code>backend-orchestration</code> — <code>engineering-suite</code>, а
+    <code>project-foundation</code> выбирается отдельно.</p>
 </div>
 
 <div class="ah-cards ah-cards--four">
@@ -74,7 +76,7 @@ ok=40 warn=4 fail=1 skipped=11</code></pre>
   <div class="ah-card">
     <span class="i">✓</span>
     <b>engineering-suite</b>
-    <span>Эпики и тикеты, триаж, двухосевое review, QA-гейт и подготовка PR.</span>
+    <span>Эпики и тикеты, триаж, двухосевое review, <code>qa-gate</code> и подготовка PR.</span>
   </div>
   <div class="ah-card">
     <span class="i">▣</span>
