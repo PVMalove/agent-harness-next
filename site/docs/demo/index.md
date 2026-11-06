@@ -1,22 +1,18 @@
 # Веб-консоль
 
-TUI и браузер — клиенты одного Сервера консоли. Выберите экран — он откроется во встроенной
-демонстрации.
+TUI и браузер — клиенты одного Сервера консоли. Ниже — интерактивная демонстрация: выберите
+раздел в меню консоли, и описание под ней обновится.
 
-<div class="ah-demo-switcher" role="group" aria-label="Экраны веб-консоли">
-  <button class="ah-demo-tab" type="button" aria-pressed="false" data-screen="home">Главная</button>
-  <button class="ah-demo-tab" type="button" aria-pressed="false" data-screen="board">Доска задач</button>
-  <button class="ah-demo-tab" type="button" aria-pressed="false" data-screen="orchestration">Оркестрация</button>
-  <button class="ah-demo-tab" type="button" aria-pressed="false" data-screen="reports">Отчёты</button>
+<div class="ah-demo-wide">
+  <iframe class="ah-demo" id="ah-demo-frame" src="console.html#home" title="Демонстрация веб-консоли" loading="lazy"></iframe>
+  <section class="ah-demo-about" aria-live="polite">
+    <img src="../assets/mascot.svg" alt="Воксельный маскот Agent Harness Next" width="120" height="156">
+    <div>
+      <h2 id="ah-demo-title">Главная</h2>
+      <p id="ah-demo-text">Здоровье harness, runtime-store, скиллы, контекст проекта и последние задачи.</p>
+    </div>
+  </section>
 </div>
-
-<div class="ah-demo-empty" id="ah-demo-empty">
-  <img src="../assets/mascot.svg" alt="Воксельный маскот Agent Harness Next" width="120" height="156">
-  <p><b>Экран не выбран.</b> Нажмите «Главная», «Доска задач», «Оркестрация» или «Отчёты» —
-    консоль откроется прямо на выбранном экране. Демонстрация не запускает команды и не меняет файлы.</p>
-</div>
-
-<iframe class="ah-demo" id="ah-demo-frame" title="Демонстрация веб-консоли" loading="lazy" hidden></iframe>
 
 <p class="ah-demo-note">Данные демонстрационные: команды не выполняются, файлы не меняются.
   Если консоль не загрузилась, <a href="console.html" target="_blank" rel="noreferrer">откройте
@@ -25,27 +21,43 @@ TUI и браузер — клиенты одного Сервера консо�
 <script>
   (function () {
     const frame = document.getElementById("ah-demo-frame");
-    const empty = document.getElementById("ah-demo-empty");
-    const tabs = Array.from(document.querySelectorAll(".ah-demo-switcher [data-screen]"));
-    const available = new Set(tabs.map((tab) => tab.dataset.screen));
-    function select(name) {
-      const chosen = available.has(name);
-      tabs.forEach((tab) => {
-        const active = tab.dataset.screen === name;
-        tab.setAttribute("aria-pressed", active ? "true" : "false");
-      });
-      empty.hidden = chosen;
-      frame.hidden = !chosen;
-      if (chosen) frame.src = "console.html#" + name;
-      else frame.removeAttribute("src");
+    const title = document.getElementById("ah-demo-title");
+    const text = document.getElementById("ah-demo-text");
+    const screens = {
+      home: ["Главная", "Здоровье harness, runtime-store, скиллы, контекст проекта и последние задачи."],
+      diagnostics: ["Диагностика", "Проверки: что проверено, что пропущено, причины и команда исправления."],
+      "update-harness": ["Обновление", "Diff управляемых файлов, режимы обновления, миграция runtime-store и конфликты."],
+      "open-project": ["Проект", "Текущий проект, список проектов, схема внедрения, план установки и проверки."],
+      board: ["Доска задач", "Спеки, колонки, карточки, блокеры, критерии приёмки и промпт тикета."],
+      "agent-activity": ["Ход работы", "Сессии агентов, фильтры по роли и статусу, маршрут и наблюдаемые события."],
+      orchestration: ["Оркестрация", "Пайплайн, батчи, dispatch, QA lane и аналитика оркестрации."],
+      reports: ["Отчёты", "Отчёты ролей, evidence, качество и готовность к публикации."],
+      publish: ["Публикация", "Candidate, Release Gate, preflight, черновик PR/MR и evidence."],
+      harness: ["Harness", "Установка, runtime, адаптеры, контейнеры и команды harness."],
+      "repo-map": ["Repo Map", "Индекс символов и связей, файлы, символы и карта модулей."],
+      configuration: ["Настройки", "project.json, orchestration.json, мастер параметров и история изменений."],
+      help: ["Справка", "Экраны, команды, горячие клавиши и границы консоли."]
+    };
+    let bound = false;
+
+    function update(name) {
+      const entry = screens[name] || ["Веб-консоль", "Выберите раздел в меню консоли — описание появится здесь."];
+      title.textContent = entry[0];
+      text.textContent = entry[1];
     }
-    tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const name = tab.dataset.screen;
-        history.replaceState(null, "", "#" + name);
-        select(name);
-      });
-    });
-    select(window.location.hash.replace(/^#/, ""));
+
+    function bind() {
+      if (bound || !frame.contentWindow) return;
+      bound = true;
+      const sync = () => {
+        const route = frame.contentWindow.location.hash.slice(1).split("?")[0] || "home";
+        update(route);
+      };
+      frame.contentWindow.addEventListener("hashchange", sync);
+      sync();
+    }
+
+    frame.addEventListener("load", bind);
+    if (frame.contentDocument && frame.contentDocument.readyState === "complete") bind();
   })();
 </script>

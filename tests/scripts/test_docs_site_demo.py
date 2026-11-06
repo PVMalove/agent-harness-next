@@ -1,13 +1,26 @@
-"""Демо-страница сайта: переключатель, iframe и пустое состояние с маскотом."""
+"""Демо-страница сайта: встроенная консоль, описание экранов и 404."""
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEMO = ROOT / "site" / "docs" / "demo"
-SCREENS = ["home", "board", "orchestration", "reports"]
+SCREENS = [
+    "home",
+    "diagnostics",
+    "update-harness",
+    "open-project",
+    "board",
+    "agent-activity",
+    "orchestration",
+    "reports",
+    "publish",
+    "harness",
+    "repo-map",
+    "configuration",
+    "help",
+]
 
 
 def _demo() -> tuple[str, str]:
@@ -17,29 +30,26 @@ def _demo() -> tuple[str, str]:
     )
 
 
-def test_switcher_targets_the_console_screens() -> None:
-    page, console = _demo()
-    targets = re.findall(r'data-screen="([a-z]+)"', page)
-
-    assert targets == SCREENS
-    assert all(f"id:'{screen}'" in console for screen in targets)
-
-
-def test_demo_loads_the_console_lazily_with_a_fallback() -> None:
+def test_demo_embeds_the_console_without_a_switcher() -> None:
     page, _ = _demo()
 
+    assert 'src="console.html#home"' in page
     assert 'title="Демонстрация веб-консоли"' in page
     assert 'loading="lazy"' in page
     assert 'href="console.html"' in page
-    assert "console.html#" in page
+    assert 'class="ah-demo-about"' in page
+    assert 'id="ah-demo-title"' in page
+    assert 'id="ah-demo-text"' in page
+    assert 'data-screen=' not in page
 
 
-def test_empty_state_uses_the_site_mascot() -> None:
-    page, _ = _demo()
+def test_about_block_describes_every_console_screen() -> None:
+    page, console = _demo()
 
-    assert 'class="ah-demo-empty"' in page
+    for screen in SCREENS:
+        assert f"{screen}: [" in page or f'"{screen}": [' in page
+        assert f"id:'{screen}'" in console
     assert 'src="../assets/mascot.svg"' in page
-    assert (ROOT / "site" / "docs" / "assets" / "mascot.svg").is_file()
 
 
 def test_404_page_keeps_the_mascot_and_a_way_back() -> None:
