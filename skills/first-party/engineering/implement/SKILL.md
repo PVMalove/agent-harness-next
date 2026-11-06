@@ -52,7 +52,7 @@ command for them without that approval. `ledger clean` only removes orphaned evi
 The coordinator must take every procedure from agent sources only: this skill, `.harness/orchestration/playbook.md`,
 `.harness/orchestration/roles/`, the guides in `docs/agents/`, and the `--help` and `remedy` output of
 the coordinator CLI. The coordinator must not take a procedure from a Russian human document
-(`backend-orchestration.md`, `harness-guide.md`, `ARCHITECTURE.md`, `docs/skills/`, `docs/hooks/`).
+(`backend-orchestration.md`, `site/docs/`, `ARCHITECTURE.md`, `site/docs/skills/`, `site/docs/hooks/`).
 The coordinator must not copy conventions from another batch and must not read ledger files in
 `.harness/orchestration/state/`. The coordinator must read state only through CLI commands (`batch list`,
 `batch decision-packet`, `dispatch status`). If these sources do not give a step, that gap is a

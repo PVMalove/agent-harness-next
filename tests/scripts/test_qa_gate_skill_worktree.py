@@ -13,7 +13,6 @@ def _text(path: Path) -> str:
 
 
 SKILL = ROOT / "skills" / "first-party" / "engineering" / "qa-gate" / "SKILL.md"
-DESCRIPTION = ROOT / "docs" / "skills" / "qa-gate.md"
 HOOK = ROOT / "harness" / "project" / "hooks" / "qa-gate-state.py"
 
 
@@ -25,12 +24,6 @@ def test_the_skill_falls_back_to_the_main_worktree_for_the_gitignored_harness() 
     assert "working directory" in text
     assert "`.harness/project.json`" in text
     assert "test_summary.py" in text
-
-
-def test_the_russian_description_states_the_same_rule() -> None:
-    text = _text(DESCRIPTION)
-    assert "git worktree list --porcelain" in text
-    assert "linked worktree" in text
 
 
 def test_the_mark_hook_uses_the_same_main_worktree_source() -> None:

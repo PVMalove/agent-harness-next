@@ -26,7 +26,7 @@ EXEMPT_MENTIONS = (
     ),
     ("echo", "echo gh pr merge 1", "echo"),
     ("printf", "printf '%s\\n' 'gh pr merge' > notes.txt", "printf with a redirection"),
-    ("grep", "grep -n 'gh pr merge' docs/hooks/block-pr-merge.md", "grep"),
+    ("grep", "grep -n 'gh pr merge' notes/policy.md", "grep"),
     ("git-commit", "git commit -m 'docs: forbid gh pr merge'", "git commit"),
     (
         "gh-pr-comment",

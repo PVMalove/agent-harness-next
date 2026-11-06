@@ -70,9 +70,13 @@ def run(ctx: SimpleNamespace) -> None:
     if not merge_hook.is_file():
         sys.exit("engineering-suite init did not scaffold block-pr-merge.sh")
     if not (pv_project / ".claude" / "hooks" / "pr_commands.py").is_file():
-        sys.exit("engineering-suite init did not scaffold the pr_commands.py hook helper")
+        sys.exit(
+            "engineering-suite init did not scaffold the pr_commands.py hook helper"
+        )
     if not (pv_project / ".claude" / "hooks" / "hook_response.py").is_file():
-        sys.exit("engineering-suite init did not scaffold the hook_response.py envelope")
+        sys.exit(
+            "engineering-suite init did not scaffold the hook_response.py envelope"
+        )
     check_change_impact_hooks(pv_project)
     if json.loads(project_json.read_text(encoding="utf-8")).get("hook_policy") != {
         "profile": "standard"
@@ -425,7 +429,9 @@ def run(ctx: SimpleNamespace) -> None:
     if not root_gitignore.is_file():
         sys.exit("engineering-suite init did not create a root .gitignore")
     if "/docs/tasks/" not in root_gitignore.read_text(encoding="utf-8").splitlines():
-        sys.exit("engineering-suite init did not add /docs/tasks/ to the root .gitignore")
+        sys.exit(
+            "engineering-suite init did not add /docs/tasks/ to the root .gitignore"
+        )
 
     # Retrofit path: emulate a project harnessed before these two protections existed by
     # removing them, then confirm a plain `update` restores both without disturbing the
@@ -1926,7 +1932,7 @@ def run(ctx: SimpleNamespace) -> None:
         "echo gh pr merge 1",
         "echo 'glab mr merge 1'",
         "printf '%s\\n' \"glab mr merge\" > notes.txt",
-        "grep -n 'gh pr merge' docs/hooks/block-pr-merge.md",
+        "grep -n 'gh pr merge' notes/policy.md",
         "git commit -m 'docs: forbid gh pr merge'",
         "git commit -m 'docs: forbid glab mr accept' && echo done",
         "gh issue comment 7 --body 'gh pr merge is manual' 2>&1",

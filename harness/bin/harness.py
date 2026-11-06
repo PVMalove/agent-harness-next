@@ -741,7 +741,7 @@ def _seed_test_fields(args: argparse.Namespace) -> str:
     """Собрать записи `test_paths` и `test_runner` нового project.json для шаблона; "" — флагов нет.
 
     Поля пишутся только по флагам --test-path и --test-runner-command: без `test_paths` тест-автор
-    выключен, а значения зависят от раскладки и стека проекта (docs/hooks/run-test.md).
+    выключен, а значения зависят от раскладки и стека проекта (site/docs/hooks/run-test.md).
     """
     fields = ""
     paths = list(dict.fromkeys(getattr(args, "test_path", None) or []))

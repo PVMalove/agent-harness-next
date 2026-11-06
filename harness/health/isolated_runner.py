@@ -1,4 +1,4 @@
-"""Изолированный runner одного теста (docs/hooks/run-test.md, docs/adr/0014).
+"""Изолированный runner одного теста (site/docs/hooks/run-test.md, docs/adr/0014).
 
 `.claude/hooks/run-test.sh <test-id>` запускает один выбранный тест командой `test_runner` из
 `.harness/project.json` внутри bubblewrap: checkout, `.git` и конфигурация runner доступны тесту
