@@ -13,6 +13,10 @@ type Values = Readonly<Record<string, string | number>>;
 const EN: Readonly<Record<string, string>> = catalog.en;
 const FACTS: Readonly<Record<string, string>> = catalog.facts;
 const SECTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = catalog.sections;
+// The Russian texts of the cleanup and worktree reasons (kernel/maintenance.py REASONS_RU) and
+// the Russian labels of the health check groups (harness/health/render.py GROUP_LABELS_RU).
+const REASONS: Readonly<Record<string, string>> = catalog.reasons;
+const GROUPS: Readonly<Record<string, string>> = catalog.groups;
 
 const fill = (text: string, values?: Values): string =>
   values
@@ -32,6 +36,19 @@ export function sectionLabel(language: Language, key: string): string {
 
 export function factLabel(language: Language, label: string): string {
   return language === "en" ? (FACTS[label] ?? label) : label;
+}
+
+/** A cleanup or worktree reason as the TUI words it: an empty reason means removable; Russian
+    from the server's table, English is the server's own text. */
+export function reasonText(language: Language, reason: string): string {
+  if (!reason) return translate(language, "Можно удалить");
+  return language === "en" ? reason : (REASONS[reason] ?? reason);
+}
+
+/** The label of a health check group; an unknown group keeps its id. */
+export function groupLabel(language: Language, group: string): string {
+  const russian = GROUPS[group];
+  return russian === undefined ? group : translate(language, russian);
 }
 
 const isLanguage = (value: unknown): value is Language =>

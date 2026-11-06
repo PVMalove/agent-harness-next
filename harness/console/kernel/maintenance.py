@@ -283,7 +283,9 @@ def summary_text(summary: CleanupSummary, language: str) -> str:
     return "\n".join(lines)
 
 
-_REASONS_RU = {
+# The Russian text of each reason the cleanup plan and the worktree facts give; the web console
+# reads the same table from its generated catalog.
+REASONS_RU = {
     "current checkout": "текущий checkout",
     "not a direct managed worktree": "вне управляемого каталога worktree",
     "Git or ledger state unavailable": "Git или ledger недоступен",
@@ -304,4 +306,4 @@ _REASONS_RU = {
 def reason_text(reason: str, language: str) -> str:
     if not reason:
         return "Можно удалить" if language == "ru" else "Can remove"
-    return _REASONS_RU.get(reason, reason) if language == "ru" else reason
+    return REASONS_RU.get(reason, reason) if language == "ru" else reason
