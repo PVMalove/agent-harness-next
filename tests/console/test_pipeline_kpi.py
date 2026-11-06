@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from harness.json_types import JsonObject
 from harness.console.kernel.pipeline_kpi import (
     PipelineKpi,
     ReportsKpi,
@@ -108,11 +109,11 @@ def test_duration_text_names_the_two_largest_units() -> None:
     assert duration_text(2 * 86400 + 4 * 3600, "en") == "2 d 4 h"
 
 
-def _report(dispatch: str, body: dict[str, object], at: str) -> ReportEntry:
+def _report(dispatch: str, body: JsonObject, at: str) -> ReportEntry:
     return ReportEntry(dispatch, "b", "#1", "developer", "completed", at, body)
 
 
-_NONE = {"status": "none", "details": ""}
+_NONE: JsonObject = {"status": "none", "details": ""}
 
 
 def test_reports_kpi_reads_the_whole_bodies_and_the_dispatch_time() -> None:
