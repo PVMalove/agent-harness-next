@@ -22,4 +22,4 @@ Messaging Integration — write-роль для границ outbox, message sch
 
 ## Источник
 
-[messaging-integration.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/messaging-integration.md)
+[messaging-integration.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/messaging-integration.md)

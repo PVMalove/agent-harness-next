@@ -22,4 +22,4 @@
 - **Выход (Output/Report):** В случае успеха или отсутствия имени возвращается код возврата `0`. В случае нарушения конвенции именования или если issue не удалось подтвердить (не найдена, issues отключены, нет авторизации, проект недоступен, CLI не ответил или завершился с нераспознанной ошибкой) возвращается код `2`, а в `stderr` выводится сообщение с причиной.
 ## Источник
 
-[check-worktree-branch-name.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/check-worktree-branch-name.sh)
+[check-worktree-branch-name.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/check-worktree-branch-name.sh)

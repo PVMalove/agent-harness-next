@@ -4,7 +4,7 @@
 
 - **Английское название:** `writing-for-agents`
 - **Русский перевод:** Документы для агентов.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/productivity/writing-for-agents/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/productivity/writing-for-agents/SKILL.md)
 
 ## 2. Русское описание
 

@@ -38,7 +38,7 @@ TERMS = (
 ENV = {"HARNESS_PRIVATE_TERMS": TERMS}
 SKIPPED = (
     "private-terms: skipped: no term list (set HARNESS_PRIVATE_TERMS or create "
-    ".private-terms.txt in the main checkout; see docs/agents/releases.md)\n"
+    ".private-terms.txt in the main checkout)\n"
 )
 _GIT = (
     "git",

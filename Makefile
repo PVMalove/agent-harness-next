@@ -77,10 +77,10 @@ web-e2e: $(HARNESS_ENV_STAMP) ## Playwright-тесты SPA консоли про
 	cd $(WEB_DIR) && npm run test:e2e
 
 docs-build: ## Собрать публичный сайт (MkDocs Material)
-	uvx --from mkdocs-material==9.8.0 mkdocs build --strict -f site/mkdocs.yml
+	uvx --from mkdocs-material==9.8.0 --with mkdocs-static-i18n==1.3.1 mkdocs build --strict -f site/mkdocs.yml
 
 docs-serve: ## Локальный предпросмотр публичного сайта
-	uvx --from mkdocs-material==9.8.0 mkdocs serve -f site/mkdocs.yml
+	uvx --from mkdocs-material==9.8.0 --with mkdocs-static-i18n==1.3.1 mkdocs serve -f site/mkdocs.yml
 
 clean: $(HARNESS_ENV_STAMP) ## Удалить временные файлы, стейт оркестратора, кэши и .pyc
 	$(HARNESS_PYTHON) -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['.mypy_cache', '.pytest_cache', '.harness/orchestration/state', '.harness/.sandboxes', '.harness/scratch', '.claude/worktrees', 'htmlcov'] if os.path.exists(p)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True)]"

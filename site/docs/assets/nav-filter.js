@@ -1,8 +1,18 @@
 (function () {
+  var LANG = document.documentElement.lang === "en" ? "en" : "ru";
+  var EN = {
+    "Скиллы": "Skills",
+    "Фильтр навыков…": "Filter skills…",
+    "Агенты": "Agents",
+    "Фильтр агентов…": "Filter agents…",
+    "Фильтр hooks…": "Filter hooks…"
+  };
+  function t(s) { return LANG === "en" && EN[s] ? EN[s] : s; }
+
   var SECTIONS = [
-    { title: "Скиллы", placeholder: "Фильтр навыков…" },
-    { title: "Агенты", placeholder: "Фильтр агентов…" },
-    { title: "Hooks", placeholder: "Фильтр hooks…" }
+    { title: t("Скиллы"), placeholder: t("Фильтр навыков…") },
+    { title: t("Агенты"), placeholder: t("Фильтр агентов…") },
+    { title: "Hooks", placeholder: t("Фильтр hooks…") }
   ];
 
   function init() {

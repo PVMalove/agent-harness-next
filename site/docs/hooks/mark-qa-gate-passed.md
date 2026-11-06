@@ -24,4 +24,4 @@
 - **Выход (Output/Report):** В случае успешной проверки создается или обновляется файл-маркер `.claude/.qa-gate/passed`, содержащий строку с текущим состоянием репозитория в формате `<HEAD_hash>:<diff_hash>`. Код возврата 0.
 ## Источник
 
-[mark-qa-gate-passed.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/mark-qa-gate-passed.sh)
+[mark-qa-gate-passed.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/mark-qa-gate-passed.sh)

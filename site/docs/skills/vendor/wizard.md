@@ -4,7 +4,7 @@
 
 - **Английское название:** `wizard`
 - **Русский перевод:** Интерактивный мастер действий.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/wizard/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/wizard/SKILL.md)
 
 ## 2. Русское описание
 

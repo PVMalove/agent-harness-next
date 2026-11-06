@@ -93,4 +93,4 @@ disable-model-invocation: true
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/to-pull-requests/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/to-pull-requests/SKILL.md)

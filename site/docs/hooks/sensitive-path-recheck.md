@@ -2,8 +2,8 @@
 
 ## 1. Название и локализация
 
-- **Исходный хук:** [`harness/project/hooks/sensitive-path-recheck.sh`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/sensitive-path-recheck.sh)
-  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py)
+- **Исходный хук:** [`harness/project/hooks/sensitive-path-recheck.sh`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/sensitive-path-recheck.sh)
+  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py)
 - **Русский перевод:** предупреждение о каждой новой правке чувствительного пути с evidence-записью.
 
 ## 2. Полное описание
@@ -50,7 +50,7 @@ Hook держит копию набора, потому что не видит �
 - **Остаточное ограничение.** Hardlink на чувствительный файл обходит только это предупреждение:
   `realpath` не раскрывает hardlink. Авторитетны критический `protect-hook-policy` и diff-проверка
   границы strict, которая видит путь из git.
-- **Второй runtime.** Не подключён до адаптера `apply_patch` (#830); `harness health` называет
+- **Второй runtime.** Не подключён до адаптера `apply_patch`; `harness health` называет
   проверку вне hook — границу strict.
 
 ## 3. Контракт
@@ -63,6 +63,6 @@ Hook держит копию набора, потому что не видит �
 
 ## Источник
 
-[sensitive-path-recheck.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/sensitive-path-recheck.sh),
-[change_impact_hooks.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py),
-[hook_policy.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/hook_policy.py)
+[sensitive-path-recheck.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/sensitive-path-recheck.sh),
+[change_impact_hooks.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py),
+[hook_policy.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/hook_policy.py)

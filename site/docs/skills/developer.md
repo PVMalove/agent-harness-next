@@ -1,6 +1,6 @@
 # Developer — Разработчик
 
-Источник: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/developer.md) и общий контракт [`_common.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/_common.md).
+Источник: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
 
 ## 1. Название и локализация
 
@@ -43,4 +43,4 @@ risk_triggers:
 
 ## Источник
 
-[developer.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/developer.md)
+[developer.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md)

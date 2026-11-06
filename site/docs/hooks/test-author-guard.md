@@ -2,7 +2,7 @@
 
 ## 1. Название и локализация
 
-- **Исходный скрипт:** [`harness/project/hooks/test-author-guard.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/test-author-guard.py)
+- **Исходный скрипт:** [`harness/project/hooks/test-author-guard.py`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/test-author-guard.py)
 - **Русский перевод:** защитный hook субагента тест-автора.
 
 ## 2. Полное описание
@@ -52,8 +52,8 @@ Guard разрешает ровно три вида вызовов:
 
 ## Источник
 
-[test-author-guard.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/test-author-guard.py),
-[test_guard.py](https://github.com/PVMalove/claude-agent-harness/blob/master/tests/test_author/test_guard.py),
-[test_compatibility.py](https://github.com/PVMalove/claude-agent-harness/blob/master/tests/test_author/test_compatibility.py),
+[test-author-guard.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/test-author-guard.py),
+[test_guard.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_guard.py),
+[test_compatibility.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_compatibility.py),
 [docs/agents/test-author.md](../agents/test-author.md),
 ADR 0014

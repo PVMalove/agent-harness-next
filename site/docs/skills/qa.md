@@ -1,6 +1,6 @@
 # QA — Обеспечение качества
 
-Источник: [`harness/orchestration/roles/qa.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/qa.md) и общий контракт [`_common.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/_common.md).
+Источник: [`harness/orchestration/roles/qa.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/qa.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
 
 ## 1. Название и локализация
 
@@ -40,4 +40,4 @@ risk_triggers:
 
 ## Источник
 
-[qa.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/qa.md)
+[qa.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/qa.md)

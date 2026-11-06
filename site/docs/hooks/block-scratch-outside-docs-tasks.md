@@ -27,4 +27,4 @@
 - **Выход (Output/Report):** Код возврата `0` (разрешить выполнение инструмента), либо `2` (заблокировать) с выводом сообщения об ошибке в STDERR с указанием нарушенного правила из документации. В конверте `hook_response.py` блок получает `reason_code` `scratch-location`, неразбираемый патч `apply_patch` — `apply-patch-unparseable`.
 ## Источник
 
-[block-scratch-outside-docs-tasks.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/block-scratch-outside-docs-tasks.sh), [apply_patch_payload.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/apply_patch_payload.py)
+[block-scratch-outside-docs-tasks.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/block-scratch-outside-docs-tasks.sh), [apply_patch_payload.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/apply_patch_payload.py)

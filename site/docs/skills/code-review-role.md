@@ -22,4 +22,4 @@ Code Review — независимая read-only роль, обязательн�
 
 ## Источник
 
-[code-review.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/roles/code-review.md)
+[code-review.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/code-review.md)

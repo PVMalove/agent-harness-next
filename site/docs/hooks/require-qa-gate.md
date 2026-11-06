@@ -19,7 +19,7 @@
 - `glab mr create`: `-s <ветка>`, `-s<ветка>`, `-s=<ветка>`, `--source-branch <ветка>`, `--source-branch=<ветка>`, в том числе в группе коротких флагов (`-fs <ветка>`). Флаг glab `-H`/`--head` задаёт репозиторий (`OWNER/REPO`), а не ветку, и не учитывается;
 - без флага ветки проверяется самый глубокий checkout проекта, содержащий `cwd` из payload, то есть текущая ветка.
 
-Выбор ветки не уже, чем до #443: если в тексте есть `gh pr create`, первый `--head <ветка>`/`--head=<ветка>` во всём тексте команды (глобальный разбор `shlex.split`, как в прежнем хуке) тоже считается веткой PR и проверяется, даже если разбор по токенам create-команды не видит. `--head` без значения или текст с `--head`, который `shlex` не разобрал, блокируют вызов.
+Выбор ветки не уже, чем в прежней версии: если в тексте есть `gh pr create`, первый `--head <ветка>`/`--head=<ветка>` во всём тексте команды (глобальный разбор `shlex.split`, как в прежнем хуке) тоже считается веткой PR и проверяется, даже если разбор по токенам create-команды не видит. `--head` без значения или текст с `--head`, который `shlex` не разобрал, блокируют вызов.
 
 Найденной ветке должен соответствовать ровно один linked worktree, иначе вызов блокируется.
 
@@ -29,4 +29,4 @@
 - **Выход (Output/Report):** Код возврата `0` (разрешение выполнения) или код возврата `2` с выводом сообщения об ошибке в `stderr` (блокировка команды).
 ## Источник
 
-[require-qa-gate.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/require-qa-gate.sh), [qa-gate-state.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/qa-gate-state.py), [pr_commands.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/pr_commands.py)
+[require-qa-gate.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/require-qa-gate.sh), [qa-gate-state.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/qa-gate-state.py), [pr_commands.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/pr_commands.py)

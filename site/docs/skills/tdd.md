@@ -1,6 +1,6 @@
 # tdd — Разработка через тесты
 
-Источник: [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/tdd/SKILL.md).
+Источник: [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/tdd/SKILL.md).
 В `engineering-suite` этот first-party override заменяет одноимённый vendor-скилл и задаёт общие
 правила тестов для developer и будущего тест-автора.
 
@@ -18,7 +18,7 @@ Refactor идёт после Green. Покрытие не служит цель�
 
 Vendor-версия держала примеры и правила подмен в отдельных `tests.md` и `mocking.md`. В first-party
 версии правила подмен вошли в `SKILL.md`, а примеры — в
-[`examples.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/tdd/examples.md).
+[`examples.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/tdd/examples.md).
 
 ## Необязательный тест-автор
 
@@ -46,4 +46,4 @@ brief/report, approval или ledger lifecycle.
 brief architect, и недоступный автор сохраняет обычный маршрут с названной причиной.
 
 `mattpocock-suite` продолжает поставлять неизменённый
-[vendor-снапшот](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/tdd/SKILL.md).
+[vendor-снапшот](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/tdd/SKILL.md).

@@ -4,7 +4,7 @@
 
 - **Английское название:** `grill-me`
 - **Русский перевод:** Проверка замысла вопросами.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/productivity/grill-me/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/productivity/grill-me/SKILL.md)
 
 ## 2. Русское описание
 

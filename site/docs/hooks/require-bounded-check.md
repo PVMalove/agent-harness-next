@@ -2,7 +2,7 @@
 
 ## 1. Название и локализация
 
-- **Исходный хук:** [`harness/project/hooks/require-bounded-check.sh`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/require-bounded-check.sh)
+- **Исходный хук:** [`harness/project/hooks/require-bounded-check.sh`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/require-bounded-check.sh)
 - **Русский перевод:** требование ограниченного вывода полного тестового прогона.
 
 ## 2. Полное описание

@@ -4,7 +4,7 @@
 
 - **Английское название:** `diagnosing-bugs`
 - **Русский перевод:** Диагностика ошибок.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/diagnosing-bugs/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/diagnosing-bugs/SKILL.md)
 
 ## 2. Русское описание
 

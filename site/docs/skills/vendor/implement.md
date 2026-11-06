@@ -4,7 +4,7 @@
 
 - **Английское название:** `implement`
 - **Русский перевод:** Реализация по задаче.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/implement/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/implement/SKILL.md)
 
 ## 2. Русское описание
 

@@ -53,7 +53,7 @@ coordinator-а пишется на русском и содержит `"report_l
 разными runtime и сохраняет отчёт читаемым для человека.
 
 Перед первым английским handoff coordinator и workers обязаны прочитать общий контракт
-[Technical English](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/docs/technical-english.md). Он также доступен через playbook и `roles/_common.md`.
+[Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/technical-english.md). Он также доступен через playbook и `roles/_common.md`.
 Источник сам описывает свою область, языковые исключения и примеры review. Действующие правила
 языка, authority, scope, привязки evidence к candidate SHA и human approval сохраняются.
 
@@ -107,7 +107,7 @@ python3 harness/bin/harness.py health /path/to/repository
 этом режиме всегда `in-process`; provider profile нет, поэтому внешний worker запускать нечем.
 `harness health` принимает такой проект. Конфиг нужен, когда проекту требуется более узкий потолок
 записи, разные модели по ролям, внешний транспорт или бюджет параллелизма больше единицы. Справочник
-всех полей с дефолтами — [`.harness/orchestration/README.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/README.md).
+всех полей с дефолтами — [`.harness/orchestration/README.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/README.md).
 
 По умолчанию запускайте coordinator-сессию с `medium` effort, и для architect в assignment plan
 тоже выбирайте `medium`. Более высокий effort — не дефолт каждого ticket: он требует явного решения
@@ -413,11 +413,10 @@ worker. Без него brief сохраняет `inherit`, а `dispatch send` �
 Значение `extensions.runtime_access: "docker"` выбирает исполнитель из поставки харнесса:
 `harness-runtime` запускает каждый утверждённый external dispatch в отдельном контейнере Docker или
 Podman, а при заданном `access_policy.operations.qa.container` — и каждую команду QA. Контракт
-исполнителя описывают ADR 0025 и разделы «Решения реализации
-#807» и «Решения реализации #810» ADR 0022; этот раздел
+исполнителя описывают ADR 0025 и ADR 0022 (разделы «Решения реализации»); этот раздел
 описывает поставленное поведение. Пошаговую настройку целевого проекта — предпосылки, сборку
 образов, кэши, allowlist, блокеры, очистку и пример проектного адаптера — даёт англоязычное
-руководство [`harness/docs/container-executor.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/docs/container-executor.md), которое
+руководство [`harness/docs/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/container-executor.md), которое
 `backend-orchestration` ставит как `.harness/docs/container-executor.md`. Проектные реализации
 `module:factory` работают, как раньше, а хост-процесс не может зарегистрировать другую реализацию
 под именем `docker`.
@@ -528,7 +527,7 @@ Podman, а при заданном `access_policy.operations.qa.container` — �
 команда QA — отдельный foreground-контейнер `--rm --init` из образа, закреплённого в brief
 QA-dispatch, а sidecar и сеть живут весь QA run. Монтирование сужено: каталог clean-room на запись,
 `git_common` только на чтение и `cache` плана. Exit code команды попадает в её stage evidence, а
-окончание классифицирует ADR 0022 (раздел «Решения реализации #810»). Без
+окончание классифицирует ADR 0022 (раздел «Решения реализации»). Без
 `operations.qa.container` QA остаётся на хосте, а операции `git` и `publish` всегда выполняет
 coordinator в своём окружении (раздел «Доступ QA, Git и publish» ниже).
 
@@ -926,7 +925,7 @@ QA, publish и рискованные переходы остаются ручн
    Любой пункт `not_covered` делает отчёт нечистым при любой policy. Auto-accept не срабатывает,
    `--decision accept` отклоняется. Принять отчёт можно только через `--decision override-warning` с
    `--note`, отличным от `none` (решение получает `dod_not_covered` с причинами). Иначе отчёт можно
-   вернуть через `retry`. Выход за scope — предупреждение, а не отказ (#633). Completed-отчёт
+   вернуть через `retry`. Выход за scope — предупреждение, а не отказ. Completed-отчёт
    developer с `changed_files` вне `write_paths` `report submit` записывает. `batch decision-packet`
    показывает эти пути в `scope_warnings`. Такой отчёт не принимается автоматически ни при одной
    policy, а `--decision accept` отклоняется. Принять его можно только через
@@ -1200,7 +1199,7 @@ transition digest, передайте `--candidate-commit <commit_sha>`. Тог�
 другого SHA отклоняется. Retry-report с тем же SHA не принимается. Retry после code-review, qa или
 publish по-прежнему пинит `snapshot_commit` на последний принятый developer candidate.
 
-Fix-forward (#503) — маршрут существующего developer-retry, а не новый переход. Решение `retry`,
+Fix-forward — маршрут существующего developer-retry, а не новый переход. Решение `retry`,
 ведущее в `developer-retry`, записывает в routing record `retry_item_ids` — закрытый, возможно
 пустой список перенесённых пунктов, который понесёт brief developer-retry. При retry code-review в
 него входят открытые `coordinator-finding`, находки осей Standards и Spec этого review
@@ -1233,7 +1232,7 @@ Developer продолжает от `snapshot_commit` новыми коммит�
 коммиты сверяются с Git, в том числе у brief без `commit_plan`. Пункт `not_closed` — carried gap, и
 такой отчёт не clean: policy его автоматически не принимает, а `--decision accept` отклоняется.
 `override-warning` требует `--note`, отличный от `none`, и записывает в решение
-`carried_items_gap`. `commit_map` retry-отчёта сохраняет строгое правило #478, а
+`carried_items_gap`. `commit_map` retry-отчёта сохраняет строгое правило сверки с commit plan, а
 `batch decision-packet` показывает у пунктов developer-retry статус `closed` с SHA коммитов или
 `open` с причиной.
 
@@ -1245,7 +1244,7 @@ squash or reset)`. Remedy: восстановить переписанные к�
 stale-base (`base_rebase_required`, записанной до ADR 0014) по-прежнему проверяется от её rebase
 target.
 
-Rebase-fix-forward (#504) — тоже маршрут существующего developer-retry, а не новый переход. Решение
+Rebase-fix-forward — тоже маршрут существующего developer-retry, а не новый переход. Решение
 `retry`, которое ведёт в `developer-retry` или `fix-forward` (retry developer, verification,
 code-review, qa или publish report; не `tooling-retry` и не `bypass-rerun`), делает `git fetch` для
 `origin/<integration_ref>`. Маршрут становится `rebase-fix-forward`, если выполнены оба условия: tip
@@ -1309,7 +1308,7 @@ rebase и у resolver-batch). Бриф и Context Package (`--base-commit`) ос
 `integration_base_commit`. Правило не отличает принятые коммиты от непроверенных: коммиты
 оставленного (`abandon`) batch новый batch не ревьюит.
 
-Delta-review после fix-forward (#625) — тоже не новый переход и не новое решение. Coordinator сам
+Delta-review после fix-forward — тоже не новый переход и не новое решение. Coordinator сам
 выбирает объём следующего code-review в `dispatch propose` и `dispatch create --role code-review`
 без `--delta-review-of`. Coordinator делает выбор, когда выполнены все условия: candidate —
 `commit_sha` последнего принятого developer work report batch; этот report — developer-retry; его
@@ -1416,8 +1415,8 @@ remedy предлагает снова передать в `--supersedes` тот
 
 - при том же Definition of Done (списки совпадают поэлементно) — принятый architect источника по
   ссылке `supersedes.architect` (`batch_id`, `dispatch_id`, `report`, `report_sha256`,
-  `commit_plan_sha256`) и commit plan, закреплённый при его accept через `--commit-plan-file`
-  (#478). Если источник сам перенёс architect, передаётся та же ссылка. Batch начинает с
+  `commit_plan_sha256`) и commit plan, закреплённый при его accept через `--commit-plan-file`.
+  Если источник сам перенёс architect, передаётся та же ссылка. Batch начинает с
   `next_action: developer`: developer dispatch создаётся сразу, а architect dispatch не допускается.
   При другом Definition of Done не переносится ничего, и стадия architect проходит заново;
 - `start_commit` — candidate из `last_accepted` (`null`, если принят только architect). У
@@ -1428,7 +1427,7 @@ remedy предлагает снова передать в `--supersedes` тот
   это обычный initial developer: его `commit_map` покрывает все коммиты после base, включая
   коммиты `start_commit`;
 - `rebase_target_commit` — эта base, если `start_commit` её не содержит. Тогда первый developer —
-  developer-retry маршрута rebase внутри retry (#504). Он перебазирует коммиты на target, исправляет
+  developer-retry маршрута rebase внутри retry. Он перебазирует коммиты на target, исправляет
   поверх и сдаёт пары `rebased_from`. `report submit` возвращает `rebase_check`. Такой dispatch
   требует явного approval с transition digest при любой `approval_policy`, кроме `auto`. Target
   остаётся в brief, пока продолжаемый snapshot его не содержит. Так бывает, например, после retry
@@ -1685,18 +1684,18 @@ Brief без поля `commit_plan_divergence` и batch без `commit_plan` т�
 Отчёт без `incomplete_items` и brief без вида `incomplete-item` тоже валидны. Новый вид источника,
 поле отчёта и значение маршрута `narrowed-retry` введены без смены версии ledger и без миграции.
 Routing record без `retry_item_ids`, поле отчёта `carried_item_closure` и значение маршрута
-`fix-forward` (#503) тоже введены без смены версии ledger и без миграции. Brief developer-retry по
+`fix-forward` тоже введены без смены версии ledger и без миграции. Brief developer-retry по
 решению, записанному до них, получает раздел без сверки с `retry_item_ids`. Completed-отчёт
-developer-retry, записанный до #503 без `carried_item_closure` для brief с перенесёнными пунктами,
+developer-retry, записанный до появления маршрута `fix-forward` без `carried_item_closure` для brief с перенесёнными пунктами,
 по-прежнему решается через `batch decide`. Каждый пункт получает статус `omitted` и входит в
 `carried_items_gap`. Поэтому `accept` и policy auto-accept отклоняются, а `override-warning` требует
 `--note`, отличный от `none`. `retry`, `block`, `fail` и `abandon` доступны. Новый такой отчёт
 `report submit` отклоняет. Brief без `rebase_target_commit`, transition без `rebase_target_sha` и
-значение маршрута `rebase-fix-forward` (#504) тоже введены без смены версии ledger и без миграции:
+значение маршрута `rebase-fix-forward` тоже введены без смены версии ledger и без миграции:
 переход без target сохраняет прежний digest. Brief без `delta_review_scope` и transition без
-`delta_review_sha256` (#625) тоже валидны и введены без смены версии ledger и без миграции: переход
+`delta_review_sha256` тоже валидны и введены без смены версии ledger и без миграции: переход
 code-review без раздела сохраняет прежний digest. Ссылка `supersedes` в batch и plan и значение
-маршрута `supersede` (#506) тоже введены без смены версии ledger и без миграции: batch и plan без
+маршрута `supersede` тоже введены без смены версии ledger и без миграции: batch и plan без
 ссылки читаются как прежде.
 
 Поле `route` в routing record и деталь `decision` в transition audit record batch тоже
@@ -2080,7 +2079,7 @@ Python не открывает `runtime.db` и не имеет запасног�
 - **Транзакция.** `BEGIN IMMEDIATE`, затем строки в порядке `batch` → `qa_lane` → `generation`
   (строки batch, строки QA-lane, затем audit и строка `operations`); одна запись audit на мутацию
   в порядке запроса. Неизменяемые записи (план, brief, отчёт, checkpoint, evidence) не заменяются
-  и не удаляются (`invariant_violation`). Инварианты схемы проверяет SQLite: CHECK #781 для batch и
+  и не удаляются (`invariant_violation`). Инварианты схемы проверяет SQLite: CHECK для batch и
   CHECK состояния исполнения (`DispatchState` терминален при исполнении `unknown`, `launching`
   или `running`).
 - **Идемпотентность.** Строка `operations` (`intent`, `committed` или `failed`) пишется в той же
@@ -2801,11 +2800,11 @@ post-integration defects, включая источник и отсутству�
 контрактом приоритет у manifest'а, immutable brief и явного approval.
 
 Архитектурный контракт маршрута целиком зафиксирован в
-[ADR 0003](https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0003-orchestration-core.md): opt-in capability, отдельное
+[ADR 0003](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0003-orchestration-core.md): opt-in capability, отдельное
 approval для dispatch, review и QA для одного SHA, локальное санитизированное evidence и adapter
 только для транспорта. Превращение `/implement` в coordinator-driven конвейер по умолчанию, model
 self-report, dispatch watchdog, per-role transport и zero-config дефолты зафиксированы в
-[ADR 0005](https://github.com/PVMalove/claude-agent-harness/blob/master/docs/adr/0005-implement-pipeline.md).
+[ADR 0005](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0005-implement-pipeline.md).
 
 ## Ручное восстановление и повтор этапа
 
@@ -2937,7 +2936,7 @@ runtime в эпохе `runtime-store`, не читают stdin и не треб�
 | 2 | документ `recoveryStatus.v1` с `outcome: refused` | политика отказала; `refusals` и `diagnostics` называют причину |
 | 2 | пусто, `ERROR:` и `REMEDY:` в stderr | команда не может выполниться: эпоха файлового ledger (remedy `harness-runtime migrate`), отказ `runtime_client` (`[runtime_unavailable]`, `[store_busy]`, `[revision_conflict]`), неполное одобрение или прерывание |
 
-Документ `recoveryStatus.v1` — контракт консоли #711. Он содержит `contract`, `action`, `outcome`,
+Документ `recoveryStatus.v1` — контракт консоли. Он содержит `contract`, `action`, `outcome`,
 `batch_id`, `observed_at`, `resumable`, `lifecycle`, `hold`, `checks`, `diagnostics`,
 `skipped_advisories`, `actions`, `intent` и `next`. Каждая из 13 проверок (`config`, `store`,
 `ledger`, `batch`, `lifecycle`, `runtime`, `snapshot`, `context`, `compatibility`, `operation`,

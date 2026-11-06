@@ -7,10 +7,67 @@
   var H = 640;
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /* --- English strings: keyed by the Russian source string --------------- */
+  var LANG = document.documentElement.lang === "en" ? "en" : "ru";
+  var EN = {
+    "harness и coordinator запускаются из терминала. Команды идут в policy-слой Python, а тот обращается к runtime через runtime_client.": "harness and coordinator run from the terminal. Commands go to the Python policy layer, which calls the runtime through runtime_client.",
+    "Терминальный клиент Сервера консоли: задачи, оркестрация, отчёты и восстановление. Данные берёт у сервера, а не из файлов.": "Terminal client of the Console Server: tasks, orchestration, reports, and recovery. It takes data from the server, not from files.",
+    "Браузерный клиент того же Сервера консоли. Подключается по /ws с токеном сессии; действия восстановления сервер выполняет как job.": "Browser client of the same Console Server. It connects over /ws with a session token; the server runs recovery actions as a job.",
+    "Claude Code и Codex находят скиллы и hooks через native skill roots. Hooks проверяют действия агента по профилю политики.": "Claude Code and Codex find skills and hooks through native skill roots. Hooks check agent actions against the policy profile.",
+    "Планирует batch, собирает approvals, принимает отчёты ролей и выбирает состояние dispatch по наблюдению runtime. Operational state сам не пишет.": "Plans a batch, collects approvals, accepts role reports, and picks the dispatch state from what the runtime observes. It does not write operational state itself.",
+    "Сервер консоли": "Console Server",
+    "Один сервер для TUI и браузера: отдаёт снимки экранов по /ws и ходит в runtime тем же клиентом, что и coordinator.": "One server for the TUI and the browser: it serves screen snapshots over /ws and calls the runtime with the same client as the coordinator.",
+    "профили hooks": "hook profiles",
+    "Профили задают предупреждения и повторы. Критические guards профилем не отключаются, а strict не блокирует recovery.": "Profiles set warnings and retries. A profile never disables critical guards, and strict does not block recovery.",
+    "человек и policy": "human and policy",
+    "Решение принимает человек и policy-слой. Immutable brief связывает план, образ, policy digest и verification digest.": "A human and the policy layer make the decision. The immutable brief binds the plan, image, policy digest, and verification digest.",
+    "ChangeImpact → план": "ChangeImpact → plan",
+    "ChangeImpact строит набор затронутого, VerificationPlan закрепляется digest-ом в approval. QA делает полный прогон на финальном SHA.": "ChangeImpact builds the set of affected items, and the VerificationPlan is pinned by a digest in the approval. QA runs the full pass on the final SHA.",
+    "hello · operation_id · повтор до request_deadline": "hello · operation_id · retry until request_deadline",
+    "Единственный путь Python к состоянию: hello, operation_id, повтор до request_deadline. Недоступный runtime даёт runtime_unavailable без записи в обход.": "The only Python path to state: hello, operation_id, retry until request_deadline. An unavailable runtime returns runtime_unavailable and nothing is written around it.",
+    "Unix socket / named pipe · protocol 1.7 · uid/SID + токен · expected_revision · fencing_token": "Unix socket / named pipe · protocol 1.7 · uid/SID + token · expected_revision · fencing_token",
+    "Unix domain socket, на Windows — named pipe. Кадр — длина и JSON. Проверяются peer uid/SID и токен; каталог 0700, сокет 0600.": "Unix domain socket; on Windows, a named pipe. A frame is a length plus JSON. The peer uid/SID and the token are checked; the directory is 0700, the socket is 0600.",
+    "Lifecycle и intent": "Lifecycle and intent",
+    "Переходы batch и dispatch сохраняются транзакцией: intent, запуск, committed. Единственный writer этих сущностей.": "Batch and dispatch transitions are saved in a transaction: intent, launch, committed. The only writer of these entities.",
+    "intent ↔ факт хоста": "intent ↔ host fact",
+    "Сверяет сохранённый intent с фактом на хосте. После SIGKILL усыновляет исполнение по меткам или доказывает, что процесса нет.": "Compares the saved intent with the fact on the host. After SIGKILL, it adopts the execution by labels or proves that the process is gone.",
+    "образы, метки dispatch": "images, dispatch labels",
+    "Контейнеры по метке dispatch. Сокеты движка и runtime в worker не монтируются, образы harness не собирает.": "Containers by the dispatch label. The engine and runtime sockets are not mounted into the worker, and harness does not build images.",
+    "процессы, cgroup / Job": "processes, cgroup / Job",
+    "Учёт процессов: группа процессов и cgroup v2 на Linux, Job Object на Windows. Исполняет только approved brief и policy не решает.": "Process accounting: a process group and cgroup v2 on Linux, a Job Object on Windows. It runs only the approved brief and does not decide policy.",
+    "Operational state с короткими транзакциями. Несовместимая версия схемы отвергается без записи.": "Operational state with short transactions. An incompatible schema version is rejected without a write.",
+    "хэш-цепочка": "hash chain",
+    "Каждая мутация оставляет запись в хэш-цепочке с checkpoint; ledger validate --full пересчитывает её целиком.": "Every mutation leaves a record in the hash chain with a checkpoint; ledger validate --full recomputes the whole chain.",
+    "Владелец, fencing_token и expires_at. Истёкший срок lease не снимает: сначала проверяется живость владельца.": "Owner, fencing_token, and expires_at. An expired lease is not dropped automatically: the owner's liveness is checked first.",
+    "эпоха runtime-store": "runtime-store epoch",
+    "Называет store единственным writer-ом operational state. Fallback-writer в Python запрещён.": "Names the store as the only writer of operational state. A fallback writer in Python is forbidden.",
+    "Хранит operation_id, digest запроса и результат, поэтому повтор после обрыва возвращает тот же ответ.": "Stores operation_id, the request digest, and the result, so a retry after a dropped connection returns the same answer.",
+    "Владелец истории: кандидат, ветки и worktree — обычные Git-объекты. Runtime их не переписывает.": "Owner of history: the candidate, branches, and worktrees are ordinary Git objects. The runtime does not rewrite them.",
+    "Проект": "Project",
+    ".harness/project.json, harness.lock и REGISTRY.md принадлежат целевому репозиторию; их обновляет установщик, а не runtime.": ".harness/project.json, harness.lock, and REGISTRY.md belong to the target repository; the installer updates them, not the runtime.",
+    "контейнер или процесс": "container or process",
+    "Untrusted: кандидат в контейнере или отдельном процессе. Получает только approved brief; сокеты engine и runtime ему недоступны.": "Untrusted: the candidate runs in a container or a separate process. It gets only the approved brief; the engine and runtime sockets are not available to it.",
+    "сеть только по allowlist": "network via allowlist only",
+    "Сетевой доступ worker-а идёт только через allowlist proxy.": "The worker's network access goes only through the allowlist proxy.",
+    "Пример маршрута: coordinator → runtime_client → IPC → Lifecycle → SQLite WAL. Переход batch сохраняется одной транзакцией.": "Example route: coordinator → runtime_client → IPC → Lifecycle → SQLite WAL. A batch transition is saved in one transaction.",
+    "Пример маршрута: Сервер консоли → IPC → Reconcile → Leases. Действие восстановления сервер выполняет как job, запись требует подтверждения.": "Example route: Console Server → IPC → Reconcile → Leases. The server runs a recovery action as a job, and a write needs confirmation.",
+    "Пример маршрута: Сервер консоли → IPC → Lifecycle → Audit chain. Снимок леджера собирается через runtime и кэшируется на сервере.": "Example route: Console Server → IPC → Lifecycle → Audit chain. The ledger snapshot is built through the runtime and cached on the server.",
+    "Пример маршрута: Hook policy проверяет действие агента, затем approved brief уходит в runtime, а Supervisor запускает worker-а.": "Example route: Hook policy checks the agent action, then the approved brief goes to the runtime, and the Supervisor starts the worker.",
+    "Схема ядра harness: клиенты, policy на Python, IPC, Rust runtime, runtime-store, Git, worker": "Diagram of the harness core: clients, Python policy, IPC, Rust runtime, runtime-store, Git, worker",
+    "POLICY · PYTHON РЕШАЕТ": "POLICY · PYTHON DECIDES",
+    "RUNTIME · RUST ИСПОЛНЯЕТ": "RUNTIME · RUST EXECUTES",
+    "STATE · ЕДИНСТВЕННЫЙ WRITER": "STATE · SINGLE WRITER",
+    "ГРАНИЦА ДОВЕРИЯ · UNTRUSTED": "TRUST BOUNDARY · UNTRUSTED",
+    "ВЛАДЕЛЬЦЫ ВНЕ RUNTIME": "OWNERS OUTSIDE RUNTIME",
+    " · маршрут": " · route"
+  };
+  function t(s) { return LANG === "en" && EN[s] ? EN[s] : s; }
+
   var nodes = {};
   var edges = [];
 
   function node(id, kind, x, y, w, h, label, sub, title, text) {
+    label = t(label); sub = t(sub); title = t(title); text = t(text);
     nodes[id] = { id: id, kind: kind, x: x, y: y, w: w, h: h, cx: x + w / 2, cy: y + h / 2,
       label: label, sub: sub, title: title, text: text };
   }
@@ -66,13 +123,13 @@
   /* --- маршруты клиентов ------------------------------------------------- */
   var routes = {
     cli: { ids: ["cli", "coordinator", "rtclient", "wire", "lifecycle", "wal"],
-      text: "Пример маршрута: coordinator → runtime_client → IPC → Lifecycle → SQLite WAL. Переход batch сохраняется одной транзакцией." },
+      text: t("Пример маршрута: coordinator → runtime_client → IPC → Lifecycle → SQLite WAL. Переход batch сохраняется одной транзакцией.") },
     tui: { ids: ["tui", "console", "rtclient", "wire", "reconcile", "leases"],
-      text: "Пример маршрута: Сервер консоли → IPC → Reconcile → Leases. Действие восстановления сервер выполняет как job, запись требует подтверждения." },
+      text: t("Пример маршрута: Сервер консоли → IPC → Reconcile → Leases. Действие восстановления сервер выполняет как job, запись требует подтверждения.") },
     web: { ids: ["web", "console", "rtclient", "wire", "lifecycle", "audit"],
-      text: "Пример маршрута: Сервер консоли → IPC → Lifecycle → Audit chain. Снимок леджера собирается через runtime и кэшируется на сервере." },
+      text: t("Пример маршрута: Сервер консоли → IPC → Lifecycle → Audit chain. Снимок леджера собирается через runtime и кэшируется на сервере.") },
     skills: { ids: ["skills", "hooks", "rtclient", "wire", "supervisor", "worker"],
-      text: "Пример маршрута: Hook policy проверяет действие агента, затем approved brief уходит в runtime, а Supervisor запускает worker-а." }
+      text: t("Пример маршрута: Hook policy проверяет действие агента, затем approved brief уходит в runtime, а Supervisor запускает worker-а.") }
   };
   var order = ["cli", "tui", "web", "skills"];
 
@@ -157,7 +214,7 @@
   }
 
   var svg = el("svg", { viewBox: "14 0 " + (W - 28) + " " + H, role: "group", class: "ah-core-svg",
-    "aria-label": "Схема ядра harness: клиенты, policy на Python, IPC, Rust runtime, runtime-store, Git, worker" });
+    "aria-label": t("Схема ядра harness: клиенты, policy на Python, IPC, Rust runtime, runtime-store, Git, worker") });
   var gBands = el("g", {}, svg);
   var gEdges = el("g", {}, svg);
   var gRoute = el("g", {}, svg);
@@ -168,14 +225,14 @@
     el("rect", { x: x, y: y, width: w, height: h, rx: 12, class: "ah-core-band " + cls }, gBands);
     if (label) text(gBands, x + 16, y + 18, "ah-core-bandlabel", label);
   }
-  band(30, 98, 760, 118, "is-policy", "POLICY · PYTHON РЕШАЕТ");
-  band(30, 356, 760, 124, "is-runtime", "RUNTIME · RUST ИСПОЛНЯЕТ");
-  band(30, 500, 760, 118, "is-store", "STATE · ЕДИНСТВЕННЫЙ WRITER");
+  band(30, 98, 760, 118, "is-policy", t("POLICY · PYTHON РЕШАЕТ"));
+  band(30, 356, 760, 124, "is-runtime", t("RUNTIME · RUST ИСПОЛНЯЕТ"));
+  band(30, 500, 760, 118, "is-store", t("STATE · ЕДИНСТВЕННЫЙ WRITER"));
   el("rect", { x: 22, y: 340, width: 776, height: 290, rx: 16, class: "ah-core-authority" }, gBands);
   text(gBands, 40, 335, "ah-core-authlabel", "runtime authority");
   el("rect", { x: 822, y: 370, width: 276, height: 104, rx: 12, class: "ah-core-untrusted" }, gBands);
-  text(gBands, 840, 365, "ah-core-trustlabel", "ГРАНИЦА ДОВЕРИЯ · UNTRUSTED");
-  text(gBands, 826, 111, "ah-core-bandlabel", "ВЛАДЕЛЬЦЫ ВНЕ RUNTIME");
+  text(gBands, 840, 365, "ah-core-trustlabel", t("ГРАНИЦА ДОВЕРИЯ · UNTRUSTED"));
+  text(gBands, 826, 111, "ah-core-bandlabel", t("ВЛАДЕЛЬЦЫ ВНЕ RUNTIME"));
 
   edges.forEach(function (e) {
     var p = el("path", { d: pathD(e.pts), class: "ah-core-edge", "data-edge": e.id }, gEdges);
@@ -255,7 +312,7 @@
       packet(pts, "is-request", "-1.7s");
       packet(reversed(pts), "is-reply", "-0.85s");
     }
-    setNote(nodes[id].title + " · маршрут", route.text);
+    setNote(nodes[id].title + t(" · маршрут"), route.text);
   }
 
   function pause() {

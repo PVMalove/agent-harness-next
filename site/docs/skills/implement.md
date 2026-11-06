@@ -199,7 +199,7 @@ module-owned guidance:
   evidence, parallelism и metric rules.
 - `.harness/orchestration/roles/` владеет boundary, required proof и specialist trigger каждой роли.
 - `--help` и вывод `remedy` координаторского CLI владеют CLI procedure и operational recovery в целевом
-  проекте. Руководство разработчика `docs/backend-orchestration.md` описывает setup и project
+  проекте. Руководство разработчика `backend-orchestration.md` описывает setup и project
   configuration, но живёт только в исходном репозитории и в проект не поставляется.
 - `docs/agents/git-workflow.md` владеет issue-branch, commit, push и PR boundaries.
 
@@ -279,7 +279,7 @@ ledger и не заменяет model self-report.
 отменяет только неотправленный dispatch, а `batch abandon` закрывает весь batch; brief, report,
 Context Package и audit в обоих случаях остаются evidence.
 
-## Обновление маршрута запуска и наблюдения (#716)
+## Обновление маршрута запуска и наблюдения
 
 Поставляется пример `.harness/orchestration/adapters/claude_code.py`, явно выбираемый через
 `--adapter`. Runtime executable выбирается отдельно; пакет не превращает `codex` в adapter.
@@ -296,4 +296,4 @@ extra-prompt-file и ручная строка Retry reason больше не н
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/implement/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/implement/SKILL.md)

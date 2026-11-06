@@ -1,6 +1,6 @@
 # Code Review Spec — Ревью по спецификации
 
-Источник: [`harness/project/agents/code-review-spec.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/agents/code-review-spec.md); вызывается осью Spec скила [`code-review`](../skills/code-review.md).
+Источник: [`harness/project/agents/code-review-spec.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/agents/code-review-spec.md); вызывается осью Spec скила [`code-review`](../skills/code-review.md).
 
 ## 1. Название и локализация
 
@@ -41,4 +41,4 @@ maxTurns: 20
 
 ## Источник
 
-[code-review-spec.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/agents/code-review-spec.md)
+[code-review-spec.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/agents/code-review-spec.md)

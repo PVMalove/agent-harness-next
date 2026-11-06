@@ -34,4 +34,4 @@
 - **Выход (Output/Report):** Возвращает код выхода `0`, если нарушения не найдены (разрешает выполнение команды). При попытке коммита/пуша в защищенную ветку, неразобранной команде с commit/push, неопределенном checkout или нестроковом `workdir` возвращает код выхода `2` и выводит причину в стандартный поток ошибок (`stderr`), прерывая выполнение инструмента.
 ## Источник
 
-[block-direct-master.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/block-direct-master.sh), [direct_commits.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/direct_commits.py), [pr_commands.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/pr_commands.py)
+[block-direct-master.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/block-direct-master.sh), [direct_commits.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/direct_commits.py), [pr_commands.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/pr_commands.py)

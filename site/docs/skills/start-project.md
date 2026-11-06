@@ -139,4 +139,4 @@ description: Начать новый проект с идеи или созда�
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/global-skills/start-project/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/global-skills/start-project/SKILL.md)

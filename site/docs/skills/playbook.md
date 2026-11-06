@@ -1,6 +1,6 @@
 # Playbook — Руководство по оркестрации
 
-Источник: [`harness/orchestration/playbook.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/playbook.md).
+Источник: [`harness/orchestration/playbook.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/playbook.md).
 
 ## 1. Название и локализация
 
@@ -28,7 +28,7 @@ worker session под тем же dispatch ID без переноса истор
 Delta-review бывает test-only (после Warning, только для test-only diff) и после fix-forward:
 coordinator выбирает delta-review или полный review сам, без отдельного решения человека; dispatch
 одобряется по `approval_policy` вместе с этим выбором. Условия полного review описаны в
-[`docs/skills/code-review.md`](code-review.md). Любой delta-review всегда является новым независимым
+[`code-review`](code-review.md). Любой delta-review всегда является новым независимым
 review dispatch. Advisory tool call остаётся эфемерным non-role выводом и не может авторизовать
 работу.
 
@@ -51,4 +51,4 @@ review dispatch. Advisory tool call остаётся эфемерным non-role
 
 ## Источник
 
-[playbook.md](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/orchestration/playbook.md)
+[playbook.md](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/playbook.md)

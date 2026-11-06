@@ -1,122 +1,121 @@
-# Triage Labels
+# Метки триажа { #triage-labels }
 
-The delivery workflow is in [git-workflow.md](git-workflow.md). This guide is the authoritative vocabulary for triage labels.
+Поток доставки описан в [git-workflow.md](git-workflow.md). Это руководство — авторитетный словарь меток триажа.
 
-This repo does **not** use the upstream `mattpocock/skills` canonical five-role vocabulary (`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`) as literal labels. `triage/SKILL.md` (`.harness/skills/triage/`) speaks natively in the namespaced taxonomy below — this file is the reference, not a translation table. Every axis, including `type::*`, uses this repo's own enterprise-style values rather than upstream's.
+Этот репозиторий **не** использует канонический словарь из пяти ролей upstream `mattpocock/skills` (`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`) в виде буквальных меток. `triage/SKILL.md` (`.harness/skills/triage/`) говорит прямо на пространственной таксономии ниже: этот файл — справочник, а не таблица перевода. Каждая ось, включая `type::*`, использует собственные значения репозитория в корпоративном стиле, а не значения upstream.
 
-## The taxonomy
+## Таксономия { #the-taxonomy }
 
-Every triaged issue or PR carries exactly one label from each of the first three axes below, except while it carries `status::specs` — execution mode isn't decided yet at that stage (see [State machine](#state-machine)).
+Каждая задача или PR после триажа несёт ровно одну метку с каждой из первых трёх осей ниже, кроме периода, пока на ней стоит `status::specs`: на этой стадии режим выполнения ещё не решён (см. [Конечный автомат](#state-machine)).
 
-### 1. Type (`type::*`)
+### 1. Тип (`type::*`) { #1-type-type }
 
-| Label | Meaning |
+| Метка | Значение |
 | --- | --- |
-| `type::bug` | Something is broken |
-| `type::feature` | New feature or improvement |
-| `type::refactoring` | Internal restructuring, no behavior change |
-| `type::chore` | Maintenance, tooling, or dependency upkeep |
-| `type::security` | Security fix or hardening |
-| `type::performance` | Performance improvement |
-| `type::hotfix` | Urgent production fix |
+| `type::bug` | Что-то сломано |
+| `type::feature` | Новая функция или улучшение |
+| `type::refactoring` | Внутренняя перестройка без изменения поведения |
+| `type::chore` | Сопровождение, инструменты или обновление зависимостей |
+| `type::security` | Исправление или усиление безопасности |
+| `type::performance` | Улучшение производительности |
+| `type::hotfix` | Срочное исправление в production |
 
-### 2. Execution mode — who does the work
+### 2. Режим выполнения — кто делает работу { #2-execution-mode-who-does-the-work }
 
-| Label | Color | Meaning |
+| Метка | Цвет | Значение |
 | --- | --- | --- |
-| `hitl` | yellow `#fbca04` | Human-in-the-loop — needs review, testing, or approval from you |
-| `afk` | light blue `#54c1e8` | Away-from-keyboard — an agent can complete it alone |
+| `hitl` | жёлтый `#fbca04` | Human-in-the-loop: нужны ревью, тестирование или одобрение от вас |
+| `afk` | голубой `#54c1e8` | Away-from-keyboard: агент может завершить задачу сам |
 
 Документационные тикеты — те, что меняют только `docs/`, `site/`, `README.md` и `CHANGELOG.md`, —
 получают `hitl`, а не `afk`: результат читает человек, и он же решает, готов ли текст к публикации.
 `/implement` и `/fast-implement` не берут такие тикеты в afk-пайплайн.
 
-### 3. Status (`status::*`) — where it sits in the pipeline
+### 3. Статус (`status::*`) — на каком этапе pipeline задача { #3-status-status-where-it-sits-in-the-pipeline }
 
-| Label | Color | Meaning |
+| Метка | Цвет | Значение |
 | --- | --- | --- |
-| `status::specs` | purple `#5319e7` | Design/spec-writing: an epic or large task being turned into a spec and decomposed into tickets. Too early to take into development. |
-| `status::ready` | green `#0e8a16` | Fully specified, ready to be picked up |
-| `status::in-progress` | blue `#1d76db` | Currently being worked on in an active session |
-| `status::blocked` | red `#b60205` | Blocked by a dependency, or waiting on more info from you |
+| `status::specs` | фиолетовый `#5319e7` | Проектирование и написание спецификации: эпик или крупная задача превращается в спецификацию и раскладывается на задачи. Для взятия в разработку пока рано. |
+| `status::ready` | зелёный `#0e8a16` | Задача полностью описана и готова к взятию в работу |
+| `status::in-progress` | синий `#1d76db` | Над задачей сейчас работает активная сессия |
+| `status::blocked` | красный `#b60205` | Задачу блокирует зависимость, либо она ждёт от вас дополнительных сведений |
 
-### Context labels — applied when relevant
+### Контекстные метки — ставятся по необходимости { #context-labels-applied-when-relevant }
 
-| Label | Color | Applied by | Meaning |
+| Метка | Цвет | Кто ставит | Значение |
 | --- | --- | --- | --- |
-| `task-report::required` | gray `#6a737d` | `/to-spec`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Applied by default to every ticket unless you say to skip it. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
-| `resolution::wontfix` | gray `#c2c2c2` | `/triage` | The request was explicitly rejected. Applied at close time; see `.out-of-scope/` handling in `triage/OUT-OF-SCOPE.md`. |
+| `task-report::required` | серый `#6a737d` | `/to-spec`, `/to-tickets`; обрабатывает `/to-pull-requests` | Агент обязан опубликовать отчёт о завершении до закрытия. Ставится по умолчанию на каждую задачу, если вы не попросили пропустить. В конечный автомат самого `triage` не входит — см. SKILL.md скилла `/to-pull-requests`. |
+| `resolution::wontfix` | серый `#c2c2c2` | `/triage` | Запрос явно отклонён. Ставится при закрытии; обработка `.out-of-scope/` описана в `triage/OUT-OF-SCOPE.md`. |
 
-### 4. Priority (`priority::*`) — optional, purely informational
+### 4. Приоритет (`priority::*`) — необязательно, только информация { #4-priority-priority-optional-purely-informational }
 
-Nothing consumes this automatically yet; it exists so a maintainer can flag urgency.
+Автоматически эту ось пока ничто не использует; она нужна, чтобы мейнтейнер мог отметить срочность.
 
-| Label | Meaning |
+| Метка | Значение |
 | --- | --- |
-| `priority::p0` | Critical — drop everything |
-| `priority::p1` | High |
-| `priority::p2` | Medium |
-| `priority::p3` | Low |
+| `priority::p0` | Критично — бросить всё |
+| `priority::p1` | Высокий |
+| `priority::p2` | Средний |
+| `priority::p3` | Низкий |
 
-### 5. Severity (`severity::*`) — optional, purely informational
+### 5. Серьёзность (`severity::*`) — необязательно, только информация { #5-severity-severity-optional-purely-informational }
 
-Nothing consumes this automatically yet; it exists so a maintainer can flag impact.
+Автоматически эту ось пока ничто не использует; она нужна, чтобы мейнтейнер мог отметить влияние.
 
-| Label | Meaning |
+| Метка | Значение |
 | --- | --- |
-| `severity::s1` | Critical impact |
-| `severity::s2` | Major impact |
-| `severity::s3` | Minor impact |
-| `severity::s4` | Trivial impact |
+| `severity::s1` | Критическое влияние |
+| `severity::s2` | Серьёзное влияние |
+| `severity::s3` | Незначительное влияние |
+| `severity::s4` | Пренебрежимое влияние |
 
-### 6. Environment (`env::*`) — target-project only, optional
+### 6. Окружение (`env::*`) — только для целевых проектов, необязательно { #6-environment-env-target-project-only-optional }
 
-Which deployed environment an issue or PR relates to. Not part of this harness repository's own
-taxonomy — only seeded into target projects that track deployments.
+К какому развёрнутому окружению относится задача или PR. В таксономию самого репозитория harness не входит: метки заводятся только в целевых проектах, которые отслеживают развёртывания.
 
-| Label | Meaning |
+| Метка | Значение |
 | --- | --- |
 | `env::prod` | Production |
 | `env::staging` | Staging |
 | `env::qa` | QA |
-| `env::dev` | Development |
+| `env::dev` | Разработка |
 
-Epic grouping uses no label: a ticket decomposed from an epic is linked to it through the tracker's parent link — a GitHub **sub-issue**, or on GitLab a `## Parent: #<epic>` section in the ticket's description plus a `relates_to` issue link — the same mechanism `/wayfinder` uses for its map/ticket relationship — see [issue-tracker.md](issue-tracker.md#wayfinding-operations). `wayfinder:map` and `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`) remain `/wayfinder`'s own separate namespace, colors below — but a Wayfinder ticket (not the map itself) also carries the matching `hitl`/`afk` label plus `status::ready`, moved to `status::in-progress` on claim: the same two axes as everywhere else in this taxonomy, applied by `/wayfinder` itself rather than by `/triage`. `status::specs` and `wayfinder:map` are not the same thing: the former is a triage state on an epic issue, the latter is Wayfinder's own map artifact — the map never carries a `status::*` label.
+Группировка по эпику метки не использует: задача, выделенная из эпика, связывается с ним через родительскую ссылку трекера — **sub-issue** на GitHub, а на GitLab раздел `## Parent: #<epic>` в описании задачи плюс связь `relates_to`. Тот же механизм `/wayfinder` применяет для связи карты и задач; см. [issue-tracker.md](issue-tracker.md#wayfinding-operations). `wayfinder:map` и `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`) остаются отдельным пространством имён `/wayfinder` (цвета ниже). При этом задача Wayfinder (не сама карта) тоже несёт соответствующую метку `hitl`/`afk` плюс `status::ready`, а при взятии в работу переводится в `status::in-progress`: это те же две оси, что и везде в этой таксономии, но ставит их сам `/wayfinder`, а не `/triage`. `status::specs` и `wayfinder:map` — не одно и то же: первое — состояние триажа на задаче-эпике, второе — собственный артефакт-карта Wayfinder, и карта никогда не несёт метку `status::*`.
 
-| Label | Color | Meaning |
+| Метка | Цвет | Значение |
 | --- | --- | --- |
-| `wayfinder:map` | dark blue `#0052cc` | The map issue itself — Destination, Notes, Decisions-so-far, the fog. |
-| `wayfinder:research` | green `#00875a` | AFK ticket type — reading docs/APIs/local resources to surface a fact. |
-| `wayfinder:prototype` | orange `#ff8b00` | HITL ticket type — a cheap concrete artifact to react to. |
-| `wayfinder:grilling` | violet `#6554c0` | HITL ticket type — a conversation, the default case. |
-| `wayfinder:task` | slate `#8993a4` | HITL-or-AFK ticket type — manual work that unblocks a decision. |
+| `wayfinder:map` | тёмно-синий `#0052cc` | Сама задача-карта: Destination, Notes, Decisions-so-far, туман. |
+| `wayfinder:research` | зелёный `#00875a` | Тип AFK-задачи: чтение документации, API и локальных ресурсов, чтобы выяснить факт. |
+| `wayfinder:prototype` | оранжевый `#ff8b00` | Тип HITL-задачи: дешёвый конкретный артефакт, на который можно отреагировать. |
+| `wayfinder:grilling` | фиолетовый `#6554c0` | Тип HITL-задачи: разговор, случай по умолчанию. |
+| `wayfinder:task` | сланцевый `#8993a4` | Тип HITL- или AFK-задачи: ручная работа, снимающая блокировку решения. |
 
-### Pipeline hint (`pipeline::*`) — from story points, `afk` only
+### Подсказка pipeline (`pipeline::*`) — по story points, только для `afk` { #pipeline-hint-pipeline-from-story-points-afk-only }
 
-A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets` assigns every `afk` ticket a Fibonacci story-point score (Planning Poker: one primary pass, plus a second cheap advisory pass when the score lands in the gray zone) and derives one of these labels from it on the STOP-AND-ASK gate, where a developer can override the label without changing the score. `hitl` tickets never receive a `pipeline::*` label. The scale and thresholds come from the optional `story_points` field in `.harness/project.json` (schema: `.harness/project.schema.json`); without it, `/to-tickets` falls back to `≤3` fast, `≥5` full, gray zone `4`.
+Отдельное пространство имён, независимое от `hitl`/`afk` и `status::*`. `/to-tickets` присваивает каждой `afk`-задаче оценку story points по Фибоначчи (Planning Poker: один основной проход и второй дешёвый совещательный, если оценка попала в серую зону) и выводит из неё одну из этих меток на гейте STOP-AND-ASK, где разработчик может переопределить метку, не меняя оценку. Задачи `hitl` метку `pipeline::*` не получают. Шкала и пороги берутся из необязательного поля `story_points` в `.harness/project.json` (схема: `.harness/project.schema.json`); без него `/to-tickets` использует значения по умолчанию: `≤3` — fast, `≥5` — full, серая зона — `4`.
 
-| Label | Color | Meaning |
+| Метка | Цвет | Значение |
 | --- | --- | --- |
-| `pipeline::fast` | pale blue `#c5def5` | Score `≤ fast_threshold` and `Execution: afk` — the short `/fast-implement` path, no gates. |
-| `pipeline::full` | orange-red `#d93f0b` | Score `≥ full_threshold` — the gated `/implement` pipeline. |
+| `pipeline::fast` | бледно-голубой `#c5def5` | Оценка `≤ fast_threshold` и `Execution: afk` — короткий путь `/fast-implement` без гейтов. |
+| `pipeline::full` | оранжево-красный `#d93f0b` | Оценка `≥ full_threshold` — pipeline `/implement` с гейтами. |
 
-## State machine
+## Конечный автомат { #state-machine }
 
-An unlabeled issue is implicitly "needs triage" — there's no dedicated label for that state.
+Задача без меток неявно находится в состоянии «нужен триаж»: отдельной метки для него нет.
 
-1. Triage analyzes the issue: determine `type::*`, and either `hitl`/`afk` or — if the issue is epic-sized and needs decomposition before anything is actionable — route it to `status::specs` instead and point the maintainer at `/to-spec`.
-2. `/to-spec` applies `status::specs` when it publishes a fresh epic issue directly (skipping step 1's routing when the maintainer starts from `/to-spec` rather than from an inbound issue).
-3. Once specified, place the ticket in `status::ready` (nothing blocking it) or `status::blocked` (a dependency, or missing info from you — either way, post triage notes).
-4. `status::blocked` → `status::ready` once the blocker clears or you reply. A blocker clears only when its predecessor is closed, and the predecessor is closed only after its merge is confirmed; a push, publish, accepted QA or an open PR does not clear it.
-5. `status::ready` → `status::in-progress` when a session (agent or you) picks it up — `/implement` and `/fast-implement` set this in pre-flight, before the issue branch or any file edit. The label is replaced, never added: a ticket carries exactly one `status::*` label. On GitLab Free a `key::value` label is an ordinary label — mutually exclusive scoped labels are a Premium feature — so every replacement removes the previous label with the same `key::` prefix explicitly (`--unlabel`), exactly as `--remove-label` does on GitHub.
-6. Merged and closed → the ticket keeps `status::in-progress`; the closed state is its terminal `done`. In the same step `/to-pull-requests` moves every open ticket whose blockers are now all closed from `status::blocked` to `status::ready`.
-7. Rejected at any point → apply `resolution::wontfix`, drop the `status::*` label, close.
+1. Триаж анализирует задачу: определяет `type::*` и либо `hitl`/`afk`, либо — если задача размером с эпик и требует декомпозиции, прежде чем с ней можно что-то делать, — отправляет её в `status::specs` и направляет мейнтейнера к `/to-spec`.
+2. `/to-spec` ставит `status::specs`, когда публикует новую задачу-эпик напрямую (пропуская маршрутизацию шага 1, если мейнтейнер начинает с `/to-spec`, а не с входящей задачи).
+3. После описания задачи переведите её в `status::ready` (ничто не блокирует) или `status::blocked` (зависимость либо недостающие от вас сведения; в обоих случаях оставьте заметки триажа).
+4. `status::blocked` → `status::ready`, когда блокер снят или вы ответили. Блокер снят, только если закрыта задача-предшественник, а она закрывается только после подтверждённого merge; push, публикация, принятый QA или открытый PR блокер не снимают.
+5. `status::ready` → `status::in-progress`, когда задачу берёт сессия (агент или вы): `/implement` и `/fast-implement` делают это в pre-flight, до ветки задачи и до любой правки файлов. Метка заменяется, а не добавляется: задача несёт ровно одну метку `status::*`. На GitLab Free метка `key::value` — обычная метка (взаимоисключающие scoped-метки есть только в Premium), поэтому каждая замена явно снимает прежнюю метку с тем же префиксом `key::` (`--unlabel`), как `--remove-label` на GitHub.
+6. Слита и закрыта → задача сохраняет `status::in-progress`; закрытое состояние — её конечный `done`. На том же шаге `/to-pull-requests` переводит из `status::blocked` в `status::ready` каждую открытую задачу, у которой теперь закрыты все блокеры.
+7. Отклонена на любом этапе → поставьте `resolution::wontfix`, снимите метку `status::*`, закройте.
 
-Apply `task-report::required` by default when `/to-spec` or `/to-tickets` create a ticket, unless told to skip it.
+Ставьте `task-report::required` по умолчанию, когда `/to-spec` или `/to-tickets` создают задачу, если не сказано пропустить.
 
-## Local markdown tracker
+## Локальный markdown-трекер { #local-markdown-tracker }
 
-A local-markdown-tracked ticket (`.scratch/<feature>/issues/NN-*.md`) has no GitHub/GitLab labels — the axes above go in explicit fields in that file instead:
+У задачи в локальном markdown-трекере (`.scratch/<feature>/issues/NN-*.md`) нет меток GitHub/GitLab: оси выше записываются в явные поля этого файла:
 
 ```markdown
 **Category:** type::bug / type::feature / type::refactoring / type::chore / type::security / type::performance / type::hotfix
@@ -127,10 +126,10 @@ A local-markdown-tracked ticket (`.scratch/<feature>/issues/NN-*.md`) has no Git
 **Task report:** required (omit the line entirely if not required)
 ```
 
-This field block is the vocabulary that [issue-tracker.md](issue-tracker.md)'s `Workflow:` line refers to. Wayfinder's own `Status: claimed/resolved` line (same source doc) is an orthogonal claim/lock marker for the file and coexists with these fields rather than replacing them.
+Этот блок полей — словарь, на который ссылается строка `Workflow:` в [issue-tracker.md](issue-tracker.md). Собственная строка Wayfinder `Status: claimed/resolved` (тот же исходный документ) — ортогональный маркер захвата файла; она сосуществует с этими полями, а не заменяет их.
 
-`status::*`'s values are the same strings as the GitHub/GitLab labels, plus a terminal `done`, which `/to-pull-requests` sets after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `docs/agents/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
+Значения `status::*` — те же строки, что и метки GitHub/GitLab, плюс конечное `done`, которое `/to-pull-requests` выставляет после подтверждения разработчиком merge ветки задачи. `/implement` и `/fast-implement` заканчивают работу на отправленной ветке задачи, затем предлагают `/to-pull-requests`. Удалённые задачи закрываются только после фактического merge изменения: GitHub автоматически закрывает `Closes #<ID>` для PR в default-ветку, а шаблон GitLab можно отключить или настроить, поэтому проверяйте любой результат. PR в integration-ветку закрывается явно после подтверждённого merge (см. `docs/agents/git-workflow.md`). Для локального трекера механизма sub-issue нет; декомпозированная задача лежит в каталоге `.scratch/<feature-slug>/issues/` функции (см. [issue-tracker.md](issue-tracker.md)): сам этот каталог и есть группировка, отдельный каталог эпика или поле для неё не нужны.
 
-## Adapting this taxonomy per project
+## Адаптация таксономии под проект { #adapting-this-taxonomy-per-project }
 
-This is the taxonomy `engineering-suite` ships by default — it's a design choice (namespaced multi-axis labels), not a hardcoded requirement. Renaming an axis or adding project-specific context labels means editing this file **and** `triage/SKILL.md` — the skill speaks the vocabulary documented here as hardcoded prose, not as data read from this file at runtime. Run `harness lock-project-skills` afterward so the customization is recorded as intentional provenance, rather than left as drift a future `harness update --force` could silently overwrite.
+Это таксономия, которую `engineering-suite` поставляет по умолчанию: она — проектное решение (пространственные многоосевые метки), а не жёсткое требование. Переименование оси или добавление собственных контекстных меток проекта означает правку этого файла **и** `triage/SKILL.md`: скилл использует описанный здесь словарь как жёстко заданный текст, а не как данные, которые читаются из этого файла во время работы. После правки выполните `harness lock-project-skills`, чтобы настройка осталась зафиксированной как намеренное происхождение, а не как дрейф, который будущий `harness update --force` может молча перезаписать.

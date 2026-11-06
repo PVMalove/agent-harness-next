@@ -132,4 +132,4 @@ review назначается вместо delta в пяти случаях: к�
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/first-party/engineering/code-review/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/code-review/SKILL.md)

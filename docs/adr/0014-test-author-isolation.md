@@ -104,7 +104,7 @@ validator в #551 не менялись. Зоны runner (временный к�
 
 **Устанавливаемый runner (#553).** Прототип перенесён в устанавливаемый runner
 `.claude/hooks/run-test.sh` (шаблон `harness/project/hooks/run-test.sh`) с ядром
-`.harness/health/isolated_runner.py`; руководство — [`docs/hooks/run-test.md`](../hooks/run-test.md).
+`.harness/health/isolated_runner.py`; руководство — [`site/docs/hooks/run-test.md`](../../site/docs/hooks/run-test.md).
 Набор флагов bwrap выше сохранён без ослаблений и дополнен `--tmpfs /run`, `--chdir <repo>` и
 `--json-status-fd`: отсутствие записи `child-pid` означает, что песочница не поднялась. Пустой
 tmpfs поверх `/run` закрывает обход, который прототип не проверял: `--ro-bind` не запрещает

@@ -51,7 +51,7 @@ description: Аудит существующей, уже значительно�
 #### Реконструкция истории решений (необязательно)
 
 Только когда владелец согласился выше. Отдельное расследование только для чтения, независимое от Установки в обоих направлениях — оно не блокирует Установку и не требует, чтобы каркас был установлен первым.
-Прочитайте [RECONSTRUCT-HISTORY.md](https://github.com/PVMalove/claude-agent-harness/blob/master/global-skills/integrate-project/RECONSTRUCT-HISTORY.md) для получения информации об источниках, доказательной дисциплине, шаблоне ADR и форме итогового отчета. На этом этапе не записывается ни один файл — включая ADR — до тех пор, пока владелец не увидит этот отчет и отдельно не авторизует, какие именно из них записать.
+Прочитайте [RECONSTRUCT-HISTORY.md](https://github.com/PVMalove/agent-harness-next/blob/master/global-skills/integrate-project/RECONSTRUCT-HISTORY.md) для получения информации об источниках, доказательной дисциплине, шаблоне ADR и форме итогового отчета. На этом этапе не записывается ни один файл — включая ADR — до тех пор, пока владелец не увидит этот отчет и отдельно не авторизует, какие именно из них записать.
 
 </div>
 
@@ -63,4 +63,4 @@ description: Аудит существующей, уже значительно�
 
 ## Источник
 
-[SKILL.md](https://github.com/PVMalove/claude-agent-harness/blob/master/global-skills/integrate-project/SKILL.md)
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/global-skills/integrate-project/SKILL.md)

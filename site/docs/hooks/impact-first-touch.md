@@ -2,8 +2,8 @@
 
 ## 1. Название и локализация
 
-- **Исходный хук:** [`harness/project/hooks/impact-first-touch.sh`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/impact-first-touch.sh)
-  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py)
+- **Исходный хук:** [`harness/project/hooks/impact-first-touch.sh`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/impact-first-touch.sh)
+  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py)
 - **Русский перевод:** предупреждение о первом касании рискованного пути в операции.
 
 ## 2. Полное описание
@@ -40,7 +40,7 @@ capabilities и skills (`harness/CAPABILITIES.json`, `skills/*`). Набор с�
   любое исключение, ненулевой код и тайм-аут 10 с (`ADVISORY_TIMEOUT_SECONDS`) дают `warn`
   `internal-error` с кодом `0` и пустым stdout ([hook-response.md](hook-response.md)).
 - **Второй runtime.** Правка файла приходит там как `apply_patch` без `file_path`, поэтому hook не
-  подключён до адаптера payload (#830). `harness health` перечисляет его в строке `нет события или
+  подключён до адаптера payload. `harness health` перечисляет его в строке `нет события или
   payload` с проверкой вне hook — ChangeImpact-gate по ADR 0023.
 
 ## 3. Контракт
@@ -56,6 +56,6 @@ capabilities и skills (`harness/CAPABILITIES.json`, `skills/*`). Набор с�
 
 ## Источник
 
-[impact-first-touch.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/impact-first-touch.sh),
-[change_impact_hooks.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py),
-[change_impact.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/repo_map/change_impact.py)
+[impact-first-touch.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/impact-first-touch.sh),
+[change_impact_hooks.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py),
+[change_impact.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/repo_map/change_impact.py)

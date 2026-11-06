@@ -63,7 +63,7 @@ def test_ticket_export_uses_the_epic_folder_that_holds_the_ticket(
     (epic / "tickets" / "issue-352-qa-logs.md").write_text("ticket", encoding="utf-8")
 
     assert (
-        export_directory(tmp_path, "PVMalove/claude-agent-harness#352")
+        export_directory(tmp_path, "PVMalove/agent-harness-next#352")
         == epic / "artifacts"
     )
 

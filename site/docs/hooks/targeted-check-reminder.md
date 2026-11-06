@@ -2,8 +2,8 @@
 
 ## 1. Название и локализация
 
-- **Исходный хук:** [`harness/project/hooks/targeted-check-reminder.sh`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/targeted-check-reminder.sh)
-  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py)
+- **Исходный хук:** [`harness/project/hooks/targeted-check-reminder.sh`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/targeted-check-reminder.sh)
+  и общее тело [`change_impact_hooks.py`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py)
 - **Русский перевод:** напоминание в конце хода роли отчитать targeted-проверки brief.
 
 ## 2. Полное описание
@@ -47,7 +47,7 @@ Hook никогда не продолжает ход: у `Stop` и `SubagentStop
 Шаблон `.codex/hooks.json` подключает этот hook только на `Stop` и `SubagentStop`: второй runtime
 доставляет оба события с `session_id`, `stop_hook_active` и, у `SubagentStop`, `agent_id`. Правки
 файлов там приходят как `apply_patch` без `file_path`, поэтому журнал касаний на `Write` и `Edit` ждёт
-адаптера payload (#830). До него журнал второго runtime пуст, и напоминание молчит; `harness health`
+адаптера payload. До него журнал второго runtime пуст, и напоминание молчит; `harness health`
 перечисляет строку `PreToolUse` в `нет события или payload` с проверкой вне hook — сверкой
 `checks_run` coordinator-ом.
 
@@ -62,5 +62,5 @@ Hook никогда не продолжает ход: у `Stop` и `SubagentStop
 
 ## Источник
 
-[targeted-check-reminder.sh](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/targeted-check-reminder.sh),
-[change_impact_hooks.py](https://github.com/PVMalove/claude-agent-harness/blob/master/harness/project/hooks/change_impact_hooks.py)
+[targeted-check-reminder.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/targeted-check-reminder.sh),
+[change_impact_hooks.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/change_impact_hooks.py)

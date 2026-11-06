@@ -4,7 +4,7 @@
 
 - **Английское название:** `codebase-design`
 - **Русский перевод:** Проектирование модулей.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/claude-agent-harness/blob/master/skills/vendor/mattpocock/engineering/codebase-design/SKILL.md)
+- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/codebase-design/SKILL.md)
 
 ## 2. Русское описание
 

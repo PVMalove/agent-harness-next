@@ -1,141 +1,141 @@
-# Issue tracker
+# Трекер задач { #issue-tracker }
 
-The delivery workflow is in [git-workflow.md](git-workflow.md). This guide defines tracker-specific operations.
+Поток доставки описан в [git-workflow.md](git-workflow.md). Это руководство определяет операции, специфичные для трекера.
 
-Detect which section below applies from the project tracker, the same resolution `check-branch-name.sh` uses: the `tracker` field of `.harness/project.json` when it is set; otherwise `git remote -v` — a `github.com` remote → GitHub; a `gitlab.`-hosted remote → GitLab; anything else, including no remote at all, → Local markdown. For a different tracker entirely (Jira, Linear, ...), replace this file's content with a description of that workflow instead — see `/setup-matt-pocock-skills`.
+Нужный раздел ниже определяется по трекеру проекта так же, как это делает `check-branch-name.sh`: по полю `tracker` в `.harness/project.json`, если оно задано; иначе по `git remote -v` — remote на `github.com` означает GitHub, remote на хосте `gitlab.` означает GitLab, всё остальное (в том числе отсутствие remote) означает Local markdown. Для совсем другого трекера (Jira, Linear, ...) замените содержимое этого файла описанием его процесса — см. `/setup-matt-pocock-skills`.
 
-This repo's triage label vocabulary is a first-party namespaced taxonomy — `type::*` category, `hitl`/`afk` execution mode, `status::*` pipeline state, optional `priority::*`/`severity::*` context, plus the `task-report::required`/`resolution::wontfix` context labels — see [triage-labels.md](triage-labels.md) before applying or querying labels, whichever section below applies.
+Словарь меток триажа в этом репозитории — собственная пространственная таксономия: категория `type::*`, режим выполнения `hitl`/`afk`, состояние pipeline `status::*`, необязательный контекст `priority::*`/`severity::*` и контекстные метки `task-report::required`/`resolution::wontfix`. Перед тем как ставить метки или искать по ним, прочитайте [triage-labels.md](triage-labels.md) — для любого раздела ниже.
 
 ## GitHub
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Задачи и спецификации этого репозитория живут как GitHub issues. Для всех операций используйте CLI `gh`.
 
-### Conventions
+### Соглашения { #conventions }
 
-- **Create an issue**: `gh issue create --title "..." --body-file <path>`. Write the body to a file first — inline `--body` heredocs break on nested quotes/backticks (see `/to-spec`, `/to-tickets`).
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body-file <path>`, with the path from [git-workflow.md](git-workflow.md) §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`)
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: post the explanation first with `gh issue comment <number> --body-file <path>`, then run `gh issue close <number>`; never an inline `--comment "..."`.
+- **Создать задачу:** `gh issue create --title "..." --body-file <path>`. Сначала запишите тело в файл: inline heredoc-ы `--body` ломаются на вложенных кавычках и обратных апострофах (см. `/to-spec`, `/to-tickets`).
+- **Прочитать задачу:** `gh issue view <number> --comments`; комментарии фильтруйте через `jq` и получайте метки.
+- **Список задач:** `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` с подходящими фильтрами `--label` и `--state`.
+- **Прокомментировать задачу:** `gh issue comment <number> --body-file <path>`; путь берите по [git-workflow.md](git-workflow.md) §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`).
+- **Поставить или снять метки:** `gh issue edit <number> --add-label "..."` / `--remove-label "..."`.
+- **Закрыть:** сначала опубликуйте пояснение через `gh issue comment <number> --body-file <path>`, затем выполните `gh issue close <number>`; inline `--comment "..."` не используйте.
 
-Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
+Репозиторий определяется по `git remote -v` — `gh` делает это сам, если запущен внутри клона.
 
-### Pull requests as a triage surface
+### Pull request как поверхность триажа { #pull-requests-as-a-triage-surface }
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+**PR как поверхность запросов: нет.** _(Поставьте `yes`, если репозиторий считает внешние PR запросами функций; флаг читает `/triage`.)_
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+При значении `yes` PR проходят через те же метки и состояния, что и задачи, с эквивалентами `gh pr`:
 
-- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
-- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
-- **Comment / label / close**: `gh pr comment <number> --body-file <path>`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
+- **Прочитать PR:** `gh pr view <number> --comments`, а diff — `gh pr diff <number>`.
+- **Список внешних PR для триажа:** `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments`, затем оставьте только `authorAssociation` со значениями `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR` или `NONE` (отбросьте `OWNER`/`MEMBER`/`COLLABORATOR`).
+- **Комментировать, метить, закрывать:** `gh pr comment <number> --body-file <path>`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
 
-GitHub shares one number space across issues and PRs, so a bare `#42` may be either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
+На GitHub задачи и PR делят одно пространство номеров, поэтому голое `#42` может быть и тем, и другим: проверьте `gh pr view 42` и при ошибке `gh issue view 42`.
 
-### When a skill says "publish to the issue tracker"
+### Когда скилл говорит «опубликовать в трекере задач» { #when-a-skill-says-publish-to-the-issue-tracker }
 
-Create a GitHub issue.
+Создайте GitHub issue.
 
-### When a skill says "fetch the relevant ticket"
+### Когда скилл говорит «получить нужную задачу» { #when-a-skill-says-fetch-the-relevant-ticket }
 
-Run `gh issue view <number> --comments`.
+Выполните `gh issue view <number> --comments`.
 
 ## GitLab
 
-Issues and specs for this repo live as GitLab issues. Use the [`glab`](https://gitlab.com/gitlab-org/cli) CLI for all operations.
+Задачи и спецификации этого репозитория живут как GitLab issues. Для всех операций используйте CLI [`glab`](https://gitlab.com/gitlab-org/cli).
 
-### Conventions
+### Соглашения { #conventions_1 }
 
-- **Project addressing**: name the project explicitly in every command instead of letting `glab` choose it. On its own, `glab` picks a remote in the order `upstream` > `gitlab` > `origin`, and `glab api` fills its project placeholders from the current directory's repository and defaults `--hostname` to `gitlab.com` or that repository's host. This guide and the skills write the project with three placeholders:
-  - `<host>` — `tracker.host` from `.harness/project.json`, including a web port other than 443 (`gitlab.example.com`, `gitlab.example.test:4443`);
-  - `<project-url>` — `https://<host>/<tracker.project>` (`https://gitlab.example.com/group/project`); every `glab` command takes `-R <project-url>`;
-  - `<project-id>` — `tracker.project` URL-encoded (`group%2Fproject`, `group%2Fsub%2Fproject`); every `glab api` call is written `GITLAB_HOST=<host> glab api projects/<project-id>/...`. `GITLAB_HOST` keeps the port and wins over the current directory's repository, while `glab api --hostname` rejects a host with a port (`invalid hostname`) and sends a host without one to port 443. In PowerShell, run `$env:GITLAB_HOST = '<host>'` before the call and `Remove-Item Env:GITLAB_HOST` after it.
+- **Адресация проекта.** Называйте проект явно в каждой команде, а не доверяйте выбор `glab`. Сам по себе `glab` выбирает remote в порядке `upstream` > `gitlab` > `origin`, а `glab api` подставляет проект из репозитория текущего каталога и по умолчанию использует `--hostname` `gitlab.com` или хост этого репозитория. Это руководство и скиллы записывают проект тремя плейсхолдерами:
+  - `<host>` — `tracker.host` из `.harness/project.json`, включая web-порт, отличный от 443 (`gitlab.example.com`, `gitlab.example.test:4443`);
+  - `<project-url>` — `https://<host>/<tracker.project>` (`https://gitlab.example.com/group/project`); каждая команда `glab` принимает `-R <project-url>`;
+  - `<project-id>` — `tracker.project` в URL-кодировке (`group%2Fproject`, `group%2Fsub%2Fproject`); каждый вызов `glab api` пишется как `GITLAB_HOST=<host> glab api projects/<project-id>/...`. `GITLAB_HOST` сохраняет порт и приоритетнее репозитория текущего каталога, тогда как `glab api --hostname` отклоняет хост с портом (`invalid hostname`), а хост без порта отправляет на порт 443. В PowerShell перед вызовом выполните `$env:GITLAB_HOST = '<host>'`, а после него `Remove-Item Env:GITLAB_HOST`.
 
-  Without a `tracker` field, use the host and project that `harness health` resolves from `origin`; its `tracker.project` warning prints a ready-to-paste `tracker` snippet.
-- **Create an issue**: `glab issue create -R <project-url> --title "..." --description-file <path>`, with the already-written draft file as `<path>` (per [git-workflow.md](git-workflow.md) §1, "Body via File, Not Inline"); never an inline `--description "..."` or a heredoc.
-- **Read an issue**: `glab issue view <number> -R <project-url> --comments`. Use `-F json` for machine-readable output.
-- **List issues**: `glab issue list -R <project-url> --output json` with appropriate `--label` filters. In `glab issue list`, `-F` is `--output-format` (`details`/`ids`/`urls`), not JSON.
-- **Comment on an issue**: `GITLAB_HOST=<host> glab api projects/<project-id>/issues/<number>/notes -F body=@<path>`, with the path from [git-workflow.md](git-workflow.md) §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`). GitLab calls comments "notes". The `note` subcommand of `glab issue` takes only an inline `--message` and cannot read a file, so it is not used for a comment body.
-- **Apply / remove labels**: `glab issue update <number> -R <project-url> --label "..."` / `--unlabel "..."`. Multiple labels can be comma-separated or by repeating the flag. Unlike `gh`, a `--label` that names a label missing from the project doesn't fail: GitLab creates it with its default color, so run `/setup-labels` before the first labelled write.
-- **Close**: `glab issue close <number> -R <project-url>`. `glab issue close` does not accept a closing comment, so post the explanation first as a comment (see above), then close.
-- **Merge requests**: GitLab calls PRs "merge requests". Use `glab mr create -R <project-url> --target-branch <target-branch> --title '<title>' --description-file <path> --yes` (target branch and title rules in [git-workflow.md](git-workflow.md) §2), `glab mr update`, `glab mr view`, etc. — the same shape as `gh pr ...` with `mr` in place of `pr`, `--target-branch` in place of `--base`, `--description-file` in place of `--body-file`, and `-R <project-url>` on every command. An MR comment goes through `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests/<number>/notes -F body=@<path>` (`pr-comment-<issue>-<slug>.md`), not `glab mr note --message`.
+  Если поля `tracker` нет, используйте хост и проект, которые `harness health` определяет по `origin`; его предупреждение `tracker.project` печатает готовый фрагмент `tracker` для вставки.
+- **Создать задачу:** `glab issue create -R <project-url> --title "..." --description-file <path>`, где `<path>` — уже написанный файл черновика (по [git-workflow.md](git-workflow.md) §1, «Тело — из файла, а не в команде»); inline `--description "..."` и heredoc не используйте.
+- **Прочитать задачу:** `glab issue view <number> -R <project-url> --comments`. Для машиночитаемого вывода добавьте `-F json`.
+- **Список задач:** `glab issue list -R <project-url> --output json` с подходящими фильтрами `--label`. В `glab issue list` флаг `-F` — это `--output-format` (`details`/`ids`/`urls`), а не JSON.
+- **Прокомментировать задачу:** `GITLAB_HOST=<host> glab api projects/<project-id>/issues/<number>/notes -F body=@<path>`; путь берите по [git-workflow.md](git-workflow.md) §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`). GitLab называет комментарии «notes». Подкоманда `note` в `glab issue` принимает только inline `--message` и не читает файл, поэтому тело комментария через неё не публикуется.
+- **Поставить или снять метки:** `glab issue update <number> -R <project-url> --label "..."` / `--unlabel "..."`. Несколько меток можно перечислить через запятую или повторением флага. В отличие от `gh`, `--label` с именем метки, которой нет в проекте, не падает: GitLab создаёт её с цветом по умолчанию, поэтому перед первой записью с метками запустите `/setup-labels`.
+- **Закрыть:** `glab issue close <number> -R <project-url>`. `glab issue close` не принимает закрывающий комментарий, поэтому сначала опубликуйте пояснение комментарием (см. выше), затем закрывайте.
+- **Merge request.** GitLab называет PR «merge requests». Используйте `glab mr create -R <project-url> --target-branch <target-branch> --title '<title>' --description-file <path> --yes` (правила целевой ветки и заголовка — в [git-workflow.md](git-workflow.md) §2), `glab mr update`, `glab mr view` и так далее — та же форма, что у `gh pr ...`, но с `mr` вместо `pr`, `--target-branch` вместо `--base`, `--description-file` вместо `--body-file` и `-R <project-url>` в каждой команде. Комментарий к MR идёт через `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests/<number>/notes -F body=@<path>` (`pr-comment-<issue>-<slug>.md`), а не через `glab mr note --message`.
 
-### `glab` setup
+### Настройка `glab` { #glab-setup }
 
-- **Minimum version: `glab` 1.117.0.** When the project tracker is GitLab, `harness health` fails its local `environment.glab` check for an older `glab --version`; upgrade by the [installation guide](https://gitlab.com/gitlab-org/cli#installation).
-- **Host with a port.** The tracker host is `tracker.host` in `.harness/project.json`, including the web port when it is not 443 — for example `gitlab.example.test:4443`. Log in to exactly that host with `glab auth login --hostname gitlab.example.test:4443` and check it with `glab auth status --hostname gitlab.example.test:4443`, the same check `harness health --online` runs. Address the project explicitly: `glab <command> -R https://gitlab.example.test:4443/group/sub/project`, and `GITLAB_HOST=gitlab.example.test:4443 glab api projects/group%2Fsub%2Fproject` with the URL-encoded project path.
-- **Personal CA and proxy.** Keep them in your own `glab` configuration and environment, never in `.harness/project.json` or the repository: `glab config set ca_cert /path/to/ca.pem --host gitlab.example.test:4443` for an internal CA, and the standard `HTTPS_PROXY`/`NO_PROXY` environment variables for a proxy. Tokens stay in the storage `glab auth login` uses.
+- **Минимальная версия: `glab` 1.117.0.** Если трекер проекта — GitLab, `harness health` завершает локальную проверку `environment.glab` с ошибкой для более старого `glab --version`; обновите его по [руководству по установке](https://gitlab.com/gitlab-org/cli#installation).
+- **Хост с портом.** Хост трекера — `tracker.host` в `.harness/project.json`, включая web-порт, если он не 443, например `gitlab.example.test:4443`. Входите именно на этот хост: `glab auth login --hostname gitlab.example.test:4443`, проверяйте командой `glab auth status --hostname gitlab.example.test:4443` — той же проверкой, что запускает `harness health --online`. Проект указывайте явно: `glab <command> -R https://gitlab.example.test:4443/group/sub/project` и `GITLAB_HOST=gitlab.example.test:4443 glab api projects/group%2Fsub%2Fproject` с URL-кодированным путём проекта.
+- **Личный CA и прокси.** Храните их в собственной конфигурации и окружении `glab`, но не в `.harness/project.json` и не в репозитории: для внутреннего CA — `glab config set ca_cert /path/to/ca.pem --host gitlab.example.test:4443`, для прокси — стандартные переменные окружения `HTTPS_PROXY`/`NO_PROXY`. Токены остаются в хранилище, которое использует `glab auth login`.
 
-### Merge requests as a triage surface
+### Merge request как поверхность триажа { #merge-requests-as-a-triage-surface }
 
-**MRs as a request surface: no.** _(Set to `yes` if this repo treats external merge requests as feature requests; `/triage` reads this flag.)_
+**MR как поверхность запросов: нет.** _(Поставьте `yes`, если репозиторий считает внешние merge request запросами функций; флаг читает `/triage`.)_
 
-When set to `yes`, MRs run through the same labels and states as issues, using the `glab mr` equivalents:
+При значении `yes` MR проходят через те же метки и состояния, что и задачи, с эквивалентами `glab mr`:
 
-- **Read an MR**: `glab mr view <number> -R <project-url> --comments` and `glab mr diff <number> -R <project-url>` for the diff.
-- **List external MRs for triage**: `glab mr list -R <project-url> -F json`, then keep only MRs whose author is not a project member/owner (a contributor's MR, not a maintainer's in-flight work).
-- **Comment / label / close**: `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests/<number>/notes -F body=@<path>`, `glab mr update <number> -R <project-url> --label`/`--unlabel`, `glab mr close <number> -R <project-url>`.
+- **Прочитать MR:** `glab mr view <number> -R <project-url> --comments`, а diff — `glab mr diff <number> -R <project-url>`.
+- **Список внешних MR для триажа:** `glab mr list -R <project-url> -F json`, затем оставьте только MR, чей автор не участник и не владелец проекта (MR контрибьютора, а не текущая работа мейнтейнера).
+- **Комментировать, метить, закрывать:** `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests/<number>/notes -F body=@<path>`, `glab mr update <number> -R <project-url> --label`/`--unlabel`, `glab mr close <number> -R <project-url>`.
 
-Unlike GitHub, GitLab numbers issues and MRs separately, so `#42` is unambiguous once you know which surface the maintainer means.
+В отличие от GitHub, GitLab нумерует задачи и MR отдельно, поэтому `#42` однозначно, как только известно, о какой поверхности говорит мейнтейнер.
 
-### When a skill says "publish to the issue tracker"
+### Когда скилл говорит «опубликовать в трекере задач» { #when-a-skill-says-publish-to-the-issue-tracker_1 }
 
-Create a GitLab issue.
+Создайте GitLab issue.
 
-### When a skill says "fetch the relevant ticket"
+### Когда скилл говорит «получить нужную задачу» { #when-a-skill-says-fetch-the-relevant-ticket_1 }
 
-Run `glab issue view <number> -R <project-url> --comments`.
+Выполните `glab issue view <number> -R <project-url> --comments`.
 
-## Local markdown
+## Local markdown { #local-markdown }
 
-Issues and specs for this repo live as markdown files in `.scratch/`.
+Задачи и спецификации этого репозитория живут как markdown-файлы в `.scratch/`.
 
-### Conventions
+### Соглашения { #conventions_2 }
 
-- One feature per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
-- Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
-- Triage state is recorded as a `Workflow:` line near the top of each issue file, using the `status::*` vocabulary (see [triage-labels.md](triage-labels.md) for the exact strings)
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading
+- Одна функция — один каталог: `.scratch/<feature-slug>/`.
+- Спецификация — `.scratch/<feature-slug>/spec.md`.
+- Задачи реализации — по файлу на задачу в `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, нумерация с `01`; единый файл со всеми задачами недопустим.
+- Состояние триажа записывается строкой `Workflow:` в начале каждого файла задачи со словарём `status::*` (точные строки — в [triage-labels.md](triage-labels.md)).
+- Комментарии и история обсуждения дописываются в конец файла под заголовком `## Comments`.
 
-### When a skill says "publish to the issue tracker"
+### Когда скилл говорит «опубликовать в трекере задач» { #when-a-skill-says-publish-to-the-issue-tracker_2 }
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+Создайте новый файл в `.scratch/<feature-slug>/` (при необходимости создайте каталог).
 
-### When a skill says "fetch the relevant ticket"
+### Когда скилл говорит «получить нужную задачу» { #when-a-skill-says-fetch-the-relevant-ticket_2 }
 
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+Прочитайте файл по указанному пути. Обычно пользователь передаёт путь или номер задачи напрямую.
 
-## Wayfinding operations
+## Операции wayfinding { #wayfinding-operations }
 
-Used by `/wayfinder`. The **map** holds the Notes / Decisions-so-far / Fog body; **child** tickets hang off it. Mechanics depend on the tracker section above:
+Используются `/wayfinder`. **Карта** хранит тело Notes / Decisions-so-far / Fog; **дочерние** задачи подвешены к ней. Механика зависит от раздела трекера выше:
 
 **GitHub:**
 
-- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
-- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint) — the same mechanism `/to-tickets` uses to link tickets to an epic (see [triage-labels.md](triage-labels.md)). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`) — a separate namespace from this repo's triage labels, don't conflate them. If the map represents a larger epic that other, non-Wayfinder tickets also belong to, link those tickets as sub-issues of the epic issue the same way `/to-tickets` does, rather than a `wayfinder:*` label. Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: GitHub's **native issue dependencies** — the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only — the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed (a blocker closes after its merge is confirmed, never on push, publish, accepted QA or an open PR).
-- **Frontier query**: list the parent issue's open children (`gh issue list --state open`, scoped to its sub-issues / task list — the map for `/wayfinder`, the epic for `/to-tickets`), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in parent order wins. `/fast-implement`, handed an epic reference instead of a specific ticket, runs this same query and keeps only `afk` + `pipeline::fast` tickets, never a `hitl` one (see [triage-labels.md](triage-labels.md)) — that execution mode routes through `/to-guide`, not this auto-pick. A `pipeline::fast`+`afk` ticket named explicitly is still accepted by `/implement` and run through the full gated cycle without refusing — the full cycle is always a safe fallback; the label only narrows auto-pick, never a named ticket.
-- **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write, before any other write. Prevents two concurrent sessions (e.g. parallel worktrees) from picking the same frontier ticket.
-- **Resolve**: `gh issue comment <n> --body-file <path>` (path per git-workflow.md §1), then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Карта:** одна задача с меткой `wayfinder:map`, в теле которой Notes / Decisions-so-far / Fog. `gh issue create --label wayfinder:map`.
+- **Дочерняя задача:** задача, связанная с картой как GitHub sub-issue (`gh api` на endpoint sub-issues) — тем же механизмом, которым `/to-tickets` связывает задачи с эпиком (см. [triage-labels.md](triage-labels.md)). Если sub-issues недоступны, добавьте дочернюю задачу в список задач в теле карты и поставьте `Part of #<map>` в начало тела дочерней. Метки: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`) — отдельное пространство имён от меток триажа этого репозитория, не смешивайте их. Если карта представляет более крупный эпик, к которому относятся и другие, не-Wayfinder задачи, свяжите их как sub-issues задачи эпика так же, как это делает `/to-tickets`, а не меткой `wayfinder:*`. После взятия в работу задача назначается ведущему разработчику.
+- **Блокировка:** **нативные зависимости задач** GitHub — каноническое представление, видимое в UI. Добавьте связь командой `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, где `<blocker-db-id>` — числовой **database id** блокирующей задачи (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _не_ `#number` и не `node_id`). GitHub сообщает `issue_dependencies_summary.blocked_by` (только открытые блокеры — это живой гейт). Если зависимости недоступны, вернитесь к строке `Blocked by: #<n>, #<n>` в начале тела дочерней задачи. Задача разблокирована, когда закрыты все блокеры (блокер закрывается после подтверждённого merge, но не при push, публикации, принятом QA или открытом PR).
+- **Запрос frontier:** перечислите открытые дочерние задачи родительской (`gh issue list --state open`, ограниченный её sub-issues или списком задач — карта для `/wayfinder`, эпик для `/to-tickets`), отбросьте задачи с открытым блокером (`issue_dependencies_summary.blocked_by > 0` или открытая задача в строке `Blocked by`) либо с исполнителем; побеждает первая в порядке родителя. `/fast-implement`, получив ссылку на эпик вместо конкретной задачи, выполняет тот же запрос и оставляет только задачи `afk` + `pipeline::fast`, но никогда `hitl` (см. [triage-labels.md](triage-labels.md)) — этот режим выполнения идёт через `/to-guide`, а не через автоподбор. Задачу `pipeline::fast`+`afk`, названную явно, `/implement` по-прежнему принимает и без отказа проводит через полный цикл с гейтами: полный цикл всегда безопасный запасной вариант; метка сужает только автоподбор, но не названную задачу.
+- **Взять в работу:** `gh issue edit <n> --add-assignee @me` — первая запись сессии, до любой другой. Не даёт двум параллельным сессиям (например, в разных worktree) выбрать одну и ту же frontier-задачу.
+- **Завершить:** `gh issue comment <n> --body-file <path>` (путь по git-workflow.md §1), затем `gh issue close <n>`, затем допишите в Decisions-so-far карты указатель на контекст (суть и ссылка).
 
 **GitLab:**
 
-Everything below runs on GitLab Free. Epics, the `blocks`/`is_blocked_by` issue links and the blocking quick actions are Premium features and are not used. The hierarchy lives in the child's description plus one `relates_to` issue link. `<host>`, `<project-url>` and `<project-id>` are the placeholders from [GitLab](#gitlab) → Conventions.
+Всё ниже работает на GitLab Free. Эпики, связи задач `blocks`/`is_blocked_by` и быстрые действия блокировки — функции Premium, и они не используются. Иерархия хранится в описании дочерней задачи плюс одной связи `relates_to`. `<host>`, `<project-url>` и `<project-id>` — плейсхолдеры из [GitLab](#gitlab) → «Соглашения».
 
-- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `glab issue create -R <project-url> --label wayfinder:map`.
-- **Child ticket**: an issue whose description opens with a `## Parent: #<parent>` section — the map for `/wayfinder`, the epic for `/to-tickets` — plus exactly one `relates_to` link from the child to the parent: `GITLAB_HOST=<host> glab api --method POST projects/<project-id>/issues/<child>/links -F target_project_id=<numeric-project-id> -F target_issue_iid=<parent> -F link_type=relates_to`. `<numeric-project-id>` is the `id` field of `GITLAB_HOST=<host> glab api projects/<project-id>`; read it once and reuse it for every child. The link lists the child on the parent's page but has no direction, so the `## Parent` line records which side is the parent. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: a `## Blocked by` section in the child's description with one `Blocked by #<M>` line per blocker, or `None — can start immediately`. No link is created between a ticket and its blockers. A ticket is unblocked when every blocker is closed (a blocker closes after its merge is confirmed, never on push, publish, accepted QA or an open PR).
-- **Frontier query**: list the parent's links with `GITLAB_HOST=<host> glab api --paginate projects/<project-id>/issues/<parent>/links`. Keep the linked issues whose `project_id` is `<numeric-project-id>` (a link may point to an issue in another project), whose `state` is `opened`, that have no assignee, and whose description carries `## Parent: #<parent>` (read it with `glab issue view <iid> -R <project-url> -F json`) — this drops unrelated `relates_to` links. Drop any ticket with a `#<M>` in its `Blocked by` lines that is still open (`state` from `glab issue view <M> -R <project-url> -F json`); an older single `Blocked by: #<n>, #<n>` line reads the same way. The lowest iid wins, because `/to-tickets` publishes tickets in dependency order. `/fast-implement`, handed an epic, runs this query and keeps only `afk` + `pipeline::fast` tickets, never a `hitl` one (see [triage-labels.md](triage-labels.md)).
-- **Claim**: `glab issue update <n> -R <project-url> --assignee @me` — the session's first write.
-- **Resolve**: `GITLAB_HOST=<host> glab api projects/<project-id>/issues/<n>/notes -F body=@<path>` (path per git-workflow.md §1), then `glab issue close <n> -R <project-url>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Карта:** одна задача с меткой `wayfinder:map`, в теле которой Notes / Decisions-so-far / Fog. `glab issue create -R <project-url> --label wayfinder:map`.
+- **Дочерняя задача:** задача, описание которой открывается разделом `## Parent: #<parent>` (карта для `/wayfinder`, эпик для `/to-tickets`), плюс ровно одна связь `relates_to` от дочерней к родительской: `GITLAB_HOST=<host> glab api --method POST projects/<project-id>/issues/<child>/links -F target_project_id=<numeric-project-id> -F target_issue_iid=<parent> -F link_type=relates_to`. `<numeric-project-id>` — поле `id` в `GITLAB_HOST=<host> glab api projects/<project-id>`; прочитайте его один раз и используйте для всех дочерних. Связь показывает дочернюю задачу на странице родительской, но не имеет направления, поэтому сторону родителя фиксирует строка `## Parent`. Метки: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). После взятия в работу задача назначается ведущему разработчику.
+- **Блокировка:** раздел `## Blocked by` в описании дочерней задачи, по строке `Blocked by #<M>` на каждый блокер, либо `None — can start immediately`. Между задачей и её блокерами связь не создаётся. Задача разблокирована, когда закрыты все блокеры (блокер закрывается после подтверждённого merge, но не при push, публикации, принятом QA или открытом PR).
+- **Запрос frontier:** перечислите связи родителя командой `GITLAB_HOST=<host> glab api --paginate projects/<project-id>/issues/<parent>/links`. Оставьте связанные задачи, у которых `project_id` равен `<numeric-project-id>` (связь может указывать на задачу другого проекта), `state` равен `opened`, нет исполнителя, а в описании есть `## Parent: #<parent>` (читайте через `glab issue view <iid> -R <project-url> -F json`) — это отбрасывает посторонние связи `relates_to`. Отбросьте любую задачу, у которой в строках `Blocked by` есть ещё открытый `#<M>` (`state` из `glab issue view <M> -R <project-url> -F json`); прежняя единая строка `Blocked by: #<n>, #<n>` читается так же. Побеждает наименьший iid, потому что `/to-tickets` публикует задачи в порядке зависимостей. `/fast-implement`, получив эпик, выполняет этот запрос и оставляет только задачи `afk` + `pipeline::fast`, но никогда `hitl` (см. [triage-labels.md](triage-labels.md)).
+- **Взять в работу:** `glab issue update <n> -R <project-url> --assignee @me` — первая запись сессии.
+- **Завершить:** `GITLAB_HOST=<host> glab api projects/<project-id>/issues/<n>/notes -F body=@<path>` (путь по git-workflow.md §1), затем `glab issue close <n> -R <project-url>`, затем допишите в Decisions-so-far карты указатель на контекст (суть и ссылка).
 
 **Local markdown:**
 
-- **Map**: `.scratch/<effort>/map.md`.
-- **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
-- **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked when every file it lists is `resolved` (set after the predecessor's merge is confirmed).
-- **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
-- **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+- **Карта:** `.scratch/<effort>/map.md`.
+- **Дочерняя задача:** `.scratch/<effort>/issues/NN-<slug>.md`, нумерация с `01`, вопрос — в теле. Строка `Type:` записывает тип задачи (`research`/`prototype`/`grilling`/`task`); строка `Status:` — `claimed`/`resolved`.
+- **Блокировка:** строка `Blocked by: NN, NN` в начале файла. Задача разблокирована, когда каждый перечисленный в ней файл имеет статус `resolved` (выставляется после подтверждённого merge предшественника).
+- **Frontier:** просмотрите `.scratch/<effort>/issues/` в поисках файлов, которые открыты, не заблокированы и не взяты; побеждает первый по номеру.
+- **Взять в работу:** выставьте `Status: claimed` и сохраните до начала работы.
+- **Завершить:** допишите ответ под заголовком `## Answer`, выставьте `Status: resolved`, затем допишите в `map.md` указатель на контекст (суть и ссылка) в Decisions-so-far карты.
