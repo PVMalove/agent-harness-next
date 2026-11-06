@@ -35,7 +35,7 @@ HELP_MARKDOWN = """\
 | `2` | Обновить Harness | Установленная и доступная версии, дрейф, diff, режим обновления и подтверждённый запуск. |
 | `3` | Диагностика | Отчёт `harness health`, онлайн-проверки, `--fix` и экспорт в Markdown. |
 | `4` | Harness | Установка и команды CLI: init, update (в том числе `--force-managed-files` и `--force-seed-files`), diff, adopt, очистка soft/hard (план и применение), удаление харнесса, registry, list, health, Repo Map, ledger. |
-| `5` | Оркестрация | Статистика пайплайна, история batch по состояниям (Enter открывает хронологию) и команды coordinator. |
+| `5` | Оркестрация | Статистика пайплайна, история batch по состояниям (Enter открывает хронологию) и команды coordinator. Кнопки раздела открывают «Доску задач» (спеки, колонки, фильтры и карточка тикета), «Ход работы» (сессии и наблюдаемые шаги) и «Публикацию» (кандидат, PR/MR и preflight без создания PR). |
 | `6` | Отчёты | Стадии и отчёты ролей из леджера с фильтрами (на узком терминале фильтры и батчи свёрнуты), хронология batch и QA-логи. |
 | `7` | Repo Map | Карта для HEAD: сводка, дерево файлов со статусом парсера, символы, связи (на узком терминале — раскрывающийся блок) и хабы. Вкладка «Диагностики» проверяет полноту карты; «Настройки»: режим minimal / full, парсеры языков и память проекта. |
 | `8` | Настройка | Шаги `project.json` и `orchestration.json`, черновик, проверка и diff, версии и откат, необязательные CLI-подсказки. |
@@ -56,13 +56,14 @@ init/adopt/update. Установка требует подтверждения 
 | `2` | Открыть экран обновления Harness: версии, дрейф, diff, режим и подтверждённый запуск |
 | `3`–`9` | Открыть соответствующий раздел из таблицы выше с любого экрана общего каркаса |
 | `r` / `o` | Офлайн- / онлайн-проверки на главном экране; `r` в Reports обновляет списки |
-| `p` | Открыть или подключить проект |
+| `p` | Открыть или подключить проект; «Публикация» в Оркестрации |
 | `y` | Скопировать полную CLI-строку выбранной команды (Harness, Orchestration) |
 | `Tab` | Следующий элемент экрана |
 | `Esc` | Назад или отмена |
 | `e` | Экспорт в Markdown |
 | `j` | Экспорт Repo Map в JSON |
-| `b` | Хронология batch в Reports, построение карты в Repo Map |
+| `b` | Хронология batch в Reports, построение карты в Repo Map, «Доска задач» в Оркестрации |
+| `w` | «Ход работы» в Оркестрации |
 | `F3` | QA-логи в Reports |
 | `F1` | Эта справка с любого экрана |
 | `F2` | Язык меню: русский / English (по умолчанию из `HARNESS_CONSOLE_LANG`) |
@@ -137,7 +138,7 @@ Selecting a menu item, tab or session never runs a command.
 | `2` | Update Harness | Installed and available versions, drift, diff, update mode and a confirmed run. |
 | `3` | Diagnostics | The full `harness health` report, online checks, `--fix` and export to Markdown. |
 | `4` | Harness | Installation state and CLI commands: init, update (including `--force-managed-files` and `--force-seed-files`), diff, adopt, soft/hard cleanup (plan and apply), Harness removal, registry, list, health, Repo Map, ledger. |
-| `5` | Orchestration | Pipeline statistics, batch history by state (Enter opens the timeline) and coordinator commands. |
+| `5` | Orchestration | Pipeline statistics, batch history by state (Enter opens the timeline) and coordinator commands. Its buttons open the task board (specs, columns, filters and a ticket card), agent activity (sessions and observed steps) and publish (candidate, PR/MR and preflight without opening a PR). |
 | `6` | Reports | Stages and role reports from the ledger with filters (on a narrow terminal the filters and batches are folded), the batch timeline and QA logs. |
 | `7` | Repo Map | The map for HEAD: summary, file tree with parser status, symbols, relations (a foldable block on a narrow terminal) and hubs. Diagnostics checks map completeness; Settings covers minimal / full mode, language parsers and project memory. |
 | `8` | Configuration | `project.json` and `orchestration.json` steps, draft, check and diff, versions and restore, optional CLI hints. |
@@ -158,13 +159,14 @@ every screen. Conflicts in discovery paths and managed files must be resolved be
 | `2` | Open the Harness update screen: versions, drift, diff, mode and a confirmed run |
 | `3`–`9` | Open the corresponding section in the table above from any shared-shell screen |
 | `r` / `o` | Offline / online checks on the home screen; `r` in Reports refreshes the lists |
-| `p` | Open or connect a project |
+| `p` | Open or connect a project; Publish in Orchestration |
 | `y` | Copy the full CLI line of the selected command (Harness, Orchestration) |
 | `Tab` | Next element on the screen |
 | `Esc` | Back or cancel |
 | `e` | Export to Markdown |
 | `j` | Export the Repo Map to JSON |
-| `b` | Batch timeline in Reports, build the map in Repo Map |
+| `b` | Batch timeline in Reports, build the map in Repo Map, task board in Orchestration |
+| `w` | Agent activity in Orchestration |
 | `F3` | QA logs in Reports |
 | `F1` | This guide from any screen |
 | `F2` | Menu language: Russian / English (default from `HARNESS_CONSOLE_LANG`) |

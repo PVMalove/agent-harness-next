@@ -43,7 +43,7 @@ class ChooseFix(Translated, ModalScreen[str | None]):
     BINDINGS = [Binding("escape", "cancel", "Отмена")]
     DEFAULT_CSS = """
     ChooseFix { align: center middle; }
-    ChooseFix > Vertical { width: 80%; max-width: 90; height: auto; border: round $primary; padding: 1 2; background: $background; }
+    ChooseFix > Vertical { width: 80%; max-width: 90; height: auto; border: round $primary; padding: 1 2; background: $surface; }
     ChooseFix Button { margin-top: 1; }
     """
 

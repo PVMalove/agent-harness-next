@@ -14,6 +14,7 @@ from rich.text import Text
 
 from harness.orchestration.ledger.lifecycle import JsonObject
 from textual import on
+from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
@@ -169,13 +170,18 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     CRUMB = "Оркестрация"
     CRUMBS = "Главная › Оркестрация"
     SECTION = "Orchestration"
-    NARROW_FOOTER_KEYS = ("escape", "enter", "f2")
+    NARROW_FOOTER_KEYS = ("escape", "enter", "f2", "w")
+    BINDINGS = [
+        Binding("b", "open_board_action", "Доска задач"),
+        Binding("p", "open_publish_action", "Публикация"),
+        Binding("w", "open_workers_action", "Ход работы"),
+    ]
 
     # The shell's rules plus this screen's own. Textual matches a type selector along the first base
     # class only, so `CommandMenuScreen` rules never reach this screen: everything it needs is here.
     CSS = SHELL_CSS + brand.shell_css("""
     OrchestrationScreen #orchestration-page { height: 1fr; padding: 0 2; }
-    OrchestrationScreen #orchestration-header { height: auto; margin-bottom: 1; }
+    OrchestrationScreen #orchestration-header { height: auto; margin-bottom: 1; overflow-x: auto; }
     OrchestrationScreen #orchestration-title { width: auto; height: 1; text-style: bold; padding-right: 2; }
     OrchestrationScreen #orchestration-subtitle { width: 1fr; height: 1; color: $text-muted; }
     OrchestrationScreen .overview { height: auto; margin: 0 0 1 0; padding: 0 1; border: round $component-border; border-title-color: $primary; }
@@ -234,7 +240,8 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
 
     def _sessions_label(self) -> str:
         active = sum(1 for stage in self._view.stages if not stage.finished)
-        return f"Рабочие сессии · {active}"
+        language = getattr(self.app, "language", "ru")
+        return f"{i18n.tr(language, 'Ход работы')} · {active}"
 
     def compose_content(self) -> ComposeResult:
         with VerticalScroll(id="orchestration-page"):
@@ -244,6 +251,8 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
                     "Пайплайн batch, рабочие сессии и команды координатора.",
                     id="orchestration-subtitle",
                 )
+                yield Button("Доска задач", id="open-board", compact=True)
+                yield Button("Публикация", id="open-publish", compact=True)
                 yield Button("Восстановление", id="open-recovery", compact=True)
                 yield Button("Контейнерный маршрут", id="container-route", compact=True)
                 yield Button(self._sessions_label(), id="worker-sessions", compact=True)
@@ -435,6 +444,37 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         from .reports import open_timeline
 
         open_timeline(self, self._client, self.repo, batch_id)
+
+    def action_open_board_action(self) -> None:
+        from .board import BoardScreen
+
+        self.app.push_screen(BoardScreen(self.repo, self._client))
+
+    def action_open_publish_action(self) -> None:
+        from .publish import PublishScreen
+
+        self.app.push_screen(PublishScreen(self.repo, self._client))
+
+    def action_open_workers_action(self) -> None:
+        from .worker_observation import WorkerObservationScreen
+
+        self.app.push_screen(WorkerObservationScreen(self.repo))
+
+    @on(Button.Pressed, "#open-board")
+    def open_board(self, event: Button.Pressed) -> None:
+        """Open the task board of the served project; it reads the tracker and never writes it."""
+        from .board import BoardScreen
+
+        event.stop()
+        self.app.push_screen(BoardScreen(self.repo, self._client))
+
+    @on(Button.Pressed, "#open-publish")
+    def open_publish(self, event: Button.Pressed) -> None:
+        """Open the read-only publish view; the PR remains a human action."""
+        from .publish import PublishScreen
+
+        event.stop()
+        self.app.push_screen(PublishScreen(self.repo, self._client))
 
     @on(Button.Pressed, "#open-recovery")
     def open_recovery(self, event: Button.Pressed) -> None:

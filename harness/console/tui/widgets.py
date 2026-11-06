@@ -158,6 +158,32 @@ class ReasonNote(Static):
         self.display = bool(lines)
 
 
+class LiveDot(Static):
+    """A slow ●/○ pulse for a live source. It is decoration: the adjacent text still says what is
+    happening, so a terminal without animation (or a reader that ignores it) loses nothing."""
+
+    DEFAULT_CLASSES = "live-dot no-i18n"
+
+    def __init__(self, *, id: str | None = None, classes: str = "") -> None:
+        super().__init__(
+            "●", id=id, classes=f"live-dot no-i18n {classes}".strip(), markup=False
+        )
+        self._on = True
+        self._timer: object | None = None
+
+    def on_mount(self) -> None:
+        self._timer = self.set_interval(1.1, self._toggle)
+
+    def on_unmount(self) -> None:
+        if self._timer is not None:
+            self._timer.stop()  # type: ignore[attr-defined]
+            self._timer = None
+
+    def _toggle(self) -> None:
+        self._on = not self._on
+        self.update("●" if self._on else "○")
+
+
 class StatusLine(Static):
     """A status as a symbol and a text in the console language (`✔ актуален`), coloured; `relabel`
     redraws it after a language switch."""

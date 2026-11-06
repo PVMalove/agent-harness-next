@@ -178,11 +178,11 @@ class ReportsScreen(ConsoleShell):
     ReportsScreen.-wide #report-filter-fold > CollapsibleTitle, ReportsScreen.-spacious #report-filter-fold > CollapsibleTitle { display: none; }
     ReportsScreen.-wide #report-filter-fold > Contents, ReportsScreen.-spacious #report-filter-fold > Contents { padding: 0; }
     ReportsScreen #report-filters { height: 1; }
-    ReportsScreen #report-filters Input { width: 1fr; height: 1; margin-right: 1; border: none; padding: 0 1; background: $background; }
+    ReportsScreen #report-filters Input { width: 1fr; height: 1; margin-right: 1; border: none; padding: 0 1; background: $surface; }
     ReportsScreen #report-filters Input:focus { border: none; background: $row-highlight; }
     ReportsScreen #report-order { height: 1; margin-top: 1; }
     ReportsScreen #report-order Select { width: 1fr; margin-right: 1; }
-    ReportsScreen #report-order Select > SelectCurrent { border: none; height: 1; padding: 0 1; background: $background; }
+    ReportsScreen #report-order Select > SelectCurrent { border: none; height: 1; padding: 0 1; background: $surface; }
     ReportsScreen #reports-body { height: 1fr; min-height: 10; }
     ReportsScreen #report-panel { width: 1fr; height: 100%; margin-bottom: 1; }
     ReportsScreen .card-hint { height: 1; color: $text-muted; }

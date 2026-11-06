@@ -60,6 +60,22 @@ def test_the_shell_css_has_no_default_text_token() -> None:
         assert not re.search(r"\$text(?![\w-])", brand.shell_css(css))
 
 
+def test_the_shell_uses_one_surface_layer() -> None:
+    import re
+
+    from harness.console.kernel import brand
+    from harness.console.tui.chrome import WorkspaceHeader
+    from harness.console.tui.shell import SHELL_CSS
+
+    border = brand.SHELL_TOKENS["border-subtle"]
+    header = brand.shell_css(WorkspaceHeader.DEFAULT_CSS)
+    shell = brand.shell_css(SHELL_CSS)
+    assert "background: $surface" in header
+    assert f"border-bottom: solid {border}" in header
+    for selector in ("ShellSidebar", "Footer", ".section-card"):
+        assert re.search(rf"{selector}[^\{{]*\{{[^}}]*background: \$surface", shell), selector
+
+
 def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
     from rich.text import Text
 

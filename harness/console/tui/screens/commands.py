@@ -228,13 +228,13 @@ class CommandMenuScreen(Translated, Screen[None]):
     CommandMenuScreen #command-menu { height: 1fr; margin: 0; border-title-color: $primary; }
     CommandMenuScreen.-wide #command-menu, CommandMenuScreen.-spacious #command-menu { width: 48; }
     CommandMenuScreen #command-detail-scroll {
-        height: 1fr; padding: 0 1; border: round $panel-lighten-2; border-title-color: $primary;
+        height: 1fr; padding: 0 1; border: round $component-border; border-title-color: $primary;
     }
     CommandMenuScreen.-narrow #command-body { layout: vertical; }
     CommandMenuScreen.-narrow #command-detail-scroll { height: 6; }
     CommandMenuScreen #command-output-scroll {
         height: 8; margin: 0 1; padding: 0 1;
-        border: round $panel-lighten-2; border-title-color: $primary;
+        border: round $component-border; border-title-color: $primary;
     }
     CommandMenuScreen #command-menu > ListItem { height: 1; padding: 0 1; }
     CommandMenuScreen #command-menu Static {

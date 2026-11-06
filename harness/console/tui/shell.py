@@ -531,7 +531,7 @@ class ShellIds:
 # single screen's widgets belong to that screen, never here.
 SHELL_CSS = brand.shell_css("""
 Screen.shell { background: $background; }
-.shell .crumb-row { height: auto; min-height: 2; padding: 0 2; border-bottom: solid $border-subtle; color: $foreground; }
+.shell .crumb-row { height: auto; min-height: 2; padding: 0 2; background: $background; border-bottom: solid $border-subtle; color: $foreground; }
 .shell .crumb-row .menu-toggle { padding: 0; margin-right: 1; color: $primary; text-style: bold; }
 .shell .breadcrumbs { width: 1fr; height: auto; }
 .shell .breadcrumbs Static { width: auto; height: 1; }
@@ -547,32 +547,33 @@ Screen.shell { background: $background; }
 .shell .jump-link:hover { background: $row-highlight; color: $selection-foreground; }
 .shell .jump-link:focus { background: $selection-background; color: $selection-foreground; text-style: bold; }
 .shell .crumb-current { width: 1fr; min-width: 1; text-style: bold; text-wrap: nowrap; text-overflow: ellipsis; }
-.shell .context-strip { height: auto; min-height: 2; border-bottom: solid $border-subtle; padding: 0 2; color: $text-muted; }
+.shell .context-strip { height: auto; min-height: 2; background: $background; border-bottom: solid $border-subtle; padding: 0 2; color: $text-muted; }
 .shell .context-strip Static { width: 1fr; height: auto; }
 .shell .context-strip .elided-path { height: 1; text-wrap: nowrap; }
 .shell .narrow-only { display: none; }
 .shell.-narrow .narrow-only { display: block; }
 .shell.-narrow .wide-only { display: none; }
-.shell Button { min-width: 8; width: auto; color: $foreground; border: round $component-border; text-style: none; }
+.shell Button { min-width: 8; width: auto; color: $foreground; border: round $component-border; text-style: none; background: transparent; }
+.shell Button.-primary { border: round $primary; color: $primary; background: transparent; }
 .shell Button:hover, .shell Button:focus { border: round $primary; color: $primary; }
 .shell .context-strip Button { border: none; height: 1; min-width: 3; color: $primary; }
 .shell Button.-textual-compact, .shell Button.-textual-compact:hover, .shell Button.-textual-compact:focus { border: none; padding: 0 1; height: 1; min-height: 1; min-width: 0; }
-.shell .context-panel { width: 30; height: 1fr; padding: 0 2; overflow-x: hidden; scrollbar-gutter: stable; border-left: solid $border-subtle; background: transparent; }
+.shell .context-panel { width: 30; height: 1fr; padding: 0 2; overflow-x: hidden; scrollbar-gutter: stable; border-left: solid $border-subtle; background: $background; }
 .shell .context-panel Static { height: auto; }
 .shell .context-label { height: 2; color: $text-muted; margin-top: 1; }
 .shell .context-value { height: auto; margin-bottom: 1; }
 .shell .context-note { height: auto; border: round $component-border; padding: 0 1; margin-top: 1; color: $text-muted; }
-.shell ShellSidebar { width: 30; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
-.shell ShellSidebar .menu-heading { height: 2; padding-left: 2; color: $text-muted; }
+.shell ShellSidebar { width: 30; height: 1fr; background: $surface; border-right: solid $border-subtle; padding: 1; }
+.shell ShellSidebar .menu-heading { height: 2; padding-left: 2; color: $text-muted; text-style: bold; }
 .shell ShellSidebar ListView, .shell ShellSidebar ListView:focus { height: 1fr; border: none; padding: 0; margin: 0; background: transparent; }
 .shell ShellSidebar ListView > ListItem { height: 1; padding: 0 1; border-left: solid transparent; color: $text-muted; background: transparent; text-style: none; }
 .shell ShellSidebar ListView > ListItem.-highlight, .shell ShellSidebar ListView:focus > ListItem.-highlight {
     background: transparent; color: $selection-foreground; text-style: none; outline: none;
 }
 .shell ShellSidebar ListView:focus > ListItem.-highlight { text-style: underline; }
-.shell Footer, .shell WorkspaceHeader { background: transparent; }
+.shell Footer, .shell WorkspaceHeader { background: $surface; }
 .shell ListView, .shell ListView:focus { background-tint: transparent; }
-.shell ShellSidebar ListView > ListItem.-active { color: $selection-foreground; border-left: solid $selection-edge; }
+.shell ShellSidebar ListView > ListItem.-active { background: $selection-background; color: $selection-foreground; border-left: solid $selection-edge; }
 .shell .shell-frame { height: 1fr; }
 .shell .shell-main { width: 1fr; min-width: 0; height: 1fr; }
 .shell .shell-body { height: 1fr; }
@@ -589,7 +590,7 @@ Screen.shell { background: $background; }
 .shell.-narrow .shell-body, .shell.-fold-context .shell-body { layout: vertical; overflow-y: auto; }
 .shell.-narrow .shell-content, .shell.-fold-context .shell-content { height: auto; min-height: 0; }
 .shell.-narrow .context-panel, .shell.-fold-context .context-panel { width: 100%; height: auto; border-left: none; border-top: solid $border-subtle; }
-.shell .section-card { height: auto; padding: 0 1; background: transparent; border: round $border-subtle; }
+.shell .section-card { height: auto; padding: 0 1; background: $surface; border: round $border-subtle; }
 .shell .section-card.-alert { border-left: outer $error; }
 .shell .fold { padding: 0 1; }
 .shell .fold > CollapsibleTitle { width: 1fr; padding: 0; color: $foreground; background: transparent; }
@@ -597,7 +598,7 @@ Screen.shell { background: $background; }
 .shell .context-fold { border: none; padding: 0; background: transparent; }
 .shell .context-fold > Contents { padding: 0; }
 .shell .context-fold > CollapsibleTitle { display: none; }
-.shell.-fold-context .context-fold { border: round $border-subtle; padding: 0 1; background: transparent; }
+.shell.-fold-context .context-fold { border: round $border-subtle; padding: 0 1; background: $surface; }
 .shell.-fold-context .context-fold > CollapsibleTitle { display: block; }
 .shell * { border-title-color: $text-muted !important; border-title-style: none !important; }
 .shell.-narrow .field-grid { layout: vertical; }

@@ -28,6 +28,7 @@ from harness.console.kernel.maintenance import MaintenanceView
 from harness.console.kernel.open_project_snapshot import OpenProjectFacts
 from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
+from harness.console.kernel.task_board import BoardSnapshot, BoardSpec, BoardSpecs
 from harness.console.tui.client import (
     HarnessFacts,
     JobResult,
@@ -98,6 +99,22 @@ class FakeHomeClient:
         return build_home_snapshot(
             self._collect_dashboard(self.repo, online=online),
             self._collect_context(self.repo),
+        )
+
+    def task_board_specs(self, *, force: bool = False) -> BoardSpecs:
+        self.screen_requests.append(("task_board.specs", force))
+        return BoardSpecs("github", (), None, None, False)
+
+    def task_board(self, spec: str, *, force: bool = False) -> BoardSnapshot:
+        self.screen_requests.append(("task_board", spec, force))
+        return BoardSnapshot(
+            tracker="github",
+            ledger="ok",
+            spec=BoardSpec(spec, 0, spec, None, None),
+            columns=("backlog", "ready", "progress", "review", "done"),
+            kpis={"open": 0, "total": 0, "with_open_blockers": 0, "active_batch": 0},
+            tickets=(),
+            truncated=False,
         )
 
     def reports(self, *, force: bool = False, online: bool = False) -> ledger.LedgerView:

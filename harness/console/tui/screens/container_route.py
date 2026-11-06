@@ -126,7 +126,7 @@ class ConfirmEffect(Translated, ModalScreen[bool]):
     BINDINGS = [Binding("escape", "cancel", "Отмена")]
     DEFAULT_CSS = """
     ConfirmEffect { align: center middle; }
-    ConfirmEffect > Vertical { width: 80%; max-width: 90; height: auto; border: round $primary; padding: 1 2; background: $background; }
+    ConfirmEffect > Vertical { width: 80%; max-width: 90; height: auto; border: round $primary; padding: 1 2; background: $surface; }
     ConfirmEffect .actions { height: auto; margin-top: 1; }
     """
 

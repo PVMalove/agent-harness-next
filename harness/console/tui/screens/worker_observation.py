@@ -42,6 +42,7 @@ from ..shell import (
     WrappedValue,
 )
 from ..translate import Translated
+from ..widgets import LiveDot
 from ..wrap import wrap_value
 from .commands import call_from_worker
 
@@ -114,7 +115,7 @@ class WorkerDetails(Translated, ModalScreen[None]):
     BINDINGS = [Binding("escape", "dismiss", "Назад")]
     DEFAULT_CSS = """
     WorkerDetails { align: center middle; }
-    WorkerDetails > Vertical { width: 90%; height: 80%; border: round $primary; padding: 1; background: $background; }
+    WorkerDetails > Vertical { width: 90%; height: 80%; border: round $primary; padding: 1; background: $surface; }
     WorkerDetails VerticalScroll { height: 1fr; }
     """
 
@@ -193,7 +194,8 @@ class WorkerObservationScreen(ConsoleShell):
     ]
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
-    WorkerObservationScreen #worker-sessions { width: 27; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-sessions { width: 27; height: 1fr; background: $surface; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-live { width: 2; height: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
     WorkerObservationScreen #worker-picker > ListItem { height: auto; min-height: 7; padding: 1; border-left: solid transparent; }
@@ -233,7 +235,7 @@ class WorkerObservationScreen(ConsoleShell):
     """)
     # The shell's rules plus this screen's own, which must outrank the app's generic widget rules.
     CSS = SHELL_CSS + brand.shell_css("""
-    .shell #worker-sessions { background: transparent; }
+    .shell #worker-sessions { background: $surface; }
     .shell #worker-picker, .shell #worker-picker:focus { border: none; background: transparent; }
     .shell #worker-picker > ListItem.-highlight, .shell #worker-picker:focus > ListItem.-highlight {
         background: $row-highlight; color: $foreground; text-style: none;
@@ -333,6 +335,7 @@ class WorkerObservationScreen(ConsoleShell):
                         classes="no-i18n",
                         markup=False,
                     )
+                    yield LiveDot(id="worker-live")
                 yield Static(
                     "Выберите рабочую сессию",
                     id="worker-subtitle",

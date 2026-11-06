@@ -47,6 +47,11 @@ HARNESS_THEME = Theme(
         "footer-key-foreground": brand.PALETTE["primary"],
         "block-cursor-background": brand.PALETTE["primary"],
         "block-cursor-foreground": brand.PALETTE["background"],
+        "border-subtle": brand.SHELL_TOKENS["border-subtle"],
+        "component-border": brand.SHELL_TOKENS["component-border"],
+        "selection-background": brand.SHELL_TOKENS["selection-background"],
+        "selection-foreground": brand.SHELL_TOKENS["selection-foreground"],
+        "row-highlight": brand.SHELL_TOKENS["row-highlight"],
     },
 )
 
@@ -81,7 +86,7 @@ class HarnessConsoleApp(App[None]):
         scrollbar-color-hover: $primary;
         scrollbar-color-active: $primary;
     }
-    ModalScreen > * { background: $background; }
+    ModalScreen > * { background: $surface; }
     .frame {
         margin: 0 1; padding: 0 1;
         border: round $panel-lighten-2; border-title-color: $primary;
@@ -97,7 +102,7 @@ class HarnessConsoleApp(App[None]):
     CommandPalette { background: $background 70%; }
     CommandPalette > Vertical#--container {
         visibility: visible; width: 80%; max-width: 100; height: auto; max-height: 80%;
-        margin: 2 0 0 0; padding: 0 1; background: $background;
+        margin: 2 0 0 0; padding: 0 1; background: $surface;
         border: round $primary; border-title-color: $primary;
     }
     CommandPalette #--input { border: none; border-bottom: solid $primary 40%; }
@@ -140,7 +145,7 @@ class HarnessConsoleApp(App[None]):
         border: round $panel-lighten-2; background: transparent; padding: 0 1;
     }
     Select:focus > SelectCurrent { border: round $primary; }
-    SelectOverlay { border: round $primary; background: $background; }
+    SelectOverlay { border: round $primary; background: $surface; }
     Checkbox, Checkbox:focus, RadioButton, RadioButton:focus {
         border: none; padding: 0; background: transparent;
     }
@@ -151,9 +156,10 @@ class HarnessConsoleApp(App[None]):
     SelectionList > .selection-list--button-highlighted { background: transparent; }
     Input.-textual-compact, Input.-textual-compact:focus { border: none; height: 1; }
     Input.-textual-compact:focus { text-style: bold; }
-    Button { border: round $primary 60%; color: $primary; min-width: 16; }
-    Button:hover { background: transparent; border: round $primary; text-style: bold; }
-    Button:focus { background: transparent; text-style: bold; border: round $primary; }
+    Button { border: round $panel-lighten-2; color: $foreground; min-width: 16; background: transparent; }
+    Button.-primary { border: round $primary; color: $primary; background: transparent; }
+    Button.-error { border: round $error; color: $error; background: transparent; }
+    Button:hover, Button:focus { background: transparent; border: round $primary; color: $primary; text-style: bold; }
     Button.-textual-compact, Button.-textual-compact:hover, Button.-textual-compact:focus {
         border: none; min-width: 0; height: 1; padding: 0 1;
     }
