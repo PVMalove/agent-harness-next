@@ -108,7 +108,11 @@ export function parseJobSnapshot(value: unknown): JobSnapshot | null {
 }
 
 export function parseCommands(value: unknown): CommandDescriptor[] | null {
-  return list(isCommand)(value) ? (value as CommandDescriptor[]) : null;
+  const field = has({ dest: string, flag: string, required: flag, repeatable: flag,
+    choices: nullable(list(string)), help: string, default: nullable(string), takes_value: flag });
+  return list((entry) => isCommand(entry) && isObject(entry) &&
+    (entry.fields === undefined || entry.fields === null || list(field)(entry.fields)))(value)
+    ? (value as CommandDescriptor[]) : null;
 }
 
 /** The local job after `snapshot`. Its batch starts at `snapshot.cursor - output.length`: a

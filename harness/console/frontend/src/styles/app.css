@@ -27,3 +27,24 @@
 .repo-page .repo-index-row > b { min-width: 0; overflow-wrap: anywhere; }
 .repo-page .repo-index-row > span { flex-shrink: 0; }
 .repo-page .repo-index-body > p { overflow-wrap: anywhere; }
+/* Pending decisions reuse the mockup's work panels, pills, fields and confirmation dialog. */
+.decision-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.decision-panel > p { margin: 0; font-size: 11px; color: var(--muted); }
+.decision-card { padding: 12px; min-width: 0; }
+.decision-card .panel-head { padding: 0 0 10px; }
+.decision-context { margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 8px; font: 11px var(--mono); }
+.decision-context dt { color: var(--muted); }
+.decision-context dd { margin: 0; overflow-wrap: anywhere; }
+.decision-context > div { width: 100%; min-width: 0; }
+.decision-context pre, .decision-confirm-context { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px var(--mono); max-height: 220px; overflow: auto; }
+.decision-action { padding-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.decision-fields { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+.decision-field { display: flex; flex-direction: column; gap: 4px; font: 10px var(--mono); min-width: 0; }
+.decision-field input, .decision-field select, .decision-field textarea { max-width: 100%; padding: 6px 8px; font: 11px var(--mono); }
+.decision-action details { width: 100%; font-size: 11px; }
+.decision-action details[open] summary { margin-bottom: 10px; }
+.decision-card > p { font-size: 11px; }
+@media (max-width: 600px) {
+  .decision-fields, .decision-field { width: 100%; }
+  .decision-action > .btn { width: 100%; white-space: normal; }
+}

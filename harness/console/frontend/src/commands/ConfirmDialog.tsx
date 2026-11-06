@@ -11,6 +11,7 @@ export interface ConfirmRequest {
   /** The word the server expects in `confirmation`; null when a flag is enough. */
   typed: string | null;
   action: string;
+  context?: string;
 }
 
 export function ConfirmDialog({
@@ -57,6 +58,7 @@ export function ConfirmDialog({
           <code>{request.command}</code>
         </p>
         <p className="board-confirm-note">{request.reason}</p>
+        {request.context && <pre className="decision-confirm-context">{request.context}</pre>}
         {request.typed !== null && (
           <label className="command-confirm-typed">
             {t("Введите {word}, чтобы подтвердить", { word: request.typed })}

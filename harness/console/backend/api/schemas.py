@@ -85,7 +85,7 @@ class JobListRequest(_Strict):  # type: ignore[explicit-any]
 
 
 CommandSection = Literal[
-    "harness", "diagnostics", "repo-map", "setup", "configuration", "memory"
+    "harness", "diagnostics", "repo-map", "setup", "configuration", "memory", "decisions"
 ]
 ReversibilityClass = Literal[
     "reversible",
@@ -356,6 +356,17 @@ class JobListReply(_Envelope):  # type: ignore[explicit-any]
     jobs: list[JobSummary]
 
 
+class CoordinatorInput(_Strict):  # type: ignore[explicit-any]
+    dest: str
+    flag: str
+    required: bool
+    repeatable: bool
+    choices: list[str] | None
+    help: str
+    default: str | None
+    takes_value: bool
+
+
 class CommandDescriptor(_Strict):  # type: ignore[explicit-any]
     command_id: str
     title: str
@@ -369,6 +380,7 @@ class CommandDescriptor(_Strict):  # type: ignore[explicit-any]
     inputs: list[str]
     plan_required: bool
     available: bool
+    fields: list[CoordinatorInput] | None = None
 
 
 class JobCatalogReply(_Envelope):  # type: ignore[explicit-any]

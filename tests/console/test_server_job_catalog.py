@@ -125,6 +125,7 @@ def test_every_section_lists_only_kernel_catalog_entries(tmp_path: Path) -> None
         "setup",
         "configuration",
         "memory",
+        "decisions",
     }
     listed = {section: served.commands(section) for section in COMMAND_SECTIONS}
     assert [c["command_id"] for c in listed["diagnostics"]] == [
@@ -132,9 +133,17 @@ def test_every_section_lists_only_kernel_catalog_entries(tmp_path: Path) -> None
         "diagnostics-online-fix",
     ]
     every = {str(c["command_id"]) for commands in listed.values() for c in commands}
-    # Decisions, native permission answers and the selected seed update keep their own flows.
+    # Decisions have their own catalog; they are not offered as general section commands.
     assert "update-seed-selected" not in every
-    assert not any(key.startswith(("batch-", "dispatch-", "native-")) for key in every)
+    decisions = {str(c["command_id"]) for c in listed["decisions"]}
+    assert decisions == {
+        "batch-approve", "batch-decide", "batch-attention-resolve",
+        "dispatch-propose", "dispatch-create", "native-permission-allow", "native-permission-deny",
+    }
+    assert not any(
+        str(c["command_id"]).startswith(("batch-", "dispatch-", "native-"))
+        for section, commands in listed.items() if section != "decisions" for c in commands
+    )
     with pytest.raises(JobRejected) as refused:
         served.commands("coordinator")
     assert refused.value.code == "bad_request"

@@ -13,6 +13,15 @@ export type Text = string;
 export type Available = boolean;
 export type CommandId = string;
 export type ConfirmationReason = string | null;
+export type Fields = CoordinatorInput[] | null;
+export type Choices = string[] | null;
+export type Default = string | null;
+export type Dest = string;
+export type Flag = string;
+export type Help = string;
+export type Repeatable = boolean;
+export type Required = boolean;
+export type TakesValue = boolean;
 export type Inputs = string[];
 export type NeedsConfirmation = boolean;
 export type PlanRequired = boolean;
@@ -25,7 +34,7 @@ export type Reversibility =
   | "overwrites-managed-files"
   | "downloads-files";
 export type ReversibilityLabel = string;
-export type Section = "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory";
+export type Section = "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions";
 export type Title = string;
 export type TypedConfirmation = string | null;
 export type Force = boolean;
@@ -287,7 +296,7 @@ export type Type22 = "job.cancel";
 export type Id24 = string | number | null;
 export type Type23 = "job.list";
 export type Id25 = string | number | null;
-export type Section1 = "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory";
+export type Section1 = "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions";
 export type Type24 = "job.catalog";
 export type Id26 = string | number | null;
 export type Type25 = "decisions.snapshot";
@@ -401,6 +410,7 @@ export interface CommandDescriptor {
   available: Available;
   command_id: CommandId;
   confirmation_reason: ConfirmationReason;
+  fields?: Fields;
   inputs: Inputs;
   needs_confirmation: NeedsConfirmation;
   plan_required: PlanRequired;
@@ -410,6 +420,20 @@ export interface CommandDescriptor {
   section: Section;
   title: Title;
   typed_confirmation: TypedConfirmation;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "CoordinatorInput".
+ */
+export interface CoordinatorInput {
+  choices: Choices;
+  default: Default;
+  dest: Dest;
+  flag: Flag;
+  help: Help;
+  repeatable: Repeatable;
+  required: Required;
+  takes_value: TakesValue;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema

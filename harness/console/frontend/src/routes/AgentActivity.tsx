@@ -2,6 +2,7 @@
    steps and orchestration events, filtered by dispatch and role. The other tabs of the mockup
    (timeline, statistics) and the session route diagram are not shown yet. */
 import { useState } from "react";
+import { DecisionPanel } from "../decisions/DecisionPanel";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -35,6 +36,7 @@ export function AgentActivity() {
         </button>
       </div>
       <StepSources />
+      <DecisionPanel kinds={["native-permission"]} hideWhenEmpty />
       <div className="work-grid">
         <StepFilters dispatches={live.dispatches} steps={live.steps} filter={filter} onChange={setFilter} />
         <StepList steps={filterSteps(live.steps, filter)} unavailable={live.orchestration === "unavailable"} />

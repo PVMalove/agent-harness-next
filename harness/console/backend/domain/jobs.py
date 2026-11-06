@@ -6,12 +6,14 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import Literal, NamedTuple
+from dataclasses import asdict, dataclass, field
+from typing import Literal, NamedTuple, Protocol
 
 from harness.configuration import SECRET_MASK, mask_secrets
 
 from ...kernel.catalog import CONFIRMATION_REASONS, REVERSIBILITY_LABELS, CatalogEntry
+from ...kernel.catalog import Reversibility
+from ...kernel.coordinator_catalog import CoordinatorCommand
 
 _FRAGMENT_CHARS = 4096
 # A character takes at most six bytes in an encoded reply (a control character as `\u00XX`),
@@ -32,7 +34,30 @@ COMMAND_SECTIONS = (
     "setup",
     "configuration",
     "memory",
+    "decisions",
 )
+
+
+class CommandDescription(Protocol):
+    """The catalog facts shared by CLI commands and human decision commands."""
+
+    @property
+    def key(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+    @property
+    def reversibility(self) -> Reversibility: ...
+
+    @property
+    def needs_confirmation(self) -> bool: ...
+
+    @property
+    def read_only(self) -> bool: ...
+
+    @property
+    def inputs(self) -> tuple[str, ...]: ...
 
 
 class JobRejected(Exception):
@@ -117,12 +142,12 @@ class Job:
 
 
 def describe_command(
-    entry: CatalogEntry, *, section: str, available: bool
+    entry: CommandDescription, *, section: str, available: bool
 ) -> dict[str, object]:
     """What a client shows of a catalog command and what its start must carry: the class with its
     label, the confirmation with its reason, the typed word, the input fields and whether a
     cleanup plan digest is needed. The texts are the catalog's Russian source strings."""
-    return {
+    result: dict[str, object] = {
         "command_id": entry.key,
         "title": entry.title,
         "section": section,
@@ -130,12 +155,15 @@ def describe_command(
         "reversibility_label": REVERSIBILITY_LABELS[entry.reversibility],
         "needs_confirmation": entry.needs_confirmation,
         "confirmation_reason": CONFIRMATION_REASONS.get(entry.reversibility),
-        "typed_confirmation": entry.typed_confirmation,
+        "typed_confirmation": entry.typed_confirmation if isinstance(entry, CatalogEntry) else None,
         "read_only": entry.read_only,
         "inputs": list(entry.inputs),
         "plan_required": entry.key in _PLAN_COMMANDS,
         "available": available,
     }
+    if isinstance(entry, CoordinatorCommand):
+        result["fields"] = [asdict(field) for field in entry.fields]
+    return result
 
 
 def plan_digest(command_id: str, body: Mapping[str, object]) -> str | None:

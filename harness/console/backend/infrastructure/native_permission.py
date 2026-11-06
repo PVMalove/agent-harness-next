@@ -56,6 +56,11 @@ class DecisionCommand:
     read_only: bool = False
 
     @property
+    def inputs(self) -> tuple[str, ...]:
+        """The immutable request binding the browser must send back."""
+        return _FIELDS
+
+    @property
     def needs_confirmation(self) -> bool:
         """An answer reaches a live runtime and cannot be withdrawn: it always asks first."""
         return self.reversibility is not Reversibility.REVERSIBLE

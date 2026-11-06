@@ -22,6 +22,8 @@ import { parseHomeSnapshot } from "./types";
 import type { HomeSnapshot } from "./types";
 import { repoMapReader } from "./repoMap";
 import type { RepoMapEvent } from "./repoMap";
+import { decisionsReader } from "./decisions";
+import type { DecisionsEvent } from "./decisions";
 
 export const FIRST_DELAY_MS = 500;
 export const MAX_DELAY_MS = 8000;
@@ -89,6 +91,8 @@ export interface HomeRequest {
 }
 
 export interface ConsoleClient {
+  requestDecisions(): boolean;
+  subscribeDecisions(listener: (event: DecisionsEvent) => void): () => void;
   requestRepoMap(force?: boolean): boolean;
   subscribeRepoMap(listener: (event: RepoMapEvent) => void): () => void;
   start(): void;
@@ -134,6 +138,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   const listeners = new Set<(event: ClientEvent) => void>();
   const jobListeners = new Set<(event: JobEvent) => void>();
   const mapListeners = new Set<(event: RepoMapEvent) => void>();
+  const decisionListeners = new Set<(event: DecisionsEvent) => void>();
   // The followed jobs by id: the held output and cursor survive reconnects.
   const followed = new Map<string, LocalJob | null>();
   // Open job requests of the current socket by request id.
@@ -198,6 +203,9 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
 
   const mapReader = repoMapReader(send, settle, (event) => {
     for (const listener of [...mapListeners]) listener(event);
+  });
+  const decisionReader = decisionsReader(send, settle, (event) => {
+    for (const listener of [...decisionListeners]) listener(event);
   });
 
   const subscribeOrchestration = () => {
@@ -300,6 +308,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     const id = reply.id;
     if (typeof id !== "string" || !id.startsWith(`${generation}-`)) return;
     if (mapReader.reply(reply)) return;
+    if (decisionReader.reply(reply)) return;
     if (jobRequests.has(id)) {
       onJobReply(id, reply);
       return;
@@ -376,6 +385,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     reconnectTimer = null;
     clearPending();
     mapReader.reset();
+    decisionReader.reset();
     latestHome = null;
     subscription = null;
     stepsSubscription = null;
@@ -413,6 +423,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       if (current !== generation || stopped) return;
       clearPending();
       mapReader.reset();
+      decisionReader.reset();
       socket = null;
       stepsSubscription = null;
       attempt += 1;
@@ -432,6 +443,11 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   }
 
   return {
+    requestDecisions: decisionReader.request,
+    subscribeDecisions(listener) {
+      decisionListeners.add(listener);
+      return () => decisionListeners.delete(listener);
+    },
     requestRepoMap: mapReader.request,
     subscribeRepoMap(listener) {
       mapListeners.add(listener);

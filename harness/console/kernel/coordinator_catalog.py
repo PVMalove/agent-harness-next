@@ -263,6 +263,11 @@ class CoordinatorCommand:
     fixed_flags: tuple[str, ...] = ()
 
     @property
+    def inputs(self) -> tuple[str, ...]:
+        """Required inputs; optional fields retain their argparse metadata in the catalog."""
+        return tuple(field.dest for field in self.fields if field.required)
+
+    @property
     def needs_confirmation(self) -> bool:
         """Определяет, требует ли команда координатора подтверждения перед выполнением."""
         return self.reversibility is not Reversibility.REVERSIBLE
