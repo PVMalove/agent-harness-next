@@ -1,4 +1,5 @@
-"""The console's look: a warm terracotta palette and the harness mark shown on the dashboard.
+"""The console's look: the compact blue-gray palette of the web console and the harness mark
+shown on the dashboard.
 
 Stdlib-only, like the rest of the textual-free seam: the palette is plain hex strings that
 app.py turns into a textual Theme, and the banner is plain text, so both are testable without
@@ -22,19 +23,20 @@ _SOURCE_ROOT = Path(__file__).resolve().parents[3]
 # Terminals narrower than this many columns get the shell's narrow layout.
 NARROW_WIDTH = 100
 
-# Terracotta/coral accents and amber on a soft graphite background.
+# Cool blue accents and muted steel surfaces on a near-black background, matching the
+# approved web console mockups.
 PALETTE = {
-    "primary": "#D97757",  # terracotta: the mark, titles, focus
-    "secondary": "#E5A04B",  # amber
-    "accent": "#EA580C",  # coral-orange highlight
-    "warning": "#E5A04B",
-    "error": "#E06C75",
-    "success": "#8FB573",
-    "foreground": "#EDE8E1",
-    "background": "#1F1E1C",
-    "surface": "#262523",
-    "panel": "#2E2C29",
-    "muted": "#AAA398",
+    "primary": "#6fa8dc",  # blue: the mark, titles, focus
+    "secondary": "#e0a458",  # amber: secondary accents and diffs
+    "accent": "#6fa8dc",  # blue: highlight, matching the primary accent
+    "warning": "#e0a458",
+    "error": "#e67d7d",
+    "success": "#8fbf7f",
+    "foreground": "#e8ebef",
+    "background": "#1b1f26",
+    "surface": "#232830",
+    "panel": "#2a303a",
+    "muted": "#9aa3af",
 }
 
 # Tones of the workspace shell that Textual's theme has no slot for. CSS refers to them as
@@ -42,20 +44,21 @@ PALETTE = {
 # CSS works in any host app, not only in one that registered the harness theme.
 SHELL_TOKENS = {
     # A decorative divider stays faint; a component's own edge (button, field, list, note) must
-    # reach 3:1 against the surface, like the selection edge and the scrollbar.
-    "border-subtle": "#3a3731",
-    "component-border": "#847d70",
-    "selection-background": "#45332c",
-    "selection-foreground": "#f6baa3",
-    "selection-edge": "#d97757",
+    # reach 3:1 against the surface, like the selection edge and the scrollbar. The web mockup's
+    # `--edge` and `--sel` were lightened/darkened to keep that contract on the new surfaces.
+    "border-subtle": "#353d49",
+    "component-border": "#6b7a8c",
+    "selection-background": "#263243",
+    "selection-foreground": "#cfe2f5",
+    "selection-edge": "#6fa8dc",
     # The outline of the selected main-menu entry, drawn around its fill (decorative: the fill
     # and the selection colour of its text already mark it).
-    "selection-outline": "#6b4a3c",
-    "row-highlight": "#35302b",
-    "scrollbar-thumb": "#f2ece1",
-    "scrollbar-track": "#8a8378",
-    "event-background": "#292621",
-    "event-active-background": "#423029",
+    "selection-outline": "#3f5168",
+    "row-highlight": "#303743",
+    "scrollbar-thumb": "#e8ebef",
+    "scrollbar-track": "#6b7a8c",
+    "event-background": "#20252d",
+    "event-active-background": "#263243",
 }
 # One colour per worker role, so a role reads the same on the dashboard and in the worker view.
 ROLE_COLORS = {
@@ -123,9 +126,9 @@ def frame_title(title: str) -> str:
 
 
 def section_title(title: str, note: str = "") -> str:
-    """A section card's title for its top border: the title in capitals, then its counter or
-    note, if any (`" ТРЕБУЕТ ВНИМАНИЯ  2 "`)."""
-    heading = title.strip().upper()
+    """A section card's title for its top border: the title as written, then its counter or note
+    (`" Требует внимания  2 "`), like the Web console's panel header."""
+    heading = title.strip()
     return frame_title(f"{heading}  {note.strip()}" if note.strip() else heading)
 
 

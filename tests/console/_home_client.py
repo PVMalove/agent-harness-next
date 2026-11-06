@@ -30,8 +30,16 @@ from harness.console.kernel.home_snapshot import (
 from harness.console.kernel.help_text import HelpSections, help_sections
 from harness.console.kernel.maintenance import MaintenanceView
 from harness.console.kernel.open_project_snapshot import OpenProjectFacts
+from harness.console.kernel.pipeline_kpi import (
+    pipeline_analytics,
+    pipeline_analytics_from_payload,
+    pipeline_kpi,
+    pipeline_kpi_from_payload,
+    reports_kpi,
+)
 from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
+from harness.console.kernel.task_board import BoardSnapshot, BoardSpec, BoardSpecs
 from harness.console.kernel.update_harness_snapshot import UpdateHarnessFacts
 from harness.console.tui.client import (
     HarnessFacts,
@@ -108,10 +116,27 @@ class FakeHomeClient:
             self._collect_context(self.repo),
         )
 
+    def task_board_specs(self, *, force: bool = False) -> BoardSpecs:
+        self.screen_requests.append(("task_board.specs", force))
+        return BoardSpecs("github", (), None, None, False)
+
+    def task_board(self, spec: str, *, force: bool = False) -> BoardSnapshot:
+        self.screen_requests.append(("task_board", spec, force))
+        return BoardSnapshot(
+            tracker="github",
+            ledger="ok",
+            spec=BoardSpec(spec, 0, spec, None, None),
+            columns=("backlog", "ready", "progress", "review", "done"),
+            kpis={"open": 0, "total": 0, "with_open_blockers": 0, "active_batch": 0},
+            tickets=(),
+            truncated=False,
+        )
+
     def reports(self, *, force: bool = False, online: bool = False) -> ledger.LedgerView:
         self.screen_requests.append(("reports", force, online))
         view = self._load_ledger(self.repo)
-        return ledger.ledger_from_payload(_wire(ledger.ledger_payload(view)))
+        payload = {**ledger.ledger_payload(view), "reports_kpi": reports_kpi(view).to_payload()}
+        return ledger.ledger_from_payload(_wire(payload))
 
     def report(self, dispatch_id: str) -> JsonObject | None:
         self.screen_requests.append(("report", dispatch_id))
@@ -130,9 +155,13 @@ class FakeHomeClient:
 
     def orchestration(self, *, force: bool = False) -> OrchestrationView:
         view = self.reports(force=force)
+        kpi = pipeline_kpi_from_payload(pipeline_kpi(view).to_payload())
+        analytics = pipeline_analytics_from_payload(
+            pipeline_analytics(view).to_payload()
+        )
         if isinstance(self.lock, str):
-            return OrchestrationView(view, None, self.lock)
-        return OrchestrationView(view, self.lock, None)
+            return OrchestrationView(view, None, self.lock, kpi, analytics)
+        return OrchestrationView(view, self.lock, None, kpi, analytics)
 
     def ledger_lock(self) -> JsonObject:
         self.screen_requests.append(("lock",))

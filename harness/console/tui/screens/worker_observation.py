@@ -42,6 +42,7 @@ from ..shell import (
     WrappedValue,
 )
 from ..translate import Translated
+from ..widgets import LiveDot
 from ..wrap import wrap_value
 from .commands import call_from_worker
 
@@ -114,7 +115,7 @@ class WorkerDetails(Translated, ModalScreen[None]):
     BINDINGS = [Binding("escape", "dismiss", "Назад")]
     DEFAULT_CSS = """
     WorkerDetails { align: center middle; }
-    WorkerDetails > Vertical { width: 90%; height: 80%; border: round $primary; padding: 1; background: $background; }
+    WorkerDetails > Vertical { width: 90%; height: 80%; border: round $primary; padding: 1; background: $surface; }
     WorkerDetails VerticalScroll { height: 1fr; }
     """
 
@@ -170,9 +171,9 @@ class NativePermissionDialog(Translated, ModalScreen[bool | None]):
 class WorkerObservationScreen(ConsoleShell):
     """A passive view. Closing/reconnecting never starts or terminates a worker."""
 
-    SECTION = "Orchestration"
-    IS_SECTION_ROOT = False
-    CRUMBS = "Главная › Оркестрация › Worker / Наблюдение"
+    SECTION = "Agent activity"
+    IS_SECTION_ROOT = True
+    CRUMBS = "Главная › Ход работы"
     HAS_CONTEXT = True
     IDS = ShellIds(
         navigation="worker-navigation",
@@ -193,10 +194,11 @@ class WorkerObservationScreen(ConsoleShell):
     ]
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
-    WorkerObservationScreen #worker-sessions { width: 27; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-sessions { width: 42; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-live { width: 2; height: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
-    WorkerObservationScreen #worker-picker > ListItem { height: auto; min-height: 7; padding: 1; border-left: solid transparent; }
+    WorkerObservationScreen #worker-picker > ListItem { height: auto; padding: 0 1; border-left: solid transparent; border-bottom: solid $border-subtle; }
     WorkerObservationScreen #worker-picker > ListItem.-highlight, WorkerObservationScreen #worker-picker:focus > ListItem.-highlight { background: $row-highlight; border-left: solid $selection-edge; text-style: none; }
     WorkerObservationScreen #worker-picker Static { height: auto; }
     WorkerObservationScreen #worker-list-foot { height: auto; border-top: solid $border-subtle; padding: 1; color: $text-muted; }
@@ -286,7 +288,7 @@ class WorkerObservationScreen(ConsoleShell):
             dispatch_id=dispatch_id,
             state=stage.state,
             language=language,
-            id_limit=22,
+            id_limit=34,
             stacked=True,
         )
 
@@ -333,6 +335,7 @@ class WorkerObservationScreen(ConsoleShell):
                         classes="no-i18n",
                         markup=False,
                     )
+                    yield LiveDot(id="worker-live")
                 yield Static(
                     "Выберите рабочую сессию",
                     id="worker-subtitle",

@@ -43,7 +43,7 @@ class ChooseFix(Translated, ModalScreen[str | None]):
     BINDINGS = [Binding("escape", "cancel", "Отмена")]
     DEFAULT_CSS = """
     ChooseFix { align: center middle; }
-    ChooseFix > Vertical { width: 80%; max-width: 90; height: auto; border: round $primary; padding: 1 2; background: $background; }
+    ChooseFix > Vertical { width: 80%; max-width: 90; height: auto; border: round $primary; padding: 1 2; background: $surface; }
     ChooseFix Button { margin-top: 1; }
     """
 
@@ -92,7 +92,7 @@ class RecoveryScreen(ConsoleShell):
     RecoveryScreen #recovery-title { height: 1; text-style: bold; margin-bottom: 1; }
     RecoveryScreen #recovery-history { height: 10; margin-bottom: 1; }
     RecoveryScreen #recovery-entry { height: auto; margin-bottom: 1; }
-    RecoveryScreen #recovery-body { height: auto; padding: 0 1; border: round $component-border; }
+    RecoveryScreen #recovery-body { height: auto; padding: 0 1; border: round $border-subtle; background: transparent; }
     RecoveryScreen #recovery-actions { height: auto; margin-top: 1; }
     RecoveryScreen #recovery-actions Button { margin-right: 1; }
     RecoveryScreen #recovery-inputs { height: auto; margin-top: 1; }

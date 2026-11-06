@@ -18,7 +18,7 @@ from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (
     Button,
@@ -200,15 +200,14 @@ class ConfigurationScreen(ConsoleShell):
     ConfigurationScreen #configuration-scroll { width: 100%; height: 1fr; overflow-x: hidden; }
     ConfigurationScreen #configuration-title { height: 1; text-style: bold; }
     ConfigurationScreen #configuration-subtitle { color: $text-muted; margin-bottom: 1; }
-    ConfigurationScreen #configuration-row { width: 100%; height: auto; layout: vertical; }
-    ConfigurationScreen.-spacious #configuration-row { layout: horizontal; }
-    ConfigurationScreen #configuration-row > SectionCard { width: 1fr; }
-    ConfigurationScreen.-spacious #configuration-row > SectionCard:first-child { margin-right: 1; }
+    ConfigurationScreen #configuration-row { width: 100%; height: auto; grid-size: 1; margin-bottom: 1; }
+    ConfigurationScreen.-spacious #configuration-row { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
+    ConfigurationScreen #configuration-row > SectionCard { height: 100%; }
     ConfigurationScreen .store-path { color: $text-muted; }
     ConfigurationScreen .reason-note { height: auto; color: $text-muted; }
     ConfigurationScreen #adapter-status { height: auto; }
     ConfigurationScreen.-spacious #adapter-status { layout: grid; grid-size: 2; grid-gutter: 0 1; }
-    ConfigurationScreen .adapter-block { height: auto; border: round $border-subtle; padding: 0 1; }
+    ConfigurationScreen .adapter-block { height: auto; border: round $border-subtle; padding: 0 1; background: transparent; }
     ConfigurationScreen.-narrow .adapter-block { border: none; padding: 0; }
     ConfigurationScreen .adapter-head { height: auto; }
     ConfigurationScreen .adapter-name { width: 1fr; text-style: bold; }
@@ -442,7 +441,7 @@ class ConfigurationScreen(ConsoleShell):
             id="configuration-subtitle",
             classes="wide-only",
         )
-        with Horizontal(id="configuration-row"):
+        with Grid(id="configuration-row"):
             with SectionCard(
                 title="Редактирование конфигурации",
                 id="configuration-editing",

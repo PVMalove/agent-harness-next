@@ -29,7 +29,7 @@ from .translate import Translated
 
 CONFIGURATION_SECTION = "Configuration"
 HOME_SECTION = "Home"
-# The numbered main menu, in the order of the number keys 0-9.
+# The main menu: a flat list in the order of the hotkeys, 0-9 first, then the three Web views.
 SECTIONS = (
     HOME_SECTION,
     "Open project",
@@ -41,7 +41,27 @@ SECTIONS = (
     "Repo Map",
     CONFIGURATION_SECTION,
     "Help",
+    "Board",
+    "Agent activity",
+    "Publish",
 )
+# Keys stay the familiar 0-9 for the original sections; the three Web views use b, w and p. The
+# menu shows the key in front of each name, in place of an icon.
+SECTION_KEYS = {
+    HOME_SECTION: "0",
+    "Open project": "1",
+    "Update Harness": "2",
+    "Diagnostics": "3",
+    "Harness": "4",
+    "Orchestration": "5",
+    "Reports": "6",
+    "Repo Map": "7",
+    CONFIGURATION_SECTION: "8",
+    "Help": "9",
+    "Board": "b",
+    "Agent activity": "w",
+    "Publish": "p",
+}
 
 
 @dataclass(frozen=True)
@@ -191,7 +211,6 @@ class ShellSidebar(Vertical):
         self.menu = menu
 
     def compose(self) -> ComposeResult:
-        yield Static("ГЛАВНОЕ МЕНЮ", classes="menu-heading")
         yield self.menu
 
 
@@ -235,12 +254,12 @@ class JumpLink(Static, can_focus=True):
         self.relabel()
 
     def relabel(self) -> None:
-        number = SECTIONS.index(self.section)
+        key = SECTION_KEYS.get(self.section, "?")
         if self.app.size.width < brand.NARROW_WIDTH:
-            text = f"{number} →"
+            text = f"{key} →"
         else:
             language = getattr(self.app, "language", "ru")
-            text = f"{i18n.jump_label(language, self.section)}  {number} →"
+            text = f"{i18n.jump_label(language, self.section)}  {key} →"
         if text != str(self.content):
             self.update(text)
 
@@ -365,9 +384,29 @@ class ContextPanel(VerticalScroll):
     DEFAULT_CLASSES = "context-panel"
 
 
+class SectionHead(Horizontal):
+    """A section card's header row, like the Web console's panel head: the title in bold on the
+    left, a counter or a note in the muted tone on the right, a thin divider under it."""
+
+    def __init__(self) -> None:
+        super().__init__(classes="section-head")
+        self.title = Static("", classes="section-title no-i18n", markup=False)
+        self.note = Static("", classes="section-note no-i18n", markup=False)
+
+    def compose(self) -> ComposeResult:
+        yield self.title
+        yield self.note
+
+    def show(self, title: str, note: str = "") -> None:
+        self.title.update(title.strip())
+        self.note.update(note.strip())
+        self.note.display = bool(note.strip())
+
+
 class SectionCard(Vertical):
-    """A block of a page: a bordered card whose top border carries the section title in capitals
-    and, after it, a counter or a note. The title follows the console language by itself."""
+    """A block of a page: a filled panel with a header row (the title, then a counter or a note
+    at the right end) and a thin divider under it. The title follows the console language by
+    itself."""
 
     def __init__(
         self,
@@ -382,17 +421,23 @@ class SectionCard(Vertical):
         )
         self._title = title
         self._note = note
+        self._head = SectionHead()
 
     def on_mount(self) -> None:
-        self.relabel()
+        self.mount(self._head, before=0 if self.children else None)
+        self.call_after_refresh(self.relabel)
 
     def set_note(self, note: str) -> None:
         self._note = note
         self.relabel()
 
+    def set_head(self, title: str, note: str = "") -> None:
+        """Show `title` and `note` as they are, without translating them."""
+        self._head.show(title, note)
+
     def relabel(self) -> None:
         language = getattr(self.app, "language", "ru")
-        self.border_title = brand.section_title(
+        self.set_head(
             i18n.tr(language, self._title), i18n.tr_text(language, self._note)
         )
 
@@ -421,9 +466,25 @@ class Fold(Collapsible):
         )
         self._source = title
         self._summary = summary
+        self._card_head = SectionHead()
+        self._card_text = ("", "")
+        self._card_head.display = False
 
     def on_mount(self) -> None:
+        self.mount(self._card_head, before=0)
         self.relabel()
+        self.call_after_refresh(self._paint_card_head)
+
+    def set_card_head(self, title: str, note: str = "") -> None:
+        """Show the fold as a card with a header row (`title`, `note`); an empty `title` shows
+        the usual folded title row instead."""
+        self._card_text = (title, note)
+        self._paint_card_head()
+
+    def _paint_card_head(self) -> None:
+        title, note = self._card_text
+        self._card_head.display = bool(title)
+        self._card_head.show(title, note)
 
     def set_summary(self, summary: str) -> None:
         self._summary = summary
@@ -530,8 +591,8 @@ class ShellIds:
 # appended to it), so it outranks the app's generic widget rules in any host app. Rules for a
 # single screen's widgets belong to that screen, never here.
 SHELL_CSS = brand.shell_css("""
-Screen.shell { background: $background; }
-.shell .crumb-row { height: auto; min-height: 2; padding: 0 2; border-bottom: solid $border-subtle; color: $foreground; }
+Screen.shell { background: $background !important; }
+.shell .crumb-row { height: auto; min-height: 2; padding: 0 2; background: transparent; border-bottom: solid $border-subtle; color: $foreground; }
 .shell .crumb-row .menu-toggle { padding: 0; margin-right: 1; color: $primary; text-style: bold; }
 .shell .breadcrumbs { width: 1fr; height: auto; }
 .shell .breadcrumbs Static { width: auto; height: 1; }
@@ -541,29 +602,29 @@ Screen.shell { background: $background; }
 .shell .crumb-sep { color: $text-muted; }
 .shell .jump-link { width: auto; height: 1; color: $primary; }
 .shell .segment { width: auto; height: 1; }
-.shell .segment Button { color: $foreground; }
+.shell .segment Button { color: $foreground; background: transparent; }
 .shell .segment Button.-on { background: $selection-background; color: $selection-foreground; }
 .shell .segment .segment-sep { width: 1; color: $component-border; }
 .shell .jump-link:hover { background: $row-highlight; color: $selection-foreground; }
 .shell .jump-link:focus { background: $selection-background; color: $selection-foreground; text-style: bold; }
 .shell .crumb-current { width: 1fr; min-width: 1; text-style: bold; text-wrap: nowrap; text-overflow: ellipsis; }
-.shell .context-strip { height: auto; min-height: 2; border-bottom: solid $border-subtle; padding: 0 2; color: $text-muted; }
+.shell .context-strip { height: auto; min-height: 2; background: transparent; border-bottom: solid $border-subtle; padding: 0 2; color: $text-muted; }
 .shell .context-strip Static { width: 1fr; height: auto; }
 .shell .context-strip .elided-path { height: 1; text-wrap: nowrap; }
 .shell .narrow-only { display: none; }
 .shell.-narrow .narrow-only { display: block; }
 .shell.-narrow .wide-only { display: none; }
-.shell Button { min-width: 8; width: auto; color: $foreground; border: round $component-border; text-style: none; }
-.shell Button:hover, .shell Button:focus { border: round $primary; color: $primary; }
+.shell Button { min-width: 8; width: auto; color: $foreground; border: round $component-border; text-style: none; background: transparent; }
+.shell Button.-primary { border: round $primary; color: $primary; background: transparent; }
+.shell Button:hover, .shell Button:focus { border: round $primary; color: $primary; background: transparent; }
 .shell .context-strip Button { border: none; height: 1; min-width: 3; color: $primary; }
-.shell Button.-textual-compact, .shell Button.-textual-compact:hover, .shell Button.-textual-compact:focus { border: none; padding: 0 1; height: 1; min-height: 1; min-width: 0; }
+.shell Button.-textual-compact, .shell Button.-textual-compact:hover, .shell Button.-textual-compact:focus { border: none; padding: 0 1; height: 1; min-height: 1; min-width: 0; background: transparent; }
 .shell .context-panel { width: 30; height: 1fr; padding: 0 2; overflow-x: hidden; scrollbar-gutter: stable; border-left: solid $border-subtle; background: transparent; }
 .shell .context-panel Static { height: auto; }
 .shell .context-label { height: 2; color: $text-muted; margin-top: 1; }
 .shell .context-value { height: auto; margin-bottom: 1; }
-.shell .context-note { height: auto; border: round $component-border; padding: 0 1; margin-top: 1; color: $text-muted; }
-.shell ShellSidebar { width: 30; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
-.shell ShellSidebar .menu-heading { height: 2; padding-left: 2; color: $text-muted; }
+.shell .context-note { height: auto; background: transparent; border: round $component-border; padding: 0 1; margin-top: 1; color: $text-muted; }
+.shell ShellSidebar { width: 30; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1 0; }
 .shell ShellSidebar ListView, .shell ShellSidebar ListView:focus { height: 1fr; border: none; padding: 0; margin: 0; background: transparent; }
 .shell ShellSidebar ListView > ListItem { height: 1; padding: 0 1; border-left: solid transparent; color: $text-muted; background: transparent; text-style: none; }
 .shell ShellSidebar ListView > ListItem.-highlight, .shell ShellSidebar ListView:focus > ListItem.-highlight {
@@ -572,7 +633,7 @@ Screen.shell { background: $background; }
 .shell ShellSidebar ListView:focus > ListItem.-highlight { text-style: underline; }
 .shell Footer, .shell WorkspaceHeader { background: transparent; }
 .shell ListView, .shell ListView:focus { background-tint: transparent; }
-.shell ShellSidebar ListView > ListItem.-active { color: $selection-foreground; border-left: solid $selection-edge; }
+.shell ShellSidebar ListView > ListItem.-active { background: $selection-background; color: $selection-foreground; border-left: solid $selection-edge; }
 .shell .shell-frame { height: 1fr; }
 .shell .shell-main { width: 1fr; min-width: 0; height: 1fr; }
 .shell .shell-body { height: 1fr; }
@@ -590,8 +651,11 @@ Screen.shell { background: $background; }
 .shell.-narrow .shell-content, .shell.-fold-context .shell-content { height: auto; min-height: 0; }
 .shell.-narrow .context-panel, .shell.-fold-context .context-panel { width: 100%; height: auto; border-left: none; border-top: solid $border-subtle; }
 .shell .section-card { height: auto; padding: 0 1; background: transparent; border: round $border-subtle; }
+.shell .section-head { height: 2; border-bottom: solid $border-subtle; }
+.shell .section-title { width: 1fr; height: 1; color: $foreground; text-style: bold; text-wrap: nowrap; text-overflow: ellipsis; }
+.shell .section-note { width: auto; height: 1; margin-left: 2; color: $text-muted; }
 .shell .section-card.-alert { border-left: outer $error; }
-.shell .fold { padding: 0 1; }
+.shell .fold { padding: 0 1; background: transparent; }
 .shell .fold > CollapsibleTitle { width: 1fr; padding: 0; color: $foreground; background: transparent; }
 .shell .fold > Contents { padding: 1 0 0 0; height: auto; }
 .shell .context-fold { border: none; padding: 0; background: transparent; }
@@ -599,17 +663,22 @@ Screen.shell { background: $background; }
 .shell .context-fold > CollapsibleTitle { display: none; }
 .shell.-fold-context .context-fold { border: round $border-subtle; padding: 0 1; background: transparent; }
 .shell.-fold-context .context-fold > CollapsibleTitle { display: block; }
-.shell * { border-title-color: $text-muted !important; border-title-style: none !important; }
+.shell * { border-title-color: $foreground !important; border-title-style: bold !important; }
+.shell ListView, .shell .frame, .shell .overview { background: transparent; }
 .shell.-narrow .field-grid { layout: vertical; }
 .shell.-narrow .field-column { width: 100%; padding-right: 0; }
 .shell.-narrow ShellSidebar { padding: 0 1; }
-.shell.-narrow ShellSidebar .menu-heading { height: 1; padding-left: 1; }
+.shell.-narrow .section-head { height: 1; border-bottom: none; }
 .shell.-narrow ShellSidebar ListView > ListItem { height: 1; padding: 0 1; }
 .shell.-narrow WorkspaceHeader { height: 2; padding: 0 2; }
 .shell.-narrow .crumb-row, .shell.-narrow .context-strip { min-height: 1; border: none; }
 .shell * { scrollbar-color: $scrollbar-thumb; scrollbar-color-hover: $primary; scrollbar-color-active: $primary; scrollbar-background: $scrollbar-track; scrollbar-background-hover: $scrollbar-track; scrollbar-background-active: $scrollbar-track; }
 .shell ListView, .shell .frame, .shell Input, .shell TextArea, .shell Select > SelectCurrent { border: round $component-border; }
 .shell ListView:focus, .shell .frame:focus, .shell .frame:focus-within, .shell Input:focus, .shell TextArea:focus, .shell Select:focus > SelectCurrent { border: round $primary; }
+.shell Input, .shell TextArea, .shell Select > SelectCurrent, .shell .well { background: transparent; }
+.shell ListView.well, .shell .frame { background: transparent; }
+.shell Input.-textual-compact, .shell Input.-textual-compact:focus { border: none; height: 1; padding: 0 1; background: transparent; }
+.shell Select.-textual-compact > SelectCurrent, .shell Select.-textual-compact:focus > SelectCurrent { border: none; height: 1; padding: 0 1; background: transparent; }
 """)
 
 
@@ -660,16 +729,14 @@ def fact_table(rows: Sequence[tuple[str, Text | str]], language: str) -> Table:
     return table
 
 
-def menu_label(
-    number: int, name: str, badge: Badge | None, language: str = "ru"
-) -> Table:
-    """A menu entry: its number and name on the left, its badge on the right. The number takes
-    the entry's own colour, so it turns into the selection colour with the entry."""
+def menu_label(name: str, badge: Badge | None, language: str = "ru") -> Table:
+    """A menu entry: its key and name on the left, its badge on the right."""
     row = Table.grid(expand=True)
     row.add_column(ratio=1, no_wrap=True, overflow="ellipsis")
     row.add_column(justify="right", no_wrap=True)
+    key = SECTION_KEYS.get(name, "·")
     row.add_row(
-        Text(f"{number} {i18n.section_label(language, name)}"),
+        Text(f"{key}  {i18n.section_label(language, name)}"),
         Text(f" {badge[0]}", style=badge[1]) if badge else Text(""),
     )
     return row
@@ -714,8 +781,8 @@ class ConsoleShell(Translated, Screen[ShellResult]):
     BINDINGS = [
         Binding("escape", "back", "Назад"),
         *(
-            Binding(str(number), f"section({number})", show=False)
-            for number in range(len(SECTIONS))
+            Binding(key, f"section({SECTIONS.index(name)})", show=False)
+            for name, key in SECTION_KEYS.items()
         ),
     ]
     IDS = ShellIds()
@@ -747,14 +814,21 @@ class ConsoleShell(Translated, Screen[ShellResult]):
     def compose_context(self) -> ComposeResult:
         yield from ()
 
-    def menu_label(self, number: int, name: str) -> Text | Table:
+    def menu_label(self, name: str) -> Text | Table:
         badges: dict[str, Badge] = getattr(self.app, "section_badges", {})
         return menu_label(
-            number, name, badges.get(name), getattr(self.app, "language", "ru")
+            name, badges.get(name), getattr(self.app, "language", "ru")
         )
 
     def menu_item_id(self, name: str) -> str | None:
         return None
+
+    def menu_position(self, name: str) -> int:
+        """The ListView index of `name`."""
+        for index, item in enumerate(self.query(f"#{self.IDS.menu} > ListItem")):
+            if item.name == name:
+                return index
+        return 0
 
     # The frame.
     def crumbs(self) -> list[Crumb]:
@@ -772,12 +846,12 @@ class ConsoleShell(Translated, Screen[ShellResult]):
         return ListView(
             *(
                 ListItem(
-                    Static(self.menu_label(number, name), classes="no-i18n"),
+                    Static(self.menu_label(name), classes="no-i18n"),
                     name=name,
                     id=self.menu_item_id(name),
                     classes="-active" if name == self.SECTION else "",
                 )
-                for number, name in enumerate(SECTIONS)
+                for name in SECTIONS
             ),
             id=self.IDS.menu,
         )
@@ -860,7 +934,7 @@ class ConsoleShell(Translated, Screen[ShellResult]):
                 self.add_class(name)
                 break
         if self.SECTION in SECTIONS:
-            self.query_one(f"#{self.IDS.menu}", ListView).index = SECTIONS.index(
+            self.query_one(f"#{self.IDS.menu}", ListView).index = self.menu_position(
                 self.SECTION
             )
         self.call_after_refresh(self._ensure_visible_focus)
@@ -876,8 +950,9 @@ class ConsoleShell(Translated, Screen[ShellResult]):
             self.focus_next()
 
     def sync_language(self) -> None:
-        for number, item in enumerate(self.query(f"#{self.IDS.menu} > ListItem")):
-            item.query_one(Static).update(self.menu_label(number, item.name or ""))
+        for item in self.query(f"#{self.IDS.menu} > ListItem"):
+            if item.name in SECTIONS:
+                item.query_one(Static).update(self.menu_label(item.name or ""))
         for grid in self.query(FieldGrid):
             grid.relabel()
         for card in self.query(SectionCard):

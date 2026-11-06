@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import cast
 from dataclasses import dataclass, field
 
 import pytest
@@ -410,7 +411,17 @@ def test_board_payload_columns_kpis_and_cards() -> None:
 
     assert payload["tracker"] == "github"
     assert payload["ledger"] == "ok"
-    assert payload["columns"] == [{"id": column_id} for column_id in COLUMNS]
+    cards = cast(list[dict[str, object]], payload["tickets"])
+    assert payload["columns"] == [
+        {
+            "id": column_id,
+            "count": sum(card["column"] == column_id for card in cards),
+        }
+        for column_id in COLUMNS
+    ]
+    assert [COLUMNS.index(str(card["column"])) for card in cards] == sorted(
+        COLUMNS.index(str(card["column"])) for card in cards
+    )
     assert payload["spec"] == {
         "id": "#862",
         "n": 862,
@@ -421,10 +432,10 @@ def test_board_payload_columns_kpis_and_cards() -> None:
     tickets = payload["tickets"]
     assert isinstance(tickets, list)
     assert [(t["id"], t["column"]) for t in tickets] == [
-        ("#880", "done"),
         ("#882", "ready"),
-        ("#886", "review"),
         ("#913", "progress"),
+        ("#886", "review"),
+        ("#880", "done"),
     ]
     assert payload["kpis"] == {
         "open": 3,
@@ -432,7 +443,7 @@ def test_board_payload_columns_kpis_and_cards() -> None:
         "with_open_blockers": 1,
         "active_batch": 1,
     }
-    card = tickets[3]
+    card = tickets[1]
     assert card["command"] == "/fast-implement"
     assert card["priority"] == "priority::p0"
     assert card["sp"] == 5
@@ -544,3 +555,22 @@ def test_board_payload_total_size_is_bounded() -> None:
     cards = payload["tickets"]
     assert isinstance(cards, list)
     assert 0 < len(cards) < MAX_TICKETS
+
+
+def test_order_cards_sorts_by_column_then_priority_then_number() -> None:
+    from harness.console.backend.domain.task_board import order_cards
+
+    def card(n: int | None, column: str, priority: str | None) -> dict[str, object]:
+        return {"id": f"#{n}", "n": n, "column": column, "priority": priority}
+
+    ordered = order_cards(
+        [
+            card(5, "done", "priority::p0"),
+            card(4, "ready", None),
+            card(3, "ready", "priority::p1"),
+            card(2, "ready", "priority::p0"),
+            card(1, "backlog", "priority::p3"),
+            card(None, "ready", "priority::p0"),
+        ]
+    )
+    assert [item["id"] for item in ordered] == ["#1", "#2", "#None", "#3", "#4", "#5"]

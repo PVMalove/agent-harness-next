@@ -140,6 +140,8 @@ class LedgerView:
     qa_runs: list[QaRun] = field(default_factory=list)
     qa_attempts: list[QaAttempt] = field(default_factory=list)
     unavailable: str | None = None
+    # The Reports KPIs the server computed; `pipeline_kpi.reports_kpi_from_payload` reads them.
+    reports_kpi: dict[str, int | None] | None = None
     _batch_records: dict[str, JsonObject] = field(default_factory=dict)
     _dispatches: dict[str, JsonObject] = field(default_factory=dict)
     _risks: dict[str, JsonObject] = field(default_factory=dict)
@@ -883,6 +885,8 @@ _LEDGER_KEYS = frozenset(
         "dispatches",
     }
 )
+# A payload may also carry the Reports KPIs the server computed beside the ledger.
+_OPTIONAL_LEDGER_KEYS = frozenset({"reports_kpi"})
 
 
 def _report_head(entry: ReportEntry) -> dict[str, object]:
@@ -996,8 +1000,13 @@ def _dispatches_from(value: object) -> dict[str, JsonObject]:
 def ledger_from_payload(payload: object) -> LedgerView:
     """The view a `ledger_payload` result (read back from JSON) describes: report bodies are empty
     and only the dispatch roles are known. Any schema break is `ValueError`."""
-    if not isinstance(payload, dict) or set(payload) != _LEDGER_KEYS:
+    if not isinstance(payload, dict) or not (
+        _LEDGER_KEYS <= set(payload) <= _LEDGER_KEYS | _OPTIONAL_LEDGER_KEYS
+    ):
         raise ValueError("ledger payload: unexpected fields")
+    kpi = payload.get("reports_kpi")
+    if kpi is not None and not isinstance(kpi, dict):
+        raise ValueError("ledger payload: reports_kpi is not an object")
     version = _int(payload["version"])
     if version != LEDGER_PAYLOAD_VERSION:
         raise ValueError(f"unsupported ledger payload version: {version!r}")
@@ -1007,6 +1016,7 @@ def ledger_from_payload(payload: object) -> LedgerView:
         qa_runs=[_qa_run_from(item) for item in _list(payload["qa_runs"])],
         qa_attempts=[_attempt_from(item) for item in _list(payload["qa_attempts"])],
         unavailable=_optional(payload["unavailable"], _str),
+        reports_kpi=kpi,
         _dispatches=_dispatches_from(payload["dispatches"]),
     )
     by_id = {entry.dispatch_id: entry for entry in view.reports}

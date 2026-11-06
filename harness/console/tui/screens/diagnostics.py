@@ -18,20 +18,18 @@ from pathlib import Path
 from typing import Callable
 
 from rich.text import Text
-from rich.markup import escape
 from textual import events, on
 from textual.message import Message
 from textual.widget import Widget
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, Collapsible, Static
+from textual.containers import Grid, Horizontal, VerticalScroll
+from textual.widgets import Button, ListItem, ListView, Static
 
 from ..crumbs import Crumb
 from ..shell import (
     SHELL_CSS,
     ConsoleShell,
-    Fold,
     JumpLink,
     SectionCard,
     WrappedValue,
@@ -181,51 +179,6 @@ def health_document(report: Report, language: str = "ru") -> MarkdownDocument:
     )
 
 
-class _CheckCard(SectionCard):
-    """Real health data stays literal; only labels belong to the interface."""
-
-    def __init__(self, check: CheckResult, index: int) -> None:
-        self.check = check
-        super().__init__(title=check.id, id=f"attention-{index}", classes="check-card")
-
-    def compose(self) -> ComposeResult:
-        yield Static(
-            _icon(self.check.status) + Text(f"{self.check.id} · {self.check.message}"),
-            classes="check-message no-i18n",
-        )
-        yield Static("", classes="check-remedy no-i18n", markup=False)
-        yield Static(
-            self.check.fix.command if self.check.fix and self.check.fix.command else "",
-            classes="check-command no-i18n",
-            markup=False,
-        )
-        with Horizontal(classes="check-links"):
-            if self.check.fix and self.check.fix.command:
-                yield Button(
-                    "Копировать команду", id=f"copy-command-{self.id}", compact=True
-                )
-            yield JumpLink(check_route(self.check.id).section)
-
-    def relabel(self) -> None:
-        language = getattr(self.app, "language", "ru")
-        # IDs, fixes and commands are report data, never translated by the shell.
-        self.border_title = escape(self.check.id)
-        if not self.query(".check-remedy"):
-            return
-        fix = self.check.fix
-        text = (
-            i18n.tr(language, "Как исправить:") + " " + fix.text
-            if fix
-            else i18n.tr(language, "Рекомендация отсутствует")
-        )
-        self.query_one(".check-remedy", Static).update(text)
-        self.query_one(".check-command", Static).update(
-            fix.command
-            if fix and fix.command
-            else i18n.tr(language, "Команда отсутствует — проверьте настройки вручную")
-        )
-
-
 class DiagnosticsScreen(ConsoleShell):
     """Экран диагностики состояния репозитория с возможностью запуска онлайн-проверок и применения исправлений."""
 
@@ -234,10 +187,10 @@ class DiagnosticsScreen(ConsoleShell):
     NARROW_FOOTER_KEYS = ("escape", "e", "f2")
     AUTO_FOCUS = "#diagnostics-scroll"
     CSS = SHELL_CSS + brand.shell_css("""
-    DiagnosticsScreen #diagnostics-scroll { height: 1fr; padding: 0 1; }
+    DiagnosticsScreen #diagnostics-scroll { height: 1fr; padding: 0 2; }
     DiagnosticsScreen #diagnostics-heading { height: 1; text-style: bold; }
     DiagnosticsScreen #diagnostics-manual { height: auto; color: $text-muted; }
-    DiagnosticsScreen #diagnostics-overview { height: auto; }
+    DiagnosticsScreen #diagnostics-overview { height: auto; margin-bottom: 1; }
     DiagnosticsScreen #diagnostics-summary { height: 1; }
     DiagnosticsScreen #diagnostics-actions { height: 1; }
     DiagnosticsScreen #diagnostics-actions Button { width: auto; min-width: 10; height: 1; margin-right: 1; }
@@ -245,26 +198,21 @@ class DiagnosticsScreen(ConsoleShell):
     DiagnosticsScreen #diagnostics-export-hint { width: auto; text-align: right; }
     DiagnosticsScreen .action-cli { height: auto; color: $text-muted; }
     DiagnosticsScreen #diagnostics-report { height: auto; }
-    DiagnosticsScreen #diagnostics-confirmation { height: 2; color: $text-muted; }
-    DiagnosticsScreen #diagnostics-attention { height: auto; max-height: 17; }
-    DiagnosticsScreen #attention-cards { layout: grid; grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; height: auto; }
-    DiagnosticsScreen .check-card { height: auto; }
-    DiagnosticsScreen .check-card Static { height: auto; }
+    DiagnosticsScreen #diagnostics-confirmation { height: auto; color: $text-muted; }
+    DiagnosticsScreen #diagnostics-pair { grid-size: 1; height: auto; }
+    DiagnosticsScreen.-wide #diagnostics-pair, DiagnosticsScreen.-spacious #diagnostics-pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
+    DiagnosticsScreen #diagnostics-pair > .section-card { height: 100%; }
+    DiagnosticsScreen #diagnostics-filters { height: 1; margin-bottom: 1; }
+    DiagnosticsScreen #diagnostics-filters Button { height: 1; min-width: 7; width: auto; margin-right: 1; }
+    DiagnosticsScreen #check-list { height: auto; max-height: 22; border: none; padding: 0; background: transparent; }
+    DiagnosticsScreen #check-list > ListItem { height: auto; padding: 0 1; border-left: solid transparent; border-bottom: solid $border-subtle; }
+    DiagnosticsScreen #check-list > ListItem.-highlight, DiagnosticsScreen #check-list:focus > ListItem.-highlight { background: $selection-background; color: $selection-foreground; border-left: solid $selection-edge; }
+    DiagnosticsScreen #check-detail, DiagnosticsScreen #check-remedy { height: auto; }
+    DiagnosticsScreen #check-command { height: auto; border: round $border-subtle; padding: 0 1; margin: 1 0; }
     DiagnosticsScreen .check-links { height: 1; }
     DiagnosticsScreen .check-links Button { height: 1; width: auto; min-width: 0; margin-right: 1; }
-    DiagnosticsScreen #diagnostics-filters { height: 1; }
-    DiagnosticsScreen #groups-heading { width: 1fr; }
-    DiagnosticsScreen #diagnostics-filters Button { height: 1; min-width: 7; width: auto; margin-right: 1; }
-    DiagnosticsScreen #diagnostics-groups { height: auto; }
-    DiagnosticsScreen #remaining-groups { border: none; padding: 0; }
-    DiagnosticsScreen #remaining-groups > Contents { padding: 0; }
-    DiagnosticsScreen #remaining-groups > CollapsibleTitle { display: none; }
     DiagnosticsScreen.-narrow #diagnostics-manual, DiagnosticsScreen.-narrow .action-cli { display: none; }
     DiagnosticsScreen.-narrow .context-strip { display: none; }
-    DiagnosticsScreen.-narrow #diagnostics-attention { max-height: 4; }
-    DiagnosticsScreen.-narrow #attention-cards { grid-size: 1; grid-columns: 1fr; }
-    DiagnosticsScreen.-narrow #remaining-groups { border: round $border-subtle; padding: 0 1; }
-    DiagnosticsScreen.-narrow #remaining-groups > CollapsibleTitle { display: block; }
     """)
 
     BINDINGS = [Binding(EXPORT_BINDING_KEY, "export", "Экспорт")]
@@ -290,6 +238,8 @@ class DiagnosticsScreen(ConsoleShell):
         self._failure = ""
         self._requested_online = False
         self._built_at: datetime | None = None
+        self._shown: list[CheckResult] = []
+        self._selected: CheckResult | None = None
 
     def compose_strip(self) -> ComposeResult:
         yield WrappedValue(self._strip_text())
@@ -297,8 +247,7 @@ class DiagnosticsScreen(ConsoleShell):
 
     def compose_content(self) -> ComposeResult:
         """Summary, actions, attention cards and all checks in report order."""
-        with VerticalScroll(id="diagnostics-scroll", classes="frame") as report:
-            report.border_title = brand.section_title("Health-отчёт")
+        with VerticalScroll(id="diagnostics-scroll"):
             yield Static("Диагностика", id="diagnostics-heading")
             yield Static(_SUBTITLE, id="diagnostics-manual")
             with SectionCard(title="Health-отчёт", id="diagnostics-overview"):
@@ -317,21 +266,31 @@ class DiagnosticsScreen(ConsoleShell):
             yield Static(
                 "", id="diagnostics-confirmation", classes="no-i18n", markup=False
             )
-            with VerticalScroll(id="diagnostics-attention"):
-                yield Static("Требует исправления", id="attention-heading")
-                yield Grid(id="attention-cards")
-            with Horizontal(id="diagnostics-filters"):
-                yield Static("Проверки по группам", id="groups-heading", classes="no-i18n")
-                for status, label in (
-                    ("all", "Все"),
-                    ("fail", "✖"),
-                    ("warn", "⚠"),
-                    ("skipped", "○"),
-                ):
-                    yield Button(
-                        label, id=f"filter-{status}", compact=True, classes="no-i18n"
-                    )
-            yield Vertical(id="diagnostics-groups")
+            with Grid(id="diagnostics-pair"):
+                with SectionCard(title="Проверки", id="checks-list-card"):
+                    with Horizontal(id="diagnostics-filters"):
+                        for status, label in (
+                            ("all", "Все"),
+                            ("fail", "✖"),
+                            ("warn", "⚠"),
+                            ("skipped", "○"),
+                        ):
+                            yield Button(
+                                label,
+                                id=f"filter-{status}",
+                                compact=True,
+                                classes="no-i18n",
+                            )
+                    yield ListView(id="check-list")
+                with SectionCard(title="Детали проверки", id="check-detail-card"):
+                    yield Static("", id="check-detail", classes="no-i18n", markup=False)
+                    yield Static("", id="check-remedy", classes="no-i18n", markup=False)
+                    yield Static("", id="check-command", classes="no-i18n", markup=False)
+                    with Horizontal(classes="check-links"):
+                        yield Button(
+                            "Копировать команду", id="copy-check-command", compact=True
+                        )
+                        yield JumpLink("Diagnostics", id="check-jump")
 
     def on_mount(self) -> None:
         """Запускает первичное построение отчёта проверок при монтировании экрана."""
@@ -363,17 +322,10 @@ class DiagnosticsScreen(ConsoleShell):
             self._filter = button_id.removeprefix("filter-")
             self._render_groups()
             return
-        if button_id.startswith("copy-command-"):
-            card = next(
-                (
-                    item
-                    for item in self.query(_CheckCard)
-                    if f"copy-command-{item.id}" == button_id
-                ),
-                None,
-            )
-            if card is not None and card.check.fix and card.check.fix.command:
-                self.app.copy_to_clipboard(card.check.fix.command)
+        if button_id == "copy-check-command":
+            check = self._selected
+            if check is not None and check.fix and check.fix.command:
+                self.app.copy_to_clipboard(check.fix.command)
                 self.notify(i18n.tr(self._language, "Команда скопирована"))
             return
         if event.button.id == "offline-checks":
@@ -461,8 +413,6 @@ class DiagnosticsScreen(ConsoleShell):
             self._reset_apply()
         self._render_overview()
         self._render_state()
-        for card in self.query(_CheckCard):
-            card.relabel()
         self._relabel_groups()
 
     def on_unmount(self) -> None:
@@ -485,8 +435,10 @@ class DiagnosticsScreen(ConsoleShell):
         self._report = None
         self._built_at = None
         self._reset_apply()
-        self.query_one("#attention-cards").remove_children()
-        self.query_one("#diagnostics-groups").remove_children()
+        self._shown = []
+        self._selected = None
+        self.query_one("#check-list", ListView).clear()
+        self._show_check(None)
         self._render_overview()
         self._render_state()
 
@@ -534,14 +486,6 @@ class DiagnosticsScreen(ConsoleShell):
         self._built_at = _now()
         self._render_overview()
         self._render_state()
-        attention = [
-            check for check in report.checks if check.status in ("fail", "warn")
-        ]
-        self._replace_contents(
-            "#attention-cards",
-            *(_CheckCard(check, index) for index, check in enumerate(attention)),
-        )
-        self.query_one("#diagnostics-attention").display = bool(attention)
         self._render_groups()
 
     def _render_state(self) -> None:
@@ -583,10 +527,13 @@ class DiagnosticsScreen(ConsoleShell):
                 )
             )
         self.query_one("#diagnostics-confirmation", Static).update(confirmation)
+        self.query_one("#diagnostics-confirmation").display = bool(confirmation)
         self.query_one("#diagnostics-report", Static).update(text)
         self.query_one("#diagnostics-report").display = bool(text)
         if self._report is None:
-            self.query_one("#diagnostics-attention").display = False
+            self.query_one("#diagnostics-pair").display = False
+        else:
+            self.query_one("#diagnostics-pair").display = True
 
     def _strip_text(self) -> str:
         """`Project: <name> · mode: <mode> · report built <time>`; the time is the screen's own,
@@ -662,10 +609,9 @@ class DiagnosticsScreen(ConsoleShell):
         self.query_one("#diagnostics-summary", Static).update(summary)
         self.query_one("#diagnostics-summary").display = report is not None
         self.query_one("#diagnostics-cli", Static).update(self._cli_line())
-        heading = tr("Проверки по группам")
-        if report is not None:
-            heading += f"  {total} · {tr('групп:')} {group_count}"
-        self.query_one("#groups-heading", Static).update(heading)
+        self.query_one("#checks-list-card", SectionCard).set_note(
+            f"{total} · {tr('групп:')} {group_count}" if report is not None else ""
+        )
         for status in ("all", "fail", "warn", "skipped"):
             label = (
                 tr("Все")
@@ -677,19 +623,6 @@ class DiagnosticsScreen(ConsoleShell):
             button.variant = "primary" if self._filter == status else "default"
         self.query_one(WrappedValue).set_value(self._strip_text())
 
-    def _group_text(self, checks: list[CheckResult]) -> Text:
-        text = Text()
-        for check in checks:
-            text.append_text(_icon(check.status))
-            text.append(f"{check.id}: {check.message}\n")
-            if check.fix:
-                text.append(
-                    i18n.tr(self._language, "Как исправить:") + f" {check.fix.text}\n"
-                )
-                if check.fix.command:
-                    text.append(f"{check.fix.command}\n")
-        return text
-
     def _replace_contents(self, selector: str, *widgets: Widget) -> None:
         async def replace() -> None:
             container = self.query_one(selector)
@@ -699,89 +632,105 @@ class DiagnosticsScreen(ConsoleShell):
 
         self.run_worker(replace(), group=f"render-{selector}", exclusive=True)
 
+    def _check_row(self, check: CheckResult) -> Text:
+        """A list row: the status symbol and id, then the muted message."""
+        text = _icon(check.status)
+        text.append(check.id, style=f"bold {brand.PALETTE['foreground']}")
+        group = GROUP_LABELS_RU.get(check.group, check.group)
+        text.append(f"  {i18n.tr(self._language, group)}", style=brand.PALETTE["muted"])
+        text.append("\n" + check.message, style=brand.PALETTE["muted"])
+        return text
+
     def _render_groups(self) -> None:
+        """The checks of the filter, problems first, as the list of the master-detail pair."""
         self._render_overview()
         if self._report is None:
             return
-        groups: dict[str, list[CheckResult]] = {}
-        indices: dict[str, int] = {}
-        sizes: dict[str, int] = {}
-        for check in self._report.checks:
-            indices.setdefault(check.group, len(indices))
-            sizes[check.group] = sizes.get(check.group, 0) + 1
-            if self._filter == "all" or check.status == self._filter:
-                groups.setdefault(check.group, []).append(check)
-        folds = []
-        for group, checks in groups.items():
-            counts = Report(1, "", False, checks).summary()
-            summary = " · ".join(
-                f"{brand.STATUS_ICONS[status]} {count}"
-                for status, count in counts.items()
-                if count
-            )
-            summary = f"{sizes[group]}  {summary}"
-            if group == "tracker" and not self._report.online and counts["skipped"]:
-                summary += " · нужна «Онлайн»"
-            fold = Fold(
-                Static(self._group_text(checks), classes="group-checks no-i18n"),
-                title=GROUP_LABELS_RU.get(group, group),
-                summary=summary,
-                id=f"check-group-{indices[group]}",
-            )
-            folds.append(fold)
-        if not folds:
-            self._replace_contents(
-                "#diagnostics-groups",
-                Static(
-                    i18n.tr(self._language, "Нет проверок для этого фильтра"),
-                    id="diagnostics-empty",
-                    classes="no-i18n",
-                    markup=False,
-                ),
-            )
-            return
-        remaining = Fold(
-            *folds[1:],
-            title="Остальные группы",
-            summary=str(len(folds) - 1),
-            collapsed=self.app.size.width < brand.NARROW_WIDTH,
-            id="remaining-groups",
+        rank = {"fail": 0, "warn": 1, "skipped": 2, "ok": 3}
+        checks = sorted(
+            (
+                check
+                for check in self._report.checks
+                if self._filter == "all" or check.status == self._filter
+            ),
+            key=lambda check: rank[check.status],
         )
-        remaining.display = len(folds) > 1
-        self._replace_contents("#diagnostics-groups", folds[0], remaining)
+        self._shown = checks
+        listing = self.query_one("#check-list", ListView)
+        listing.clear()
+        if not checks:
+            listing.append(
+                ListItem(
+                    Static(
+                        i18n.tr(self._language, "Нет проверок для этого фильтра"),
+                        id="diagnostics-empty",
+                        classes="no-i18n",
+                        markup=False,
+                    ),
+                    disabled=True,
+                )
+            )
+            self._selected = None
+            self._show_check(None)
+            return
+        listing.extend(
+            ListItem(Static(self._check_row(check), classes="no-i18n"), name=str(index))
+            for index, check in enumerate(checks)
+        )
+        listing.index = 0
+        self._show_check(checks[0])
+
+    def _show_check(self, check: CheckResult | None) -> None:
+        """The details of the highlighted check: status, message, remedy, the command and the
+        section that deals with it."""
+        self._selected = check
+        language = self._language
+        detail = Text()
+        remedy = Text()
+        command = ""
+        if check is not None:
+            detail.append_text(_icon(check.status))
+            detail.append(check.id + "\n", style=f"bold {brand.PALETTE['foreground']}")
+            group = GROUP_LABELS_RU.get(check.group, check.group)
+            detail.append(i18n.tr(language, group) + "\n", style=brand.PALETTE["muted"])
+            detail.append(check.message)
+            fix = check.fix
+            remedy = Text(
+                i18n.tr(language, "Как исправить:") + " " + fix.text
+                if fix
+                else i18n.tr(language, "Рекомендация отсутствует"),
+                style=brand.PALETTE["muted"],
+            )
+            command = (
+                fix.command
+                if fix and fix.command
+                else i18n.tr(language, "Команда отсутствует — проверьте настройки вручную")
+            )
+        self.query_one("#check-detail", Static).update(detail)
+        self.query_one("#check-remedy", Static).update(remedy)
+        self.query_one("#check-command", Static).update(command)
+        self.query_one("#check-command").display = check is not None
+        has_command = bool(check and check.fix and check.fix.command)
+        self.query_one("#copy-check-command", Button).display = has_command
+        jump = self.query_one("#check-jump", JumpLink)
+        jump.display = check is not None
+        if check is not None:
+            jump.section = check_route(check.id).section
+            jump.relabel()
+
+    @on(ListView.Highlighted, "#check-list")
+    def _check_highlighted(self, event: ListView.Highlighted) -> None:
+        event.stop()
+        name = event.item.name if event.item is not None else None
+        if name is not None and name.isdigit() and int(name) < len(self._shown):
+            self._show_check(self._shown[int(name)])
 
     def _relabel_groups(self) -> None:
-        if self.query("#diagnostics-empty"):
-            self.query_one("#diagnostics-empty", Static).update(
-                i18n.tr(self._language, "Нет проверок для этого фильтра")
-            )
-        if self._report is None:
-            return
-        groups: dict[str, list[CheckResult]] = {}
-        for check in self._report.checks:
-            groups.setdefault(check.group, []).append(check)
-        for index, checks in enumerate(groups.values()):
-            matches = self.query(f"#check-group-{index} .group-checks")
-            if matches:
-                matches.first(Static).update(
-                    self._group_text(
-                        [
-                            check
-                            for check in checks
-                            if self._filter == "all" or check.status == self._filter
-                        ]
-                    )
-                )
-
-    @on(Collapsible.Toggled)
-    def on_collapsible_toggled(self, event: Collapsible.Toggled) -> None:
-        self._reset_apply()
+        if self._report is not None:
+            self._render_groups()
 
     def on_resize(self, event: events.Resize) -> None:
         ConsoleShell.on_resize(self, event)
-        matches = self.query("#remaining-groups")
-        if matches:
-            matches.first(Fold).collapsed = event.size.width < brand.NARROW_WIDTH
         if self.query("#diagnostics-summary"):
             self._render_overview()
 

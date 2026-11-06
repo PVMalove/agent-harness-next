@@ -1440,6 +1440,8 @@ def cmd_health(args: argparse.Namespace) -> int:
 
 def cmd_console(args: argparse.Namespace) -> int:
     """Запустить интерактивную консоль TUI для диагностики harness."""
+    # The console theme is an exact hex palette; do not let a 16/256-colour profile remap it.
+    os.environ["TEXTUAL_COLOR_SYSTEM"] = "truecolor"
     from harness.console.launcher import run_console
 
     repo = Path(args.repo).expanduser().resolve()

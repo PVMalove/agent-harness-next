@@ -27,14 +27,14 @@ def health_counts_markup(counts: HealthCounts, *, gaps: str = " ") -> str:
 class TopBar(Horizontal):
     """One text row plus a rule. `crumbs` is where the user is, e.g. `Главная › Harness`."""
 
-    DEFAULT_CSS = """
+    DEFAULT_CSS = brand.shell_css("""
     TopBar {
-        height: 2; margin: 0 1; padding: 0 1; color: $primary;
-        border-bottom: solid $primary 40%;
+        height: 2; margin: 0 1; padding: 0 1; color: $foreground;
+        background: transparent; border-bottom: solid $border-subtle;
     }
     TopBar #topbar-left { width: 1fr; text-wrap: nowrap; text-overflow: ellipsis; }
-    TopBar #topbar-right { width: auto; padding-left: 2; text-align: right; }
-    """
+    TopBar #topbar-right { width: auto; padding-left: 2; text-align: right; color: $text-muted; }
+    """)
 
     def __init__(self, crumbs: str) -> None:
         super().__init__()

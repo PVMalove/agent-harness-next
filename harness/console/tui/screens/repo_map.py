@@ -16,7 +16,7 @@ from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -29,6 +29,7 @@ from textual.widgets import (
 from textual.widgets.tree import TreeNode
 
 from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard
+from ..widgets import KpiGrid
 from ...kernel.status import Status
 from ..translate import Translated
 from ...kernel import repo_map as console_repo_map
@@ -133,6 +134,7 @@ class RepoMapScreen(ConsoleShell):
     RepoMapScreen TabPane { padding: 1 0 0 0; }
     RepoMapScreen #tab-settings { padding: 0; }
     RepoMapScreen .section-card { margin-bottom: 1; }
+    RepoMapScreen .pair > .section-card, RepoMapScreen .settings-row > .section-card { margin-bottom: 0; }
     RepoMapScreen #file-search { height: auto; }
     RepoMapScreen #symbol-search { width: 1fr; }
     RepoMapScreen #search-status { width: auto; height: 3; content-align: left middle; padding-left: 2; color: $text-muted; }
@@ -144,7 +146,10 @@ class RepoMapScreen(ConsoleShell):
     RepoMapScreen #file-relations-scroll { height: 1fr; }
     RepoMapScreen #file-relations { height: auto; }
     RepoMapScreen.-wide #relations-fold > CollapsibleTitle, RepoMapScreen.-spacious #relations-fold > CollapsibleTitle { display: none; }
-    RepoMapScreen #map-summary { margin-bottom: 1; }
+    RepoMapScreen #map-summary { margin-bottom: 0; }
+    RepoMapScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    RepoMapScreen.-wide .pair, RepoMapScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
+    RepoMapScreen .pair > .section-card { height: 100%; }
     RepoMapScreen #map-summary-empty { height: auto; color: $text-muted; }
     RepoMapScreen #map-hubs, RepoMapScreen #map-diagnostics, RepoMapScreen #map-checks, RepoMapScreen #map-provenance { height: auto; }
     RepoMapScreen.-narrow #file-browser { layout: vertical; height: auto; }
@@ -154,7 +159,8 @@ class RepoMapScreen(ConsoleShell):
     RepoMapScreen.-narrow #file-relations-scroll { height: auto; max-height: 10; }
     RepoMapScreen.-narrow #tab-files { overflow-y: auto; }
     RepoMapScreen.-narrow #search-status { height: 3; }
-    RepoMapScreen.-narrow .settings-row { layout: vertical; }
+    RepoMapScreen .settings-row > .section-card { height: 100%; }
+    RepoMapScreen.-narrow .settings-row { grid-size: 1; }
     RepoMapScreen.-narrow .strip-note { display: none; }
     """)
 
@@ -249,8 +255,12 @@ class RepoMapScreen(ConsoleShell):
                     )
         with TabbedContent(id="repo-map-tabs"):
             with TabPane(_TABS["tab-summary"][narrow], id="tab-summary"):
-                yield FieldGrid(id="map-summary")
                 yield Static(_NO_MAP, id="map-summary-empty")
+                with Grid(classes="pair", id="map-index-row"):
+                    with SectionCard(title="Индекс", id="map-index-card"):
+                        yield FieldGrid(id="map-summary")
+                    with SectionCard(title="Покрытие", id="map-coverage-card"):
+                        yield KpiGrid([], columns=3, id="map-coverage")
                 with SectionCard(title="Provenance парсера", id="provenance-card"):
                     yield Static(
                         "", id="map-provenance", classes="no-i18n", markup=False
@@ -318,9 +328,7 @@ class RepoMapScreen(ConsoleShell):
         for identifier, labels in _TABS.items():
             tabs.get_tab(identifier).label = i18n.tr(language, labels[narrow])
         fold = self.query_one("#relations-fold", Fold)
-        fold.border_title = (
-            "" if self._narrow else brand.section_title(i18n.tr(language, "Связи"))
-        )
+        fold.set_card_head("" if self._narrow else i18n.tr(language, "Связи"))
         self.query_one("#repo-map-status", Static).update(self._status_line())
         self.query_one("#repo-map-context", Static).update(
             i18n.tr_text(language, self._context_text())
@@ -444,6 +452,7 @@ class RepoMapScreen(ConsoleShell):
         summary = self.query_one("#map-summary", FieldGrid)
         empty = self.query_one("#map-summary-empty", Static)
         self.query_one("#provenance-card").display = view is not None
+        self.query_one("#map-index-row").display = view is not None
         if view is None:
             summary.set_fields([])
             empty.display = True
@@ -451,7 +460,17 @@ class RepoMapScreen(ConsoleShell):
             self.query_one("#map-diagnostics", Static).update(_NO_MAP)
         else:
             empty.display = False
-            summary.set_fields(console_repo_map.summary_fields(view))
+            fields = console_repo_map.summary_fields(view)
+            coverage = ("Файлов", "Рёбер", "Токенов (оценка)")
+            summary.set_fields([item for item in fields if item[0] not in coverage])
+            self.call_later(
+                self.query_one("#map-coverage", KpiGrid).set_tiles,
+                [
+                    (i18n.tr(language, label), value, "", "")
+                    for label, value in fields
+                    if label in coverage
+                ],
+            )
             self.query_one("#map-provenance", Static).update(
                 "\n".join(console_repo_map.provenance_lines(view))
             )

@@ -48,6 +48,8 @@ from ..kernel.protocol import (
     REPORT_REQUEST,
     REPORTS_REQUEST,
     ROUTE_REQUEST,
+    TASK_BOARD_REQUEST,
+    TASK_BOARD_SPECS_REQUEST,
     TIMELINE_REQUEST,
     UPDATE_DIFF_REQUEST,
     UPDATE_HARNESS_REQUEST,
@@ -56,12 +58,24 @@ from ..kernel.protocol import (
 from ..kernel.help_text import HelpSections
 from ..kernel.open_project_snapshot import OpenProjectFacts
 from ..kernel.repo_map_snapshot import RepoMapFacts
+from ..kernel.pipeline_kpi import (
+    PipelineAnalytics,
+    PipelineKpi,
+    pipeline_analytics_from_payload,
+    pipeline_kpi_from_payload,
+)
 from ..kernel.update_harness_snapshot import UpdateHarnessFacts
 from ..kernel.reports import (
     BatchTimeline,
     LedgerView,
     ledger_from_payload,
     timeline_from_payload,
+)
+from ..kernel.task_board import (
+    BoardSnapshot,
+    BoardSpecs,
+    board_from_payload,
+    specs_from_payload,
 )
 
 if TYPE_CHECKING:
@@ -122,6 +136,8 @@ class OrchestrationView:
     ledger: LedgerView
     lock: JsonObject | None
     lock_error: str | None
+    kpi: PipelineKpi = PipelineKpi()
+    analytics: PipelineAnalytics = PipelineAnalytics({}, {}, {}, {})
 
 
 @dataclass(frozen=True)
@@ -297,6 +313,9 @@ class ScreenClient(HomeClient, Protocol):
 
     def help(self, language: str) -> HelpSections: ...
 
+    def task_board_specs(self, *, force: bool = False) -> BoardSpecs: ...
+
+    def task_board(self, spec: str, *, force: bool = False) -> BoardSnapshot: ...
     def update_harness(self, *, force: bool = False) -> UpdateHarnessFacts: ...
 
     def update_diff(self, path: str, *, force: bool = False) -> str | None: ...
@@ -423,7 +442,9 @@ class ConsoleClient:
     def reports(self, *, force: bool = False, online: bool = False) -> LedgerView:
         """The ledger of the Reports screen without report bodies; `online` adds the PR
         timings."""
-        payload = self._paged({"type": REPORTS_REQUEST, "force": force, "online": online})
+        payload = self._paged(
+            {"type": REPORTS_REQUEST, "force": force, "online": online}
+        )
         return self._decoded(ledger_from_payload, payload, "леджер")
 
     def report(self, dispatch_id: str) -> JsonObject | None:
@@ -445,6 +466,18 @@ class ConsoleClient:
                 return None
             raise
         return self._decoded(timeline_from_payload, payload, "хронология")
+
+    def task_board_specs(self, *, force: bool = False) -> BoardSpecs:
+        """The open specs of the task board."""
+        payload = self._paged({"type": TASK_BOARD_SPECS_REQUEST, "force": force})
+        return self._decoded(specs_from_payload, payload, "спеки доски")
+
+    def task_board(self, spec: str, *, force: bool = False) -> BoardSnapshot:
+        """One spec board with its cards and columns."""
+        payload = self._paged(
+            {"type": TASK_BOARD_REQUEST, "spec": spec, "force": force}
+        )
+        return self._decoded(board_from_payload, payload, "доска")
 
     def worker_steps(self, dispatch_id: str, offset: int) -> WorkerSteps | None:
         """One page of the worker steps of `dispatch_id` from the log byte `offset`; None when
@@ -469,11 +502,15 @@ class ConsoleClient:
         found = _object(
             self._paged({"type": ORCHESTRATION_REQUEST, "force": force}), "снимок"
         )
-        if set(found) != {"ledger", "lock"}:
+        if set(found) != {"ledger", "lock", "kpi", "analytics"}:
             raise MalformedReply("снимок оркестрации сервера консоли не по схеме")
         lock, error = _lock_of(found["lock"])
         ledger = self._decoded(ledger_from_payload, found["ledger"], "леджер")
-        return OrchestrationView(ledger, lock, error)
+        kpi = self._decoded(pipeline_kpi_from_payload, found["kpi"], "KPI")
+        analytics = self._decoded(
+            pipeline_analytics_from_payload, found["analytics"], "аналитика"
+        )
+        return OrchestrationView(ledger, lock, error, kpi, analytics)
 
     def ledger_lock(self) -> JsonObject:
         """The ledger lock state; `LockUnavailable` carries why the server could not read it."""
@@ -516,13 +553,20 @@ class ConsoleClient:
         """The authored configuration and, for `batch`, its `dispatch preflight`."""
         found = _object(
             self._paged(
-                {"type": ROUTE_REQUEST, "batch": batch, "role": role, "runtime": runtime}
+                {
+                    "type": ROUTE_REQUEST,
+                    "batch": batch,
+                    "role": role,
+                    "runtime": runtime,
+                }
             ),
             "снимок маршрута",
         )
         if set(found) != {"authored", "preflight"}:
             raise MalformedReply("снимок маршрута сервера консоли не по схеме")
-        authored = self._decoded(Authored.from_payload, found["authored"], "конфигурация")
+        authored = self._decoded(
+            Authored.from_payload, found["authored"], "конфигурация"
+        )
         preflight = found["preflight"]
         return RouteFacts(
             authored,
@@ -563,7 +607,9 @@ class ConsoleClient:
             self._paged({"type": MAINTENANCE_REQUEST, "force": force}),
             "снимок обслуживания",
         )
-        if set(found) != {"maintenance", "error"} or not isinstance(found["error"], str):
+        if set(found) != {"maintenance", "error"} or not isinstance(
+            found["error"], str
+        ):
             raise MalformedReply("снимок обслуживания сервера консоли не по схеме")
         view = found["maintenance"]
         return (
@@ -712,10 +758,16 @@ class ConsoleClient:
                     raise MalformedReply("вывод задачи сервера консоли не по схеме")
                 streams[channel].append(text)
         last = batches[-1]
-        phase, code, error = last.get("phase"), last.get("returncode"), last.get("error")
+        phase, code, error = (
+            last.get("phase"),
+            last.get("returncode"),
+            last.get("error"),
+        )
         if (
             not isinstance(phase, str)
-            or not (code is None or (isinstance(code, int) and not isinstance(code, bool)))
+            or not (
+                code is None or (isinstance(code, int) and not isinstance(code, bool))
+            )
             or not (error is None or isinstance(error, str))
         ):
             raise MalformedReply("итог задачи сервера консоли не по схеме")

@@ -148,8 +148,16 @@ RULES = {
                 "asyncio.subprocess",
             }
         ),
+        # The wire kernel, plus the command catalog (the vocabulary of jobs and their confirmation
+        # reasons) and the interface strings: both are plain data, no process, socket or UI.
         only_console=frozenset(
-            {f"{B}.domain", f"{KERNEL}.protocol", f"{KERNEL}.json_fields"}
+            {
+                f"{B}.domain",
+                f"{KERNEL}.protocol",
+                f"{KERNEL}.json_fields",
+                f"{KERNEL}.catalog",
+                f"{KERNEL}.i18n",
+            }
         ),
     ),
     "application": Rule(
@@ -319,7 +327,7 @@ def test_every_layer_rule_refuses_its_sample(name: str) -> None:
     assert RULES[name].violations(source, package)
 
 
-def test_the_domain_imports_only_itself_and_the_wire_kernel_from_the_console() -> None:
+def test_the_domain_imports_only_itself_and_the_plain_data_kernel_from_the_console() -> None:
     rule = RULES["domain"]
     package = f"{B}.domain"
     assert rule.violations("from ...kernel.home_snapshot import HomeSnapshot", package)
@@ -327,6 +335,7 @@ def test_the_domain_imports_only_itself_and_the_wire_kernel_from_the_console() -
     allowed = (
         "import asyncio\nfrom ...kernel.protocol import _clip\n"
         "from ...kernel import json_fields\nfrom .jobs import Job\n"
+        "from ...kernel.catalog import CatalogEntry\nfrom ...kernel.i18n import tr_text\n"
         "from harness.configuration import SECRET_MASK"
     )
     assert rule.violations(allowed, package) == []

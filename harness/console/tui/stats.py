@@ -11,7 +11,15 @@ from dataclasses import dataclass, field
 
 from ..kernel.harness_facts import HarnessState as HarnessState
 from ..kernel.harness_facts import harness_state as harness_state
+from ..kernel import brand, i18n
 from ..kernel.json_fields import text
+from ..kernel.pipeline_kpi import (
+    AGING_BUCKETS,
+    PipelineAnalytics,
+    PipelineKpi,
+    ReportsKpi,
+    duration_text,
+)
 from ..kernel.reports import BatchSummary, LedgerView
 
 # The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state.
@@ -194,4 +202,164 @@ def harness_summary_fields(
         ("файлов", str(state.managed_files)),
         ("Lock", state.updated_at),
         ("Оркестрация", "✔ подключена" if state.orchestration else "○ не подключена"),
+    ]
+
+
+def kpi_tiles(kpi: PipelineKpi, language: str) -> list[tuple[str, str, str, str]]:
+    """(label, figure, hint, colour) of each KPI tile of the Orchestration screen. A figure that
+    needs attention starts with its status symbol, so the colour is never the only signal."""
+
+    def tr(text: str) -> str:
+        return i18n.tr(language, text)
+
+    def flagged(count: int, level: str) -> tuple[str, str]:
+        if not count:
+            return str(count), ""
+        return f"{brand.STATUS_ICONS[level]} {count}", {"warn": "warning", "fail": "error"}[level]
+
+    def duration(seconds: int | None) -> str:
+        return duration_text(seconds, language)
+
+    stale, stale_colour = flagged(kpi.stale, "warn")
+    blocked, blocked_colour = flagged(kpi.blocked, "warn")
+    first_pass = (
+        f"{kpi.qa_first_pass} / {kpi.qa_tickets}  ({round(100 * kpi.qa_first_pass / kpi.qa_tickets)}%)"
+        if kpi.qa_tickets
+        else "—"
+    )
+    return [
+        (tr("В работе (WIP)"), str(kpi.wip), f"{tr('старейший')} {duration(kpi.oldest_wip_seconds)}", ""),
+        (
+            tr("Ждёт подтверждения"),
+            str(kpi.awaiting_approval),
+            f"{tr('старейший')} {duration(kpi.oldest_approval_seconds)}",
+            "",
+        ),
+        (tr("Заблокировано"), blocked, "", blocked_colour),
+        (tr("Без движения"), stale, tr("активные > 6 ч"), stale_colour),
+        (tr("QA с первого раза"), first_pass, tr("по тикетам"), ""),
+        (tr("Доработки"), str(kpi.rework), tr("повторные диспатчи"), ""),
+        (
+            tr("Цикл до PR"),
+            f"{duration(kpi.cycle_p50_seconds)} / {duration(kpi.cycle_p95_seconds)}",
+            "p50 / p95",
+            "",
+        ),
+        (
+            tr("PR за 7 дней"),
+            str(kpi.throughput_7d),
+            f"{brand.STATUS_ICONS['fail']} {tr('провалено')} {kpi.failed}" if kpi.failed else "",
+            "",
+        ),
+    ]
+
+
+def reports_kpi_tiles(kpi: ReportsKpi, language: str) -> list[tuple[str, str, str, str]]:
+    """(label, figure, hint, colour) of each KPI tile of the Reports screen; a figure that needs
+    attention starts with its status symbol."""
+
+    def tr(text: str) -> str:
+        return i18n.tr(language, text)
+
+    def share(part: int, total: int) -> str:
+        return f"{part} / {total}  ({round(100 * part / total)}%)" if total else "—"
+
+    def flagged(count: int) -> tuple[str, str]:
+        if not count:
+            return str(count), ""
+        return f"{brand.STATUS_ICONS['warn']} {count}", "warning"
+
+    risks, risks_colour = flagged(kpi.attention)
+    blockers, blockers_colour = flagged(kpi.blocked)
+    latency = (
+        f"{duration_text(kpi.latency_p50_seconds, language)} / "
+        f"{duration_text(kpi.latency_p95_seconds, language)}"
+    )
+    return [
+        (tr("Отчётов"), str(kpi.reports), "", ""),
+        (tr("Evidence полно"), share(kpi.evidence_complete, kpi.reports), tr("output, risks, blockers"), ""),
+        (tr("Задержка отчёта"), latency, "p50 / p95", ""),
+        (tr("QA с первого раза"), share(kpi.qa_first_pass, kpi.qa_tickets), tr("по тикетам"), ""),
+        (tr("С рисками"), risks, tr("отчёты с записанным риском"), risks_colour),
+        (tr("С блокерами"), blockers, tr("отчёты с блокером"), blockers_colour),
+    ]
+
+
+_SPARK = "▁▂▃▄▅▆▇█"
+_AGING_LABELS = {"lt_1d": "< 1 дн", "d1_3": "1–3 дн", "d3_7": "3–7 дн", "gt_7d": "> 7 дн"}
+_AGING_LABELS_EN = {"lt_1d": "< 1 d", "d1_3": "1–3 d", "d3_7": "3–7 d", "gt_7d": "> 7 d"}
+
+
+def _count_text(counts: object, labels: dict[str, str] | None = None) -> str:
+    """`name 3 · other 1`, the largest first; `—` for none."""
+    if not isinstance(counts, dict) or not counts:
+        return "—"
+    items = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return " · ".join(f"{(labels or {}).get(name, name)} {count}" for name, count in items)
+
+
+def _spark(values: object) -> str:
+    """The seven daily counts as bars and numbers; `—` without any."""
+    if not isinstance(values, list) or not any(values):
+        return "—"
+    peak = max(values)
+    bars = "".join(_SPARK[round((len(_SPARK) - 1) * value / peak)] if value else " " for value in values)
+    return f"{bars}  ({' '.join(str(value) for value in values)})"
+
+
+def _seconds(value: object, language: str) -> str:
+    return duration_text(value if isinstance(value, int) else None, language)
+
+
+def analytics_rows(
+    section: str, analytics: PipelineAnalytics, language: str
+) -> list[tuple[str, str]]:
+    """(label, value) rows of one analytics tab: `flow`, `quality`, `runtime` or `gates`. Only the
+    figures the ledger gave are shown; an empty section says so in one row."""
+
+    def tr(text: str) -> str:
+        return i18n.tr(language, text)
+
+    figures = getattr(analytics, section)
+    if not figures:
+        return [(tr("Данные"), tr("в ledger нет данных"))]
+    aging = _AGING_LABELS if language == "ru" else _AGING_LABELS_EN
+    if section == "flow":
+        buckets = figures.get("aging", {})
+        return [
+            (tr("Батчи по состояниям"), _count_text(figures.get("by_state"), {k: tr(v) for k, v in STATE_LABELS.items()})),
+            (
+                tr("Возраст незавершённых"),
+                " · ".join(f"{aging[name]} {buckets.get(name, 0)}" for name in AGING_BUCKETS) if isinstance(buckets, dict) else "—",
+            ),
+            (tr("PR по дням, 7 дней"), _spark(figures.get("pr_per_day"))),
+            (
+                tr("Цикл до PR p50 / p95"),
+                f"{_seconds(figures.get('cycle_p50_seconds'), language)} / {_seconds(figures.get('cycle_p95_seconds'), language)}",
+            ),
+        ]
+    if section == "quality":
+        passed, total = figures.get("qa_first_pass", 0), figures.get("qa_tickets", 0)
+        return [
+            (tr("Доработки по ролям"), _count_text(figures.get("rework_by_role"))),
+            (tr("Отчёты по ролям"), _count_text(figures.get("reports_by_role"))),
+            (tr("Итоги отчётов"), _count_text(figures.get("outcomes"))),
+            (tr("Неудачные попытки QA"), str(figures.get("qa_attempts_failed", 0))),
+            (tr("QA с первого раза"), f"{passed} / {total}" if total else "—"),
+        ]
+    if section == "runtime":
+        return [
+            (tr("Состояния стадий"), _count_text(figures.get("stage_states"))),
+            (tr("Не завершено"), str(figures.get("unfinished", 0))),
+            (tr("Старейшая не завершённая"), _seconds(figures.get("oldest_unfinished_seconds"), language)),
+            (tr("Без движения"), str(figures.get("stale", 0))),
+        ]
+    return [
+        (tr("Ждут подтверждения"), str(figures.get("awaiting", 0))),
+        (
+            tr("Ожидание p50 / p95"),
+            f"{_seconds(figures.get('approval_p50_seconds'), language)} / {_seconds(figures.get('approval_p95_seconds'), language)}",
+        ),
+        (tr("Старейшее ожидание"), _seconds(figures.get("approval_oldest_seconds"), language)),
+        (tr("PR по состояниям"), _count_text(figures.get("pr_states"))),
     ]

@@ -15,6 +15,7 @@ from typing import Generic, TypeVar
 
 from ...kernel.batch_history import History
 from ...kernel.help_text import help_sections
+from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
 from ...kernel.update_harness_snapshot import diff_paths
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
@@ -123,7 +124,10 @@ def snapshot_text(payload: object) -> str:
 
 
 def _ledger(view: LedgerView) -> _Ledger:
-    return _Ledger(view, ledger_payload(view))
+    """The view with its payload: the ledger without report bodies and the Reports KPIs, which the
+    server reads from the whole bodies."""
+    payload = {**ledger_payload(view), "reports_kpi": reports_kpi(view).to_payload()}
+    return _Ledger(view, payload)
 
 
 class ScreenService:
@@ -229,10 +233,22 @@ class ScreenService:
         return {"lock": state, "error": None}
 
     async def orchestration(self, *, force: bool = False) -> Paged:
-        """The ledger of the Orchestration screen with the ledger lock state."""
+        """The ledger of the Orchestration screen with the ledger lock state and the pipeline
+        KPIs computed from that ledger."""
         ledger, cached, age = await self._cached_ledger(force)
         lock = await self.lock()
-        return await self._paged({"ledger": ledger.payload, "lock": lock}, cached, age)
+        kpi = await asyncio.to_thread(pipeline_kpi, ledger.view)
+        analytics = await asyncio.to_thread(pipeline_analytics, ledger.view)
+        return await self._paged(
+            {
+                "ledger": ledger.payload,
+                "lock": lock,
+                "kpi": kpi.to_payload(),
+                "analytics": analytics.to_payload(),
+            },
+            cached,
+            age,
+        )
 
     async def recovery(
         self, batch: str = "", skip: Sequence[str] = (), *, force: bool = False

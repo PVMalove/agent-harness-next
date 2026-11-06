@@ -11,7 +11,7 @@ from rich.style import Style
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Grid, Vertical, VerticalScroll
 from textual.content import Content
 from textual.strip import Strip
 from textual.widgets import (
@@ -158,6 +158,32 @@ class ReasonNote(Static):
         self.display = bool(lines)
 
 
+class LiveDot(Static):
+    """A slow ●/○ pulse for a live source. It is decoration: the adjacent text still says what is
+    happening, so a terminal without animation (or a reader that ignores it) loses nothing."""
+
+    DEFAULT_CLASSES = "live-dot no-i18n"
+
+    def __init__(self, *, id: str | None = None, classes: str = "") -> None:
+        super().__init__(
+            "●", id=id, classes=f"live-dot no-i18n {classes}".strip(), markup=False
+        )
+        self._on = True
+        self._timer: object | None = None
+
+    def on_mount(self) -> None:
+        self._timer = self.set_interval(1.1, self._toggle)
+
+    def on_unmount(self) -> None:
+        if self._timer is not None:
+            self._timer.stop()  # type: ignore[attr-defined]
+            self._timer = None
+
+    def _toggle(self) -> None:
+        self._on = not self._on
+        self.update("●" if self._on else "○")
+
+
 class StatusLine(Static):
     """A status as a symbol and a text in the console language (`✔ актуален`), coloured; `relabel`
     redraws it after a language switch."""
@@ -181,3 +207,43 @@ class StatusLine(Static):
     def relabel(self) -> None:
         language = getattr(self.app, "language", "ru")
         self.update(Text(self.status.render(language), style=self.status.color))
+
+
+class KpiGrid(Grid):
+    """A row of KPI tiles like the Web console's: a muted label, the figure in bold and a muted
+    hint under it. The grid wraps into rows by its width; the tiles never overlap or clip."""
+
+    DEFAULT_CLASSES = "kpi-grid"
+    DEFAULT_CSS = """
+    KpiGrid { grid-size: 4; grid-gutter: 0 2; height: auto; }
+    KpiGrid Static { height: auto; }
+    """
+
+    def __init__(
+        self,
+        tiles: Iterable[tuple[str, str, str, str]],
+        *,
+        columns: int = 4,
+        **kwargs: object,
+    ) -> None:
+        """`tiles` are (label, figure, hint, colour); the colour is a palette key or empty. Up to
+        `columns` tiles share a row, each at least 19 cells wide."""
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self._tiles = tuple(tiles)
+        self._columns = columns
+
+    def on_resize(self) -> None:
+        self.styles.grid_size_columns = max(1, min(self._columns, self.size.width // 19))
+
+    async def set_tiles(self, tiles: Iterable[tuple[str, str, str, str]]) -> None:
+        """Replace the tiles, for a refreshed snapshot."""
+        self._tiles = tuple(tiles)
+        await self.recompose()
+
+    def compose(self) -> ComposeResult:
+        for label, figure, hint, colour in self._tiles:
+            text = Text()
+            text.append(label + "\n", style=brand.PALETTE["muted"])
+            text.append(figure + "\n", style=f"bold {brand.PALETTE.get(colour, brand.PALETTE['foreground'])}")
+            text.append(hint, style=brand.PALETTE["muted"])
+            yield Static(text, classes="kpi-tile no-i18n", markup=False)

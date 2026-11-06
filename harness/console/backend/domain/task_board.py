@@ -530,6 +530,29 @@ def _sort_key(ticket: TrackerTicket) -> tuple[int, int, str]:
     return (ticket.n is None, ticket.n or 0, ticket.ref)
 
 
+def _priority_rank(card: Mapping[str, object]) -> int:
+    """`priority::p0` first, a card without a priority last."""
+    label = card.get("priority")
+    if isinstance(label, str) and label.removeprefix("priority::p").isdigit():
+        return int(label.removeprefix("priority::p"))
+    return len(COLUMNS) + 99
+
+
+def order_cards(cards: list[dict[str, object]]) -> list[dict[str, object]]:
+    """The cards in board order: by column, then priority, then ticket number, so any client lists
+    one column the same way."""
+    return sorted(
+        cards,
+        key=lambda card: (
+            COLUMNS.index(str(card["column"])),
+            _priority_rank(card),
+            card["n"] is None,
+            card["n"] or 0,
+            str(card["id"]),
+        ),
+    )
+
+
 def build_board_payload(
     tracker_type: str,
     board: SpecTickets,
@@ -615,13 +638,20 @@ def build_board_payload(
             break
         caps.fired = caps.fired or bool(card["truncated"])
         cards.append(card)
+    cards = order_cards(cards)
     return {
         "tracker": tracker_type,
         "stale": None,
         "age_seconds": None,
         "ledger": "ok" if ledger_ok else "unavailable",
         "spec": spec_card,
-        "columns": [{"id": column_id} for column_id in COLUMNS],
+        "columns": [
+            {
+                "id": column_id,
+                "count": sum(card["column"] == column_id for card in cards),
+            }
+            for column_id in COLUMNS
+        ],
         "kpis": {
             "open": sum(not card["closed"] for card in cards),
             "total": len(cards),

@@ -331,7 +331,7 @@ class DashboardScreen(ConsoleShell):
     HAS_CONTEXT = True
     # Home is the bottom of the screen stack: Esc has nowhere to go.
     CAN_GO_BACK = False
-    NARROW_FOOTER_KEYS = ("p", "f1", "f2")
+    NARROW_FOOTER_KEYS = ("f1", "f2")
     # Beside the content from 140 columns; narrower, one folded card under it.
     CONTEXT_SIDE_MIN = 140
     CONTEXT_TITLE = "Контекст проекта"
@@ -348,16 +348,16 @@ class DashboardScreen(ConsoleShell):
     BINDINGS = [
         Binding("r", "checks_offline", "Офлайн"),
         Binding("o", "checks_online", "Онлайн"),
-        Binding("p", "open_project", "Проект"),
     ]
     DEFAULT_CSS = brand.shell_css("""
     DashboardScreen { overflow: hidden hidden; }
     DashboardScreen #dashboard-overview { width: 1fr; height: 1fr; padding: 0 2; overflow-y: auto; }
     DashboardScreen #dashboard-title { height: 1; text-style: bold; }
-    DashboardScreen #dashboard-subtitle { height: 1; color: $text-muted; }
+    DashboardScreen #dashboard-subtitle { height: 1; color: $text-muted; margin-bottom: 1; }
     DashboardScreen #dashboard-attention-card { margin-bottom: 1; }
     DashboardScreen #dashboard-attention, DashboardScreen #dashboard-problems { height: auto; }
-    DashboardScreen .problem-row { height: auto; }
+    DashboardScreen .problem-row { height: auto; border-bottom: solid $border-subtle; }
+    DashboardScreen .problem-row:last-of-type { border-bottom: none; }
     DashboardScreen .problem-symbol { width: 2; height: 1; }
     DashboardScreen .problem-text { width: 1fr; height: auto; }
     DashboardScreen .problem-title { height: 1; color: $foreground; text-wrap: nowrap; text-overflow: ellipsis; }
@@ -382,8 +382,9 @@ class DashboardScreen(ConsoleShell):
     DashboardScreen.-fold-context #dashboard-overview { height: auto; }
     DashboardScreen.-narrow #dashboard-title { height: 1; }
     DashboardScreen.-narrow #dashboard-subtitle { display: none; }
+    DashboardScreen.-narrow .problem-row { border-bottom: none; }
+    DashboardScreen.-narrow #dashboard-check { margin-bottom: 0; }
     DashboardScreen.-narrow .problem-caption, DashboardScreen.-narrow #dashboard-check-label, DashboardScreen.-narrow #home-sessions-hint { display: none; }
-    DashboardScreen.-narrow #dashboard-attention-card, DashboardScreen.-narrow #dashboard-check, DashboardScreen.-narrow #home-sessions-card { margin-bottom: 0; }
     DashboardScreen.-narrow .context-fold .section-card { margin-top: 0; }
     """)
     # The shell's rules plus this screen's own, which must outrank the app's generic widget rules.
@@ -434,6 +435,9 @@ class DashboardScreen(ConsoleShell):
             "Repo Map": self._repo_map,
             CONFIGURATION_SECTION: self._configuration,
             "Help": self._help,
+            "Board": self._board,
+            "Agent activity": self._activity,
+            "Publish": self._publish,
         }
 
     def compose(self) -> ComposeResult:
@@ -824,7 +828,7 @@ class DashboardScreen(ConsoleShell):
     async def action_open_section(self, index: int) -> None:
         name = SECTIONS[index]
         menu = self.query_one("#section-menu", ListView)
-        menu.index = index
+        menu.index = self.menu_position(name)
         menu.focus()
         await self._open_section(name)
 
@@ -939,6 +943,21 @@ class DashboardScreen(ConsoleShell):
         from .configuration import ConfigurationScreen
 
         return ConfigurationScreen(self.repo, client=self._home_client)
+
+    def _board(self) -> Screen[None]:
+        from .board import BoardScreen
+
+        return BoardScreen(self.repo, self._home_client)
+
+    def _activity(self) -> Screen[None]:
+        from .worker_observation import WorkerObservationScreen
+
+        return WorkerObservationScreen(self.repo)
+
+    def _publish(self) -> Screen[None]:
+        from .publish import PublishScreen
+
+        return PublishScreen(self.repo, self._home_client)
 
     def _help(self) -> Screen[None]:
         from .help import HelpScreen

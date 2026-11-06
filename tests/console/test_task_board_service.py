@@ -135,7 +135,7 @@ def test_board_is_cached_within_ttl_and_rebuilt_after_it() -> None:
         clock.now += 1
         third = await service.board("#862")
         assert third.cached is False
-        assert [card["id"] for card in _cards(third)] == ["#913", "#914"]
+        assert [card["id"] for card in _cards(third)] == ["#914", "#913"]
 
     asyncio.run(scenario())
 
@@ -148,7 +148,7 @@ def test_force_rebuilds_and_shows_a_new_sub_ticket() -> None:
         await service.board("#862")
         reader.tickets.append(_ticket(914))
         forced = await service.board("#862", force=True)
-        assert [card["id"] for card in _cards(forced)] == ["#913", "#914"]
+        assert [card["id"] for card in _cards(forced)] == ["#914", "#913"]
         assert reader.calls == ["board #862", "board #862"]
 
     asyncio.run(scenario())
@@ -181,7 +181,7 @@ def test_force_during_a_collect_reads_the_tracker_again() -> None:
         assert reader.gate is not None
         reader.gate.set()
         assert [card["id"] for card in _cards(await first)] == ["#913"]
-        assert [card["id"] for card in _cards(await forced)] == ["#913", "#914"]
+        assert [card["id"] for card in _cards(await forced)] == ["#914", "#913"]
         assert reader.calls == ["board #862", "board #862"]
 
     asyncio.run(scenario())

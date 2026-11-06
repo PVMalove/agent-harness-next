@@ -60,14 +60,44 @@ def test_the_shell_css_has_no_default_text_token() -> None:
         assert not re.search(r"\$text(?![\w-])", brand.shell_css(css))
 
 
-def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
+def test_the_shell_draws_one_window_background_and_no_block_fill() -> None:
+    import re
+
+    from harness.console.kernel import brand
+    from harness.console.tui.chrome import WorkspaceHeader
+    from harness.console.tui.shell import SHELL_CSS
+
+    border = brand.SHELL_TOKENS["border-subtle"]
+    header = brand.shell_css(WorkspaceHeader.DEFAULT_CSS)
+    shell = brand.shell_css(SHELL_CSS)
+    assert "background: transparent" in header
+    assert f"border-bottom: solid {border}" in header
+    # Panels, buttons and fields are told apart by their frame and dividers, never by a fill.
+    for selector in (
+        "ShellSidebar",
+        "Footer",
+        r"\.section-card",
+        r"\.fold",
+        "Button",
+        "Input",
+    ):
+        assert re.search(
+            rf"{selector}[^\{{]*\{{[^}}]*background: transparent", shell
+        ), selector
+    assert re.search(
+        rf"\.section-head[^\{{]*\{{[^}}]*border-bottom: solid {border}", shell
+    )
+    assert not re.search(r"\.section-(card|head)[^\{]*\{[^}]*background: \$", shell)
+
+
+def test_a_menu_entry_shows_its_key_and_takes_the_colour_of_its_badge() -> None:
     from rich.text import Text
 
     from harness.console.tui.shell import menu_label
 
-    label = menu_label(2, "Update Harness", ("⚠", "#E5A04B"))
+    label = menu_label("Update Harness", ("⚠", "#E5A04B"))
     name, badge = (column._cells[0] for column in label.columns)
-    assert isinstance(name, Text) and name.plain == "2 Обновить Harness"
+    assert isinstance(name, Text) and name.plain == "2  Обновить Harness"
     assert not name.style and not name.spans
     assert isinstance(badge, Text) and badge.plain.strip() == "⚠"
 
@@ -100,15 +130,12 @@ def test_section_badges_come_from_the_health_facts() -> None:
     }
 
 
-def test_a_section_title_is_in_capitals_with_its_note_after_it() -> None:
-    from harness.console.kernel import brand, i18n
+def test_a_section_title_keeps_its_case_and_note() -> None:
+    from harness.console.kernel import brand
 
-    assert brand.section_title("Требует внимания", "2") == " ТРЕБУЕТ ВНИМАНИЯ  2 "
-    assert brand.section_title(" Действия ") == " ДЕЙСТВИЯ "
-    # A title in capitals still finds its English text.
-    assert i18n.tr("en", "HEALTH-ОТЧЁТ") == "HEALTH REPORT"
-    assert i18n.tr("en", "СОСТОЯНИЕ · 3") == "STATUS · 3"
-    assert i18n.tr("ru", "HEALTH-ОТЧЁТ") == "HEALTH-ОТЧЁТ"
+    assert brand.section_title("Требует внимания", "2") == " Требует внимания  2 "
+    assert brand.section_title(" Действия ") == " Действия "
+    assert brand.section_title("HEALTH-ОТЧЁТ") == " HEALTH-ОТЧЁТ "
 
 
 def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
@@ -138,7 +165,9 @@ def test_a_jump_is_labelled_by_its_section_or_its_action() -> None:
     assert i18n.jump_label("en", "Configuration") == "Open setup"
 
 
-def test_home_is_item_zero_and_keys_one_to_nine_keep_their_sections() -> None:
+def test_the_menu_is_a_flat_list_in_hotkey_order() -> None:
+    from harness.console.tui.shell import SECTION_KEYS
+
     assert SECTIONS == (
         "Home",
         "Open project",
@@ -150,14 +179,17 @@ def test_home_is_item_zero_and_keys_one_to_nine_keep_their_sections() -> None:
         "Repo Map",
         "Configuration",
         "Help",
+        "Board",
+        "Agent activity",
+        "Publish",
     )
     actions = {
         binding.key: binding.action
         for binding in ConsoleShell.BINDINGS
         if isinstance(binding, Binding)
     }
-    for number in range(10):
-        assert actions[str(number)] == f"section({number})"
+    for name, key in SECTION_KEYS.items():
+        assert actions[key] == f"section({SECTIONS.index(name)})"
 
 
 def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> None:

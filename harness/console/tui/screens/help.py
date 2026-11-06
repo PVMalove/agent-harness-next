@@ -9,7 +9,7 @@ from textual.widgets import ListItem, ListView, Markdown, Static
 
 from ...kernel import brand, i18n
 from ..client import ConsoleClientError, ScreenClient
-from ..shell import ConsoleShell, Fold
+from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from .commands import call_from_worker
 
 READING = "Читаю справку…"
@@ -34,19 +34,21 @@ class HelpScreen(ConsoleShell):
     SECTION = "Help"
     CRUMBS = "Главная › Справка"
     AUTO_FOCUS = "#help-scroll"
-    DEFAULT_CSS = brand.shell_css("""
+    CSS = SHELL_CSS + brand.shell_css("""
     HelpScreen #help-layout { height: 1fr; }
-    HelpScreen #help-toc { width: 23; height: auto; border: none; margin: 1 1 0 2; padding: 0; }
+    HelpScreen #help-toc-card { width: 27; height: auto; margin: 0 1 0 2; }
+    HelpScreen #help-toc { width: 100%; height: auto; border: none; margin: 0; padding: 0; background: transparent; }
     HelpScreen #help-toc > ListItem { height: 1; }
     HelpScreen #help-scroll { width: 1fr; height: 1fr; padding: 0 2; }
     HelpScreen Markdown { padding: 0; }
     HelpScreen MarkdownH1 { margin: 0 0 1 0; padding: 0; border: none; content-align: left middle; }
-    HelpScreen .help-section { border: none; margin: 0; padding: 0; }
-    HelpScreen .help-section > Contents { padding: 0; }
-    HelpScreen .help-section > CollapsibleTitle { display: none; }
-    HelpScreen.-narrow #help-toc { display: none; }
-    HelpScreen.-narrow .help-section { border: round $border-subtle; padding: 0 1; }
-    HelpScreen.-narrow .help-section > CollapsibleTitle { display: block; }
+    HelpScreen.shell .help-section { border: none; margin: 0; padding: 0; background: transparent; }
+    HelpScreen.shell .help-section > Contents { padding: 0; }
+    HelpScreen.shell .help-section > CollapsibleTitle { display: none; }
+    HelpScreen.-narrow #help-toc-card { display: none; }
+    HelpScreen.shell.-narrow .help-section { border: round $border-subtle; background: transparent; padding: 0 1; }
+    HelpScreen.shell.-narrow .help-section > Contents { padding: 1 0 0 0; }
+    HelpScreen.shell.-narrow .help-section > CollapsibleTitle { display: block; }
     HelpScreen.-narrow .help-section MarkdownH2 { display: none; }
     """)
 
@@ -64,7 +66,8 @@ class HelpScreen(ConsoleShell):
     def compose_content(self) -> ComposeResult:
         language = getattr(self.app, "language", "ru")
         with Horizontal(id="help-layout"):
-            yield ListView(id="help-toc")
+            with SectionCard(title="Содержание", id="help-toc-card"):
+                yield ListView(id="help-toc")
             with VerticalScroll(id="help-scroll"):
                 yield Markdown(i18n.tr(language, READING), id="help-text")
 

@@ -47,13 +47,18 @@ HARNESS_THEME = Theme(
         "footer-key-foreground": brand.PALETTE["primary"],
         "block-cursor-background": brand.PALETTE["primary"],
         "block-cursor-foreground": brand.PALETTE["background"],
+        "border-subtle": brand.SHELL_TOKENS["border-subtle"],
+        "component-border": brand.SHELL_TOKENS["component-border"],
+        "selection-background": brand.SHELL_TOKENS["selection-background"],
+        "selection-foreground": brand.SHELL_TOKENS["selection-foreground"],
+        "row-highlight": brand.SHELL_TOKENS["row-highlight"],
     },
 )
 
 
 class HarnessConsoleApp(App[None]):
     """Accepts an injected `command_runner`, threaded through to the screens that run catalog
-    commands (Harness, Orchestration, Repo Map), so a Pilot test never spawns a real process.
+    commands (Harness, Orchestration, Repo Map), so a test never spawns a real process.
 
     `home_client` is the connection to the project's console server the home screen reads; without
     one the app looks for a running server (`launcher.discover_console`) and starts none. A failed
@@ -64,12 +69,14 @@ class HarnessConsoleApp(App[None]):
     BINDINGS = [
         Binding("f1", "open_help", "Справка"),
         Binding("f2", "toggle_language", "RU/EN"),
+        # The palette key keeps Textual's binding; only its footer label is the console's own.
+        Binding("ctrl+p", "command_palette", "Меню", show=False, priority=True),
     ]
-    # Thin rounded frames and warm accents shared by every screen. Only the screen itself is
-    # filled by default. Informational panes stay transparent; selected data rows and primary
-    # actions may use a fill. Modal dialogs mask the screen behind them.
+    # Thin rounded frames and blue accents shared by every screen. The window is filled by
+    # default; section cards and modal dialogs add the one `surface` fill above it. Menus, headers
+    # and the footer stay transparent; selected data rows and primary actions may use a fill.
     CSS = """
-    Screen { background: $background; }
+    Screen { background: $background !important; }
     Screen * { background: transparent; }
     ModalScreen { background: $background 70%; }
     * {
@@ -81,7 +88,7 @@ class HarnessConsoleApp(App[None]):
         scrollbar-color-hover: $primary;
         scrollbar-color-active: $primary;
     }
-    ModalScreen > * { background: $background; }
+    ModalScreen > * { background: $surface; }
     .frame {
         margin: 0 1; padding: 0 1;
         border: round $panel-lighten-2; border-title-color: $primary;
@@ -97,7 +104,7 @@ class HarnessConsoleApp(App[None]):
     CommandPalette { background: $background 70%; }
     CommandPalette > Vertical#--container {
         visibility: visible; width: 80%; max-width: 100; height: auto; max-height: 80%;
-        margin: 2 0 0 0; padding: 0 1; background: $background;
+        margin: 2 0 0 0; padding: 0 1; background: $surface;
         border: round $primary; border-title-color: $primary;
     }
     CommandPalette #--input { border: none; border-bottom: solid $primary 40%; }
@@ -140,7 +147,7 @@ class HarnessConsoleApp(App[None]):
         border: round $panel-lighten-2; background: transparent; padding: 0 1;
     }
     Select:focus > SelectCurrent { border: round $primary; }
-    SelectOverlay { border: round $primary; background: $background; }
+    SelectOverlay { border: round $primary; background: $surface; }
     Checkbox, Checkbox:focus, RadioButton, RadioButton:focus {
         border: none; padding: 0; background: transparent;
     }
@@ -151,9 +158,10 @@ class HarnessConsoleApp(App[None]):
     SelectionList > .selection-list--button-highlighted { background: transparent; }
     Input.-textual-compact, Input.-textual-compact:focus { border: none; height: 1; }
     Input.-textual-compact:focus { text-style: bold; }
-    Button { border: round $primary 60%; color: $primary; min-width: 16; }
-    Button:hover { background: transparent; border: round $primary; text-style: bold; }
-    Button:focus { background: transparent; text-style: bold; border: round $primary; }
+    Button { border: round $panel-lighten-2; color: $foreground; min-width: 16; background: transparent; }
+    Button.-primary { border: round $primary; color: $primary; background: transparent; }
+    Button.-error { border: round $error; color: $error; background: transparent; }
+    Button:hover, Button:focus { background: transparent; border: round $primary; color: $primary; text-style: bold; }
     Button.-textual-compact, Button.-textual-compact:hover, Button.-textual-compact:focus {
         border: none; min-width: 0; height: 1; padding: 0 1;
     }
@@ -187,6 +195,8 @@ class HarnessConsoleApp(App[None]):
     def on_mount(self) -> None:
         self.register_theme(HARNESS_THEME)
         self.theme = brand.THEME_NAME
+        self.ansi_color = False
+        self.call_after_refresh(self._restore_theme)
         # Home reads the console server: without a client there is no home screen to show.
         if self.home_client is not None:
             try:
@@ -203,6 +213,12 @@ class HarnessConsoleApp(App[None]):
                     snapshot=snapshot,
                 )
             )
+
+    def _restore_theme(self) -> None:
+        """A terminal profile or a palette command must not replace the approved console theme."""
+        if self.theme != brand.THEME_NAME:
+            self.theme = brand.THEME_NAME
+        self.ansi_color = False
 
     def _tracked_runner(
         self,
