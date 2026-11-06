@@ -833,3 +833,76 @@ def test_a_job_carries_its_confirmation_and_plan_digest_and_streams_its_output(
         "plan_digest": "d" * 64,
         "client": "tui",
     }
+
+
+def test_the_update_harness_and_configuration_snapshots_and_a_diff_are_decoded() -> None:
+    from harness.console.kernel.configuration_snapshot import ConfigurationFacts
+    from harness.console.kernel.update_harness_snapshot import UpdateHarnessFacts
+
+    from ._screen_facts import CONFIGURATION_FACTS, HARNESS_STATE, UPDATE_DRIFT
+
+    update = UpdateHarnessFacts(HARNESS_STATE, "1.0.1", UPDATE_DRIFT)
+    texts = [
+        json.dumps(update.to_payload()),
+        json.dumps({"path": "AGENTS.md", "text": "--- a\n"}),
+        None,
+        json.dumps(CONFIGURATION_FACTS.to_payload()),
+        json.dumps({**update.to_payload(), "drift": []}),
+        json.dumps({"path": "other.md", "text": ""}),
+        json.dumps({**CONFIGURATION_FACTS.to_payload(), "files": {}}),
+    ]
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> str:
+        requests.append(request)
+        text = texts[len(requests) - 1]
+        if text is None:
+            return json.dumps(
+                {
+                    "v": 1,
+                    "id": request["id"],
+                    "type": request["type"],
+                    "ok": False,
+                    "error": {"code": "not_found", "message": "x"},
+                }
+            )
+        return _ok(request, snapshot_id=7, text=text, next=len(text), done=True)
+
+    with _fake_server(answer) as endpoint:
+        sut = ConsoleClient.connect(endpoint)
+        try:
+            found = sut.update_harness(force=True)
+            diff = sut.update_diff("AGENTS.md")
+            missing = sut.update_diff("../x", force=True)
+            configuration = sut.configuration()
+            with pytest.raises(MalformedReply):
+                sut.update_harness()
+            with pytest.raises(MalformedReply):
+                sut.update_diff("AGENTS.md")
+            with pytest.raises(MalformedReply):
+                sut.configuration(force=True)
+        finally:
+            sut.close()
+
+    assert isinstance(found, UpdateHarnessFacts) and found == update
+    assert (diff, missing) == ("--- a\n", None)
+    assert isinstance(configuration, ConfigurationFacts)
+    assert configuration == CONFIGURATION_FACTS
+    assert [{k: v for k, v in item.items() if k != "id"} for item in requests] == [
+        {"type": "update_harness.snapshot", "force": True},
+        {"type": "update_harness.diff", "path": "AGENTS.md", "force": False},
+        {"type": "update_harness.diff", "path": "../x", "force": True},
+        {"type": "configuration.snapshot", "force": False},
+        {"type": "update_harness.snapshot", "force": False},
+        {"type": "update_harness.diff", "path": "AGENTS.md", "force": False},
+        {"type": "configuration.snapshot", "force": True},
+    ]
+
+
+def test_a_job_start_frame_is_measured_as_the_client_sends_it() -> None:
+    from harness.console.kernel.protocol import MAX_REQUEST_BYTES
+    from harness.console.tui.client import job_start_fits
+
+    assert job_start_fits("configuration-apply", {"request": "{}"})
+    assert not job_start_fits("configuration-apply", {"request": "я" * 700})
+    assert not job_start_fits("x", {"request": "a" * MAX_REQUEST_BYTES})

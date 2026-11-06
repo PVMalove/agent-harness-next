@@ -20,6 +20,7 @@ from harness.orchestration.ledger.lifecycle import JsonObject
 
 from ...health.model import Report
 from ..kernel.batch_history import History
+from ..kernel.configuration_snapshot import ConfigurationFacts
 from ..kernel.container_route import Authored
 from ..kernel.coordinator_api import ApiResult
 from ..kernel.discovery import ServerEndpoint
@@ -28,11 +29,13 @@ from ..kernel.health_report import report_from_payload
 from ..kernel.home_snapshot import HomeSnapshot, Problem, problems_from_text
 from ..kernel.maintenance import MaintenanceView
 from ..kernel.protocol import (
+    CONFIGURATION_REQUEST,
     DIAGNOSTICS_REQUEST,
     HARNESS_REQUEST,
     HOME_PROBLEMS_REQUEST,
     HOME_REQUEST,
     LOCK_REQUEST,
+    MAX_REQUEST_BYTES,
     MAINTENANCE_REQUEST,
     MESSAGE_LIMIT,
     ORCHESTRATION_REQUEST,
@@ -46,11 +49,14 @@ from ..kernel.protocol import (
     REPORTS_REQUEST,
     ROUTE_REQUEST,
     TIMELINE_REQUEST,
+    UPDATE_DIFF_REQUEST,
+    UPDATE_HARNESS_REQUEST,
     WORKER_STEPS_REQUEST,
 )
 from ..kernel.help_text import HelpSections
 from ..kernel.open_project_snapshot import OpenProjectFacts
 from ..kernel.repo_map_snapshot import RepoMapFacts
+from ..kernel.update_harness_snapshot import UpdateHarnessFacts
 from ..kernel.reports import (
     BatchTimeline,
     LedgerView,
@@ -291,6 +297,12 @@ class ScreenClient(HomeClient, Protocol):
 
     def help(self, language: str) -> HelpSections: ...
 
+    def update_harness(self, *, force: bool = False) -> UpdateHarnessFacts: ...
+
+    def update_diff(self, path: str, *, force: bool = False) -> str | None: ...
+
+    def configuration(self, *, force: bool = False) -> ConfigurationFacts: ...
+
     def run_job(
         self,
         command_id: str,
@@ -301,6 +313,26 @@ class ScreenClient(HomeClient, Protocol):
         plan_digest: str | None = None,
         on_output: Callable[[str, str], None] | None = None,
     ) -> JobResult: ...
+
+
+# The widest request id a client sends, so a measured frame is never below the sent one.
+_WIDEST_ID = 10**12
+
+
+def job_start_fits(
+    command_id: str, values: Mapping[str, str], *, confirmed: bool = True
+) -> bool:
+    """Whether the `job.start` of `command_id` with `values` fits the server's request limit,
+    encoded as `run_job` sends it; a frame above it would be refused unread."""
+    frame = {
+        "id": _WIDEST_ID,
+        "type": "job.start",
+        "command_id": command_id,
+        "values": dict(values),
+        "confirmed": confirmed,
+        "client": "tui",
+    }
+    return len(json.dumps(frame).encode("utf-8")) <= MAX_REQUEST_BYTES
 
 
 def _object(value: object, what: str) -> dict[str, object]:
@@ -560,6 +592,39 @@ class ConsoleClient:
         `MalformedReply`."""
         found = self._paged({"type": HELP_REQUEST, "language": language})
         return self._decoded(HelpSections.from_payload, found, "снимок «Справка»")
+
+    def update_harness(self, *, force: bool = False) -> UpdateHarnessFacts:
+        """The installed harness, the package version and the drift report of «Обновить
+        Harness»; a reply off the schema is `MalformedReply`."""
+        found = self._paged({"type": UPDATE_HARNESS_REQUEST, "force": force})
+        return self._decoded(
+            UpdateHarnessFacts.from_payload, found, "снимок «Обновить Harness»"
+        )
+
+    def update_diff(self, path: str, *, force: bool = False) -> str | None:
+        """The diff of `path` against what `harness update` writes there; None when the drift
+        report does not list the file."""
+        try:
+            found = self._paged(
+                {"type": UPDATE_DIFF_REQUEST, "path": path, "force": force}
+            )
+        except ServerError as error:
+            if error.code == "not_found":
+                return None
+            raise
+        body = _object(found, "diff обновления")
+        text = body.get("text")
+        if body.get("path") != path or not isinstance(text, str) or len(body) != 2:
+            raise MalformedReply("diff обновления сервера консоли не по схеме")
+        return text
+
+    def configuration(self, *, force: bool = False) -> ConfigurationFacts:
+        """The masked configuration files with their digests of «Настройка»; a reply off the
+        schema is `MalformedReply`."""
+        found = self._paged({"type": CONFIGURATION_REQUEST, "force": force})
+        return self._decoded(
+            ConfigurationFacts.from_payload, found, "снимок «Настройка»"
+        )
 
     def run_job(
         self,
