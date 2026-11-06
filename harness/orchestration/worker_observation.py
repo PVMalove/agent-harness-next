@@ -435,19 +435,27 @@ def _plain_line(line: bytes, section: list[str]) -> list[JsonObject]:
 
 
 def _plain_headers_before(reader: BinaryIO, offset: int) -> list[str]:
-    """Section headers in a bounded window before ``offset``, in order."""
+    """Section headers in a bounded window before ``offset``, in order.
+
+    Only whole lines are classified; an oversized line is a hidden-section boundary, as in a
+    forward read."""
     start = max(0, offset - PLAIN_HEADER_WINDOW_BYTES)
     reader.seek(start)
     window = reader.read(offset - start)
     lines = window.split(b"\n")
     if start:
         lines = lines[1:]  # the first line may be cut in the middle
-    return [
-        header
-        for raw in lines
-        for text in _plain_segments(raw)
-        if (header := _plain_header(text)) is not None
-    ]
+    headers: list[str] = []
+    for raw in lines:
+        if len(raw) > MAX_STEP_LINE_BYTES:
+            headers.append(_UNKNOWN_SECTION)
+            continue
+        headers.extend(
+            header
+            for text in _plain_segments(raw)
+            if (header := _plain_header(text)) is not None
+        )
+    return headers
 
 
 def _plain_section_before(reader: BinaryIO, offset: int) -> str:
@@ -504,6 +512,29 @@ def _plain_log_unrecognised(reader: BinaryIO, size: int) -> bool:
     )
 
 
+def _skip_line(reader: BinaryIO) -> bool:
+    """Read past the rest of the current line; ``False`` if it has no end yet."""
+    while True:
+        chunk = reader.readline(MAX_STEP_LINE_BYTES)
+        if not chunk:
+            return False
+        if chunk.endswith(b"\n"):
+            return True
+
+
+def _line_start(reader: BinaryIO, offset: int) -> int | None:
+    """The first line start at or after ``offset``, or ``None`` while that line is unfinished.
+
+    A client offset is never trusted as a line boundary: a line whose start was not seen is
+    skipped whole, never parsed."""
+    if not offset:
+        return 0
+    reader.seek(offset - 1)
+    if reader.read(1) == b"\n":
+        return offset
+    return reader.tell() if _skip_line(reader) else None
+
+
 def _read_step_page(
     path: Path,
     offset: int,
@@ -523,12 +554,15 @@ def _read_step_page(
                     **unavailable_page(source, "log_unrecognised", position),
                     "reset": reset,
                 }
+            aligned = _line_start(stream, position)
+            position = position if aligned is None else aligned
             section = [
                 _plain_section_before(stream, position)
                 if source == "plain" and position
                 else ""
             ]
-            stream.seek(position)
+            # An unfinished line under the offset: wait at the offset, read nothing.
+            stream.seek(size if aligned is None else position)
             steps: list[JsonObject] = []
             used = 0
             more = False
@@ -545,6 +579,8 @@ def _read_step_page(
                     if not line:
                         break  # oversized and unfinished: wait at its start
                     position = stream.tell()  # oversized records are never parsed
+                    # Its section is unknown, so it hides what follows until a header.
+                    section[0] = _UNKNOWN_SECTION
                     continue
                 found = parse_line(line, section)
                 cost = sum(_step_cost(step) for step in found)

@@ -526,3 +526,149 @@ def test_structured_log_path_requires_a_bound_receipt_in_logs_storage(
     assert structured_log_path(
         tmp_path, {**receipt, "log_path": str(tmp_path / "x.jsonl")}, "dispatch-a"
     ) == (None, "log_outside_storage")
+
+
+def test_oversized_plain_header_hides_what_follows_until_the_next_codex_header(
+    tmp_path: Path,
+) -> None:
+    from harness.orchestration import worker_observation
+
+    log = tmp_path / "dispatch-x.log"
+    huge = "x" * (worker_observation.MAX_STEP_LINE_BYTES + 10)
+    log.write_text(
+        f'[t] codex\nhi\n[t] tool srv.fn({{"q":"{huge}"}})\nLEAKX-AFTER\n'
+        "[t] codex\nbye\n"
+    )
+
+    page = read_plain_steps(log, 0, 1 << 20)
+
+    assert [step["text"] for step in page["steps"]] == ["hi", "bye"]
+    assert "LEAKX" not in _texts(page)
+
+
+def test_oversized_codex_body_line_ends_the_visible_section(tmp_path: Path) -> None:
+    from harness.orchestration import worker_observation
+
+    log = tmp_path / "dispatch-x.log"
+    huge = "y" * (worker_observation.MAX_STEP_LINE_BYTES + 10)
+    log.write_text(f"[t] codex\nhi\n{huge}\nLEAKX-AFTER\n[t] codex\nbye\n")
+    after_huge = len(f"[t] codex\nhi\n{huge}\n".encode())
+
+    page = read_plain_steps(log, 0, 1 << 20)
+    resumed = read_plain_steps(log, after_huge, 1 << 20)
+
+    assert [step["text"] for step in page["steps"]] == ["hi", "bye"]
+    assert [step["text"] for step in resumed["steps"]] == ["bye"]
+
+
+def test_offset_inside_a_header_line_is_realigned_without_exposing_its_tail(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_text('[t] codex\nhi\n[t] codex_apps.fn({"q":"LEAKX"})\nLEAKX-BODY\n')
+    inside = len(b"[t] codex\nhi\n[t] codex")
+
+    page = read_plain_steps(log, inside, 4096)
+
+    assert page["steps"] == []
+    assert page["offset"] == log.stat().st_size
+    assert "LEAKX" not in _texts(page)
+
+
+@pytest.mark.parametrize(
+    "header", ["[t] thinking", "[t] exec", "thinking", "exec", "[t] user"]
+)
+def test_offset_inside_a_hidden_section_body_never_exposes_the_body(
+    tmp_path: Path, header: str
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    text = (
+        f"[t] codex\nhi\n{header}\nSECRET-ONE line\nSECRET-TWO line\n"
+        "[t] codex\nbye\n"
+    )
+    log.write_text(text)
+    start = text.index(header)
+
+    for offset in range(start, text.index("[t] codex\nbye")):
+        page = read_plain_steps(log, offset, 4096)
+        assert "SECRET" not in _texts(page), offset
+        assert _texts(page).endswith("bye"), offset
+
+
+def test_offset_inside_an_unfinished_line_waits_and_exposes_nothing(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_bytes(b"[t] codex\nhi\n[t] codex SECRET-PARTIAL")
+    inside = len(b"[t] codex\nhi\n[t] codex")
+
+    page = read_plain_steps(log, inside, 4096)
+
+    assert page["steps"] == []
+    assert page["offset"] == inside
+
+
+def test_structured_offset_inside_a_record_never_parses_its_tail(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "events.jsonl"
+    foreign = 'noise {"type": "result", "result": "LEAKX-TAIL"}\n'
+    log.write_text(foreign + json.dumps({"type": "result", "result": "after"}) + "\n")
+
+    full = read_structured_steps(log, 0, 4096)
+    page = read_structured_steps(log, len("noise "), 4096)
+
+    assert [step["text"] for step in full["steps"]] == ["after"]
+    assert [step["text"] for step in page["steps"]] == ["after"]
+
+
+_FRAGMENTS = (
+    "[t] codex",
+    "[t] codex extra",
+    "[t] thinking",
+    "[t] exec",
+    "[t] tool srv.fn({})",
+    "[t] turn diff:",
+    "thinking",
+    "codex",
+    "message one",
+    "message two",
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    "a\r[t] exec",
+    "",
+)
+
+
+@pytest.mark.parametrize("seed", range(12))
+def test_a_read_from_any_byte_offset_emits_only_lines_of_a_full_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, seed: int
+) -> None:
+    import random
+
+    from harness.orchestration import worker_observation
+
+    monkeypatch.setattr(worker_observation, "MAX_STEP_LINE_BYTES", 24)
+    monkeypatch.setattr(worker_observation, "PLAIN_HEADER_WINDOW_BYTES", 40)
+    rng = random.Random(seed)
+    lines = ["[t] codex"] + [
+        f"{rng.choice(_FRAGMENTS)} {rng.randrange(100)}"
+        if rng.random() < 0.3
+        else rng.choice(_FRAGMENTS)
+        for _ in range(30)
+    ]
+    data = ("\n".join(lines) + "\n").encode()
+    log = tmp_path / "dispatch-x.log"
+    log.write_bytes(data)
+
+    def emitted(offset: int) -> set[str]:
+        texts: set[str] = set()
+        while True:
+            page = read_plain_steps(log, offset, 1 << 16)
+            texts |= {f"{s['kind']}:{s['text']}" for s in page["steps"]}
+            if not page["more"]:
+                return texts
+            offset = page["offset"]
+
+    full = emitted(0)
+    for offset in range(len(data) + 1):
+        assert emitted(offset) <= full, offset
