@@ -255,7 +255,7 @@ class HarnessConsoleApp(App[None]):
         from .screens.help import HelpScreen
 
         if not isinstance(self.screen, HelpScreen):
-            self.push_screen(HelpScreen())
+            self.push_screen(HelpScreen(self.home_client))
 
     def action_command_palette(self) -> None:
         """Open the palette (the ☰ menu) in the console's own look and language."""

@@ -841,7 +841,9 @@ class DashboardScreen(ConsoleShell):
                 self.app.activate_project(repo)
 
         self.app.push_screen(
-            ProjectSetupScreen(self.repo, command_runner=self._command_runner),
+            ProjectSetupScreen(
+                self.repo, command_runner=self._command_runner, client=self._home_client
+            ),
             selected,
         )
 
@@ -941,4 +943,4 @@ class DashboardScreen(ConsoleShell):
     def _help(self) -> Screen[None]:
         from .help import HelpScreen
 
-        return HelpScreen()
+        return HelpScreen(self._home_client)

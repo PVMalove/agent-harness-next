@@ -23,7 +23,9 @@ from harness.console.kernel.home_snapshot import (
     HomeSnapshot,
     build_home_snapshot,
 )
+from harness.console.kernel.help_text import HelpSections, help_sections
 from harness.console.kernel.maintenance import MaintenanceView
+from harness.console.kernel.open_project_snapshot import OpenProjectFacts
 from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
 from harness.console.tui.client import (
@@ -85,6 +87,9 @@ class FakeHomeClient:
         self.maintenance: tuple[MaintenanceView | None, str] = (None, "")
         self.repo_map_facts = RepoMapFacts(
             None, None, TierSetting("full", False), MemoryStatus(False, False, (), None), None, {}
+        )
+        self.open_project_facts = OpenProjectFacts(
+            str(repo), None, "Это не Git-проект", {}, ()
         )
         self.closed = False
 
@@ -169,6 +174,16 @@ class FakeHomeClient:
     def repo_map(self, *, force: bool = False) -> RepoMapFacts:
         self.screen_requests.append(("repo_map", force))
         return RepoMapFacts.from_payload(_wire(self.repo_map_facts.to_payload()))
+
+    def open_project(self, *, force: bool = False) -> OpenProjectFacts:
+        self.screen_requests.append(("open_project", force))
+        return OpenProjectFacts.from_payload(
+            _wire(self.open_project_facts.to_payload())
+        )
+
+    def help(self, language: str) -> HelpSections:
+        self.screen_requests.append(("help", language))
+        return HelpSections.from_payload(_wire(help_sections(language).to_payload()))
 
     def run_job(
         self,

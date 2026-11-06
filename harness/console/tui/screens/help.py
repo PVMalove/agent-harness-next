@@ -1,4 +1,4 @@
-"""Help screen: the console guide from harness.console.tui.help_text, rendered as Markdown."""
+"""Help screen: the console guide of the console server's `help.snapshot`, rendered as Markdown."""
 
 from __future__ import annotations
 
@@ -8,8 +8,26 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import ListItem, ListView, Markdown, Static
 
 from ...kernel import brand, i18n
-from ..help_text import help_markdown
+from ..client import ConsoleClientError, ScreenClient
 from ..shell import ConsoleShell, Fold
+from .commands import call_from_worker
+
+READING = "Читаю справку…"
+
+
+def guide_parts(
+    client: ScreenClient | None, language: str
+) -> tuple[str, list[tuple[str, str]]]:
+    """The introduction and the sections of the guide in `language`, read from the console
+    server's `help.snapshot`; without the server, or when it does not answer, the introduction
+    is the reason and there are no sections. Blocks: the screen calls it in a worker."""
+    if client is None:
+        return i18n.tr(language, "Справка недоступна: сервер консоли не подключён"), []
+    try:
+        guide = client.help(language)
+    except ConsoleClientError as exc:
+        return f"{i18n.tr(language, 'Справка недоступна:')} {exc}", []
+    return guide.intro, list(guide.sections)
 
 
 class HelpScreen(ConsoleShell):
@@ -32,42 +50,73 @@ class HelpScreen(ConsoleShell):
     HelpScreen.-narrow .help-section MarkdownH2 { display: none; }
     """)
 
-    def __init__(self) -> None:
+    def __init__(self, client: ScreenClient | None) -> None:
         super().__init__()
+        self._client = client
         self._help_narrow: bool | None = None
         self._navigation_blocked = False
-
-    def _parts(self) -> tuple[str, list[tuple[str, str]]]:
-        intro, *parts = help_markdown(getattr(self.app, "language", "ru")).split(
-            "\n## "
-        )
-        return intro, [(part.split("\n", 1)[0], "## " + part) for part in parts]
+        # A language switch outdates a read that is still running: its result is dropped.
+        self._load_epoch = 0
 
     def compose_strip(self) -> ComposeResult:
         yield Static("", id="help-source", classes="no-i18n", markup=False)
 
     def compose_content(self) -> ComposeResult:
-        intro, parts = self._parts()
+        language = getattr(self.app, "language", "ru")
         with Horizontal(id="help-layout"):
-            yield ListView(
-                *(ListItem(Static(title, classes="no-i18n")) for title, _ in parts),
-                id="help-toc",
-            )
+            yield ListView(id="help-toc")
             with VerticalScroll(id="help-scroll"):
-                yield Markdown(intro, id="help-text")
-                for index, (title, body) in enumerate(parts):
-                    yield Fold(
-                        Markdown(body, id=f"help-body-{index}"),
-                        title=title,
-                        id=f"help-section-{index}",
-                        classes="help-section",
-                        collapsed=self.app.size.width < brand.NARROW_WIDTH
-                        and index != 0,
-                    )
+                yield Markdown(i18n.tr(language, READING), id="help-text")
 
     def on_mount(self) -> None:
-        self._adapt_sections(self.size.width)
         self._update_source()
+        self._load()
+
+    def _load(self) -> None:
+        """Read the guide in the console language from the server in a worker, then show it."""
+        self._load_epoch += 1
+        epoch, language = self._load_epoch, getattr(self.app, "language", "ru")
+
+        def work() -> None:
+            intro, parts = guide_parts(self._client, language)
+
+            def done() -> None:
+                if epoch == self._load_epoch:
+                    self.call_later(self._show, intro, parts)
+
+            call_from_worker(self, done)
+
+        self.run_worker(work, thread=True, group="help", exclusive=True)
+
+    async def _show(self, intro: str, parts: list[tuple[str, str]]) -> None:
+        """Show the guide: the sections are updated in place when their number is unchanged (a
+        language switch), otherwise mounted anew."""
+        self.query_one("#help-text", Markdown).update(intro)
+        toc = self.query_one("#help-toc", ListView)
+        if len(self.query(".help-section")) == len(parts):
+            for index, ((title, body), item) in enumerate(zip(parts, toc.children)):
+                self.query_one(f"#help-body-{index}", Markdown).update(body)
+                item.query_one(Static).update(title)
+            return
+        # Removed before mounting: the new sections reuse the ids of the old ones.
+        await self.query(".help-section").remove()
+        await toc.clear()
+        await toc.extend(
+            ListItem(Static(title, classes="no-i18n")) for title, _ in parts
+        )
+        narrow = self.size.width < brand.NARROW_WIDTH
+        await self.query_one("#help-scroll", VerticalScroll).mount_all(
+            Fold(
+                Markdown(body, id=f"help-body-{index}"),
+                title=title,
+                id=f"help-section-{index}",
+                classes="help-section",
+                collapsed=narrow and index != 0,
+            )
+            for index, (title, body) in enumerate(parts)
+        )
+        self._help_narrow = None
+        self.call_after_refresh(self._adapt_sections, self.size.width)
 
     def _update_source(self) -> None:
         language = getattr(self.app, "language", "ru")
@@ -119,11 +168,5 @@ class HelpScreen(ConsoleShell):
 
     def sync_language(self) -> None:
         super().sync_language()
-        intro, parts = self._parts()
-        self.query_one("#help-text", Markdown).update(intro)
-        for index, (title, body) in enumerate(parts):
-            self.query_one(f"#help-body-{index}", Markdown).update(body)
-            self.query_one("#help-toc", ListView).children[index].query_one(
-                Static
-            ).update(title)
         self._update_source()
+        self._load()

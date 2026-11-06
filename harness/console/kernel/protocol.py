@@ -31,6 +31,11 @@ HARNESS_REQUEST = "harness.snapshot"
 MAINTENANCE_REQUEST = "harness.maintenance"
 # The Repo Map screen: HEAD, its cached map, the tier, the parser bundle and the memory status.
 REPO_MAP_REQUEST = "repo_map.snapshot"
+# «Открыть проект»: the installation state of the served project and the candidate projects, each
+# with the command that starts the Web console there; the server never switches its project.
+OPEN_PROJECT_REQUEST = "open_project.snapshot"
+# «Справка»: the console guide in the requested language, split into its sections.
+HELP_REQUEST = "help.snapshot"
 # Worker steps: one page of a dispatch's worker log from a byte offset the client keeps, and a
 # stream of such pages in a subscription slot.
 WORKER_STEPS_REQUEST = "worker.steps"

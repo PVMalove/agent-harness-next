@@ -51,6 +51,7 @@
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
           "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
           "harness.snapshot": "#/$defs/HarnessSnapshotRequest",
+          "help.snapshot": "#/$defs/HelpSnapshotRequest",
           "home.problems": "#/$defs/HomeProblemsRequest",
           "home.snapshot": "#/$defs/HomeSnapshotRequest",
           "job.cancel": "#/$defs/JobCancelRequest",
@@ -58,6 +59,7 @@
           "job.list": "#/$defs/JobListRequest",
           "job.start": "#/$defs/JobStartRequest",
           "job.subscribe": "#/$defs/JobSubscribeRequest",
+          "open_project.snapshot": "#/$defs/OpenProjectSnapshotRequest",
           "orchestration.lock": "#/$defs/OrchestrationLockRequest",
           "orchestration.snapshot": "#/$defs/OrchestrationSnapshotRequest",
           "orchestration.subscribe": "#/$defs/OrchestrationSubscribeRequest",
@@ -140,6 +142,12 @@
         },
         {
           "$ref": "#/$defs/RepoMapSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/OpenProjectSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HelpSnapshotRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"
@@ -479,6 +487,46 @@
         "type"
       ],
       "title": "HarnessSnapshotRequest",
+      "type": "object"
+    },
+    "HelpSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "language": {
+          "enum": [
+            "ru",
+            "en"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "type": {
+          "const": "help.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "language"
+      ],
+      "title": "HelpSnapshotRequest",
       "type": "object"
     },
     "HomeProblemsReply": {
@@ -1107,6 +1155,42 @@
       "type": "object"
     },
     "JsonValue": {},
+    "OpenProjectSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "open_project.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OpenProjectSnapshotRequest",
+      "type": "object"
+    },
     "OrchestrationEventsReply": {
       "additionalProperties": false,
       "properties": {
@@ -1719,7 +1803,9 @@
             "diagnostics.snapshot",
             "harness.snapshot",
             "harness.maintenance",
-            "repo_map.snapshot"
+            "repo_map.snapshot",
+            "open_project.snapshot",
+            "help.snapshot"
           ],
           "title": "Type",
           "type": "string"

@@ -1,8 +1,8 @@
 """Screen facts read from the project: the orchestration ledger, the ledger lock, the read-only
 coordinator commands of the Recovery and Container route screens (`batch list`, `recovery status`,
 `dispatch preflight`), the health report of Diagnostics, the installation, drift and
-maintenance facts of Harness and the Repo Map facts. Nothing here writes, locks the ledger, applies
-a fix or starts a worker."""
+maintenance facts of Harness, the Repo Map facts and the «Открыть проект» facts. Nothing here
+writes, locks the ledger, applies a fix, installs or starts a worker."""
 
 from __future__ import annotations
 
@@ -20,6 +20,13 @@ from ...kernel.container_route import Authored, read_authored
 from ...kernel.coordinator_api import ApiResult, CoordinatorApi
 from ...kernel.harness_facts import harness_state
 from ...kernel.maintenance import load_maintenance
+from ...kernel.open_project_snapshot import Candidate, OpenProjectFacts
+from ...kernel.project_target import (
+    ProjectTarget,
+    capability_options,
+    inspect_target,
+    installation_blockers,
+)
 from ...kernel.pr_timings import load_reports_view
 from ...kernel.repo_map import cached_map, head_commit
 from ...kernel.repo_map_settings import language_files, memory_status, tier_setting
@@ -124,4 +131,56 @@ def repo_map_facts(repo: Path) -> dict[str, object]:
         memory=memory_status(repo),
         parsers=parsers,
         language_files=language_files(repo),
+    ).to_payload()
+
+
+# «Открыть проект» lists at most this many sibling projects beside the served one.
+CANDIDATE_LIMIT = 20
+
+
+def _installed(path: Path) -> bool:
+    return (path / ".harness" / "harness.lock").is_file()
+
+
+def _candidates(repo: Path) -> tuple[Candidate, ...]:
+    """The served project, then the Git projects beside it (a `.git` directory or worktree
+    file), by name; an unreadable parent lists only the served project."""
+    try:
+        siblings = sorted(
+            path
+            for path in repo.parent.iterdir()
+            if path != repo and path.is_dir() and (path / ".git").exists()
+        )
+    except OSError:
+        siblings = []
+    return (
+        Candidate(str(repo), _installed(repo), True),
+        *(
+            Candidate(str(path), _installed(path), False)
+            for path in siblings[:CANDIDATE_LIMIT]
+        ),
+    )
+
+
+def open_project_facts(repo: Path) -> dict[str, object]:
+    """The installation state of the served project (the plan target and the blockers of every
+    capability, or why it cannot be installed into) and the candidate projects; reads files and
+    runs `git rev-parse`, never installs."""
+    target: ProjectTarget | None = None
+    blockers: dict[str, tuple[str, ...]] = {}
+    error = ""
+    try:
+        target = inspect_target(str(repo))
+        blockers = {
+            name: installation_blockers(target, name)
+            for name, _ in capability_options()
+        }
+    except ValueError as exc:  # not a Git project, a broken lock: the reason is shown
+        target, error = None, str(exc)
+    except (
+        OSError
+    ) as exc:  # unreadable files: the plan stays unchecked, never unblocked
+        blockers, error = {}, str(exc) or type(exc).__name__
+    return OpenProjectFacts(
+        str(repo), target, error, blockers, _candidates(repo)
     ).to_payload()

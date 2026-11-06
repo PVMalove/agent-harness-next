@@ -746,6 +746,50 @@ def test_the_repo_map_snapshot_is_decoded_and_a_map_off_schema_v1_is_malformed()
     ]
 
 
+def test_the_open_project_and_help_snapshots_are_decoded_and_off_schema_is_malformed() -> (
+    None
+):
+    from harness.console.kernel.help_text import HelpSections, help_sections
+    from harness.console.kernel.open_project_snapshot import OpenProjectFacts
+
+    from ._screen_facts import open_project_facts
+
+    project, guide = open_project_facts(), help_sections("en")
+    texts = [
+        json.dumps(project.to_payload()),
+        json.dumps(guide.to_payload()),
+        json.dumps({**project.to_payload(), "repo": 1}),
+        json.dumps({**guide.to_payload(), "sections": "x"}),
+    ]
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> str:
+        requests.append(request)
+        text = texts[len(requests) - 1]
+        return _ok(request, snapshot_id=6, text=text, next=len(text), done=True)
+
+    with _fake_server(answer) as endpoint:
+        sut = ConsoleClient.connect(endpoint)
+        try:
+            found = sut.open_project(force=True)
+            sections = sut.help("en")
+            with pytest.raises(MalformedReply):
+                sut.open_project()
+            with pytest.raises(MalformedReply):
+                sut.help("ru")
+        finally:
+            sut.close()
+
+    assert isinstance(found, OpenProjectFacts) and found == project
+    assert isinstance(sections, HelpSections) and sections == guide
+    assert [{k: v for k, v in item.items() if k != "id"} for item in requests] == [
+        {"type": "open_project.snapshot", "force": True},
+        {"type": "help.snapshot", "language": "en"},
+        {"type": "open_project.snapshot", "force": False},
+        {"type": "help.snapshot", "language": "ru"},
+    ]
+
+
 def test_a_job_carries_its_confirmation_and_plan_digest_and_streams_its_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

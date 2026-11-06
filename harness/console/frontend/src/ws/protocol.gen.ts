@@ -100,7 +100,9 @@ export type Type8 =
   | "diagnostics.snapshot"
   | "harness.snapshot"
   | "harness.maintenance"
-  | "repo_map.snapshot";
+  | "repo_map.snapshot"
+  | "open_project.snapshot"
+  | "help.snapshot";
 export type V8 = 1;
 export type Done3 = boolean;
 export type Id10 = string | number | null;
@@ -169,6 +171,8 @@ export type ConsoleRequest =
   | HarnessSnapshotRequest
   | HarnessMaintenanceRequest
   | RepoMapSnapshotRequest
+  | OpenProjectSnapshotRequest
+  | HelpSnapshotRequest
   | SnapshotPageRequest
   | WorkerStepsRequest
   | WorkerSubscribeRequest;
@@ -254,18 +258,24 @@ export type Type33 = "harness.maintenance";
 export type Force9 = boolean;
 export type Id35 = string | number | null;
 export type Type34 = "repo_map.snapshot";
+export type Force10 = boolean;
 export type Id36 = string | number | null;
+export type Type35 = "open_project.snapshot";
+export type Id37 = string | number | null;
+export type Language = "ru" | "en";
+export type Type36 = "help.snapshot";
+export type Id38 = string | number | null;
 export type Offset2 = number;
 export type SnapshotId3 = number;
-export type Type35 = "snapshot.page";
+export type Type37 = "snapshot.page";
 export type DispatchId2 = string;
-export type Id37 = string | number | null;
+export type Id39 = string | number | null;
 export type Offset3 = number;
-export type Type36 = "worker.steps";
+export type Type38 = "worker.steps";
 export type DispatchId3 = string;
-export type Id38 = string | number | null;
+export type Id40 = string | number | null;
 export type Offset4 = number;
-export type Type37 = "worker.subscribe";
+export type Type39 = "worker.subscribe";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
@@ -716,13 +726,31 @@ export interface RepoMapSnapshotRequest {
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "OpenProjectSnapshotRequest".
+ */
+export interface OpenProjectSnapshotRequest {
+  force?: Force10;
+  id?: Id36;
+  type: Type35;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "HelpSnapshotRequest".
+ */
+export interface HelpSnapshotRequest {
+  id?: Id37;
+  language: Language;
+  type: Type36;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "SnapshotPageRequest".
  */
 export interface SnapshotPageRequest {
-  id?: Id36;
+  id?: Id38;
   offset: Offset2;
   snapshot_id: SnapshotId3;
-  type: Type35;
+  type: Type37;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -730,9 +758,9 @@ export interface SnapshotPageRequest {
  */
 export interface WorkerStepsRequest {
   dispatch_id: DispatchId2;
-  id?: Id37;
+  id?: Id39;
   offset: Offset3;
-  type: Type36;
+  type: Type38;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -740,7 +768,7 @@ export interface WorkerStepsRequest {
  */
 export interface WorkerSubscribeRequest {
   dispatch_id: DispatchId3;
-  id?: Id38;
+  id?: Id40;
   offset?: Offset4;
-  type: Type37;
+  type: Type39;
 }

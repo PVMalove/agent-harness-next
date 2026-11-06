@@ -95,6 +95,13 @@ class RepoMapCollector(Protocol):
     def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
+class OpenProjectCollector(Protocol):
+    """The «Открыть проект» facts (`OpenProjectFacts.to_payload`) of the served project: its
+    installation state and the candidate projects; blocks until read and never installs."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
 class JobExecutor(Protocol):
     """Emit on the event loop, and finish all output callbacks before returning an exit code.
 

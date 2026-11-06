@@ -861,6 +861,9 @@ EN.update(
         "Сервер консоли не нашёл тело этого отчёта": "The console server found no body for this report",
         "Сервер консоли не отдал данные оркестрации": "The console server did not return the orchestration data",
         "Загрузка данных оркестрации…": "Loading the orchestration data…",
+        "Справка недоступна: сервер консоли не подключён": "Help is unavailable: the console server is not connected",
+        "Справка недоступна:": "Help is unavailable:",
+        "Читаю справку…": "Reading the help…",
         "конфигурация не получена от сервера консоли": "configuration not received from the console server",
     }
 )
@@ -871,6 +874,7 @@ EN_PREFIXES.update(
         "Хронология батча недоступна: ": "Batch timeline is unavailable: ",
         "Сервер консоли не отдал данные оркестрации: ": "The console server did not return the orchestration data: ",
         "конфигурация не получена от сервера консоли: ": "configuration not received from the console server: ",
+        "Сервер консоли не отдал состояние проекта: ": "The console server did not return the project state: ",
     }
 )
 EN.update(
