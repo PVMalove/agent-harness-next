@@ -35,6 +35,9 @@ const jobEvents = (events: JobEvent[]) =>
   events.flatMap((event) => (event.type === "job" ? [event.job] : []));
 
 describe("job snapshots", () => {
+  test("reject malformed coordinator field metadata before a decision form can use it", () => {
+    expect(parseCommands([{ ...COMMANDS[0], fields: [{ dest: "decision", choices: "accept" }] }])).toBeNull();
+  });
   test("parse the summary, the snapshot and the command descriptions of the server", () => {
     const snapshot = jobSnapshot({ output: lines(0, 2), cursor: 2 });
     expect(parseJobSnapshot(snapshot)).toEqual(snapshot);

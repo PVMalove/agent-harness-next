@@ -10,13 +10,13 @@ from typing import Protocol
 
 from ....json_types import JsonObject
 from ...kernel.batch_history import History
-from ...kernel.catalog import Reversibility
 from ...kernel.container_route import Authored
 from ...kernel.coordinator_api import ApiResult
 from ...kernel.home_snapshot import HomeSnapshot
 from ...kernel.reports import LedgerView
 from ...kernel.protocol import _clip
 from ..domain.events import Event, Observation, View
+from ..domain.jobs import CommandDescription
 from ..domain.task_board import REASON_BYTES, SpecList, SpecTickets, TrackerSpec
 from ..domain.worker_steps import WorkerFacts
 
@@ -141,20 +141,8 @@ class JobExecutor(Protocol):
     ) -> Awaitable[int]: ...
 
 
-class CommandSpec(Protocol):
+class CommandSpec(CommandDescription, Protocol):
     """A command a job can run: what `JobService` reads of a catalog entry."""
-
-    @property
-    def key(self) -> str: ...
-
-    @property
-    def read_only(self) -> bool: ...
-
-    @property
-    def reversibility(self) -> Reversibility: ...
-
-    @property
-    def needs_confirmation(self) -> bool: ...
 
     def available(self, repo: Path) -> bool: ...
 

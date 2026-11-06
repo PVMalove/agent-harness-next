@@ -114,7 +114,7 @@ class JobService:
                 entry, section=str(section), available=entry.available(self.repo)
             )
             for key, entry in self._catalog.items()
-            if self._sections.get(key) == section and isinstance(entry, CatalogEntry)
+            if self._sections.get(key) == section
         ]
 
     def start(self, body: Mapping[str, object]) -> Job:

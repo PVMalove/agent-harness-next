@@ -178,6 +178,10 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         "setup": SETUP_COMMANDS,
         "configuration": CONFIGURATION_COMMANDS,
         "memory": MEMORY_COMMANDS,
+        "decisions": tuple(
+            entry for entry in COORDINATOR_COMMANDS
+            if entry.key in {"batch-approve", "batch-decide", "batch-attention-resolve", "dispatch-propose", "dispatch-create"}
+        ) + NATIVE_PERMISSION_COMMANDS,
     }
     return JobService(
         repo,

@@ -88,14 +88,18 @@ class DecisionsSnapshot:
     # True when the project has no readable ledger.
     unavailable: bool = False
     version: int = SCHEMA_VERSION
+    error_code: str | None = None
 
     def to_payload(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "version": self.version,
             "items": [asdict(item) for item in self.items],
             "total": self.total,
             "unavailable": self.unavailable,
         }
+        if self.error_code is not None:
+            payload["error_code"] = self.error_code
+        return payload
 
 
 def _wire_size(item: DecisionItem) -> int:

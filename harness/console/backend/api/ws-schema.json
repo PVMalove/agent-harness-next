@@ -86,6 +86,21 @@
           ],
           "title": "Confirmation Reason"
         },
+        "fields": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CoordinatorInput"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fields"
+        },
         "inputs": {
           "items": {
             "type": "string"
@@ -128,7 +143,8 @@
             "repo-map",
             "setup",
             "configuration",
-            "memory"
+            "memory",
+            "decisions"
           ],
           "title": "Section",
           "type": "string"
@@ -439,6 +455,72 @@
         "type"
       ],
       "title": "ContainerRouteSnapshotRequest",
+      "type": "object"
+    },
+    "CoordinatorInput": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Choices"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Default"
+        },
+        "dest": {
+          "title": "Dest",
+          "type": "string"
+        },
+        "flag": {
+          "title": "Flag",
+          "type": "string"
+        },
+        "help": {
+          "title": "Help",
+          "type": "string"
+        },
+        "repeatable": {
+          "title": "Repeatable",
+          "type": "boolean"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "takes_value": {
+          "title": "Takes Value",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dest",
+        "flag",
+        "required",
+        "repeatable",
+        "choices",
+        "help",
+        "default",
+        "takes_value"
+      ],
+      "title": "CoordinatorInput",
       "type": "object"
     },
     "DecisionsSnapshotReply": {
@@ -1097,7 +1179,8 @@
             "repo-map",
             "setup",
             "configuration",
-            "memory"
+            "memory",
+            "decisions"
           ],
           "title": "Section",
           "type": "string"

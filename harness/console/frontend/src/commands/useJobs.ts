@@ -24,6 +24,7 @@ export interface Jobs {
   /** The job whose output the panel shows. */
   shown: LocalJob | null;
   refusal: JobRefusal | null;
+  starting: boolean;
   start(request: StartJob): void;
   cancel(jobId: string): void;
   show(jobId: string): void;
@@ -36,6 +37,7 @@ export function useJobs(section: Section): Jobs {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [shown, setShown] = useState<LocalJob | null>(null);
   const [refusal, setRefusal] = useState<JobRefusal | null>(null);
+  const [starting, setStarting] = useState(false);
   // The id of the shown job; "start" until the reply of a start names it.
   const shownId = useRef<string | null>(null);
 
@@ -55,7 +57,7 @@ export function useJobs(section: Section): Jobs {
         }
       } else if (event.type === "job") {
         const { job } = event;
-        if (shownId.current === "start") shownId.current = job.id;
+        if (shownId.current === "start") { shownId.current = job.id; setStarting(false); }
         if (job.id === shownId.current) setShown(job);
         setJobs((known) => {
           const { output: _output, ...summary } = job;
@@ -64,7 +66,7 @@ export function useJobs(section: Section): Jobs {
             : [...known, summary];
         });
       } else {
-        if (event.request === "job.start" && shownId.current === "start") shownId.current = null;
+        if (event.request === "job.start" && shownId.current === "start") { shownId.current = null; setStarting(false); }
         setRefusal({ request: event.request, code: event.code, message: event.message });
         if (event.code === "busy" && event.jobId) {
           // The console is busy with another mutation: show that job instead.
@@ -77,7 +79,7 @@ export function useJobs(section: Section): Jobs {
       if (event.type === "open") client.requestCommands(section);
       // A lost start reply has no known job id. Reconcile the server's active job on reopen;
       // never resend the mutation whose outcome is unknown.
-      if (event.type === "closed" && shownId.current === "start") shownId.current = null;
+      if (event.type === "closed" && shownId.current === "start") { shownId.current = null; setStarting(false); }
     });
     client.requestCommands(section);
     client.listJobs();
@@ -91,7 +93,8 @@ export function useJobs(section: Section): Jobs {
     (request: StartJob) => {
       setRefusal(null);
       shownId.current = "start";
-      client.startJob(request);
+      setStarting(true);
+      if (!client.startJob(request)) { shownId.current = null; setStarting(false); }
     },
     [client],
   );
@@ -116,5 +119,5 @@ export function useJobs(section: Section): Jobs {
     () => jobs.find((job) => job.mutating && job.phase === "running") ?? null,
     [jobs],
   );
-  return { commands, cancelReason, busy, shown, refusal, start, cancel, show };
+  return { commands, cancelReason, busy, shown, refusal, starting, start, cancel, show };
 }

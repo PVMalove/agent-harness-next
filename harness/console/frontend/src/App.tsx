@@ -7,6 +7,7 @@ import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from 
 import { NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
 import { Harness } from "./routes/Harness";
+import { Decisions } from "./routes/Decisions";
 import { Home } from "./routes/Home";
 import { Placeholder } from "./routes/Placeholder";
 import { RepoMap } from "./routes/RepoMap";
@@ -27,6 +28,8 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   "repo-map": <RepoMap />,
   harness: <Harness />,
   "agent-activity": <AgentActivity />,
+  orchestration: <Decisions section="Orchestration" />,
+  publish: <Decisions section="Публикация" />,
 };
 
 export function createRouter() {
