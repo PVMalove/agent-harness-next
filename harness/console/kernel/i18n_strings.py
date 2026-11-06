@@ -759,6 +759,8 @@ EN_COMMANDS: dict[str, str] = {
     "Health-отчёт": "Health report",
     "Health-отчёт с локальными фиксами": "Health report with local fixes",
     "Health-отчёт с онлайн-проверками и созданием лейблов": "Health report with online checks and label creation",
+    "Применить локальные фиксы Диагностики": "Apply the local Diagnostics fixes",
+    "Применить фиксы Диагностики с онлайн-проверками": "Apply the Diagnostics fixes with online checks",
     "Построить Repo Map для HEAD": "Build the Repo Map for HEAD",
     "Собрать parser bundle из wheelhouse": "Build the parser bundle from the wheelhouse",
     "Полная проверка (verify)": "Full verification (verify)",

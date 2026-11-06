@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -221,3 +222,52 @@ def test_the_security_middleware_refuses_a_screen_client_without_the_session(
 
     asyncio.run(scenario())
     assert facts.calls == {} and runtime.clients == 0
+
+
+def test_the_job_service_runs_a_diagnostics_fix_only_as_confirmed(tmp_path: Path) -> None:
+    """An online fix changes the tracker: it starts only confirmed, then runs as a server job
+    whose stdout is the `--json` report."""
+    from harness.console.backend.domain.jobs import JobRejected
+    from harness.console.kernel.catalog import DIAGNOSTICS_COMMANDS
+    from harness.health.report_json import to_json
+
+    from ._screen_facts import health_report
+
+    ran: list[list[str]] = []
+    journal: list[dict[str, object]] = []
+
+    async def executor(
+        argv: object, *, cwd: Path, on_output: object, cancel_event: object
+    ) -> int:
+        ran.append(list(cast(list[str], argv)))
+        cast(Callable[[str, str], None], on_output)(
+            "stdout", json.dumps(to_json(health_report()))
+        )
+        return 1
+
+    async def scenario() -> None:
+        served = composition.job_service(tmp_path, executor=executor)
+        with pytest.raises(JobRejected) as refused:
+            served.start({"command_id": "diagnostics-online-fix", "client": "tui"})
+        assert refused.value.code == "confirmation_required" and ran == []
+        # The same catalog entry with an in-memory journal: the real one resolves Git.
+        jobs = JobService(
+            tmp_path,
+            catalog={entry.key: entry for entry in DIAGNOSTICS_COMMANDS},
+            executor=executor,
+            journal=lambda repo, record: journal.append(dict(record)),
+            new_id=lambda: "job-1",
+            now=lambda: "t",
+        )
+        job = jobs.start(
+            {"command_id": "diagnostics-online-fix", "client": "tui", "confirmed": True}
+        )
+        while job.phase == "running":
+            await asyncio.sleep(0.01)
+        assert (job.phase, job.returncode) == ("completed", 1)
+        output = "".join(fragment.text for fragment in job.output)
+        assert report_from_payload(json.loads(output)) == health_report()
+        assert ran[0][-3:] == ["--online", "--fix", "--json"]
+        assert journal[0]["command_id"] == "diagnostics-online-fix"
+
+    asyncio.run(scenario())

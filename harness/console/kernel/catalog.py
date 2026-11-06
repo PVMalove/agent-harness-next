@@ -387,6 +387,25 @@ HARNESS_COMMANDS: tuple[CatalogEntry, ...] = (
     ),
 )
 
+# The Diagnostics screen's fixes: `harness health --fix` that prints the `--json` report, so the
+# screen reads back which fixes were applied. They are not listed in the Harness menu.
+DIAGNOSTICS_COMMANDS: tuple[CatalogEntry, ...] = (
+    CatalogEntry(
+        "diagnostics-fix",
+        "Применить локальные фиксы Диагностики",
+        ("harness", "health", "{repo}", "--fix", "--json"),
+        Reversibility.REVERSIBLE,
+        f"{_HARNESS_CLI}:cmd_health",
+    ),
+    CatalogEntry(
+        "diagnostics-online-fix",
+        "Применить фиксы Диагностики с онлайн-проверками",
+        ("harness", "health", "{repo}", "--online", "--fix", "--json"),
+        Reversibility.EXTERNAL_CHANGE,
+        f"{_HARNESS_CLI}:cmd_health",
+    ),
+)
+
 # The Repo Map section's own commands; they are not listed in the Harness menu.
 MEMORY_COMMANDS: tuple[CatalogEntry, ...] = (
     CatalogEntry(

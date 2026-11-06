@@ -236,3 +236,25 @@ def test_repo_map_commands_dispatch_to_their_cli_functions() -> None:
         assert args.repo == str(REPO)
     assert install.needs_confirmation
     assert not any(entry.needs_confirmation for entry in MEMORY_COMMANDS)
+
+
+def test_diagnostics_fixes_print_the_json_report_through_cmd_health() -> None:
+    """The Diagnostics fixes are their own commands, kept out of the Harness menu: the same
+    `harness health --fix` with `--json`, so the screen reads the applied fixes back."""
+    from harness.console.kernel.catalog import DIAGNOSTICS_COMMANDS
+    from harness.console.kernel.i18n_strings import EN
+
+    by_key = {entry.key: entry for entry in DIAGNOSTICS_COMMANDS}
+    assert set(by_key) == {"diagnostics-fix", "diagnostics-online-fix"}
+    assert not set(by_key) & set(ENTRIES)
+    cli = runpy.run_path(str(BIN_HARNESS_PATH))
+    for entry in DIAGNOSTICS_COMMANDS:
+        args = cli["parser"]().parse_args(entry.cli_argv(REPO)[1:])
+        assert args.func.__name__ == entry.function.split(":")[1] == "cmd_health"
+        assert (args.repo, args.fix, args.json) == (str(REPO), True, True)
+        assert args.online is (entry.key == "diagnostics-online-fix")
+        assert not entry.read_only and not entry.inputs and entry.title in EN
+    assert by_key["diagnostics-fix"].reversibility is Reversibility.REVERSIBLE
+    online = by_key["diagnostics-online-fix"]
+    assert online.reversibility is ENTRIES["health-online-fix"].reversibility
+    assert online.needs_confirmation and online.typed_confirmation is None

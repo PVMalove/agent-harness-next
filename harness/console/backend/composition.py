@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..kernel.catalog import HARNESS_COMMANDS, MEMORY_COMMANDS
+from ..kernel.catalog import DIAGNOSTICS_COMMANDS, HARNESS_COMMANDS, MEMORY_COMMANDS
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from .api.request_router import RequestRouter
 from .application.decisions import DecisionService
@@ -121,10 +121,11 @@ def screen_service(
 
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
-    """The job service over the harness, memory, coordinator and native permission commands;
-    without `executor` the commands run as subprocesses."""
+    """The job service over the harness, Diagnostics, memory, coordinator and native permission
+    commands; without `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
+        *DIAGNOSTICS_COMMANDS,
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
