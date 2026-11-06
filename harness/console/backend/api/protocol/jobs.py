@@ -1,8 +1,12 @@
 """The ``job.*`` requests of the console protocol.
 
 Requests use ``job.start(command_id, values?, confirmed?, confirmation?, plan_digest?, client?)``,
-``job.cancel(job_id, confirmed?)``, ``job.get/job.subscribe(job_id, cursor=0)`` and ``job.list``.
-Replies carry a ``job`` snapshot, or the ``jobs`` summaries for ``job.list``. The cursor counts
+``job.cancel(job_id, confirmed?)``, ``job.get/job.subscribe(job_id, cursor=0)``, ``job.list`` and
+``job.catalog(section)``. Replies carry a ``job`` snapshot, the ``jobs`` summaries for
+``job.list`` (``mutating`` marks the holder of the mutation slot), or the ``commands`` of a
+section for ``job.catalog``: the server's own catalog entries with their reversibility class,
+confirmation, inputs and availability in the served project. An unknown section is
+``bad_request``. The cursor counts
 output fragments, starting at zero. Each snapshot contains the next bounded batch and its new
 cursor; ``done`` means execution and replay ended. Subscriptions own no execution task. A job keeps
 a bounded output, and ``truncated`` marks the cut.
@@ -36,6 +40,7 @@ _FIELDS = {
     "job.subscribe": {"id", "type", "job_id", "cursor"},
     "job.cancel": {"id", "type", "job_id", "confirmed"},
     "job.list": {"id", "type"},
+    "job.catalog": {"id", "type", "section"},
 }
 
 _ERRORS = {
@@ -77,6 +82,10 @@ async def replies(raw: str, jobs: JobService) -> AsyncGenerator[str, None]:
             raise JobRejected("bad_request")
         if kind == "job.list":
             yield encode({**envelope, "ok": True, "jobs": jobs.jobs()})
+            return
+        if kind == "job.catalog":
+            commands = jobs.commands(body.get("section"))
+            yield encode({**envelope, "ok": True, "commands": commands})
             return
         if kind == "job.start":
             job = jobs.start(body)

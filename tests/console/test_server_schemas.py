@@ -55,7 +55,9 @@ def test_request_models_have_the_field_sets_of_the_services() -> None:
         "job.subscribe": schemas.JobSubscribeRequest,
         "job.cancel": schemas.JobCancelRequest,
         "job.list": schemas.JobListRequest,
+        "job.catalog": schemas.JobCatalogRequest,
     }
+    assert set(by_type) == set(jobs._FIELDS)
     for kind, model in by_type.items():
         assert _fields(model) == jobs._FIELDS[kind], kind
     assert (
@@ -208,6 +210,41 @@ def test_every_documented_request_parses_as_its_model() -> None:
         assert parsed.type == sample["type"]
     with pytest.raises(ValueError):
         schemas.REQUESTS.validate_python({"type": "job.list", "extra": 1})
+
+
+def test_the_job_catalog_models_match_the_job_service_replies(tmp_path: Path) -> None:
+    """The section and class enums are those of the server; a real reply validates."""
+    import asyncio
+    import json
+    from typing import get_args
+
+    from harness.console.backend import composition
+    from harness.console.backend.domain.jobs import COMMAND_SECTIONS
+    from harness.console.kernel.catalog import Reversibility
+
+    assert get_args(schemas.CommandSection) == COMMAND_SECTIONS
+    assert set(get_args(schemas.ReversibilityClass)) == {
+        member.value for member in Reversibility
+    }
+
+    async def idle(
+        argv: object, *, cwd: Path, on_output: object, cancel_event: object
+    ) -> int:
+        return 0
+
+    served = composition.job_service(tmp_path, executor=idle)
+
+    async def answers() -> list[str]:
+        out: list[str] = []
+        for section in COMMAND_SECTIONS:
+            raw = json.dumps({"id": 1, "type": "job.catalog", "section": section})
+            out += [text async for text in jobs.replies(raw, served)]
+        return out
+
+    for text in asyncio.run(answers()):
+        assert schemas.REPLIES.validate_json(text).type == "job.catalog"
+    with pytest.raises(ValueError):
+        schemas.REQUESTS.validate_python({"type": "job.catalog", "section": "nowhere"})
 
 
 def test_worker_request_models_have_the_field_sets_of_the_worker_protocol() -> None:

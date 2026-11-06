@@ -84,6 +84,25 @@ class JobListRequest(_Strict):  # type: ignore[explicit-any]
     type: Literal["job.list"]
 
 
+CommandSection = Literal[
+    "harness", "diagnostics", "repo-map", "setup", "configuration", "memory"
+]
+ReversibilityClass = Literal[
+    "reversible",
+    "deletes-local-data",
+    "terminal-coordinator-action",
+    "external-change",
+    "overwrites-managed-files",
+    "downloads-files",
+]
+
+
+class JobCatalogRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["job.catalog"]
+    section: CommandSection
+
+
 class DecisionsSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["decisions.snapshot"]
@@ -248,6 +267,7 @@ ConsoleRequest = Annotated[
     | JobSubscribeRequest
     | JobCancelRequest
     | JobListRequest
+    | JobCatalogRequest
     | DecisionsSnapshotRequest
     | OrchestrationSubscribeRequest
     | ReportsSnapshotRequest
@@ -315,6 +335,7 @@ class HomeProblemsReply(_Envelope):  # type: ignore[explicit-any]
 class JobSummary(_Strict):  # type: ignore[explicit-any]
     id: str
     command_id: str
+    mutating: bool
     phase: Literal["running", "completed", "failed", "cancelled"]
     cursor: int
     done: bool
@@ -327,6 +348,25 @@ class JobListReply(_Envelope):  # type: ignore[explicit-any]
     type: Literal["job.list"]
     ok: Literal[True]
     jobs: list[JobSummary]
+
+
+class CommandDescriptor(_Strict):  # type: ignore[explicit-any]
+    command_id: str
+    title: str
+    section: CommandSection
+    reversibility: ReversibilityClass
+    needs_confirmation: bool
+    typed_confirmation: str | None
+    read_only: bool
+    inputs: list[str]
+    plan_required: bool
+    available: bool
+
+
+class JobCatalogReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["job.catalog"]
+    ok: Literal[True]
+    commands: list[CommandDescriptor]
 
 
 class JobReply(_Envelope):  # type: ignore[explicit-any]
@@ -452,6 +492,7 @@ ConsoleReply = (
     | HomeSnapshotReply
     | HomeProblemsReply
     | JobListReply
+    | JobCatalogReply
     | JobReply
     | DecisionsSnapshotReply
     | OrchestrationSourceReply

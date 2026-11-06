@@ -1,5 +1,90 @@
 {
   "$defs": {
+    "CommandDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "command_id": {
+          "title": "Command Id",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "needs_confirmation": {
+          "title": "Needs Confirmation",
+          "type": "boolean"
+        },
+        "plan_required": {
+          "title": "Plan Required",
+          "type": "boolean"
+        },
+        "read_only": {
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "reversibility": {
+          "enum": [
+            "reversible",
+            "deletes-local-data",
+            "terminal-coordinator-action",
+            "external-change",
+            "overwrites-managed-files",
+            "downloads-files"
+          ],
+          "title": "Reversibility",
+          "type": "string"
+        },
+        "section": {
+          "enum": [
+            "harness",
+            "diagnostics",
+            "repo-map",
+            "setup",
+            "configuration",
+            "memory"
+          ],
+          "title": "Section",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "typed_confirmation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Typed Confirmation"
+        }
+      },
+      "required": [
+        "command_id",
+        "title",
+        "section",
+        "reversibility",
+        "needs_confirmation",
+        "typed_confirmation",
+        "read_only",
+        "inputs",
+        "plan_required",
+        "available"
+      ],
+      "title": "CommandDescriptor",
+      "type": "object"
+    },
     "ConfigurationSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
@@ -51,6 +136,9 @@
           "$ref": "#/$defs/JobListReply"
         },
         {
+          "$ref": "#/$defs/JobCatalogReply"
+        },
+        {
           "$ref": "#/$defs/JobReply"
         },
         {
@@ -92,6 +180,7 @@
           "home.problems": "#/$defs/HomeProblemsRequest",
           "home.snapshot": "#/$defs/HomeSnapshotRequest",
           "job.cancel": "#/$defs/JobCancelRequest",
+          "job.catalog": "#/$defs/JobCatalogRequest",
           "job.get": "#/$defs/JobGetRequest",
           "job.list": "#/$defs/JobListRequest",
           "job.start": "#/$defs/JobStartRequest",
@@ -136,6 +225,9 @@
         },
         {
           "$ref": "#/$defs/JobListRequest"
+        },
+        {
+          "$ref": "#/$defs/JobCatalogRequest"
         },
         {
           "$ref": "#/$defs/DecisionsSnapshotRequest"
@@ -832,6 +924,101 @@
       "title": "JobCancelRequest",
       "type": "object"
     },
+    "JobCatalogReply": {
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "items": {
+            "$ref": "#/$defs/CommandDescriptor"
+          },
+          "title": "Commands",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "job.catalog",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "commands"
+      ],
+      "title": "JobCatalogReply",
+      "type": "object"
+    },
+    "JobCatalogRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "section": {
+          "enum": [
+            "harness",
+            "diagnostics",
+            "repo-map",
+            "setup",
+            "configuration",
+            "memory"
+          ],
+          "title": "Section",
+          "type": "string"
+        },
+        "type": {
+          "const": "job.catalog",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "section"
+      ],
+      "title": "JobCatalogRequest",
+      "type": "object"
+    },
     "JobGetRequest": {
       "additionalProperties": false,
       "properties": {
@@ -1163,6 +1350,10 @@
           "title": "Id",
           "type": "string"
         },
+        "mutating": {
+          "title": "Mutating",
+          "type": "boolean"
+        },
         "phase": {
           "enum": [
             "running",
@@ -1192,6 +1383,7 @@
       "required": [
         "id",
         "command_id",
+        "mutating",
         "phase",
         "cursor",
         "done",
