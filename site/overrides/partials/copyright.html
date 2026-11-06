@@ -1,7 +1,7 @@
 {#- Footer leaf partial: keeps the rest of the Material footer intact. -#}
 <div class="md-copyright">
   <div class="ah-footer-brand">
-    <img src="{{ 'assets/mascot.svg' | url }}" alt="Воксельный маскот Agent Harness Next" width="20" height="26" loading="lazy">
+    <img src="{{ 'assets/mascot.svg' | url }}" alt="{{ config.extra.mascot_alt }}" width="20" height="26" loading="lazy">
     {% if config.copyright %}<span class="md-copyright__highlight">{{ config.copyright }}</span>{% endif %}
   </div>
 </div>

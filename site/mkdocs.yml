@@ -39,6 +39,71 @@ theme:
     - content.code.copy
     - content.tabs.link
 
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      languages:
+        - locale: ru
+          default: true
+          name: Русский
+          build: true
+        - locale: en
+          name: English
+          build: true
+          site_name: Agent Harness Next · beta
+          theme:
+            palette:
+              - scheme: slate
+                primary: custom
+                accent: custom
+                toggle:
+                  icon: material/weather-sunny
+                  name: Light theme
+              - scheme: default
+                primary: custom
+                accent: custom
+                toggle:
+                  icon: material/weather-night
+                  name: Dark theme
+          extra:
+            mascot_alt: Voxel mascot of Agent Harness Next
+          nav_translations:
+            Главная: Home
+            Начало: Getting started
+            Руководства: Guides
+            Рабочий поток: Workflow
+            Примеры: Examples
+            "QA gate и Release Gate": QA gate and Release Gate
+            Скиллы: Skills
+            Идея и исследование: Idea and research
+            Спецификация и тикеты: Specs and tickets
+            Реализация: Implementation
+            Качество и публикация: Quality and publishing
+            Настройка: Setup
+            Агенты: Agents
+            Субагенты: Subagents
+            Процесс и Git: Process and Git
+            Артефакты и релизы: Artifacts and releases
+            Приёмка: Acceptance
+            Git и ветки: Git and branches
+            QA и проверки: QA and checks
+            Политика и рискованные пути: Policy and risky paths
+            Служебные: Utility
+            Оркестрация: Orchestration
+            Схемы: Diagrams
+            Концепции: Concepts
+            Контекст: Context
+            Справочник: Reference
+            Метки: Labels
+            Глоссарий: Glossary
+            Проект: Project
+            Структура: Structure
+            Архитектура: Architecture
+            Обзор: Overview
+            Релизы: Releases
+
 extra_css:
   - assets/docs-site.css
 
@@ -212,6 +277,7 @@ copyright: © 2026 Agent Harness Next · MIT
 
 extra:
   generator: false
+  mascot_alt: Воксельный маскот Agent Harness Next
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/PVMalove/claude-agent-harness
