@@ -20,3 +20,6 @@
 @media (max-width: 600px) {
   .command-inputs { flex-direction: column; }
 }
+/* Agent activity: the mockup's .work-* rows hold the live step list; a Codex step's pill sits
+   under its details. */
+.work-event-main .orch-pill { margin-top: 4px; }

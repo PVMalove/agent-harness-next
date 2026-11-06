@@ -285,3 +285,52 @@ def test_the_help_request_schema_accepts_exactly_the_languages_of_the_guide() ->
     annotation = schemas.HelpSnapshotRequest.model_fields["language"].annotation
 
     assert get_args(annotation) == HELP_LANGUAGES
+
+
+def test_step_models_match_the_live_step_items_and_refuse_extra_fields() -> None:
+    from harness.console.backend.api.protocol import steps
+    from harness.console.backend.domain import live_steps
+
+    assert _fields(schemas.StepsSubscribeRequest) == steps.FIELDS
+    roster = live_steps.RosterDispatch("d", "b", "#1", "developer", "working")
+    agent = live_steps.AgentStep(
+        "d",
+        "b",
+        "developer",
+        "plain",
+        "unavailable",
+        "log",
+        "hi",
+        "2026-11-06T10:00:00Z",
+    )
+    event = live_steps.orchestration_step(
+        {"seq": 1, "event": "qa.run", "dispatch_id": "d", "outcome": "pass"}, [roster]
+    )
+    assert event is not None
+    assert set(schemas.RosterDispatch.model_fields) == set(roster.to_wire())
+    assert set(schemas.AgentStep.model_fields) == set(agent.to_wire())
+    assert set(schemas.OrchestrationStep.model_fields) == set(event.to_wire())
+    envelope = {"v": 1, "id": 1, "type": "steps.subscribe", "ok": True}
+    reply = {**envelope, "kind": "steps", "steps": [agent.to_wire(), event.to_wire()]}
+    assert schemas.REPLIES.validate_python(reply).type == "steps.subscribe"
+    schemas.REPLIES.validate_python(
+        {
+            **envelope,
+            "kind": "roster",
+            "reset": True,
+            "orchestration": "available",
+            "dispatches": [roster.to_wire()],
+        }
+    )
+    extras: tuple[dict[str, object], ...] = (
+        {"thinking": "x"},
+        {"input": {}},
+        {"raw": "{}"},
+    )
+    for extra in extras:
+        with pytest.raises(ValueError):
+            schemas.REPLIES.validate_python(
+                {**reply, "steps": [{**agent.to_wire(), **extra}]}
+            )
+    with pytest.raises(ValueError):
+        schemas.REQUESTS.validate_python({"type": "steps.subscribe", "cursor": "x"})

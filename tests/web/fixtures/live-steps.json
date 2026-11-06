@@ -1,0 +1,209 @@
+{
+  "roster": {
+    "kind": "roster",
+    "reset": true,
+    "orchestration": "available",
+    "dispatches": [
+      {
+        "dispatch_id": "dispatch-arch",
+        "batch_id": "batch-885",
+        "ticket": "#885",
+        "role": "architect",
+        "state": "reported"
+      },
+      {
+        "dispatch_id": "dispatch-dev",
+        "batch_id": "batch-885",
+        "ticket": "#885",
+        "role": "developer",
+        "state": "working"
+      },
+      {
+        "dispatch_id": "dispatch-rev",
+        "batch_id": "batch-885",
+        "ticket": "#885",
+        "role": "review",
+        "state": "working"
+      },
+      {
+        "dispatch_id": "dispatch-qa",
+        "batch_id": "batch-885",
+        "ticket": "#885",
+        "role": "qa",
+        "state": "dispatched"
+      }
+    ]
+  },
+  "steps": {
+    "kind": "steps",
+    "steps": [
+      {
+        "origin": "orchestration",
+        "seq": 1,
+        "observed_at": "2026-11-06T10:30:02+00:00",
+        "event": "batch.transition",
+        "batch_id": "batch-885",
+        "dispatch_id": null,
+        "ticket": "#885",
+        "role": null,
+        "from_state": null,
+        "to_state": "active",
+        "decision": null,
+        "next_role": null,
+        "outcome": null,
+        "stage": null,
+        "message": ""
+      },
+      {
+        "origin": "orchestration",
+        "seq": 2,
+        "observed_at": "2026-11-06T10:31:10+00:00",
+        "event": "dispatch.transition",
+        "batch_id": "batch-885",
+        "dispatch_id": "dispatch-arch",
+        "ticket": "#885",
+        "role": "architect",
+        "from_state": "working",
+        "to_state": "reported",
+        "decision": null,
+        "next_role": null,
+        "outcome": null,
+        "stage": null,
+        "message": ""
+      },
+      {
+        "origin": "orchestration",
+        "seq": 3,
+        "observed_at": "2026-11-06T10:31:12+00:00",
+        "event": "gate.decision",
+        "batch_id": "batch-885",
+        "dispatch_id": "dispatch-arch",
+        "ticket": "#885",
+        "role": "architect",
+        "from_state": null,
+        "to_state": null,
+        "decision": "accept",
+        "next_role": "developer",
+        "outcome": null,
+        "stage": null,
+        "message": ""
+      },
+      {
+        "origin": "orchestration",
+        "seq": 4,
+        "observed_at": "2026-11-06T10:31:15+00:00",
+        "event": "dispatch.transition",
+        "batch_id": "batch-885",
+        "dispatch_id": "dispatch-dev",
+        "ticket": "#885",
+        "role": "developer",
+        "from_state": "dispatched",
+        "to_state": "working",
+        "decision": null,
+        "next_role": null,
+        "outcome": null,
+        "stage": null,
+        "message": ""
+      },
+      {
+        "origin": "agent",
+        "dispatch_id": "dispatch-dev",
+        "batch_id": "batch-885",
+        "role": "developer",
+        "source": "structured",
+        "structure": "available",
+        "kind": "output",
+        "text": "Читаю схему протокола и тесты сервера",
+        "observed_at": "2026-11-06T10:32:01+00:00"
+      },
+      {
+        "origin": "agent",
+        "dispatch_id": "dispatch-dev",
+        "batch_id": "batch-885",
+        "role": "developer",
+        "source": "structured",
+        "structure": "available",
+        "kind": "tool",
+        "text": "Read",
+        "observed_at": "2026-11-06T10:32:04+00:00"
+      },
+      {
+        "origin": "agent",
+        "dispatch_id": "dispatch-dev",
+        "batch_id": "batch-885",
+        "role": "developer",
+        "source": "structured",
+        "structure": "available",
+        "kind": "tool",
+        "text": "Edit",
+        "observed_at": "2026-11-06T10:32:09+00:00"
+      },
+      {
+        "origin": "agent",
+        "dispatch_id": "dispatch-rev",
+        "batch_id": "batch-885",
+        "role": "review",
+        "source": "plain",
+        "structure": "unavailable",
+        "kind": "log",
+        "text": "Проверяю изменения в request_router.py",
+        "observed_at": "2026-11-06T10:33:20+00:00"
+      },
+      {
+        "origin": "agent",
+        "dispatch_id": "dispatch-rev",
+        "batch_id": "batch-885",
+        "role": "review",
+        "source": "plain",
+        "structure": "unavailable",
+        "kind": "tool",
+        "text": "exec",
+        "observed_at": "2026-11-06T10:33:22+00:00"
+      },
+      {
+        "origin": "orchestration",
+        "seq": 5,
+        "observed_at": "2026-11-06T10:33:40+00:00",
+        "event": "dispatch.transition",
+        "batch_id": "batch-885",
+        "dispatch_id": "dispatch-qa",
+        "ticket": "#885",
+        "role": "qa",
+        "from_state": null,
+        "to_state": "dispatched",
+        "decision": null,
+        "next_role": null,
+        "outcome": null,
+        "stage": null,
+        "message": ""
+      }
+    ]
+  },
+  "later": {
+    "kind": "steps",
+    "steps": [
+      {
+        "origin": "agent",
+        "dispatch_id": "dispatch-dev",
+        "batch_id": "batch-885",
+        "role": "developer",
+        "source": "structured",
+        "structure": "available",
+        "kind": "tool",
+        "text": "Bash",
+        "observed_at": "2026-11-06T10:34:05+00:00"
+      },
+      {
+        "origin": "agent",
+        "dispatch_id": "dispatch-dev",
+        "batch_id": "batch-885",
+        "role": "developer",
+        "source": "structured",
+        "structure": "available",
+        "kind": "result",
+        "text": "Тесты сервера прошли",
+        "observed_at": "2026-11-06T10:34:12+00:00"
+      }
+    ]
+  }
+}

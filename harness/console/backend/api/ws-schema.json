@@ -1,5 +1,69 @@
 {
   "$defs": {
+    "AgentStep": {
+      "additionalProperties": false,
+      "description": "A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.",
+      "properties": {
+        "batch_id": {
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "origin": {
+          "const": "agent",
+          "title": "Origin",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "structured",
+            "plain"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "structure": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Structure",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "dispatch_id",
+        "batch_id",
+        "role",
+        "source",
+        "structure",
+        "kind",
+        "text",
+        "observed_at"
+      ],
+      "title": "AgentStep",
+      "type": "object"
+    },
     "CommandDescriptor": {
       "additionalProperties": false,
       "properties": {
@@ -181,6 +245,12 @@
         },
         {
           "$ref": "#/$defs/WorkerStepsReply"
+        },
+        {
+          "$ref": "#/$defs/StepsRosterReply"
+        },
+        {
+          "$ref": "#/$defs/StepsReply"
         }
       ]
     },
@@ -212,6 +282,7 @@
           "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
           "reports.timeline": "#/$defs/TimelineRequest",
           "snapshot.page": "#/$defs/SnapshotPageRequest",
+          "steps.subscribe": "#/$defs/StepsSubscribeRequest",
           "task_board.snapshot": "#/$defs/TaskBoardSnapshotRequest",
           "task_board.specs": "#/$defs/TaskBoardSpecsRequest",
           "update_harness.diff": "#/$defs/UpdateHarnessDiffRequest",
@@ -314,6 +385,9 @@
         },
         {
           "$ref": "#/$defs/WorkerSubscribeRequest"
+        },
+        {
+          "$ref": "#/$defs/StepsSubscribeRequest"
         }
       ]
     },
@@ -1728,6 +1802,169 @@
       "title": "OrchestrationSourceReply",
       "type": "object"
     },
+    "OrchestrationStep": {
+      "additionalProperties": false,
+      "description": "An orchestration event with the allowlisted fields its text needs.",
+      "properties": {
+        "batch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Batch Id"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Decision"
+        },
+        "dispatch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dispatch Id"
+        },
+        "event": {
+          "enum": [
+            "batch.transition",
+            "dispatch.transition",
+            "gate.decision",
+            "qa.run",
+            "qa.attempt"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "from_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "From State"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "next_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Role"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "origin": {
+          "const": "orchestration",
+          "title": "Origin",
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcome"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Role"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stage"
+        },
+        "ticket": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ticket"
+        },
+        "to_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "To State"
+        }
+      },
+      "required": [
+        "origin",
+        "seq",
+        "observed_at",
+        "event",
+        "batch_id",
+        "dispatch_id",
+        "ticket",
+        "role",
+        "from_state",
+        "to_state",
+        "decision",
+        "next_role",
+        "outcome",
+        "stage",
+        "message"
+      ],
+      "title": "OrchestrationStep",
+      "type": "object"
+    },
     "OrchestrationSubscribeRequest": {
       "additionalProperties": false,
       "properties": {
@@ -2007,6 +2244,40 @@
       "title": "ReportsSnapshotRequest",
       "type": "object"
     },
+    "RosterDispatch": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "ticket": {
+          "title": "Ticket",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatch_id",
+        "batch_id",
+        "ticket",
+        "role",
+        "state"
+      ],
+      "title": "RosterDispatch",
+      "type": "object"
+    },
     "ScreenSnapshotReply": {
       "additionalProperties": false,
       "description": "The first page of a screen snapshot's JSON text; `snapshot.page` reads the rest.",
@@ -2195,6 +2466,180 @@
         "offset"
       ],
       "title": "SnapshotPageRequest",
+      "type": "object"
+    },
+    "StepsReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "steps",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "steps": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent": "#/$defs/AgentStep",
+                "orchestration": "#/$defs/OrchestrationStep"
+              },
+              "propertyName": "origin"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/AgentStep"
+              },
+              {
+                "$ref": "#/$defs/OrchestrationStep"
+              }
+            ]
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "steps"
+      ],
+      "title": "StepsReply",
+      "type": "object"
+    },
+    "StepsRosterReply": {
+      "additionalProperties": false,
+      "description": "The dispatches the live step list knows; `reset` drops the steps the client holds.",
+      "properties": {
+        "dispatches": {
+          "items": {
+            "$ref": "#/$defs/RosterDispatch"
+          },
+          "title": "Dispatches",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "roster",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "orchestration": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Orchestration",
+          "type": "string"
+        },
+        "reset": {
+          "title": "Reset",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "reset",
+        "orchestration",
+        "dispatches"
+      ],
+      "title": "StepsRosterReply",
+      "type": "object"
+    },
+    "StepsSubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "StepsSubscribeRequest",
       "type": "object"
     },
     "TaskBoardSnapshotRequest": {

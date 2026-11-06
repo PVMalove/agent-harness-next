@@ -19,10 +19,13 @@ from ..kernel.catalog import (
     UPDATE_SEED_SELECTED,
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
+from harness.orchestration.core.constants import LIVE_DISPATCH_STATES
 from .api.request_router import RequestRouter
 from .application.decisions import DecisionService
 from .application.events import POLL_INTERVAL_SECONDS, OrchestrationEvents
 from .application.jobs import JobService
+from .application.live_steps import POLL_SECONDS as STEPS_POLL_SECONDS
+from .application.live_steps import LiveSteps
 from .application.ports import (
     Clock,
     ConfigurationCollector,
@@ -229,6 +232,23 @@ def worker_steps_query(
     )
 
 
+def live_steps(
+    events: OrchestrationEvents,
+    workers: WorkerStepsQuery,
+    *,
+    poll_seconds: float = STEPS_POLL_SECONDS,
+) -> LiveSteps:
+    """The live step feed over the server's event journal and worker logs; it follows the
+    dispatches in the coordinator's live states."""
+    return LiveSteps(
+        events,
+        workers,
+        now=utc_now_iso,
+        live_states={state.value for state in LIVE_DISPATCH_STATES},
+        poll_seconds=poll_seconds,
+    )
+
+
 @dataclass(frozen=True)
 class Composition:
     """Everything one console server is built from. `discovery` makes the project's discovery
@@ -240,6 +260,7 @@ class Composition:
     events: OrchestrationEvents
     screens: ScreenService
     workers: WorkerStepsQuery
+    steps: LiveSteps
     router: RequestRouter
     discovery: Callable[[Path], Discovery]
 
@@ -253,6 +274,7 @@ def compose(
     events: OrchestrationEvents | None = None,
     screens: ScreenService | None = None,
     workers: WorkerStepsQuery | None = None,
+    steps: LiveSteps | None = None,
 ) -> Composition:
     """The services of one console server, with the given ones kept, and its request router."""
     snapshots = snapshots or snapshot_service(repo)
@@ -261,6 +283,7 @@ def compose(
     events = events or orchestration_events(repo)
     screens = screens or screen_service(repo)
     workers = workers or worker_steps_query(repo)
+    steps = steps or live_steps(events, workers)
     return Composition(
         snapshots,
         jobs,
@@ -268,6 +291,7 @@ def compose(
         events,
         screens,
         workers,
-        RequestRouter(snapshots, jobs, decisions, events, screens, workers),
+        steps,
+        RequestRouter(snapshots, jobs, decisions, events, screens, workers, steps),
         Discovery,
     )

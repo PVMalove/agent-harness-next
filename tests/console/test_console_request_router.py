@@ -18,6 +18,7 @@ from harness.console.backend.api.request_router import (
 from harness.console.backend.application.decisions import DecisionService
 from harness.console.backend.application.events import OrchestrationEvents
 from harness.console.backend.application.jobs import JobService
+from harness.console.backend.application.live_steps import LiveSteps
 from harness.console.backend.application.screens import ScreenService
 from harness.console.backend.application.snapshots import SnapshotService
 from harness.console.backend.application.worker_steps import WorkerStepsQuery
@@ -58,6 +59,7 @@ def _router(
         cast(OrchestrationEvents, object()),
         cast(ScreenService, object()),
         cast(WorkerStepsQuery, object()),
+        cast(LiveSteps, object()),
     )
     return router, sent
 
