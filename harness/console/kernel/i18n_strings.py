@@ -213,6 +213,18 @@ EN: dict[str, str] = {
     "⚠ Истёк срок первого self-report; таймаут не доказывает остановку.": "Warning: first self-report deadline exceeded; timeout does not prove termination.",
     "○ Нет новых событий; это не проверка здоровья worker.": "No new events; this does not prove worker health.",
     "⚠ Поток был сокращён или перезаписан; показана доступная история.": "Warning: stream truncated or rotated; available history shown.",
+    "◌ Структура недоступна: показан хвост обычного лога worker.": "Structure unavailable: showing the tail of the plain worker log.",
+    "⚠ Шаги worker недоступны": "Warning: worker steps unavailable",
+    "Исход worker от наблюдения не зависит.": "The worker outcome does not depend on observation.",
+    "worker не предоставил наблюдаемый лог": "the worker supplied no observable log",
+    "лог worker ещё не создан": "the worker log does not exist yet",
+    "лог worker не читается": "the worker log is unreadable",
+    "лог worker вне хранилища harness": "the worker log is outside harness storage",
+    "формат лога worker не распознан, текст не показывается": (
+        "the worker log format is not recognised; its text is not shown"
+    ),
+    "ledger не знает этот dispatch": "the ledger has no such dispatch",
+    "нет соединения с сервером консоли": "no connection to the console server",
     "Адаптеры runtime": "Runtime adapters",
     "актуален": "current",
     "требует обновления": "outdated",

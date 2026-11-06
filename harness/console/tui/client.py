@@ -36,6 +36,7 @@ from ..kernel.protocol import (
     REPORTS_REQUEST,
     ROUTE_REQUEST,
     TIMELINE_REQUEST,
+    WORKER_STEPS_REQUEST,
 )
 from ..kernel.reports import (
     BatchTimeline,
@@ -130,6 +131,104 @@ class JobResult:
     stderr: str
     truncated: bool
     error: str | None
+
+
+_STEP_PAGE_FIELDS = frozenset(
+    {
+        "dispatch_id",
+        "source",
+        "structure",
+        "state",
+        "reason",
+        "message",
+        "offset",
+        "reset",
+        "more",
+        "last_step_age_seconds",
+        "steps",
+    }
+)
+_STEP_REASONS = frozenset(
+    {
+        "no_log",
+        "log_missing",
+        "log_unreadable",
+        "log_outside_storage",
+        "log_unrecognised",
+    }
+)
+
+
+@dataclass(frozen=True)
+class WorkerSteps:
+    """One page of worker steps from the console server; `offset` is where the next page
+    starts. `structure` is `unavailable` for a plain log tail; a `state` of `unavailable` comes
+    with its `reason`. Each step is its kind and visible text only."""
+
+    source: str
+    structure: str
+    state: str
+    reason: str | None
+    message: str
+    offset: int
+    reset: bool
+    more: bool
+    last_step_age_seconds: int | None
+    steps: tuple[tuple[str, str], ...]
+
+
+def _int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _worker_steps(value: object) -> WorkerSteps:
+    """The page of a `worker.steps` reply; anything outside the protocol is malformed."""
+    malformed = MalformedReply("шаги worker сервера консоли не по схеме")
+    page = _object(value, "шаги worker")
+    if set(page) != _STEP_PAGE_FIELDS:
+        raise malformed
+    steps, reason, offset, age = (
+        page["steps"],
+        page["reason"],
+        page["offset"],
+        page["last_step_age_seconds"],
+    )
+    if (
+        page["source"] not in {"structured", "plain", "none"}
+        or page["structure"] not in {"available", "unavailable"}
+        or page["state"] not in {"connected", "waiting", "unavailable"}
+        or not (reason is None or reason in _STEP_REASONS)
+        or not isinstance(page["message"], str)
+        or not _int(offset)
+        or cast(int, offset) < 0
+        or not isinstance(page["reset"], bool)
+        or not isinstance(page["more"], bool)
+        or not (age is None or _int(age))
+        or not isinstance(steps, list)
+    ):
+        raise malformed
+    found: list[tuple[str, str]] = []
+    for step in steps:
+        if (
+            not isinstance(step, dict)
+            or set(step) != {"kind", "text"}
+            or not isinstance(step["kind"], str)
+            or not isinstance(step["text"], str)
+        ):
+            raise malformed
+        found.append((step["kind"], step["text"]))
+    return WorkerSteps(
+        source=page["source"],
+        structure=page["structure"],
+        state=page["state"],
+        reason=reason,
+        message=page["message"],
+        offset=cast(int, offset),
+        reset=page["reset"],
+        more=page["more"],
+        last_step_age_seconds=cast(int | None, age),
+        steps=tuple(found),
+    )
 
 
 class ScreenClient(HomeClient, Protocol):
@@ -269,6 +368,24 @@ class ConsoleClient:
                 return None
             raise
         return self._decoded(timeline_from_payload, payload, "хронология")
+
+    def worker_steps(self, dispatch_id: str, offset: int) -> WorkerSteps | None:
+        """One page of the worker steps of `dispatch_id` from the log byte `offset`; None when
+        the ledger has no such dispatch. A short request, like `job.get`."""
+        try:
+            with self._lock:
+                reply = self._request(
+                    {
+                        "type": WORKER_STEPS_REQUEST,
+                        "dispatch_id": dispatch_id,
+                        "offset": offset,
+                    }
+                )
+        except ServerError as error:
+            if error.code == "not_found":
+                return None
+            raise
+        return _worker_steps(reply.get("page"))
 
     def orchestration(self, *, force: bool = False) -> OrchestrationView:
         """The ledger of the Orchestration screen with the ledger lock state."""

@@ -24,6 +24,10 @@ PAGE_REQUEST = "snapshot.page"
 # The task board: the open specs and the board of one spec, paged like the screen snapshots.
 TASK_BOARD_SPECS_REQUEST = "task_board.specs"
 TASK_BOARD_REQUEST = "task_board.snapshot"
+# Worker steps: one page of a dispatch's worker log from a byte offset the client keeps, and a
+# stream of such pages in a subscription slot.
+WORKER_STEPS_REQUEST = "worker.steps"
+WORKER_SUBSCRIBE_REQUEST = "worker.subscribe"
 # How many diagnostics one `recovery.snapshot` may skip.
 MAX_SKIPPED = 32
 

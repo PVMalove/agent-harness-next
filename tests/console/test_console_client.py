@@ -24,6 +24,7 @@ from harness.console.tui.client import (
     LockUnavailable,
     MalformedReply,
     ServerError,
+    WorkerSteps,
 )
 from tests.console.test_snapshots import DATA, MEMORY, VIEW
 
@@ -518,3 +519,124 @@ def test_a_refused_job_start_surfaces_its_code() -> None:
         finally:
             client.close()
     assert refused.value.code == "confirmation_required"
+
+
+def _steps_page(**changes: object) -> dict[str, object]:
+    page: dict[str, object] = {
+        "dispatch_id": "dispatch-a",
+        "source": "plain",
+        "structure": "unavailable",
+        "state": "connected",
+        "reason": None,
+        "message": "",
+        "offset": 42,
+        "reset": False,
+        "more": False,
+        "last_step_age_seconds": 3,
+        "steps": [{"kind": "log", "text": "working"}],
+    }
+    page.update(changes)
+    return page
+
+
+def test_worker_steps_are_read_by_offset_with_their_structure_and_state() -> None:
+    requests: list[dict[str, object]] = []
+    pages = iter(
+        [
+            _steps_page(),
+            _steps_page(
+                state="unavailable", reason="log_missing", message="gone", steps=[]
+            ),
+        ]
+    )
+
+    def answer(request: dict[str, object]) -> str:
+        requests.append(request)
+        if request["dispatch_id"] == "dispatch-x":
+            return _failed(request, "not_found")
+        return _ok(request, page=next(pages))
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            first = client.worker_steps("dispatch-a", 0)
+            second = client.worker_steps("dispatch-a", 42)
+            missing = client.worker_steps("dispatch-x", 0)
+        finally:
+            client.close()
+
+    assert first == WorkerSteps(
+        source="plain",
+        structure="unavailable",
+        state="connected",
+        reason=None,
+        message="",
+        offset=42,
+        reset=False,
+        more=False,
+        last_step_age_seconds=3,
+        steps=(("log", "working"),),
+    )
+    assert second is not None and (second.state, second.reason) == (
+        "unavailable",
+        "log_missing",
+    )
+    assert missing is None
+    assert [(r["type"], r["dispatch_id"], r["offset"]) for r in requests] == [
+        ("worker.steps", "dispatch-a", 0),
+        ("worker.steps", "dispatch-a", 42),
+        ("worker.steps", "dispatch-x", 0),
+    ]
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "not a page",
+        _steps_page(structure="maybe"),
+        _steps_page(offset=-1),
+        _steps_page(offset=True),
+        _steps_page(steps=[{"kind": "log"}]),
+        _steps_page(steps=[{"kind": "tool", "text": "x", "input": {}}]),
+        _steps_page(reason="because"),
+    ],
+    ids=["not-object", "structure", "negative", "bool", "no-text", "extra", "reason"],
+)
+def test_a_worker_steps_page_outside_the_protocol_is_malformed(page: object) -> None:
+    def answer(request: dict[str, object]) -> str:
+        return _ok(request, page=page)
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            with pytest.raises(MalformedReply):
+                client.worker_steps("dispatch-a", 0)
+        finally:
+            client.close()
+
+
+def test_every_server_step_reason_is_accepted_and_has_screen_text() -> None:
+    from harness.console.backend.domain.worker_steps import REASONS
+    from harness.console.tui.screens.worker_observation import STEP_REASONS
+
+    def answer(request: dict[str, object]) -> str:
+        return _ok(
+            request,
+            page=_steps_page(
+                state="unavailable",
+                reason=request["dispatch_id"],
+                message="m",
+                steps=[],
+            ),
+        )
+
+    with _fake_server(answer) as endpoint:
+        client = ConsoleClient.connect(endpoint)
+        try:
+            pages = [client.worker_steps(reason, 0) for reason in REASONS]
+        finally:
+            client.close()
+
+    assert [page.reason if page else None for page in pages] == list(REASONS)
+    assert "log_unrecognised" in REASONS
+    assert set(REASONS) <= set(STEP_REASONS)

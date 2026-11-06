@@ -29,6 +29,7 @@ from ...kernel import brand, i18n
 from ...kernel import reports
 from ..chrome import TopBar
 from ...kernel.runner import CommandRunner
+from ..client import ConsoleClientError, WorkerSteps
 from ..session_card import session_card, status_caption
 from ...kernel.status import PERMISSION_PENDING, process_status, session_status
 from ..crumbs import Crumb
@@ -45,6 +46,58 @@ from ..wrap import wrap_value
 from .commands import call_from_worker
 
 Observer = Callable[[Path, str, int], JsonObject]
+StepsReader = Callable[[str, int], WorkerSteps | None]
+
+# Why the transcript is unavailable; the worker outcome never depends on it.
+STEP_REASONS = {
+    "no_log": "worker не предоставил наблюдаемый лог",
+    "log_missing": "лог worker ещё не создан",
+    "log_unreadable": "лог worker не читается",
+    "log_outside_storage": "лог worker вне хранилища harness",
+    "log_unrecognised": "формат лога worker не распознан, текст не показывается",
+    "no_dispatch": "ledger не знает этот dispatch",
+    "no_server": "нет соединения с сервером консоли",
+}
+_OBSERVER_STREAM = frozenset(
+    {
+        "events",
+        "next_offset",
+        "reset",
+        "stream_state",
+        "stream_reason",
+        "last_event_age_seconds",
+    }
+)
+
+
+def with_server_steps(
+    snapshot: JsonObject, steps: WorkerSteps | None, failure: str
+) -> JsonObject:
+    """The process facts of `snapshot` with the transcript of the console server; the observer's
+    own events are dropped. Without a page the transcript is unavailable for `failure`."""
+    facts: JsonObject = {
+        key: value for key, value in snapshot.items() if key not in _OBSERVER_STREAM
+    }
+    if steps is None:
+        return {
+            **facts,
+            "events": [],
+            "reset": False,
+            "stream_state": "unavailable",
+            "steps_reason": failure,
+            "steps_structure": "unavailable",
+        }
+    return {
+        **facts,
+        "events": [{"kind": kind, "text": text} for kind, text in steps.steps],
+        "next_offset": steps.offset,
+        "reset": steps.reset,
+        "stream_state": steps.state,
+        "steps_reason": steps.reason,
+        "steps_source": steps.source,
+        "steps_structure": steps.structure,
+        "last_event_age_seconds": steps.last_step_age_seconds,
+    }
 
 
 def observe(repo: Path, dispatch: str, offset: int) -> JsonObject:
@@ -408,12 +461,24 @@ class WorkerObservationScreen(ConsoleShell):
             return
         self._polling = True
         dispatch, offset = self.dispatch, self._stream_offset
+        reader: StepsReader | None = getattr(
+            getattr(self.app, "home_client", None), "worker_steps", None
+        )
 
         def poll() -> None:
             try:
                 snapshot = self.observer(self.repo, dispatch, offset)
             except Exception:
                 snapshot = {"dispatch_id": dispatch, "observation_error": True}
+            steps, failure = None, "no_server"
+            if reader is not None:
+                try:
+                    steps = reader(dispatch, offset)
+                    failure = "no_dispatch"
+                except ConsoleClientError:
+                    pass
+            if not snapshot.get("observation_error"):
+                snapshot = with_server_steps(snapshot, steps, failure)
             call_from_worker(self, lambda: self._render_snapshot(snapshot, dispatch))
 
         self.run_worker(poll, thread=True, group="observation", exit_on_error=False)
@@ -494,6 +559,16 @@ class WorkerObservationScreen(ConsoleShell):
             )
         if snapshot.get("stream_state") in {"unavailable", "waiting"}:
             lines.append(t("○ Нет новых событий; это не проверка здоровья worker."))
+        if snapshot.get("steps_source") == "plain":
+            lines.append(
+                t("◌ Структура недоступна: показан хвост обычного лога worker.")
+            )
+        reason = snapshot.get("steps_reason")
+        if isinstance(reason, str) and reason in STEP_REASONS:
+            lines.append(
+                f"{t('⚠ Шаги worker недоступны')}: {t(STEP_REASONS[reason])}. "
+                + t("Исход worker от наблюдения не зависит.")
+            )
         self._paint_context(snapshot, worker, lines)
         self.query_one("#worker-status", Static).update(
             "\n".join(lines[1:3] + lines[4:])
@@ -535,6 +610,8 @@ class WorkerObservationScreen(ConsoleShell):
         elif kind == "output":
             row.append("  —   WORKER\n", style=brand.PALETTE["primary"])
             row.append("      " + text.replace("\n", "\n      ") + "\n\n")
+        elif kind == "log":
+            row.append("      " + text.replace("\n", "\n      ") + "\n")
         else:
             color = (
                 "error"

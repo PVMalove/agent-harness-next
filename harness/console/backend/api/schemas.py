@@ -165,6 +165,25 @@ class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     offset: Annotated[int, Field(ge=0)]
 
 
+DispatchId = Annotated[
+    str, Field(min_length=1, max_length=100, pattern="^[A-Za-z0-9][A-Za-z0-9_-]*$")
+]
+
+
+class WorkerStepsRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["worker.steps"]
+    dispatch_id: DispatchId
+    offset: Annotated[int, Field(ge=0)]
+
+
+class WorkerSubscribeRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["worker.subscribe"]
+    dispatch_id: DispatchId
+    offset: Annotated[int, Field(ge=0)] = 0
+
+
 ConsoleRequest = Annotated[
     HomeSnapshotRequest
     | HomeProblemsRequest
@@ -184,7 +203,9 @@ ConsoleRequest = Annotated[
     | ContainerRouteSnapshotRequest
     | TaskBoardSpecsRequest
     | TaskBoardSnapshotRequest
-    | SnapshotPageRequest,
+    | SnapshotPageRequest
+    | WorkerStepsRequest
+    | WorkerSubscribeRequest,
     Field(discriminator="type"),
 ]
 
@@ -317,6 +338,42 @@ class OrchestrationLockReply(_Envelope):  # type: ignore[explicit-any]
     error: str | None
 
 
+class WorkerStep(_Strict):  # type: ignore[explicit-any]
+    kind: str
+    text: str
+
+
+class WorkerStepsPage(_Strict):  # type: ignore[explicit-any]
+    """Allowlisted worker steps from a log byte offset; never thinking, tool inputs or raw JSON."""
+
+    dispatch_id: str
+    source: Literal["structured", "plain", "none"]
+    structure: Literal["available", "unavailable"]
+    state: Literal["connected", "waiting", "unavailable"]
+    reason: (
+        Literal[
+            "no_log",
+            "log_missing",
+            "log_unreadable",
+            "log_outside_storage",
+            "log_unrecognised",
+        ]
+        | None
+    )
+    message: str
+    offset: Annotated[int, Field(ge=0)]
+    reset: bool
+    more: bool
+    last_step_age_seconds: int | None
+    steps: list[WorkerStep]
+
+
+class WorkerStepsReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["worker.steps", "worker.subscribe"]
+    ok: Literal[True]
+    page: WorkerStepsPage
+
+
 ConsoleReply = (
     ErrorReply
     | HomeSnapshotReply
@@ -330,6 +387,7 @@ ConsoleReply = (
     | PagedReply
     | SnapshotPageReply
     | OrchestrationLockReply
+    | WorkerStepsReply
 )
 
 REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)

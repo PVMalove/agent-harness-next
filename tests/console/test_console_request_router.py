@@ -20,6 +20,7 @@ from harness.console.backend.application.events import OrchestrationEvents
 from harness.console.backend.application.jobs import JobService
 from harness.console.backend.application.screens import ScreenService
 from harness.console.backend.application.snapshots import SnapshotService
+from harness.console.backend.application.worker_steps import WorkerStepsQuery
 
 
 class Gate:
@@ -48,6 +49,7 @@ def _router(
 
     monkeypatch.setattr(request_router, "respond", respond)
     monkeypatch.setattr(request_router, "job_replies", job_replies)
+    monkeypatch.setattr(request_router, "worker_replies", job_replies)
     sent: list[dict[str, object]] = []
     router = RequestRouter(
         cast(SnapshotService, object()),
@@ -55,6 +57,7 @@ def _router(
         cast(DecisionService, object()),
         cast(OrchestrationEvents, object()),
         cast(ScreenService, object()),
+        cast(WorkerStepsQuery, object()),
     )
     return router, sent
 
@@ -123,6 +126,42 @@ def test_subscriptions_have_their_own_slots(monkeypatch: pytest.MonkeyPatch) -> 
         assert connection.unfinished == MAX_UNFINISHED_REQUESTS + MAX_SUBSCRIPTIONS
         await connection.submit(_subscribe(99))
         assert [reply["id"] for reply in sent] == [99]
+        await connection.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_worker_subscribe_takes_a_subscription_slot_and_steps_a_request_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        gate = Gate()
+        router, sent = _router(monkeypatch, gate)
+
+        async def send(reply: str) -> bool:
+            sent.append(json.loads(reply))
+            return True
+
+        connection = router.open(send)
+
+        def worker(id: int, kind: str) -> str:
+            return json.dumps({"id": id, "type": kind, "dispatch_id": "d", "offset": 0})
+
+        for id in range(1, MAX_SUBSCRIPTIONS + 1):
+            await connection.submit(worker(id, "worker.subscribe"))
+        for id in range(10, 10 + MAX_UNFINISHED_REQUESTS):
+            await connection.submit(worker(id, "worker.steps"))
+        await _settle()
+        assert sent == []
+        await connection.submit(worker(98, "worker.subscribe"))
+        await connection.submit(worker(99, "worker.steps"))
+        assert [reply["id"] for reply in sent] == [98, 99]
+        gate.open.set()
+        await _settle()
+        assert {reply["id"] for reply in sent[2:]} == {
+            *range(1, MAX_SUBSCRIPTIONS + 1),
+            *range(10, 10 + MAX_UNFINISHED_REQUESTS),
+        }
         await connection.aclose()
 
     asyncio.run(scenario())
