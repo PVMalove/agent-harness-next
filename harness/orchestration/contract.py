@@ -389,7 +389,11 @@ def retry_verification_commands(
     return [*lint, f"{test_command} {tests}"]
 
 
-VERIFICATION_PLAN_POLICY_FIELDS = ("max_related_tests", "stages")
+VERIFICATION_PLAN_POLICY_FIELDS = (
+    "max_related_tests",
+    "stages",
+    "ticket_diff_selection",
+)
 VERIFICATION_PLAN_STAGE_FIELDS = ("stage_id", "kind", "argv", "timeout_seconds")
 
 
@@ -401,7 +405,9 @@ def verification_plan_policy_problems(value: object) -> list[str]:
     """Problems of the optional ``verification_plan_policy`` object; none when the key is absent.
 
     The policy names the stage templates of a verification plan and the ``related_tests`` count
-    above which the pytest stage widens to the full suite (ADR 0023, section 2).
+    above which the pytest stage widens to the full suite (ADR 0023, section 2). The optional
+    boolean ``ticket_diff_selection`` (off when absent) switches a plan for an ``integration/*``
+    target to the tests of the ticket's own diff.
     """
     if value is None:
         return []
@@ -414,6 +420,10 @@ def verification_plan_policy_problems(value: object) -> list[str]:
         problems.append(f"{label} has unknown field(s): {', '.join(extra)}")
     if not _positive_int(value.get("max_related_tests")):
         problems.append(f"{label}.max_related_tests must be a positive integer")
+    if "ticket_diff_selection" in value and not isinstance(
+        value["ticket_diff_selection"], bool
+    ):
+        problems.append(f"{label}.ticket_diff_selection must be a boolean")
     stages = value.get("stages")
     if not isinstance(stages, list) or not stages:
         problems.append(f"{label}.stages must be a non-empty list of stage objects")

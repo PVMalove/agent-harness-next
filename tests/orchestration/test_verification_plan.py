@@ -97,6 +97,9 @@ INVALID_POLICIES: dict[str, object] = {
     "zero timeout": _with(stages=[_stage(timeout_seconds=0)]),
     "unknown stage field": _with(stages=[_stage(selection="full")]),
     "unknown policy field": _with(retries=1),
+    "ticket_diff_selection as a string": _with(ticket_diff_selection="true"),
+    "ticket_diff_selection as an integer": _with(ticket_diff_selection=1),
+    "ticket_diff_selection as null": _with(ticket_diff_selection=None),
     "no pytest stage": _with(
         stages=[_stage(kind="lint"), _stage(stage_id="t2", kind="custom")]
     ),
@@ -138,6 +141,31 @@ class VerificationPlanPolicyContractTests(unittest.TestCase):
                 self.assertNotEqual(_policy_problems(policy), [])
                 self.assertNotEqual(value_problems(policy, node, schema), [])
 
+    def test_the_ticket_diff_flag_accepts_both_booleans(self) -> None:
+        for flag in (True, False):
+            with self.subTest(flag=flag):
+                self.assertEqual(
+                    _policy_problems(_with(ticket_diff_selection=flag)), []
+                )
+
+    def test_the_schema_describes_the_flag_as_a_boolean(self) -> None:
+        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+        node = schema["properties"]["verification_plan_policy"]
+
+        self.assertEqual(
+            node["properties"]["ticket_diff_selection"]["type"], "boolean"
+        )
+        self.assertNotIn("ticket_diff_selection", node["required"])
+        for flag in (True, False):
+            self.assertEqual(
+                value_problems(_with(ticket_diff_selection=flag), node, schema), []
+            )
+
+    def test_the_example_ships_the_flag_switched_off(self) -> None:
+        policy = _example()["verification_plan_policy"]
+
+        self.assertIs(policy["ticket_diff_selection"], False)
+
     def test_duplicate_stage_ids_are_rejected(self) -> None:
         policy = _with(stages=[_stage(), _stage(kind="custom")])
 
@@ -175,6 +203,26 @@ class VerificationPlanBatchTests(unittest.TestCase):
         batch = self._create(POLICY)
 
         self.assertEqual(batch["verification_plan_policy"], POLICY)
+
+    def test_the_ticket_diff_flag_is_frozen_with_the_policy(self) -> None:
+        batch = self._create(_with(ticket_diff_selection=True))
+
+        self.assertIs(batch["verification_plan_policy"]["ticket_diff_selection"], True)
+
+    def test_a_config_edit_after_batch_create_does_not_change_the_frozen_flag(
+        self,
+    ) -> None:
+        batch = self._create(_with(ticket_diff_selection=True))
+
+        (self.fx.repo / ".harness" / "orchestration.json").write_text(
+            json.dumps(
+                {"verification_plan_policy": _with(ticket_diff_selection=False)}
+            ),
+            encoding="utf-8",
+        )
+        frozen = self.fx._batch_record(batch["batch_id"])
+
+        self.assertIs(frozen["verification_plan_policy"]["ticket_diff_selection"], True)
 
     def test_a_batch_without_the_policy_keeps_its_old_shape(self) -> None:
         batch = self._create(None)
