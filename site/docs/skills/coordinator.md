@@ -56,7 +56,7 @@ Coordinator записывает ровно одно текущее состоя
   сессия продолжается через checkpoint и `dispatch resume --trigger human-decision`. Принятая
   резолюция идёт узким маршрутом без повторного review, но с новыми QA и CI либо local-QA пары.
 - `integration local-qa --record <id> --ci-condition absent|unavailable|unusable --reason <текст>` —
-  запасной полный локальный QA актуализированного candidate (#536) в изолированном checkout через
+  запасной полный локальный QA актуализированного candidate в изолированном checkout через
   общую очередь QA; пишет `verified` evidence только для текущей пары, провал сохраняет как finding,
   недоступность инфраструктуры — отдельный результат с явным `--retry` и лимитом.
 - `integration link-evidence --kind ci|local-qa|resolver` — единственный путь привязать будущие

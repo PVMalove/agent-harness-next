@@ -279,7 +279,7 @@ ledger и не заменяет model self-report.
 отменяет только неотправленный dispatch, а `batch abandon` закрывает весь batch; brief, report,
 Context Package и audit в обоих случаях остаются evidence.
 
-## Обновление маршрута запуска и наблюдения (#716)
+## Обновление маршрута запуска и наблюдения
 
 Поставляется пример `.harness/orchestration/adapters/claude_code.py`, явно выбираемый через
 `--adapter`. Runtime executable выбирается отдельно; пакет не превращает `codex` в adapter.

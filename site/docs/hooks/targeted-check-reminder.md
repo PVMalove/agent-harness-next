@@ -47,7 +47,7 @@ Hook никогда не продолжает ход: у `Stop` и `SubagentStop
 Шаблон `.codex/hooks.json` подключает этот hook только на `Stop` и `SubagentStop`: второй runtime
 доставляет оба события с `session_id`, `stop_hook_active` и, у `SubagentStop`, `agent_id`. Правки
 файлов там приходят как `apply_patch` без `file_path`, поэтому журнал касаний на `Write` и `Edit` ждёт
-адаптера payload (#830). До него журнал второго runtime пуст, и напоминание молчит; `harness health`
+адаптера payload. До него журнал второго runtime пуст, и напоминание молчит; `harness health`
 перечисляет строку `PreToolUse` в `нет события или payload` с проверкой вне hook — сверкой
 `checks_run` coordinator-ом.
 
