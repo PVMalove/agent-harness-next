@@ -70,6 +70,20 @@ describe("the shell", () => {
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
 
+  test("the agent activity route renders its step list inside the shell, not a placeholder", async () => {
+    renderApp();
+    await act(async () => {
+      window.location.hash = "#/agent-activity";
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    const current = within(navigation()).getByRole("link", { name: "Ход работы" });
+    expect(current.getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Ход работы");
+    expect(screen.getByRole("heading", { level: 2, name: "Шаги и события" })).toBeTruthy();
+    expect(document.querySelector(".work-events")?.closest("main")).toBeTruthy();
+    expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
+  });
+
   test("collapse is remembered and the drawer closes on the scrim and Esc", () => {
     renderApp();
     const collapse = screen.getByRole("button", { name: "Свернуть меню" });

@@ -5,6 +5,7 @@ import { createHashRouter, Navigate, Outlet, RouterProvider } from "react-router
 import { AppShell } from "./AppShell";
 import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
 import { NAV_ITEMS } from "./navigation";
+import { AgentActivity } from "./routes/AgentActivity";
 import { Harness } from "./routes/Harness";
 import { Home } from "./routes/Home";
 import { Placeholder } from "./routes/Placeholder";
@@ -21,7 +22,10 @@ function Layout() {
 }
 
 /** The sections the web console shows; the others are placeholders. */
-const ROUTES: Readonly<Record<string, ReactElement>> = { harness: <Harness /> };
+const ROUTES: Readonly<Record<string, ReactElement>> = {
+  harness: <Harness />,
+  "agent-activity": <AgentActivity />,
+};
 
 export function createRouter() {
   return createHashRouter([
