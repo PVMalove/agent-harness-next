@@ -63,6 +63,10 @@ nav:
       - "/implement": guides/implement.md
       - "/fast-implement": guides/fast-implement.md
       - TDD: guides/tdd.md
+      - Code review: guides/code-review.md
+      - QA gate и Release Gate: guides/qa-gate.md
+      - Примеры: guides/examples.md
+      - Troubleshooting: guides/troubleshooting.md
   - Reference: reference/index.md
   - Архитектура:
       - architecture/index.md
