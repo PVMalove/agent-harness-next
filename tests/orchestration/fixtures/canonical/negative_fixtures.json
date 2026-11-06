@@ -1,0 +1,55 @@
+{
+  "fixtures": [
+    {
+      "file": "approval-policy-case.json",
+      "expected": [
+        {
+          "code": "config-noncanonical",
+          "pointer": "/approval_policy"
+        }
+      ]
+    },
+    {
+      "file": "duplicate-key.json",
+      "expected": [
+        {
+          "code": "config-invalid",
+          "pointer": "",
+          "message_contains": "duplicate JSON key"
+        }
+      ]
+    },
+    {
+      "file": "malformed.json",
+      "expected": [
+        {
+          "code": "config-invalid",
+          "pointer": "",
+          "message_contains": "Некорректное JSON-значение"
+        }
+      ]
+    },
+    {
+      "file": "transport-alias.json",
+      "expected": [
+        {
+          "code": "config-noncanonical",
+          "pointer": "/assignment_plans/developer/transport"
+        }
+      ]
+    },
+    {
+      "file": "unknown-enum.json",
+      "expected": [
+        {
+          "code": "config-schema",
+          "pointer": "/approval_policy"
+        },
+        {
+          "code": "config-contract",
+          "pointer": ""
+        }
+      ]
+    }
+  ]
+}

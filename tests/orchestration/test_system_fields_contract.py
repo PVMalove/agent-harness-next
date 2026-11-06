@@ -1058,6 +1058,53 @@ def test_the_shipped_registry_has_no_drift_from_the_code() -> None:
     assert vocabulary_drift(load_registry(), BINDINGS, GROUP_BINDINGS) == []
 
 
+# The Python runtime store and its intent journal were superseded by the Rust store (ADR 0026
+# section 1); their vocabularies and modules must not return.
+SUPERSEDED_STORE_FIELDS = (
+    "runtime.state",
+    "runtime.operation_kind",
+    "runtime.operation_phase",
+    "runtime.effect_state",
+    "runtime.failure_code",
+)
+SUPERSEDED_STORE_MODULES = ("runtime_state_store", "runtime_intent")
+
+
+def test_the_registry_holds_no_superseded_store_vocabulary() -> None:
+    fields = set(load_registry().fields)
+
+    assert fields.isdisjoint(SUPERSEDED_STORE_FIELDS)
+
+
+def test_no_orchestration_module_is_or_imports_a_superseded_store_module() -> None:
+    offenders = []
+    for name in _orchestration_modules():
+        if name.rsplit(".", 1)[-1] in SUPERSEDED_STORE_MODULES:
+            offenders.append(name)
+            continue
+        spec = importlib.util.find_spec(name)
+        assert spec is not None and spec.origin is not None
+        if not spec.origin.endswith(".py"):
+            continue
+        tree = ast.parse(Path(spec.origin).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            names = (
+                [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or "", *(alias.name for alias in node.names)]
+                if isinstance(node, ast.ImportFrom)
+                else []
+            )
+            if any(
+                part in SUPERSEDED_STORE_MODULES
+                for item in names
+                for part in item.split(".")
+            ):
+                offenders.append(name)
+
+    assert offenders == []
+
+
 def test_every_orchestration_str_enum_is_bound_to_a_field() -> None:
     bound = [
         vocabulary

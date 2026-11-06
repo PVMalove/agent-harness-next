@@ -212,6 +212,14 @@ evidence). Report each startup failure under its own classification (unsupported
 or refused self-report, capacity, rate-limit, service-unavailable) together with its recovery
 route.
 
+When the runtime store holds a batch (attention `operational-hold`, or a refusal whose `REMEDY`
+names recovery), run `recovery status --batch <id> --json`, fix the cause, resolve open attention,
+then run `recovery resume --batch <id>`. Recovery never reruns an accepted stage and never starts a
+worker: continue with the `next` command it prints. An `ambiguous-effect` refusal waits for a human
+decision. After a configuration edit, run `config validate --canonical --json` before the next
+transition. Details: "Operational hold and recovery commands" in
+`.harness/orchestration/playbook.md`.
+
 Under `approval_policy: auto`, the coordinator takes every path decision by policy and records it
 as `policy:auto`; follow "Automatic path" in `.harness/orchestration/playbook.md`. Do not write
 `--approved-by` or `--approved-at`: run `batch approve`, `dispatch create` and a planned
