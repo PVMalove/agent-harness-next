@@ -14,7 +14,7 @@ Claude Code и Codex, а оркестрация использует Rust runtim
 | Компонент | Требование |
 | --- | --- |
 | Python | 3.12 или новее |
-| Git | 2.40+; каталог проекта уже инициализирован как Git-репозиторий |
+| Git | Каталог проекта уже инициализирован как Git-репозиторий |
 | Runtime | Claude Code или Codex: skills и hooks подключаются нативно |
 | ОС | Linux; на Windows — поддерживаемый runtime и named pipe |
 | `uv` | Для веб-консоли и локальных проверок harness |
@@ -94,7 +94,7 @@ python3 harness/bin/harness.py health /path/to/repository --json
 
 Каждая строка помечена `✅` ok, `⚠️` warn, `❌` fail или `-` skipped. На `fail` команда сама печатает
 причину и команду исправления. Группа «Оркестрация» появляется только при `backend-orchestration`:
-там видно ledger, незавершённые batch, dispatch без heartbeat и неучтённые worktree.
+там видно ledger, незавершённые batch, dispatch без активности и неучтённые worktree.
 
 ## 4. Первые команды
 

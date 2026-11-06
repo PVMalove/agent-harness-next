@@ -51,8 +51,8 @@ cat .harness/orchestration/state/AUTHORITY.json
 Идентичность процесса — `boot_id`, inode PID-namespace, pid и время старта. PID сам по себе ничего
 не доказывает: объект другого namespace или другого boot не считается живым worker-ом.
 
-- **Linux.** Группы процессов и systemd scope для учёта cgroup v2; остановка — SIGTERM группе,
-  после grace-периода SIGKILL.
+- **Linux.** Учёт по группе процессов; там, где доступен systemd, — transient scope для cgroup v2.
+  Остановка — SIGTERM группе, после grace-периода SIGKILL.
 - **Windows.** Именованный Job Object без `KILL_ON_JOB_CLOSE`, чтобы исполнение пережило рестарт
   runtime.
 - **Контейнеры.** OCI-образ, метки dispatch и запрет монтировать сокеты движка и runtime. Egress
