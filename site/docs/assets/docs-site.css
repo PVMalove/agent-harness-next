@@ -724,6 +724,19 @@ body {
   line-height: 1.45;
 }
 
+/* Heading permalink: a visible link icon, larger than the old triangle. */
+.md-typeset .headerlink {
+  font-size: 1.3em;
+  line-height: 1;
+  opacity: 0.8;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.md-typeset .headerlink:hover {
+  opacity: 1;
+}
+
 .ah-footer-brand {
 
   display: inline-flex;
