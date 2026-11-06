@@ -355,7 +355,9 @@ class CommandDescriptor(_Strict):  # type: ignore[explicit-any]
     title: str
     section: CommandSection
     reversibility: ReversibilityClass
+    reversibility_label: str
     needs_confirmation: bool
+    confirmation_reason: str | None
     typed_confirmation: str | None
     read_only: bool
     inputs: list[str]
@@ -367,6 +369,7 @@ class JobCatalogReply(_Envelope):  # type: ignore[explicit-any]
     type: Literal["job.catalog"]
     ok: Literal[True]
     commands: list[CommandDescriptor]
+    cancel_reason: str
 
 
 class JobReply(_Envelope):  # type: ignore[explicit-any]

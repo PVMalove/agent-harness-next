@@ -11,6 +11,17 @@
           "title": "Command Id",
           "type": "string"
         },
+        "confirmation_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmation Reason"
+        },
         "inputs": {
           "items": {
             "type": "string"
@@ -40,6 +51,10 @@
             "downloads-files"
           ],
           "title": "Reversibility",
+          "type": "string"
+        },
+        "reversibility_label": {
+          "title": "Reversibility Label",
           "type": "string"
         },
         "section": {
@@ -75,7 +90,9 @@
         "title",
         "section",
         "reversibility",
+        "reversibility_label",
         "needs_confirmation",
+        "confirmation_reason",
         "typed_confirmation",
         "read_only",
         "inputs",
@@ -927,6 +944,10 @@
     "JobCatalogReply": {
       "additionalProperties": false,
       "properties": {
+        "cancel_reason": {
+          "title": "Cancel Reason",
+          "type": "string"
+        },
         "commands": {
           "items": {
             "$ref": "#/$defs/CommandDescriptor"
@@ -970,7 +991,8 @@
         "id",
         "type",
         "ok",
-        "commands"
+        "commands",
+        "cancel_reason"
       ],
       "title": "JobCatalogReply",
       "type": "object"

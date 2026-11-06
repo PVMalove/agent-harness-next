@@ -11,7 +11,7 @@ from typing import Literal, NamedTuple
 
 from harness.configuration import SECRET_MASK, mask_secrets
 
-from ...kernel.catalog import CatalogEntry
+from ...kernel.catalog import CONFIRMATION_REASONS, REVERSIBILITY_LABELS, CatalogEntry
 
 _FRAGMENT_CHARS = 4096
 # A character takes at most six bytes in an encoded reply (a control character as `\u00XX`),
@@ -119,14 +119,17 @@ class Job:
 def describe_command(
     entry: CatalogEntry, *, section: str, available: bool
 ) -> dict[str, object]:
-    """What a client shows of a catalog command and what its start must carry: the class and its
-    confirmation, the typed word, the input fields and whether a cleanup plan digest is needed."""
+    """What a client shows of a catalog command and what its start must carry: the class with its
+    label, the confirmation with its reason, the typed word, the input fields and whether a
+    cleanup plan digest is needed. The texts are the catalog's Russian source strings."""
     return {
         "command_id": entry.key,
         "title": entry.title,
         "section": section,
         "reversibility": entry.reversibility.value,
+        "reversibility_label": REVERSIBILITY_LABELS[entry.reversibility],
         "needs_confirmation": entry.needs_confirmation,
+        "confirmation_reason": CONFIRMATION_REASONS.get(entry.reversibility),
         "typed_confirmation": entry.typed_confirmation,
         "read_only": entry.read_only,
         "inputs": list(entry.inputs),

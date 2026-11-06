@@ -1,19 +1,16 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
-import {
-  CONFIRMATION_REASONS,
-  REVERSIBILITY_LABELS,
-} from "../../harness/console/frontend/src/commands/CommandPanel";
 import { PHASE_LABELS } from "../../harness/console/frontend/src/commands/JobOutput";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
 import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
-import { COMMANDS, FakeSocket, ManualClock, jobReply, jobSnapshot } from "./fake-socket";
+import { CANCEL_REASON, COMMANDS, FakeSocket, ManualClock, jobReply, jobSnapshot } from "./fake-socket";
+import served from "./fixtures/job-catalog.json";
 
 const line = (n: number) => ({ channel: "stdout", text: `line ${n}\n` });
 
-function renderHarness(commands: unknown[] = COMMANDS) {
+function renderHarness(commands: unknown[] = COMMANDS, cancelReason: string = CANCEL_REASON) {
   window.location.hash = "#/harness";
   const clock = new ManualClock();
   const client = createConsoleClient({
@@ -30,7 +27,9 @@ function renderHarness(commands: unknown[] = COMMANDS) {
   const socket = FakeSocket.last;
   act(() => socket.open());
   const catalogRequest = socket.request("job.catalog");
-  act(() => socket.reply({ v: 1, id: catalogRequest.id, type: "job.catalog", ok: true, commands }));
+  act(() =>
+    socket.reply({ v: 1, id: catalogRequest.id, type: "job.catalog", ok: true, commands, cancel_reason: cancelReason }),
+  );
   const list = socket.request("job.list");
   return { client, clock, socket, list };
 }
@@ -86,7 +85,7 @@ describe("the Harness commands panel", () => {
     act(() => fireEvent.click(screen.getByRole("button", { name: "Запустить uninstall-apply" })));
     expect(socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(CONFIRMATION_REASONS["deletes-local-data"]!)).toBeTruthy();
+    expect(within(dialog).getByText("Команда удаляет локальные данные — восстановить их нельзя.")).toBeTruthy();
     const submit = within(dialog).getByRole("button", { name: "Запустить" }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     const typed = within(dialog).getByLabelText("Введите UNINSTALL, чтобы подтвердить");
@@ -100,6 +99,42 @@ describe("the Harness commands panel", () => {
       confirmation: "UNINSTALL",
     });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("the label and the reasons are the server's, not a client copy", () => {
+    const { socket, list } = renderHarness(
+      [{ ...COMMANDS[1], reversibility_label: "⚠ метка сервера", confirmation_reason: "Причина от сервера." }],
+      "Предупреждение сервера об отмене.",
+    );
+    expect(within(row("uninstall-apply")).getByText("⚠ метка сервера")).toBeTruthy();
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Запустить uninstall-apply" })));
+    expect(within(screen.getByRole("dialog")).getByText("Причина от сервера.")).toBeTruthy();
+    act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Отмена" })));
+    const { output: _output, ...summary } = jobSnapshot({ id: "job-7", command_id: "registry" });
+    act(() => socket.reply({ v: 1, id: list.id, type: "job.list", ok: true, jobs: [summary] }));
+    const bar = document.querySelector(".command-busy") as HTMLElement;
+    act(() => fireEvent.click(within(bar).getByRole("button", { name: "Отменить job" })));
+    expect(within(screen.getByRole("dialog")).getByText("Предупреждение сервера об отмене.")).toBeTruthy();
+  });
+
+  test("in English the server's label and reasons are translated", () => {
+    const { socket, list } = renderHarness();
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    expect(within(row("uninstall-apply")).getByText(catalog.en["✖ удаление"])).toBeTruthy();
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Run uninstall-apply" })));
+    expect(
+      within(screen.getByRole("dialog")).getByText("The command deletes local data — it cannot be restored."),
+    ).toBeTruthy();
+    act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" })));
+    const { output: _output, ...summary } = jobSnapshot({ id: "job-7", command_id: "registry" });
+    act(() => socket.reply({ v: 1, id: list.id, type: "job.list", ok: true, jobs: [summary] }));
+    const bar = document.querySelector(".command-busy") as HTMLElement;
+    act(() => fireEvent.click(within(bar).getByRole("button", { name: "Cancel the job" })));
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        "Cancelling stops the command; the changes it has already made are not rolled back.",
+      ),
+    ).toBeTruthy();
   });
 
   test("closing the dialog starts nothing", () => {
@@ -163,8 +198,8 @@ describe("the Harness commands panel", () => {
   test("every label the panel shows has its English translation", () => {
     const english: Record<string, string> = catalog.en;
     for (const label of [
-      ...Object.values(REVERSIBILITY_LABELS),
-      ...Object.values(CONFIRMATION_REASONS),
+      ...served.commands.flatMap((command) => [command.reversibility_label, command.confirmation_reason ?? []].flat()),
+      served.cancel_reason,
       ...Object.values(PHASE_LABELS),
     ]) {
       expect(english[label], label).toBeTruthy();

@@ -10,7 +10,7 @@ import {
 } from "../../harness/console/frontend/src/ws/jobs";
 import type { LocalJob } from "../../harness/console/frontend/src/ws/jobs";
 import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
-import { COMMANDS, FakeSocket, ManualClock, jobReply, jobSnapshot } from "./fake-socket";
+import { CANCEL_REASON, COMMANDS, FakeSocket, ManualClock, jobReply, jobSnapshot } from "./fake-socket";
 
 const fragment = (n: number) => ({ channel: "stdout", text: `line ${n}\n` });
 const lines = (from: number, to: number) =>
@@ -46,6 +46,9 @@ describe("job snapshots", () => {
     expect(parseJobSummary({ ...summary, mutating: "yes" })).toBeNull();
     expect(parseCommands(COMMANDS)).toEqual(COMMANDS);
     expect(parseCommands([{ ...COMMANDS[0], inputs: "x" }])).toBeNull();
+    expect(parseCommands([{ ...COMMANDS[1], confirmation_reason: 1 }])).toBeNull();
+    const { reversibility_label: _label, ...unlabelled } = COMMANDS[0]!;
+    expect(parseCommands([unlabelled])).toBeNull();
   });
 
   test("merge appends a contiguous batch and keeps only the tail of an overlap", () => {
@@ -104,8 +107,8 @@ describe("the console client's jobs", () => {
     expect(client.requestCommands("harness")).toBe(true);
     const request = socket.request("job.catalog");
     expect(request).toEqual({ id: request.id, type: "job.catalog", section: "harness" });
-    socket.reply({ v: 1, id: request.id, type: "job.catalog", ok: true, commands: COMMANDS });
-    expect(events.at(-1)).toEqual({ type: "commands", section: "harness", commands: COMMANDS });
+    socket.reply({ v: 1, id: request.id, type: "job.catalog", ok: true, commands: COMMANDS, cancel_reason: CANCEL_REASON });
+    expect(events.at(-1)).toEqual({ type: "commands", section: "harness", commands: COMMANDS, cancelReason: CANCEL_REASON });
   });
 
   test("starts a job as the browser, then follows its output from the returned cursor", () => {

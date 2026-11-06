@@ -13,11 +13,14 @@ import pytest
 from harness.console.backend import composition
 from harness.console.backend.api.protocol.jobs import replies
 from harness.console.backend.application.jobs import JobService
+from harness.console.backend.domain.approvals import CANCEL_KEEPS_CHANGES, CANCEL_REASON
 from harness.console.backend.domain.jobs import COMMAND_SECTIONS, JobRejected
+from harness.console.kernel import i18n
 from harness.console.kernel.catalog import (
     CONFIRMATION_REASONS,
     HARNESS_COMMANDS,
     HARNESS_MENU_HIDDEN,
+    REVERSIBILITY_LABELS,
     Reversibility,
 )
 
@@ -64,7 +67,9 @@ def test_a_description_carries_what_the_confirmation_dialog_needs(tmp_path: Path
         "title": "Дрейф управляемых файлов",
         "section": "harness",
         "reversibility": "reversible",
+        "reversibility_label": REVERSIBILITY_LABELS[Reversibility.REVERSIBLE],
         "needs_confirmation": False,
+        "confirmation_reason": None,
         "typed_confirmation": None,
         "read_only": True,
         "inputs": [],
@@ -76,6 +81,24 @@ def test_a_description_carries_what_the_confirmation_dialog_needs(tmp_path: Path
     for command in by_key.values():
         if command["needs_confirmation"]:
             assert Reversibility(command["reversibility"]) in CONFIRMATION_REASONS
+
+
+def test_the_label_and_the_confirmation_reason_are_the_kernel_catalog_texts(
+    tmp_path: Path,
+) -> None:
+    served = _served(tmp_path)
+    listed = [command for section in COMMAND_SECTIONS for command in served.commands(section)]
+    classes = {Reversibility(command["reversibility"]) for command in listed}
+    assert classes >= {Reversibility.REVERSIBLE, Reversibility.DELETES_LOCAL_DATA}
+    for command in listed:
+        reversibility = Reversibility(command["reversibility"])
+        assert command["reversibility_label"] == REVERSIBILITY_LABELS[reversibility]
+        assert command["confirmation_reason"] == CONFIRMATION_REASONS.get(reversibility)
+    by_key = {command["command_id"]: command for command in listed}
+    assert by_key["uninstall-apply"]["confirmation_reason"] == (
+        "Команда удаляет локальные данные — восстановить их нельзя."
+    )
+    assert by_key["uninstall-apply"]["reversibility_label"] == "✖ удаление"
 
 
 def test_availability_is_computed_for_the_served_project(tmp_path: Path) -> None:
@@ -155,6 +178,10 @@ def test_the_catalog_request_answers_once_and_refuses_an_unknown_section_or_fiel
     [answer] = _reply({"id": 1, "type": "job.catalog", "section": "harness"}, served)
     assert answer["ok"] is True and answer["type"] == "job.catalog"
     assert answer["commands"] == served.commands("harness")
+    # The cancel warning is the server's own text: its English is the refusal message.
+    assert answer["cancel_reason"] == CANCEL_REASON
+    assert CANCEL_REASON == "Отмена останавливает команду; уже внесённые изменения не откатываются."
+    assert i18n.tr_text("en", CANCEL_REASON) == CANCEL_KEEPS_CHANGES
     for broken in (
         {"id": 2, "type": "job.catalog", "section": "harness", "extra": 1},
         {"id": 3, "type": "job.catalog", "section": "nowhere"},

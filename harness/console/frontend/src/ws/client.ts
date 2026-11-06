@@ -56,7 +56,7 @@ export type JobRequestType = "job.catalog" | "job.list" | "job.start" | "job.can
 /** What the job requests bring: a section's commands, the job list, a followed job with its
     merged output, or a refusal with its code (and the running job of `busy`). */
 export type JobEvent =
-  | { type: "commands"; section: string; commands: CommandDescriptor[] }
+  | { type: "commands"; section: string; commands: CommandDescriptor[]; cancelReason: string }
   | { type: "jobs"; jobs: JobSummary[] }
   | { type: "job"; job: LocalJob }
   | { type: "job-error"; request: JobRequestType; code: string; message: string; jobId: string | null };
@@ -249,8 +249,10 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     if (open.type !== "job.subscribe") jobRequests.delete(id);
     if (open.type === "job.catalog") {
       const commands = parseCommands(reply.commands);
-      if (commands) emitJob({ type: "commands", section: open.key, commands });
-      else emitJob({ type: "job-error", request: open.type, code: "invalid", message: "", jobId: null });
+      const cancelReason = reply.cancel_reason;
+      if (commands && typeof cancelReason === "string") {
+        emitJob({ type: "commands", section: open.key, commands, cancelReason });
+      } else emitJob({ type: "job-error", request: open.type, code: "invalid", message: "", jobId: null });
     } else if (open.type === "job.list") {
       const jobs = Array.isArray(reply.jobs) ? reply.jobs.map(parseJobSummary) : null;
       if (jobs && jobs.every((job) => job !== null)) emitJob({ type: "jobs", jobs: jobs as JobSummary[] });

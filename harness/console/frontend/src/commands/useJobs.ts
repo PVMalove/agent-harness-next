@@ -17,6 +17,8 @@ export interface JobRefusal {
 export interface Jobs {
   /** null until the catalog reply arrives. */
   commands: CommandDescriptor[] | null;
+  /** What a cancel warns, as the server words it; null until the catalog reply arrives. */
+  cancelReason: string | null;
   /** The running job that holds the mutation slot, if any. */
   busy: JobSummary | null;
   /** The job whose output the panel shows. */
@@ -30,6 +32,7 @@ export interface Jobs {
 export function useJobs(section: Section): Jobs {
   const { client } = useConsole();
   const [commands, setCommands] = useState<CommandDescriptor[] | null>(null);
+  const [cancelReason, setCancelReason] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [shown, setShown] = useState<LocalJob | null>(null);
   const [refusal, setRefusal] = useState<JobRefusal | null>(null);
@@ -39,7 +42,10 @@ export function useJobs(section: Section): Jobs {
   useEffect(() => {
     const stopJobs = client.subscribeJobs((event) => {
       if (event.type === "commands") {
-        if (event.section === section) setCommands(event.commands);
+        if (event.section === section) {
+          setCommands(event.commands);
+          setCancelReason(event.cancelReason);
+        }
       } else if (event.type === "jobs") {
         setJobs(event.jobs);
         const active = event.jobs.find((job) => job.mutating && job.phase === "running");
@@ -107,5 +113,5 @@ export function useJobs(section: Section): Jobs {
     () => jobs.find((job) => job.mutating && job.phase === "running") ?? null,
     [jobs],
   );
-  return { commands, busy, shown, refusal, start, cancel, show };
+  return { commands, cancelReason, busy, shown, refusal, start, cancel, show };
 }

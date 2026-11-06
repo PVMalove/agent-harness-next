@@ -1,5 +1,6 @@
 /* A section's catalog commands as server jobs: run, confirm by the class the server reports,
-   follow the output, show the job that keeps the console busy and cancel it after a confirmation. */
+   follow the output, show the job that keeps the console busy and cancel it after a confirmation.
+   Labels and reasons are the server's Russian source strings; catalog.json translates them. */
 import { useState } from "react";
 import { useI18n } from "../i18n";
 import { JOB_ERROR_LABELS } from "../ws/jobs";
@@ -9,29 +10,6 @@ import type { ConfirmRequest } from "./ConfirmDialog";
 import { JobOutput } from "./JobOutput";
 import { useJobs } from "./useJobs";
 import type { Section } from "./useJobs";
-
-/* The Russian labels and reasons of kernel/catalog.py (REVERSIBILITY_LABELS,
-   CONFIRMATION_REASONS); catalog.json translates them. */
-export const REVERSIBILITY_LABELS: Readonly<Record<string, string>> = {
-  reversible: "✔ обратимо",
-  "deletes-local-data": "✖ удаление",
-  "terminal-coordinator-action": "⚠ решение",
-  "external-change": "⚠ внешнее",
-  "overwrites-managed-files": "⚠ перезапись",
-  "downloads-files": "⚠ загрузка",
-};
-
-export const CONFIRMATION_REASONS: Readonly<Record<string, string>> = {
-  "deletes-local-data": "Команда удаляет локальные данные — восстановить их нельзя.",
-  "terminal-coordinator-action": "Команда записывает терминальное решение coordinator — отменить его нельзя.",
-  "external-change": "Команда меняет внешнюю систему: это видят другие люди или это расходует токены.",
-  "overwrites-managed-files":
-    "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
-  "downloads-files":
-    "Команда скачивает файлы из сети (PyPI, нужны доступ и время) и заменяет локальный bundle парсеров проекта.",
-};
-
-const CANCEL_KEEPS_CHANGES = "Отмена останавливает команду; уже внесённые изменения не откатываются.";
 
 type Pending =
   | { kind: "start"; command: CommandDescriptor; values: Record<string, string>; dialog: ConfirmRequest }
@@ -57,7 +35,7 @@ function CommandRow({
     <div className="harness-command-row" data-command={command.command_id}>
       <code>{command.command_id}</code>
       <span title={blocked ?? t(command.title)}>{blocked ?? t(command.title)}</span>
-      <em className={`orch-pill ${tone}`}>{t(REVERSIBILITY_LABELS[command.reversibility] ?? command.reversibility)}</em>
+      <em className={`orch-pill ${tone}`}>{t(command.reversibility_label)}</em>
       <span className="command-inputs">
         {command.inputs.map((name) => (
           <input
@@ -100,7 +78,7 @@ export function CommandPanel({ section }: { section: Section }) {
       dialog: {
         title: t("Подтвердите запуск"),
         command: command.command_id,
-        reason: t(CONFIRMATION_REASONS[command.reversibility] ?? command.title),
+        reason: t(command.confirmation_reason ?? command.title),
         typed: command.typed_confirmation,
         action: t("Запустить"),
       },
@@ -113,7 +91,7 @@ export function CommandPanel({ section }: { section: Section }) {
       dialog: {
         title: t("Подтвердите отмену job"),
         command: commandId,
-        reason: t(CANCEL_KEEPS_CHANGES),
+        reason: t(jobs.cancelReason ?? ""),
         typed: null,
         action: t("Отменить job"),
       },

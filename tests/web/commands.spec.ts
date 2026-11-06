@@ -10,7 +10,7 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 const base = () => process.env.CONSOLE_BASE_URL!;
 const read = (name: string) => JSON.parse(readFileSync(resolve(__dirname, "fixtures", name), "utf-8")) as unknown;
 const HOME = read("home-snapshot.json");
-const COMMANDS = read("job-catalog.json");
+const CATALOG = read("job-catalog.json") as Body;
 
 type Body = Record<string, unknown>;
 
@@ -45,7 +45,7 @@ async function mockSocket(page: Page, onJob: (ws: WebSocketRoute, request: Body,
       if (request.type === "home.snapshot") {
         send(ws, { id, type: "home.snapshot", cached: true, age_seconds: 3, snapshot: HOME });
       } else if (request.type === "job.catalog") {
-        send(ws, { id, type: "job.catalog", commands: COMMANDS });
+        send(ws, { id, type: "job.catalog", ...CATALOG });
       } else if (request.type === "job.list") {
         send(ws, { id, type: "job.list", jobs: [] });
       } else if (String(request.type).startsWith("job.")) {

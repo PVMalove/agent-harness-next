@@ -3,6 +3,7 @@
 
 export type Available = boolean;
 export type CommandId = string;
+export type ConfirmationReason = string | null;
 export type Inputs = string[];
 export type NeedsConfirmation = boolean;
 export type PlanRequired = boolean;
@@ -14,6 +15,7 @@ export type Reversibility =
   | "external-change"
   | "overwrites-managed-files"
   | "downloads-files";
+export type ReversibilityLabel = string;
 export type Section = "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory";
 export type Title = string;
 export type TypedConfirmation = string | null;
@@ -79,6 +81,7 @@ export type Jobs = JobSummary[];
 export type Ok3 = true;
 export type Type4 = "job.list";
 export type V3 = 1;
+export type CancelReason = string;
 export type Commands = CommandDescriptor[];
 export type Id6 = string | number | null;
 export type Ok4 = true;
@@ -332,11 +335,13 @@ export interface ConsoleWebSocketProtocol {
 export interface CommandDescriptor {
   available: Available;
   command_id: CommandId;
+  confirmation_reason: ConfirmationReason;
   inputs: Inputs;
   needs_confirmation: NeedsConfirmation;
   plan_required: PlanRequired;
   read_only: ReadOnly;
   reversibility: Reversibility;
+  reversibility_label: ReversibilityLabel;
   section: Section;
   title: Title;
   typed_confirmation: TypedConfirmation;
@@ -431,6 +436,7 @@ export interface JobSummary {
  * via the `definition` "JobCatalogReply".
  */
 export interface JobCatalogReply {
+  cancel_reason: CancelReason;
   commands: Commands;
   id: Id6;
   ok: Ok4;
