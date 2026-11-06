@@ -1,15 +1,19 @@
-"""The coordinator commands of the Recovery and Container route screens through the console
-server. Reads come from the screen snapshots (`batch list` from `recovery.snapshot`, `recovery
-status`, `dispatch preflight`), recovery actions run as server jobs under its confirmation rules,
-and nothing here starts a process: a path the server does not serve goes to the `fallback`
-client, or is refused when there is none."""
+"""The commands of the Recovery, Container route, Diagnostics and Harness screens through the
+console server. Reads come from the screen snapshots (`batch list` from `recovery.snapshot`,
+`recovery status`, `dispatch preflight`), recovery actions, health fixes and Harness commands run
+as server jobs under its confirmation rules, and nothing here starts a process: a path the server
+does not serve goes to the `fallback` client, or is refused when there is none."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import json
+import subprocess
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
+from ...health.model import Report
+from ..kernel.catalog import CatalogEntry
 from ..kernel.coordinator_api import (
     ApiResult,
     ArgvError,
@@ -18,7 +22,8 @@ from ..kernel.coordinator_api import (
     classify,
 )
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
-from .client import ConsoleClientError, ScreenClient
+from ..kernel.health_report import report_from_payload
+from .client import ConsoleClientError, JobResult, ScreenClient
 
 Values = Mapping[str, str | Sequence[str] | bool]
 
@@ -150,3 +155,76 @@ class ServerCoordinatorApi:
                 stderr=result.error or result.stderr or result.phase,
             )
         return classify(argv, result.returncode, result.stdout, result.stderr)
+
+
+class JobFailed(ConsoleClientError):
+    """A server job ended without the result its screen reads back."""
+
+
+def _failure(result: JobResult) -> str:
+    return (result.error or result.stderr or result.phase).strip() or result.phase
+
+
+def apply_health_fixes(client: ScreenClient, *, online: bool) -> Report:
+    """Run `harness health --fix --json` (with `--online` when asked) as a confirmed server job
+    and read its report, with the fixes it applied, back from the job's stdout. Exit code 1 means
+    a check still fails, not that the fixes failed; a job without an exit code or a report is
+    `JobFailed`, and a refused start the client's `ServerError`."""
+    key = "diagnostics-online-fix" if online else "diagnostics-fix"
+    result = client.run_job(key, {}, confirmed=True)
+    if result.phase != "completed" or result.returncode is None:
+        raise JobFailed(_failure(result))
+    try:
+        return report_from_payload(json.loads(result.stdout))
+    except ValueError:
+        raise JobFailed(_failure(result)) from None
+
+
+class ServerJobRefused(OSError):
+    """The console server refused or could not finish a Harness command; the text is the
+    server's, shown where a command that cannot start is reported."""
+
+
+class ServerJobRunner:
+    """A `CommandRunner` for one Harness catalog command, run as a console server job. The
+    form already checked the confirmation, so the job carries it with the typed word and the
+    cleanup plan digest the operator approved (`__plan_digest`). `argv` is only shown: the
+    server builds the command from the catalog entry."""
+
+    streams_output = True
+
+    def __init__(
+        self, client: ScreenClient, entry: CatalogEntry, values: Mapping[str, str]
+    ) -> None:
+        self._client = client
+        self._entry = entry
+        self._values = {
+            name: value for name, value in values.items() if name != "__plan_digest"
+        }
+        self._plan_digest = values.get("__plan_digest")
+
+    def __call__(
+        self,
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | None = None,
+        on_output: Callable[[str, str], None] | None = None,
+    ) -> "subprocess.CompletedProcess[str]":
+        entry = self._entry
+        try:
+            result = self._client.run_job(
+                entry.key,
+                self._values,
+                confirmed=entry.needs_confirmation,
+                confirmation=entry.typed_confirmation,
+                plan_digest=self._plan_digest,
+                on_output=on_output,
+            )
+        except ConsoleClientError as exc:
+            raise ServerJobRefused(str(exc)) from None
+        if result.returncode is None:
+            raise ServerJobRefused(_failure(result))
+        return subprocess.CompletedProcess(
+            list(argv), result.returncode, result.stdout, result.stderr
+        )

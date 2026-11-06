@@ -4,7 +4,7 @@ server client: reads map to screen snapshots, recovery actions to server jobs.""
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import pytest
@@ -56,10 +56,21 @@ class FakeClient:
         return RouteFacts(Authored({}), PREFLIGHT if batch else None)
 
     def run_job(
-        self, command_id: str, values: Mapping[str, str], *, confirmed: bool = False
+        self,
+        command_id: str,
+        values: Mapping[str, str],
+        *,
+        confirmed: bool = False,
+        confirmation: str | None = None,
+        plan_digest: str | None = None,
+        on_output: Callable[[str, str], None] | None = None,
     ) -> JobResult:
         self.calls.append(("job", command_id, dict(values), confirmed))
+        if confirmation is not None or plan_digest is not None:
+            self.calls.append(("job-extra", confirmation, plan_digest))
         self._maybe_fail()
+        if on_output is not None:
+            on_output("stdout", self.job.stdout)
         return self.job
 
 
@@ -175,3 +186,117 @@ def test_with_a_fallback_only_unserved_paths_reach_its_runner() -> None:
     assert api.call(("recovery", "reload"), {"batch": "b"}).ok
     assert api.call(("dispatch", "status")).ok
     assert len(calls) == 1 and calls[0][-2:] == ["dispatch", "status"]
+
+
+def _report_json(fixes: list[str]) -> str:
+    from harness.health.model import CheckResult, Report
+    from harness.health.report_json import to_json
+
+    report = Report(1, str(REPO), False, [CheckResult("a.b", "core", "fail", "x")], fixes)
+    return json.dumps(to_json(report))
+
+
+@pytest.fixture
+def no_local_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The TUI never runs health or its fixes in its own process."""
+    from harness.console.kernel import data as console_data
+
+    def local(*args: object, **kwargs: object) -> object:
+        raise AssertionError("a health fix must run as a server job")
+
+    for name in ("apply_local_fixes", "run_health", "collect_diagnostics"):
+        monkeypatch.setattr(console_data, name, local)
+
+
+@pytest.mark.parametrize("online", [False, True])
+def test_health_fixes_are_a_confirmed_server_job_read_back_as_the_report(
+    online: bool, no_local_health: None
+) -> None:
+    from harness.console.tui.server_api import apply_health_fixes
+
+    client = FakeClient()
+    # `harness health` exits 1 when a check fails; the fixes still ran and the report is valid.
+    client.job = JobResult("completed", 1, _report_json(["a.b"]), "", False, None)
+    report = apply_health_fixes(client, online=online)  # type: ignore[arg-type]
+    assert report.fixes_applied == ["a.b"] and report.checks[0].status == "fail"
+    key = "diagnostics-online-fix" if online else "diagnostics-fix"
+    assert client.calls == [("job", key, {}, True)]
+
+
+@pytest.mark.parametrize(
+    "job",
+    [
+        JobResult("failed", None, "", "", False, "executor failed"),
+        JobResult("cancelled", None, "", "", False, None),
+        JobResult("completed", 2, "usage: harness", "bad flag", False, None),
+    ],
+    ids=["no-exit-code", "cancelled", "not-json"],
+)
+def test_a_health_fix_job_without_a_report_is_an_error(
+    job: JobResult, no_local_health: None
+) -> None:
+    from harness.console.tui.client import ConsoleClientError
+    from harness.console.tui.server_api import apply_health_fixes
+
+    client = FakeClient()
+    client.job = job
+    with pytest.raises(ConsoleClientError) as failed:
+        apply_health_fixes(client, online=False)  # type: ignore[arg-type]
+    assert str(failed.value)
+    if job.error or job.stderr:
+        assert (job.error or job.stderr) in str(failed.value)
+
+
+def test_the_server_job_runner_sends_the_form_confirmation_and_plan_digest() -> None:
+    from harness.console.kernel.catalog import HARNESS_COMMANDS
+    from harness.console.tui.server_api import ServerJobRunner
+
+    entries = {entry.key: entry for entry in HARNESS_COMMANDS}
+    client = FakeClient()
+    client.job = JobResult("completed", 0, "removed", "", False, None)
+    entry = entries["cleanup-hard-apply"]
+    runner = ServerJobRunner(client, entry, {"__plan_digest": "d" * 64})  # type: ignore[arg-type]
+    seen: list[tuple[str, str]] = []
+    result = runner(["ignored"], cwd=REPO, on_output=lambda c, t: seen.append((c, t)))
+    assert (result.returncode, result.stdout) == (0, "removed") and runner.streams_output
+    assert seen == [("stdout", "removed")]
+    assert client.calls == [
+        ("job", "cleanup-hard-apply", {}, True),
+        ("job-extra", entry.typed_confirmation, "d" * 64),
+    ]
+    plain = FakeClient()
+    ServerJobRunner(plain, entries["health"], {})(["x"])  # type: ignore[arg-type]
+    assert plain.calls == [("job", "health", {}, False)]
+
+
+@pytest.mark.parametrize(
+    "failure, job",
+    [
+        (ServerError("busy", "Busy: job-1 (update)"), None),
+        (ConnectionLost("gone"), None),
+        (None, JobResult("failed", None, "", "", False, "executor failed")),
+    ],
+    ids=["busy", "lost", "no-exit-code"],
+)
+def test_a_refused_or_failed_server_job_is_an_os_error_with_the_server_text(
+    failure: Exception | None, job: JobResult | None
+) -> None:
+    from harness.console.kernel.catalog import HARNESS_COMMANDS
+    from harness.console.kernel.runner import HarnessRuns
+    from harness.console.tui.server_api import ServerJobRunner
+
+    entry = next(item for item in HARNESS_COMMANDS if item.key == "update")
+    client = FakeClient()
+    client.failure = failure
+    if job is not None:
+        client.job = job
+    runner = ServerJobRunner(client, entry, {})  # type: ignore[arg-type]
+    with pytest.raises(OSError) as refused:
+        runner(["x"])
+    text = str(failure) if failure is not None else "executor failed"
+    assert text in str(refused.value)
+    runs = HarnessRuns()
+    run = runs.reserve("update", "harness update", ["x"], {})
+    assert run is not None
+    runs.execute(run, runner, REPO)
+    assert run.error.startswith("не удалось запустить: ") and text in run.error
