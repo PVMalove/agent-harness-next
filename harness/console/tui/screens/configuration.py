@@ -1,4 +1,7 @@
-"""Guided configuration editing; only explicit confirmation applies a validated draft."""
+"""Guided configuration editing; only explicit confirmation applies a validated draft. The files
+come from the console server's `configuration.snapshot` (secrets masked) and every write runs as
+its server job through the configuration gateway; a project the server does not serve (opened
+from «Открыть проект») is written in process by the same functions."""
 
 from __future__ import annotations
 
@@ -31,8 +34,8 @@ from textual.widgets import (
     TextArea,
 )
 
-from harness.configuration import SECRET_MASK, mask_secrets, read_config_bundle
-from harness.configuration_store import ConfigurationStore, StaleConfiguration
+from harness.configuration import SECRET_MASK, mask_secrets
+from harness.configuration_store import StaleConfiguration, json_bytes
 from harness.runtime_adapters import AdapterStatus
 from ...kernel import brand, i18n
 from ..shell import SHELL_CSS, ConsoleShell, SectionCard, WrappedValue
@@ -48,11 +51,13 @@ from ..widgets import (
     StatusLine,
 )
 from ..advisor import PROVIDERS, Advice, AdvisorUnavailable, advise, availability
-from ...kernel.configuration import (
-    ConfigurationDraft,
-    RuntimeAdapterPreview,
-    preview_runtime_adapters,
-    apply_runtime_adapters,
+from ...kernel.configuration import ConfigurationDraft, RuntimeAdapterPreview
+from ...kernel.configuration_snapshot import ConfigurationFacts
+from ..client import ScreenClient
+from ..configuration_gateway import (
+    ConfigurationGateway,
+    LocalConfiguration,
+    ServerConfiguration,
 )
 from ..configuration_steps import (
     skeleton,
@@ -242,11 +247,21 @@ class ConfigurationScreen(ConsoleShell):
     """)
 
     def __init__(
-        self, repo: Path, focus: tuple[str, tuple[str, ...]] | None = None
+        self,
+        repo: Path,
+        focus: tuple[str, tuple[str, ...]] | None = None,
+        *,
+        client: ScreenClient | None = None,
     ) -> None:
-        """`focus` is (file, field path): the wizard opens on that file at that field."""
+        """`focus` is (file, field path): the wizard opens on that file at that field. `client`
+        is the console server of `repo`; without it (a project the server does not serve) the
+        wizard reads and writes the files in process."""
         super().__init__()
         self.repo = repo
+        self._gateway: ConfigurationGateway = (
+            LocalConfiguration(repo) if client is None else ServerConfiguration(client)
+        )
+        self._facts: ConfigurationFacts | None = None
         self.focus_target = focus
         self.phase = Phase.CHOOSE
         self.draft: ConfigurationDraft | None = None
@@ -406,9 +421,19 @@ class ConfigurationScreen(ConsoleShell):
             self._store_text(), id="configuration-store-path", classes="store-path"
         )
 
+    def _snapshot(self) -> ConfigurationFacts:
+        """The configuration snapshot the page shows, read once until a write or a reload."""
+        if self._facts is None:
+            self._facts = self._gateway.snapshot()
+        return self._facts
+
     def _store_text(self) -> str:
         prefix = i18n.tr(self._language(), "Хранилище: ")
-        return prefix + str(ConfigurationStore(self.repo).root)
+        try:
+            root = self._snapshot().store_root
+        except (ValueError, OSError) as exc:
+            root = str(exc)
+        return prefix + root
 
     def _compose_choose(self) -> ComposeResult:
         yield Static("Настройка конфигурации", id="configuration-title")
@@ -458,7 +483,10 @@ class ConfigurationScreen(ConsoleShell):
             classes="configuration-choice",
         ):
             try:
-                preview = preview_runtime_adapters(self.repo)
+                adapters = self._snapshot().adapters
+                if adapters.preview is None:
+                    raise ValueError(adapters.error)
+                preview = adapters.preview
             except (ValueError, OSError) as exc:
                 message = str(exc)
                 yield StatusLine(
@@ -497,7 +525,11 @@ class ConfigurationScreen(ConsoleShell):
 
     def _preview_adapters(self) -> None:
         try:
-            preview = preview_runtime_adapters(self.repo)
+            # The plan is read again: it must be the one the job checks by fingerprint.
+            adapters = self._gateway.snapshot(force=True).adapters
+            if adapters.preview is None:
+                raise ValueError(adapters.error)
+            preview = adapters.preview
         except (ValueError, OSError) as exc:
             self._set_message(str(exc))
             return
@@ -515,8 +547,7 @@ class ConfigurationScreen(ConsoleShell):
     ) -> None:
         if confirmed:
             self._operation(
-                lambda: apply_runtime_adapters(self.repo, preview, confirmed=True),
-                reload=True,
+                lambda: self._gateway.apply_adapters(preview.fingerprint), reload=True
             )
 
     def _compose_field(self) -> ComposeResult:
@@ -975,12 +1006,7 @@ class ConfigurationScreen(ConsoleShell):
 
     async def _start(self, names: tuple[str, ...], focus: tuple[str, ...] = ()) -> None:
         try:
-            if not (self.repo / ".harness/project.schema.json").is_file():
-                raise ValueError(
-                    "Сначала установите engineering-suite или backend-orchestration через меню подключения проекта"
-                )
-            ConfigurationStore(self.repo).recover()
-            self.draft = ConfigurationDraft.load(self.repo, names)
+            self.draft = self._load_draft(names)
             self.steps = steps_for(self.draft)
             # Opening on a given field takes one build of the page, not two.
             self.index = next(
@@ -1000,6 +1026,22 @@ class ConfigurationScreen(ConsoleShell):
         if self.phase is Phase.EDITING and not self.provider_status:
             # Availability is probed without a model request; the result labels the options.
             self._check_advisor(announce=False)
+
+    def _load_draft(
+        self, names: tuple[str, ...], *, force: bool = False
+    ) -> ConfigurationDraft:
+        """A draft of `names` from the configuration snapshot; an interrupted write is recovered
+        first (as a server job), then the snapshot is read again."""
+        facts = self._gateway.snapshot(force=force)
+        if not facts.schema_installed:
+            raise ValueError(
+                "Сначала установите engineering-suite или backend-orchestration через меню подключения проекта"
+            )
+        if facts.transaction_pending:
+            self._gateway.recover()
+            facts = self._gateway.snapshot(force=True)
+        self._facts = facts
+        return ConfigurationDraft.from_snapshot(self.repo, facts, names)
 
     def _set_page(self) -> None:
         self.choice_page = 0
@@ -1030,7 +1072,12 @@ class ConfigurationScreen(ConsoleShell):
         """Whether the editor shows `field` through the secret mask (a boolean carries no secret)."""
         assert self.draft is not None
         value = field.value(self.draft)
-        return field.kind != "boolean" and mask_secrets(value, field.path[-1]) != value
+        if field.kind == "boolean":
+            return False
+        # A snapshot already carries the mask in place of a secret.
+        return mask_secrets(value, field.path[-1]) != value or SECRET_MASK in json.dumps(
+            value, ensure_ascii=False
+        )
 
     def _save_field(self) -> bool:
         if self.phase is not Phase.EDITING or self.draft is None:
@@ -1204,7 +1251,7 @@ class ConfigurationScreen(ConsoleShell):
     def _open_versions(self) -> None:
         from .configuration_versions import ConfigurationVersionsScreen
 
-        self.app.push_screen(ConfigurationVersionsScreen(self.repo))
+        self.app.push_screen(ConfigurationVersionsScreen(self.repo, self._gateway))
 
     def _confirm_apply(self) -> None:
         self.app.push_screen(
@@ -1231,25 +1278,10 @@ class ConfigurationScreen(ConsoleShell):
         assert self.draft is not None
         if self.draft.problems():
             raise ValueError("Исправьте ошибки черновика")
-        bundle = {**read_config_bundle(self.repo), **self.draft.encoded()}
-        version = ConfigurationStore(self.repo).save(bundle, description)
-        return (
-            "Версия сохранена без применения: "
-            + version.id
-            + "\nХранилище: "
-            + str(ConfigurationStore(self.repo).root)
-        )
+        return self._gateway.save_draft(self.draft, description)
 
     def _save_current(self, description: str) -> str:
-        version = ConfigurationStore(self.repo).save(
-            read_config_bundle(self.repo), description
-        )
-        return (
-            "Текущая конфигурация сохранена как версия: "
-            + version.id
-            + "\nХранилище: "
-            + str(ConfigurationStore(self.repo).root)
-        )
+        return self._gateway.save_current(description)
 
     def _confirmed_apply(self, confirmed: bool | None) -> None:
         if confirmed:
@@ -1259,16 +1291,27 @@ class ConfigurationScreen(ConsoleShell):
         assert self.draft is not None
         if self.draft.problems():
             raise ValueError("Исправьте ошибки черновика")
-        backup = ConfigurationStore(self.repo).apply(
-            self.draft.encoded(), expected=self.draft.original
-        )
-        return "Конфигурация применена. Предыдущая версия: " + backup.id
+        return self._gateway.apply(self.draft)
 
     async def _reload_external(self) -> None:
         if self.draft is None:
             return
         try:
-            conflicts = self.draft.rebase(read_config_bundle(self.repo))
+            facts = self._gateway.snapshot(force=True)
+            names = tuple(self.draft.documents)
+            for name in names:
+                if facts.files[name].error:
+                    raise ValueError(facts.files[name].error)
+            conflicts = self.draft.rebase(
+                {
+                    name: json_bytes(facts.files[name].document)
+                    if facts.files[name].exists
+                    else None
+                    for name in names
+                }
+            )
+            self.draft.digests = {name: facts.files[name].digest for name in names}
+            self._facts = facts
         except (ValueError, OSError) as exc:
             self._remember(str(exc))
         else:
@@ -1314,10 +1357,14 @@ class ConfigurationScreen(ConsoleShell):
         if stale:
             await self._rebuild_page()
         elif reload:
+            self._facts = None
             if self.draft is not None:
-                self.draft = ConfigurationDraft.load(
-                    self.repo, tuple(self.draft.documents)
-                )
+                try:
+                    self.draft = self._load_draft(
+                        tuple(self.draft.documents), force=True
+                    )
+                except (ValueError, OSError) as exc:
+                    message, kind = message + "\n" + str(exc), "error"
             await self._rebuild_page()
             self._set_message(message, kind)
 

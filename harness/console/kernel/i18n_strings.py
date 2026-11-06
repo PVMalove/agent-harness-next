@@ -873,6 +873,7 @@ EN.update(
         "Сервер консоли не отдал состояние Harness: ": "The console server did not return the Harness state: ",
         "Слишком много отмеченных файлов для одного запроса к серверу консоли: выберите режим перезаписи всех seed-файлов или отметьте меньше файлов.": "Too many ticked files for one console server request: choose the mode that overwrites all seed files or tick fewer files.",
         "diff недоступен: файла больше нет в отчёте дрейфа": "diff unavailable: the drift report no longer lists the file",
+        "Слишком много изменений для одного запроса к серверу консоли: примените изменения частями": "Too many changes for one console server request: apply them in parts",
         "Читаю справку…": "Reading the help…",
         "конфигурация не получена от сервера консоли": "configuration not received from the console server",
     }

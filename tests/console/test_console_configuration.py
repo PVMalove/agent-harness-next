@@ -217,3 +217,105 @@ def test_a_draft_from_the_snapshot_starts_unchanged_from_its_masked_documents(
     draft.documents["project.json"]["language"] = "ru"
     facts.files["project.json"].document["language"] = "x"
     assert draft.documents["project.json"]["language"] == "ru"
+
+
+class _Gateway:
+    """A configuration gateway over fixed facts that records every call."""
+
+    def __init__(self, facts: object) -> None:
+        self.facts = facts
+        self.calls: list[tuple[object, ...]] = []
+
+    def snapshot(self, *, force: bool = False) -> object:
+        self.calls.append(("snapshot", force))
+        return self.facts
+
+    def recover(self) -> str:
+        self.calls.append(("recover",))
+        return "ok"
+
+
+def test_the_wizard_draft_comes_from_the_snapshot_after_recovering_a_pending_write(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    from harness.console.kernel.configuration_snapshot import collect_configuration
+    from harness.console.tui.screens.configuration import ConfigurationScreen
+
+    from ._configuration_fixture import installed_project
+
+    installed_project(tmp_path)
+    facts = replace(collect_configuration(tmp_path), transaction_pending=True)
+    gateway = _Gateway(facts)
+    screen = ConfigurationScreen(tmp_path)
+    screen._gateway = gateway  # type: ignore[assignment]
+
+    draft = screen._load_draft(("project.json",))
+
+    assert gateway.calls == [("snapshot", False), ("recover",), ("snapshot", True)]
+    assert draft.documents["project.json"]["language"] == "ru"
+    assert draft.digests["project.json"] == facts.files["project.json"].digest
+    gateway.facts = replace(facts, schema_installed=False, transaction_pending=False)
+    with pytest.raises(ValueError, match="Сначала установите"):
+        screen._load_draft(("project.json",))
+
+
+def test_the_wizard_writes_through_the_server_when_it_has_a_client(tmp_path: Path) -> None:
+    from harness.console.tui.client import JobResult
+    from harness.console.tui.configuration_gateway import (
+        LocalConfiguration,
+        ServerConfiguration,
+    )
+    from harness.console.tui.screens.configuration import ConfigurationScreen
+
+    from ._home_client import FakeHomeClient
+    from ._configuration_fixture import installed_project
+
+    installed_project(tmp_path)
+    client = FakeHomeClient(tmp_path)
+    client.job_result = JobResult("completed", 0, "Текущая конфигурация сохранена\n", "", False, None)
+    served = ConfigurationScreen(tmp_path, client=client)
+
+    assert isinstance(served._gateway, ServerConfiguration)
+    assert isinstance(ConfigurationScreen(tmp_path)._gateway, LocalConfiguration)
+    assert served._save_current("описание") == "Текущая конфигурация сохранена"
+    assert client.screen_requests == [
+        (
+            "job",
+            "configuration-save-current",
+            {"request": json.dumps({"description": "описание"}, ensure_ascii=False, separators=(",", ":"))},
+            False,
+        )
+    ]
+    assert not (tmp_path / ".harness/config_versions").exists()
+
+
+def test_the_wizard_and_its_versions_screen_write_no_configuration_themselves() -> None:
+    """Saving, applying, the adapters and the restore go through the configuration gateway; the
+    wizard reads its files from the snapshot, never from disk."""
+    import ast
+
+    from harness.console.tui.screens import configuration, configuration_versions
+
+    def called(module: object) -> set[str]:
+        tree = ast.parse(Path(str(getattr(module, "__file__"))).read_text(encoding="utf-8"))
+        return {
+            node.func.attr
+            if isinstance(node.func, ast.Attribute)
+            else getattr(node.func, "id", "")
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+        }
+
+    wizard, versions = called(configuration), called(configuration_versions)
+    local = {
+        "read_config_bundle",
+        "preview_runtime_adapters",
+        "apply_runtime_adapters",
+        "ConfigurationStore",
+        "load",
+    }
+    assert not local & wizard
+    assert {"snapshot", "from_snapshot", "save_draft", "apply", "apply_adapters"} <= wizard
+    assert "restore" in versions and "apply" not in versions

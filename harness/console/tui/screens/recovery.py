@@ -111,6 +111,7 @@ class RecoveryScreen(ConsoleShell):
     ) -> None:
         super().__init__()
         self.repo = repo
+        self._client = client
         # History, status and every recovery action go through the console server; nothing
         # here runs a coordinator process.
         self._api = ServerCoordinatorApi(repo, client)
@@ -371,7 +372,9 @@ class RecoveryScreen(ConsoleShell):
             from .configuration import ConfigurationScreen
 
             self.app.push_screen(
-                ConfigurationScreen(self.repo, focus=(target.file, target.path)),
+                ConfigurationScreen(
+                    self.repo, focus=(target.file, target.path), client=self._client
+                ),
                 lambda _: self._run(session.reload, then_refresh=True),
             )
 

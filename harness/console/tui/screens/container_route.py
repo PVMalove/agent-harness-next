@@ -216,6 +216,7 @@ class ContainerRouteScreen(ConsoleShell):
     ) -> None:
         super().__init__()
         self.repo = repo
+        self._client = client
         self._command_runner = command_runner
         # Setup and Preflight read the console server; the explicit effects (propose, create,
         # status, QA, cleanup) are not server jobs and keep the local client.
@@ -431,7 +432,9 @@ class ContainerRouteScreen(ConsoleShell):
 
         self.app.push_screen(
             ConfigurationScreen(
-                self.repo, focus=("orchestration.json", ("access_policy",))
+                self.repo,
+                focus=("orchestration.json", ("access_policy",)),
+                client=self._client,
             )
         )
 

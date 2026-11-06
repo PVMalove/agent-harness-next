@@ -938,7 +938,7 @@ class DashboardScreen(ConsoleShell):
     def _configuration(self) -> Screen[None]:
         from .configuration import ConfigurationScreen
 
-        return ConfigurationScreen(self.repo)
+        return ConfigurationScreen(self.repo, client=self._home_client)
 
     def _help(self) -> Screen[None]:
         from .help import HelpScreen

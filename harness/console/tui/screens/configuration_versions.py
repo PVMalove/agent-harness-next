@@ -1,4 +1,6 @@
-"""Select, compare and explicitly restore a local configuration generation."""
+"""Select, compare and explicitly restore a local configuration generation. The list and the diff
+of the versions are read locally; the restore runs through the configuration gateway (a console
+server job for the served project), checked against the digests of the files shown."""
 
 from __future__ import annotations
 
@@ -10,6 +12,8 @@ from textual.widgets import Button, Select, Static
 
 from harness.configuration import Bundle, read_config_bundle
 from harness.configuration_store import ConfigurationStore, ConfigurationVersion
+from ...kernel.configuration_snapshot import config_digest
+from ..configuration_gateway import ConfigurationGateway, LocalConfiguration
 from .commands import call_from_worker
 from ...kernel import brand, i18n
 from ..crumbs import Crumb
@@ -37,9 +41,10 @@ class ConfigurationVersionsScreen(ConsoleShell):
     ConfigurationVersionsScreen #version-diff-scroll { height: auto; max-height: 24; }
     """)
 
-    def __init__(self, repo: Path) -> None:
+    def __init__(self, repo: Path, gateway: ConfigurationGateway | None = None) -> None:
         super().__init__()
         self.repo = repo
+        self._gateway = LocalConfiguration(repo) if gateway is None else gateway
         self.store = ConfigurationStore(repo)
         self.selected: str | None = None
         self.expected: Bundle = {}
@@ -193,14 +198,19 @@ class ConfigurationVersionsScreen(ConsoleShell):
 
         def work() -> None:
             try:
-                # Recheck the immutable snapshot before writing; hashes/contract may have changed.
-                backup = self.store.apply(self.store.load(selected), expected=expected)
-                message = "Версия восстановлена. Обратный откат: " + backup.id
+                message = self._restore(selected, expected)
             except (ValueError, OSError) as exc:
                 message = str(exc)
             call_from_worker(self, lambda: self._finished(message))
 
         self.run_worker(work, thread=True, group="restore", exclusive=True)
+
+    def _restore(self, selected: str, expected: Bundle) -> str:
+        """Restore `selected` once the files still are the `expected` ones the diff showed; the
+        write rechecks the version's contract."""
+        return self._gateway.restore(
+            selected, {name: config_digest(raw) for name, raw in expected.items()}
+        )
 
     async def _finished(self, message: str) -> None:
         self.busy = False

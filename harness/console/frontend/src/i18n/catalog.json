@@ -503,6 +503,7 @@
     "Синхронизировать": "Synchronise",
     "Скиллы": "Skills",
     "Скиллы отличаются от установленной версии Harness": "Skills differ from the installed Harness version",
+    "Слишком много изменений для одного запроса к серверу консоли: примените изменения частями": "Too many changes for one console server request: apply them in parts",
     "Слишком много отмеченных файлов для одного запроса к серверу консоли: выберите режим перезаписи всех seed-файлов или отметьте меньше файлов.": "Too many ticked files for one console server request: choose the mode that overwrites all seed files or tick fewer files.",
     "Смените режим или разберите файл.": "Change the mode or resolve the file.",
     "Сначала выполните в каталоге: git init (y — копировать команду)": "First run in the directory: git init (y — copy the command)",
