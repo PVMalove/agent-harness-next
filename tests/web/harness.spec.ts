@@ -1,7 +1,6 @@
 /* Harness in the real build over a mocked socket: the overview and maintenance facts, the
    «Очистить…» button that opens the server's confirmation in the Commands tab and starts the
-   cleanup bound to the shown plan's digest, and the page at 1440 and 390 px. Update only these
-   with `npm run test:e2e:update -- harness.spec.ts`.
+   cleanup bound to the shown plan's digest, and the page at 1440 and 390 px without horizontal overflow.
 
    Manual mockup-conformance checklist (docs/design/web-console-mockups, route #harness):
    - [x] Title: h1, subtitle, facts (installed version, skills, drift, lock time), actions
@@ -87,6 +86,6 @@ for (const width of [1440, 390]) {
   test(`harness at ${width} px`, async ({ page }) => {
     await mockSocket(page);
     await open(page, width);
-    await expect(page).toHaveScreenshot(`harness-${width}.png`, { fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }

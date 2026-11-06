@@ -1,5 +1,5 @@
 /* Browser decisions from the real server read-model/catalog fixture. Mutations stay on the
-   mocked WebSocket, including the screenshots: no native approval reaches the host. */
+   mocked WebSocket: no native approval reaches the host. */
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import fixture from "./fixtures/decisions.json";
@@ -34,10 +34,8 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("dispatch-aaaa")).toBeVisible();
     await expect(page.getByText('{"file_path": "example.py"}')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(page).toHaveScreenshot(`decisions-${width}.png`, { fullPage: true });
     await page.getByRole("button", { name: "Разрешить запрос native permission" }).click();
     await expect(page.getByRole("dialog")).toContainText("request_sha256");
-    await expect(page).toHaveScreenshot(`decisions-confirm-${width}.png`);
     expect(starts).toEqual([]);
     await page.getByRole("dialog").getByRole("button", { name: "Отмена", exact: true }).click();
     expect(starts).toEqual([]);

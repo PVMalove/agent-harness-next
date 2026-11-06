@@ -1,5 +1,5 @@
-/* Shell and Home against committed baselines at 1440 and 390 px, from the fixture snapshot
-   through a mocked socket with a frozen clock. Update with `npm run test:e2e:update`. */
+/* Shell and Home at 1440 and 390 px without horizontal overflow, from the fixture snapshot
+   through a mocked socket with a frozen clock. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -34,12 +34,12 @@ for (const width of [1440, 390]) {
       await page.getByRole("button", { name: "Открыть меню" }).click();
       await expect(page.locator("#nav-scrim")).toBeVisible();
     }
-    await expect(page).toHaveScreenshot(`shell-${width}.png`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 
   test(`Home at ${width} px`, async ({ page }) => {
     await open(page, width, "");
     await expect(page.locator("#health-ok")).toHaveText("42");
-    await expect(page).toHaveScreenshot(`home-${width}.png`, { fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }

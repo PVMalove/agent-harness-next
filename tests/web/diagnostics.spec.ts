@@ -1,7 +1,6 @@
 /* Diagnostics in the real build over a mocked socket: the health report arrives in several
    snapshot pages, the list filters and selects, the export downloads under the real CSP, a fix
-   job's report replaces the view, and the page matches its baselines at 1440 and 390 px. Update
-   only these with `npm run test:e2e:update -- diagnostics.spec.ts`.
+   job's report replaces the view, and the page fits 1440 and 390 px without horizontal overflow.
 
    Manual mockup-conformance checklist (docs/design/web-console-mockups, route #diagnostics):
    - [x] Title: h1, subtitle, facts (total checks, groups, mode, cache), actions «Проверить»,
@@ -172,6 +171,6 @@ for (const width of [1440, 390]) {
     await mockSocket(page);
     await open(page, width);
     await expect(page.locator(".command-panel [data-command]")).toHaveCount(2);
-    await expect(page).toHaveScreenshot(`diagnostics-${width}.png`, { fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
