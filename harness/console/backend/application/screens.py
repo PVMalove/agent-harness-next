@@ -15,6 +15,7 @@ from ...kernel.batch_history import History
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
 from .ports import Clock, LedgerCollector, LockReader, RecoveryReader, RouteReader
+from .task_board import TaskBoardService
 
 T = TypeVar("T")
 
@@ -120,6 +121,7 @@ class ScreenService:
         lock: LockReader,
         recovery: RecoveryReader,
         route: RouteReader,
+        board: TaskBoardService | None = None,
     ) -> None:
         self._repo = repo
         self._collect_ledger = ledger
@@ -127,6 +129,7 @@ class ScreenService:
         self._read_lock = lock
         self._recovery = recovery
         self._route = route
+        self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
         self._pages = TextPages()
@@ -224,6 +227,20 @@ class ScreenService:
                 "preflight": preflight.to_payload() if preflight is not None else None,
             }
         )
+
+    async def task_board_specs(self, *, force: bool = False) -> Paged:
+        """The open specs of the task board; `NotFound` without a configured board."""
+        if self._board is None:
+            raise NotFound("task_board")
+        served = await self._board.specs(force)
+        return await self._paged(served.payload, served.cached, served.age_seconds or 0.0)
+
+    async def task_board(self, spec: str, *, force: bool = False) -> Paged:
+        """The task board of one spec; `SpecNotFound` when the tracker has no such spec."""
+        if self._board is None:
+            raise NotFound("task_board")
+        served = await self._board.board(spec, force)
+        return await self._paged(served.payload, served.cached, served.age_seconds or 0.0)
 
     def page(self, snapshot_id: int, offset: int) -> tuple[str, int, bool]:
         """A further page of a kept snapshot; `LookupError` when it is no longer kept,
