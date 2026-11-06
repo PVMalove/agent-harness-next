@@ -98,6 +98,8 @@ export interface StartJob {
   confirmed?: boolean;
   /** The typed word of a command whose description asks for one; the server checks it. */
   confirmation?: string;
+  /** The digest of the cleanup plan the page showed; the server deletes only that plan. */
+  plan_digest?: string;
 }
 
 export interface ClientOptions {
@@ -619,6 +621,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
         values: request.values ?? {},
         confirmed: request.confirmed ?? false,
         ...(request.confirmation === undefined ? {} : { confirmation: request.confirmation }),
+        ...(request.plan_digest === undefined ? {} : { plan_digest: request.plan_digest }),
         client: "browser",
       };
       return sendJob("job.start", request.command_id, { ...body });

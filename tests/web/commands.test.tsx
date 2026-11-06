@@ -1,6 +1,10 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
+import { CommandPanel } from "../../harness/console/frontend/src/commands/CommandPanel";
+import type { RunRequest } from "../../harness/console/frontend/src/commands/CommandPanel";
+import { ConsoleProvider } from "../../harness/console/frontend/src/useConsole";
+import type { LocalJob } from "../../harness/console/frontend/src/ws/jobs";
 import { PHASE_LABELS } from "../../harness/console/frontend/src/commands/JobOutput";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
 import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
@@ -204,5 +208,90 @@ describe("the Harness commands panel", () => {
     ]) {
       expect(english[label], label).toBeTruthy();
     }
+  });
+});
+
+const CLEANUP = {
+  ...COMMANDS[1],
+  command_id: "cleanup-apply",
+  title: "Очистка .harness (soft): применить",
+  typed_confirmation: null,
+  plan_required: true,
+};
+const DIGEST = "c".repeat(64);
+
+function renderPanel(props: { planDigests?: Record<string, string>; request?: RunRequest | null; onJobDone?: (job: LocalJob) => void }) {
+  const client = createConsoleClient({
+    url: "ws://127.0.0.1:1/ws",
+    WebSocket: FakeSocket,
+    timers: new ManualClock(),
+    probeHealth: async () => false,
+  });
+  const view = (next: typeof props) => (
+    <LanguageProvider>
+      <ConsoleProvider client={client}>
+        <CommandPanel section="harness" {...next} />
+      </ConsoleProvider>
+    </LanguageProvider>
+  );
+  const rendered = render(view(props));
+  const socket = FakeSocket.last;
+  act(() => socket.open());
+  const catalogRequest = socket.request("job.catalog");
+  act(() =>
+    socket.reply({
+      v: 1,
+      id: catalogRequest.id,
+      type: "job.catalog",
+      ok: true,
+      commands: [...COMMANDS, CLEANUP],
+      cancel_reason: CANCEL_REASON,
+    }),
+  );
+  return { socket, rerender: (next: typeof props) => rendered.rerender(view(next)) };
+}
+
+describe("the command panel inside a page", () => {
+  beforeEach(() => FakeSocket.reset());
+
+  test("a server digest makes a plan-bound command runnable and travels with its start", () => {
+    const { socket } = renderPanel({ planDigests: { "cleanup-apply": DIGEST } });
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Запустить cleanup-apply" })));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(CLEANUP.confirmation_reason!)).toBeTruthy();
+    act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Запустить" })));
+    expect(socket.request("job.start")).toMatchObject({
+      command_id: "cleanup-apply",
+      confirmed: true,
+      plan_digest: DIGEST,
+    });
+  });
+
+  test("a page's run request opens the same server-driven dialog, once per nonce", () => {
+    const request = { command_id: "uninstall-apply", values: {}, nonce: 1 };
+    const { socket, rerender } = renderPanel({ request });
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(COMMANDS[1]!.confirmation_reason!)).toBeTruthy();
+    act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" })));
+    rerender({ request });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
+    rerender({ request: { command_id: "cleanup-apply", values: {}, nonce: 2 } });
+    expect(screen.getByRole("alert").textContent).toBe("Нужно превью плана очистки: запустите команду из TUI");
+  });
+
+  test("the page learns once that the shown job finished", () => {
+    const done = vi.fn();
+    const { socket } = renderPanel({ onJobDone: done });
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Запустить diff" })));
+    const start = socket.request("job.start");
+    act(() => socket.reply(jobReply(start.id, "job.start", { command_id: "diff", mutating: false })));
+    expect(done).not.toHaveBeenCalled();
+    const follow = socket.request("job.subscribe");
+    const final = { command_id: "diff", mutating: false, phase: "completed", done: true, returncode: 0 };
+    act(() => socket.reply(jobReply(follow.id, "job.subscribe", final)));
+    act(() => socket.reply(jobReply(follow.id, "job.subscribe", final)));
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(done.mock.calls[0]![0]).toMatchObject({ id: "job-1", phase: "completed", returncode: 0 });
   });
 });

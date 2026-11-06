@@ -114,6 +114,16 @@ describe("the console client's jobs", () => {
     expect(events.at(-1)).toEqual({ type: "commands", section: "harness", commands: COMMANDS, cancelReason: CANCEL_REASON });
   });
 
+  test("a start bound to a cleanup plan carries the plan digest the page showed", () => {
+    const { client } = setup();
+    const socket = FakeSocket.last;
+    const digest = "d".repeat(64);
+    client.startJob({ command_id: "cleanup-apply", confirmed: true, plan_digest: digest });
+    expect(socket.request("job.start")).toMatchObject({ command_id: "cleanup-apply", plan_digest: digest });
+    client.startJob({ command_id: "diff" });
+    expect(Object.hasOwn(socket.request("job.start"), "plan_digest")).toBe(false);
+  });
+
   test("starts a job as the browser, then follows its output from the returned cursor", () => {
     const { client, events } = setup();
     const socket = FakeSocket.last;

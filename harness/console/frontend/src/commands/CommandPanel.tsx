@@ -1,35 +1,55 @@
 /* A section's catalog commands as server jobs: run, confirm by the class the server reports,
    follow the output, show the job that keeps the console busy and cancel it after a confirmation.
-   Labels and reasons are the server's Russian source strings; catalog.json translates them. */
-import { useState } from "react";
+   Labels and reasons are the server's Russian source strings; catalog.json translates them.
+   A page may hand over the digests of the cleanup plans it shows (a plan_required command then
+   runs bound to that plan), ask to run a command from its own buttons through the same
+   server-driven confirmation, and learn when the shown job finishes. */
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { JOB_ERROR_LABELS } from "../ws/jobs";
-import type { CommandDescriptor } from "../ws/jobs";
+import type { CommandDescriptor, LocalJob } from "../ws/jobs";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { ConfirmRequest } from "./ConfirmDialog";
 import { JobOutput } from "./JobOutput";
 import { useJobs } from "./useJobs";
 import type { Section } from "./useJobs";
 
+/** A run a page asks for; a new `nonce` asks again. */
+export interface RunRequest {
+  command_id: string;
+  values: Record<string, string>;
+  nonce: number;
+}
+
 type Pending =
   | { kind: "start"; command: CommandDescriptor; values: Record<string, string>; dialog: ConfirmRequest }
   | { kind: "cancel"; jobId: string; dialog: ConfirmRequest };
 
+/** Why `command` cannot run here, or null when it can. */
+function blockedText(
+  t: (text: string) => string,
+  command: CommandDescriptor,
+  planDigests: Readonly<Record<string, string>>,
+): string | null {
+  if (!command.available) return t("Команда недоступна для выбранного проекта");
+  if (command.plan_required && !planDigests[command.command_id]) {
+    return t("Нужно превью плана очистки: запустите команду из TUI");
+  }
+  return null;
+}
+
 function CommandRow({
   command,
+  blocked,
   onRun,
 }: {
   command: CommandDescriptor;
+  blocked: string | null;
   onRun: (command: CommandDescriptor, values: Record<string, string>) => void;
 }) {
   const { t } = useI18n();
   const [values, setValues] = useState<Record<string, string>>({});
   const filled = command.inputs.every((name) => (values[name] ?? "").trim() !== "");
-  const blocked = !command.available
-    ? t("Команда недоступна для выбранного проекта")
-    : command.plan_required
-      ? t("Нужно превью плана очистки: запустите команду из TUI")
-      : null;
   const tone = command.reversibility === "reversible" ? "mint" : "violet";
   return (
     <div className="harness-command-row" data-command={command.command_id}>
@@ -61,14 +81,34 @@ function CommandRow({
   );
 }
 
-export function CommandPanel({ section }: { section: Section }) {
+const NO_DIGESTS: Readonly<Record<string, string>> = {};
+
+export function CommandPanel({
+  section,
+  planDigests = NO_DIGESTS,
+  request,
+  onJobDone,
+}: {
+  section: Section;
+  /** command_id -> the server digest of the plan the page shows. */
+  planDigests?: Readonly<Record<string, string>>;
+  request?: RunRequest | null;
+  onJobDone?: (job: LocalJob) => void;
+}) {
   const { t } = useI18n();
   const jobs = useJobs(section);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [unavailable, setUnavailable] = useState<string | null>(null);
+  const handled = useRef<number | null>(null);
+  const finished = useRef(new Set<string>());
+
+  const digest = (command: CommandDescriptor) =>
+    command.plan_required ? { plan_digest: planDigests[command.command_id] } : {};
 
   const run = (command: CommandDescriptor, values: Record<string, string>) => {
+    setUnavailable(null);
     if (!command.needs_confirmation) {
-      jobs.start({ command_id: command.command_id, values });
+      jobs.start({ command_id: command.command_id, values, ...digest(command) });
       return;
     }
     setPending({
@@ -103,6 +143,7 @@ export function CommandPanel({ section }: { section: Section }) {
         values: pending.values,
         confirmed: true,
         ...(confirmation === undefined ? {} : { confirmation }),
+        ...digest(pending.command),
       });
     } else if (pending?.kind === "cancel") {
       jobs.cancel(pending.jobId);
@@ -111,6 +152,27 @@ export function CommandPanel({ section }: { section: Section }) {
   };
 
   const { busy, shown, refusal, commands } = jobs;
+
+  // A page's run request: once per nonce, as soon as the catalog is known.
+  useEffect(() => {
+    if (!request || commands === null || handled.current === request.nonce) return;
+    handled.current = request.nonce;
+    const command = commands.find((item) => item.command_id === request.command_id);
+    const blocked = command ? blockedText(t, command, planDigests) : t("Команда недоступна для выбранного проекта");
+    if (!command || blocked !== null) {
+      setUnavailable(blocked);
+      return;
+    }
+    run(command, request.values);
+    // `run` and `t` change with every render; the nonce decides.
+  }, [request, commands]);
+
+  // The shown job reached a final phase: tell the page once per job.
+  useEffect(() => {
+    if (!shown || !shown.done || shown.phase === "running" || finished.current.has(shown.id)) return;
+    finished.current.add(shown.id);
+    onJobDone?.(shown);
+  }, [shown, onJobDone]);
   return (
     <div className="command-panel" data-section={section}>
       {busy && (
@@ -133,6 +195,11 @@ export function CommandPanel({ section }: { section: Section }) {
           {t(JOB_ERROR_LABELS[refusal.code] ?? "Сервер ответил ошибкой.")}
         </p>
       )}
+      {unavailable && (
+        <p className="command-refusal err" role="alert">
+          {unavailable}
+        </p>
+      )}
       <section className="panel harness-commands">
         <div className="panel-head">
           <h2>{t("Команды")}</h2>
@@ -144,7 +211,12 @@ export function CommandPanel({ section }: { section: Section }) {
         ) : (
           <div className="harness-command-table">
             {commands.map((command) => (
-              <CommandRow key={command.command_id} command={command} onRun={run} />
+              <CommandRow
+                key={command.command_id}
+                command={command}
+                blocked={blockedText(t, command, planDigests)}
+                onRun={run}
+              />
             ))}
           </div>
         )}
