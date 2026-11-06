@@ -293,12 +293,19 @@ STEP_REASON_MESSAGES = {
     "log_missing": "Worker log does not exist yet; worker outcome is independent",
     "log_unreadable": "Worker log is unreadable; worker outcome is independent",
     "log_outside_storage": "Worker log is outside harness storage and is not read",
+    "log_unrecognised": (
+        "Worker log has no recognised Codex sections at its start, so its text is not shown;"
+        " worker outcome is independent"
+    ),
 }
 MAX_STEP_LINE_BYTES = 1024 * 1024
 MAX_PAGE_RAW_BYTES = 4 * 1024 * 1024
 PLAIN_HEADER_WINDOW_BYTES = 65536
 _PLAIN_TOOL_SECTIONS = ("exec", "apply_patch", "mcp tool call")
 _PLAIN_SECTIONS = ("codex", "thinking", "user", "tokens used", *_PLAIN_TOOL_SECTIONS)
+OMITTED_STEP_KIND = "omitted"
+_OMITTED_RESERVE_BYTES = 160
+_MAX_ESCAPED_CHAR_BYTES = 12  # a surrogate pair escaped as two ``\uXXXX`` sequences
 _PLAIN_HEADER = re.compile(
     r"^(?:\[[^\]\n]*\]\s+(?P<stamped>"
     + "|".join(re.escape(name) for name in _PLAIN_SECTIONS)
@@ -414,6 +421,51 @@ def _plain_section_before(reader: BinaryIO, offset: int) -> str:
     return section
 
 
+def _step_cost(step: JsonObject) -> int:
+    import json
+
+    # ASCII-escaped JSON is an upper bound of a step's bytes in any reply.
+    return len(json.dumps(step)) + 1
+
+
+def _fit_record(found: list[JsonObject], budget: int) -> list[JsonObject]:
+    """One record whose steps exceed a whole page: its leading steps that fit, the first one cut
+    if even it does not fit, and an ``omitted`` step counting what is not shown in full. The
+    page then moves past the record, so a client always makes progress."""
+    room = budget - _OMITTED_RESERVE_BYTES
+    kept: list[JsonObject] = []
+    used = 0
+    for step in found:
+        cost = _step_cost(step)
+        if used + cost > room:
+            break
+        kept.append(step)
+        used += cost
+    cut = 0
+    if not kept:
+        first = found[0]
+        frame = _step_cost({**first, "text": ""})
+        chars = max(0, (room - frame) // _MAX_ESCAPED_CHAR_BYTES)
+        kept = [{**first, "text": str(first["text"])[:chars]}]
+        cut = 1
+    hidden = len(found) - len(kept) + cut
+    return [
+        *kept,
+        {
+            "kind": OMITTED_STEP_KIND,
+            "text": f"One log record exceeds the page budget: {hidden} of {len(found)}"
+            " steps are not shown in full",
+        },
+    ]
+
+
+def _plain_log_unrecognised(reader: BinaryIO, size: int) -> bool:
+    """A non-empty plain log whose head holds no Codex section header has no visible text."""
+    return bool(size) and not _plain_section_before(
+        reader, min(size, PLAIN_HEADER_WINDOW_BYTES)
+    )
+
+
 def _read_step_page(
     path: Path,
     offset: int,
@@ -422,14 +474,17 @@ def _read_step_page(
     parse_line: Callable[[bytes, list[str]], list[JsonObject]],
 ) -> JsonObject:
     """``budget`` bounds the encoded size of the page's steps, so the reply stays bounded."""
-    import json
-
     offset = max(0, offset)
     try:
         with path.open("rb") as stream:
             size = stream.seek(0, 2)
             reset = offset > size
             position = 0 if reset else offset
+            if source == "plain" and _plain_log_unrecognised(stream, size):
+                return {
+                    **unavailable_page(source, "log_unrecognised", position),
+                    "reset": reset,
+                }
             section = [
                 _plain_section_before(stream, position)
                 if source == "plain" and position
@@ -454,11 +509,13 @@ def _read_step_page(
                     position = stream.tell()  # oversized records are never parsed
                     continue
                 found = parse_line(line, section)
-                # ASCII-escaped JSON is an upper bound of a step's bytes in any reply.
-                cost = sum(len(json.dumps(step)) + 1 for step in found)
-                if steps and used + cost > budget:
-                    more = True
-                    break
+                cost = sum(_step_cost(step) for step in found)
+                if used + cost > budget:
+                    if steps:
+                        more = True
+                        break
+                    found = _fit_record(found, budget)
+                    cost = budget  # a cut record fills its page
                 steps.extend(found)
                 used += cost
                 position = stream.tell()

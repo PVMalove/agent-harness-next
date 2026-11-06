@@ -222,12 +222,106 @@ def test_plain_section_at_offset_comes_from_the_last_header_before_it(
 
 def test_plain_lines_before_any_known_header_stay_hidden(tmp_path: Path) -> None:
     log = tmp_path / "dispatch-x.log"
-    log.write_text("plain claude text output\nunknown header\n")
+    log.write_text("banner line\n[t] codex\nhello\n")
 
     page = read_plain_steps(log, 0, 4096)
 
-    assert page["steps"] == []
+    assert [step["text"] for step in page["steps"]] == ["hello"]
     assert page["state"] == "connected"
+
+
+def test_plain_log_without_codex_sections_is_an_explicit_unrecognised_state(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_text("plain claude text output SECRET\nunknown header\n")
+
+    page = read_plain_steps(log, 0, 4096)
+    later = read_plain_steps(log, 10_000, 4096)
+
+    assert page["source"] == "plain"
+    assert page["structure"] == "unavailable"
+    assert page["state"] == "unavailable"
+    assert page["reason"] == "log_unrecognised"
+    assert page["message"]
+    assert page["steps"] == []
+    assert "SECRET" not in json.dumps(page)
+    assert (page["offset"], page["reset"], page["more"]) == (0, False, False)
+    assert (later["reason"], later["offset"], later["reset"]) == (
+        "log_unrecognised",
+        0,
+        True,
+    )
+
+
+def test_unrecognised_plain_log_turns_connected_once_a_codex_section_starts(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "dispatch-x.log"
+    log.write_text("OpenAI Codex banner\n")
+    before = read_plain_steps(log, 0, 4096)
+    with log.open("a") as stream:
+        stream.write("[t] codex\nhello\n")
+
+    after = read_plain_steps(log, before["offset"], 4096)
+
+    assert before["reason"] == "log_unrecognised"
+    assert after["state"] == "connected"
+    assert after["reason"] is None
+    assert [step["text"] for step in after["steps"]] == ["hello"]
+
+
+def test_one_record_with_many_large_steps_fits_the_budget_and_moves_on(
+    tmp_path: Path,
+) -> None:
+    budget = 48 * 1024
+    record = {
+        "type": "user",
+        "message": {
+            "content": [
+                {"type": "tool_result", "content": f"{index}" + "r" * 9000}
+                for index in range(12)
+            ]
+        },
+    }
+    log = _jsonl(
+        tmp_path / "events.jsonl", record, {"type": "result", "result": "next"}
+    )
+    first_line = len(json.dumps(record)) + 1
+
+    page = read_structured_steps(log, 0, budget)
+    rest = read_structured_steps(log, page["offset"], budget)
+
+    assert len(json.dumps(page["steps"])) <= budget
+    assert page["offset"] == first_line
+    assert page["more"] is True
+    shown = page["steps"][:-1]
+    assert shown and all(step["kind"] == "tool-result" for step in shown)
+    assert [step["text"][0] for step in shown] == [str(i) for i in range(len(shown))]
+    assert page["steps"][-1]["kind"] == "omitted"
+    assert f"{12 - len(shown)} of 12" in page["steps"][-1]["text"]
+    assert [step["text"] for step in rest["steps"]] == ["next"]
+
+
+def test_a_single_step_larger_than_the_budget_is_cut_not_repeated(
+    tmp_path: Path,
+) -> None:
+    budget = 4096
+    log = _jsonl(
+        tmp_path / "events.jsonl",
+        {"type": "result", "result": "\U0001f600" * 8000},
+        {"type": "result", "result": "next"},
+    )
+
+    page = read_structured_steps(log, 0, budget)
+    rest = read_structured_steps(log, page["offset"], budget)
+
+    assert sum(len(json.dumps(step)) + 1 for step in page["steps"]) <= budget
+    assert page["offset"] > 0
+    assert [step["kind"] for step in page["steps"]] == ["result", "omitted"]
+    assert page["steps"][0]["text"]
+    assert "1 of 1" in page["steps"][1]["text"]
+    assert [step["text"] for step in rest["steps"]] == ["next"]
 
 
 def test_reading_changes_nothing_and_takes_no_lock(tmp_path: Path) -> None:
