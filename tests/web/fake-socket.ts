@@ -247,3 +247,58 @@ export function rosterReply(id: unknown, reset = true, dispatches: unknown = ROS
 export function stepsReply(id: unknown, steps: unknown[]): Record<string, unknown> {
   return { v: 1, id, type: "steps.subscribe", ok: true, kind: "steps", steps };
 }
+
+/* A health report as diagnostics.snapshot pages it (schema v1 of `harness health --json`). */
+export const HEALTH_REPORT = {
+  schema_version: 1,
+  repo: "/work/project",
+  online: false,
+  summary: { ok: 2, warn: 1, fail: 1, skipped: 1 },
+  checks: [
+    { id: "files.lock", group: "files", status: "ok", message: "harness.lock на месте", fix: null },
+    {
+      id: "hooks.policy",
+      group: "hooks",
+      status: "fail",
+      message: "Нет .harness/hook-policy.json",
+      fix: { text: "Запустите обновление", command: "harness update ." },
+    },
+    {
+      id: "environment.uv",
+      group: "environment",
+      status: "warn",
+      message: "uv старше рекомендуемого",
+      fix: { text: "Обновите uv", command: null },
+    },
+    { id: "tracker.online", group: "tracker", status: "skipped", message: "Онлайн-проверки не выполнялись", fix: null },
+    { id: "directories.sandboxes", group: "directories", status: "ok", message: "Каталоги на месте", fix: null },
+  ],
+  fixes_applied: [],
+};
+
+/** The first page of a paged screen snapshot whose JSON text is `text`. */
+export function screenPage(
+  id: unknown,
+  type: string,
+  text: string,
+  options: { snapshotId?: number; next?: number; done?: boolean; cached?: boolean; age?: number } = {},
+): Record<string, unknown> {
+  const done = options.done ?? true;
+  return {
+    v: 1,
+    id,
+    type,
+    ok: true,
+    snapshot_id: options.snapshotId ?? 7,
+    text,
+    next: options.next ?? text.length,
+    done,
+    cached: options.cached ?? false,
+    age_seconds: options.age ?? 0,
+  };
+}
+
+/** A further page of a snapshot (`snapshot.page`). */
+export function nextPage(id: unknown, text: string, next: number, done: boolean): Record<string, unknown> {
+  return { v: 1, id, type: "snapshot.page", ok: true, text, next, done };
+}
