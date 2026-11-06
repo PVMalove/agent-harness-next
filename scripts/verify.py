@@ -149,9 +149,9 @@ def _check_global_skills() -> None:
     grep_contains(start_project, "until the owner confirms")
     grep_contains(start_project, "Prove each layer separately")
     grep_contains(integrate_project, "Audit is read-only")
-    grep_contains(ROOT / "docs" / "skills" / "implement.md", "module-owned guidance")
+    grep_contains(ROOT / "site" / "docs" / "skills" / "implement.md", "module-owned guidance")
     grep_contains(
-        ROOT / "docs" / "skills" / "pilot.md",
+        ROOT / "site" / "docs" / "skills" / "pilot.md",
         "самоотчёт роли не является token telemetry",
     )
 

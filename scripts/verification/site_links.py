@@ -47,7 +47,9 @@ def _default_name(path: Path) -> str:
 def _page_base(path: Path, docs_dir: Path) -> str:
     """Каталог URL страницы относительно корня сайта при `use_directory_urls: true`.
 
-    Английская пара публикуется под `en/`: её raw HTML разрешается от этого URL.
+    Английская Markdown-пара публикуется под `en/`: её raw HTML разрешается от этого URL.
+    Статический `.en.html` — самостоятельный документ в корне сайта, а не страница i18n,
+    поэтому его ссылки разрешаются от собственного каталога.
     """
     relative = path.relative_to(docs_dir)
     name = _default_name(path)
@@ -55,7 +57,7 @@ def _page_base(path: Path, docs_dir: Path) -> str:
         base = relative.parent.as_posix()
     else:
         base = (relative.parent / Path(name).stem).as_posix()
-    if _is_english(path):
+    if path.suffix == ".md" and _is_english(path):
         return posixpath.normpath(posixpath.join("en", base))
     return base
 
@@ -124,6 +126,10 @@ def find_broken_links(docs_dir: Path) -> list[str]:
     broken: list[str] = []
     for path in sorted(docs_dir.rglob("*")):
         if not path.is_file() or path.suffix not in CHECKED_SUFFIXES:
+            continue
+        if path.suffix == ".html" and _is_english(path):
+            # Статический `.en.html` — самостоятельный документ, который i18n публикует
+            # как `en/X.html`; его ссылки проверяются собственным инструментом экспорта.
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         links: list[tuple[str, bool]] = []
