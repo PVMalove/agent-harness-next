@@ -717,7 +717,7 @@ checks» пересчитывает счётчики с `--online` и показ
 | `Reports` | Completion reports из леджера с фильтрами по тикету, роли, outcome и дате; хронология batch; QA-логи |
 | `Repo Map` | Карта для HEAD из кэша или построение: сводка, дерево файлов с сигнатурами, поиск символа, связи, топ-10 хабов, диагностика. Вкладка «Настройки»: режим карты `minimal`/`full` (`repo_map_policy.tier`), мастер на шаге `repo_map_policy`, установка парсеров выбранных языков (`harness parsers install`) и память проекта: инициализация (`memory_policy` по умолчанию и `harness memory build`), синхронизация, пересборка, мастер на шаге `memory` |
 | `Настройка конфигурации` | Пошаговый мастер `project.json` и `orchestration.json` (`harness/console/tui/configuration_steps.py`): пояснения и рекомендации по признакам проекта, проверка по схеме и валидаторам, различия, применение с автоматической резервной копией, локальные версии в `.harness/config_versions/` и откат, необязательные подсказки через авторизованный Codex CLI или Claude Code CLI (`harness/console/tui/advisor.py`) |
-| `Help` | Справка по разделам, клавишам и правилам безопасности (`harness/console/tui/help_text.py`) |
+| `Help` | Справка по разделам, клавишам и правилам безопасности (`harness/console/kernel/help_text.py`) |
 
 | Клавиша | Действие |
 |---|---|
