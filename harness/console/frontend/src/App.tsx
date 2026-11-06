@@ -1,9 +1,11 @@
 /* Hash routes: the static build needs no server-side fallback (ADR 0029). */
 import { useState } from "react";
+import type { ReactElement } from "react";
 import { createHashRouter, Navigate, Outlet, RouterProvider } from "react-router";
 import { AppShell } from "./AppShell";
 import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
 import { NAV_ITEMS } from "./navigation";
+import { Harness } from "./routes/Harness";
 import { Home } from "./routes/Home";
 import { Placeholder } from "./routes/Placeholder";
 import { ConsoleProvider, useConsole } from "./useConsole";
@@ -18,6 +20,9 @@ function Layout() {
   );
 }
 
+/** The sections the web console shows; the others are placeholders. */
+const ROUTES: Readonly<Record<string, ReactElement>> = { harness: <Harness /> };
+
 export function createRouter() {
   return createHashRouter([
     {
@@ -26,7 +31,7 @@ export function createRouter() {
       children: [
         ...NAV_ITEMS.map((item) =>
           item.route
-            ? { path: item.route, element: <Placeholder section={item.section} /> }
+            ? { path: item.route, element: ROUTES[item.route] ?? <Placeholder section={item.section} /> }
             : { index: true, element: <Home /> },
         ),
         { path: "*", element: <Navigate to="/" replace /> },
