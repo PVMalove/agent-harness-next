@@ -35,7 +35,7 @@ from ...kernel.catalog import (
     process_argv,
 )
 from harness.cleanup import plan_cleanup, plan_digest, worktree_facts
-from ..maintenance import (
+from ...kernel.maintenance import (
     MaintenanceView,
     load_maintenance,
     summarize,
