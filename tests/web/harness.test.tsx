@@ -143,6 +143,18 @@ describe("the Harness route", () => {
     expect(screen.getByText(/worktree has uncommitted changes/)).toBeTruthy();
   });
 
+  test("in English the server's ledger reason is translated through the catalog", () => {
+    const reason = "леджер оркестрации не найден или не инициализирован";
+    renderHarness(
+      { ...HARNESS_OVERVIEW, usage: { unavailable: reason, batches: 0, tickets: 0, dispatches: 0, reports: 0 } },
+      "?lang=en",
+    );
+    const english = "the orchestration ledger is not found or not initialized";
+    expect(within(kpis()).getByText(english)).toBeTruthy();
+    expect(within(document.querySelector("#harness-usage") as HTMLElement).getByText(`Pipeline usage: ${english}`)).toBeTruthy();
+    expect(screen.queryByText(new RegExp(reason))).toBeNull();
+  });
+
   test("in English the overview tab reads Overview, apart from folder browsing", () => {
     renderHarness(HARNESS_OVERVIEW, "?lang=en");
     expect(screen.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected")).toBe("true");

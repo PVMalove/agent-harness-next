@@ -119,7 +119,7 @@ export function UsagePanel({ overview }: { overview: HarnessOverview | null }) {
           <p className="harness-install-note">{t("Состояние харнесса загружается…")}</p>
         ) : usage.unavailable !== null ? (
           <p className="harness-install-note">
-            {t("Использование пайплайна")}: {usage.unavailable}
+            {t("Использование пайплайна")}: {t(usage.unavailable)}
           </p>
         ) : (
           <div className="harness-store-facts">

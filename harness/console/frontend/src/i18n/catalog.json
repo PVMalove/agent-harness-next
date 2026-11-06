@@ -877,6 +877,7 @@
     "карты нет": "no map",
     "конфигурация не получена от сервера консоли": "configuration not received from the console server",
     "кэш": "cache",
+    "леджер оркестрации не найден или не инициализирован": "the orchestration ledger is not found or not initialized",
     "лог worker вне хранилища harness": "the worker log is outside harness storage",
     "лог worker ещё не создан": "the worker log does not exist yet",
     "лог worker не читается": "the worker log is unreadable",

@@ -107,7 +107,7 @@ export function Harness() {
                     dispatches: usage.dispatches,
                     reports: usage.reports,
                   })
-                : usage.unavailable
+                : t(usage.unavailable)
               : unavailable}
           </small>
         </div>

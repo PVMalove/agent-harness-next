@@ -18,6 +18,9 @@ from harness.console.backend.application.decisions import DecisionService
 from harness.console.backend.application.events import OrchestrationEvents
 from harness.console.backend.application.snapshots import SnapshotService
 from harness.console.kernel import web_catalog
+from harness.console.kernel.i18n import tr_text
+from harness.console.kernel.pipeline_stats import pipeline_usage
+from harness.console.kernel.reports import load_ledger_view
 from harness.console.kernel.health_report import report_from_payload
 from harness.console.kernel.maintenance import (
     REASONS_RU,
@@ -318,3 +321,15 @@ def test_every_label_of_both_routes_has_its_english_text() -> None:
     sections = cast(dict[str, dict[str, str]], _catalog()["sections"])
     for section in ("Diagnostics", "Harness", "Update Harness"):
         assert sections[section]["ru"] and sections[section]["en"]
+
+
+def test_the_unavailable_ledger_reason_has_an_english_label(tmp_path: Path) -> None:
+    # The reason harness.overview sends when the repository has no ledger; the routes translate
+    # it through the catalog as the TUI does through `_t`.
+    usage = pipeline_usage(load_ledger_view(tmp_path))
+    reason = usage["unavailable"]
+    assert isinstance(reason, str) and reason
+    assert cast(dict[str, str], _catalog()["en"])[reason] == (
+        "the orchestration ledger is not found or not initialized"
+    )
+    assert tr_text("en", reason) == "the orchestration ledger is not found or not initialized"

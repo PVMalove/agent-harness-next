@@ -1845,6 +1845,7 @@ EN.update(
         "Отчётов": "Reports",
         "тикетов {tickets} · диспатчей {dispatches} · отчётов {reports}": "tickets {tickets} · dispatches {dispatches} · reports {reports}",
         "недоступно": "unavailable",
+        "леджер оркестрации не найден или не инициализирован": "the orchestration ledger is not found or not initialized",
         "Обслуживание": "Maintenance",
         "Временные файлы": "Temporary files",
         "Временных файлов нет": "No temporary files",
