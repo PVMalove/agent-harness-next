@@ -16,7 +16,7 @@ from ...kernel.home_snapshot import HomeSnapshot
 from ...kernel.reports import LedgerView
 from ...kernel.protocol import _clip
 from ..domain.events import Event, Observation, View
-from ..domain.task_board import REASON_BYTES, SpecTickets, TrackerSpec
+from ..domain.task_board import REASON_BYTES, SpecList, SpecTickets, TrackerSpec
 
 
 class Clock(Protocol):
@@ -217,10 +217,11 @@ class SpecNotFound(LookupError):
 
 class TaskBoardReader(Protocol):
     """Read-only tracker facts of the task board; blocks until read and raises
-    ``TrackerUnavailable`` or ``SpecNotFound``. Never changes the tracker or local state."""
+    ``TrackerUnavailable`` or ``SpecNotFound``. Never changes the tracker or local state.
+    ``specs`` returns a plain tuple when the source has no listing limit to report."""
 
     def tracker_type(self, repo: Path) -> str: ...
 
-    def specs(self, repo: Path) -> tuple[TrackerSpec, ...]: ...
+    def specs(self, repo: Path) -> SpecList | tuple[TrackerSpec, ...]: ...
 
     def board(self, repo: Path, spec_ref: str) -> SpecTickets: ...

@@ -7,13 +7,19 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
 
 from harness.console.backend.application.ports import SpecNotFound, TrackerUnavailable
-from harness.console.backend.domain.task_board import BlockerFact, PullRef
+from harness.console.backend.domain.task_board import (
+    MAX_SPECS,
+    BlockerFact,
+    PullRef,
+    SpecList,
+)
 from harness.console.backend.infrastructure.task_board_tracker import (
     TrackerBoardReader,
     read_only,
@@ -162,10 +168,13 @@ def _github(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, s
 def test_github_specs_are_open_issues_with_sub_issues(tmp_path: Path) -> None:
     reader, runner = _reader(GITHUB, _github)
 
-    specs = reader.specs(tmp_path)
+    listing = reader.specs(tmp_path)
 
+    assert isinstance(listing, SpecList)
+    assert listing.truncated is False
     assert [
-        (spec.ref, spec.n, spec.tickets_total, spec.tickets_open) for spec in specs
+        (spec.ref, spec.n, spec.tickets_total, spec.tickets_open)
+        for spec in listing.specs
     ] == [("#862", 862, 3, 2)]
     argv = runner.calls[0][0]
     assert argv[:5] == ["gh", "api", "--hostname", "github.com", "graphql"]
@@ -205,6 +214,115 @@ def test_github_board_retries_without_blocked_by(tmp_path: Path) -> None:
     assert len(board.tickets) == 3
     queries = [_query(argv) for argv, _, _ in runner.calls if argv[:2] != ["gh", "pr"]]
     assert ["blockedBy" in query for query in queries] == [True, False]
+
+
+def test_github_board_keeps_blocked_by_after_a_transient_failure(
+    tmp_path: Path,
+) -> None:
+    def handler(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, str]:
+        if argv[:2] != ["gh", "pr"]:
+            return 1, "", "HTTP 502: Bad Gateway"
+        return _github(argv, env)
+
+    reader, runner = _reader(GITHUB, handler)
+
+    with pytest.raises(TrackerUnavailable) as raised:
+        reader.board(tmp_path, "#862")
+
+    assert raised.value.reason == "failed"
+    queries = [_query(argv) for argv, _, _ in runner.calls if argv[:2] != ["gh", "pr"]]
+    assert ["blockedBy" in query for query in queries] == [True]
+
+
+def _variables(argv: list[str]) -> dict[str, str]:
+    found = {}
+    for flag, value in zip(argv, argv[1:], strict=False):
+        if flag in {"-f", "-F"} and not value.startswith("query="):
+            name, _, _ = value.partition("=")
+            found[name] = flag
+    return found
+
+
+def test_github_strings_are_raw_fields_and_numbers_typed(tmp_path: Path) -> None:
+    def handler(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, str]:
+        if argv[:2] == ["gh", "pr"] or "subIssues(" in _query(argv):
+            return _github(argv, env)
+        page = json.loads(json.dumps(GITHUB_SPECS))["data"]["repository"]["issues"]
+        first = "cursor" not in _variables(argv)
+        page["pageInfo"] = {"hasNextPage": first, "endCursor": "@abc" if first else None}
+        return 0, json.dumps({"data": {"repository": {"issues": page}}}), ""
+
+    tracker = ProjectTracker("github", "github.com", "123/true", "config")
+    reader, runner = _reader(tracker, handler)
+
+    reader.specs(tmp_path)
+    reader.board(tmp_path, "#862")
+
+    graphql = [argv for argv, _, _ in runner.calls if argv[:2] == ["gh", "api"]]
+    assert [_variables(argv) for argv in graphql] == [
+        {"owner": "-f", "name": "-f"},
+        {"owner": "-f", "name": "-f", "cursor": "-f"},
+        {"owner": "-f", "name": "-f", "number": "-F"},
+    ]
+    assert "owner=123" in graphql[0] and "name=true" in graphql[0]
+    assert "cursor=@abc" in graphql[1]
+
+
+def _spec_nodes(start: int, count: int) -> list[dict[str, object]]:
+    return [
+        {
+            "number": number,
+            "title": f"Spec {number}",
+            "url": f"https://github.com/acme/app/issues/{number}",
+            "body": "",
+            "subIssuesSummary": {"total": 1, "completed": 0},
+        }
+        for number in range(start, start + count)
+    ]
+
+
+@pytest.mark.parametrize("per_page", [0, 100])
+def test_github_specs_flag_a_listing_stopped_at_its_limit(
+    tmp_path: Path, per_page: int
+) -> None:
+    pages = 0
+
+    def handler(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, str]:
+        nonlocal pages
+        pages += 1
+        issues = {
+            "pageInfo": {"hasNextPage": True, "endCursor": f"c{pages}"},
+            "nodes": _spec_nodes(pages * 1000, per_page),
+        }
+        return 0, json.dumps({"data": {"repository": {"issues": issues}}}), ""
+
+    reader, _ = _reader(GITHUB, handler)
+
+    listing = reader.specs(tmp_path)
+
+    assert listing.truncated is True
+    assert len(listing.specs) == min(MAX_SPECS, per_page * pages)
+
+
+@pytest.mark.parametrize("field", ["subIssues", "blockedBy"])
+def test_github_board_flags_more_sub_issues_or_blockers(
+    tmp_path: Path, field: str
+) -> None:
+    board = json.loads(json.dumps(GITHUB_BOARD))
+    issue = board["data"]["repository"]["issue"]
+    first = issue["subIssues"]["nodes"][0]
+    target = issue["subIssues"] if field == "subIssues" else first["blockedBy"]
+    target["pageInfo"] = {"hasNextPage": True}
+
+    def handler(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, str]:
+        if argv[:2] == ["gh", "pr"]:
+            return _github(argv, env)
+        return 0, json.dumps(board), ""
+
+    reader, _ = _reader(GITHUB, handler)
+
+    assert reader.board(tmp_path, "#862").truncated is True
+    assert _reader(GITHUB, _github)[0].board(tmp_path, "#862").truncated is False
 
 
 def test_github_unknown_spec_is_not_found(tmp_path: Path) -> None:
@@ -268,11 +386,13 @@ def _gitlab(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, s
 def test_gitlab_specs_are_open_parents_of_children(tmp_path: Path) -> None:
     reader, runner = _reader(GITLAB, _gitlab)
 
-    specs = reader.specs(tmp_path)
+    listing = reader.specs(tmp_path)
 
-    assert [(spec.ref, spec.tickets_total, spec.tickets_open) for spec in specs] == [
-        ("#10", 2, 1)
-    ]
+    assert isinstance(listing, SpecList)
+    assert listing.truncated is False
+    assert [
+        (spec.ref, spec.tickets_total, spec.tickets_open) for spec in listing.specs
+    ] == [("#10", 2, 1)]
     for argv, _, _ in runner.calls:
         assert argv[:2] == ["glab", "api"] and len(argv) == 3
 
@@ -289,6 +409,47 @@ def test_gitlab_board_reads_children_blockers_and_mrs(tmp_path: Path) -> None:
     assert board.blocker_states["#12"] is True
     with pytest.raises(SpecNotFound):
         reader.board(tmp_path, "#99")
+
+
+def _gitlab_many(total: int) -> Handler:
+    """A GitLab project of `total` issues; spec #2400 is recent and has recent children."""
+    issues = [
+        _gitlab_issue(
+            iid,
+            "opened",
+            [],
+            "## Parent: #2400\n" if 2450 <= iid <= 2460 else f"issue {iid}",
+        )
+        for iid in range(1, total + 1)
+    ]
+
+    def handler(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, str]:
+        path = argv[2]
+        page = int(path.rsplit("page=", 1)[1].split("&")[0])
+        if "/merge_requests?" in path:
+            return 0, "[]", ""
+        ordered = issues[::-1] if "sort=desc" in path else issues
+        return 0, json.dumps(ordered[(page - 1) * 100 : page * 100]), ""
+
+    return handler
+
+
+def test_gitlab_reads_the_newest_issues_and_flags_the_limit(tmp_path: Path) -> None:
+    reader, _ = _reader(GITLAB, _gitlab_many(2500))
+
+    listing = reader.specs(tmp_path)
+    board = reader.board(tmp_path, "#2400")
+
+    assert [spec.ref for spec in listing.specs] == ["#2400"]
+    assert listing.truncated is True
+    assert [ticket.n for ticket in board.tickets] == list(range(2450, 2461))
+    assert board.truncated is True
+
+
+def test_gitlab_listing_below_the_limit_is_not_truncated(tmp_path: Path) -> None:
+    reader, _ = _reader(GITLAB, _gitlab_many(1999))
+
+    assert reader.specs(tmp_path).truncated is False
 
 
 def _write(path: Path, text: str) -> None:
@@ -334,12 +495,12 @@ def test_local_specs_and_board_from_scratch_files(tmp_path: Path) -> None:
     before = _tree_state(tmp_path)
     reader, runner = _reader(LOCAL, lambda argv, env: None)
 
-    specs = reader.specs(tmp_path)
+    listing = reader.specs(tmp_path)
     board = reader.board(tmp_path, "board")
 
     assert [
         (spec.ref, spec.n, spec.title, spec.tickets_total, spec.tickets_open)
-        for spec in specs
+        for spec in listing.specs
     ] == [("board", None, "Board spec", 2, 1)]
     first, second = board.tickets
     assert first.ref == ".scratch/board/issues/01-first.md"
@@ -360,10 +521,36 @@ def test_local_specs_and_board_from_scratch_files(tmp_path: Path) -> None:
             reader.board(tmp_path, bad)
 
 
+# Hostile local files that a backtracking title or field pattern reads in seconds.
+PARSE_SECONDS = 1.0
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    ["# a" + " " * 60000 + "x\n", "**a\n" * 16000, "# " + " " * 60000 + "\n"],
+    ids=["title", "fields", "blank-title"],
+)
+def test_local_hostile_files_are_read_in_linear_time(
+    tmp_path: Path, hostile: str
+) -> None:
+    _write(tmp_path / ".scratch" / "s" / "spec.md", hostile)
+    _write(tmp_path / ".scratch" / "s" / "issues" / "01-x.md", hostile)
+    reader, _ = _reader(LOCAL, lambda argv, env: None)
+
+    started = time.perf_counter()
+    listing = reader.specs(tmp_path)
+    board = reader.board(tmp_path, "s")
+
+    assert time.perf_counter() - started < PARSE_SECONDS
+    assert [spec.ref for spec in listing.specs] == ["s"]
+    assert board.tickets[0].title.strip() == board.tickets[0].title
+    assert board.tickets[0].title in {"a" + " " * 60000 + "x", "01-x"}
+
+
 def test_local_without_scratch_has_no_specs(tmp_path: Path) -> None:
     reader, _ = _reader(LOCAL, lambda argv, env: None)
 
-    assert reader.specs(tmp_path) == ()
+    assert reader.specs(tmp_path) == SpecList(())
 
 
 @pytest.mark.parametrize(

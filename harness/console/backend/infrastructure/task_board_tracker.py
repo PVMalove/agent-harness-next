@@ -10,7 +10,7 @@ import json
 import os
 import re
 import shutil
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import quote
@@ -24,6 +24,7 @@ from ..domain.task_board import (
     MAX_SPECS,
     BlockerFact,
     PullRef,
+    SpecList,
     SpecTickets,
     TrackerSpec,
     TrackerTicket,
@@ -41,10 +42,17 @@ _WRITE_FLAGS = frozenset(
 )
 _PARENT = re.compile(r"^## Parent: #(\d+)\b", re.MULTILINE)
 _LOCAL_TICKET = re.compile(r"^(\d+)-.*\.md$")
-_LOCAL_FIELD = re.compile(r"^\*\*([^*]+?):\*\*\s*(\S*)", re.MULTILINE)
-_TITLE = re.compile(r"^# +(.+?)\s*$", re.MULTILINE)
+# Local files are untrusted text: a field name never spans lines and the title has one
+# quantifier over its spaces, so a long whitespace run is read in linear time.
+_LOCAL_FIELD = re.compile(r"^\*\*([^*\n]+?):\*\*\s*(\S*)", re.MULTILINE)
+_TITLE = re.compile(r"^# +(.+)$", re.MULTILINE)
 _SPEC_REF = re.compile(r"^#?(\d{1,9})$")
 _NOT_FOUND = re.compile(r"Could not resolve to an Issue", re.IGNORECASE)
+
+
+def _title(body: str, fallback: str) -> str:
+    match = _TITLE.search(body)
+    return (match.group(1).strip() if match else "") or fallback
 
 
 class Runner(Protocol):
@@ -179,6 +187,7 @@ _GH_BOARD = """query($owner: String!, $name: String!, $number: Int!) {
     issue(number: $number) {
       number title url body
       subIssues(first: 100) {
+        pageInfo { hasNextPage }
         nodes {
           number title url state body
           labels(first: 50) { nodes { name } }
@@ -189,7 +198,9 @@ _GH_BOARD = """query($owner: String!, $name: String!, $number: Int!) {
   }
 }"""
 
-_GH_BLOCKED = "blockedBy(first: 20) { nodes { number title state } }"
+_GH_BLOCKED = (
+    "blockedBy(first: 20) { pageInfo { hasNextPage } nodes { number title state } }"
+)
 
 
 class _GitHub:
@@ -210,14 +221,16 @@ class _GitHub:
             "-f",
             f"query={query}",
         ]
-        argv += ["-F", f"owner={self._owner}", "-F", f"name={self._name}"]
+        # `-F` would turn "123", "true" or "@file" into a number, a boolean or a file read.
+        argv += ["-f", f"owner={self._owner}", "-f", f"name={self._name}"]
         for key, value in variables.items():
-            argv += ["-F", f"{key}={value}"]
+            argv += ["-F" if isinstance(value, int) else "-f", f"{key}={value}"]
         return self._collect.json(argv)
 
-    def specs(self) -> tuple[TrackerSpec, ...]:
+    def specs(self) -> SpecList:
         found: list[TrackerSpec] = []
         cursor: str | None = None
+        more = False
         for _ in range(_SPEC_PAGES):
             variables: dict[str, str | int] = {"cursor": cursor} if cursor else {}
             issues = _path(
@@ -245,13 +258,10 @@ class _GitHub:
                 )
             page = _dict(_path(issues, "pageInfo"))
             cursor = _text(page.get("endCursor"))
-            if (
-                len(found) >= MAX_SPECS
-                or page.get("hasNextPage") is not True
-                or not cursor
-            ):
+            more = page.get("hasNextPage") is True and bool(cursor)
+            if len(found) >= MAX_SPECS or not more:
                 break
-        return tuple(found[:MAX_SPECS])
+        return SpecList(tuple(found[:MAX_SPECS]), more or len(found) > MAX_SPECS)
 
     def _board_data(self, number: int) -> object:
         try:
@@ -259,7 +269,7 @@ class _GitHub:
                 _GH_BOARD.replace("%BLOCKED%", _GH_BLOCKED), number=number
             )
         except TrackerUnavailable as failure:
-            if failure.reason != "failed":
+            if failure.reason != "failed" or "blockedBy" not in failure.message:
                 raise
         # A host without the `blockedBy` field: blockers come from the body only.
         return self._graphql(_GH_BOARD.replace("%BLOCKED%", ""), number=number)
@@ -286,10 +296,12 @@ class _GitHub:
             raise SpecNotFound(spec_ref)
         pulls = self._pulls()
         tickets: list[TrackerTicket] = []
+        more = _path(issue, "subIssues", "pageInfo", "hasNextPage") is True
         for node in _list(_path(issue, "subIssues", "nodes")):
             n = _int(_path(node, "number"))
             if n is None:
                 continue
+            more = more or _path(node, "blockedBy", "pageInfo", "hasNextPage") is True
             blockers = tuple(
                 BlockerFact(
                     f"#{bn}",
@@ -326,7 +338,9 @@ class _GitHub:
             tickets_total=len(tickets),
             tickets_open=sum(not ticket.closed for ticket in tickets),
         )
-        return SpecTickets(spec, tuple(tickets), {t.ref: t.closed for t in tickets})
+        return SpecTickets(
+            spec, tuple(tickets), {t.ref: t.closed for t in tickets}, more
+        )
 
 
 class _GitLab:
@@ -340,7 +354,9 @@ class _GitLab:
         self._env = {**os.environ, "GITLAB_HOST": tracker.host}
         self._prefix = f"projects/{quote(tracker.project, safe='')}"
 
-    def _pages(self, path: str, pages: int) -> Iterator[dict[str, object]]:
+    def _pages(self, path: str, pages: int) -> tuple[list[dict[str, object]], bool]:
+        """The items of at most `pages` pages and whether the last read page was full."""
+        found: list[dict[str, object]] = []
         for page in range(1, pages + 1):
             items = _list(
                 self._collect.json(
@@ -352,16 +368,18 @@ class _GitLab:
                     self._env,
                 )
             )
-            yield from (item for item in items if isinstance(item, dict))
+            found.extend(item for item in items if isinstance(item, dict))
             if len(items) < _PER_PAGE:
-                return
+                return found, False
+        return found, True
 
-    def _issues(self) -> list[dict[str, object]]:
-        return list(
-            self._pages(
-                "issues?state=all&order_by=created_at&sort=asc", _GITLAB_ISSUE_PAGES
-            )
+    def _issues(self) -> tuple[list[dict[str, object]], bool]:
+        """The newest issues, oldest first: a spec and its later children are read before an
+        old closed issue when the page limit cuts the listing."""
+        issues, more = self._pages(
+            "issues?state=all&order_by=created_at&sort=desc", _GITLAB_ISSUE_PAGES
         )
+        return issues[::-1], more
 
     @staticmethod
     def _children(
@@ -387,8 +405,8 @@ class _GitLab:
             tickets_open=sum(kid.get("state") != "closed" for kid in kids),
         )
 
-    def specs(self) -> tuple[TrackerSpec, ...]:
-        issues = self._issues()
+    def specs(self) -> SpecList:
+        issues, more = self._issues()
         children = self._children(issues)
         specs = [
             self._spec(issue, children[iid])
@@ -397,17 +415,18 @@ class _GitLab:
             and iid in children
             and issue.get("state") == "opened"
         ]
-        return tuple(specs[:MAX_SPECS])
+        return SpecList(tuple(specs[-MAX_SPECS:]), more or len(specs) > MAX_SPECS)
 
     def board(self, spec_ref: str) -> SpecTickets:
         number = _spec_number(spec_ref)
-        issues = self._issues()
+        issues, more = self._issues()
         spec_issue = next((i for i in issues if _int(i.get("iid")) == number), None)
         if spec_issue is None:
             raise SpecNotFound(spec_ref)
         kids = self._children(issues).get(number, [])
         pulls: dict[int, PullRef] = {}
-        for mr in self._pages("merge_requests?state=opened", _GITLAB_MR_PAGES):
+        mrs, more_mrs = self._pages("merge_requests?state=opened", _GITLAB_MR_PAGES)
+        for mr in mrs:
             ticket, iid = ticket_of_branch(mr.get("source_branch")), _int(mr.get("iid"))
             if ticket is not None and iid is not None:
                 pulls.setdefault(
@@ -436,7 +455,9 @@ class _GitLab:
             for issue in issues
             if (iid := _int(issue.get("iid"))) is not None
         }
-        return SpecTickets(self._spec(spec_issue, kids), tickets, states)
+        return SpecTickets(
+            self._spec(spec_issue, kids), tickets, states, more or more_mrs
+        )
 
 
 def _read(path: Path) -> str:
@@ -494,12 +515,11 @@ class _Local:
         for number, path in files:
             body = _read(path)
             labels, closed = _local_labels(body)
-            title = _TITLE.search(body)
             tickets.append(
                 TrackerTicket(
                     ref=path.relative_to(self._repo).as_posix(),
                     n=number,
-                    title=title.group(1) if title else path.stem,
+                    title=_title(body, path.stem),
                     url=None,
                     closed=closed,
                     labels=labels,
@@ -537,11 +557,10 @@ class _Local:
         if not has_spec and not tickets:
             return None
         body = _read(spec_file) if has_spec else ""
-        title = _TITLE.search(body)
         spec = TrackerSpec(
             ref=spec_dir.name,
             n=None,
-            title=title.group(1) if title else spec_dir.name,
+            title=_title(body, spec_dir.name),
             url=None,
             body=body,
             tickets_total=len(tickets),
@@ -549,15 +568,15 @@ class _Local:
         )
         return spec, tickets
 
-    def specs(self) -> tuple[TrackerSpec, ...]:
+    def specs(self) -> SpecList:
         if not self._root.is_dir() or self._root.is_symlink():
-            return ()
+            return SpecList(())
         found = []
         for spec_dir in sorted(self._root.iterdir()):
             read = self._spec(spec_dir)
             if read is not None and (not read[1] or read[0].tickets_open):
                 found.append(read[0])
-        return tuple(found[:MAX_SPECS])
+        return SpecList(tuple(found[:MAX_SPECS]), len(found) > MAX_SPECS)
 
     def board(self, spec_ref: str) -> SpecTickets:
         if (
@@ -604,7 +623,7 @@ class TrackerBoardReader:
             return _GitLab(collect, tracker)
         return _GitHub(collect, tracker)
 
-    def specs(self, repo: Path) -> tuple[TrackerSpec, ...]:
+    def specs(self, repo: Path) -> SpecList:
         try:
             return self._source(repo).specs()
         except OSError as exc:
