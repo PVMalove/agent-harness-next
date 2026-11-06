@@ -48,6 +48,9 @@
         "mapping": {
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
+          "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
+          "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
+          "harness.snapshot": "#/$defs/HarnessSnapshotRequest",
           "home.problems": "#/$defs/HomeProblemsRequest",
           "home.snapshot": "#/$defs/HomeSnapshotRequest",
           "job.cancel": "#/$defs/JobCancelRequest",
@@ -124,6 +127,15 @@
         },
         {
           "$ref": "#/$defs/TaskBoardSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/DiagnosticsSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessMaintenanceRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"
@@ -268,6 +280,47 @@
       "title": "DecisionsSnapshotRequest",
       "type": "object"
     },
+    "DiagnosticsSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "online": {
+          "default": false,
+          "title": "Online",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "diagnostics.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "DiagnosticsSnapshotRequest",
+      "type": "object"
+    },
     "ErrorBody": {
       "additionalProperties": false,
       "properties": {
@@ -350,6 +403,78 @@
         "error"
       ],
       "title": "ErrorReply",
+      "type": "object"
+    },
+    "HarnessMaintenanceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.maintenance",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessMaintenanceRequest",
+      "type": "object"
+    },
+    "HarnessSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessSnapshotRequest",
       "type": "object"
     },
     "HomeProblemsReply": {
@@ -1550,7 +1675,10 @@
             "recovery.snapshot",
             "container_route.snapshot",
             "task_board.specs",
-            "task_board.snapshot"
+            "task_board.snapshot",
+            "diagnostics.snapshot",
+            "harness.snapshot",
+            "harness.maintenance"
           ],
           "title": "Type",
           "type": "string"

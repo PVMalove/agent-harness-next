@@ -1,12 +1,15 @@
-"""The screen snapshot requests of Reports, Orchestration, Recovery and Container route and the
-`snapshot.page` request that completes them: parsing and the replies."""
+"""The screen snapshot requests of Reports, Orchestration, Recovery, Container route, Diagnostics
+and Harness and the `snapshot.page` request that completes them: parsing and the replies."""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
 from ....kernel.protocol import (
+    DIAGNOSTICS_REQUEST,
+    HARNESS_REQUEST,
     LOCK_REQUEST,
+    MAINTENANCE_REQUEST,
     MAX_ID_CHARS,
     MAX_SKIPPED,
     ORCHESTRATION_REQUEST,
@@ -42,7 +45,15 @@ _FIELDS: dict[str, frozenset[str]] = {
     PAGE_REQUEST: frozenset({"snapshot_id", "offset"}),
     TASK_BOARD_SPECS_REQUEST: frozenset({"force"}),
     TASK_BOARD_REQUEST: frozenset({"spec", "force"}),
+    DIAGNOSTICS_REQUEST: frozenset({"online", "force"}),
+    HARNESS_REQUEST: frozenset({"force"}),
+    MAINTENANCE_REQUEST: frozenset({"force"}),
 }
+# The replies that carry whether they came from the cache and how old it is.
+_CACHED_TYPES = frozenset(
+    {TASK_BOARD_SPECS_REQUEST, MAINTENANCE_REQUEST}
+    | {kind for kind in _FIELDS if kind.endswith(".snapshot")}
+)
 SCREEN_TYPES = frozenset(_FIELDS)
 
 
@@ -121,6 +132,15 @@ def _call(
     if kind == TASK_BOARD_REQUEST:
         spec, force = _id(body, "spec"), _flag(body, "force")
         return lambda: screens.task_board(spec, force=force)
+    if kind == DIAGNOSTICS_REQUEST:
+        online, force = _flag(body, "online"), _flag(body, "force")
+        return lambda: screens.diagnostics(online=online, force=force)
+    if kind == HARNESS_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.harness(force=force)
+    if kind == MAINTENANCE_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.maintenance(force=force)
     batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
     runtime = _id(body, "runtime", "")
     if not role:
@@ -184,6 +204,6 @@ async def respond(raw: str, screens: ScreenService) -> str:
         "next": served.next,
         "done": served.done,
     }
-    if kind.endswith(".snapshot") or kind == TASK_BOARD_SPECS_REQUEST:
+    if kind in _CACHED_TYPES:
         fields.update(cached=served.cached, age_seconds=served.age_seconds)
     return _ok(request_id, kind, **fields)

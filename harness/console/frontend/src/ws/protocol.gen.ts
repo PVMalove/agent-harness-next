@@ -96,7 +96,10 @@ export type Type8 =
   | "recovery.snapshot"
   | "container_route.snapshot"
   | "task_board.specs"
-  | "task_board.snapshot";
+  | "task_board.snapshot"
+  | "diagnostics.snapshot"
+  | "harness.snapshot"
+  | "harness.maintenance";
 export type V8 = 1;
 export type Done3 = boolean;
 export type Id10 = string | number | null;
@@ -161,6 +164,9 @@ export type ConsoleRequest =
   | ContainerRouteSnapshotRequest
   | TaskBoardSpecsRequest
   | TaskBoardSnapshotRequest
+  | DiagnosticsSnapshotRequest
+  | HarnessSnapshotRequest
+  | HarnessMaintenanceRequest
   | SnapshotPageRequest
   | WorkerStepsRequest
   | WorkerSubscribeRequest;
@@ -233,18 +239,28 @@ export type Force5 = boolean;
 export type Id31 = string | number | null;
 export type Spec = string;
 export type Type30 = "task_board.snapshot";
+export type Force6 = boolean;
 export type Id32 = string | number | null;
+export type Online2 = boolean;
+export type Type31 = "diagnostics.snapshot";
+export type Force7 = boolean;
+export type Id33 = string | number | null;
+export type Type32 = "harness.snapshot";
+export type Force8 = boolean;
+export type Id34 = string | number | null;
+export type Type33 = "harness.maintenance";
+export type Id35 = string | number | null;
 export type Offset2 = number;
 export type SnapshotId3 = number;
-export type Type31 = "snapshot.page";
+export type Type34 = "snapshot.page";
 export type DispatchId2 = string;
-export type Id33 = string | number | null;
+export type Id36 = string | number | null;
 export type Offset3 = number;
-export type Type32 = "worker.steps";
+export type Type35 = "worker.steps";
 export type DispatchId3 = string;
-export type Id34 = string | number | null;
+export type Id37 = string | number | null;
 export type Offset4 = number;
-export type Type33 = "worker.subscribe";
+export type Type36 = "worker.subscribe";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
@@ -658,13 +674,41 @@ export interface TaskBoardSnapshotRequest {
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "DiagnosticsSnapshotRequest".
+ */
+export interface DiagnosticsSnapshotRequest {
+  force?: Force6;
+  id?: Id32;
+  online?: Online2;
+  type: Type31;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "HarnessSnapshotRequest".
+ */
+export interface HarnessSnapshotRequest {
+  force?: Force7;
+  id?: Id33;
+  type: Type32;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "HarnessMaintenanceRequest".
+ */
+export interface HarnessMaintenanceRequest {
+  force?: Force8;
+  id?: Id34;
+  type: Type33;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "SnapshotPageRequest".
  */
 export interface SnapshotPageRequest {
-  id?: Id32;
+  id?: Id35;
   offset: Offset2;
   snapshot_id: SnapshotId3;
-  type: Type31;
+  type: Type34;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -672,9 +716,9 @@ export interface SnapshotPageRequest {
  */
 export interface WorkerStepsRequest {
   dispatch_id: DispatchId2;
-  id?: Id33;
+  id?: Id36;
   offset: Offset3;
-  type: Type32;
+  type: Type35;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -682,7 +726,7 @@ export interface WorkerStepsRequest {
  */
 export interface WorkerSubscribeRequest {
   dispatch_id: DispatchId3;
-  id?: Id34;
+  id?: Id37;
   offset?: Offset4;
-  type: Type33;
+  type: Type36;
 }
