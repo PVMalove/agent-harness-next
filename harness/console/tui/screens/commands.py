@@ -21,6 +21,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Footer, ListItem, ListView, Static
 
 from ..chrome import TopBar
+from ..shell import SectionCard
 from ..translate import Translated
 from ..logtext import colorize_log, colorize_overview
 from ...kernel.catalog import CONFIRMATION_REASONS, Reversibility
@@ -320,17 +321,16 @@ class CommandMenuScreen(Translated, Screen[None]):
         children = self._menu_children()
         first = next((i for i, item in enumerate(children) if item.name), 0)
         with Horizontal(id="command-body"):
-            menu = ListView(*children, id="command-menu", initial_index=first)
-            menu.border_title = brand.section_title(i18n.ui(self._language, "commands"))
-            yield menu
-            with VerticalScroll(id="command-detail-scroll") as detail:
-                detail.border_title = brand.section_title("Описание")
-                yield Static("", id="command-detail")
-        output = VerticalScroll(
-            Static("", id="command-output", markup=False), id="command-output-scroll"
-        )
-        output.border_title = brand.section_title("Вывод")
-        yield output
+            with SectionCard(title="Команды", id="command-menu-card"):
+                yield ListView(*children, id="command-menu", initial_index=first)
+            with SectionCard(title="Описание", id="command-detail-card"):
+                with VerticalScroll(id="command-detail-scroll"):
+                    yield Static("", id="command-detail")
+        with SectionCard(title="Вывод", id="command-output-card"):
+            yield VerticalScroll(
+                Static("", id="command-output", markup=False),
+                id="command-output-scroll",
+            )
 
     def sync_language(self) -> None:
         """Re-label the group headings after the console language changed."""
@@ -340,7 +340,6 @@ class CommandMenuScreen(Translated, Screen[None]):
             return
         self._language = language
         menu = self.query_one("#command-menu", ListView)
-        menu.border_title = brand.section_title(i18n.ui(language, "commands"))
         for heading_id, heading in self._headings.items():
             self.query_one(f"#{heading_id} Static", Static).update(
                 i18n.group_title(language, heading).upper()

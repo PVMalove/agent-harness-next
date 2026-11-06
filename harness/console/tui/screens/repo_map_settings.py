@@ -14,7 +14,7 @@ from typing import Callable
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, RadioButton, RadioSet, SelectionList, Static
 from textual.widgets.selection_list import Selection
 
@@ -70,8 +70,8 @@ class RepoMapSettings(Vertical):
     DEFAULT_CSS = """
     RepoMapSettings { width: 100%; height: 1fr; }
     RepoMapSettings #settings-scroll { width: 100%; height: 1fr; overflow-x: hidden; }
-    RepoMapSettings .settings-row { height: auto; }
-    RepoMapSettings .settings-row > SectionCard { width: 1fr; margin: 0 1 1 0; }
+    RepoMapSettings .settings-row { height: auto; grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; margin-bottom: 1; }
+    RepoMapSettings .settings-row > SectionCard { height: 100%; }
     RepoMapSettings Static { height: auto; }
     RepoMapSettings .actions { height: auto; }
     RepoMapSettings .actions Button { margin-right: 1; }
@@ -106,7 +106,7 @@ class RepoMapSettings(Vertical):
 
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="settings-scroll"):
-            with Horizontal(classes="settings-row"):
+            with Grid(classes="settings-row"):
                 with SectionCard(title="Режим карты", id="tier-frame"):
                     yield Static("", id="tier-status", classes="no-i18n", markup=False)
                     with RadioSet(id="tier-choice"):
@@ -129,7 +129,7 @@ class RepoMapSettings(Vertical):
                         yield Button(
                             "Проверить заново", id="parser-refresh", compact=True
                         )
-            with Horizontal(classes="settings-row"):
+            with Grid(classes="settings-row"):
                 with SectionCard(title="Память проекта", id="memory-frame"):
                     yield Static(
                         "", id="memory-status", classes="no-i18n", markup=False

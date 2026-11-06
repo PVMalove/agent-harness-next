@@ -53,6 +53,12 @@ from ..kernel.protocol import (
 from ..kernel.help_text import HelpSections
 from ..kernel.open_project_snapshot import OpenProjectFacts
 from ..kernel.repo_map_snapshot import RepoMapFacts
+from ..kernel.pipeline_kpi import (
+    PipelineAnalytics,
+    PipelineKpi,
+    pipeline_analytics_from_payload,
+    pipeline_kpi_from_payload,
+)
 from ..kernel.reports import (
     BatchTimeline,
     LedgerView,
@@ -124,6 +130,8 @@ class OrchestrationView:
     ledger: LedgerView
     lock: JsonObject | None
     lock_error: str | None
+    kpi: PipelineKpi = PipelineKpi()
+    analytics: PipelineAnalytics = PipelineAnalytics({}, {}, {}, {})
 
 
 @dataclass(frozen=True)
@@ -463,11 +471,15 @@ class ConsoleClient:
         found = _object(
             self._paged({"type": ORCHESTRATION_REQUEST, "force": force}), "снимок"
         )
-        if set(found) != {"ledger", "lock"}:
+        if set(found) != {"ledger", "lock", "kpi", "analytics"}:
             raise MalformedReply("снимок оркестрации сервера консоли не по схеме")
         lock, error = _lock_of(found["lock"])
         ledger = self._decoded(ledger_from_payload, found["ledger"], "леджер")
-        return OrchestrationView(ledger, lock, error)
+        kpi = self._decoded(pipeline_kpi_from_payload, found["kpi"], "KPI")
+        analytics = self._decoded(
+            pipeline_analytics_from_payload, found["analytics"], "аналитика"
+        )
+        return OrchestrationView(ledger, lock, error, kpi, analytics)
 
     def ledger_lock(self) -> JsonObject:
         """The ledger lock state; `LockUnavailable` carries why the server could not read it."""

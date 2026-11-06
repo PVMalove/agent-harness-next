@@ -194,11 +194,11 @@ class WorkerObservationScreen(ConsoleShell):
     ]
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
-    WorkerObservationScreen #worker-sessions { width: 27; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-sessions { width: 42; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
     WorkerObservationScreen #worker-live { width: 2; height: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
-    WorkerObservationScreen #worker-picker > ListItem { height: auto; min-height: 7; padding: 1; border-left: solid transparent; }
+    WorkerObservationScreen #worker-picker > ListItem { height: auto; padding: 0 1; border-left: solid transparent; border-bottom: solid $border-subtle; }
     WorkerObservationScreen #worker-picker > ListItem.-highlight, WorkerObservationScreen #worker-picker:focus > ListItem.-highlight { background: $row-highlight; border-left: solid $selection-edge; text-style: none; }
     WorkerObservationScreen #worker-picker Static { height: auto; }
     WorkerObservationScreen #worker-list-foot { height: auto; border-top: solid $border-subtle; padding: 1; color: $text-muted; }
@@ -288,7 +288,7 @@ class WorkerObservationScreen(ConsoleShell):
             dispatch_id=dispatch_id,
             state=stage.state,
             language=language,
-            id_limit=22,
+            id_limit=34,
             stacked=True,
         )
 

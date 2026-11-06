@@ -154,7 +154,6 @@ def test_session_card_carries_ticket_role_dispatch_and_caption() -> None:
     assert stacked.plain.splitlines() == [
         "#721  ·  developer",
         "dispatch-e98a4a72-50a…",
-        "",
         "▶ Выполняется",
     ]
     colors = {str(span.style) for span in inline.spans}

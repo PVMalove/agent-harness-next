@@ -58,7 +58,7 @@ HARNESS_THEME = Theme(
 
 class HarnessConsoleApp(App[None]):
     """Accepts an injected `command_runner`, threaded through to the screens that run catalog
-    commands (Harness, Orchestration, Repo Map), so a Pilot test never spawns a real process.
+    commands (Harness, Orchestration, Repo Map), so a test never spawns a real process.
 
     `home_client` is the connection to the project's console server the home screen reads; without
     one the app looks for a running server (`launcher.discover_console`) and starts none. A failed
@@ -69,10 +69,12 @@ class HarnessConsoleApp(App[None]):
     BINDINGS = [
         Binding("f1", "open_help", "Справка"),
         Binding("f2", "toggle_language", "RU/EN"),
+        # The palette key keeps Textual's binding; only its footer label is the console's own.
+        Binding("ctrl+p", "command_palette", "Меню", show=False, priority=True),
     ]
-    # Thin rounded frames and warm accents shared by every screen. Only the screen itself is
-    # filled by default. Informational panes stay transparent; selected data rows and primary
-    # actions may use a fill. Modal dialogs mask the screen behind them.
+    # Thin rounded frames and blue accents shared by every screen. The window is filled by
+    # default; section cards and modal dialogs add the one `surface` fill above it. Menus, headers
+    # and the footer stay transparent; selected data rows and primary actions may use a fill.
     CSS = """
     Screen { background: $background !important; }
     Screen * { background: transparent; }

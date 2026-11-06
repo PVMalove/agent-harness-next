@@ -22,7 +22,7 @@ from rich.text import Text
 from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import ActiveBinding, Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Button, Collapsible, Input, ListItem, ListView, Static
 
@@ -47,6 +47,7 @@ from ...kernel.runner import HarnessRun
 from ..client import HarnessFacts, ScreenClient
 from ..server_api import ServerJobRunner
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
+from ..widgets import KpiGrid
 from .commands import (
     CommandForm,
     CommandMenuScreen,
@@ -374,15 +375,16 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
     BINDINGS = [Binding("y", "copy_cli", "Копировать CLI")]
     CSS = SHELL_CSS + brand.shell_css("""
     HarnessScreen #harness-page { height: 1fr; padding: 0 2; }
+    HarnessScreen #command-body { margin-top: 1; }
     HarnessScreen #harness-title { height: 1; text-style: bold; }
     HarnessScreen #harness-subtitle { height: 1; color: $text-muted; }
-    HarnessScreen .section-card { border: round $component-border; padding: 0 1; height: auto; margin: 0; }
+    HarnessScreen .section-card { border: round $border-subtle; padding: 0 1; height: auto; margin: 0; }
     HarnessScreen #harness-state, HarnessScreen #harness-usage { height: auto; }
     HarnessScreen #harness-usage { color: $text-muted; }
-    HarnessScreen #maintenance-fold { height: 12; margin: 0; padding: 0 1; }
+    HarnessScreen #maintenance-fold { height: auto; max-height: 12; margin: 0; padding: 0 1; }
     HarnessScreen #maintenance-fold.-collapsed { height: 1; border: none; }
-    HarnessScreen #maintenance-fold > Contents { height: 1fr; padding: 0; }
-    HarnessScreen #maintenance-scroll { height: 1fr; }
+    HarnessScreen #maintenance-fold > Contents { height: auto; max-height: 10; padding: 0; }
+    HarnessScreen #maintenance-scroll { height: auto; max-height: 8; }
     HarnessScreen #maintenance-summary { height: auto; }
     HarnessScreen #maintenance-actions, HarnessScreen .worktree-row { height: 1; }
     HarnessScreen #maintenance-worktrees { height: auto; }
@@ -390,45 +392,45 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
     HarnessScreen #maintenance-fold Button { height: 1; min-height: 1; min-width: 0; border: none; padding: 0 1; }
     HarnessScreen.-narrow #maintenance-fold { height: 7; }
     HarnessScreen.-narrow #maintenance-fold.-collapsed { height: 1; }
-    HarnessScreen #command-body { height: 1fr; min-height: 3; }
-    HarnessScreen #command-list { width: 56%; height: 1fr; min-height: 2; }
+    HarnessScreen #command-body { height: auto; grid-size: 1; margin-bottom: 1; }
+    HarnessScreen.-wide #command-body, HarnessScreen.-spacious #command-body { grid-size: 2; grid-columns: 3fr 2fr; grid-rows: auto; grid-gutter: 0 1; }
+    HarnessScreen #command-list, HarnessScreen #detail-fold { width: 100%; height: 100%; }
     HarnessScreen #command-filters { height: 1; }
     HarnessScreen #command-filters Button { min-width: 0; padding: 0 1; }
     HarnessScreen #command-filters .-on { background: $selection-background; color: $selection-foreground; }
-    HarnessScreen #command-menu { height: 1fr; min-height: 2; margin: 0; padding: 0; border: round $component-border; }
+    HarnessScreen #command-menu { height: auto; min-height: 2; margin: 0; padding: 0; border: none; background: transparent; }
+    HarnessScreen #command-menu:focus { border: none; }
     HarnessScreen #command-menu > ListItem { height: 1; padding: 0; border-left: solid transparent; text-style: none; }
-    HarnessScreen #command-menu > ListItem.-highlight { background: $selection-background; border-left: solid $primary; outline: round $selection-outline; text-style: none; }
+    HarnessScreen #command-menu > ListItem.-highlight { background: $selection-background; border-left: solid $primary; text-style: none; }
     HarnessScreen #command-menu Static { height: 1; text-wrap: nowrap; text-overflow: ellipsis; }
     HarnessScreen #command-menu Horizontal { height: 1; }
     HarnessScreen .command-label { width: 1fr; }
     HarnessScreen .command-risk { width: auto; padding-left: 1; }
     HarnessScreen .group-title { color: $text-muted; text-style: bold; }
-    HarnessScreen #detail-fold { width: 1fr; height: 1fr; }
     HarnessScreen #detail-fold > CollapsibleTitle { display: none; }
-    HarnessScreen #detail-fold > Contents { height: 1fr; padding: 0; }
-    HarnessScreen #command-detail-scroll { height: 1fr; padding: 0 1; }
+    HarnessScreen #detail-fold > Contents { height: auto; padding: 0; }
+    HarnessScreen #command-detail-scroll { height: auto; padding: 0 1; }
     HarnessScreen #command-detail { height: auto; }
     HarnessScreen #command-risk { height: auto; padding: 0 1; border: round $warning; background: transparent; color: $warning; }
     HarnessScreen #command-risk.-safe { border: round $success; color: $success; }
     HarnessScreen #command-risk.-deletes { border: round $error; color: $error; }
-    HarnessScreen #command-cli { height: auto; border: round $component-border; padding: 0 1; }
+    HarnessScreen #command-cli { height: auto; border: round $component-border; padding: 0 1; background: transparent; }
     HarnessScreen #copy-hint { height: 1; color: $text-muted; }
     HarnessScreen #command-actions { height: auto; }
     HarnessScreen #command-actions Button { margin-right: 1; }
-    HarnessScreen #command-run { background: $primary; color: $background; border: round $primary; }
-    HarnessScreen #command-run:hover, HarnessScreen #command-run:focus { border: round $foreground; }
+    HarnessScreen #command-run { background: transparent; color: $primary; border: round $primary; }
+    HarnessScreen #command-run:hover, HarnessScreen #command-run:focus { background: transparent; border: round $primary; color: $primary; }
     HarnessScreen #run-status { height: 1; text-wrap: nowrap; text-overflow: ellipsis; }
     HarnessScreen #run-feedback { height: auto; max-height: 1; color: $warning; text-wrap: nowrap; text-overflow: ellipsis; }
-    HarnessScreen #output-fold { height: 10; max-height: 35%; }
+    HarnessScreen #output-fold { height: 12; }
     HarnessScreen #output-fold.-collapsed { height: 1; border: none; padding: 0 1; }
     HarnessScreen #output-fold > Contents { height: 1fr; padding: 0; }
     HarnessScreen #command-output-scroll { height: 1fr; }
     HarnessScreen #command-output { height: auto; }
     HarnessScreen.-narrow #harness-page { padding: 0 1; }
     HarnessScreen.-narrow #harness-subtitle { display: none; }
-    HarnessScreen.-narrow #command-body { layout: vertical; }
-    HarnessScreen.-narrow #command-list { width: 1fr; height: 1fr; }
-    HarnessScreen.-narrow #detail-fold { width: 1fr; height: 7; }
+    HarnessScreen.-narrow #command-list { height: auto; }
+    HarnessScreen.-narrow #detail-fold { height: 7; }
     HarnessScreen.-narrow #detail-fold.-collapsed { height: 1; border: none; padding: 0 1; }
     HarnessScreen.-narrow #detail-fold > CollapsibleTitle { display: block; }
     HarnessScreen.-narrow #command-risk { padding: 0; border: none; }
@@ -453,7 +455,8 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         self._facts_error = ""
         self._facts_epoch = 0
         self._filter = "all"
-        self._expanded_group = "Проверки"
+        # Command groups the operator opened; every group starts folded.
+        self._open_groups: set[str] = set()
         self._selected_key: str | None = None
         self._detail_ready: str | None = None
         self._rebuilding = False
@@ -474,10 +477,6 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             for entry in catalog
             if entry.key not in _HIDDEN_COMMANDS and entry.available(repo)
         }
-        if self._entries and not any(
-            self.menu_group(key) == self._expanded_group for key in self._entries
-        ):
-            self._expanded_group = self.menu_group(next(iter(self._entries)))
 
     @property
     def active_bindings(self) -> dict[str, ActiveBinding]:
@@ -510,13 +509,14 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
 
     def compose_content(self) -> ComposeResult:
         self._language = getattr(self.app, "language", "ru")
-        with Vertical(id="harness-page"):
+        with VerticalScroll(id="harness-page"):
             yield Static("Harness", id="harness-title")
             yield Static(
                 "Команды харнесса и обслуживание. У каждой команды виден CLI.",
                 id="harness-subtitle",
             )
-            with SectionCard(title="Состояние"):
+            with SectionCard(title="Установка"):
+                yield KpiGrid([], id="harness-tiles")
                 yield Static("", id="harness-state", classes="no-i18n", markup=False)
                 yield Static("", id="harness-usage", classes="no-i18n", markup=False)
             with Fold(
@@ -537,8 +537,8 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                         yield Button("↻", id="maintenance-refresh", compact=True)
                     with Vertical(id="maintenance-worktrees"):
                         yield Static("Worktree: …", markup=False)
-            with Horizontal(id="command-body"):
-                with Vertical(id="command-list"):
+            with Grid(id="command-body"):
+                with SectionCard(title="Команды", id="command-list"):
                     with Horizontal(id="command-filters"):
                         yield Button(
                             "Все", id="filter-all", compact=True, classes="-on"
@@ -628,7 +628,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                 continue
             heading_id = f"group-{_GROUP_ORDER.index(group)}"
             self._headings[heading_id] = group
-            opened = group == self._expanded_group
+            opened = group in self._open_groups
             counts = Counter(
                 REVERSIBILITY_LABELS[entry.reversibility][0] for entry in members
             )
@@ -672,11 +672,15 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             )
         return children
 
-    async def _rebuild_menu(self, selected: str | None = None) -> None:
+    async def _rebuild_menu(
+        self, selected: str | None = None, heading: str | None = None
+    ) -> None:
         async with self._menu_lock:
-            await self._replace_menu(selected)
+            await self._replace_menu(selected, heading)
 
-    async def _replace_menu(self, selected: str | None) -> None:
+    async def _replace_menu(
+        self, selected: str | None, heading: str | None = None
+    ) -> None:
         self._rebuilding = True
         menu = self.query_one("#command-menu", ListView)
         await menu.clear()
@@ -686,7 +690,8 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             (
                 i
                 for i, row in enumerate(rows)
-                if row.name == selected and selected is not None
+                if (heading is not None and row.id == heading)
+                or (heading is None and row.name == selected and selected is not None)
             ),
             next((i for i, row in enumerate(rows) if row.name), 0),
         )
@@ -700,8 +705,8 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         if key not in {entry.key for entry in self._filtered_entries()}:
             return
         group = self.menu_group(key)
-        if group != self._expanded_group:
-            self._expanded_group = group
+        if group not in self._open_groups:
+            self._open_groups.add(group)
             self.run_worker(self._rebuild_menu(key), group="harness-menu")
         else:
             menu = self.query_one("#command-menu", ListView)
@@ -710,8 +715,11 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             )
 
     def _paint_menu_title(self) -> None:
-        self.query_one("#command-menu").border_title = brand.section_title(
-            i18n.ui(self._language, "commands"), str(len(self._filtered_entries()))
+        self.query_one("#command-list", SectionCard).set_note(
+            str(len(self._filtered_entries()))
+        )
+        self.query_one("#detail-fold", Fold).set_card_head(
+            "" if self.narrow else i18n.tr(self._language, "Описание")
         )
 
     def _paint_state(self) -> None:
@@ -766,6 +774,28 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             " · " + self._t(drift),
             style=brand.STATUS_COLORS["ok" if facts.drift == "clean" else "warn"],
         )
+        tiles = [
+            (self._t(label), self._t(value), "", "")
+            for label, value in fields
+            if label
+        ]
+        tiles.append(
+            (
+                self._t("Дрейф"),
+                self._t(
+                    {"clean": "✔ нет", "drift": "⚠ есть", "missing": "○ нет lock"}.get(
+                        facts.drift, "○ неизвестен"
+                    )
+                ),
+                "",
+                "" if facts.drift == "clean" else "warning",
+            )
+        )
+        show_tiles = not self.narrow and state.installed
+        self.query_one("#harness-tiles", KpiGrid).display = show_tiles
+        self.query_one("#harness-state").display = not show_tiles
+        if show_tiles:
+            self.call_later(self.query_one("#harness-tiles", KpiGrid).set_tiles, tiles)
         self.query_one("#harness-state", Static).update(text)
         self.query_one("#harness-state").tooltip = self._t(
             console_stats.harness_state_text(state, version)
@@ -1010,6 +1040,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             and self._last_narrow != self.narrow
         ):
             self._last_narrow = self.narrow
+            self._paint_menu_title()
             self.query_one("#detail-fold", Fold).collapsed = (
                 self.narrow and self._detail_ready is None
             )
@@ -1070,8 +1101,8 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                 if entries
                 else None
             )
-            if selected:
-                self._expanded_group = self.menu_group(selected)
+            if selected and selected == self._selected_key:
+                self._open_groups.add(self.menu_group(selected))
             self.run_worker(self._rebuild_menu(selected), group="harness-menu")
         elif key == "command-run" and self._selected_key:
             event.stop()
@@ -1094,16 +1125,16 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         elif event.list_view.id == "command-menu":
             event.stop()
             if event.item.id in self._headings:
-                self._expanded_group = self._headings[event.item.id]
-                await self._rebuild_menu(self._selected_key)
+                self._open_groups ^= {self._headings[event.item.id]}
+                await self._rebuild_menu(self._selected_key, event.item.id)
 
     async def on_harness_command_list_activate(
         self, event: HarnessCommandList.Activate
     ) -> None:
         event.stop()
         if event.item.id in self._headings:
-            self._expanded_group = self._headings[event.item.id]
-            await self._rebuild_menu(self._selected_key)
+            self._open_groups ^= {self._headings[event.item.id]}
+            await self._rebuild_menu(self._selected_key, event.item.id)
         elif event.item.name is not None:
             if self._refuse_busy():
                 return

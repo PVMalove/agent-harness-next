@@ -195,7 +195,7 @@ class ContainerRouteScreen(ConsoleShell):
     ContainerRouteScreen #route-tabs { height: auto; margin-bottom: 1; }
     ContainerRouteScreen #route-tabs Button { margin-right: 1; }
     ContainerRouteScreen #route-tab-reason { height: auto; color: $text-muted; margin-bottom: 1; }
-    ContainerRouteScreen #route-body { height: auto; padding: 0 1; border: round $component-border; }
+    ContainerRouteScreen #route-body { height: auto; padding: 0 1; border: round $border-subtle; background: transparent; }
     ContainerRouteScreen #route-actions { height: auto; margin-top: 1; }
     ContainerRouteScreen #route-actions Button { margin-right: 1; }
     ContainerRouteScreen #route-approver { margin-top: 1; }

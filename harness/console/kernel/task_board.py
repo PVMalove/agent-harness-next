@@ -6,7 +6,7 @@ run without Textual or the server."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Mapping
 
 
@@ -92,6 +92,7 @@ class BoardSnapshot:
     kpis: Mapping[str, int]
     tickets: tuple[BoardCard, ...]
     truncated: bool
+    column_counts: Mapping[str, int] = field(default_factory=dict)
 
 
 def _dict(value: object, what: str) -> dict[str, object]:
@@ -286,6 +287,17 @@ def board_from_payload(value: object) -> BoardSnapshot:
         if isinstance(raw_columns, list)
         else ()
     )
+    counts = (
+        {
+            _str(_dict(item, "column").get("id"), "column.id"): _optional_int(
+                _dict(item, "column").get("count"), "column.count"
+            )
+            or 0
+            for item in raw_columns
+        }
+        if isinstance(raw_columns, list)
+        else {}
+    )
     kpis_value = _dict(found.get("kpis", {}), "board.kpis")
     kpis = {
         key: _optional_int(kpis_value.get(key), f"kpis.{key}") or 0
@@ -301,4 +313,5 @@ def board_from_payload(value: object) -> BoardSnapshot:
             _card(item) for item in _list(found.get("tickets"), "board.tickets")
         ),
         truncated=bool(found.get("truncated", False)),
+        column_counts=counts,
     )

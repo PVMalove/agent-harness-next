@@ -60,7 +60,7 @@ def test_the_shell_css_has_no_default_text_token() -> None:
         assert not re.search(r"\$text(?![\w-])", brand.shell_css(css))
 
 
-def test_the_shell_keeps_elements_transparent() -> None:
+def test_the_shell_draws_one_window_background_and_no_block_fill() -> None:
     import re
 
     from harness.console.kernel import brand
@@ -72,20 +72,32 @@ def test_the_shell_keeps_elements_transparent() -> None:
     shell = brand.shell_css(SHELL_CSS)
     assert "background: transparent" in header
     assert f"border-bottom: solid {border}" in header
-    for selector in ("ShellSidebar", "Footer", ".section-card"):
+    # Panels, buttons and fields are told apart by their frame and dividers, never by a fill.
+    for selector in (
+        "ShellSidebar",
+        "Footer",
+        r"\.section-card",
+        r"\.fold",
+        "Button",
+        "Input",
+    ):
         assert re.search(
             rf"{selector}[^\{{]*\{{[^}}]*background: transparent", shell
         ), selector
+    assert re.search(
+        rf"\.section-head[^\{{]*\{{[^}}]*border-bottom: solid {border}", shell
+    )
+    assert not re.search(r"\.section-(card|head)[^\{]*\{[^}]*background: \$", shell)
 
 
-def test_a_menu_entry_takes_the_colour_of_its_badge() -> None:
+def test_a_menu_entry_shows_its_key_and_takes_the_colour_of_its_badge() -> None:
     from rich.text import Text
 
     from harness.console.tui.shell import menu_label
 
     label = menu_label("Update Harness", ("⚠", "#E5A04B"))
     name, badge = (column._cells[0] for column in label.columns)
-    assert isinstance(name, Text) and name.plain == "↻  Обновить Harness"
+    assert isinstance(name, Text) and name.plain == "2  Обновить Harness"
     assert not name.style and not name.spans
     assert isinstance(badge, Text) and badge.plain.strip() == "⚠"
 
@@ -153,23 +165,23 @@ def test_a_jump_is_labelled_by_its_section_or_its_action() -> None:
     assert i18n.jump_label("en", "Configuration") == "Open setup"
 
 
-def test_the_menu_uses_the_web_order_and_keeps_the_hotkeys() -> None:
+def test_the_menu_is_a_flat_list_in_hotkey_order() -> None:
     from harness.console.tui.shell import SECTION_KEYS
 
     assert SECTIONS == (
         "Home",
-        "Diagnostics",
-        "Update Harness",
         "Open project",
-        "Board",
-        "Agent activity",
+        "Update Harness",
+        "Diagnostics",
+        "Harness",
         "Orchestration",
         "Reports",
-        "Publish",
-        "Harness",
         "Repo Map",
         "Configuration",
         "Help",
+        "Board",
+        "Agent activity",
+        "Publish",
     )
     actions = {
         binding.key: binding.action

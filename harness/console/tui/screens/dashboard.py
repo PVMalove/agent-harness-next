@@ -354,10 +354,11 @@ class DashboardScreen(ConsoleShell):
     DashboardScreen { overflow: hidden hidden; }
     DashboardScreen #dashboard-overview { width: 1fr; height: 1fr; padding: 0 2; overflow-y: auto; }
     DashboardScreen #dashboard-title { height: 1; text-style: bold; }
-    DashboardScreen #dashboard-subtitle { height: 1; color: $text-muted; }
+    DashboardScreen #dashboard-subtitle { height: 1; color: $text-muted; margin-bottom: 1; }
     DashboardScreen #dashboard-attention-card { margin-bottom: 1; }
     DashboardScreen #dashboard-attention, DashboardScreen #dashboard-problems { height: auto; }
-    DashboardScreen .problem-row { height: auto; }
+    DashboardScreen .problem-row { height: auto; border-bottom: solid $border-subtle; }
+    DashboardScreen .problem-row:last-of-type { border-bottom: none; }
     DashboardScreen .problem-symbol { width: 2; height: 1; }
     DashboardScreen .problem-text { width: 1fr; height: auto; }
     DashboardScreen .problem-title { height: 1; color: $foreground; text-wrap: nowrap; text-overflow: ellipsis; }
@@ -382,8 +383,9 @@ class DashboardScreen(ConsoleShell):
     DashboardScreen.-fold-context #dashboard-overview { height: auto; }
     DashboardScreen.-narrow #dashboard-title { height: 1; }
     DashboardScreen.-narrow #dashboard-subtitle { display: none; }
+    DashboardScreen.-narrow .problem-row { border-bottom: none; }
+    DashboardScreen.-narrow #dashboard-check { margin-bottom: 0; }
     DashboardScreen.-narrow .problem-caption, DashboardScreen.-narrow #dashboard-check-label, DashboardScreen.-narrow #home-sessions-hint { display: none; }
-    DashboardScreen.-narrow #dashboard-attention-card, DashboardScreen.-narrow #dashboard-check, DashboardScreen.-narrow #home-sessions-card { margin-bottom: 0; }
     DashboardScreen.-narrow .context-fold .section-card { margin-top: 0; }
     """)
     # The shell's rules plus this screen's own, which must outrank the app's generic widget rules.

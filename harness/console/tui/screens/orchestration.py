@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
+from rich.table import Table
 from rich.text import Text
 
 from harness.orchestration.ledger.lifecycle import JsonObject
@@ -25,6 +26,8 @@ from textual.widgets import (
     ListItem,
     ListView,
     Static,
+    TabbedContent,
+    TabPane,
     TextArea,
 )
 
@@ -35,8 +38,8 @@ from .. import stats as console_stats
 from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand, process_argv
 from ...kernel.runner import CommandRunner, capturing_runner
 from ..client import ConsoleClientError, LockUnavailable, OrchestrationView, ScreenClient
-from ..shell import SHELL_CSS, ConsoleShell, FieldGrid
-from ..widgets import CheckBox
+from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, SectionCard
+from ..widgets import CheckBox, KpiGrid
 from .commands import (
     CommandForm,
     CommandMenuScreen,
@@ -129,6 +132,24 @@ SERVER_UNAVAILABLE = "Сервер консоли не отдал данные �
 LOADING = "Загрузка данных оркестрации…"
 
 
+def _analytics_table(rows: Sequence[tuple[str, str]]) -> Table:
+    """Label and value rows: the label muted, a gap of two columns before the value."""
+    table = Table.grid(expand=True, padding=(0, 2))
+    table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
+    table.add_column(ratio=1, overflow="fold")
+    for label, value in rows:
+        table.add_row(label, value)
+    return table
+
+
+_ANALYTICS_TABS = (
+    ("flow", "Поток работ"),
+    ("quality", "Качество"),
+    ("runtime", "Runtime"),
+    ("gates", "Гейты"),
+)
+
+
 class OrchestrationOverview(Vertical):
     """The panels above the command menu, rebuilt once the snapshot arrives."""
 
@@ -184,26 +205,31 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     OrchestrationScreen #orchestration-header { height: auto; margin-bottom: 1; overflow-x: auto; }
     OrchestrationScreen #orchestration-title { width: auto; height: 1; text-style: bold; padding-right: 2; }
     OrchestrationScreen #orchestration-subtitle { width: 1fr; height: 1; color: $text-muted; }
-    OrchestrationScreen .overview { height: auto; margin: 0 0 1 0; padding: 0 1; border: round $component-border; border-title-color: $primary; }
+    OrchestrationScreen .overview { height: auto; margin: 0; padding: 0; border: none; }
     OrchestrationScreen #pipeline-stats { layout: horizontal; }
     OrchestrationScreen #pipeline-stats .field-column { width: 1fr; padding-right: 2; }
     OrchestrationScreen #ledger-lock { height: auto; }
-    OrchestrationScreen #pipeline-history { height: 11; margin: 0 0 1 0; }
-    OrchestrationScreen #state-filter { width: 32; height: 100%; border-title-color: $primary; }
-    OrchestrationScreen #batch-history { width: 1fr; height: 100%; border-title-color: $primary; }
-    OrchestrationScreen #command-body { height: 16; margin: 0 0 1 0; }
-    OrchestrationScreen #command-menu { height: 1fr; margin: 0; border: round $component-border; border-title-color: $primary; }
-    OrchestrationScreen #command-menu:focus { border: round $primary; }
-    OrchestrationScreen.-wide #command-menu, OrchestrationScreen.-spacious #command-menu { width: 48; }
-    OrchestrationScreen #command-detail-scroll { height: 1fr; padding: 0 1; border: round $component-border; border-title-color: $primary; }
-    OrchestrationScreen #command-output-scroll { height: 8; margin: 0; padding: 0 1; border: round $component-border; border-title-color: $primary; }
+    OrchestrationScreen #pipeline-analytics-card, OrchestrationScreen #pipeline-analytics TabPane { height: auto; }
+    OrchestrationScreen #pipeline-analytics { height: auto; }
+    OrchestrationScreen #pipeline-analytics-card, OrchestrationScreen #pipeline-kpi-card, OrchestrationScreen #pipeline-stats-card, OrchestrationScreen #ledger-lock-card { margin: 0 0 1 0; }
+    OrchestrationScreen #pipeline-history { height: 13; margin: 0 0 1 0; }
+    OrchestrationScreen #state-filter-card { width: 32; height: 100%; }
+    OrchestrationScreen #batch-history-card { width: 1fr; height: 100%; }
+    OrchestrationScreen #state-filter, OrchestrationScreen #batch-history { height: 1fr; border: none; padding: 0; }
+    OrchestrationScreen #command-body { height: 18; margin: 0 0 1 0; }
+    OrchestrationScreen #command-menu-card { height: 100%; }
+    OrchestrationScreen.-wide #command-menu-card, OrchestrationScreen.-spacious #command-menu-card { width: 48; }
+    OrchestrationScreen #command-detail-card { width: 1fr; height: 100%; }
+    OrchestrationScreen #command-menu, OrchestrationScreen #command-detail-scroll, OrchestrationScreen #command-output-scroll { height: 1fr; margin: 0; padding: 0; border: none; }
+    OrchestrationScreen #command-output-card { height: 10; margin: 0; }
     OrchestrationScreen #command-menu > ListItem { height: 1; padding: 0 1; }
     OrchestrationScreen #command-menu Static { height: 1; text-wrap: nowrap; text-overflow: ellipsis; }
     OrchestrationScreen .group-title { color: $text-muted; text-style: bold; }
     OrchestrationScreen.-narrow #orchestration-subtitle { display: none; }
     OrchestrationScreen.-narrow #orchestration-title { width: 1fr; }
-    OrchestrationScreen.-narrow #command-body { layout: vertical; height: 22; }
-    OrchestrationScreen.-narrow #command-detail-scroll { height: 6; }
+    OrchestrationScreen.-narrow #command-body { layout: vertical; height: 26; }
+    OrchestrationScreen.-narrow #command-menu-card { width: 100%; height: 1fr; }
+    OrchestrationScreen.-narrow #command-detail-card { width: 100%; height: 9; }
     """)
 
     def __init__(
@@ -232,6 +258,8 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             console_reports.LedgerView(unavailable=LOADING), None, LOADING
         )
         self._view = found.ledger
+        self._kpi = found.kpi
+        self._analytics = found.analytics
         self._first_lock = found
         self._lock_refresh_seconds = lock_refresh_seconds
 
@@ -294,8 +322,28 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
                     markup=False,
                 )
             )
-        panel.border_title = brand.section_title("Состояние и статистика")
-        yield panel
+        if not view.unavailable:
+            with SectionCard(title="Показатели", id="pipeline-kpi-card"):
+                yield KpiGrid(
+                    console_stats.kpi_tiles(self._kpi, self._language), id="pipeline-kpi"
+                )
+        if not view.unavailable:
+            with SectionCard(title="Аналитика", id="pipeline-analytics-card"):
+                with TabbedContent(id="pipeline-analytics"):
+                    for section, title in _ANALYTICS_TABS:
+                        with TabPane(
+                            i18n.tr(self._language, title), id=f"analytics-{section}"
+                        ):
+                            yield Static(
+                                _analytics_table(
+                                    console_stats.analytics_rows(
+                                        section, self._analytics, self._language
+                                    )
+                                ),
+                                classes="analytics-table no-i18n",
+                            )
+        with SectionCard(title="Состояние и статистика", id="pipeline-stats-card"):
+            yield panel
         lock = Static(
             ledger_lock.current_lock_text(
                 self.repo, lambda repo: first_lock(self._first_lock), self._language
@@ -304,23 +352,21 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             classes="overview",
             markup=False,
         )
-        lock.border_title = brand.section_title("Lock ledger")
-        yield lock
+        with SectionCard(title="Lock ledger", id="ledger-lock-card"):
+            yield lock
         if view.unavailable:
             return
         with Horizontal(id="pipeline-history"):
-            states = ListView(
-                *(
-                    ListItem(Static(label, markup=False), name=key)
-                    for key, label in console_stats.state_filter_items(view)
-                ),
-                id="state-filter",
-            )
-            states.border_title = brand.section_title("Состояния")
-            yield states
-            history = ListView(id="batch-history")
-            history.border_title = brand.section_title("История пайплайна")
-            yield history
+            with SectionCard(title="Состояния", id="state-filter-card"):
+                yield ListView(
+                    *(
+                        ListItem(Static(label, markup=False), name=key)
+                        for key, label in console_stats.state_filter_items(view)
+                    ),
+                    id="state-filter",
+                )
+            with SectionCard(title="История пайплайна", id="batch-history-card"):
+                yield ListView(id="batch-history")
 
     def on_mount(self) -> None:
         def load() -> None:
@@ -334,7 +380,8 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         self.call_after_refresh(page.scroll_home, animate=False)
 
     async def _loaded(self, found: OrchestrationView) -> None:
-        self._view, self._first_lock = found.ledger, found
+        self._view, self._first_lock, self._kpi = found.ledger, found, found.kpi
+        self._analytics = found.analytics
         await self.query_one(OrchestrationOverview).recompose()
         self._repaint_overview(self._language)
         self.query_one("#worker-sessions", Button).label = self._sessions_label()

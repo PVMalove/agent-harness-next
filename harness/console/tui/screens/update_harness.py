@@ -12,7 +12,7 @@ from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.message import Message
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, VerticalScroll
 from textual.widgets import (
     Button,
     RadioSet,
@@ -271,16 +271,15 @@ class UpdateHarnessScreen(ConsoleShell):
     UpdateHarnessScreen #update-page { width: 100%; height: 1fr; padding: 0 2; overflow-x: hidden; }
     UpdateHarnessScreen #update-title { height: 1; text-style: bold; }
     UpdateHarnessScreen #update-subtitle { color: $text-muted; margin-bottom: 1; }
-    UpdateHarnessScreen #update-columns { width: 100%; height: auto; layout: vertical; }
-    UpdateHarnessScreen.-spacious #update-columns { layout: horizontal; }
-    UpdateHarnessScreen #update-left, UpdateHarnessScreen #update-right { width: 1fr; height: auto; }
-    UpdateHarnessScreen.-spacious #update-left { margin-right: 1; }
+    UpdateHarnessScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    UpdateHarnessScreen.-wide .pair, UpdateHarnessScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
+    UpdateHarnessScreen .pair > .section-card { height: 100%; margin-bottom: 0; }
     UpdateHarnessScreen .section-card { margin-bottom: 1; }
     UpdateHarnessScreen Static { height: auto; }
     UpdateHarnessScreen .actions { height: auto; }
     UpdateHarnessScreen .reason-note { height: auto; color: $text-muted; }
     UpdateHarnessScreen #update-plan { text-style: bold; color: $secondary; }
-    UpdateHarnessScreen #update-warning { margin-top: 1; border: round $warning; padding: 0 1; color: $warning; }
+    UpdateHarnessScreen #update-warning { margin-top: 1; border: round $warning; padding: 0 1; color: $warning; background: transparent; }
     UpdateHarnessScreen #update-confirm, UpdateHarnessScreen #seed-note { margin-top: 1; color: $text-muted; }
     UpdateHarnessScreen #seed-frame { display: none; }
     UpdateHarnessScreen #mode-caption { margin-top: 1; color: $text-muted; }
@@ -371,46 +370,45 @@ class UpdateHarnessScreen(ConsoleShell):
                 id="update-subtitle",
                 classes="wide-only",
             )
-            with Horizontal(id="update-columns"):
-                with Vertical(id="update-left"):
-                    with SectionCard(title="Версии", id="versions-frame"):
-                        yield Static("", id="update-versions", markup=False)
-                    with SectionCard(
-                        title="Что изменится в управляемых файлах",
-                        note="из harness diff",
-                        id="drift-frame",
-                    ):
-                        yield Static("", id="update-drift", markup=False)
-                        with Horizontal(classes="actions"):
-                            yield self._recheck
-                        yield ReasonNote(self._drift_reasons, id="drift-reason")
-                with Vertical(id="update-right"):
-                    with Fold(
-                        title="Режим обновления",
-                        summary=MODES[0][1],
-                        collapsed=narrow,
-                        id="mode-frame",
-                    ):
-                        with RadioSet(id="update-mode"):
-                            for key, label in MODES:
-                                yield RoundRadioButton(label, value=key == MODES[0][0])
-                        yield Static("", id="mode-caption", markup=False)
-                        yield Static("", id="mode-reason", markup=False)
-                    with SectionCard(title="Seed-файлы", id="seed-frame"):
-                        yield Static("", id="seed-note", markup=False)
-                        yield CheckList(id="seed-files")
-                        with Horizontal(classes="actions"):
-                            yield self._seed_all
-                            yield self._seed_none
-                        yield ReasonNote(self._seed_reasons, id="seed-reason")
-                    with SectionCard(title="План", id="plan-frame"):
-                        yield Static("", id="update-plan", markup=False)
-                        yield Static("", id="update-warning", markup=False)
-                        yield Static("", id="update-confirm", markup=False)
-                        with Horizontal(classes="actions"):
-                            yield self._run_button
-                            yield self._recheck_narrow
-                        yield ReasonNote(self._plan_reasons, id="plan-reason")
+            with Grid(classes="pair", id="update-row-a"):
+                with SectionCard(title="Версии", id="versions-frame"):
+                    yield Static("", id="update-versions", markup=False)
+                with Fold(
+                    title="Режим обновления",
+                    summary=MODES[0][1],
+                    collapsed=narrow,
+                    id="mode-frame",
+                ):
+                    with RadioSet(id="update-mode"):
+                        for key, label in MODES:
+                            yield RoundRadioButton(label, value=key == MODES[0][0])
+                    yield Static("", id="mode-caption", markup=False)
+                    yield Static("", id="mode-reason", markup=False)
+            with SectionCard(title="Seed-файлы", id="seed-frame"):
+                yield Static("", id="seed-note", markup=False)
+                yield CheckList(id="seed-files")
+                with Horizontal(classes="actions"):
+                    yield self._seed_all
+                    yield self._seed_none
+                yield ReasonNote(self._seed_reasons, id="seed-reason")
+            with Grid(classes="pair", id="update-row-b"):
+                with SectionCard(
+                    title="Что изменится в управляемых файлах",
+                    note="из harness diff",
+                    id="drift-frame",
+                ):
+                    yield Static("", id="update-drift", markup=False)
+                    with Horizontal(classes="actions"):
+                        yield self._recheck
+                    yield ReasonNote(self._drift_reasons, id="drift-reason")
+                with SectionCard(title="План", id="plan-frame"):
+                    yield Static("", id="update-plan", markup=False)
+                    yield Static("", id="update-warning", markup=False)
+                    yield Static("", id="update-confirm", markup=False)
+                    with Horizontal(classes="actions"):
+                        yield self._run_button
+                        yield self._recheck_narrow
+                    yield ReasonNote(self._plan_reasons, id="plan-reason")
             with Fold(
                 title="Diff — что изменится в файлах",
                 collapsed=narrow,

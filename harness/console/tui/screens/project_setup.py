@@ -14,7 +14,7 @@ from rich.text import Text
 from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.content import Content, ContentText
 from textual.geometry import Size
 from textual.message import Message
@@ -22,6 +22,8 @@ from textual.widgets import (
     Button,
     DirectoryTree,
     Input,
+    ListItem,
+    ListView,
     RadioButton,
     RadioSet,
     Static,
@@ -29,6 +31,7 @@ from textual.widgets import (
 
 from ...kernel import brand, i18n
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
+from ..widgets import KpiGrid
 from ...kernel.status import Status
 from ...kernel import data
 from ....health.model import Report
@@ -43,6 +46,8 @@ from ...kernel.project_target import (
     installation_blockers,
     installation_entry,
 )
+from ...kernel.home_snapshot import HomeSnapshot
+from ...kernel.open_project_snapshot import Candidate, OpenProjectFacts
 from ...kernel.runner import CommandRunner
 from ..client import ConsoleClientError, ScreenClient
 from ..server_api import serves, setup_runner
@@ -210,18 +215,23 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     ProjectSetupScreen #setup-title { height: 1; text-style: bold; }
     ProjectSetupScreen #setup-subtitle { height: auto; color: $text-muted; }
     ProjectSetupScreen #setup-stage { height: auto; border: round $border-subtle; background: transparent; padding: 0 1; }
-    ProjectSetupScreen #setup-columns { width: 100%; height: auto; layout: vertical; }
-    ProjectSetupScreen.-spacious #setup-columns { layout: horizontal; }
-    ProjectSetupScreen #setup-left, ProjectSetupScreen #setup-right { width: 1fr; height: auto; }
-    ProjectSetupScreen.-spacious #setup-left { margin-right: 1; }
+    ProjectSetupScreen #hub-current, ProjectSetupScreen #hub-row { margin-bottom: 1; }
+    ProjectSetupScreen #hub-name { height: auto; margin-bottom: 1; }
+    ProjectSetupScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    ProjectSetupScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
+    ProjectSetupScreen .pair > .section-card { height: 100%; }
+    ProjectSetupScreen #hub-list { height: auto; max-height: 12; border: none; padding: 0; background: transparent; }
+    ProjectSetupScreen #hub-list > ListItem { height: auto; padding: 0 1; border-left: solid transparent; border-bottom: solid $border-subtle; }
+    ProjectSetupScreen #hub-list > ListItem.-highlight, ProjectSetupScreen #hub-list:focus > ListItem.-highlight { background: $selection-background; color: $selection-foreground; border-left: solid $selection-edge; }
+    ProjectSetupScreen #hub-command { height: auto; border: round $border-subtle; padding: 0 1; margin: 1 0; }
     ProjectSetupScreen Static { height: auto; }
     ProjectSetupScreen .field-label, ProjectSetupScreen .hint { color: $text-muted; }
     ProjectSetupScreen .actions { height: auto; align-vertical: middle; }
     ProjectSetupScreen .actions Button { margin-right: 1; }
     ProjectSetupScreen Button:disabled { border: dashed $border-subtle; text-opacity: 45%; }
     ProjectSetupScreen #activate-project { color: $primary; border: round $primary; }
-    ProjectSetupScreen #install-project { background: $primary; color: $background; border: round $primary; text-style: bold; }
-    ProjectSetupScreen #activate-project:disabled, ProjectSetupScreen #install-project:disabled { background: $surface; color: $text-muted; border: dashed $border-subtle; }
+    ProjectSetupScreen #install-project { background: transparent; color: $primary; border: round $primary; }
+    ProjectSetupScreen #activate-project:disabled, ProjectSetupScreen #install-project:disabled { background: transparent; color: $text-muted; border: dashed $border-subtle; }
     ProjectSetupScreen #project-path { width: 1fr; }
     ProjectSetupScreen #target-status { margin-top: 1; }
     ProjectSetupScreen #browser-panel { height: auto; margin-top: 1; }
@@ -266,6 +276,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         self.stage = 0
         self.options = _options_by_default()
         self._capability_value = ""
+        self._candidates: tuple[Candidate, ...] = ()
         # What `#target-status` shows: (kind, text, emphasised part of the first line).
         self._target_status: tuple[str, str, str] = ("not_started", _TARGET_HINT, "")
         # The plan whose blockers are being read; an older plan's result is dropped.
@@ -553,12 +564,9 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
             ),
             (self.query_one("#output-frame", Fold), "Результат", "последняя операция"),
         ):
-            fold.border_title = (
-                ""
-                if narrow
-                else brand.section_title(
-                    i18n.tr(self._language(), title), self._t(note)
-                )
+            fold.set_card_head(
+                "" if narrow else i18n.tr(self._language(), title),
+                "" if narrow else self._t(note),
             )
             if switched:
                 fold.collapsed = narrow
@@ -593,78 +601,208 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
                 classes="wide-only",
             )
             yield _Stepper(id="setup-stage")
-            with Horizontal(id="setup-columns"):
-                with Vertical(id="setup-left"):
-                    with SectionCard(title="Проект", id="project-frame"):
-                        yield Static(
-                            "Путь к локальному Git-проекту", classes="field-label"
+            with SectionCard(title="Текущий проект", id="hub-current"):
+                yield Static("", id="hub-name", classes="no-i18n", markup=False)
+                yield KpiGrid([], id="hub-tiles")
+            with Grid(classes="pair", id="hub-row"):
+                with SectionCard(title="Проекты", id="hub-projects"):
+                    yield ListView(id="hub-list")
+                with SectionCard(title="Детали проекта", id="hub-details"):
+                    yield Static("", id="hub-detail", classes="no-i18n", markup=False)
+                    yield Static(
+                        "", id="hub-command", classes="well no-i18n", markup=False
+                    )
+                    yield Button("Копировать команду", id="hub-copy", compact=True)
+            with Grid(classes="pair", id="setup-row-a"):
+                with SectionCard(title="Путь к другому проекту", id="project-frame"):
+                    yield Static(
+                        "Путь к локальному Git-проекту", classes="field-label"
+                    )
+                    yield Input(
+                        value=str(self.repo),
+                        placeholder="Путь к локальному Git-проекту",
+                        id="project-path",
+                    )
+                    with Horizontal(classes="actions"):
+                        yield Button("Обзор папок", id="browse-project")
+                        yield Button("Проверить путь", id="inspect-project")
+                        yield Button(
+                            "Открыть проект →", id="activate-project", disabled=True
                         )
-                        yield Input(
-                            value=str(self.repo),
-                            placeholder="Путь к локальному Git-проекту",
-                            id="project-path",
-                        )
-                        with Horizontal(classes="actions"):
-                            yield Button("Обзор папок", id="browse-project")
-                            yield Button("Проверить путь", id="inspect-project")
-                            yield Button(
-                                "Открыть проект →", id="activate-project", disabled=True
+                    yield Static(
+                        "", id="target-status", classes="no-i18n", markup=False
+                    )
+                with Fold(
+                    title="Состав Harness", id="capability-frame", collapsed=narrow
+                ):
+                    with RadioSet(id="capability"):
+                        for name, _ in self.options:
+                            yield _OptionButton(
+                                name, value=name == DEFAULT_CAPABILITY
                             )
-                        yield Static(
-                            "", id="target-status", classes="no-i18n", markup=False
+                    yield Static(
+                        "", id="capability-detail", classes="no-i18n", markup=False
+                    )
+            with Grid(classes="pair", id="setup-row-b"):
+                with SectionCard(title="Проверки", id="checks-frame"):
+                    with Horizontal(classes="actions"):
+                        yield Button("Офлайн", id="setup-offline", disabled=True)
+                        yield Button("Онлайн", id="setup-online", disabled=True)
+                        yield Button("Исправить", id="setup-fix", disabled=True)
+                        yield Button("Настройка", id="setup-config", disabled=True)
+                    yield Static(
+                        "", id="checks-summary", classes="no-i18n", markup=False
+                    )
+                    yield Static(
+                        "Онлайн — отдельная проверка GitHub/GitLab и прав доступа. "
+                        "Проверки песочницы анализируют настройки; фактические доступы "
+                        "могут остаться непроверенными.",
+                        classes="hint wide-only",
+                    )
+                with SectionCard(title="План установки", id="plan-frame"):
+                    yield Static(
+                        "", id="installation-plan", classes="no-i18n", markup=False
+                    )
+                    yield Static(
+                        "Команда",
+                        id="plan-command-label",
+                        classes="field-label no-i18n",
+                    )
+                    yield Static(
+                        "", id="plan-command", classes="no-i18n", markup=False
+                    )
+                    yield Static(
+                        "", id="plan-hint", classes="no-i18n", markup=False
+                    )
+                    with Horizontal(classes="actions"):
+                        yield Button(
+                            "Установить", id="install-project", disabled=True
                         )
-                    with Fold(
-                        title="Состав Harness", id="capability-frame", collapsed=narrow
-                    ):
-                        with RadioSet(id="capability"):
-                            for name, _ in self.options:
-                                yield _OptionButton(
-                                    name, value=name == DEFAULT_CAPABILITY
-                                )
-                        yield Static(
-                            "", id="capability-detail", classes="no-i18n", markup=False
-                        )
-                with Vertical(id="setup-right"):
-                    with SectionCard(title="План установки", id="plan-frame"):
-                        yield Static(
-                            "", id="installation-plan", classes="no-i18n", markup=False
-                        )
-                        yield Static(
-                            "Команда",
-                            id="plan-command-label",
-                            classes="field-label no-i18n",
-                        )
-                        yield Static(
-                            "", id="plan-command", classes="no-i18n", markup=False
-                        )
-                        yield Static(
-                            "", id="plan-hint", classes="no-i18n", markup=False
-                        )
-                        with Horizontal(classes="actions"):
-                            yield Button(
-                                "Установить", id="install-project", disabled=True
-                            )
-                            yield Static("Потребуется подтверждение", id="install-note")
-                    with SectionCard(title="Проверки", id="checks-frame"):
-                        with Horizontal(classes="actions"):
-                            yield Button("Офлайн", id="setup-offline", disabled=True)
-                            yield Button("Онлайн", id="setup-online", disabled=True)
-                            yield Button("Исправить", id="setup-fix", disabled=True)
-                            yield Button("Настройка", id="setup-config", disabled=True)
-                        yield Static(
-                            "", id="checks-summary", classes="no-i18n", markup=False
-                        )
-                        yield Static(
-                            "Онлайн — отдельная проверка GitHub/GitLab и прав доступа. "
-                            "Проверки песочницы анализируют настройки; фактические доступы "
-                            "могут остаться непроверенными.",
-                            classes="hint wide-only",
-                        )
+                        yield Static("Потребуется подтверждение", id="install-note")
             with Fold(title="Результат", id="output-frame", collapsed=narrow):
                 with VerticalScroll(id="setup-output-scroll"):
                     yield Static("", id="setup-output", classes="no-i18n", markup=False)
 
+    # -- the project hub: the current project, the candidates and the command that opens one ----
+
+    def _load_hub(self) -> None:
+        """The served project's facts and the candidate projects from the console server, read in
+        a worker; without a server the hub stays empty."""
+        client = self._client
+        if client is None:
+            return
+
+        def work() -> None:
+            try:
+                facts = client.open_project()
+                home = client.home()
+            except ConsoleClientError:
+                return
+            call_from_worker(self, lambda: self._hub_loaded(facts, home))
+
+        self.run_worker(work, thread=True, group="hub", exclusive=True)
+
+    def _hub_loaded(self, facts: OpenProjectFacts, home: HomeSnapshot) -> None:
+        self._candidates = facts.candidates
+        language = getattr(self.app, "language", "ru")
+        name = Path(facts.repo).name or facts.repo
+        text = Text()
+        text.append(name + "\n", style=f"bold {brand.PALETTE['foreground']}")
+        text.append(facts.repo, style=brand.PALETTE["muted"])
+        self.query_one("#hub-name", Static).update(text)
+        health = home.health
+        total = health.ok + health.warn + health.fail + health.skipped
+        icons = brand.STATUS_ICONS
+        tiles = [
+            (i18n.tr(language, "Harness"), home.harness_version or "—", "", ""),
+            (
+                i18n.tr(language, "Дрейф"),
+                i18n.tr(language, "нет") if home.drift == "clean" else f"{icons['warn']} {home.drift}",
+                "",
+                "" if home.drift == "clean" else "warning",
+            ),
+            (
+                i18n.tr(language, "Проверки"),
+                f"{health.ok}/{total}",
+                f"{icons['fail']} {health.fail}  {icons['warn']} {health.warn}",
+                "error" if health.fail else "",
+            ),
+            (
+                i18n.tr(language, "Батчи в работе"),
+                "—" if home.active_batches is None else str(home.active_batches),
+                "",
+                "",
+            ),
+        ]
+        grid = self.query_one("#hub-tiles", KpiGrid)
+        self.call_later(grid.set_tiles, tiles)
+        listing = self.query_one("#hub-list", ListView)
+        listing.clear()
+        listing.extend(
+            ListItem(Static(self._candidate_row(item, language), classes="no-i18n"), name=str(index))
+            for index, item in enumerate(facts.candidates)
+        )
+        self.query_one("#hub-projects", SectionCard).set_note(str(len(facts.candidates)))
+        current = next((i for i, item in enumerate(facts.candidates) if item.current), 0)
+        self.query_one("#hub-details").display = bool(facts.candidates)
+        if facts.candidates:
+            listing.index = current
+            self._show_candidate(facts.candidates[current])
+        else:
+            listing.append(
+                ListItem(
+                    Static(i18n.tr(language, "Проектов для открытия не найдено"), classes="no-i18n"),
+                    disabled=True,
+                )
+            )
+
+    @staticmethod
+    def _candidate_row(item: Candidate, language: str) -> Text:
+        """`name  path` and the open / installed marks, as the Web list shows them."""
+        icons = brand.STATUS_ICONS
+        text = Text(no_wrap=True, overflow="ellipsis")
+        text.append(Path(item.path).name or item.path, style=f"bold {brand.PALETTE['foreground']}")
+        mark = i18n.tr(language, "Открыт") if item.current else i18n.tr(language, "Не открыт")
+        text.append(f"  {mark}", style=brand.PALETTE["success"] if item.current else brand.PALETTE["muted"])
+        text.append("\n" + item.path, style=brand.PALETTE["muted"])
+        text.append(
+            f"\n{icons['ok'] if item.installed else icons['skipped']} "
+            + i18n.tr(language, "Harness установлен" if item.installed else "Harness не установлен"),
+            style=brand.PALETTE["muted"],
+        )
+        return text
+
+    def _show_candidate(self, item: Candidate) -> None:
+        language = getattr(self.app, "language", "ru")
+        detail = Text()
+        detail.append((Path(item.path).name or item.path) + "\n", style=f"bold {brand.PALETTE['foreground']}")
+        detail.append(item.path + "\n", style=brand.PALETTE["muted"])
+        icons = brand.STATUS_ICONS
+        detail.append(
+            f"{icons['ok'] if item.installed else icons['skipped']} "
+            + i18n.tr(language, "Harness установлен" if item.installed else "Harness не установлен")
+        )
+        self.query_one("#hub-detail", Static).update(detail)
+        self.query_one("#hub-command", Static).update(item.command)
+        self.query_one("#hub-copy", Button).disabled = item.current
+
+    @on(ListView.Highlighted, "#hub-list")
+    def _hub_highlighted(self, event: ListView.Highlighted) -> None:
+        event.stop()
+        name = event.item.name if event.item is not None else None
+        if name is not None and name.isdigit() and int(name) < len(self._candidates):
+            self._show_candidate(self._candidates[int(name)])
+
+    @on(Button.Pressed, "#hub-copy")
+    def _hub_copy(self, event: Button.Pressed) -> None:
+        event.stop()
+        command = str(self.query_one("#hub-command", Static).content)
+        if command:
+            self.app.copy_to_clipboard(command)
+            self.app.notify("Команда скопирована")
+
     def on_mount(self) -> None:
+        self._load_hub()
         self._layout(self.app.size.width < brand.NARROW_WIDTH)
         self._set_stage(0)
         self._paint()
@@ -829,8 +967,8 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     def _relayout(self) -> None:
         for identifier in (
             "project-frame",
-            "setup-left",
-            "setup-columns",
+            "setup-row-a",
+            "setup-row-b",
             "setup-scroll",
         ):
             self.query_one("#" + identifier).refresh(layout=True)

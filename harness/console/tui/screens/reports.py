@@ -11,8 +11,10 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from rich.console import Group
+from rich.table import Table
 from rich.text import Text
-from textual import events
+from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -22,7 +24,9 @@ from textual.widgets import Button, Input, ListItem, ListView, Select, Static
 from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard, WrappedValue
 from ...kernel.status import Status
 from ..translate import translate_bindings
-from ..widgets import OpenableList, ScrollingView
+from ..stats import reports_kpi_tiles
+from ..widgets import KpiGrid, OpenableList, ScrollingView
+from ...kernel.pipeline_kpi import reports_kpi_from_payload
 from ...kernel import reports as console_reports
 from ...kernel.reports import BatchTimeline, LedgerView, ReportEntry, StageEntry
 from ...kernel import brand
@@ -179,12 +183,15 @@ class ReportsScreen(ConsoleShell):
     ReportsScreen.-wide #report-filter-fold > Contents, ReportsScreen.-spacious #report-filter-fold > Contents { padding: 0; }
     ReportsScreen #report-filters { height: 1; }
     ReportsScreen #report-filters Input { width: 1fr; height: 1; margin-right: 1; border: none; padding: 0 1; background: transparent; }
-    ReportsScreen #report-filters Input:focus { border: none; background: $row-highlight; }
+    ReportsScreen #report-filters Input:focus { border: none; background: transparent; text-style: bold; }
     ReportsScreen #report-order { height: 1; margin-top: 1; }
     ReportsScreen #report-order Select { width: 1fr; margin-right: 1; }
     ReportsScreen #report-order Select > SelectCurrent { border: none; height: 1; padding: 0 1; background: transparent; }
+    ReportsScreen #reports-kpi-card { margin-bottom: 1; }
     ReportsScreen #reports-body { height: 1fr; min-height: 10; }
     ReportsScreen #report-panel { width: 1fr; height: 100%; margin-bottom: 1; }
+    ReportsScreen #report-detail-card { width: 44; height: 100%; margin: 0 0 1 1; }
+    ReportsScreen.-narrow #report-detail-card { display: none; }
     ReportsScreen .card-hint { height: 1; color: $text-muted; }
     ReportsScreen .report-list { height: 1fr; margin: 0; padding: 0; border: none; background: transparent; }
     ReportsScreen .report-list:focus { border: none; }
@@ -305,6 +312,8 @@ class ReportsScreen(ConsoleShell):
                         id="sort-direction",
                         compact=True,
                     )
+            with SectionCard(title="Показатели", id="reports-kpi-card"):
+                yield KpiGrid(self._kpi_tiles(), id="reports-kpi")
             with Horizontal(id="reports-body"):
                 with SectionCard(
                     title="Стадии и отчёты",
@@ -323,6 +332,8 @@ class ReportsScreen(ConsoleShell):
                         classes="no-i18n",
                         markup=False,
                     )
+                with SectionCard(title="Детали отчёта", id="report-detail-card"):
+                    yield Static("", id="report-detail", classes="no-i18n", markup=False)
             with Fold(
                 title="Батчи",
                 summary=self._batches_summary(),
@@ -477,6 +488,47 @@ class ReportsScreen(ConsoleShell):
             items.append(item)
         return items
 
+    def _show_detail(self, entry: StageEntry | None) -> None:
+        """The head facts of the highlighted stage beside the list; the whole report opens on Enter."""
+        language = self._language()
+        table = Table.grid(expand=True, padding=(0, 2))
+        table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
+        table.add_column(ratio=1, overflow="fold")
+        if entry is not None:
+            outcome = (
+                entry.report.outcome
+                if entry.report
+                else i18n.tr(language, "отчёт ещё не получен")
+            )
+            for label, value in (
+                ("Тикет", entry.ticket),
+                ("Роль", entry.role),
+                ("Состояние", entry.state),
+                ("Итог", outcome),
+                ("Время", entry.at or i18n.tr(language, "время неизвестно")),
+                ("Batch", entry.batch_id),
+                ("Dispatch", entry.dispatch_id),
+            ):
+                table.add_row(i18n.tr(language, label), value)
+        detail = self.query_one("#report-detail", Static)
+        detail.update(
+            Group(
+                table,
+                Text(
+                    "\n" + i18n.tr(language, "Enter — отчёт целиком: итог, evidence, выводы"),
+                    style=brand.PALETTE["muted"],
+                ),
+            )
+            if entry is not None
+            else ""
+        )
+
+    @on(ListView.Highlighted, "#report-list")
+    def _stage_highlighted(self, event: ListView.Highlighted) -> None:
+        event.stop()
+        name = event.item.name if event.item is not None else None
+        self._show_detail(next((e for e in self.shown if e.dispatch_id == name), None))
+
     async def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id in {widget_id for widget_id, _, _ in _FILTERS}:
             await self._apply_filters()
@@ -497,6 +549,7 @@ class ReportsScreen(ConsoleShell):
             descending=self.query_one("#sort-direction", Select).value == "desc",
         )
         self.query_one("#reports-status", Static).update(self._status())
+        self._show_detail(self.shown[0] if self.shown else None)
         self.query_one("#report-panel", SectionCard).set_note(str(len(self.shown)))
         self.query_one("#report-filter-fold", Fold).set_summary(self._filters_summary())
         self.query_one("#batch-fold", Fold).set_summary(self._batches_summary())
@@ -531,8 +584,22 @@ class ReportsScreen(ConsoleShell):
 
         self.run_worker(read, thread=True, group="reports-refresh", exclusive=True)
 
+    def _kpi_tiles(self) -> list[tuple[str, str, str, str]]:
+        """The KPI tiles of the snapshot's server-computed figures; none when it carries none."""
+        if self.view.reports_kpi is None:
+            return []
+        return reports_kpi_tiles(
+            reports_kpi_from_payload(self.view.reports_kpi), self._language()
+        )
+
+    async def _paint_kpi(self) -> None:
+        tiles = self._kpi_tiles()
+        self.query_one("#reports-kpi-card").display = bool(tiles)
+        await self.query_one("#reports-kpi", KpiGrid).set_tiles(tiles)
+
     async def _refreshed(self, view: LedgerView, error: str) -> None:
         self.view = view
+        await self._paint_kpi()
         self.refresh_error = error
         self.refreshing = False
         self.query_one("#refresh-reports", Button).disabled = False

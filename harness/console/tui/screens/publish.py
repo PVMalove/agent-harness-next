@@ -63,7 +63,8 @@ class PublishScreen(ConsoleShell):
     PublishScreen #publish-batches { height: 1fr; border: none; background: transparent; }
     PublishScreen #publish-batches > ListItem { height: auto; padding: 0 1; border-left: solid transparent; }
     PublishScreen #publish-batches > ListItem.-highlight, PublishScreen #publish-batches:focus > ListItem.-highlight { background: $row-highlight; color: $foreground; border-left: solid $selection-edge; }
-    PublishScreen #publish-detail { height: 1fr; }
+    PublishScreen #publish-right { width: 1fr; height: 1fr; }
+    PublishScreen #publish-right > .section-card { margin-bottom: 1; }
     PublishScreen #publish-detail-title { height: auto; text-style: bold; color: $foreground; }
     PublishScreen #publish-detail-meta { height: auto; color: $text-muted; }
     PublishScreen #publish-detail-body { height: auto; }
@@ -71,7 +72,8 @@ class PublishScreen(ConsoleShell):
     PublishScreen #publish-actions Button { margin-right: 1; border: round $component-border; }
     PublishScreen #publish-actions Button:hover, PublishScreen #publish-actions Button:focus { border: round $primary; color: $primary; }
     PublishScreen.-narrow #publish-body { layout: vertical; }
-    PublishScreen.-narrow #publish-list-panel { width: 100%; height: 10; margin-right: 0; }
+    PublishScreen.-narrow #publish-list-panel { width: 100%; height: 10; margin-right: 0; margin-bottom: 1; }
+    PublishScreen.-narrow #publish-right { width: 100%; height: auto; }
     """)
 
     def __init__(self, repo: Path, client: ScreenClient) -> None:
@@ -97,11 +99,14 @@ class PublishScreen(ConsoleShell):
             with Horizontal(id="publish-body"):
                 with SectionCard(title="Пакеты", id="publish-list-panel"):
                     yield ListView(id="publish-batches")
-                with SectionCard(title="Preflight", id="publish-detail"):
-                    with VerticalScroll():
+                with VerticalScroll(id="publish-right"):
+                    with SectionCard(title="Release candidate", id="publish-candidate"):
                         yield Static("", id="publish-detail-title", markup=False)
                         yield Static("", id="publish-detail-meta", markup=False)
+                    with SectionCard(title="Preflight", id="publish-detail"):
                         yield Static("", id="publish-detail-body", markup=False)
+                    with SectionCard(title="Решение человека", id="publish-decision"):
+                        yield Static("", id="publish-gate", markup=False)
                         with Horizontal(id="publish-actions"):
                             yield Button(
                                 "Копировать PR", id="publish-copy", compact=True
@@ -211,8 +216,30 @@ class PublishScreen(ConsoleShell):
         ]
         self.query_one("#publish-detail-meta", Static).update("\n".join(meta))
 
+        passed = sum(ok for _, ok in checks)
+        self.query_one("#publish-detail", SectionCard).set_note(
+            f"{passed} / {len(checks)}"
+        )
+        gate = Text()
+        missing = [label for label, ok in checks if not ok]
+        if missing:
+            gate.append(
+                f"{brand.STATUS_ICONS['fail']} Release Gate: заблокирован — нет "
+                + ", ".join(missing)
+                + "\n",
+                style=brand.STATUS_COLORS["fail"],
+            )
+        else:
+            gate.append(
+                f"{brand.STATUS_ICONS['ok']} Release Gate: проверки пройдены\n",
+                style=brand.STATUS_COLORS["ok"],
+            )
+        gate.append(
+            "TUI не открывает PR и не выполняет merge: решение остаётся человеку.",
+            style=brand.PALETTE["muted"],
+        )
+        self.query_one("#publish-gate", Static).update(gate)
         body = Text()
-        body.append("Preflight\n", style=f"bold {brand.PALETTE['primary']}")
         for label, ok in checks:
             icon = brand.STATUS_ICONS["ok"] if ok else brand.STATUS_ICONS["warn"]
             color = brand.STATUS_COLORS["ok"] if ok else brand.STATUS_COLORS["warn"]
@@ -227,13 +254,15 @@ class PublishScreen(ConsoleShell):
             body.append(
                 str(qa.report.outcome) + "\n", style=brand.PALETTE["foreground"]
             )
-        body.append(
-            "\nTUI не открывает PR и не выполняет merge.\n",
-            style=brand.PALETTE["muted"],
-        )
         self.query_one("#publish-detail-body", Static).update(body)
         button = self.query_one("#publish-copy", Button)
         button.disabled = not bool(batch.pr_url)
+
+    @on(ListView.Highlighted, "#publish-batches")
+    def _batch_highlighted(self, event: ListView.Highlighted) -> None:
+        event.stop()
+        if event.item is not None and event.item.name:
+            self._select(event.item.name)
 
     @on(ListView.Selected, "#publish-batches")
     def _batch_selected(self, event: ListView.Selected) -> None:

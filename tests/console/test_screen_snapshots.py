@@ -16,6 +16,7 @@ from harness.console.backend.domain.snapshots import PAGE_BYTES, TextPages
 from harness.console.kernel.batch_history import History
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult
+from harness.console.kernel.pipeline_kpi import pipeline_kpi_from_payload
 from harness.console.kernel.protocol import MESSAGE_LIMIT
 from harness.console.kernel.reports import (
     LedgerView,
@@ -145,6 +146,8 @@ def test_the_orchestration_snapshot_and_the_lock_poll() -> None:
     assert isinstance(payload, dict)
     assert payload["lock"] == {"lock": {"locked": False}, "error": None}
     assert ledger_from_payload(payload["ledger"]).batches[0].batch_id == "b-1"
+    kpi = pipeline_kpi_from_payload(payload["kpi"])
+    assert kpi.wip + kpi.failed + kpi.blocked >= 0 and kpi.qa_tickets >= 0
     facts.lock_error = OSError("занят")
     reply = _ask(screens, type="orchestration.lock")
     assert reply["ok"] is True and reply["lock"] is None and reply["error"] == "занят"

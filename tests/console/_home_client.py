@@ -26,6 +26,13 @@ from harness.console.kernel.home_snapshot import (
 from harness.console.kernel.help_text import HelpSections, help_sections
 from harness.console.kernel.maintenance import MaintenanceView
 from harness.console.kernel.open_project_snapshot import OpenProjectFacts
+from harness.console.kernel.pipeline_kpi import (
+    pipeline_analytics,
+    pipeline_analytics_from_payload,
+    pipeline_kpi,
+    pipeline_kpi_from_payload,
+    reports_kpi,
+)
 from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
 from harness.console.kernel.task_board import BoardSnapshot, BoardSpec, BoardSpecs
@@ -120,7 +127,8 @@ class FakeHomeClient:
     def reports(self, *, force: bool = False, online: bool = False) -> ledger.LedgerView:
         self.screen_requests.append(("reports", force, online))
         view = self._load_ledger(self.repo)
-        return ledger.ledger_from_payload(_wire(ledger.ledger_payload(view)))
+        payload = {**ledger.ledger_payload(view), "reports_kpi": reports_kpi(view).to_payload()}
+        return ledger.ledger_from_payload(_wire(payload))
 
     def report(self, dispatch_id: str) -> JsonObject | None:
         self.screen_requests.append(("report", dispatch_id))
@@ -139,9 +147,13 @@ class FakeHomeClient:
 
     def orchestration(self, *, force: bool = False) -> OrchestrationView:
         view = self.reports(force=force)
+        kpi = pipeline_kpi_from_payload(pipeline_kpi(view).to_payload())
+        analytics = pipeline_analytics_from_payload(
+            pipeline_analytics(view).to_payload()
+        )
         if isinstance(self.lock, str):
-            return OrchestrationView(view, None, self.lock)
-        return OrchestrationView(view, self.lock, None)
+            return OrchestrationView(view, None, self.lock, kpi, analytics)
+        return OrchestrationView(view, self.lock, None, kpi, analytics)
 
     def ledger_lock(self) -> JsonObject:
         self.screen_requests.append(("lock",))
