@@ -397,3 +397,50 @@ def test_a_changed_backup_prevents_resuming_an_interrupted_repair(
         assert (state / "IMPORT_APPROVAL_REPAIR.json").is_file()
     finally:
         store.stop_runtime()
+
+
+def test_an_interrupted_repair_cannot_change_other_authority_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = Store(tmp_path)
+    try:
+        _old_format(store)
+        monkeypatch.setenv("HARNESS_RUNTIME_TEST_FAIL_AT", "approval-installed")
+        assert _repair(store, approved=True).returncode == 3
+        monkeypatch.delenv("HARNESS_RUNTIME_TEST_FAIL_AT")
+        state = store.repo / STATE_REL
+        intent_path = state / "IMPORT_APPROVAL_REPAIR.json"
+        intent = json.loads(intent_path.read_text())
+        desired = json.loads(intent["after_marker"])
+        desired["snapshot"] = "a-different-snapshot"
+        intent["after_marker"] = _canonical(desired)
+        intent_path.write_text(_canonical(intent))
+        marker = (state / "AUTHORITY.json").read_bytes()
+
+        refused = _repair(store, approved=True)
+
+        assert refused.returncode == 4, refused.stderr
+        assert (state / "AUTHORITY.json").read_bytes() == marker
+        assert intent_path.exists()
+    finally:
+        store.stop_runtime()
+
+
+def test_serve_restores_wal_after_a_repair_stopped_before_its_intent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = Store(tmp_path)
+    try:
+        _old_format(store)
+        monkeypatch.setenv("HARNESS_RUNTIME_TEST_FAIL_AT", "approval-backup")
+        assert _repair(store, approved=True).returncode == 3
+        monkeypatch.delenv("HARNESS_RUNTIME_TEST_FAIL_AT")
+
+        store.restart_runtime()
+
+        with closing(sqlite3.connect(store.database)) as connection:
+            assert connection.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+    finally:
+        store.stop_runtime()

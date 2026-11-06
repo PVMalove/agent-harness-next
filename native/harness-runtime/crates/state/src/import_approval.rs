@@ -7,7 +7,7 @@ use crate::error::{Error, Result};
 use crate::validate;
 use crate::{audit, hooks, platform, schema};
 use contracts::ErrorCode;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -323,6 +323,16 @@ fn finish(state: &Path, approval: &Approval) -> Result<Value> {
     let marker_path = state.join(authority::AUTHORITY_NAME);
     let current_marker = fs::read(&marker_path)?;
     let old_marker = fs::read(directory.join(authority::AUTHORITY_NAME))?;
+    let mut expected: Value =
+        serde_json::from_slice(&old_marker).map_err(|err| Error::invariant(err.to_string()))?;
+    for (key, value) in fields(approval) {
+        expected[key] = Value::String(value.to_owned());
+    }
+    if canonical_json(&expected) != marker {
+        return Err(Error::invariant(
+            "repair intent changes authority outside the approved fields",
+        ));
+    }
     let current_sha = file_sha(&state.join(STORE_NAME))?;
     if current_sha == field(&intent, "before_sha256")? {
         if current_marker != old_marker
@@ -332,6 +342,12 @@ fn finish(state: &Path, approval: &Approval) -> Result<Value> {
                 "the prepared repair or its authority changed",
             ));
         }
+        verify_candidate(
+            &directory.join("prepared.db"),
+            &directory,
+            &intent,
+            approval,
+        )?;
         hooks::reach("approval-install")?;
         fs::rename(directory.join("prepared.db"), state.join(STORE_NAME))?;
         platform::sync_dir(state)?;
@@ -339,6 +355,8 @@ fn finish(state: &Path, approval: &Approval) -> Result<Value> {
         return Err(Error::invariant(
             "the store is neither the original nor the prepared repair",
         ));
+    } else {
+        verify_candidate(&state.join(STORE_NAME), &directory, &intent, approval)?;
     }
     if current_marker != old_marker && current_marker != marker.as_bytes() {
         return Err(Error::invariant(
@@ -354,6 +372,65 @@ fn finish(state: &Path, approval: &Approval) -> Result<Value> {
         "repaired": true, "already_repaired": false,
         "store_id": field(&intent, "store_id")?, "backup": backup
     }))
+}
+
+/// Bind the resume intent to the checked candidate's immutable audit evidence.
+fn verify_candidate(path: &Path, backup: &Path, intent: &Value, approval: &Approval) -> Result<()> {
+    let candidate = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    candidate.execute_batch("PRAGMA query_only=ON; BEGIN;")?;
+    let (_, mut expected) =
+        authority::read(backup)?.ok_or_else(|| Error::invariant("backup has no authority"))?;
+    expected.approval = approval.clone();
+    validate::check_content(&candidate, &expected).map_err(broken)?;
+    let anchor = validate::anchor_details(&candidate).map_err(broken)?;
+    for (key, value) in fields(approval) {
+        if anchor[key].as_str() != Some(value) {
+            return Err(Error::invariant(
+                "the prepared anchor approval differs from the intent",
+            ));
+        }
+    }
+    let raw: Option<String> = candidate
+        .query_row(
+            "SELECT details_json FROM audit WHERE seq=(SELECT MAX(seq) FROM audit)
+            AND action='import-approval-repair'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let proof: Value = raw
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .ok_or_else(|| Error::invariant("the candidate has no final repair audit record"))?;
+    for (key, wanted) in [
+        ("store_id", field(intent, "store_id")?.to_owned()),
+        ("backup", field(intent, "backup")?.to_owned()),
+        ("backup_sha256", field(intent, "before_sha256")?.to_owned()),
+        (
+            "before_authority_sha256",
+            field(intent, "marker_sha256")?.to_owned(),
+        ),
+        (
+            "after_authority_sha256",
+            sha256_hex(field(intent, "after_marker")?.as_bytes()),
+        ),
+    ] {
+        if proof[key].as_str() != Some(wanted.as_str()) {
+            return Err(Error::invariant(format!(
+                "repair audit and intent differ at {key}"
+            )));
+        }
+    }
+    for (key, value) in fields(approval) {
+        if proof[key].as_str() != Some(value) {
+            return Err(Error::invariant(
+                "the repair audit names another human approval",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Missing fields, rather than explicitly empty or malformed approval, identify the old format.
