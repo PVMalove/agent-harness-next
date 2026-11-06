@@ -350,6 +350,9 @@
     "**/*_test.py"
   ],
   "tool_policy": {
+    "roles": {
+      "developer": ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "Agent(test-author)"]
+    },
     "modes": {
       "read-only": [
         "Read",

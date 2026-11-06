@@ -41,6 +41,7 @@ from scripts.clean_room.support import (
     run_step,
 )
 from scripts.clean_room.test_author_cycle import Execute, verify_cycle
+from harness.storage import storage_path
 
 TEST_MODULE = "tests.test_runner_cases"
 BENIGN = f"{TEST_MODULE}.Benign.test_add"
@@ -223,10 +224,11 @@ def _direct_execute(project: Path) -> Execute:
     return execute
 
 
-def _install(project: Path) -> Path:
+def _install(project: Path, *, existing_checkout: bool = False) -> Path:
     """A fresh engineering-suite project with src/, unittest tests and the runner settings."""
-    project.mkdir(parents=True)
-    run_step(["git", "init", "-q"], cwd=project, check=True)
+    if not existing_checkout:
+        project.mkdir(parents=True)
+        run_step(["git", "init", "-q"], cwd=project, check=True)
     run_ok(
         HARNESS
         + [
@@ -255,7 +257,9 @@ def _install(project: Path) -> Path:
         (project / ".harness" / "project.json").read_text(encoding="utf-8")
     )
     if config.get("test_runner") != {"command": RUNNER_COMMAND}:
-        sys.exit("engineering-suite init did not write the --test-* flags to project.json")
+        sys.exit(
+            "engineering-suite init did not write the --test-* flags to project.json"
+        )
     fill_agents(project)
     _write_project_files(project)
     run_health(project)
@@ -281,7 +285,9 @@ def _check_shipped_files(project: Path) -> None:
     if not (project / ".claude" / "hooks" / "run-test.sh").is_file():
         sys.exit("engineering-suite init did not scaffold run-test.sh")
     if not (project / ".harness" / "health" / "isolated_runner.py").is_file():
-        sys.exit("engineering-suite init did not ship .harness/health/isolated_runner.py")
+        sys.exit(
+            "engineering-suite init did not ship .harness/health/isolated_runner.py"
+        )
     for relative in (
         ".claude/agents/test-author.md",
         ".claude/hooks/test-author-guard.py",
@@ -347,9 +353,7 @@ def _snapshot(project: Path) -> dict[str, str]:
 
 def _run_dir(project: Path, data: dict[str, object]) -> Path:
     """The local artifact directory of one run."""
-    return (
-        project / ".harness" / ".sandboxes" / "runs" / f"isolated-test-{data['run_id']}"
-    )
+    return storage_path(project, "runs", f"isolated-test-{data['run_id']}")
 
 
 def _verify_isolation(project: Path, test_root: Path) -> None:
