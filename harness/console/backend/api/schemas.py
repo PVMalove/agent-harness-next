@@ -145,6 +145,19 @@ class ContainerRouteSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     runtime: OptionalScreenId = ""
 
 
+class TaskBoardSpecsRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["task_board.specs"]
+    force: bool = False
+
+
+class TaskBoardSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["task_board.snapshot"]
+    spec: ScreenId
+    force: bool = False
+
+
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["snapshot.page"]
@@ -169,6 +182,8 @@ ConsoleRequest = Annotated[
     | OrchestrationLockRequest
     | RecoverySnapshotRequest
     | ContainerRouteSnapshotRequest
+    | TaskBoardSpecsRequest
+    | TaskBoardSnapshotRequest
     | SnapshotPageRequest,
     Field(discriminator="type"),
 ]
@@ -264,6 +279,8 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "orchestration.snapshot",
         "recovery.snapshot",
         "container_route.snapshot",
+        "task_board.specs",
+        "task_board.snapshot",
     ]
     ok: Literal[True]
     snapshot_id: int

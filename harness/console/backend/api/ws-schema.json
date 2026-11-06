@@ -59,7 +59,9 @@
           "reports.report": "#/$defs/ReportRequest",
           "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
           "reports.timeline": "#/$defs/TimelineRequest",
-          "snapshot.page": "#/$defs/SnapshotPageRequest"
+          "snapshot.page": "#/$defs/SnapshotPageRequest",
+          "task_board.snapshot": "#/$defs/TaskBoardSnapshotRequest",
+          "task_board.specs": "#/$defs/TaskBoardSpecsRequest"
         },
         "propertyName": "type"
       },
@@ -111,6 +113,12 @@
         },
         {
           "$ref": "#/$defs/ContainerRouteSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/TaskBoardSpecsRequest"
+        },
+        {
+          "$ref": "#/$defs/TaskBoardSnapshotRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"
@@ -1529,7 +1537,9 @@
             "reports.snapshot",
             "orchestration.snapshot",
             "recovery.snapshot",
-            "container_route.snapshot"
+            "container_route.snapshot",
+            "task_board.specs",
+            "task_board.snapshot"
           ],
           "title": "Type",
           "type": "string"
@@ -1654,6 +1664,85 @@
         "offset"
       ],
       "title": "SnapshotPageRequest",
+      "type": "object"
+    },
+    "TaskBoardSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "spec": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Spec",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_board.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "spec"
+      ],
+      "title": "TaskBoardSnapshotRequest",
+      "type": "object"
+    },
+    "TaskBoardSpecsRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "task_board.specs",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "TaskBoardSpecsRequest",
       "type": "object"
     },
     "TimelineRequest": {
