@@ -167,6 +167,16 @@ def _registry_values(field: str) -> tuple[str, ...]:
     return tuple(registry["fields"][field]["values"])
 
 
+def test_a_ticket_diff_stage_is_a_valid_selection() -> None:
+    document = copy.deepcopy(_golden())
+    _stages(document)[0]["selection"] = "ticket-diff"
+
+    parsed = stage_evidence.StageEvidenceDocument.from_json(document)
+
+    assert parsed.stages[0].selection == "ticket-diff"
+    assert "ticket-diff" in _registry_values("verification_plan.selection")
+
+
 def test_the_vocabularies_equal_the_system_fields_registry() -> None:
     assert stage_evidence.RESULTS == _registry_values("report.check_result")
     assert stage_evidence.SELECTIONS == _registry_values("verification_plan.selection")

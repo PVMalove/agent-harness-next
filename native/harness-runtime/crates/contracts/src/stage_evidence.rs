@@ -32,6 +32,8 @@ vocabulary! {
         Focused => "focused",
         #[serde(rename = "failed-only")]
         FailedOnly => "failed-only",
+        #[serde(rename = "ticket-diff")]
+        TicketDiff => "ticket-diff",
     }
 }
 

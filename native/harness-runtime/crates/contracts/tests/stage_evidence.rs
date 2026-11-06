@@ -84,6 +84,18 @@ fn the_vocabularies_match_the_registry() {
 }
 
 #[test]
+fn a_ticket_diff_stage_is_a_valid_selection() {
+    let mut document: Value = serde_json::from_str(&golden()).expect("the fixture is JSON");
+    document["stages"][0]["selection"] = json!("ticket-diff");
+
+    let parsed = StageEvidenceDocument::from_json_str(&document.to_string())
+        .expect("ticket-diff is a registered selection");
+
+    assert_eq!(parsed.stages[0].selection, StageSelection::TicketDiff);
+    assert!(registry_values("verification_plan.selection").contains("ticket-diff"));
+}
+
+#[test]
 fn json_spelling_equals_the_machine_value() {
     for value in StageResult::ALL {
         assert_eq!(serde_json::to_value(value).unwrap(), json!(value.as_str()));

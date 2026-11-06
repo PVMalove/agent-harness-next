@@ -25,7 +25,7 @@ SCHEMA = "stage-evidence.v1"
 # The exact values of the registry fields ``report.check_result``, ``verification_plan.selection``
 # and ``verification_plan.stage_kind``.
 RESULTS = ("pass", "fail", "not_run")
-SELECTIONS = ("full", "focused", "failed-only")
+SELECTIONS = ("full", "focused", "failed-only", "ticket-diff")
 KINDS = ("lint", "typecheck", "pytest", "clean-room", "custom")
 
 DOCUMENT_KEYS = frozenset({"schema", "stages"})
