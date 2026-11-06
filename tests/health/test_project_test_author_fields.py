@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import json
+import pytest
 from pathlib import Path
 
 from harness.health import project_files
+from harness.configuration_schema import value_problems
 
-SCHEMA = Path(project_files.__file__).resolve().parents[1] / "project" / "project.schema.json"
+SCHEMA = (
+    Path(project_files.__file__).resolve().parents[1]
+    / "project"
+    / "project.schema.json"
+)
 
 
 def test_test_author_runner_settings_are_optional_but_explicit() -> None:
@@ -19,7 +25,10 @@ def test_test_author_runner_settings_are_optional_but_explicit() -> None:
     assert "test_runner" in project_files.PROJECT_JSON_ALLOWED_FIELDS
     assert "glob" in schema["properties"]["test_paths"]["description"]
     assert "command" in schema["properties"]["test_runner"]["description"]
-    assert "{test_id}" in schema["properties"]["test_runner"]["properties"]["command"]["description"]
+    assert (
+        "{test_id}"
+        in schema["properties"]["test_runner"]["properties"]["command"]["description"]
+    )
 
 
 def test_absent_test_author_settings_do_not_fail_health(tmp_path: Path) -> None:
@@ -37,3 +46,31 @@ def test_absent_test_author_settings_do_not_fail_health(tmp_path: Path) -> None:
     project_files.validate_project_json(tmp_path, problems)
 
     assert problems == []
+
+
+@pytest.mark.parametrize(
+    "profile,valid",
+    [
+        ({"runtime": "claude", "model": "project-model", "effort": "high"}, True),
+        ({"runtime": "codex", "model": "project-model", "effort": "medium"}, True),
+        ({"runtime": "claude", "model": "project-model"}, False),
+        ({"runtime": "claude", "model": "bad model", "effort": "high"}, False),
+        ({"runtime": "claude", "model": "m", "effort": "invented"}, False),
+    ],
+)
+def test_author_executor_schema_matches_project_validation(
+    profile: object, valid: bool
+) -> None:
+    config = {
+        "language": "ru",
+        "base_branch": "main",
+        "branch_pattern": "^feature/.+",
+        "qa_gate_commands": [],
+        "test_author": profile,
+    }
+    problems: list[str] = []
+    project_files.validate_project_data(config, problems)
+    schema = json.loads(SCHEMA.read_text())
+
+    assert (not problems) is valid
+    assert (not value_problems(config, schema, schema)) is valid

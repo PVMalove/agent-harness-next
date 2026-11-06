@@ -22,10 +22,18 @@ Vendor-версия держала примеры и правила подмен
 
 ## Необязательный тест-автор
 
-Developer передаёт следующий Red-тест установленному в Claude Code субагенту `test-author`
-только после запуска `.claude/hooks/test-author-preflight.sh`. Preflight обязан вернуть ровно
-`{"status":"ok"}`. Ответ `disabled` сохраняет обычный маршрут developer: передайте ему
-санитизированную `reason` и не запускайте незащищённого тест-автора.
+Исполнитель полного `/implement` наследует runtime/model/effort из утверждённого brief developer;
+короткий маршрут выбирает явный профиль `test_author` из `.harness/project.json`. Общая проверка:
+`python3 -I -B .harness/health/test_author.py preflight --repo <checkout>`; полный маршрут
+добавляет `--brief <путь brief>`. Только `{"status":"ok"}` разрешает вызов. Отсутствие настроек,
+`runtime_unsupported` и другие отказы сохраняют обычный TDD с санитизированной причиной,
+без подмены исполнителя. Текущий защищённый адаптер использует Claude Code и
+`.claude/hooks/test-author-preflight.sh`; выбор runtime не закреплён за ним.
+
+Полный маршрут вызывает нативный `Agent(test-author)` без model/effort overrides (`model: inherit`).
+Короткий маршрут передаёт каждый prompt-файл в `.harness/health/test_author.py run --repo .
+--prompt-file <путь>`: так применяются настройки проекта, даже если текущая сессия использует
+другую модель. Подробнее — [руководство тест-автора](../agents/test-author.md).
 
 При успешном preflight вызывайте субагента перед каждым шагом реализации. Передайте одно
 поведенческое требование, один сценарий, согласованный public seam, публичные сигнатуры и

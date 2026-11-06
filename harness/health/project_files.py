@@ -59,6 +59,7 @@ PROJECT_JSON_ALLOWED_FIELDS = frozenset(PROJECT_JSON_REQUIRED_FIELDS) | {
     "ci_required_checks",
     "test_paths",
     "test_runner",
+    "test_author",
     "hook_policy",
 }
 STORY_POINTS_REQUIRED_FIELDS = (
@@ -819,6 +820,14 @@ def validate_project_data(data: object, problems: list[str]) -> None:
     if not isinstance(data, dict):
         problems.append(".harness/project.json must contain a JSON object")
         return
+
+    if "test_author" in data:
+        from .test_author import profile_problems
+
+        problems.extend(
+            f".harness/project.json {problem}"
+            for problem in profile_problems(data["test_author"])
+        )
 
     if "memory" in data or "memory_policy" in data:
         from harness.memory.policy import parse_policy

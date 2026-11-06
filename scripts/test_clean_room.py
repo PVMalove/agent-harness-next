@@ -51,6 +51,7 @@ from scripts.clean_room import (
     parallel_batches,
     project_hooks,
     recovery_cycle,
+    recovery_regression,
     risk_aware_review,
     stuck_batch,
     zero_config_defaults,
@@ -83,6 +84,7 @@ SCENARIOS = (
     full_route_worktree,
     branch_hooks,
     recovery_cycle,
+    recovery_regression,
     global_install,
 )
 

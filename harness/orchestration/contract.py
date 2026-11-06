@@ -14,7 +14,12 @@ from collections.abc import Iterable, Mapping, Iterator
 from pathlib import Path
 from typing import TypeGuard, cast
 
-from harness.configuration import read_config_file, parse_config_json
+from harness.configuration import (
+    read_config_file,
+    parse_config_json,
+    MODEL_ID as MODEL_ID,
+    EFFORT_LEVELS as EFFORT_LEVELS,
+)
 
 from ..errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from .core.constants import (
@@ -34,7 +39,6 @@ from harness.json_types import JsonObject as JsonObject
 
 ROLE_MODES = {"write", "read-only"}
 ROLE_TRANSPORTS = {"in-process", "external"}
-MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
 # An image reference becomes one argv element of the engine: no spaces, and never a leading '-'
 # that the engine would read as an option.
 CONTAINER_IMAGE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}")
@@ -44,9 +48,6 @@ ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DOCKER_CONTAINER_PROBLEM = (
     "orchestration extensions.runtime_access 'docker' requires "
     "access_policy.defaults.container with a worker_image"
-)
-EFFORT_LEVELS = frozenset(
-    {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
 )
 ROLE_FIELDS = frozenset({"name", "mode", "required_capabilities", "risk_triggers"})
 CONFIG_REQUIRED_FIELDS = (
@@ -1099,7 +1100,11 @@ def resolve_min_repo_map_tier(
 
 
 def resolve_allowed_tools(
-    config: Mapping[str, object], role_name: str, mode: str
+    config: Mapping[str, object],
+    role_name: str,
+    mode: str,
+    *,
+    test_author: bool = False,
 ) -> list[str]:
     """Инструменты, фиксируемые в brief роли: запись роли в проекте, иначе запись для режима, иначе встроенный дефолт режима манифеста."""
     policy = config.get("tool_policy")
@@ -1108,7 +1113,10 @@ def resolve_allowed_tools(
             entries = policy.get(section)
             if isinstance(entries, dict) and key in entries:
                 return list(entries[key])
-    return list(DEFAULT_ALLOWED_TOOLS[mode])
+    tools = list(DEFAULT_ALLOWED_TOOLS[mode])
+    if test_author and role_name == "developer" and mode == "write":
+        tools.append("Agent(test-author)")
+    return tools
 
 
 def valid_tool_list(value: object) -> TypeGuard[list[str]]:

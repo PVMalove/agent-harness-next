@@ -191,3 +191,57 @@ Red, сразу зелёный тест возвращается автору я
 через `unittest`, а на Windows и macOS runner отвечает `isolation_unavailable`. Классификация
 по `log.txt` опирается на формат вывода unittest и pytest и является эвристикой. Локальный повтор
 автора и отдельный отказ guard не создают dispatch и состояние ledger.
+
+## Автор в worker worktree: вариант A (#971, 2026-11-06)
+
+Для Harness Next выбран вариант A с поддержкой external Claude Code developer. In-process
+транспорт сохраняет безопасный отказ `checkout_mismatch`, а `/fast-implement` — прежний opt-in.
+Решение согласовано для базы и цели PR `integration/harness-runtime-reliability`.
+
+External developer работает в точном worker checkout. Установленные там preflight, scoped guard
+и runner обслуживают его код; человек отдельно подтверждает trust этого канонического пути.
+Членство worktree в том же репозитории не наследует доверие. Основной checkout не становится
+зоной записи автора. Никакого перенаправления guard по произвольному tool payload не добавлено.
+Установка в linked worktree не сидирует общий scratch в другом checkout. Runner сохраняет логи
+в общем хранилище по действующему контракту; developer передаёт автору корень этих логов.
+
+В утверждённом наборе инструментов developer нужен `Agent(test-author)`; в новых проектах его
+задаёт шаблон роли. При отсутствии явного tool_policy встроенный набор добавляет его только
+external Claude developer с opt-in. Явное ограничение проекта сохраняется: отсутствие инструмента
+оставляет обычный TDD с `agent_tool_unavailable`. Adapter никогда не расширяет allowed_tools.
+Список инструментов и hook-policy по-прежнему закреплены до approval (ADR 0024).
+
+Проверка `hooks.test_author` показывает готовность preflight или причину отказа отдельно от
+проводки hooks. Она проверяет trust до выполнения скрипта, не запускает LLM, сборку, БД или тест;
+проверка изоляции использует удаляемый временный каталог. Живую защиту подтверждает отдельный
+`make test-author-probe`: guard denials, разрешённая запись, поведенческий Red и реальный вызов
+автора из external developer в worktree. Тот же тест становится Green на коде worker; снимок
+исходников, тестов и Git-статус основного checkout сохраняются. Фактические usage и стоимость
+сохраняются отдельно от лимита; неизвестная метрика не подменяется нулём.
+
+Проверенная конфигурация — Python unittest/pytest. Rust-тесты этой поставкой автора не
+поддержаны; настраиваемый argv не служит доказательством их поддержки. Codex и другие runtime
+автора не поддерживают. Автор остаётся помощником developer, не ролью orchestration. Изменение
+не вводит writer operational state, не меняет Rust authority, supervisor, независимую QA и
+Release Gate ADR 0019–0026.
+
+
+## Уточнение #993: исполнитель из конфигурации
+
+В полном `/implement` test-author наследует `resolved_runtime`, `resolved_model`,
+`resolved_effort` из утверждённого brief developer. Это фиксирует фактический выбор задания,
+включая runtime, выбранный вместо планового default. Отдельной роли/assignment автора нет.
+Короткий `/fast-implement` использует явный `project.json.test_author` с обязательными
+`runtime`, `model`, `effort`. Отсутствие профиля отключает автора, без скрытой модели по умолчанию.
+
+Общий stdlib selector `.harness/health/test_author.py` обслуживает preflight, запуск короткого
+маршрута и Health. Диагностика Health использует план developer с пометкой `planned`; он не
+подменяет утверждённый brief при исполнении. Для нативного Agent шаблон задаёт `model: inherit`,
+а вызов сохраняет model/effort родителя без overrides. Короткий launcher передаёт model/effort
+профиля в выбранный CLI, независимо от настроек текущей интерактивной сессии.
+
+Выбор runtime не доказывает наличие защищённого адаптера: пока он реализован для Claude Code.
+Выбранный Codex, dsh или другой runtime получает `runtime_unsupported`, без запуска Claude.
+Live-проба использует профиль developer исходного проекта; фиксированный `haiku` удалён.
+Это уточнение меняет выбор исполнителя, сохраняя trust, scoped guard, runner и обычный TDD
+при недоступности автора по решениям #971 и этой ADR.

@@ -66,6 +66,23 @@ python3 harness/bin/harness.py health /path/to/repository
 
 ## Разработка
 
+Конфиг оркестрации проверяет `coordinator.py config validate --canonical --json`: при загрузке
+coordinator лишь нормализует enum-поля в памяти с предупреждением и файл не меняет. После
+`harness-runtime migrate` состояние batch хранит runtime store, а остановленный или удержанный batch
+восстанавливают команды `recovery status|reload|resume|fix|abort`; `recovery status`, `reload` и
+`resume` доступны и в разделе Orchestration консоли. Recovery не перезапускает принятые этапы и не восстанавливает потерянный
+контекст модели и незакоммиченные файлы. Подробности:
+[руководство по backend-оркестрации](./site/docs/backend-orchestration.md#удержание-batch-и-команды-recovery).
+
+При любой capability установщик ставит общий
+[контракт технического английского](./harness/docs/technical-english.md) как
+`.harness/docs/technical-english.md` и обновляет его в составе управляемого snapshot. `diff` и
+`update` показывают отдельный unified diff недостающих обязательных ссылок для существующих
+`AGENTS.md`, `CLAUDE.md` и установленных agent seeds. Команды сохраняют пользовательские инструкции.
+После просмотра и явного согласования человек или уполномоченный агент применяет только эти
+добавления обычным редактированием или patch. Подключённые входы требуют прочитать общий контракт
+до первого English handoff. Повторное обновление не предлагает уже подключённые ссылки.
+
 `backend-orchestration` проводит тикет через роли и coordinator: `/implement` ведёт этапы architect,
 developer, review и QA, `/to-pull-requests` готовит ветку к публикации.
 PR требует отдельного подтверждения; изменения проходят через issue, ветку и PR по

@@ -120,6 +120,36 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         for flag in ("--repo", "--brief", "--extra-prompt-file", "--dry-run"):
             self.assertIn(flag, result.stdout)
 
+    def test_author_permission_exposes_shared_runner_evidence_without_widening_tools(
+        self,
+    ) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["allowed_tools"] = ["Read", "Bash", "Agent(test-author)"]
+
+        command = claude_worker.worker_command(brief)
+
+        self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), command)
+        self.assertEqual(
+            command[command.index("--allowedTools") + 1], "Read,Bash,Agent(test-author)"
+        )
+        prompt = claude_worker.build_prompt(
+            brief, self.brief, self.repo, self.worktree, self.sha
+        )
+        self.assertIn(f"{self.worktree}/.claude/hooks/test-author-preflight.sh", prompt)
+        self.assertIn(f"--worktree {self.worktree}", prompt)
+        self.assertIn(f"--brief {self.brief}", prompt)
+        self.assertIn("without model or effort overrides", prompt)
+        self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), prompt)
+
+    def test_another_role_keeps_its_original_directory_scope(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["role"] = "architect"
+        brief["allowed_tools"] = ["Read", "Agent"]
+
+        command = claude_worker.worker_command(brief)
+
+        self.assertNotIn(str(self.repo / ".harness/.sandboxes/runs"), command)
+
     def test_dry_run_starts_nothing_and_targets_the_selected_checkout(self) -> None:
         result = subprocess.run(
             [

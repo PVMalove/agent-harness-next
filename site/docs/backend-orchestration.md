@@ -252,6 +252,34 @@ developer-dispatch, code-review и QA не меняются. Если связа
 `harness health`: он проверит JSON, существование profile, совместимость capability, fallback и режим
 `code-review`.
 
+### Нормализация и проверка конфига
+
+При загрузке coordinator нормализует конфиг только в памяти (`normalization.v1`): для перечисленных
+enum-полей он убирает пробелы по краям, приводит регистр и применяет документированные алиасы
+(`in_process` → `in-process`, `manual-all` → `manual_all`, `low-risk` → `low_risk`). Каждое
+исправление даёт предупреждение (WARN) с ID поля, а файл не меняется. ID, модели, пути и команды
+не нормализуются. Битый JSON, дубликат ключа, секрет и неоднозначное значение — ошибки; дубликат
+никогда не разрешается по последнему значению.
+
+- `config validate --json` печатает диагностику: файл, JSON pointer, код, допустимые значения и
+  безопасное полученное значение. Невалидный конфиг даёт код 2.
+- `config validate --canonical --json` дополнительно отклоняет написание, которое требует
+  нормализации (код `config-noncanonical`).
+- `config validate --fix --dry-run --json` показывает diff безопасной нормализации, а
+  `config validate --fix --json` записывает его транзакцией с резервной копией.
+
+В этом репозитории `make verify` до тестов запускает read-only проверку
+`scripts/check_canonical_tracked_data.py`. Она требует canonical-написания от tracked конфигов
+`harness/orchestration.example.json`, `docs/settings/orchestration.json` и
+`scripts/cloud/orchestration.json` и печатает по строке на проблему:
+`<файл>:<pointer>: <код>: allowed=<допустимые>; received=<полученное>; <сообщение>`. Negative
+fixtures лежат в `tests/orchestration/fixtures/canonical/negative/` и перечислены в
+`negative_fixtures.json` вместе с ожидаемыми кодом и pointer каждой диагностики. Проверка падает,
+если fixture отклонён по другой причине, если файл не перечислен в манифесте или если новый tracked
+`*orchestration*.json` не отнесён ни к конфигам, ни к fixtures. JSON-фрагменты в документации
+проверка не читает: это неполные примеры, а не конфиги. Файлы проверка только читает и никогда не
+переписывает.
+
 ### Бюджет контекста и preflight
 
 Новый batch не создаётся, пока `batch preflight` не подтвердит ограниченный scope. `batch create`
@@ -827,7 +855,7 @@ QA, publish и рискованные переходы остаются ручн
    чистый architect report с планом по умолчанию. Поэтому architect, который предлагает другой план,
    указывает это в `risks`, и report ждёт ручного решения.
 
-   `dispatch send --role code-review` — единственный случай, когда нужен ещё один обязательный флаг:
+   `dispatch send` для роли code-review — единственный случай, когда нужен ещё один обязательный флаг:
    `--checkout <путь>`. Он указывает на worktree, реально зачекаученный на `candidate_commit`
    dispatch-а (см. clean-room QA lane ниже: та же изоляция нужна и для review). Все остальные роли
    не передают `--checkout`. Без него coordinator отклоняет `dispatch send` и показывает точный текст
@@ -2979,3 +3007,13 @@ expected и received, подсказку и remedy. Секреты в докум
 | Запись | Решает | Пишет | Правила записи |
 | --- | --- | --- | --- |
 | `recovery/hold/<batch_id>.json`, `recovery/intent/<batch_id>.json` | Python: `operational_hold` и `recovery_api` в единице записи команды | Rust store, `state.write` (протокол 1.5, feature `state.recovery`) | только `create`, затем `replace` по revision строки, `delete` отказывает; поле `batch_id` равно id пути; строка batch существует в той же транзакции; одна запись audit на мутацию; миграции схемы нет |
+
+Граница гарантии восстановления. Recovery восстанавливает только durable подтверждённую работу:
+lifecycle, записанный в ledger, принятые этапы с закреплённым evidence, intent и удержание в runtime
+store. Принятый этап не запускается повторно: после сбоя следующего этапа, невалидной конфигурации
+или перезапуска runtime `recovery resume` называет следующий переход (например,
+`dispatch propose --batch <id> --role developer`) и не создаёт dispatch. Recovery не восстанавливает
+потерянный контекст модели, незакоммиченные файлы worktree и неотправленный отчёт. Для внешних
+эффектов нет гарантии exactly-once: исполнение с неизвестным эффектом отклоняется как
+`ambiguous-effect` и ждёт решения человека, второй worker не запускается. Эти случаи закрепляет
+regression suite `tests/orchestration/recovery_regression_matrix.py`.

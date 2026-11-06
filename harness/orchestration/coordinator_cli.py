@@ -34,12 +34,28 @@ def build_parser(
 
     config = commands.add_parser("config", help="inspect or explicitly normalize project config")
     config_commands = config.add_subparsers(dest="config_command", required=True)
-    validate = config_commands.add_parser("validate", help="validate without changing lifecycle state")
+    validate = config_commands.add_parser(
+        "validate",
+        help="validate without changing lifecycle state; exits 2 on an invalid configuration",
+    )
     _common(validate)
-    validate.add_argument("--json", action="store_true", help="structured diagnostics")
+    validate.add_argument(
+        "--json",
+        action="store_true",
+        help="structured diagnostics: file, JSON pointer, code, allowed and redacted received value",
+    )
     mode = validate.add_mutually_exclusive_group()
-    mode.add_argument("--canonical", action="store_true", help="require canonical source spelling")
-    mode.add_argument("--fix", action="store_true", help="explicitly persist safe normalization")
+    mode.add_argument(
+        "--canonical",
+        action="store_true",
+        help="require canonical source spelling: a value runtime normalization would repair "
+        "with a warning is an error",
+    )
+    mode.add_argument(
+        "--fix",
+        action="store_true",
+        help="explicitly persist safe normalization with a backup; runtime loading never writes",
+    )
     validate.add_argument("--dry-run", action="store_true", help="preview --fix without writing")
     validate.set_defaults(handler=handlers.validate_config)
 

@@ -858,9 +858,12 @@ def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str,
             if source.is_file() and source.suffix in suffixes:
                 files[f"{target}/{source.name}"] = source.read_bytes()
     scratch = storage_path(repo, "scratch", ".gitignore")
-    files[scratch.relative_to(repo).as_posix()] = (
-        PROJECT_TEMPLATE_DIR / "scratch/.gitignore"
-    ).read_bytes()
+    # A linked checkout shares scratch with its main checkout. Seeding this worker must not
+    # turn a shared path into a ../ write or fail while relativizing that outside path.
+    if scratch.is_relative_to(repo):
+        files[scratch.relative_to(repo).as_posix()] = (
+            PROJECT_TEMPLATE_DIR / "scratch/.gitignore"
+        ).read_bytes()
     files[".harness/.gitignore"] = HARNESS_RUNTIME_GITIGNORE.encode("utf-8")
     for adapter in ADAPTERS:
         files[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
@@ -1048,14 +1051,16 @@ def scaffold_engineering_extras(
             if result:
                 written.append(result)
 
-    scratch_gitignore_result = _copy_if_absent(
-        PROJECT_TEMPLATE_DIR / "scratch/.gitignore",
-        storage_path(repo, "scratch", ".gitignore"),
-        force=forced(storage_path(repo, "scratch", ".gitignore")),
-        differing=differing,
-    )
-    if scratch_gitignore_result:
-        written.append(scratch_gitignore_result)
+    scratch_gitignore = storage_path(repo, "scratch", ".gitignore")
+    if scratch_gitignore.is_relative_to(repo):
+        scratch_gitignore_result = _copy_if_absent(
+            PROJECT_TEMPLATE_DIR / "scratch/.gitignore",
+            scratch_gitignore,
+            force=forced(scratch_gitignore),
+            differing=differing,
+        )
+        if scratch_gitignore_result:
+            written.append(scratch_gitignore_result)
 
     harness_gitignore = repo / ".harness/.gitignore"
     if not harness_gitignore.exists() or forced(harness_gitignore):

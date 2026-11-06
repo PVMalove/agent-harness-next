@@ -27,8 +27,9 @@ pub fn chain_sha256(prev: &str, record_sha256: &str) -> String {
 
 /// The actions a record of the chain may name: the closed vocabulary of ADR 0020, section 4, and
 /// one `execution-<state>` per state an execution of the supervisor enters (ADR 0022, section 2).
-pub const ACTIONS: [&str; 14] = [
+pub const ACTIONS: [&str; 15] = [
     "legacy-import",
+    "import-approval-repair",
     "migration-repair",
     "schema-migrate",
     "immutable-record",
@@ -68,6 +69,15 @@ impl Broken {
     /// `store_busy`, any other SQLite failure is `internal`, and neither sends the operator to
     /// restore a snapshot.
     pub fn to_error(&self) -> ErrorBody {
+        if self.check == "import_approval_missing" {
+            return ErrorBody::new(
+                ErrorCode::ApprovalMismatch,
+                FailureDomain::Policy,
+                false,
+                &self.detail,
+                "stop every writer and run `harness-runtime repair-import-approval --repo <repo> --approved-by <human> --approved-at <RFC3339> --reason <text>`; this preserves post-cutover data",
+            ).with_fact("check", self.check);
+        }
         if self.check == CHECK_BUSY {
             return ErrorBody::new(
                 ErrorCode::StoreBusy,

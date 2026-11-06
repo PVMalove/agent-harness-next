@@ -78,6 +78,13 @@ brief и report, независимый review и clean-room QA. Capability вы
 выполните `harness health`. Команда проверяет конфиг полностью: схему полей, ссылки на профили,
 совместимость capability с role manifest'ами, fallback и обязательный `code-review`.
 
+При загрузке coordinator нормализует в памяти только перечисленные enum-поля (`normalization.v1`:
+регистр, пробелы по краям и документированные алиасы вроде `in_process` → `in-process`), пишет
+предупреждение и никогда не меняет файл. `config validate --json` показывает диагностику без записи,
+`config validate --canonical` отклоняет любое написание, которое требует нормализации, а
+`config validate --fix [--dry-run]` явно записывает безопасную нормализацию с резервной копией.
+Подробности: [Configuration validation](playbook.md#configuration-validation-and-pinned-evidence).
+
 **Без конфига** coordinator тоже работает: потолок записи ролей — весь репозиторий, а границу
 задаёт `--allowed-path` batch. Проверки coordinator берёт из `qa_gate_commands` в
 `.harness/project.json`, бюджет параллелизма равен 1, `model` и `effort` передаются в
@@ -163,12 +170,26 @@ brief и report, независимый review и clean-room QA. Capability вы
 выбирают `auto`, в batch нет `auto_stop` и не было ручного восстановления. В остальных случаях каждый шаг такого batch согласует
 человек.
 
+### Исполнитель test-author
+
+В полном маршруте test-author наследует runtime/model/effort из утверждённого brief developer.
+Отдельного назначения роли нет; профиль `project.json.test_author` используется только коротким
+маршрутом. Профиль требует явные `runtime`, `model`, `effort`; отсутствие не выбирает Claude или
+другую модель по умолчанию. Общий selector — `.harness/health/test_author.py`; Health помечает
+выбор из плана developer как `planned`, а исполнение берёт поля именно из brief. Неподдержанный
+защищённый адаптер возвращает `runtime_unsupported`, без запуска другого CLI. Поддержка адаптера
+и выбор исполнителя — отдельные условия; текущий защищённый адаптер реализован для Claude Code.
+
 ### `tool_policy`
 
 Без поля роль получает набор по режиму manifest'а: `read-only` — `Read`, `Grep`, `Glob`, `Bash`;
 `write` — те же плюс `Edit`, `Write`. Переопределяют набор `modes` (ключи `read-only`/`write`) и
 `roles` (имена ролей), причём запись роли важнее записи режима. Это рабочий набор роли, а не запрет
-глобальных инструментов runtime.
+глобальных инструментов runtime. Для external Claude Code developer с opt-in тест-автора
+(`test_paths` и `test_runner`) встроенный fallback также включает `Agent(test-author)`.
+Новый шаблон задаёт это разрешение через `tool_policy.roles.developer`; существующий явный
+`tool_policy` сохраняет точный набор и требует ручного добавления именованного разрешения.
+Digest списка по-прежнему фиксируется до approval; adapter не добавляет инструменты.
 
 ```json
 "tool_policy": {"modes": {"read-only": ["Read", "Grep", "Glob"]}, "roles": {"qa": ["Read", "Grep", "Glob", "Bash"]}}
@@ -366,6 +387,14 @@ abandon. `dispatch heartbeat`, `dispatch cancel`, `batch abandon`, `batch attent
 запрашивает подтверждение терминального действия. Удержание и durable intent решает Python, а
 пишет Rust store (`state.write`, протокол 1.5, feature `state.recovery`). Подробности:
 [Operator recovery](playbook.md#operator-recovery).
+
+Recovery восстанавливает только durable подтверждённую работу: записанный lifecycle, принятые этапы
+с закреплённым evidence, intent и удержание в runtime store. Принятый этап не запускается повторно:
+после сбоя следующего этапа, невалидной конфигурации или перезапуска runtime `recovery resume`
+называет следующий переход и не создаёт dispatch. Потерянный контекст модели, незакоммиченные файлы
+worktree и неотправленный отчёт recovery не восстанавливает, а внешний эффект не получает гарантии
+exactly-once: исполнение с неизвестным эффектом отклоняется как `ambiguous-effect` и ждёт решения
+человека, второй worker не запускается.
 
 Новые recovery-команды работают на установленном runtime. Ручное событие связывает старый pin с
 новым control runtime; plan и прежние brief/report не переписываются. Ранний 429 writer-а сохраняет

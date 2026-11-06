@@ -403,6 +403,42 @@
           "minimum": 1
         }
       }
+    },
+    "test_author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "model",
+        "effort"
+      ],
+      "description": "Optional executor for the short test-author route. The full route inherits the approved developer runtime/model/effort instead. Missing settings disable the short-route author; no provider or model is implied.",
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "description": "Selected runtime ID. An unavailable protected adapter gives an explicit refusal, never a runtime fallback."
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "description": "Explicit CLI model ID or alias."
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "description": "Explicit effort from the project executor settings."
+        }
+      }
     }
   }
 }

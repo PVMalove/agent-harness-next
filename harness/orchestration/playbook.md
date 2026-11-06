@@ -49,8 +49,10 @@ Each new dispatch binds a complete canonical config, project and role snapshot t
 digest, with separate source and canonical hashes. Checkpoints and manual or clean-room QA reports
 use that snapshot. Invalid or changed live configuration blocks a subsequent transition while
 accepted evidence remains saved. Missing or corrupt snapshots allow only unaccepted evidence
-capture with a remedy; they never reconstruct approval from current files. Runtime state-store
-reconciliation and recovery UI are separate follow-up work.
+capture with a remedy; they never reconstruct approval from current files. After the cutover to
+the runtime store (`harness-runtime migrate`), `recovery reload` re-reads the live configuration
+and `recovery fix [--apply]` previews or writes its safe normalization; neither resumes a batch
+(see Operational hold and recovery commands).
 
 ## Lifecycle
 
@@ -810,6 +812,15 @@ Python decides the hold and the intent; the Rust store writes both through `stat
 then replace under the row revision; no delete), in the store unit of the command, as it writes
 every lifecycle record. The `harness console` catalog offers `recovery status` and `recovery
 reload` without a confirmation and `recovery resume` as a terminal coordinator action.
+
+Recovery restores durable, confirmed work only: the lifecycle the ledger records, the accepted
+stages and their pinned evidence, and the recovery intent and hold in the runtime store. An
+accepted stage is never run again: after a later failure, an invalid configuration or a runtime
+restart, `resume` names the next transition (for example `dispatch propose --role developer`) and
+creates no dispatch. Recovery does not restore a worker's lost model context, uncommitted files in a
+worktree or an unsent report, and it gives no exactly-once guarantee for an external effect: an
+execution whose effect is `unknown` is refused as `ambiguous-effect` and waits for a human
+decision; no second worker is started for it.
 
 ## Developer-retry handoff
 

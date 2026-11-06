@@ -116,13 +116,18 @@ worker остановился; правила перезапуска — в ра
 запускает role subagent в указанном worktree. External adapter является только transport и сохраняет
 тот же handoff, liveness, approval и report contract.
 
-**Тест-автор в полном маршруте.** Preflight тест-автора обслуживает только тот checkout, где он
-лежит. Developer с `in-process` transport запускает
-`"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <send.worker_worktree>`;
-для отдельного worker checkout ответ — `disabled` с причиной `checkout_mismatch`.
-Developer с `external` transport (headless `claude -p` в worktree) автора не включает и preflight
-не запускает: причина `transport_unsupported`. Любой ответ, кроме `{"status":"ok"}`, оставляет
-обычный TDD с названной в выводе причиной и никогда не становится blocker.
+**Тест-автор в полном маршруте.** Исполнитель наследует runtime/model/effort из утверждённого
+brief developer, без подмены профилем проекта. Настроенный runtime без защищённого адаптера даёт
+`runtime_unsupported` и обычный TDD. Текущий защищённый адаптер Claude Code с external transport
+запускает preflight из
+собственного worker checkout: `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <путь brief>`.
+Точный trust этого пути принимает человек. После `{"status":"ok"}` и при наличии
+`Agent(test-author)` или `Agent` в утверждённом brief developer вызывает автора без переопределения model/effort (`model: inherit`); без разрешения
+остаётся обычный TDD с причиной `agent_tool_unavailable`. Для in-process проверка основного
+checkout с `--worktree` даёт `checkout_mismatch` и оставляет обычный TDD. Отказ не становится
+blocker. Автор пишет и запускает тест в worker, а общий корень runner-логов получает от developer.
+Проверка `hooks.test_author` показывает выбранный runtime/model/effort, источник и готовность или отказ; live-проба с учётом расхода
+проверяет реальный вызов developer → author. Rust и Codex этим решением не поддержаны.
 
 Перед первым dispatch coordinator может зарегистрировать immutable Context Package, собранный
 `context_builder.py` без LLM из pinned `base_commit`/`candidate_commit`. Он содержит exact diff,
@@ -250,6 +255,12 @@ shell сохраняется между командами, поэтому од�
 worktree читаются по абсолютным путям: `git -C <worktree> …`, `rg <шаблон> <путь в worktree>` и
 инструменты чтения файлов. Если сессия всё же сместилась, верните её в main checkout до следующей
 команды.
+Если runtime store удерживает batch (attention `operational-hold` или отказ, чей `REMEDY` называет
+recovery), запустите `recovery status --batch <id> --json`, устраните причину, разрешите открытое
+attention и выполните `recovery resume --batch <id>`. Recovery не перезапускает принятый этап и не
+запускает worker: продолжайте командой из поля `next`. Отказ `ambiguous-effect` ждёт решения
+человека. После правки конфигурации перед следующим переходом выполните
+`config validate --canonical --json`.
 Подробные ограничения задаёт `.harness/orchestration/playbook.md`, раздел Operator recovery.
 
 ### Сбой запуска worker

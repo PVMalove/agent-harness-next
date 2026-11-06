@@ -17,6 +17,10 @@ from pathlib import Path
 from harness.json_types import JsonObject
 
 NAMES = ("project.json", "orchestration.json")
+MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
+EFFORT_LEVELS = frozenset(
+    {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+)
 MAX_BYTES = 2_000_000
 MAX_DEPTH = 64
 Bundle = dict[str, bytes | None]
@@ -151,9 +155,7 @@ def mask_secrets(value: object, key: str | None = None) -> object:
         return SECRET_MASK
     if isinstance(value, dict):
         return {
-            name: SECRET_MASK
-            if not isinstance(name, str)
-            else mask_secrets(item, name)
+            name: SECRET_MASK if not isinstance(name, str) else mask_secrets(item, name)
             for name, item in value.items()
         }
     if isinstance(value, list):

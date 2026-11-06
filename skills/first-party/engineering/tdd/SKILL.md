@@ -45,10 +45,22 @@ current implementation.
 
 ## Optional test-author subagent
 
-The developer delegates the next Red test to the installed Claude Code `test-author` subagent
-only after running `.claude/hooks/test-author-preflight.sh`. The preflight must return exactly
-`{"status":"ok"}`. Any `disabled` result keeps the ordinary developer route; pass its sanitized
-`reason` to the developer and do not spawn an unprotected test-author.
+Select the executor before invoking the helper. In full `/implement`, inherit runtime/model/effort
+from the approved developer brief; run `python3 -I -B .harness/health/test_author.py preflight
+--repo <worker_worktree> --brief <brief path>` in its exact checkout. In the short route, omit
+`--brief` to select the explicit `test_author` profile from `.harness/project.json`. Missing or
+invalid settings and `runtime_unsupported` keep ordinary TDD; state the sanitized reason.
+There is no implied provider or model. See `docs/agents/test-author.md` for activation.
+
+Only exactly `{"status":"ok"}` enables the author. The current protected adapter uses
+`.claude/hooks/test-author-preflight.sh`; other selected runtimes keep ordinary TDD until a
+protected adapter exists. For full external Claude execution, require `Agent(test-author)` or
+`Agent` in the approved tools and call the native subagent without model/effort overrides;
+`model: inherit` preserves the developer's approved settings. An in-process worker keeps ordinary
+TDD on `checkout_mismatch`. Linked workers read evidence from the supplied shared log root.
+For the short route, pass each handoff in a prompt-file to `python3 -I -B
+.harness/health/test_author.py run --repo . --prompt-file <path>` so the configured project
+model/effort are applied even when the current developer session uses other settings.
 
 When preflight is `ok`, call the subagent before each implementation step. Give it one behavior
 requirement, one scenario, the agreed public seam, the public signatures and the existing fixtures;

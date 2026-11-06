@@ -95,7 +95,7 @@ def build_prompt(
             str(repo),
         )
     )
-    return PROMPT.format(
+    prompt = PROMPT.format(
         role=brief["role"],
         dispatch_id=brief["dispatch_id"],
         brief=brief_path,
@@ -106,6 +106,22 @@ def build_prompt(
         heartbeat=brief["liveness"]["heartbeat_every_seconds"],
         package=brief["context_package_id"],
     )
+    if brief["role"] == "developer" and any(
+        tool in brief["allowed_tools"] for tool in ("Agent", "Agent(test-author)")
+    ):
+        prompt += (
+            "\nOptional test-author: before the first test, run "
+            f"{shlex.quote(str(worktree / '.claude/hooks/test-author-preflight.sh'))} "
+            f"--worktree {shlex.quote(str(worktree))} --brief {shlex.quote(str(brief_path))}. "
+            "The author inherits your approved resolved_runtime, resolved_model and resolved_effort. "
+            "Call Agent without model or effort overrides. Only exactly {\"status\":\"ok\"} enables "
+            "the named test-author Agent; any refusal keeps ordinary TDD with its reason. "
+            "Give the author the requirement, agreed seam, one scenario and a test path within "
+            "the brief's allowed paths, never a proposed algorithm. "
+            f"Runner log root for its Red evidence: {repo / '.harness/.sandboxes/runs'}. "
+            "Wait for the author and verify its behavioral assertion before writing production code.\n"
+        )
+    return prompt
 
 
 def worker_command(brief: Brief, binary: str = "claude") -> list[str]:
@@ -125,6 +141,14 @@ def worker_command(brief: Brief, binary: str = "claude") -> list[str]:
         "text",
     ]
     effort = brief.get("resolved_effort")
+    if brief["role"] == "developer" and any(
+        tool in brief["allowed_tools"] for tool in ("Agent", "Agent(test-author)")
+    ):
+        # Linked workers keep runner evidence in the main checkout's shared sandbox.
+        command += [
+            "--add-dir",
+            str(Path(brief["report_staging_path"]).parents[2] / "runs"),
+        ]
     if effort:
         command += ["--effort", effort]
     return command

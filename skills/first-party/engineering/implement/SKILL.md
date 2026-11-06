@@ -150,14 +150,23 @@ main checkout, and `EnterWorktree` refuses it there. Two paths exist; state whic
   paths for every file. Its self-report then proves the checkout it works in, not its CWD; say so in
   the final report.
 
-**Test author in the full route.** The test-author preflight serves only the checkout that holds
-it. An `in-process` developer runs `"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh"
---worktree <send.worker_worktree>`; for a separate worker checkout the answer is
-`{"status":"disabled","reason":"checkout_mismatch"}`. An `external` developer (headless `claude -p`
-in the worktree, where the trust dialog is skipped and the path has no trust decision) does not
-enable the author and runs no preflight: the reason is `transport_unsupported`. Any answer other
-than `{"status":"ok"}` keeps the ordinary TDD route with the reason named in the worker's output,
-never a blocker. State this in the worker prompt.
+**Test author in the full route.** The author inherits runtime/model/effort from the approved
+developer brief, without a separate role assignment or project-profile override. A selected runtime
+without a protected adapter returns `runtime_unsupported` and keeps ordinary TDD. The current
+protected adapter lets an `external` Claude Code developer call the author in
+`send.worker_worktree`, using `Agent(test-author)` without model/effort overrides. Before dispatch, install the harness in that exact checkout; the human
+accepts its exact-path trust in Claude Code. Never copy the main checkout's runtime state or trust.
+The developer checks its own `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <approved brief path>`
+and enables the author only after exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent`
+permission in the approved brief. The default developer role policy includes the named permission;
+a project override remains authoritative. Missing permission gives `agent_tool_unavailable` and
+ordinary TDD, never a launch-time tool expansion. Pass the shared runner log root from the adapter
+prompt to the author along with one test path within the brief's scope.
+
+For `in-process`, the main preflight with `--worktree <send.worker_worktree>` still answers
+`checkout_mismatch` for a separate worker. Preserve ordinary TDD there and name the reason;
+Keep the selected executor visible in refusals; never substitute Claude for an unsupported runtime. A preflight refusal or unavailable author
+never creates a blocker or changes the Rust ledger. State this in the worker prompt.
 
 `dispatch send` checks the adapter's flags against its `dispatch --help` before the handoff and
 refuses an unsupported one: fix the `--adapter-arg` values and send the same approved dispatch
@@ -202,6 +211,14 @@ Recovery route table in `.harness/orchestration/playbook.md` (situation → rout
 evidence). Report each startup failure under its own classification (unsupported flag, missing
 or refused self-report, capacity, rate-limit, service-unavailable) together with its recovery
 route.
+
+When the runtime store holds a batch (attention `operational-hold`, or a refusal whose `REMEDY`
+names recovery), run `recovery status --batch <id> --json`, fix the cause, resolve open attention,
+then run `recovery resume --batch <id>`. Recovery never reruns an accepted stage and never starts a
+worker: continue with the `next` command it prints. An `ambiguous-effect` refusal waits for a human
+decision. After a configuration edit, run `config validate --canonical --json` before the next
+transition. Details: "Operational hold and recovery commands" in
+`.harness/orchestration/playbook.md`.
 
 Under `approval_policy: auto`, the coordinator takes every path decision by policy and records it
 as `policy:auto`; follow "Automatic path" in `.harness/orchestration/playbook.md`. Do not write

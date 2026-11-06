@@ -185,6 +185,7 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "hooks.policy": CheckRoute(
         "Политика hooks проекта требует внимания", "Diagnostics"
     ),
+    "hooks.test_author": CheckRoute("Тест-автор недоступен", "Diagnostics"),
     "files.sandboxes": CheckRoute("Каталог .sandboxes настроен неверно", "Diagnostics"),
     "directories.harness": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
     "directories.sandboxes": CheckRoute("Каталог Harness недоступен", "Diagnostics"),

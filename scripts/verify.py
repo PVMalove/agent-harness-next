@@ -197,8 +197,8 @@ def _check_private_terms(test_env: dict[str, str]) -> None:
 
 
 def _static_checks(test_env: dict[str, str]) -> None:
-    """Быстрые проверки до тестов: приватные термины, JSON каталога, компиляция, скиллы, реестр
-    и документация."""
+    """Быстрые проверки до тестов: приватные термины, JSON каталога, компиляция, скиллы, реестр,
+    canonical-конфиги оркестрации и документация."""
     _check_private_terms(test_env)
     run_ok(
         [
@@ -215,6 +215,10 @@ def _static_checks(test_env: dict[str, str]) -> None:
     _check_global_skills()
     run_ok([sys.executable, str(ROOT / "scripts" / "build_registry.py")], env=test_env)
     run_ok(["git", "-C", str(ROOT), "diff", "--exit-code", "--", "skills/REGISTRY.md"])
+    run_ok(
+        [sys.executable, str(ROOT / "scripts" / "check_canonical_tracked_data.py")],
+        env=test_env,
+    )
     _check_documentation()
 
 
