@@ -27,7 +27,7 @@ PATH_INVENTORY_ROOTS = (
     DOCS_AGENTS_TEMPLATE,
     ROOT / "docs" / "skills",
     ROOT / "docs" / "diagrams",
-    ROOT / "docs" / "ARCHITECTURE.md",
+    ROOT / "site" / "docs",
     ROOT / "README.md",
 )
 
