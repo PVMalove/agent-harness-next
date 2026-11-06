@@ -2,19 +2,19 @@
    Tokens are shared with the site mockups; no external fonts or assets. */
 
 :root {
-  --ah-bg: #161a20;
-  --ah-surface: #1b1f26;
-  --ah-panel: #232830;
-  --ah-row: #2a303a;
-  --ah-fg: #e8ebef;
-  --ah-muted: #9aa3af;
+  --ah-bg: #0c1016;
+  --ah-surface: #11161e;
+  --ah-panel: #171e28;
+  --ah-row: #1d2531;
+  --ah-fg: #f0f3f7;
+  --ah-muted: #99a3b1;
   --ah-primary: #6fa8dc;
   --ah-accent: #d97757;
   --ah-ok: #8fbf7f;
   --ah-warn: #e0a458;
   --ah-err: #d96b6b;
-  --ah-rule: #353d49;
-  --ah-edge: #5a6675;
+  --ah-rule: rgba(255, 255, 255, 0.08);
+  --ah-edge: #2b3442;
   --ah-mono: "JetBrainsMono Nerd Font Mono", "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, Consolas, monospace;
 }
 
@@ -1182,5 +1182,977 @@ body {
   }
   .ah-term-anchor {
     opacity: 0.55;
+  }
+}
+
+/* Landing: deep, dense engineering surface with live demo interactions. */
+.ah-hero {
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  gap: 2.2rem;
+  align-items: start;
+  padding: 1.6rem 0 2.2rem;
+  background: transparent;
+}
+
+.ah-hero-copy {
+  padding-top: 0.3rem;
+}
+
+.ah-eyebrow {
+  border-color: color-mix(in srgb, var(--ah-primary) 34%, var(--ah-rule));
+  background: color-mix(in srgb, var(--ah-primary) 7%, var(--ah-surface));
+  color: var(--ah-fg);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--ah-primary) 16%, transparent);
+  font-size: 0.6rem;
+}
+
+.ah-eyebrow::before {
+  content: none;
+}
+
+.ah-eyebrow i {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: var(--ah-ok);
+  box-shadow: 0 0 8px var(--ah-ok);
+}
+
+.ah-hero h1 {
+  margin: 0.9rem 0 0.8rem;
+  font-size: clamp(2.25rem, 4.6vw, 3.8rem);
+  line-height: 1.03;
+  letter-spacing: -0.035em;
+}
+
+.ah-hero .ah-lead {
+  max-width: 38rem;
+  font-size: 0.98rem;
+}
+
+.ah-install {
+  display: block;
+  max-width: 42rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  border: 1px solid var(--ah-edge);
+  border-radius: 9px;
+  background: #090d12;
+  box-shadow: 0 16px 40px #0006;
+  overflow: hidden;
+}
+
+.ah-install-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid var(--ah-rule);
+  background: #0d1219;
+}
+
+.ah-install-label {
+  color: var(--ah-muted);
+  font: 0.55rem/1.5 var(--ah-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ah-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ah-muted);
+  font: 0.6rem/1.4 var(--ah-mono);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.ah-copy:hover {
+  border-color: var(--ah-edge);
+  background: var(--ah-row);
+  color: var(--ah-fg);
+}
+
+.ah-copy.is-copied {
+  border-color: color-mix(in srgb, var(--ah-ok) 55%, var(--ah-rule));
+  color: var(--ah-ok);
+}
+
+.ah-install-lines {
+  display: block;
+}
+
+.ah-install-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: auto;
+}
+
+.ah-install-line:first-child {
+  border-top: 0;
+}
+
+.ah-install-line code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c8d2de;
+  font: 0.62rem/1.65 var(--ah-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ah-prompt {
+  flex: none;
+  color: var(--ah-primary);
+  font: 0.64rem/1.65 var(--ah-mono);
+  user-select: none;
+}
+
+.ah-install-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  color: var(--ah-muted);
+  font-size: 0.66rem;
+}
+
+.ah-req {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.18rem 0.4rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 4px;
+  background: var(--ah-surface);
+  color: var(--ah-fg);
+  font: 0.58rem/1.4 var(--ah-mono);
+}
+
+.ah-req svg {
+  color: var(--ah-primary);
+}
+
+.ah-terminal-wrap {
+  position: relative;
+  padding-top: 7.25rem;
+}
+
+.ah-mascot--perch {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  pointer-events: none;
+}
+
+.ah-mascot--perch img {
+  width: 5.4rem;
+  height: auto;
+  filter: drop-shadow(0 12px 24px #0008);
+}
+
+.ah-mascot--perch .ah-bubble {
+  margin-top: 0.55rem;
+  font-size: 0.68rem;
+}
+
+.ah-terminal {
+  border-color: var(--ah-edge);
+  border-radius: 9px;
+  background: #080c12;
+  box-shadow: 0 24px 60px #0008, 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.ah-terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #0d1219;
+  color: #8290a1;
+  font: 0.58rem/1.4 var(--ah-mono);
+}
+
+.ah-terminal-dots {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.ah-terminal-dots i {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: #3b4654;
+}
+
+.ah-terminal-dots i:nth-child(1) { background: #d96b6b; }
+.ah-terminal-dots i:nth-child(2) { background: #e0a458; }
+.ah-terminal-dots i:nth-child(3) { background: #8fbf7f; }
+
+.ah-terminal-title {
+  color: #8290a1;
+}
+
+.ah-terminal-beta {
+  color: #5f6b7a;
+}
+
+.ah-terminal-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  margin-left: auto;
+  padding: 0.18rem 0.45rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ah-muted);
+  font: 0.58rem/1.4 var(--ah-mono);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.ah-terminal-play:hover {
+  border-color: var(--ah-edge);
+  background: var(--ah-row);
+  color: var(--ah-fg);
+}
+
+.ah-terminal-play .ah-stop-icon {
+  display: none;
+}
+
+.ah-terminal-play.is-running .ah-play-icon {
+  display: none;
+}
+
+.ah-terminal-play.is-running .ah-stop-icon {
+  display: block;
+}
+
+.ah-terminal .ah-terminal-output {
+  min-height: 300px;
+  max-height: 390px;
+  margin: 0;
+  padding: 0.85rem 0.95rem;
+  border: 0;
+  background: #080c12;
+  color: #c8d2de;
+  font: 0.62rem/1.7 var(--ah-mono);
+  white-space: pre-wrap;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2b3442 transparent;
+}
+
+.ah-terminal-output code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.ah-terminal-line {
+  display: block;
+}
+
+.ah-t-prompt { color: var(--ah-accent); }
+.ah-t-cmd { color: var(--ah-fg); }
+.ah-t-ok { color: var(--ah-ok); }
+.ah-t-warn { color: var(--ah-warn); }
+.ah-t-fail { color: var(--ah-err); }
+.ah-t-info { color: var(--ah-primary); }
+.ah-t-dim { color: #6f7a88; }
+
+.ah-cursor {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.9rem;
+  margin-left: 0.12rem;
+  background: var(--ah-primary);
+  vertical-align: -0.12rem;
+  animation: ah-blink 1s steps(1) infinite;
+}
+
+@keyframes ah-blink {
+  50% { opacity: 0; }
+}
+
+.ah-specs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 1.4rem 0 0;
+  border: 1px solid var(--ah-rule);
+  border-radius: 10px;
+  background: var(--ah-surface);
+  box-shadow: 0 0 40px rgba(111, 168, 220, 0.035);
+  overflow: hidden;
+}
+
+.ah-spec {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.8rem 0.85rem;
+  border-right: 1px solid var(--ah-rule);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-spec:last-child {
+  border-right: 0;
+}
+
+.ah-spec:hover {
+  background: var(--ah-panel);
+  box-shadow: inset 0 0 28px rgba(111, 168, 220, 0.04);
+}
+
+.ah-spec-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ah-primary) 8%, transparent);
+  color: var(--ah-primary);
+}
+
+.ah-spec .k {
+  color: var(--ah-muted);
+  font: 0.52rem/1.5 var(--ah-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ah-spec .v {
+  margin-top: 0.1rem;
+  color: var(--ah-fg);
+  font: 600 0.76rem/1.35 var(--ah-mono);
+}
+
+.ah-spec .v em {
+  color: var(--ah-primary);
+  font-style: normal;
+}
+
+.ah-spec .s {
+  margin-top: 0.15rem;
+  color: var(--ah-muted);
+  font-size: 0.61rem;
+  line-height: 1.5;
+}
+
+.ah-spec .s em {
+  color: var(--ah-fg);
+  font-style: normal;
+}
+
+.ah-section {
+  padding-top: 2.4rem;
+}
+
+.ah-section h2 {
+  letter-spacing: -0.02em;
+}
+
+.ah-section p code {
+  color: var(--ah-fg);
+}
+
+.ah-cap-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.ah-cap {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0.9rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 9px;
+  background: var(--ah-surface);
+  color: var(--ah-fg);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-cap:hover {
+  border-color: var(--ah-edge);
+  background: var(--ah-panel);
+  transform: translateY(-2px);
+}
+
+.ah-cap.is-active {
+  border-color: var(--ah-primary);
+  background: color-mix(in srgb, var(--ah-primary) 7%, var(--ah-surface));
+  box-shadow: 0 0 0 1px var(--ah-primary), 0 10px 30px rgba(111, 168, 220, 0.1);
+}
+
+.ah-cap-icon {
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  margin-bottom: 0.55rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ah-primary) 8%, transparent);
+  color: var(--ah-primary);
+}
+
+.ah-cap-check {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 50%;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.ah-cap.is-active .ah-cap-check {
+  border-color: var(--ah-primary);
+  background: var(--ah-primary);
+  color: #0c1016;
+  opacity: 1;
+}
+
+.ah-cap-name {
+  display: block;
+  color: var(--ah-fg);
+  font: 600 0.74rem/1.35 var(--ah-mono);
+}
+
+.ah-cap-desc {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--ah-muted);
+  font-size: 0.67rem;
+  line-height: 1.55;
+}
+
+.ah-cap-desc code {
+  color: var(--ah-fg);
+}
+
+.ah-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.ah-feature {
+  display: block;
+  width: 100%;
+  padding: 0.95rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 9px;
+  background: var(--ah-surface);
+  color: var(--ah-fg);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-feature:hover {
+  border-color: var(--ah-edge);
+  background: var(--ah-panel);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px #0004;
+}
+
+.ah-feature-icon {
+  display: grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ah-primary) 8%, transparent);
+  color: var(--ah-primary);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.ah-feature:hover .ah-feature-icon {
+  border-color: color-mix(in srgb, var(--ah-primary) 45%, var(--ah-rule));
+  color: var(--ah-primary);
+}
+
+.ah-feature b {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.78rem;
+}
+
+.ah-feature > span:not(.ah-feature-icon):not(.ah-feature-more) {
+  display: block;
+  color: var(--ah-muted);
+  font-size: 0.68rem;
+  line-height: 1.55;
+}
+
+.ah-feature-more {
+  display: inline-block;
+  margin-top: 0.6rem;
+  color: var(--ah-primary);
+  font: 0.6rem/1.4 var(--ah-mono);
+  opacity: 0.75;
+}
+
+.ah-feature:hover .ah-feature-more {
+  opacity: 1;
+}
+
+.ah-flow {
+  margin-top: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 10px;
+  background: var(--ah-surface);
+}
+
+.ah-flow-clients {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--ah-rule);
+}
+
+.ah-flow-clients-label {
+  margin-right: 0.3rem;
+  color: var(--ah-muted);
+  font: 0.54rem/1.4 var(--ah-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ah-flow-chip {
+  padding: 0.18rem 0.45rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 4px;
+  background: var(--ah-panel);
+  color: var(--ah-fg);
+  font: 0.6rem/1.4 var(--ah-mono);
+}
+
+.ah-flow-chip--primary {
+  border-color: color-mix(in srgb, var(--ah-primary) 45%, var(--ah-rule));
+  color: var(--ah-primary);
+}
+
+.ah-flow-track {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) 3rem minmax(0, 1.7fr);
+  gap: 0.35rem;
+  align-items: stretch;
+  margin-top: 0.8rem;
+}
+
+.ah-flow-node {
+  display: block;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 8px;
+  background: var(--ah-panel);
+  color: var(--ah-fg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-flow-node:hover,
+.ah-flow-node:focus-visible,
+.ah-flow-node.is-active {
+  border-color: var(--ah-primary);
+  background: color-mix(in srgb, var(--ah-primary) 7%, var(--ah-panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-primary) 55%, transparent), 0 0 26px rgba(111, 168, 220, 0.08);
+}
+
+.ah-flow-node--rust.is-active,
+.ah-flow-node--rust:hover,
+.ah-flow-node--rust:focus-visible {
+  border-color: var(--ah-ok);
+  background: color-mix(in srgb, var(--ah-ok) 7%, var(--ah-panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-ok) 55%, transparent), 0 0 26px rgba(143, 191, 127, 0.08);
+}
+
+.ah-flow-node--store.is-active,
+.ah-flow-node--store:hover,
+.ah-flow-node--store:focus-visible {
+  border-color: var(--ah-accent);
+  background: color-mix(in srgb, var(--ah-accent) 7%, var(--ah-panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-accent) 55%, transparent), 0 0 26px rgba(217, 119, 87, 0.08);
+}
+
+.ah-flow-icon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 5px;
+  color: var(--ah-primary);
+}
+
+.ah-flow-node--rust .ah-flow-icon { color: var(--ah-ok); }
+.ah-flow-node--store .ah-flow-icon { color: var(--ah-accent); }
+
+.ah-flow-kicker {
+  display: block;
+  color: var(--ah-muted);
+  font: 0.52rem/1.4 var(--ah-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ah-flow-node b {
+  display: block;
+  margin: 0.1rem 0 0.2rem;
+  font-size: 0.84rem;
+}
+
+.ah-flow-items {
+  display: block;
+  color: var(--ah-muted);
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.ah-flow-link {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.2rem;
+  min-width: 2.6rem;
+  color: var(--ah-muted);
+  font: 0.5rem/1.4 var(--ah-mono);
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ah-flow-link i {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, var(--ah-edge) 0 4px, transparent 4px 8px);
+}
+
+.ah-flow-link b {
+  color: var(--ah-primary);
+  font: 0.72rem/1 var(--ah-mono);
+}
+
+.ah-authority {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.6rem minmax(0, 1fr);
+  gap: 0.3rem;
+  align-items: stretch;
+  padding: 1rem 0.55rem 0.55rem;
+  border: 1px dashed color-mix(in srgb, var(--ah-ok) 45%, var(--ah-edge));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ah-ok) 3%, transparent);
+}
+
+.ah-authority-label {
+  position: absolute;
+  top: -0.48rem;
+  left: 0.65rem;
+  padding: 0 0.3rem;
+  background: var(--ah-surface);
+  color: var(--ah-muted);
+  font: 0.5rem/1.4 var(--ah-mono);
+  letter-spacing: 0.04em;
+}
+
+.ah-flow-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-height: 2.8rem;
+  margin-top: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border-left: 2px solid var(--ah-primary);
+  background: color-mix(in srgb, var(--ah-primary) 5%, transparent);
+  color: var(--ah-muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
+.ah-flow-note b {
+  color: var(--ah-fg);
+  font: 600 0.66rem/1.5 var(--ah-mono);
+}
+
+.ah-flow-principles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.ah-principle {
+  padding: 0.6rem 0.65rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 7px;
+  background: var(--ah-panel);
+  color: var(--ah-muted);
+  font-size: 0.66rem;
+  line-height: 1.55;
+}
+
+.ah-principle .tag {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--ah-primary);
+  font: 0.54rem/1.4 var(--ah-mono);
+  letter-spacing: 0.06em;
+}
+
+.ah-principle b {
+  color: var(--ah-fg);
+}
+
+.ah-principle code {
+  color: var(--ah-fg);
+  font-size: 0.92em;
+}
+
+.ah-card {
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px #0004;
+}
+
+.ah-card .i svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Feature quick view. */
+.ah-dialog {
+  width: min(680px, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  padding: 0;
+  border: 1px solid var(--ah-edge);
+  border-radius: 11px;
+  background: var(--ah-surface);
+  color: var(--ah-fg);
+  box-shadow: 0 30px 90px #000b;
+}
+
+.ah-dialog::backdrop {
+  background: rgba(4, 7, 11, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.ah-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem 0.5rem;
+}
+
+.ah-dialog-head h3 {
+  margin: 0.15rem 0 0;
+  color: var(--ah-fg);
+  font-size: 1.1rem;
+}
+
+.ah-dialog-close {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ah-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.ah-dialog-close:hover {
+  border-color: var(--ah-edge);
+  color: var(--ah-fg);
+}
+
+.ah-dialog p {
+  margin: 0;
+  padding: 0 1.1rem 0.8rem;
+  color: var(--ah-muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.ah-dialog-code {
+  margin: 0 1.1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 7px;
+  background: #080c12;
+  color: #c8d2de;
+  font: 0.64rem/1.7 var(--ah-mono);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.ah-dialog-code code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.ah-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.8rem 1.1rem 1rem;
+}
+
+.ah-dialog-link {
+  color: var(--ah-primary);
+  font: 0.66rem/1.4 var(--ah-mono);
+  text-decoration: none;
+}
+
+.ah-dialog-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1100px) {
+  .ah-hero {
+    grid-template-columns: 1fr;
+    gap: 1.4rem;
+  }
+  .ah-terminal-wrap {
+    padding-top: 0;
+  }
+  .ah-mascot--perch {
+    position: static;
+    margin-bottom: 0.7rem;
+    pointer-events: auto;
+  }
+  .ah-specs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ah-spec:nth-child(2) {
+    border-right: 0;
+  }
+  .ah-spec:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--ah-rule);
+  }
+  .ah-cap-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ah-feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ah-flow-track {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+  .ah-flow-link {
+    min-height: 1.8rem;
+  }
+  .ah-flow-link i {
+    display: none;
+  }
+  .ah-authority {
+    grid-template-columns: 1fr;
+    padding-top: 1.2rem;
+  }
+  .ah-flow-principles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .ah-hero {
+    padding-top: 1rem;
+  }
+  .ah-hero h1 {
+    font-size: clamp(2rem, 10vw, 2.8rem);
+  }
+  .ah-install {
+    max-width: none;
+  }
+  .ah-install-line code {
+    font-size: 0.58rem;
+  }
+  .ah-specs {
+    grid-template-columns: 1fr;
+  }
+  .ah-spec {
+    border-right: 0;
+    border-bottom: 1px solid var(--ah-rule);
+  }
+  .ah-spec:last-child {
+    border-bottom: 0;
+  }
+  .ah-spec:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--ah-rule);
+  }
+  .ah-cap-grid,
+  .ah-feature-grid {
+    grid-template-columns: 1fr;
+  }
+  .ah-flow {
+    padding: 0.75rem;
+  }
+  .ah-authority-label {
+    font-size: 0.46rem;
+  }
+  .ah-flow-principles {
+    grid-template-columns: 1fr;
+  }
+  .ah-dialog-head,
+  .ah-dialog p,
+  .ah-dialog-foot {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+  .ah-dialog-code {
+    margin-left: 0.85rem;
+    margin-right: 0.85rem;
   }
 }
