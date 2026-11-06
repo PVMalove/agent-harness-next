@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from harness.health.test_author import AuthorUnavailable, adapter_for, read_author
 from harness.storage import storage_path
 from scripts.clean_room.support import ROOT, run_step
 
@@ -317,6 +318,16 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _probe_executor(project: Path) -> dict[str, object]:
+    """Resolve before looking for a CLI or linking its credentials."""
+    try:
+        selected = read_author(project)
+        adapter_for(selected)
+        return selected
+    except AuthorUnavailable as exc:
+        sys.exit(f"test-author probe: configured executor unavailable ({exc.reason})")
+
+
 def _run_claude(
     claude: str,
     project: Path,
@@ -327,13 +338,16 @@ def _run_claude(
     as_main: bool = False,
 ) -> str:
     """One bounded `claude --agent test-author` run; any failure fails the scenario."""
+    selected = _probe_executor(project)
     result = run_step(
         [
             claude,
             "--print",
             *([] if as_main else ["--agent", "test-author"]),
             "--model",
-            "haiku",
+            str(selected["model"]),
+            "--effort",
+            str(selected["effort"]),
             "--permission-mode",
             "dontAsk",
             "--allowed-tools",
@@ -377,18 +391,32 @@ def verify_worker_cycle(main: Path, worktree: Path) -> None:
             flush=True,
         )
         return
-    claude = shutil.which("claude")
+    selected = _probe_executor(worktree)
+    claude = shutil.which(str(selected["runtime"]))
     if claude is None:
         sys.exit("claude probe: worker confirmation requires claude")
-    environment = claude_environment(worktree, credentials=True)
     source = worktree / "src/calc.py"
     digest = _digest(source)
     known_tests = set((worktree / "tests").glob("*.py"))
+    brief = worktree / ".harness/probe-developer-brief.json"
+    brief.write_text(
+        json.dumps(
+            {
+                "role": "developer",
+                **{
+                    f"resolved_{key}": selected[key]
+                    for key in ("runtime", "model", "effort")
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     prompt = (
         "You are the external developer in this worker checkout. First run exactly "
-        f"`.claude/hooks/test-author-preflight.sh --worktree {worktree}` and proceed only on "
+        f"`.claude/hooks/test-author-preflight.sh --worktree {worktree} --brief {brief}` and proceed only on "
         '`{"status":"ok"}`. Then use the Agent tool to invoke subagent_type test-author in the '
-        "foreground and wait for its result. Give it this requirement and no implementation: "
+        "foreground without model or effort overrides; inherit the developer settings from the brief. "
+        "Wait for its result. Give it this requirement and no implementation: "
         "add(a, b) from src.calc returns the sum plus a fee of 1; add(2, 3) must return 6. "
         "Ask it to write exactly one unittest.TestCase under tests/ and run the dotted test id "
         f"through .claude/hooks/run-test.sh. Tell it the runner log root is {storage_path(worktree, 'runs')}; "
@@ -398,6 +426,7 @@ def verify_worker_cycle(main: Path, worktree: Path) -> None:
         "the runner JSON and failed assertion, then stop."
     )
     try:
+        environment = claude_environment(worktree, credentials=True)
         stream = _run_claude(
             claude,
             worktree,
@@ -429,6 +458,7 @@ def verify_worker_cycle(main: Path, worktree: Path) -> None:
             flush=True,
         )
     finally:
+        brief.unlink(missing_ok=True)
         remove_credentials(worktree)
         source.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
         for path in set((worktree / "tests").glob("*.py")) - known_tests:
@@ -443,7 +473,8 @@ def verify_scoped_hook(project: Path) -> None:
             "isolated-test-runner: Claude Code confirmation not requested", flush=True
         )
         return
-    claude = shutil.which("claude")
+    selected = _probe_executor(project)
+    claude = shutil.which(str(selected["runtime"]))
     if claude is None:
         if mode == "require":
             sys.exit("claude probe: confirmation required but claude is unavailable")
@@ -461,7 +492,9 @@ def verify_scoped_hook(project: Path) -> None:
         )
         check_guard_calls(project, tool_calls(guard_stream))
         red_stream = _run_claude(
-            claude, project, environment,
+            claude,
+            project,
+            environment,
             RED_PROMPT + f" Runner log root: {storage_path(project, 'runs')}.",
             "Read,Write,Bash",
         )

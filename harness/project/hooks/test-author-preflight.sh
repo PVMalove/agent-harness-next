@@ -5,12 +5,10 @@
 # prints exactly one sanitized JSON line and always exits 0: a disabled result preserves the normal
 # developer route and does not create orchestration or ledger state.
 #
-# Usage: test-author-preflight.sh [--worktree <path>]
-# The optional --worktree names the checkout the developer works in (the brief's worker
-# checkout).  The preflight only ever checks the checkout that holds this script, so the answer
-# is checkout_mismatch unless the canonical --worktree path is that checkout; a missing,
-# unresolvable or other argv answers checkout_mismatch as well.  With no argument the behavior
-# is unchanged.
+# Usage: test-author-preflight.sh [--worktree <path>] [--brief <approved brief> | --planned]
+# --worktree must be this exact checkout. --brief selects the approved developer executor;
+# --planned diagnoses the orchestration developer plan (Health only). With neither context flag,
+# the explicit short-route project.test_author profile is required. No executor is implied.
 
 set -u
 
@@ -25,11 +23,52 @@ PY="$(command -v python3 || command -v python || true)"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd -P)"
 [ -n "$REPO" ] || disabled project_untrusted
 
-if [ "$#" -gt 0 ]; then
-  [ "$#" -eq 2 ] && [ "$1" = "--worktree" ] && [ -n "$2" ] || disabled checkout_mismatch
-  WORKTREE="$(cd "$2" 2>/dev/null && pwd -P || true)"
-  [ -n "$WORKTREE" ] && [ "$WORKTREE" = "$REPO" ] || disabled checkout_mismatch
-fi
+WORKTREE="$REPO"
+SEEN_WORKTREE=0
+CONTEXT_ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --worktree)
+      [ "$SEEN_WORKTREE" -eq 0 ] && [ "$#" -ge 2 ] && [ -n "$2" ] || disabled checkout_mismatch
+      WORKTREE="$(cd "$2" 2>/dev/null && pwd -P || true)"
+      [ -n "$WORKTREE" ] && [ "$WORKTREE" = "$REPO" ] || disabled checkout_mismatch
+      SEEN_WORKTREE=1
+      shift 2
+      ;;
+    --brief)
+      [ "${#CONTEXT_ARGS[@]}" -eq 0 ] && [ "$#" -ge 2 ] && [ -n "$2" ] || disabled checkout_mismatch
+      CONTEXT_ARGS=(--brief "$2")
+      shift 2
+      ;;
+    --planned)
+      [ "${#CONTEXT_ARGS[@]}" -eq 0 ] || disabled checkout_mismatch
+      CONTEXT_ARGS=(--planned)
+      shift
+      ;;
+    *) disabled checkout_mismatch ;;
+  esac
+done
+
+# Resolve before touching an adapter's identity or trust store. A configured unsupported runtime
+# must never be turned into a Claude session. The installed module is portable stdlib code.
+SELECTOR="$REPO/.harness/health/test_author.py"
+[ -f "$SELECTOR" ] && [ ! -L "$SELECTOR" ] || disabled selector_unavailable
+SELECTION="$("$PY" -I -B "$SELECTOR" check --repo "$REPO" "${CONTEXT_ARGS[@]}" 2>/dev/null || true)"
+SELECTION_REASON="$(printf '%s' "$SELECTION" | "$PY" -c '
+import json, sys
+try:
+    value = json.load(sys.stdin)
+except (ValueError, TypeError, RecursionError):
+    value = None
+allowed = {"test_paths_missing", "test_runner_missing", "test_author_missing", "test_author_config_invalid", "runtime_unsupported", "orchestration_unavailable"}
+if value == {"status": "ok"}:
+    print("ok")
+elif isinstance(value, dict) and value.get("status") == "disabled" and value.get("reason") in allowed:
+    print(value["reason"])
+else:
+    print("selector_unavailable")
+' 2>/dev/null || true)"
+[ "$SELECTION_REASON" = "ok" ] || disabled "${SELECTION_REASON:-selector_unavailable}"
 
 # Claude Code supplies this identity to scoped hooks and its Bash tool.  A matching canonical
 # path is required before this helper can enable the optional subagent.
@@ -107,7 +146,7 @@ else:
 CONFIG="$("$PY" "$GUARD" --validate-config 2>/dev/null || true)"
 CONFIG_REASON="$(printf '%s' "$CONFIG" | answer_reason disabled \
   agent_missing scoped_hook_unsupported test_paths_missing test_runner_missing \
-  config_invalid write_zone_rejected)"
+  config_invalid test_author_config_invalid write_zone_rejected)"
 case "$CONFIG_REASON" in
   ok) ;;
   invalid) disabled guard_hook_unavailable ;;

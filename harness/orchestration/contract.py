@@ -14,7 +14,12 @@ from collections.abc import Iterable, Mapping, Iterator
 from pathlib import Path
 from typing import TypeGuard, cast
 
-from harness.configuration import read_config_file, parse_config_json
+from harness.configuration import (
+    read_config_file,
+    parse_config_json,
+    MODEL_ID as MODEL_ID,
+    EFFORT_LEVELS as EFFORT_LEVELS,
+)
 
 from ..errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from .core.constants import (
@@ -34,7 +39,6 @@ from harness.json_types import JsonObject as JsonObject
 
 ROLE_MODES = {"write", "read-only"}
 ROLE_TRANSPORTS = {"in-process", "external"}
-MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
 # An image reference becomes one argv element of the engine: no spaces, and never a leading '-'
 # that the engine would read as an option.
 CONTAINER_IMAGE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}")
@@ -44,9 +48,6 @@ ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DOCKER_CONTAINER_PROBLEM = (
     "orchestration extensions.runtime_access 'docker' requires "
     "access_policy.defaults.container with a worker_image"
-)
-EFFORT_LEVELS = frozenset(
-    {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
 )
 ROLE_FIELDS = frozenset({"name", "mode", "required_capabilities", "risk_triggers"})
 CONFIG_REQUIRED_FIELDS = (

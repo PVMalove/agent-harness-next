@@ -6,15 +6,15 @@
 теста цикла Red → Green → Refactor. Он пишет ровно один тест и запускает его через
 `.claude/hooks/run-test.sh`; production-код, скелет и orchestration остаются у developer.
 
-Субагент доступен только в Claude Code и только после успешного
-`.claude/hooks/test-author-preflight.sh`. Команда возвращает одну строку `{"status":"ok"}`,
+Исполнитель выбирается из конфигурации перед проверкой защищённого адаптера. Общая команда
+`python3 -I -B .harness/health/test_author.py preflight --repo .` возвращает одну строку `{"status":"ok"}`,
 если `test_paths`, `test_runner`, process isolation и scoped guard подтверждены. При любом
 отказе она возвращает `{"status":"disabled","reason":"<санитизированная причина>"}` и
 developer продолжает обычный маршрут.
 
 ## 2. Конфигурация
 
-В `.harness/project.json` задаются обе необязательные настройки:
+В `.harness/project.json` задаются необязательные настройки тестовой зоны и runner:
 
 ```json
 "test_paths": ["tests/**"],
@@ -30,6 +30,37 @@ preflight отвечает `write_zone_rejected`, например для `tests
 `test_runner.command` — argv без shell, с ровно одним аргументом `{test_id}`, который не является
 первым. Схема, validator и `harness health` используют один контракт; отсутствие полей не
 считается ошибкой, но выключает тест-автора.
+
+Исполнитель полного `/implement` наследует `resolved_runtime`, `resolved_model` и
+`resolved_effort` из утверждённого brief developer. Передавайте `--brief <путь>` общему
+preflight; текущая orchestration-конфигурация и профиль проекта не меняют уже утверждённый
+выбор. Для поддержанного нативного вызова `Agent(test-author)` шаблон использует `model: inherit`
+и наследует effort; developer вызывает автора без переопределения model/effort. Старый
+локальный шаблон с фиксированным model или effort получает `test_author_config_invalid`: после
+просмотра замените `.claude/agents/test-author.md` через `harness update . --force-seed-file .claude/agents/test-author.md`, чтобы восстановить наследование.
+
+Короткий `/fast-implement` читает отдельный явный профиль в `.harness/project.json`:
+
+```json
+"test_author": {"runtime": "claude", "model": "sonnet", "effort": "high"}
+```
+
+Это пример выбора пользователя, а не значения по умолчанию. Все три поля обязательны внутри
+профиля. Без профиля короткий маршрут получает `test_author_missing`. Без корректных полей
+brief полный маршрут получает `test_author_config_invalid`, без отката к профилю проекта.
+`resolve --repo . [--brief <путь>]` показывает фактически выбранные поля и источник.
+
+Короткий маршрут сохраняет требование и один сценарий в локальный prompt-файл и вызывает:
+
+```sh
+python3 -I -B .harness/health/test_author.py run --repo . --prompt-file <prompt-файл>
+```
+
+Launcher повторно проверяет защищённый адаптер, передаёт выбранному CLI точные model/effort
+и отдаёт текст задания через stdin. Он нужен и когда модель текущей сессии отличается от
+профиля проекта. Настроенный runtime без защищённого адаптера даёт `runtime_unsupported`;
+другой CLI вместо него не запускается. Сейчас защищённый адаптер реализован для Claude Code;
+упоминания `.claude` ниже относятся к его guard и runner, а не к выбору исполнителя.
 
 ## 3. Защита
 
@@ -50,6 +81,8 @@ Preflight проверяет условия и на первом нарушен�
 | Проверка | Причина отказа |
 | --- | --- |
 | Необязательный `--worktree <путь>` называет тот же checkout, где лежит preflight | `checkout_mismatch` |
+| Выбраны runtime/model/effort из brief developer или short-профиля проекта | `test_author_missing`, `test_author_config_invalid` |
+| Для выбранного runtime есть защищённый адаптер | `runtime_unsupported` |
 | `CLAUDE_PROJECT_DIR` совпадает с корнем Git checkout | `project_untrusted` |
 | Claude Code не запущен с `CLAUDE_CODE_SIMPLE=1` или `CLAUDE_CODE_SAFE_MODE=1` | `claude_code_unsupported` |
 | Пользователь принял диалог доверия для этого проекта | `project_untrusted` |
@@ -156,7 +189,8 @@ fixtures, останавливается до ответа разработчи�
 
 **Поддерживаемые версии и окружения.**
 
-- Только Claude Code; Codex не поддержан. Харнесс не закрепляет минимальную версию Claude Code:
+- Защищённый адаптер сейчас есть только для Claude Code; выбор Codex или другого runtime
+  сохраняется в диагностике и даёт `runtime_unsupported`. Харнесс не закрепляет минимальную версию Claude Code:
   preflight статически проверяет agent, scoped hook и guard, а срабатывание hook в живой сессии
   подтверждает проверка самого харнесса (`make test-author-probe`, нужны `claude` и вход).
 - Только Linux с bubblewrap 0.9.0+ и непривилегированными user-namespaces. На Windows и macOS
@@ -175,14 +209,15 @@ fixtures, останавливается до ответа разработчи�
 
 ## 7. Полный маршрут `/implement`
 
-Выбран вариант A задачи #971: автор доступен external developer в worker worktree. Этот
-транспорт запускает `claude -p` прямо в checkout из brief, поэтому `CLAUDE_PROJECT_DIR`, scoped
-hook и runner относятся к тому же коду. Установите харнесс в worker checkout и включите там
+Выбран вариант A задачи #971: автор работает рядом с external developer в worker worktree,
+с runtime/model/effort из его brief. Поддержанный адаптер запускает developer прямо в checkout
+из brief, поэтому runtime, scoped hook и runner относятся к тому же коду. Установите харнесс в worker checkout и включите там
 `test_paths` и `test_runner`; состояние оркестрации из основного checkout не копируется.
 Откройте этот точный путь в Claude Code и примите диалог доверия. Ни installer, ни developer,
 ни headless-запуск не создают решение доверия за пользователя.
 
-External developer запускает свой `.claude/hooks/test-author-preflight.sh --worktree <worker_worktree>`.
+External developer запускает общий preflight с `--repo <worker_worktree> --brief <путь brief>`.
+Для защищённого Claude-адаптера это `.claude/hooks/test-author-preflight.sh --worktree <worker_worktree> --brief <путь brief>`.
 Только точный ответ `{"status":"ok"}` разрешает следующий шаг. В утверждённом brief также должно
 быть разрешение `Agent(test-author)` или `Agent`; без него причина — `agent_tool_unavailable`.
 Новый шаблон orchestration задаёт именованное разрешение только роли developer. Существующие
@@ -200,8 +235,8 @@ checkout не меняются; общие runtime-логи сохраняютс
 In-process developer по-прежнему запускает preflight основного checkout с `--worktree` из brief.
 Отдельный worker даёт `checkout_mismatch`: этот транспорт использует обычный TDD. Любой отказ
 preflight и недоступность инструмента вызова автора также сохраняют обычный TDD в worker,
-с указанной причиной, без blocker и новых записей ledger. Полный маршрут автора требует
-external Claude Code; Codex и другие runtime его не поддерживают.
+с указанной причиной, без blocker и новых записей ledger. Выбор runtime берётся из developer;
+отсутствие защищённого адаптера для него сохраняет обычный TDD, без подмены исполнителя.
 
 В этой поставке проверены Python-тесты через unittest и pytest. Rust-тесты
 `native/harness-runtime/crates/*/tests` этим решением не поддержаны: для них не добавлены
@@ -212,15 +247,18 @@ external Claude Code; Codex и другие runtime его не поддержи
 ## 8. Диагностика и живая проверка
 
 `harness health` выводит отдельную проверку `hooks.test_author`: результат preflight для
-целевого Claude Code checkout или санитизированную причину отказа. Это готовность Claude Code,
-даже если Health вызван из Codex; она не включает автора в Codex. Перед исполнением скрипта
-Health отдельно проверяет точное решение доверия. Без opt-in проверка пропускается с причиной,
+целевого checkout или санитизированную причину отказа, выбранные runtime/model/effort и
+источник. Health использует план developer из orchestration (пометка `planned`), а при отсутствии
+плана — short-профиль проекта. Плановая готовность не заменяет выбор из утверждённого brief.
+Для поддержанного Claude-адаптера Health отдельно проверяет точное решение доверия. Без opt-in проверка пропускается с причиной,
 недоступный необязательный автор даёт предупреждение и оставляет обычный маршрут рабочим.
 
 Health не запускает Claude, выбранный тест, сборку или БД и не меняет доверие. Probe изоляции
 создаёт и удаляет временную песочницу в общем `runs/`. Статический `preflight: ok` не доказывает,
 что scoped hook сработает в живой сессии. Это проверяет `make test-author-probe`: нужны вход
-в Claude Code и квота. Команда подтверждает guard, поведенческий Red и вызов автора внешним
+в Claude Code и квота. Проба берёт runtime/model/effort из плана developer исходного проекта, без отдельной дешёвой
+модели. Если адаптер выбранного runtime недоступен, проба завершается явным отказом. Команда
+для поддержанного адаптера подтверждает guard, поведенческий Red и вызов автора внешним
 developer в worker worktree; fixture developer затем проверяет Green неизменного теста.
 
 Каждый вызов CLI оставляет санитизированный `test-author-probe-*.json` в общем

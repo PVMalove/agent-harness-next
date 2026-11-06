@@ -25,7 +25,8 @@ the repository; a failing test is re-run by its node id through the bounded wrap
 
 ## Red-Green-Refactor with the optional test author
 
-When `.claude/hooks/test-author-preflight.sh` returns `{"status":"ok"}`, the developer runs each
+When `python3 -I -B .harness/health/test_author.py preflight --repo <worker_worktree>
+--brief <approved brief path>` returns `{"status":"ok"}`, the developer runs each
 implementation step as one test-first cycle with the in-session `test-author`; any other preflight
 answer keeps the ordinary route. The cycle is prose for the developer, not a new dispatch, role, state or
 ledger record. Per step, in order:
@@ -64,13 +65,16 @@ rephrased (see "Never work around a hook" in `_common.md`). A local author retry
 guard denial create no new dispatch, add no ledger state and do not bypass the recovery rules of
 ADR 0012.
 
-**Full `/implement` route.** Only an `external` Claude Code developer enables the author: its
+**Full `/implement` route.** Inherit runtime/model/effort from the approved developer brief;
+project settings never override it. A selected runtime without a protected adapter returns
+`runtime_unsupported`, preserving ordinary TDD without a provider substitution. The current
+protected adapter supports an `external` Claude Code developer: its
 process, `CLAUDE_PROJECT_DIR`, preflight, guard and runner must all serve the brief's canonical
 `worker_worktree`. Install the project harness in that worker checkout before dispatch; the human
 must accept Claude Code trust for that exact path. Do not copy state or trust from the main checkout.
-Run `"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <brief worker_worktree>`.
+Run `"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <brief worker_worktree> --brief <approved brief path>`.
 Only exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent` permission in the approved
-brief allow calling the named author. Otherwise use ordinary TDD and name the preflight reason or
+brief allow calling the named author without model/effort overrides (`model: inherit`). Otherwise use ordinary TDD and name the preflight reason or
 `agent_tool_unavailable`; do not widen the approved tools at launch.
 
 Give the author one test path within the brief's allowed scope, the requirement and the runner log
@@ -83,7 +87,10 @@ are unsupported. A refusal never creates a blocker, another dispatch or ledger s
 author does not change independent QA or the Rust runtime authority.
 
 The `/fast-implement` short route runs this same cycle in its single session, with the seam agreed
-by the human before the first test instead of taken from the architect brief. It adds no coordinator,
+by the human before the first test instead of taken from the architect brief. There, select the
+explicit project `test_author` runtime/model/effort and use `.harness/health/test_author.py run
+--repo . --prompt-file <path>` for each handoff, as described in the project test-author guide.
+It adds no coordinator,
 architect or QA step, and an unavailable author keeps the ordinary route with the reason stated.
 
 A developer retry receives, besides its brief, the retry handoff (the playbook's "Developer-retry

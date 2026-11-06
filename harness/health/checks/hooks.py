@@ -24,6 +24,7 @@ from ..hook_settings import (
 )
 from ..model import CheckResult, Fix, Status
 from ..process import run_tool
+from ..test_author import AuthorUnavailable, adapter_for, read_author, preflight_reason
 from ..project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
     HOOK_POLICY_REL,
@@ -44,41 +45,61 @@ PROJECT_JSON_SOURCE = ".harness/project.json"
 
 
 def check_test_author(context: HealthContext) -> CheckResult:
-    """Probe a trusted Claude checkout; never start Claude, a build, database or selected test.
+    """Resolve the planned executor and probe its protected adapter without starting its runtime.
 
     The preflight's isolation probe creates and removes a disposable sandbox. Trust is checked
     before executing any project script, independently of the script's own trust check.
     """
-    reason, status = _test_author_readiness(context)
+    reason, status, selection = _test_author_readiness(context)
+    executor = (
+        f"runtime={selection['runtime']}, model={selection['model']}, "
+        f"effort={selection['effort']}, источник={selection['source']}"
+        if selection
+        else "исполнитель не выбран"
+    )
     return CheckResult(
         id="hooks.test_author",
         group=GROUP,
         status=status,
         message=(
-            f"Тест-автор Claude Code — preflight: {reason}; "
+            f"Тест-автор {executor} — preflight: {reason}; "
             "/implement: external в доверенном worker checkout; "
             "/fast-implement: текущий checkout; "
             "live-срабатывание hook проверяет make test-author-probe. "
-            "Codex и другие runtime не поддержаны; Rust этим решением не поддержан"
+            "Неподдерживаемый защищённый адаптер даёт runtime_unsupported; Rust этим решением не поддержан"
         ),
     )
 
 
-def _test_author_readiness(context: HealthContext) -> tuple[str, Status]:
+def _test_author_readiness(
+    context: HealthContext,
+) -> tuple[str, Status, dict[str, object] | None]:
     repo = context.repo.resolve()
     if context.lock is None:
-        return context.no_lock_message(), "skipped"
+        return context.no_lock_message(), "skipped", None
     try:
         config = json.loads((repo / PROJECT_JSON_SOURCE).read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return "test_paths_missing", "skipped"
+        return "test_paths_missing", "skipped", None
     except JSON_READ_ERRORS:
-        return "config_invalid", "warn"
+        return "config_invalid", "warn", None
     if not isinstance(config, dict):
-        return "config_invalid", "warn"
+        return "config_invalid", "warn", None
     for field in ("test_paths", "test_runner"):
         if field not in config:
-            return f"{field}_missing", "skipped"
+            return f"{field}_missing", "skipped", None
+    try:
+        selection = read_author(repo, planned=True)
+    except AuthorUnavailable as exc:
+        return (
+            exc.reason,
+            "skipped" if exc.reason == "test_author_missing" else "warn",
+            None,
+        )
+    try:
+        preflight = adapter_for(selection)
+    except AuthorUnavailable as exc:
+        return exc.reason, "warn", selection
     # A readiness check targets this checkout, even when health is called from another runtime.
     # Setting its identity is not granting trust: the exact path must already be accepted.
     config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
@@ -94,48 +115,23 @@ def _test_author_readiness(context: HealthContext) -> tuple[str, Status]:
     except JSON_READ_ERRORS:
         entry = None
     if not isinstance(entry, dict) or entry.get("hasTrustDialogAccepted") is not True:
-        return "project_untrusted", "warn"
-    if shutil.which("claude") is None:
-        return "runtime_unavailable", "warn"
-    script = repo / HOOKS_DIR / "test-author-preflight.sh"
+        return "project_untrusted", "warn", selection
+    if shutil.which(str(selection["runtime"])) is None:
+        return "runtime_unavailable", "warn", selection
+    script = repo / preflight
     bash = shutil.which("bash")
     if bash is None or not script.is_file() or script.is_symlink():
-        return "preflight_unavailable", "warn"
+        return "preflight_unavailable", "warn", selection
     result = run_tool(
-        [bash, str(script), "--worktree", str(repo)],
+        [bash, str(script), "--worktree", str(repo), "--planned"],
         cwd=repo,
         env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)},
         timeout=135,
     )
     if result is None:
-        return "preflight_unavailable", "warn"
-    if result.returncode != 0 or len(result.stdout) > 512:
-        return "preflight_failed", "warn"
-    try:
-        answer = json.loads(result.stdout)
-    except JSON_READ_ERRORS:
-        return "preflight_failed", "warn"
-    if answer == {"status": "ok"}:
-        return "ok", "ok"
-    reasons = {
-        "checkout_mismatch",
-        "project_untrusted",
-        "claude_code_unsupported",
-        "agent_missing",
-        "scoped_hook_unsupported",
-        "test_paths_missing",
-        "test_runner_missing",
-        "config_invalid",
-        "write_zone_rejected",
-        "guard_hook_unavailable",
-        "isolation_unavailable",
-        "runner_unavailable",
-    }
-    if isinstance(answer, dict) and answer.get("status") == "disabled":
-        reason = answer.get("reason")
-        if isinstance(reason, str) and reason in reasons:
-            return reason, "warn"
-    return "preflight_failed", "warn"
+        return "preflight_unavailable", "warn", selection
+    reason = preflight_reason(result)
+    return reason, "ok" if reason == "ok" else "warn", selection
 
 
 def recorded_managed_entries(repo: Path, identifier: str) -> list[str] | None:

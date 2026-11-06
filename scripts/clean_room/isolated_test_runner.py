@@ -30,10 +30,12 @@ from scripts.clean_room.claude_probe import (
     UNTRUSTED_STATES,
     claude_environment,
     project_environment,
+    probe_mode,
     verify_scoped_hook,
 )
 from scripts.clean_room.support import (
     BASH,
+    ROOT,
     HARNESS,
     fill_agents,
     run_health,
@@ -41,7 +43,8 @@ from scripts.clean_room.support import (
     run_step,
 )
 from scripts.clean_room.test_author_cycle import Execute, verify_cycle
-from harness.storage import storage_path
+from harness.storage import storage_path, storage_root
+from harness.health.test_author import AuthorUnavailable, adapter_for, read_author
 
 TEST_MODULE = "tests.test_runner_cases"
 BENIGN = f"{TEST_MODULE}.Benign.test_add"
@@ -260,6 +263,26 @@ def _install(project: Path, *, existing_checkout: bool = False) -> Path:
         sys.exit(
             "engineering-suite init did not write the --test-* flags to project.json"
         )
+    # Deterministic fixture input, never a production executor default. Live probes instead
+    # consume the source project's configured developer assignment without a model override.
+    profile: dict[str, object] = {
+        "runtime": "claude",
+        "model": "fixture-model",
+        "effort": "medium",
+    }
+    if probe_mode() != "off":
+        try:
+            selected = read_author(storage_root(ROOT).parent, planned=True)
+            adapter_for(selected)
+        except AuthorUnavailable as exc:
+            sys.exit(
+                f"test-author probe: configured developer unavailable ({exc.reason})"
+            )
+        profile = {key: selected[key] for key in ("runtime", "model", "effort")}
+    config["test_author"] = profile
+    (project / ".harness/project.json").write_text(
+        json.dumps(config) + "\n", encoding="utf-8"
+    )
     fill_agents(project)
     _write_project_files(project)
     run_health(project)

@@ -70,6 +70,7 @@
 
 ### Fixed
 
+- **[Исполнитель тест-автора из настроек]:** Полный `/implement` наследует runtime/model/effort утверждённого developer, короткий `/fast-implement` использует явный профиль `project.json.test_author`. Общий selector обслуживает запуск, preflight и Health; нативный Agent наследует модель родителя вместо фиксированного `haiku`. Неподдержанный защищённый адаптер даёт `runtime_unsupported`, без подмены выбранного CLI. Live-проба также использует настройки developer (#993).
 - **[Workdir `exec_command` в `block-direct-master`]:** `direct_commits.py` берёт каталог запуска из `tool_input.workdir` вызова `exec_command`, если он задан, и разрешает относительный путь от `cwd` payload. Раньше проверялся только `cwd` сессии, поэтому коммит в изолированном issue-worktree блокировался как коммит в защищённую ветку основного checkout. Явный `workdir` главнее `cwd`; нестроковый `workdir` блокирует команду fail-closed (#960).
 
 - **[DNS и очистка сетей Podman]:** runtime подключает proxy к отдельной внешней сети с DNS, сохраняя worker во внутренней сети; при обнаружении сетей разбирает поля Podman `name`, `id` и `labels`, поэтому очистка удаляет обе принадлежащие dispatch сети. Проверки labels и порядка удаления сохранены (#943).

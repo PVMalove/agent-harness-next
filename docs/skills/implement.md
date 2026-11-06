@@ -115,14 +115,17 @@ worker остановился; правила перезапуска — в ра
 запускает role subagent в указанном worktree. External adapter является только transport и сохраняет
 тот же handoff, liveness, approval и report contract.
 
-**Тест-автор в полном маршруте.** Developer Claude Code с external transport запускает preflight из
-собственного worker checkout: `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree>`.
+**Тест-автор в полном маршруте.** Исполнитель наследует runtime/model/effort из утверждённого
+brief developer, без подмены профилем проекта. Настроенный runtime без защищённого адаптера даёт
+`runtime_unsupported` и обычный TDD. Текущий защищённый адаптер Claude Code с external transport
+запускает preflight из
+собственного worker checkout: `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <путь brief>`.
 Точный trust этого пути принимает человек. После `{"status":"ok"}` и при наличии
-`Agent(test-author)` или `Agent` в утверждённом brief developer вызывает автора; без разрешения
+`Agent(test-author)` или `Agent` в утверждённом brief developer вызывает автора без переопределения model/effort (`model: inherit`); без разрешения
 остаётся обычный TDD с причиной `agent_tool_unavailable`. Для in-process проверка основного
 checkout с `--worktree` даёт `checkout_mismatch` и оставляет обычный TDD. Отказ не становится
 blocker. Автор пишет и запускает тест в worker, а общий корень runner-логов получает от developer.
-Проверка `hooks.test_author` показывает готовность или отказ; live-проба с учётом расхода
+Проверка `hooks.test_author` показывает выбранный runtime/model/effort, источник и готовность или отказ; live-проба с учётом расхода
 проверяет реальный вызов developer → author. Rust и Codex этим решением не поддержаны.
 
 Перед первым dispatch coordinator может зарегистрировать immutable Context Package, собранный

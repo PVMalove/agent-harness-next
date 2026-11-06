@@ -137,6 +137,8 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         )
         self.assertIn(f"{self.worktree}/.claude/hooks/test-author-preflight.sh", prompt)
         self.assertIn(f"--worktree {self.worktree}", prompt)
+        self.assertIn(f"--brief {self.brief}", prompt)
+        self.assertIn("without model or effort overrides", prompt)
         self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), prompt)
 
     def test_another_role_keeps_its_original_directory_scope(self) -> None:

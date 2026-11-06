@@ -224,3 +224,24 @@ external Claude developer с opt-in. Явное ограничение прое�
 автора не поддерживают. Автор остаётся помощником developer, не ролью orchestration. Изменение
 не вводит writer operational state, не меняет Rust authority, supervisor, независимую QA и
 Release Gate ADR 0019–0026.
+
+
+## Уточнение #993: исполнитель из конфигурации
+
+В полном `/implement` test-author наследует `resolved_runtime`, `resolved_model`,
+`resolved_effort` из утверждённого brief developer. Это фиксирует фактический выбор задания,
+включая runtime, выбранный вместо планового default. Отдельной роли/assignment автора нет.
+Короткий `/fast-implement` использует явный `project.json.test_author` с обязательными
+`runtime`, `model`, `effort`. Отсутствие профиля отключает автора, без скрытой модели по умолчанию.
+
+Общий stdlib selector `.harness/health/test_author.py` обслуживает preflight, запуск короткого
+маршрута и Health. Диагностика Health использует план developer с пометкой `planned`; он не
+подменяет утверждённый brief при исполнении. Для нативного Agent шаблон задаёт `model: inherit`,
+а вызов сохраняет model/effort родителя без overrides. Короткий launcher передаёт model/effort
+профиля в выбранный CLI, независимо от настроек текущей интерактивной сессии.
+
+Выбор runtime не доказывает наличие защищённого адаптера: пока он реализован для Claude Code.
+Выбранный Codex, dsh или другой runtime получает `runtime_unsupported`, без запуска Claude.
+Live-проба использует профиль developer исходного проекта; фиксированный `haiku` удалён.
+Это уточнение меняет выбор исполнителя, сохраняя trust, scoped guard, runner и обычный TDD
+при недоступности автора по решениям #971 и этой ADR.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -37,6 +38,11 @@ def _project(
         "qa_gate_commands": [],
         "test_paths": test_paths,
         "test_runner": {"command": ["python3", "-m", "pytest", "{test_id}"]},
+        "test_author": {
+            "runtime": "claude",
+            "model": "configured-model",
+            "effort": "high",
+        },
     }
     (project / ".harness" / "project.json").write_text(
         json.dumps(config), encoding="utf-8"
@@ -48,6 +54,15 @@ def _project(
         target.write_bytes(source.read_bytes())
         target.chmod(target.stat().st_mode | stat.S_IXUSR)
     (project / ".claude" / "agents" / "test-author.md").write_bytes(AGENT.read_bytes())
+    health = project / ".harness/health"
+    health.mkdir()
+    (health / "test_author.py").write_bytes(
+        (ROOT / "harness/health/test_author.py").read_bytes()
+    )
+    for name in ("configuration.py", "json_types.py"):
+        (project / ".harness" / name).write_bytes(
+            (ROOT / "harness" / name).read_bytes()
+        )
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     (tmp_path / ".claude.json").write_text(
         json.dumps(
@@ -116,6 +131,42 @@ def test_preflight_activates_only_after_probe_and_scoped_hook_contract_passes(
     answer = _answer(_run(project))
 
     assert answer == {"status": "ok"}
+
+
+def test_full_route_uses_the_approved_developer_instead_of_short_route_profile(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    _runner(project, '{"status":"ok"}')
+    brief = tmp_path / "developer.json"
+    brief.write_text(
+        json.dumps(
+            {
+                "role": "developer",
+                "resolved_runtime": "codex",
+                "resolved_model": "developer-model",
+                "resolved_effort": "high",
+            }
+        )
+    )
+
+    assert _answer(_run(project, args=("--brief", str(brief)))) == {
+        "status": "disabled",
+        "reason": "runtime_unsupported",
+    }
+
+    data = json.loads(brief.read_text())
+    data["resolved_runtime"] = "claude"
+    brief.write_text(json.dumps(data))
+    project_config = project / ".harness/project.json"
+    config = json.loads(project_config.read_text())
+    config["test_author"]["runtime"] = "codex"
+    project_config.write_text(json.dumps(config))
+    assert _answer(_run(project, args=("--brief", str(brief)))) == {"status": "ok"}
+    assert _answer(_run(project)) == {
+        "status": "disabled",
+        "reason": "runtime_unsupported",
+    }
 
 
 def test_preflight_requires_a_trusted_claude_project_identity(tmp_path: Path) -> None:
@@ -432,3 +483,127 @@ def test_unresolvable_or_unknown_arguments_are_a_checkout_mismatch(
     argv = tuple(item.replace("{project}", str(project)) for item in args)
 
     assert _answer(_run(project, args=argv)) == _MISMATCH
+
+
+@pytest.mark.parametrize(
+    "override",
+    ["model: haiku", "model: inherit\neffort: low", "model: inherit\nmodel: sonnet"],
+)
+def test_preflight_refuses_stale_or_overridden_author_settings(
+    tmp_path: Path, override: str
+) -> None:
+    project = _project(tmp_path)
+    _runner(project, '{"status":"ok"}')
+    agent = project / ".claude/agents/test-author.md"
+    agent.write_text(agent.read_text().replace("model: inherit", override))
+
+    assert _answer(_run(project)) == {
+        "status": "disabled",
+        "reason": "test_author_config_invalid",
+    }
+
+
+@pytest.mark.skipif(os.name == "nt", reason="native CLI fixture is a POSIX executable")
+def test_portable_short_launcher_applies_project_settings_in_a_fresh_process(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    _runner(project, '{"status":"ok"}')
+    (project / ".harness/storage.py").write_bytes(
+        (ROOT / "harness/storage.py").read_bytes()
+    )
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    binary = binary_dir / "claude"
+    binary.write_text(
+        f"#!{sys.executable}\nimport json, pathlib, sys\npathlib.Path('selected.json').write_text(json.dumps(sys.argv[1:]))\nassert sys.stdin.read() == 'one requirement'\n"
+    )
+    binary.chmod(0o755)
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("one requirement")
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path),
+        "CLAUDE_CONFIG_DIR": str(tmp_path),
+        "PATH": str(binary_dir) + os.pathsep + os.environ["PATH"],
+    }
+    command = [
+        sys.executable,
+        "-I",
+        "-B",
+        str(project / ".harness/health/test_author.py"),
+        "run",
+        "--repo",
+        str(project),
+        "--prompt-file",
+        str(prompt),
+    ]
+    result = subprocess.run(
+        command, cwd=project, env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    argv = json.loads((project / "selected.json").read_text())
+    assert argv[argv.index("--model") + 1] == "configured-model"
+    assert argv[argv.index("--effort") + 1] == "high"
+    assert "--agent" in argv
+
+    config_path = project / ".harness/project.json"
+    config = json.loads(config_path.read_text())
+    config["test_author"]["runtime"] = "codex"
+    config_path.write_text(json.dumps(config))
+    (project / "selected.json").unlink()
+    result = subprocess.run(
+        command, cwd=project, env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 3
+    assert json.loads(result.stdout) == {
+        "status": "disabled",
+        "reason": "runtime_unsupported",
+    }
+    assert not (project / "selected.json").exists()
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="protected adapter fixture uses a POSIX shell"
+)
+def test_full_generic_preflight_preserves_the_native_parent_checkout_identity(
+    tmp_path: Path,
+) -> None:
+    worker = _project(tmp_path)
+    _runner(worker, '{"status":"ok"}')
+    brief = tmp_path / "developer.json"
+    brief.write_text(
+        json.dumps(
+            {
+                "role": "developer",
+                "resolved_runtime": "claude",
+                "resolved_model": "developer-model",
+                "resolved_effort": "high",
+            }
+        )
+    )
+    command = [
+        sys.executable,
+        "-I",
+        "-B",
+        str(worker / ".harness/health/test_author.py"),
+        "preflight",
+        "--repo",
+        str(worker),
+        "--brief",
+        str(brief),
+    ]
+    env = {
+        **os.environ,
+        "CLAUDE_CONFIG_DIR": str(tmp_path),
+        "CLAUDE_PROJECT_DIR": str(tmp_path),
+    }
+    result = subprocess.run(
+        command, cwd=worker, env=env, capture_output=True, text=True, check=False
+    )
+    assert _answer(result) == {"status": "disabled", "reason": "checkout_mismatch"}
+    env["CLAUDE_PROJECT_DIR"] = str(worker)
+    result = subprocess.run(
+        command, cwd=worker, env=env, capture_output=True, text=True, check=False
+    )
+    assert _answer(result) == {"status": "ok"}
