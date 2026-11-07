@@ -77,6 +77,9 @@ plugins:
             Политики: Policies
             Доступ и контейнер: Access and container
             Верификация: Verification
+            Интеграции: Integrations
+            Секреты и токены: Secrets and tokens
+            Зависимости и окружение: Dependencies and environment
             Контейнер: Container
             Руководства: Guides
             Рабочий поток: Workflow
@@ -115,6 +118,7 @@ extra_css:
 
 extra_javascript:
   - assets/nav-filter.js
+  - assets/nav-tree.js
   - assets/diagram-embed.js
   - assets/core-diagram.js
   - assets/install-diagram.js
@@ -145,6 +149,9 @@ nav:
               - Политики: getting-started/settings/orchestration/policies.md
               - Доступ и контейнер: getting-started/settings/orchestration/access.md
               - Верификация: getting-started/settings/orchestration/verification.md
+          - Интеграции: getting-started/settings/integrations.md
+          - Секреты и токены: getting-started/settings/secrets.md
+          - Зависимости и окружение: getting-started/settings/environment.md
           - Контейнер: getting-started/settings/container.md
           - Test-author: getting-started/settings/test-author.md
   - Руководства:

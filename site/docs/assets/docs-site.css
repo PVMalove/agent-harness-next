@@ -3396,44 +3396,39 @@ body {
   }
 }
 
-/* Nested navigation: a collapsible tree with a square +/- toggle and indented children. */
+/* Nested navigation: folder/file icons, page counts and tree branches. */
+.md-sidebar--primary {
+  --ah-nav-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
+  --ah-nav-file: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'/%3E%3Cpath d='M14 3v6h6'/%3E%3C/svg%3E");
+}
+
 .md-sidebar--primary .md-nav__item--nested > .md-nav__link[for] {
   pointer-events: auto;
 }
 
-/* The top-level tab group stays always open; only deeper groups get the toggle. */
-.md-sidebar--primary .md-nav__item--nested:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__link .md-nav__icon {
-  display: grid;
-  place-items: center;
-  position: static;
-  flex: 0 0 auto;
-  align-self: center;
-  width: 1.3rem;
-  height: 1.3rem;
-  margin: 0 0 0 0.35rem;
-  border: 1px solid var(--ah-rule);
-  border-radius: 4px;
+.md-sidebar--primary .md-nav__item--nested > .md-nav__container {
+  position: relative;
 }
 
-.md-sidebar--primary .md-nav__item--nested:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__link .md-nav__icon:after {
+/* Invisible toggle over the folder: the title still opens the page, the folder expands the group. */
+.md-sidebar--primary .md-nav__item--nested > .md-nav__container > label.md-nav__link {
+  position: absolute;
+  left: 0.7rem;
+  top: 0;
   display: block;
-  width: auto;
-  height: auto;
-  content: "+";
-  background: none;
-  -webkit-mask-image: none;
-  mask-image: none;
-  color: var(--ah-fg);
-  font: 600 0.72rem/1 var(--ah-mono);
-  transform: none;
+  width: 1.3rem;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
-.md-sidebar--primary .md-nav__item--nested:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__toggle:checked ~ .md-nav__link .md-nav__icon:after {
-  content: "−";
-  transform: none;
+.md-sidebar--primary .md-nav__item--nested > label.md-nav__link > .md-nav__icon {
+  display: none;
 }
 
-/* With navigation.sections, Material keeps every section open; make the toggle real. */
+/* navigation.sections keeps sections open; make the toggle real. */
 .md-sidebar--primary .md-nav__item--section > .md-nav:not([data-md-level="1"]) {
   display: none;
   visibility: visible;
@@ -3445,37 +3440,32 @@ body {
   display: block;
 }
 
-.md-sidebar--primary .md-nav__item--section:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__container > label.md-nav__link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .md-sidebar--primary .md-nav__item--nested > .md-nav:not([data-md-level="1"]) > .md-nav__list {
   margin-left: 0.85rem;
   padding-left: 0.4rem;
-  border-left: 1px solid var(--ah-rule);
+  border-left: 1px solid var(--ah-edge);
 }
 
-/* Tree icons: folders group child pages, files mark a page. */
-.md-sidebar--primary {
-  --ah-nav-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
-  --ah-nav-file: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'/%3E%3Cpath d='M14 3v6h6'/%3E%3C/svg%3E");
+.md-sidebar--primary .md-nav__item--nested > .md-nav:not([data-md-level="1"]) > .md-nav__list > .md-nav__item {
+  position: relative;
 }
 
-.md-sidebar--primary .md-nav__item--nested > .md-nav__container > a.md-nav__link::before,
-.md-sidebar--primary .md-nav__item--nested > label.md-nav__link::before {
+.md-sidebar--primary .md-nav__item--nested > .md-nav:not([data-md-level="1"]) > .md-nav__list > .md-nav__item::before {
   content: "";
-  flex: 0 0 auto;
-  width: 1rem;
-  height: 1rem;
-  margin-top: 0.12rem;
-  background-color: currentColor;
-  opacity: 0.7;
-  -webkit-mask: var(--ah-nav-folder) center / contain no-repeat;
-  mask: var(--ah-nav-folder) center / contain no-repeat;
+  position: absolute;
+  left: -0.4rem;
+  top: 0.55rem;
+  width: 1.2rem;
+  height: 0.7rem;
+  border-left: 1px solid var(--ah-edge);
+  border-bottom: 1px solid var(--ah-edge);
+  border-bottom-left-radius: 6px;
+  pointer-events: none;
 }
 
+/* Folder marks a group, file marks a page. */
+.md-sidebar--primary .md-nav__item--nested > .md-nav__container > a.md-nav__link::before,
+.md-sidebar--primary .md-nav__item--nested > label.md-nav__link::before,
 .md-sidebar--primary .md-nav__item:not(.md-nav__item--nested) > a.md-nav__link::before {
   content: "";
   flex: 0 0 auto;
@@ -3483,7 +3473,21 @@ body {
   height: 1rem;
   margin-top: 0.12rem;
   background-color: currentColor;
-  opacity: 0.7;
-  -webkit-mask: var(--ah-nav-file) center / contain no-repeat;
-  mask: var(--ah-nav-file) center / contain no-repeat;
+  opacity: 0.6;
+  -webkit-mask: var(--ah-nav-folder) center / contain no-repeat;
+  mask: var(--ah-nav-folder) center / contain no-repeat;
+}
+
+.md-sidebar--primary .md-nav__item:not(.md-nav__item--nested) > a.md-nav__link::before {
+  -webkit-mask-image: var(--ah-nav-file);
+  mask-image: var(--ah-nav-file);
+}
+
+.ah-nav-count {
+  margin-left: auto;
+  padding: 0.06rem 0.4rem;
+  border: 1px solid var(--ah-edge);
+  border-radius: 999px;
+  color: var(--ah-muted);
+  font: 0.6rem/1.4 var(--ah-mono);
 }

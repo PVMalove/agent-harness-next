@@ -1,11 +1,13 @@
 # Настройки проекта
 
-Проект настраивают два файла в `.harness/`. `project.json` описывает сам проект: язык, ветки,
-команды QA gate, трекер, тестовую зону и память. `orchestration.json` описывает, как coordinator и
-runtime ведут роли, согласование и проверки. Первый файл есть в любом проекте, второй появляется
-вместе с capability `backend-orchestration`.
+Настройка проекта — это два основных контракта в `.harness/` и поверхности вокруг них.
+`project.json` описывает сам проект: язык, ветки, команды QA gate, трекер, тестовую зону, hook
+policy и память. `orchestration.json` описывает, как coordinator и runtime ведут роли, согласование,
+доступ и проверки; он появляется вместе с capability `backend-orchestration`. Рядом лежат инвентарь
+интеграций, сгенерированная hook policy, native-конфиги рантаймов, секреты и окружение.
 
-## Два файла
+
+## Два основных файла
 
 | Файл | Когда появляется | Кто пишет | Кто читает |
 | --- | --- | --- | --- |
@@ -16,6 +18,25 @@ runtime ведут роли, согласование и проверки. Пе�
 `orchestration.json` — только если его нет. `harness update` обновляет управляемый пример
 `.harness/orchestration.example.json`, но не проектный конфиг; перезапись проектного файла требует
 явного `--force-seed-file`.
+
+## Что ещё входит в настройку
+
+Кроме двух контрактов, у проекта есть поверхности, которые настраиваются отдельно:
+
+- `.harness/integrations.json` — инвентарь native-конфигов: пути, sha256, runtime'ы, `secret_refs` и
+  действие `verify`; проверяет `files.integrations`.
+- `.harness/hook-policy.json` — генерируется установщиком и вручную не правится; дрейф показывает
+  `hooks.policy`, исправляет `harness update`. Формат и проверка описаны в
+  [установке hooks](../../hooks/install-and-update.md).
+- Native-конфиги `.claude/settings.json`, `.claude/settings.local.json`, `.codex/hooks.json`,
+  `.mcp.json` — принадлежат рантаймам; harness их только учитывает, а не перезаписывает.
+- Секреты — в файлах лежат только имена переменных; значения живут в окружении, а для контейнера —
+  в окружении `harness-runtime serve`.
+- Зависимости — Python 3.12+, `uv`, Git, Rust и `harness-runtime`, Docker или Podman для контейнера;
+  зависимости самого проекта harness не устанавливает.
+
+Эти поверхности описаны на страницах [«Интеграции»](integrations.md),
+[«Секреты и токены»](secrets.md) и [«Зависимости и окружение»](environment.md).
 
 ## Где лежат схемы
 
@@ -73,6 +94,9 @@ python3 .harness/orchestration/coordinator.py --repo . config validate --fix --d
   контейнерным исполнителем.
 - [Верификация](orchestration/verification.md) — команды QA, профили и планы проверки, Repo Map и
   Context Package.
+- [Интеграции](integrations.md) — `.harness/integrations.json`: native-конфиги, `secret_refs` и `verify`.
+- [Секреты и токены](secrets.md) — доступ к модели, секреты интеграций, токены runtime и консоли.
+- [Зависимости и окружение](environment.md) — Python, uv, Git, Rust/runtime, Docker/Podman и окружение.
 - [Контейнер](container.md) — хост, образы, сеть, токен, проверки и типичные ошибки.
 - [Test-author](test-author.md) — поля, условия активации, причины отказа и живая проверка.
 
