@@ -450,7 +450,13 @@ def integration_prepare(args: argparse.Namespace) -> JsonObject:
             _write_record(ledger, IntegrationRecord.from_dict(record))
             links, created = [], True
         # A record prepared before the pair record existed gets its pair here as well.
-        pair = release_gate.record_pair(ledger, repo, publish["candidate"], target)
+        pair = release_gate.record_pair(
+            ledger,
+            repo,
+            publish["candidate"],
+            target,
+            release_gate.required_selection(repo, batch),
+        )
     state = (
         {
             "state": IntegrationTargetState.CURRENT,

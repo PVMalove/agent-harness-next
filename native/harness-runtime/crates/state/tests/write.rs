@@ -1169,6 +1169,62 @@ fn a_pair_record_with_its_exact_fields_is_created_once() {
 }
 
 #[test]
+fn a_pair_record_of_either_contract_is_created_with_its_exact_fields() {
+    let records = [
+        ("legacy", common::qa_store::legacy_pair_record()),
+        ("full", common::qa_store::pair_record()),
+        ("diff", common::qa_store::diff_pair_record()),
+    ];
+
+    for (name, (path, record)) in records {
+        let repo = cut_over(&format!("pair-contract-{name}"));
+
+        create_pair(&repo, "op-1", &path, &record).unwrap();
+
+        assert_eq!(
+            stored(&repo, &path).unwrap().0,
+            *record.as_object().unwrap(),
+            "{record}"
+        );
+    }
+}
+
+#[test]
+fn a_pair_record_with_a_selection_outside_its_contract_is_an_invariant_violation() {
+    let repo = cut_over("pair-selection-invalid");
+    let audit_before = count(&repo, "audit");
+    let (path, record) = common::qa_store::diff_pair_record();
+    let mut no_selection = record.clone();
+    no_selection.as_object_mut().unwrap().remove("selection");
+    let mut old_with_selection = record.clone();
+    old_with_selection["contract"] = json!(1);
+    let mut third_contract = record.clone();
+    third_contract["contract"] = json!(3);
+    let broken = [no_selection, old_with_selection, third_contract]
+        .into_iter()
+        .chain(
+            ["focused", "failed-only", "Full", "", "requirement"].map(|selection| {
+                let mut other = record.clone();
+                other["selection"] = json!(selection);
+                other
+            }),
+        )
+        .chain([json!(null), json!(1)].map(|selection| {
+            let mut other = record.clone();
+            other["selection"] = selection;
+            other
+        }));
+
+    for (index, broken) in broken.enumerate() {
+        let error = create_pair(&repo, &format!("op-{index}"), &path, &broken).unwrap_err();
+
+        assert_eq!(code(&error), ErrorCode::InvariantViolation, "{broken}");
+    }
+    assert_eq!(count(&repo, "audit"), audit_before);
+    assert!(stored(&repo, &path).is_none());
+}
+
+#[test]
 fn a_pair_record_with_a_bad_id_an_extra_field_or_another_pair_id_is_an_invariant_violation() {
     let repo = cut_over("pair-invalid");
     let audit_before = count(&repo, "audit");

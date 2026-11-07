@@ -361,7 +361,15 @@ def write_refresh_record(
         / f"{document['refresh_id']}.json"
     )
     # The new pair of the Release Gate: a refresh and an accepted resolution move the candidate.
-    release_gate.record_pair(ledger, repo, new_candidate, tip)
+    # The pair is decided by the batch the record was prepared from, never by a resolver batch.
+    source = _load_batch(ledger.root, identity["source_batch_id"])
+    release_gate.record_pair(
+        ledger,
+        repo,
+        new_candidate,
+        tip,
+        release_gate.required_selection(repo, source),
+    )
     if recorded.is_file():
         return _read_object(recorded, "integration refresh record")
     _write_record(ledger, IntegrationRefreshRecord.from_dict(document))
