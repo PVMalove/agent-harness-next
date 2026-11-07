@@ -195,6 +195,10 @@ def _verification_plan(
         head = candidate
     else:
         return None
+    # The ref is read only when the frozen flag asks for it: a flag-off plan never depends on it.
+    integration_ref = (
+        _integration_ref(repo, batch) if policy.get("ticket_diff_selection") else None
+    )
     return verification_plan.build_plan(
         repo,
         policy,
@@ -205,6 +209,7 @@ def _verification_plan(
             cast(dict[str, object], batch.get("repo_map_policy") or {})
         ),
         runtime_images=runtime_images,
+        integration_ref=integration_ref,
     )
 
 

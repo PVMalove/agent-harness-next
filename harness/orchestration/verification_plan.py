@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import cast
 
 from harness.repo_map.backend import ParserBackend
-from harness.repo_map.change_impact import ImpactSet, compute_change_impact
+from harness.repo_map.change_impact import (
+    CargoTarget,
+    ImpactSet,
+    TicketDiffSelection,
+    compute_change_impact,
+    ticket_diff_selection,
+)
 from harness.repo_map.git_source import blob_contents
 from harness.repo_map.policy import RepoMapPolicy
 
@@ -29,6 +35,9 @@ from .core.utils import CoordinatorError, JsonObject
 PLAN_ROLES = ("developer", "code-review", "qa")
 PYTEST_KIND = "pytest"
 IMPACT_NOT_COVERED = "impact_not_covered"
+TICKET_DIFF = "ticket-diff"
+# The target prefix under which the ticket-diff selection applies (ADR 0023, section 7).
+TICKET_DIFF_REF_PREFIX = "integration/"
 # Таймаут одной git-команды при чтении манифестов окружения.
 _GIT_TIMEOUT_SECONDS = 60
 
@@ -154,12 +163,59 @@ def _stage(
     }
 
 
+def ticket_diff_active(
+    policy: Mapping[str, object], integration_ref: str | None
+) -> bool:
+    """Whether a plan selects the ticket's own diff: the frozen flag is on and the target is ``integration/*``."""
+    return bool(policy.get("ticket_diff_selection")) and bool(
+        integration_ref and integration_ref.startswith(TICKET_DIFF_REF_PREFIX)
+    )
+
+
+def _ticket_diff_stage(
+    template: Mapping[str, object],
+    selection: TicketDiffSelection,
+    *,
+    fingerprint: str,
+) -> JsonObject:
+    """A pytest stage of the ticket-diff plan: exactly the diff's Python test modules, never widened."""
+    argv = list(cast(Sequence[str], template["argv"]))
+    nodeids = list(selection.python_tests)
+    return {
+        "stage_id": template["stage_id"],
+        "kind": template["kind"],
+        "argv": argv + nodeids,
+        "timeout_seconds": template["timeout_seconds"],
+        "selection": TICKET_DIFF,
+        "nodeids": nodeids,
+        "environment_fingerprint": fingerprint,
+    }
+
+
+def _cargo_stage(
+    target: CargoTarget, *, timeout_seconds: object, fingerprint: str
+) -> JsonObject:
+    """A ``custom`` stage that runs one cargo test target of the diff."""
+    return {
+        "stage_id": "cargo-test-" + target.target_id.replace("::", "-"),
+        "kind": "custom",
+        "argv": target.argv(),
+        "timeout_seconds": timeout_seconds,
+        "selection": TICKET_DIFF,
+        "nodeids": [target.target_id],
+        "environment_fingerprint": fingerprint,
+    }
+
+
 def uncovered_tests(plan: Mapping[str, object]) -> list[str]:
     """Связанные тесты ImpactSet, которые план не выбирает (ADR 0023, раздел 6).
 
     Тесты покрыты, если любая стадия pytest имеет выбор ``full`` либо ``nodeids`` перечисляют сам
     тестовый файл целиком: nodeid внутри файла (``file::test``) файл не покрывает.
     """
+    if "ticket_diff" in plan:
+        # A ticket-diff plan is gated by its own selection, not by the import graph.
+        return []
     impact = cast(Mapping[str, Sequence[str]], plan["impact"])
     related = list(impact["related_tests"])
     stages = [
@@ -201,6 +257,7 @@ def build_plan(
     backend: ParserBackend | None = None,
     repo_map_policy: RepoMapPolicy | None = None,
     runtime_images: Mapping[str, str | None] | None = None,
+    integration_ref: str | None = None,
 ) -> JsonObject:
     """План проверки роли для diff ``base..candidate`` по замороженной ``policy``.
 
@@ -208,6 +265,11 @@ def build_plan(
     удалённый или переименованный модуль, порог ``max_related_tests``, недоступный парсер) и для
     QA, иначе ``focused`` по ``related_tests`` без отсечения. ``focused`` без тестов не выбирает
     ничего: исполнитель отчитывается ``not_run``, а не запускает весь набор.
+
+    Если политика включает ``ticket_diff_selection`` и ``integration_ref`` — ``integration/*``,
+    план выбирает ровно тесты diff самого тикета (ADR 0023, раздел 7): стадия pytest получает
+    ``ticket-diff`` по добавленным и изменённым тестовым модулям, а каждая цель cargo test из diff
+    добавляется стадией ``custom``. Выбор не расширяется до ``full`` ни ``unknown``, ни ролью QA.
     """
     if role not in PLAN_ROLES:
         raise CoordinatorError(
@@ -224,6 +286,17 @@ def build_plan(
         max_related_tests=threshold,
     )
     fingerprint = environment_fingerprint(repo, candidate, runtime_images)
+    if ticket_diff_active(policy, integration_ref):
+        return _ticket_diff_plan(
+            repo,
+            policy,
+            impact,
+            base=base,
+            candidate=candidate,
+            role=role,
+            repo_map_policy=repo_map_policy,
+            fingerprint=fingerprint,
+        )
     widen = role == "qa" or bool(impact.unknown)
     return {
         "base_sha": base,
@@ -235,4 +308,50 @@ def build_plan(
             _stage(template, impact, widen=widen, fingerprint=fingerprint)
             for template in cast(Sequence[Mapping[str, object]], policy["stages"])
         ],
+    }
+
+
+def _ticket_diff_plan(
+    repo: Path,
+    policy: Mapping[str, object],
+    impact: ImpactSet,
+    *,
+    base: str,
+    candidate: str,
+    role: str,
+    repo_map_policy: RepoMapPolicy | None,
+    fingerprint: str,
+) -> JsonObject:
+    """The plan of the ticket's own diff: the template stages, then one cargo stage per target."""
+    selection = ticket_diff_selection(repo, base, candidate, policy=repo_map_policy)
+    templates = cast(Sequence[Mapping[str, object]], policy["stages"])
+    stages: list[JsonObject] = [
+        _ticket_diff_stage(template, selection, fingerprint=fingerprint)
+        if template["kind"] == PYTEST_KIND
+        else _stage(template, impact, widen=True, fingerprint=fingerprint)
+        for template in templates
+    ]
+    pytest_timeout = next(
+        template["timeout_seconds"]
+        for template in templates
+        if template["kind"] == PYTEST_KIND
+    )
+    stages += [
+        _cargo_stage(target, timeout_seconds=pytest_timeout, fingerprint=fingerprint)
+        for target in selection.cargo_targets
+    ]
+    return {
+        "base_sha": base,
+        "candidate_sha": candidate,
+        "role": role,
+        "max_related_tests": policy["max_related_tests"],
+        "impact": impact.to_json(),
+        "ticket_diff": {
+            "python_tests": list(selection.python_tests),
+            "cargo_targets": [
+                {"target_id": target.target_id, "argv": target.argv()}
+                for target in selection.cargo_targets
+            ],
+        },
+        "stages": stages,
     }

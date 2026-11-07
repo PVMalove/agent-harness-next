@@ -129,6 +129,38 @@ Python строит план при propose. План входит в brief, а 
 (ADR 0024) используют тот же `ImpactSet` для предупреждений, но планированием проверок не
 управляют.
 
+### 7. Выбор тестов по diff тикета (`ticket-diff`)
+
+Флаг `verification_plan_policy.ticket_diff_selection` (булев, по умолчанию выключен) включает
+режим для батча, чья `integration_ref` начинается с `integration/`. `batch create` замораживает флаг
+вместе с остальной политикой: правка конфига после создания батча план не меняет. Для цели
+`master` (ветка по умолчанию) флаг не действует, а план QA остаётся `full`.
+
+При включённом режиме план developer-retry, code-review и QA выбирает ровно тесты diff
+`base..candidate` самого тикета. Выбор — чистая функция списка `--name-status` (`select_ticket_diff_tests`):
+
+- добавленный или изменённый `test_*.py` (`*_test.py`) входит в стадию `pytest` с выбором
+  `ticket-diff` и явными nodeid; переименованный модуль входит под новым путём;
+- Rust `crates/X/tests/foo.rs` (или `tests/foo/main.rs`) даёт стадию `custom` с
+  `cargo test -p X --test foo`, а любой файл `crates/X/src/**` — `cargo test -p X --lib`;
+  crate без `src/lib.rs` (бинарный, как `harness-runtime`) получает `--bins`, потому что у него
+  нет цели `--lib`;
+- удалённый файл, изменённый хелпер или фикстура (`conftest.py`, `tests/common/**`,
+  `tests/fixtures/**`) тестов не добавляют;
+- стадии `lint`, `typecheck`, `cargo fmt` и `cargo clippy` остаются как в шаблоне политики.
+
+Выбор никогда не расширяется до `full`: ни `unknown` из ChangeImpact, ни роль QA его не меняют.
+Diff без тестов оставляет статические стадии, не запускает тесты, а стадия тестов пишется в
+stage evidence как `not_run` с причиной `no tests in diff`. План несёт раздел `ticket_diff`
+(`python_tests` и `cargo_targets`), а `impact` остаётся как есть, чтобы профиль hooks `strict` видел те же причины
+`unknown`. Выбор `ticket-diff` — диагностика ветки тикета, а не Release Gate: полный `master`-QA
+остаётся единственным evidence для publish (раздел 5).
+
+Gate из раздела 6 для такого плана требует каждый тест выбора diff в планах code-review и QA и
+отказывает `impact_not_covered`, перечисляя пропущенные тесты. Команды `verification_commands`
+этих brief выводятся из плана: lint и typecheck шаблона плюс точные команды выбранных тестов.
+`qa run` записывает в stage evidence выбор `ticket-diff` и явные nodeid.
+
 ## Операционные последствия
 
 - **Approval.** `verification_plan_sha256` и `verification_commands` закрепляются при approval;

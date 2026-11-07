@@ -1243,7 +1243,11 @@ It must contain, at minimum:
   non-Python file, a dynamic import, an unavailable parser, a Python file the graph cannot read
   (hidden by the Repo Map policy or not parsed) that names an impacted module, or more related
   tests than `max_related_tests`. On a docker dispatch the pinned image digests are part of every
-  stage's `environment_fingerprint`. A QA plan is always `full`. The plan's digest is bound into the transition as
+  stage's `environment_fingerprint`. A QA plan is always `full`, except under the `ticket_diff_selection`
+  policy flag (off by default, frozen with the policy), which a batch whose `integration_ref` starts with
+  `integration/` turns into a plan of exactly the tests of its own `base..candidate` diff (selection
+  `ticket-diff`, a `ticket_diff` section, one `custom` cargo stage per Rust test target; never widened
+  to `full`; ADR 0023, section 7). The plan's digest is bound into the transition as
   `verification_plan_sha256`; `verification_commands` stays the list a role reports in `checks_run`.
   `dispatch propose` and `dispatch create` for code-review and QA refuse with `impact_not_covered`
   (exit code 2, the uncovered tests listed) when the plan's pytest stage is not `full` and does not

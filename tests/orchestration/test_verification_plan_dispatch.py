@@ -118,9 +118,11 @@ class PlanFixture(unittest.TestCase):
             json.dumps(config), encoding="utf-8"
         )
 
+    integration_ref = "master"
+
     def _assessed_candidate(self) -> tuple[str, str]:
         fx = self.fx
-        batch_id = fx._create_batch()["batch_id"]
+        batch_id = fx._create_batch(integration_ref=self.integration_ref)["batch_id"]
         fx._accepted_architect(batch_id)
         first = fx._dispatch(batch_id, "developer")["brief"]
         fx._start(first["dispatch_id"])
@@ -132,16 +134,14 @@ class PlanFixture(unittest.TestCase):
         fx._assess(batch_id, candidate, changed)
         return batch_id, candidate
 
-
-class VerificationPlanDispatchTests(PlanFixture):
-    def _briefs(self) -> JsonObject:
+    def _briefs(self, first_commit: str = "x", fix_commit: str = "y") -> JsonObject:
         """First developer, review (with a finding), developer-retry, then QA briefs."""
         fx = self.fx
-        batch_id = fx._create_batch()["batch_id"]
+        batch_id = fx._create_batch(integration_ref=self.integration_ref)["batch_id"]
         fx._accepted_architect(batch_id)
         first = fx._dispatch(batch_id, "developer")["brief"]
         fx._start(first["dispatch_id"])
-        candidate, changed = fx._developer_commit("x")
+        candidate, changed = fx._developer_commit(first_commit)
         fx._submit(
             first["dispatch_id"], fx._developer_report(first, candidate, changed)
         )
@@ -156,7 +156,7 @@ class VerificationPlanDispatchTests(PlanFixture):
         fx._decide(batch_id, "retry", reason_category="code")
         retry = fx._dispatch(batch_id, "developer")["brief"]
         fx._start(retry["dispatch_id"])
-        fixed, fixed_files = fx._developer_commit("y")
+        fixed, fixed_files = fx._developer_commit(fix_commit)
         fx._submit(
             retry["dispatch_id"], fx._developer_report(retry, fixed, fixed_files)
         )
@@ -174,6 +174,8 @@ class VerificationPlanDispatchTests(PlanFixture):
             "qa": qa,
         }
 
+
+class VerificationPlanDispatchTests(PlanFixture):
     def test_the_developer_retry_review_and_qa_briefs_carry_a_plan(self) -> None:
         self._configure(POLICY)
 
@@ -336,6 +338,100 @@ class VerificationPlanDispatchTests(PlanFixture):
 
         with self.assertRaises(operational_guards.GuardError):
             operational_guards.validate_binding(brief, briefs["batch_id"])
+
+
+class TicketDiffDispatchTests(PlanFixture):
+    """Briefs of a batch whose integration target is ``integration/*`` (ADR 0023, section 7)."""
+
+    integration_ref = "integration/it"
+
+    def setUp(self) -> None:
+        super().setUp()
+        subprocess.run(
+            [
+                "git", "-C", str(self.fx.repo), "push", "origin",
+                "master:refs/heads/integration/it",
+            ],
+            check=True,
+            capture_output=True,
+        )  # fmt: skip
+
+    def _on(self, **changes: object) -> JsonObject:
+        return {**POLICY, "ticket_diff_selection": True, **changes}
+
+    def test_the_retry_review_and_qa_plans_select_the_tests_of_the_diff(self) -> None:
+        self._configure(self._on())
+
+        briefs = self._briefs("test_y", "z")
+
+        for name in ("retry", "clean_review", "qa"):
+            with self.subTest(brief=name):
+                plan = briefs[name]["verification_plan"]
+                tests = _stage(plan, "tests")
+                self.assertEqual(tests["selection"], "ticket-diff")
+                self.assertEqual(tests["nodeids"], ["services/test_y.py"])
+                self.assertEqual(_stage(plan, "lint")["selection"], "full")
+                self.assertEqual(
+                    plan["ticket_diff"]["python_tests"], ["services/test_y.py"]
+                )
+
+    def test_the_plan_digest_is_bound_to_the_approval(self) -> None:
+        self._configure(self._on())
+
+        briefs = self._briefs("test_y", "z")
+
+        qa = briefs["qa"]
+        self.assertEqual(
+            qa["transition"]["verification_plan_sha256"],
+            verification_plan.plan_sha256(qa["verification_plan"]),
+        )
+
+    def test_a_diff_without_tests_selects_nothing_and_is_not_widened(self) -> None:
+        self._configure(self._on())
+
+        briefs = self._briefs("x", "z")
+
+        tests = _stage(briefs["qa"]["verification_plan"], "tests")
+        self.assertEqual(tests["selection"], "ticket-diff")
+        self.assertEqual(tests["nodeids"], [])
+        self.assertEqual(tests["argv"], POLICY["stages"][1]["argv"])
+
+    def test_the_flag_off_keeps_the_plans_of_a_batch_on_an_integration_target(
+        self,
+    ) -> None:
+        self._configure(self._on(ticket_diff_selection=False))
+
+        briefs = self._briefs("test_y", "z")
+
+        review = briefs["clean_review"]["verification_plan"]
+        qa = briefs["qa"]["verification_plan"]
+        self.assertEqual(_stage(review, "tests")["selection"], "focused")
+        self.assertEqual(_stage(qa, "tests")["selection"], "full")
+        for name in ("retry", "clean_review", "qa"):
+            self.assertNotIn("ticket_diff", briefs[name]["verification_plan"])
+
+    def test_a_default_branch_target_keeps_the_full_qa_plan(self) -> None:
+        self.integration_ref = "master"
+        self._configure(self._on())
+
+        briefs = self._briefs("test_y", "z")
+
+        qa = briefs["qa"]["verification_plan"]
+        self.assertEqual(_stage(qa, "tests")["selection"], "full")
+        self.assertNotIn("ticket_diff", qa)
+
+    def test_a_config_edit_after_batch_create_does_not_switch_the_selection(
+        self,
+    ) -> None:
+        self._configure(self._on())
+        batch_id, candidate = self._assessed_candidate()
+        self._configure(self._on(ticket_diff_selection=False))
+
+        review = self.fx._reported_review(batch_id, candidate)
+
+        self.assertEqual(
+            _stage(review["verification_plan"], "tests")["selection"], "ticket-diff"
+        )
 
 
 class ImpactGateTests(PlanFixture):

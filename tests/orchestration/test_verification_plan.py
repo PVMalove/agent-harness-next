@@ -152,9 +152,7 @@ class VerificationPlanPolicyContractTests(unittest.TestCase):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
         node = schema["properties"]["verification_plan_policy"]
 
-        self.assertEqual(
-            node["properties"]["ticket_diff_selection"]["type"], "boolean"
-        )
+        self.assertEqual(node["properties"]["ticket_diff_selection"]["type"], "boolean")
         self.assertNotIn("ticket_diff_selection", node["required"])
         for flag in (True, False):
             self.assertEqual(
@@ -249,6 +247,7 @@ def _plan(
     policy: JsonObject = POLICY,
     backend: object | None = None,
     runtime_images: dict[str, str] | None = None,
+    integration_ref: str | None = None,
 ) -> JsonObject:
     return verification_plan.build_plan(
         repo,
@@ -258,6 +257,7 @@ def _plan(
         role=role,
         backend=backend or RegexBackend(repo),  # type: ignore[arg-type]
         runtime_images=runtime_images,
+        integration_ref=integration_ref,
     )
 
 
@@ -519,6 +519,206 @@ def test_building_a_plan_does_not_touch_the_repository(repo: Path) -> None:
     assert (
         subprocess.check_output(["git", "-C", str(repo), "status", "--short"]) == before
     )
+
+
+TICKET_DIFF_POLICY = _with(
+    ticket_diff_selection=True,
+    stages=[
+        *POLICY["stages"],
+        {
+            "stage_id": "cargo-fmt",
+            "kind": "custom",
+            "argv": ["cargo", "fmt", "--check"],
+            "timeout_seconds": 300,
+        },
+    ],
+)
+INTEGRATION = "integration/orchestration"
+WORKSPACE = "native/harness-runtime"
+CRATE = f"{WORKSPACE}/crates/state"
+
+
+def _ticket_diff_plan(repo: Path, base: str, **options: object) -> JsonObject:
+    options.setdefault("policy", TICKET_DIFF_POLICY)
+    options.setdefault("integration_ref", INTEGRATION)
+    return _plan(repo, base, **options)  # type: ignore[arg-type]
+
+
+def _add_rust_crate(repo: Path) -> None:
+    _write(
+        repo,
+        {
+            f"{CRATE}/Cargo.toml": '[package]\nname = "state"\n',
+            f"{CRATE}/src/lib.rs": "",
+        },
+    )
+    _commit(repo, "crate")
+
+
+@pytest.mark.parametrize("role", ["developer", "code-review", "qa"])
+def test_ticket_diff_plan_selects_only_the_tests_of_the_diff(
+    repo: Path, role: str
+) -> None:
+    base = _base(repo)
+    _write(
+        repo,
+        {
+            "pkg/core.py": "VALUE = 2\n",
+            "tests/test_new.py": "def test_new():\n    pass\n",
+        },
+    )
+    _commit(repo, "change core and add a test")
+
+    plan = _ticket_diff_plan(repo, base, role=role)
+    stages = _stages(plan)
+
+    tests = stages["tests"]
+    assert tests["selection"] == "ticket-diff"
+    assert tests["nodeids"] == ["tests/test_new.py"]
+    assert tests["argv"] == ["python", "-m", "pytest", "-q", "tests/test_new.py"]
+    assert plan["ticket_diff"] == {
+        "python_tests": ["tests/test_new.py"],
+        "cargo_targets": [],
+    }
+    for name, argv in (
+        ("lint", ["make", "lint"]),
+        ("typecheck", ["make", "typecheck"]),
+    ):
+        assert stages[name]["selection"] == "full"
+        assert stages[name]["argv"] == argv
+    assert stages["cargo-fmt"]["argv"] == ["cargo", "fmt", "--check"]
+    assert stages["cargo-fmt"]["selection"] == "full"
+
+
+def test_ticket_diff_plan_is_never_widened_to_full_by_an_unknown_impact(
+    repo: Path,
+) -> None:
+    base = _base(repo)
+    _write(repo, {"tests/conftest.py": "import pytest\n", "pyproject.toml": "[x]\n"})
+    _commit(repo, "build config only")
+
+    plan = _ticket_diff_plan(repo, base)
+
+    assert plan["impact"]["unknown"]
+    assert _stages(plan)["tests"]["selection"] == "ticket-diff"
+    assert _stages(plan)["tests"]["nodeids"] == []
+    assert _stages(plan)["tests"]["argv"] == ["python", "-m", "pytest", "-q"]
+
+
+def test_a_changed_helper_alone_adds_no_test(repo: Path) -> None:
+    base = _base(repo)
+    _write(repo, {"tests/helpers.py": "VALUE = 2\n", "pkg/core.py": "VALUE = 3\n"})
+    _commit(repo, "helper")
+
+    plan = _ticket_diff_plan(repo, base)
+
+    assert plan["ticket_diff"] == {"python_tests": [], "cargo_targets": []}
+    assert list(_stages(plan)) == ["lint", "typecheck", "tests", "cargo-fmt"]
+
+
+def test_rust_tests_of_the_diff_become_cargo_test_stages(repo: Path) -> None:
+    _add_rust_crate(repo)
+    base = _base(repo)
+    _write(
+        repo,
+        {f"{CRATE}/tests/qa_evidence.rs": "", f"{CRATE}/src/lib.rs": "// edit\n"},
+    )
+    _commit(repo, "rust")
+
+    plan = _ticket_diff_plan(repo, base)
+    stages = _stages(plan)
+
+    assert list(stages) == [
+        "lint",
+        "typecheck",
+        "tests",
+        "cargo-fmt",
+        "cargo-test-state-lib",
+        "cargo-test-state-test-qa_evidence",
+    ]
+    lib = stages["cargo-test-state-lib"]
+    assert lib["kind"] == "custom"
+    assert lib["selection"] == "ticket-diff"
+    assert lib["nodeids"] == ["state::lib"]
+    assert lib["argv"] == [
+        "cargo",
+        "test",
+        "--manifest-path",
+        f"{WORKSPACE}/Cargo.toml",
+        "-p",
+        "state",
+        "--lib",
+    ]
+    assert lib["timeout_seconds"] == 1800
+    assert re.fullmatch(r"[0-9a-f]{64}", lib["environment_fingerprint"])
+    assert stages["cargo-test-state-test-qa_evidence"]["argv"][-2:] == [
+        "--test",
+        "qa_evidence",
+    ]
+    assert [item["target_id"] for item in plan["ticket_diff"]["cargo_targets"]] == [
+        "state::lib",
+        "state::test::qa_evidence",
+    ]
+
+
+def test_a_default_branch_target_keeps_the_full_qa_plan(repo: Path) -> None:
+    base = _base(repo)
+    _write(repo, {"tests/test_new.py": "def test_new():\n    pass\n"})
+    _commit(repo, "add a test")
+
+    plan = _ticket_diff_plan(repo, base, role="qa", integration_ref="master")
+
+    assert _stages(plan)["tests"]["selection"] == "full"
+    assert "ticket_diff" not in plan
+
+
+def test_with_the_flag_off_the_plan_is_byte_identical(repo: Path) -> None:
+    base = _base(repo)
+    _write(
+        repo,
+        {
+            "pkg/core.py": "VALUE = 2\n",
+            "tests/test_new.py": "def test_new():\n    pass\n",
+        },
+    )
+    _commit(repo, "change")
+    policy = _with(ticket_diff_selection=False)
+
+    for role in ("developer", "code-review", "qa"):
+        reference = _plan(repo, base, role=role)
+        plan = _plan(repo, base, role=role, policy=policy, integration_ref=INTEGRATION)
+        assert verification_plan.plan_sha256(plan) == verification_plan.plan_sha256(
+            reference
+        )
+        assert json.dumps(plan, sort_keys=True) == json.dumps(reference, sort_keys=True)
+        assert "ticket_diff" not in plan
+
+
+def test_without_an_integration_ref_the_flag_has_no_effect(repo: Path) -> None:
+    base = _base(repo)
+    _write(repo, {"pkg/core.py": "VALUE = 2\n"})
+    _commit(repo, "change core")
+
+    plan = _ticket_diff_plan(repo, base, integration_ref=None)
+
+    assert _stages(plan)["tests"]["selection"] == "focused"
+    assert "ticket_diff" not in plan
+
+
+def test_ticket_diff_plan_digest_follows_the_selection(repo: Path) -> None:
+    base = _base(repo)
+    _write(repo, {"tests/test_new.py": "def test_new():\n    pass\n"})
+    _commit(repo, "add a test")
+
+    first = _ticket_diff_plan(repo, base)
+    second = _ticket_diff_plan(repo, base)
+    flag_off = _plan(repo, base, policy=_with(ticket_diff_selection=False))
+
+    assert verification_plan.plan_sha256(first) == verification_plan.plan_sha256(second)
+    assert verification_plan.plan_sha256(first) != verification_plan.plan_sha256(
+        flag_off
+    )
+    assert verification_plan.plan_problems(first) == []
 
 
 if __name__ == "__main__":
