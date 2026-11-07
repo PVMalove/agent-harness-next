@@ -295,6 +295,72 @@ class ReleaseGatePairTests(unittest.TestCase):
             FULL,
         )
 
+    def selection_of(self, candidate: str, target: str) -> str:
+        ledger = LifecycleLedger(self.branch.state_root())
+        with ledger_ops._ledger_lock(ledger):
+            return release_gate.pair_selection(ledger, candidate, target)
+
+    def test_pair_selection_reads_the_stored_selection_of_the_pair(self) -> None:
+        published = self.branch.publish()
+        full_target = _git(self.branch.repo, "rev-parse", "origin/master")
+        diff_target = "2" * 40
+        self.record(published["candidate"], diff_target, TICKET_DIFF)
+
+        self.assertEqual(self.selection_of(published["candidate"], full_target), FULL)
+        self.assertEqual(
+            self.selection_of(published["candidate"], diff_target), TICKET_DIFF
+        )
+
+    def test_pair_selection_is_full_when_the_pair_is_not_recorded(self) -> None:
+        published = self.branch.publish()
+
+        self.assertEqual(self.selection_of(published["candidate"], "3" * 40), FULL)
+        self.assertEqual(self.selection_of("4" * 40, "3" * 40), FULL)
+
+    def test_pair_selection_is_full_for_a_pair_of_the_first_contract(self) -> None:
+        published = self.branch.publish()
+        candidate = published["candidate"]
+        target = "2" * 40
+        stored = self.record(candidate, target, TICKET_DIFF)
+        old = {k: v for k, v in stored.items() if k != "selection"}
+        old["contract"] = 1
+        self.pair_path(candidate, target).write_text(_canonical(old), encoding="utf-8")
+
+        self.assertEqual(self.selection_of(candidate, target), FULL)
+
+    def test_pair_selection_is_full_for_every_malformed_record(self) -> None:
+        published = self.branch.publish()
+        candidate = published["candidate"]
+        target = "2" * 40
+        good = self.record(candidate, target, TICKET_DIFF)
+        path = self.pair_path(candidate, target)
+        forged = {
+            "unknown selection": {**good, "selection": "focused"},
+            "no selection": {k: v for k, v in good.items() if k != "selection"},
+            "contract 3": {**good, "contract": 3},
+            "extra field": {**good, "requirement": TICKET_DIFF},
+            "another pair": {**good, "target_sha": "5" * 40},
+            "another pair id": {**good, "pair_id": "pair-" + "0" * 32},
+            "no tree": {k: v for k, v in good.items() if k != "candidate_tree_sha"},
+        }
+
+        for name, record in forged.items():
+            with self.subTest(forged=name):
+                path.write_text(_canonical(record), encoding="utf-8")
+                self.assertEqual(self.selection_of(candidate, target), FULL)
+        for name, text in {"not json": "{", "not an object": "[]"}.items():
+            with self.subTest(forged=name):
+                path.write_text(text, encoding="utf-8")
+                # Not under the lock: entering it validates the ledger and would refuse first.
+                self.assertEqual(
+                    release_gate.pair_selection(
+                        LifecycleLedger(self.branch.state_root()), candidate, target
+                    ),
+                    FULL,
+                )
+        path.write_text(_canonical(good), encoding="utf-8")
+        self.assertEqual(self.selection_of(candidate, target), TICKET_DIFF)
+
 
 class SelectionOfTheWritersTests(plan_dispatch.TicketDiffFixture):
     """Every writer of a pair decides ``selection`` from the batch it holds: a ticket whose frozen
