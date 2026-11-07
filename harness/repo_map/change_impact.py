@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import tomllib
 from collections import defaultdict, deque
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -447,3 +449,145 @@ def _ordered(reasons: list[UnknownReason]) -> tuple[UnknownReason, ...]:
     return tuple(
         sorted(set(reasons), key=lambda item: (item.code, item.path, item.detail))
     )
+
+
+@dataclass(frozen=True)
+class RustCrate:
+    """A Cargo package found under `crates/<dir>`: its package name and whether it has `src/lib.rs`."""
+
+    package: str
+    has_lib: bool
+
+
+@dataclass(frozen=True)
+class CargoTarget:
+    """One `cargo test` target of the ticket diff: `lib`, `bins` or a named integration `test`."""
+
+    manifest: str
+    package: str
+    kind: str
+    name: str | None = None
+
+    @property
+    def target_id(self) -> str:
+        """A stable id such as `state::lib`, `app::bins` or `state::test::qa_evidence`."""
+        parts = [self.package, self.kind] + ([self.name] if self.name else [])
+        return "::".join(parts)
+
+    def argv(self) -> list[str]:
+        """The `cargo test` command line that runs exactly this target."""
+        argv = ["cargo", "test", "--manifest-path", self.manifest, "-p", self.package]
+        if self.kind == "test":
+            return [*argv, "--test", str(self.name)]
+        return [*argv, f"--{self.kind}"]
+
+
+@dataclass(frozen=True)
+class TicketDiffSelection:
+    """The tests of a ticket's own `base..candidate` diff (ADR 0023): Python modules and cargo targets."""
+
+    python_tests: tuple[str, ...] = ()
+    cargo_targets: tuple[CargoTarget, ...] = ()
+    changed: tuple[ChangedPath, ...] = ()
+
+    @property
+    def empty(self) -> bool:
+        """No test is selected; the caller records `no tests in diff` and never widens to full."""
+        return not self.python_tests and not self.cargo_targets
+
+
+def _crate_of(path: str) -> tuple[str, str, tuple[str, ...]] | None:
+    """Split `<workspace>/crates/<name>/(src|tests)/<rest>` into crate dir, `src` or `tests`, rest."""
+    parts = PurePosixPath(path).parts
+    if "crates" not in parts:
+        return None
+    index = parts.index("crates")
+    rest = parts[index + 2 :]
+    if len(rest) < 2 or rest[0] not in {"src", "tests"}:
+        return None
+    return "/".join(parts[: index + 2]), rest[0], rest[1:]
+
+
+def _test_target_name(rest: tuple[str, ...]) -> str | None:
+    """The cargo test target of a file under `tests/`: `foo.rs` or `foo/main.rs`; helpers give none."""
+    if len(rest) == 1 and rest[0].endswith(".rs"):
+        return rest[0][: -len(".rs")]
+    if len(rest) == 2 and rest[1] == "main.rs":
+        return rest[0]
+    return None
+
+
+def select_ticket_diff_tests(
+    changes: Sequence[ChangedPath], crates: Mapping[str, RustCrate]
+) -> TicketDiffSelection:
+    """The tests selected by a name-status diff alone; `crates` maps a crate dir to its package.
+
+    An added, modified or renamed (to its new path) Python test module is selected. A Rust
+    `tests/foo.rs` (or `tests/foo/main.rs`) gives `--test foo`, and any `src/**` file gives the
+    crate's unit tests: `--lib`, or `--bins` for a crate without `src/lib.rs`. Deleted files,
+    helpers, fixtures and files of unknown crates add nothing, and nothing widens the selection.
+    """
+    python_tests: set[str] = set()
+    targets: dict[str, CargoTarget] = {}
+    for item in changes:
+        if item.status == "deleted":
+            continue
+        if is_test_path(item.path):
+            python_tests.add(item.path)
+            continue
+        located = _crate_of(item.path)
+        if located is None or located[0] not in crates:
+            continue
+        crate_dir, area, rest = located
+        crate = crates[crate_dir]
+        manifest = str(PurePosixPath(crate_dir).parent.parent / "Cargo.toml")
+        if area == "src":
+            target = CargoTarget(
+                manifest, crate.package, "lib" if crate.has_lib else "bins"
+            )
+        elif (name := _test_target_name(rest)) is not None:
+            target = CargoTarget(manifest, crate.package, "test", name)
+        else:
+            continue
+        targets[target.target_id] = target
+    return TicketDiffSelection(
+        tuple(sorted(python_tests)),
+        tuple(targets[key] for key in sorted(targets)),
+        tuple(changes),
+    )
+
+
+def ticket_diff_selection(
+    repo: Path, base: str, candidate: str, *, policy: RepoMapPolicy | None = None
+) -> TicketDiffSelection:
+    """The `TicketDiffSelection` of `git diff base..candidate`; each crate is read from `candidate`."""
+    timeout = (policy or RepoMapPolicy()).timeout_seconds
+    changed = _diff(repo, base, candidate, timeout)
+    dirs = sorted(
+        {
+            located[0]
+            for item in changed
+            if item.status != "deleted" and (located := _crate_of(item.path))
+        }
+    )
+    paths = [f"{name}/{leaf}" for name in dirs for leaf in ("Cargo.toml", "src/lib.rs")]
+    contents = blob_contents(repo, candidate, paths, timeout)
+    crates: dict[str, RustCrate] = {}
+    for name in dirs:
+        package = _package_name(contents.get(f"{name}/Cargo.toml"))
+        if package is not None:
+            crates[name] = RustCrate(
+                package, contents.get(f"{name}/src/lib.rs") is not None
+            )
+    return select_ticket_diff_tests(changed, crates)
+
+
+def _package_name(manifest: bytes | None) -> str | None:
+    """`package.name` of a Cargo manifest, or `None` for a missing or unparsable manifest."""
+    if manifest is None:
+        return None
+    try:
+        name = tomllib.loads(manifest.decode("utf-8")).get("package", {}).get("name")
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return None
+    return name if isinstance(name, str) and name else None
