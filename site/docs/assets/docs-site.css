@@ -3395,3 +3395,64 @@ body {
     max-width: 58rem;
   }
 }
+
+/* Nested navigation: a collapsible tree with a square +/- toggle and indented children. */
+.md-sidebar--primary .md-nav__item--nested > .md-nav__link[for] {
+  pointer-events: auto;
+}
+
+/* The top-level tab group stays always open; only deeper groups get the toggle. */
+.md-sidebar--primary .md-nav__item--nested:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__link .md-nav__icon {
+  display: grid;
+  place-items: center;
+  position: static;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin: 0 0 0 0.35rem;
+  border: 1px solid var(--ah-rule);
+  border-radius: 4px;
+}
+
+.md-sidebar--primary .md-nav__item--nested:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__link .md-nav__icon:after {
+  display: block;
+  width: auto;
+  height: auto;
+  content: "+";
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+  color: var(--ah-fg);
+  font: 600 0.72rem/1 var(--ah-mono);
+  transform: none;
+}
+
+.md-sidebar--primary .md-nav__item--nested:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__toggle:checked ~ .md-nav__link .md-nav__icon:after {
+  content: "−";
+  transform: none;
+}
+
+/* With navigation.sections, Material keeps every section open; make the toggle real. */
+.md-sidebar--primary .md-nav__item--section > .md-nav:not([data-md-level="1"]) {
+  display: none;
+  visibility: visible;
+  opacity: 1;
+  margin-left: 0;
+}
+
+.md-sidebar--primary .md-nav__item--section > .md-nav__toggle:checked ~ .md-nav:not([data-md-level="1"]) {
+  display: block;
+}
+
+.md-sidebar--primary .md-nav__item--section:not(:has(> .md-nav[data-md-level="1"])) > .md-nav__container > label.md-nav__link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.md-sidebar--primary .md-nav__item--nested > .md-nav:not([data-md-level="1"]) > .md-nav__list {
+  margin-left: 0.85rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--ah-rule);
+}
