@@ -95,6 +95,21 @@ PR в integration-ветки и релизы вливаются squash-merge (т
   или CI, принятый `integration collect-ci` для этой же пары. Focused-, failed-only- и
   кэшированные результаты пару не подтверждают.
 - Запись пары дополнительно хранит `candidate_tree_sha` (`git rev-parse <candidate>^{tree}`).
+- Запись пары контракта 2 дополнительно хранит `selection` — выбор тестов, который требуется от QA
+  этой пары: `full` или `ticket-diff`. Значение один раз решает писатель пары в Python по цели пары
+  и замороженному в batch флагу `ticket_diff_selection` (ADR 0023, раздел 7): `ticket-diff` — только
+  для цели `integration/*` при включённом флаге, иначе `full` (цель — ветка по умолчанию, флаг
+  выключен или batch без политики). Запись неизменяема и создаётся один раз; повторная запись той
+  же пары возвращает сохранённую запись и не понижает `ticket-diff` до `full`. Запись контракта 1
+  (пять полей, без `selection`) остаётся допустимой и читается как `full`.
+- `qa.evidence.verify` берёт требование только из сохранённой записи пары. Запрос по-прежнему
+  `{candidate_sha, target_sha}`: поля `requirement` в нём нет, любое лишнее поле — `malformed_request`,
+  поэтому клиент не может запросить более слабую проверку. Для записи контракта 2 со `selection`
+  `ticket-diff` пару подтверждают и стадии `full`, и стадии `ticket-diff`, а pytest-стадия без
+  тестов в diff (`not_run`, id `no-tests-in-diff...`, без кода выхода и node id) не нарушает вердикт.
+  Для любой другой пары — `full` из записи, запись контракта 1, отсутствующая запись или неизвестное
+  значение — стадия `ticket-diff` даёт `selection_not_full` (проверка закрывается в сторону `full`).
+  Стадии `focused` и `failed-only` не подтверждают пару никогда.
 - Push ветки разрешён, только если её голова равна `candidate_sha`.
 - Merge в целевую ветку разрешён, только если её текущая голова равна `target_sha` пары и входит
   в историю кандидата. Тогда squash-merge даёт дерево, равное `candidate_tree_sha`.
@@ -117,7 +132,9 @@ PR в integration-ветки и релизы вливаются squash-merge (т
   `docs/adr/0018-container-executor.md` нет, а `docs/adr/0025-container-executor.md` есть.
 - **Негативные проверки Release Gate:** голова целевой ветки ушла вперёд после QA → merge отказан;
   дерево после squash-merge не равно `candidate_tree_sha` → блокер; QA на SHA, отличном от головы
-  push → push отказан; CI, привязанный вручную без `integration collect-ci`, пару не подтверждает.
+  push → push отказан; CI, привязанный вручную без `integration collect-ci`, пару не подтверждает;
+  стадии `ticket-diff` для пары в ветку по умолчанию или при выключенном флаге → `selection_not_full`.
+  Сверка дерева после squash-merge остаётся для каждого merge, в том числе для пары в `integration/*`.
 - **Риск.** Пока импорты не завершены, тикеты Rust-фундамента не стартуют; разрешение конфликтов
   `contract.py`, `constants.py` и `configuration_schema.py` — работа импорта
   `orchestration-system-fields`, а не тикетов Rust.
