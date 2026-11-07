@@ -65,8 +65,10 @@ When a task matches a skill, open only its relevant `SKILL.md` through `.agents/
   closed; for an integration PR, use `Related to #<ID>` and close the issue only after the developer
   confirms its merge. Use
   `docs/agents/artifacts.md` and `docs/agents/worktrees.md` for their respective workflows.
-- Keep commit messages and PR titles/bodies project-only: never add automated-agent attribution,
-  model names, session URLs, or `Co-Authored-By` trailers. The project hook and CI check enforce this.
+- Keep commit messages and PR titles/bodies project-only. Runtime and model names are allowed.
+  When forming a commit, never add the agent itself as an author or coauthor; human developer
+  `Co-Authored-By` trailers are allowed. Do not add generated-by marks or assistant session URLs.
+  The project hook and CI check reject known assistant signatures and automatic attribution.
   For `-F`/`--file` and PR `--body-file`/`--description-file`, pass a readable literal path: the hook
   checks the file's content, never its path, and rejects an unavailable or shell-variable path.
 - Run QA commands from `.harness/project.json`. After changing `harness/CAPABILITIES.json` or

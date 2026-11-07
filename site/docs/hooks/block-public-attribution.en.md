@@ -11,11 +11,11 @@ Blocking of AI attribution in public Git metadata
 
 ## 2. Full description
 
-The script fires at the `PreToolUse` stage for the `Bash` tool. Its goal is to guarantee that all Git commits, Pull Requests, Merge Requests, pushes, and tracker texts (issues, comments, notes) on GitHub and GitLab contain no automatic attribution: mentions of the use of AI assistants (such as Claude, ChatGPT, Copilot, Gemini, and others), the trailer "Co-authored-by: AI", and session URLs.
+The script runs at the `PreToolUse` stage for `Bash`. It checks commit messages, PR/MR titles and bodies, pushes, and tracker text: issues, comments and notes in GitHub and GitLab.
 
-The check works on two levels:
-- **Git metadata** — commit messages, and the title and body of a PR/MR. The full list of prohibited terms `FORBIDDEN` applies here: names of models and runtimes, attribution, session URLs.
-- **Tracker text** — the title and body of an issue, comments on issues and PRs, notes on issues and MRs, including through `glab api`. Only the attribution pattern `TRACKER_ATTRIBUTION` applies here: the trailer `Co-Authored-By`, the claim "generated/written by <assistant>", an AI-generated mark, and links to assistant sessions. Runtime names and paths such as `.claude/` or `CLAUDE.md` are project vocabulary in tickets, so they are not blocked by themselves.
+Assistant and model names — Claude, Codex, OpenAI, ChatGPT, GPT, Copilot, Gemini — are allowed as project vocabulary, including paths such as `.claude/` and `CLAUDE.md`. Human developer `Co-Authored-By` trailers are also allowed. When forming a commit, the agent must never add itself as an author or coauthor.
+
+Every publication surface uses the same rule: reject known assistant signatures in `Co-Authored-By`, claims such as "generated/written/created/authored/produced by/with/using/via <assistant>", an `AI-generated` mark, and assistant session URLs. The check recognizes known signatures by assistant name; it does not establish a person's identity. Ordinary names and human developer coauthor trailers pass. `FORBIDDEN` and `TRACKER_ATTRIBUTION` use the same pattern.
 
 The execution logic includes:
 1. Safe JSON parsing (through Python) to extract the command being run from `tool_input.command`.
@@ -28,7 +28,7 @@ The execution logic includes:
    - `glab api` — the fields `-F`/`--field` and `-f`/`--raw-field` with the key `body`, `description`, or `title`; the value `-F key=@<path>` is read from a file.
 
    In gh, `-d` is `--draft`, in glab `-b` is `--target-branch`, and `-m` outside notes is a milestone: such flags do not count as text. All forms are read: `-t X`, `-tX`, `-t=X`, the cluster `-dt X`, `--title=X`, and repeated flags.
-5. Check of the string values and of the content of the specified files against the pattern of their own level. The file must be reachable by a literal path: a shell variable, `-` or `@-` (stdin), and a nonexistent path block the command.
+5. Check of the string values and of the content of the specified files against the shared attribution pattern. The file must be reachable by a literal path: a shell variable, `-` or `@-` (stdin), and a nonexistent path block the command.
 6. For push commands and for PR/MR create/edit commands, the messages of local (unpushed) commits reachable from `HEAD` (`git log HEAD --not --remotes`) are also checked.
 7. If the script finds prohibited substrings or hits an error while reading files or strings, it aborts the command, returns error code `2`, and prints a warning to stderr.
 

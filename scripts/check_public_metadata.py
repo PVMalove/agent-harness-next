@@ -9,9 +9,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Runtime and model names are project vocabulary; only attribution is forbidden.
 FORBIDDEN = re.compile(
-    r"\bclaude\b|\bopenai\b|\bchatgpt\b|\bgpt[-_ ]?[0-9]|\bcopilot\b|\bgemini\b|\bcodex\b|"
-    r"\bco-authored[- ]by\b|\bai[-_ ]?(agent|assistant|generated)\b",
+    r"(?<![a-z0-9])co-authored[- ]by\s*:\s*"
+    r"(?:claude(?:\s+code)?|openai|chatgpt|copilot|gemini|codex|gpt(?:[-_ ]?[0-9][a-z0-9._-]*)?)"
+    r"(?=\s*(?:<|_?(?:\r?\n|$)))|"
+    r"(?<![a-z0-9])(generated|written|created|authored|produced)\s+(with|by|using|via)\s+"
+    r"\[?(claude|chatgpt|openai|copilot|gemini|codex|gpt[-_ ]?[0-9])|"
+    r"(?<![a-z0-9])ai[-_ ]?generated(?![a-z0-9])|"
+    r"(?<![a-z0-9.-])(claude\.ai|chatgpt\.com|chat\.openai\.com)/",
     re.IGNORECASE,
 )
 GIT_TIMEOUT_SECONDS = 60
@@ -44,7 +50,7 @@ def git_messages(
 
 
 def main() -> int:
-    """Точка входа CLI: проверка сообщений коммитов и тела PR на запрещённые упоминания AI-агентов."""
+    """Точка входа CLI: проверка сообщений коммитов и тела PR на автоматическую атрибуцию."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--commit-range")
     # A PR into an integration branch carries default-branch commits its base lacks: they are
