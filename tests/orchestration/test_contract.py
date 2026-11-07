@@ -1377,5 +1377,118 @@ class ConfigLoadingTests(unittest.TestCase):
         self.assertEqual(config._developer_verification_commands(loaded), ["pytest -q"])
 
 
+def _diff_stage(
+    stage_id: str,
+    kind: str,
+    argv: list[str],
+    selection: str = "full",
+    nodeids: list[str] | None = None,
+) -> JsonObject:
+    return {
+        "stage_id": stage_id,
+        "kind": kind,
+        "argv": argv,
+        "timeout_seconds": 60,
+        "selection": selection,
+        "nodeids": nodeids or [],
+        "environment_fingerprint": "0" * 64,
+    }
+
+
+def _diff_plan(python: list[str]) -> JsonObject:
+    pytest_argv = ["python", "-m", "pytest", "-q"]
+    return {
+        "role": "qa",
+        "ticket_diff": {"python_tests": python, "cargo_targets": []},
+        "stages": [
+            _diff_stage("lint", "lint", ["make", "lint"]),
+            _diff_stage(
+                "tests", "pytest", pytest_argv + python, "ticket-diff", python
+            ),
+            _diff_stage("cargo-fmt", "custom", ["cargo", "fmt", "--check"]),
+            _diff_stage(
+                "cargo-test-state-lib",
+                "custom",
+                ["cargo", "test", "-p", "state", "--lib"],
+                "ticket-diff",
+                ["state::lib"],
+            ),
+        ],
+    }
+
+
+class TicketDiffVerificationCommandsTests(unittest.TestCase):
+    CONFIG: ClassVar[JsonObject] = {
+        "verification_commands": ["make verify"],
+        "review_verification_commands": ["make review"],
+        "developer_verification_commands": ["make dev"],
+    }
+    DERIVED: ClassVar[list[str]] = [
+        "make lint",
+        "python -m pytest -q 'tests/a b.py'",
+        "cargo fmt --check",
+        "cargo test -p state --lib",
+    ]
+
+    def _accepted(self, role: str, brief: JsonObject) -> list[object]:
+        return contract.accepted_verification_commands(
+            self.CONFIG, role, "work", brief=brief
+        )
+
+    def test_the_commands_are_the_plan_stages_in_order(self) -> None:
+        commands = contract.ticket_diff_plan_commands(_diff_plan(["tests/a b.py"]))
+
+        self.assertEqual(commands, self.DERIVED)
+
+    def test_a_stage_without_a_selected_test_adds_no_command(self) -> None:
+        commands = contract.ticket_diff_plan_commands(_diff_plan([]))
+
+        self.assertEqual(
+            commands, ["make lint", "cargo fmt --check", "cargo test -p state --lib"]
+        )
+
+    def test_review_qa_and_developer_retry_accept_exactly_the_derived_list(
+        self,
+    ) -> None:
+        plan = _diff_plan(["tests/a b.py"])
+        retry: JsonObject = {
+            "transition": {"next_action": "developer-retry"},
+            "verification_plan": plan,
+        }
+
+        for role, brief in (
+            ("code-review", {"verification_plan": plan}),
+            ("qa", {"verification_plan": plan}),
+            ("developer", retry),
+        ):
+            with self.subTest(role=role):
+                accepted = self._accepted(role, brief)
+                self.assertIn(self.DERIVED, accepted)
+                self.assertNotIn(self.DERIVED[:-1], accepted)
+                self.assertNotIn([*self.DERIVED, "make verify"], accepted)
+
+    def test_a_plan_without_the_ticket_diff_section_accepts_only_the_role_lists(
+        self,
+    ) -> None:
+        plan = {k: v for k, v in _diff_plan(["tests/a.py"]).items() if k != "ticket_diff"}
+
+        accepted = self._accepted("qa", {"verification_plan": plan})
+
+        self.assertEqual(accepted, [["make verify"]])
+        self.assertEqual(
+            self._accepted("code-review", {}), [["make review"]]
+        )
+
+    def test_a_first_developer_brief_never_accepts_the_derived_list(self) -> None:
+        plan = _diff_plan(["tests/a b.py"])
+
+        accepted = self._accepted(
+            "developer",
+            {"transition": {"next_action": "developer"}, "verification_plan": plan},
+        )
+
+        self.assertNotIn(self.DERIVED, accepted)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1199,6 +1199,13 @@ def _tampered(tmp_path: Path, mutate: Mutation) -> system_fields.SystemFieldsReg
     return load_registry(_write(tmp_path, document))
 
 
+def test_the_ticket_diff_selection_is_registered_and_spelled_by_the_code() -> None:
+    registry = load_registry()
+
+    assert "ticket-diff" in registry.fields["verification_plan.selection"].allowed
+    assert "ticket-diff" in constants.VERIFICATION_PLAN_SELECTIONS
+
+
 def test_a_value_removed_from_the_registry_is_drift(tmp_path: Path) -> None:
     registry = _tampered(tmp_path, _drop(("fields", "batch.state", "values", "paused")))
 

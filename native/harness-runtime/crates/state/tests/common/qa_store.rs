@@ -53,6 +53,7 @@ pub fn passed_stage(stage_id: &str, candidate: &str) -> StageEvidence {
         stderr: Some(stream("stderr", STDERR)),
         duration_ms: 10,
         failed_nodeids: Vec::new(),
+        nodeids: None,
     }
 }
 

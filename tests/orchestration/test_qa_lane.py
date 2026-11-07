@@ -816,6 +816,77 @@ class QaLaneRunTests(QaLaneTestCase):
             operational_guards.runtime_images_digest(images),
         )
 
+    def test_a_ticket_diff_plan_names_kind_selection_and_nodeids_of_each_command(
+        self,
+    ) -> None:
+        fingerprint = "f" * 64
+
+        def stage(
+            stage_id: str, kind: str, selection: str, nodeids: list[JsonValue]
+        ) -> JsonObject:
+            return {
+                "stage_id": stage_id,
+                "kind": kind,
+                "argv": [stage_id],
+                "timeout_seconds": 60,
+                "selection": selection,
+                "nodeids": nodeids,
+                "environment_fingerprint": fingerprint,
+            }
+
+        plan: JsonObject = {
+            "role": "qa",
+            "ticket_diff": {"python_tests": [], "cargo_targets": []},
+            "stages": [
+                stage("lint", "lint", "full", []),
+                stage("tests", "pytest", "ticket-diff", []),
+                stage("cargo-test-state-lib", "custom", "ticket-diff", ["state::lib"]),
+            ],
+        }
+        self.dispatch["verification_plan"] = plan
+        self.dispatch["verification_commands"] = ["lint", "cargo-test-state-lib"]
+        self.dispatch["candidate_commit"] = "c" * 40
+        self._seed()
+
+        with mock.patch.object(
+            qa_lane,
+            "run_gate",
+            return_value=self._evidence_gate(["lint", "cargo-test-state-lib"]),
+        ) as gate:
+            qa_lane.run(self.args, self._ops([]))
+
+        context = gate.call_args.kwargs["evidence"]
+        self.assertEqual(
+            [(p.stage_id, p.kind, p.selection, p.nodeids) for p in context.planned],
+            [
+                ("gate-1", "lint", "full", None),
+                ("gate-2", "custom", "ticket-diff", ("state::lib",)),
+            ],
+        )
+        self.assertEqual(
+            [(p.stage_id, p.kind, p.selection, p.nodeids) for p in context.unselected],
+            [("no-tests-in-diff", "pytest", "ticket-diff", ())],
+        )
+
+    def test_a_plan_without_the_ticket_diff_section_adds_no_stage_description(
+        self,
+    ) -> None:
+        plan: JsonObject = {
+            "stages": [{"stage_id": "p", "environment_fingerprint": "f" * 64}],
+            "role": "qa",
+        }
+        self.dispatch["verification_plan"] = plan
+        self.dispatch["verification_commands"] = ["first", "second"]
+        self._seed()
+
+        with mock.patch.object(
+            qa_lane, "run_gate", return_value=self._evidence_gate(["first", "second"])
+        ) as gate:
+            qa_lane.run(self.args, self._ops([]))
+
+        context = gate.call_args.kwargs["evidence"]
+        self.assertEqual((context.planned, context.unselected), ((), ()))
+
     def test_a_command_the_gate_never_reached_is_not_run_in_the_report(self) -> None:
         self.dispatch["verification_commands"] = ["first", "second", "third"]
         self._seed()

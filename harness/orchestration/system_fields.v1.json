@@ -669,7 +669,7 @@
       "values": {
         "pair_not_recorded": "The store holds no Release Gate pair record with a candidate_tree_sha for the pair.",
         "no_full_qa": "No accepted QA run, verified local-QA run or collected CI check of exactly the pair is stored; developer and review checks and the qa-gate marker never confirm a pair.",
-        "selection_not_full": "A stage of the run selected only some tests (focused or failed-only).",
+        "selection_not_full": "A stage of the run selected only some tests (focused, failed-only or ticket-diff).",
         "stage_not_passed": "A stage failed or did not run, or an approved command has no stage.",
         "stage_candidate_mismatch": "A stage names another candidate than the pair.",
         "plan_mismatch": "A stage names another verification plan or image than the QA brief pinned, or the stages name different environments.",
@@ -1140,7 +1140,8 @@
       "values": {
         "full": "The stage runs the whole suite; the conservative widening an unknown impact falls back to.",
         "focused": "The stage runs only the node ids the impact analysis selected.",
-        "failed-only": "The stage reruns the exact node ids that failed before; a diagnostic inside a developer session, never evidence."
+        "failed-only": "The stage reruns the exact node ids that failed before; a diagnostic inside a developer session, never evidence.",
+        "ticket-diff": "The stage runs exactly the tests of the ticket's own base..candidate diff for an integration/* target (the ticket_diff_selection policy flag); never widened to full, and never Release Gate evidence."
       }
     },
     "verification_plan.stage_kind": {

@@ -40,7 +40,7 @@ def test_the_golden_fixture_round_trips_unchanged() -> None:
 def test_the_golden_fixture_covers_pass_fail_and_not_run() -> None:
     parsed = stage_evidence.parse(GOLDEN.read_text(encoding="utf-8"))
 
-    assert [stage.result for stage in parsed.stages] == ["pass", "fail", "not_run"]
+    assert [stage.result for stage in parsed.stages][:3] == ["pass", "fail", "not_run"]
     failed = parsed.stages[1]
     assert failed.stdout is not None and failed.stderr is not None
     assert failed.stdout.sha256 != failed.stderr.sha256
@@ -165,6 +165,48 @@ def test_an_unknown_schema_name_and_bad_json_are_refused() -> None:
 def _registry_values(field: str) -> tuple[str, ...]:
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
     return tuple(registry["fields"][field]["values"])
+
+
+def test_the_golden_fixture_covers_the_ticket_diff_selection_with_explicit_nodeids() -> (
+    None
+):
+    parsed = stage_evidence.parse(GOLDEN.read_text(encoding="utf-8"))
+
+    selected, empty = parsed.stages[3], parsed.stages[4]
+    assert selected.selection == "ticket-diff" and selected.result == "pass"
+    assert selected.nodeids == ("tests/core/test_b.py",)
+    assert empty.stage_id == "no-tests-in-diff" and empty.result == "not_run"
+    assert empty.selection == "ticket-diff" and empty.nodeids == ()
+    assert parsed.stages[0].nodeids is None
+
+
+def test_a_stage_without_nodeids_stays_without_the_key() -> None:
+    document = copy.deepcopy(_golden())
+
+    written = stage_evidence.StageEvidenceDocument.from_json(document).to_json()
+
+    assert "nodeids" not in _stages(written)[0]
+    assert _stages(written)[3]["nodeids"] == ["tests/core/test_b.py"]
+    assert _stages(written)[4]["nodeids"] == []
+
+
+@pytest.mark.parametrize("value", ["tests/a.py", [1], [""], None])
+def test_invalid_nodeids_are_refused(value: object) -> None:
+    document = copy.deepcopy(_golden())
+    _stages(document)[3]["nodeids"] = value
+
+    with pytest.raises(stage_evidence.StageEvidenceError, match="nodeids"):
+        stage_evidence.StageEvidenceDocument.from_json(document)
+
+
+def test_a_ticket_diff_stage_is_a_valid_selection() -> None:
+    document = copy.deepcopy(_golden())
+    _stages(document)[0]["selection"] = "ticket-diff"
+
+    parsed = stage_evidence.StageEvidenceDocument.from_json(document)
+
+    assert parsed.stages[0].selection == "ticket-diff"
+    assert "ticket-diff" in _registry_values("verification_plan.selection")
 
 
 def test_the_vocabularies_equal_the_system_fields_registry() -> None:
