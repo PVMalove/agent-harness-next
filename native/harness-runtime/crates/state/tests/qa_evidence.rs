@@ -457,7 +457,7 @@ fn a_pair_record_is_checked_field_by_field() {
         json!(format!("pair-{}", "0".repeat(32))),
     );
     let mut bad_contract = record.clone();
-    bad_contract.insert("contract".to_owned(), json!(2));
+    bad_contract.insert("contract".to_owned(), json!(3));
     for broken in [extra, bad_sha, bad_id, bad_contract] {
         assert!(
             qa_evidence::check_pair_record(&path, &broken).is_err(),
@@ -466,4 +466,46 @@ fn a_pair_record_is_checked_field_by_field() {
     }
     let elsewhere = "reports/integration-pair/pair-00000000000000000000000000000000.json";
     assert!(qa_evidence::check_pair_record(elsewhere, &record).is_err());
+}
+
+#[test]
+fn a_pair_record_is_checked_by_its_contract() {
+    let accepted = [
+        qa_store::legacy_pair_record(),
+        qa_store::pair_record(),
+        qa_store::diff_pair_record(),
+    ];
+    for (path, record) in &accepted {
+        let record = record.as_object().unwrap();
+
+        assert_eq!(
+            qa_evidence::check_pair_record(path, record),
+            Ok(()),
+            "{record:?}"
+        );
+    }
+    let (path, diff) = qa_store::diff_pair_record();
+    let with = |key: &str, value: Value| {
+        let mut record = diff.as_object().unwrap().clone();
+        record.insert(key.to_owned(), value);
+        record
+    };
+    let mut without = diff.as_object().unwrap().clone();
+    without.remove("selection");
+    let broken = [
+        without,
+        with("contract", json!(1)),
+        with("contract", json!(3)),
+        with("selection", json!("focused")),
+        with("selection", json!("failed-only")),
+        with("selection", json!("Full")),
+        with("selection", json!(null)),
+        with("requirement", json!("full")),
+    ];
+    for record in broken {
+        assert!(
+            qa_evidence::check_pair_record(&path, &record).is_err(),
+            "{record:?}"
+        );
+    }
 }

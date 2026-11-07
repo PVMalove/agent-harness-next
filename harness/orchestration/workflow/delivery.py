@@ -1133,7 +1133,11 @@ def _record_publish_pair(
             return
         pair = release_gate.publish_pair(batch, dispatch)
         release_gate.record_pair(
-            ledger, repo, pair["candidate_sha"], pair["target_sha"]
+            ledger,
+            repo,
+            pair["candidate_sha"],
+            pair["target_sha"],
+            release_gate.required_selection(repo, batch),
         )
 
 

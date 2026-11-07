@@ -7,6 +7,11 @@ QA evidence of the pair (``qa_evidence_verify``, on the wire ``qa.evidence.verif
 runtime-store epoch: the file ledger has no runtime verdict and no Python stand-in for one. This
 module keeps the one function that records a pair, so ``dispatch publish``, ``integration
 prepare`` and ``integration refresh`` write the same immutable record.
+
+The record also stores the QA selection the pair requires (contract 2, ``selection``): the writer
+decides it once, from the target ref and the flag frozen in the batch, and the runtime judges the
+stage evidence by the stored value alone (never by anything the caller of ``qa.evidence.verify``
+says). A record of the first contract stores none and requires ``full``.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ import uuid
 from pathlib import Path
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY
+from harness.orchestration import verification_plan
 from harness.orchestration.core import state_view
 from harness.orchestration.core.constants import (
     INTEGRATION_SHA_PATTERN,
@@ -29,6 +35,7 @@ from harness.orchestration.core.git_utils import (
     _run_git,
 )
 from harness.orchestration.core.utils import CoordinatorError, JsonObject, _read_object
+from harness.orchestration.core.workspace import _integration_ref
 from harness.orchestration.ledger.ledger_ops import _write_record
 from harness.orchestration.ledger.lifecycle import (
     IntegrationPairRecord,
@@ -36,7 +43,13 @@ from harness.orchestration.ledger.lifecycle import (
     store_is_authority,
 )
 
-PAIR_RECORD_CONTRACT = 1
+PAIR_RECORD_CONTRACT = 2
+# The first contract has no ``selection`` field and always requires a full QA run.
+FIRST_PAIR_RECORD_CONTRACT = 1
+SELECTION_FULL = "full"
+SELECTION_TICKET_DIFF = verification_plan.TICKET_DIFF
+# The selections a contract-2 record may store, the stricter one first.
+PAIR_SELECTIONS = (SELECTION_FULL, SELECTION_TICKET_DIFF)
 
 
 def pair_id(candidate: str, target: str) -> str:
@@ -70,14 +83,62 @@ def candidate_tree(repo: Path, candidate: str) -> str:
     return tree
 
 
-def record_pair(
-    ledger: LifecycleLedger, repo: Path, candidate: str, target: str
-) -> JsonObject:
-    """Record the pair ``{candidate, target}`` with the tree of ``candidate``; idempotent.
+def required_selection(repo: Path, batch: JsonObject) -> str:
+    """The QA selection the pair of ``batch`` requires: ``ticket-diff`` exactly when the batch
+    froze ``ticket_diff_selection`` and its target is an ``integration/*`` ref, else ``full``.
 
-    The caller holds the ledger lock (the store unit of its command). A pair that is recorded
-    already is returned as it is; a stored pair with other content is refused.
-    """
+    The ref is read only when the frozen flag asks for it, as the verification plan does; a batch
+    without a policy (a legacy batch) or with the flag off requires ``full``."""
+    policy = batch.get("verification_plan_policy")
+    if not isinstance(policy, dict) or not policy.get("ticket_diff_selection"):
+        return SELECTION_FULL
+    if verification_plan.ticket_diff_active(policy, _integration_ref(repo, batch)):
+        return SELECTION_TICKET_DIFF
+    return SELECTION_FULL
+
+
+def _held_selection(path: Path, stored: JsonObject, members: JsonObject) -> str:
+    """The selection a stored pair record requires; a record that is not exactly one of the two
+    contracts for ``members`` is refused."""
+    contract = stored.get("contract")
+    if contract == FIRST_PAIR_RECORD_CONTRACT:
+        expected: JsonObject = {**members, "contract": contract}
+        held = SELECTION_FULL
+    else:
+        held = str(stored.get("selection"))
+        expected = {**members, "contract": PAIR_RECORD_CONTRACT, "selection": held}
+        if contract != PAIR_RECORD_CONTRACT or held not in PAIR_SELECTIONS:
+            expected = {}
+    if not expected or stored != expected:
+        raise CoordinatorError(
+            f"the Release Gate pair record {path.name} names another candidate_tree_sha, "
+            "selection or fields than the candidate has",
+            remedy="the pair record was changed after it was written -- "
+            + INTERNAL_INVARIANT_REMEDY,
+        )
+    return held
+
+
+def record_pair(
+    ledger: LifecycleLedger,
+    repo: Path,
+    candidate: str,
+    target: str,
+    selection: str,
+) -> JsonObject:
+    """Record the pair ``{candidate, target}`` with the tree of ``candidate`` and the ``selection``
+    its QA must have; idempotent.
+
+    The caller holds the ledger lock (the store unit of its command) and decides ``selection``
+    with ``required_selection``. A pair that is recorded already is returned as it is when it
+    requires as much as ``selection`` does (a record of the first contract requires ``full``); a
+    stored ``ticket-diff`` pair is never recorded as ``full``, and a stored pair with other
+    content is refused."""
+    if selection not in PAIR_SELECTIONS:
+        raise CoordinatorError(
+            f"the selection {selection!r} of the Release Gate pair of {candidate} is unknown",
+            remedy=f"{INTERNAL_INVARIANT_REMEDY}",
+        )
     try:
         tree = candidate_tree(repo, candidate)
     except CoordinatorError as exc:
@@ -85,9 +146,8 @@ def record_pair(
             f"cannot record the Release Gate pair of {candidate}: {exc.message}",
             remedy=exc.remedy,
         ) from exc
-    document: JsonObject = {
+    members: JsonObject = {
         "pair_id": pair_id(candidate, target),
-        "contract": PAIR_RECORD_CONTRACT,
         "candidate_sha": candidate,
         "target_sha": target,
         "candidate_tree_sha": tree,
@@ -95,14 +155,20 @@ def record_pair(
     path = _pair_path(ledger, candidate, target)
     if state_view.is_file(path):
         stored = _read_object(path, "Release Gate pair record")
-        if stored != document:
+        held = _held_selection(path, stored, members)
+        if held == SELECTION_TICKET_DIFF and selection == SELECTION_FULL:
             raise CoordinatorError(
-                f"the Release Gate pair record {path.name} names another candidate_tree_sha or "
-                "fields than the candidate has",
-                remedy="the pair record was changed after it was written -- "
-                + INTERNAL_INVARIANT_REMEDY,
+                f"the Release Gate pair record {path.name} stores selection {held!r}, but "
+                f"{selection!r} is required for this candidate_tree_sha",
+                remedy="the pair record is immutable and was decided by the batch's frozen "
+                "ticket_diff_selection flag -- " + INTERNAL_INVARIANT_REMEDY,
             )
         return stored
+    document: JsonObject = {
+        **members,
+        "contract": PAIR_RECORD_CONTRACT,
+        "selection": selection,
+    }
     _write_record(ledger, IntegrationPairRecord.from_dict(document))
     return document
 

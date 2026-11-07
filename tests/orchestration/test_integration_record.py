@@ -251,15 +251,26 @@ class PublishedBranch:
     a real local bare remote through every role, and subclassing it would run its whole suite again.
     """
 
-    def __init__(self) -> None:
-        self.fixture = coordinator_tests.CoordinatorRetryRoutingTests()
-        self.fixture.setUp()
+    def __init__(
+        self,
+        fixture: coordinator_tests.CoordinatorRetryRoutingTests | None = None,
+        integration_ref: str | None = None,
+    ) -> None:
+        """``fixture`` is a coordinator fixture its caller already set up (and tears down);
+        ``integration_ref`` is the target its batches name, ``master`` when it is ``None``."""
+        self.owned = fixture is None
+        if fixture is None:
+            fixture = coordinator_tests.CoordinatorRetryRoutingTests()
+            fixture.setUp()
+        self.fixture = fixture
+        self.integration_ref = integration_ref
         self.repo = self.fixture.repo
         self.branch = self.fixture.branch
         self.ticket = "#244"
 
     def close(self) -> None:
-        self.fixture.tearDown()
+        if self.owned:
+            self.fixture.tearDown()
 
     def args(self, **values: object) -> argparse.Namespace:
         return self.fixture._args(**values)
@@ -279,7 +290,7 @@ class PublishedBranch:
         batch without landing anything: a follow-up of the already published branch."""
         fx = self.fixture
         if landed is None and not again:
-            batch = fx._create_batch()
+            batch = fx._create_batch(integration_ref=self.integration_ref)
         else:
             if landed is not None:
                 _git(self.repo, "push", "origin", f"{landed}:refs/heads/master")
@@ -339,6 +350,7 @@ class PublishedBranch:
 
     def advance_integration_ref(self) -> str:
         """Another change lands on the integration ref in the remote."""
+        ref = self.integration_ref or "master"
         _git(self.repo, "checkout", "-q", "master")
         # The tip in the content keeps a second landing a new commit.
         tip = _git(self.repo, "rev-parse", "HEAD")
@@ -347,7 +359,7 @@ class PublishedBranch:
         # paths overflow MAX_PATH once a QA worktree is created for a refreshed candidate on Windows.
         _git(self.repo, "add", "landed.txt")
         _git(self.repo, "commit", "-m", "landed")
-        _git(self.repo, "push", "origin", "master")
+        _git(self.repo, "push", "origin", f"HEAD:refs/heads/{ref}")
         return _git(self.repo, "rev-parse", "HEAD")
 
     def snapshot(self) -> JsonObject:

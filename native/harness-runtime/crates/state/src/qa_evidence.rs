@@ -31,7 +31,7 @@ use crate::read::{self, ReadError};
 
 /// The record directory of the Release Gate pairs.
 pub const PAIR_DIRECTORY: &str = "reports/integration-pair";
-/// The fields of a pair record, exactly.
+/// The fields of a pair record of the first contract, exactly: it requires a full QA run.
 pub const PAIR_FIELDS: [&str; 5] = [
     "pair_id",
     "contract",
@@ -39,7 +39,18 @@ pub const PAIR_FIELDS: [&str; 5] = [
     "target_sha",
     "candidate_tree_sha",
 ];
+/// The fields of a pair record of the second contract, exactly: the first contract's and the
+/// `selection` its QA must have.
+pub const PAIR_FIELDS_V2: [&str; 6] = [
+    "pair_id",
+    "contract",
+    "candidate_sha",
+    "target_sha",
+    "candidate_tree_sha",
+    "selection",
+];
 const PAIR_CONTRACT: u64 = 1;
+const PAIR_CONTRACT_V2: u64 = 2;
 const EVIDENCE_DIRECTORY: &str = "reports/integration-evidence/";
 const LOCAL_QA_DIRECTORY: &str = "reports/integration-local-qa/";
 const QA_ARTIFACTS: &str = "qa-artifacts/";
@@ -103,21 +114,44 @@ impl Pair {
     }
 }
 
-/// Check a pair record a `state.write` creates at `path`: its exact fields, its contract, its
-/// three ids and the `pair_id` its pair derives.
+/// Check a pair record a `state.write` creates at `path`: its contract and the exact fields of it
+/// (contract 1: five; contract 2: those and a `selection`, `full` or `ticket-diff`), its three ids
+/// and the `pair_id` its pair derives.
 ///
 /// # Errors
 /// What breaks the record.
 pub fn check_pair_record(path: &str, record: &Map<String, Value>) -> Result<(), String> {
+    let contract = record.get("contract").and_then(Value::as_u64);
+    let fields: &[&str] = match contract {
+        Some(PAIR_CONTRACT) => &PAIR_FIELDS,
+        Some(PAIR_CONTRACT_V2) => &PAIR_FIELDS_V2,
+        _ => {
+            return Err(format!(
+                "the pair record {path} must have contract {PAIR_CONTRACT} or {PAIR_CONTRACT_V2}"
+            ));
+        }
+    };
     let keys: BTreeSet<&str> = record.keys().map(String::as_str).collect();
-    if keys != PAIR_FIELDS.into_iter().collect() {
+    if keys != fields.iter().copied().collect() {
         return Err(format!(
-            "the pair record {path} must hold exactly the fields {PAIR_FIELDS:?}"
+            "the pair record {path} of contract {} must hold exactly the fields {fields:?}",
+            contract.unwrap_or_default()
         ));
     }
-    if record.get("contract").and_then(Value::as_u64) != Some(PAIR_CONTRACT) {
+    if contract == Some(PAIR_CONTRACT_V2)
+        && !record
+            .get("selection")
+            .and_then(Value::as_str)
+            .is_some_and(|selection| {
+                [StageSelection::Full, StageSelection::TicketDiff]
+                    .into_iter()
+                    .any(|accepted| accepted.as_str() == selection)
+            })
+    {
         return Err(format!(
-            "the pair record {path} must have contract {PAIR_CONTRACT}"
+            "the pair record {path} must have the selection {:?} or {:?}",
+            StageSelection::Full.as_str(),
+            StageSelection::TicketDiff.as_str()
         ));
     }
     let text = |key: &str| {
