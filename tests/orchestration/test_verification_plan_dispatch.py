@@ -386,6 +386,9 @@ class TicketDiffFixture(PlanFixture):
 
     def setUp(self) -> None:
         super().setUp()
+        self._publish_integration_ref()
+
+    def _publish_integration_ref(self) -> None:
         subprocess.run(
             [
                 "git", "-C", str(self.fx.repo), "push", "origin",
@@ -397,6 +400,20 @@ class TicketDiffFixture(PlanFixture):
 
     def _on(self, **changes: object) -> JsonObject:
         return {**POLICY, "ticket_diff_selection": True, **changes}
+
+    def _assessed_candidate_with_test(self) -> tuple[str, str]:
+        fx = self.fx
+        batch_id = fx._create_batch(integration_ref=self.integration_ref)["batch_id"]
+        fx._accepted_architect(batch_id)
+        first = fx._dispatch(batch_id, "developer")["brief"]
+        fx._start(first["dispatch_id"])
+        candidate, changed = fx._developer_commit("test_y")
+        fx._submit(
+            first["dispatch_id"], fx._developer_report(first, candidate, changed)
+        )
+        fx._decide(batch_id, "accept")
+        fx._assess(batch_id, candidate, changed)
+        return batch_id, candidate
 
 
 class TicketDiffDispatchTests(TicketDiffFixture):
@@ -642,20 +659,6 @@ class TicketDiffGateTests(TicketDiffFixture):
     def _reviewed(self) -> tuple[str, str]:
         self._configure({**POLICY, "ticket_diff_selection": True})
         batch_id, candidate = self._assessed_candidate_with_test()
-        return batch_id, candidate
-
-    def _assessed_candidate_with_test(self) -> tuple[str, str]:
-        fx = self.fx
-        batch_id = fx._create_batch(integration_ref=self.integration_ref)["batch_id"]
-        fx._accepted_architect(batch_id)
-        first = fx._dispatch(batch_id, "developer")["brief"]
-        fx._start(first["dispatch_id"])
-        candidate, changed = fx._developer_commit("test_y")
-        fx._submit(
-            first["dispatch_id"], fx._developer_report(first, candidate, changed)
-        )
-        fx._decide(batch_id, "accept")
-        fx._assess(batch_id, candidate, changed)
         return batch_id, candidate
 
     def test_a_review_plan_that_skips_a_diff_test_is_refused_with_exit_code_2(
