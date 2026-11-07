@@ -145,7 +145,11 @@ def test_checkpoint_survives_invalid_live_config() -> None:
             == "checkpointed"
         )
     finally:
-        case.tearDown()
+        try:
+            case.tearDown()
+        finally:
+            # Manual TestCase lifecycle must also restore _patch_config's mock.
+            case.doCleanups()
 
 
 def test_qa_runner_preserves_report_if_gate_breaks_live_configuration() -> None:
