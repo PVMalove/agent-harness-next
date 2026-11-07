@@ -73,7 +73,7 @@ and an ambiguous value are errors, not a reason to keep the last value. See the
   container executor.
 - [Verification](orchestration/verification.md) — QA commands, verification profiles and plans,
   Repo Map, and Context Package.
-- [Container executor](container.md) — host, images, network, token, checks, and common errors.
+- [Container](container.md) — host, images, network, token, checks, and common errors.
 - [Test-author](test-author.md) — fields, activation conditions, refusal reasons, and the live check.
 
 ## Neighbouring guides

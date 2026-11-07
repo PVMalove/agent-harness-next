@@ -73,7 +73,7 @@ python3 .harness/orchestration/coordinator.py --repo . config validate --fix --d
   контейнерным исполнителем.
 - [Верификация](orchestration/verification.md) — команды QA, профили и планы проверки, Repo Map и
   Context Package.
-- [Контейнерный исполнитель](container.md) — хост, образы, сеть, токен, проверки и типичные ошибки.
+- [Контейнер](container.md) — хост, образы, сеть, токен, проверки и типичные ошибки.
 - [Test-author](test-author.md) — поля, условия активации, причины отказа и живая проверка.
 
 ## Соседние руководства

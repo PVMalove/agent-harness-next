@@ -77,7 +77,7 @@ plugins:
             Политики: Policies
             Доступ и контейнер: Access and container
             Верификация: Verification
-            Контейнерный исполнитель: Container executor
+            Контейнер: Container
             Руководства: Guides
             Рабочий поток: Workflow
             Примеры: Examples
@@ -145,7 +145,7 @@ nav:
               - Политики: getting-started/settings/orchestration/policies.md
               - Доступ и контейнер: getting-started/settings/orchestration/access.md
               - Верификация: getting-started/settings/orchestration/verification.md
-          - Контейнерный исполнитель: getting-started/settings/container.md
+          - Контейнер: getting-started/settings/container.md
           - Test-author: getting-started/settings/test-author.md
   - Руководства:
       - Рабочий поток: guides/workflow.md

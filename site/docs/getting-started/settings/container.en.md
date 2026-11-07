@@ -1,4 +1,4 @@
-# Container executor
+# Container
 
 This page describes the full setup of the container executor: host, images, configuration fields, network, token, checks, and common errors.
 
