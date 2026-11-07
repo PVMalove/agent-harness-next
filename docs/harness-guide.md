@@ -317,6 +317,13 @@ python harness\bin\harness.py init C:\path\to\repository `
 `integration collect-ci` принимает CI-доказательство вместо повторного полного локального QA.
 Пустой список или отсутствие поля означает «не настроено», и действует запасной путь с локальным QA.
 
+Имена в `ci_required_checks` — это полные проверки: `verify`, `rust` и другие задания, которые
+`verify.yml` запускает для PR в `master`. Не записывайте туда `-light` имена: задание `verify-light`
+идёт только для PR в `integration/**`, и `collect-ci` отвечает на такую проверку причиной
+`light_check`, если пара требует полного QA. Поле живёт в локальном `.harness/project.json`, который
+не коммитится. Оператор задаёт его один раз при включении CI-доказательства, а в тексте PR
+описывает этот шаг (ADR 0016, дополнение #937).
+
 Команда `integration collect-ci --record <id> --pull-request <n>` (backend-оркестрация, ADR 0016)
 принимает CI только для трекера `github`. Кроме того, все проверки из `ci_required_checks` должны
 пройти на комбинированном результате PR (merge commit с родителями candidate и target). Иначе

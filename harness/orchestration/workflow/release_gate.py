@@ -39,6 +39,7 @@ from harness.orchestration.core.workspace import _integration_ref
 from harness.orchestration.ledger.ledger_ops import _write_record
 from harness.orchestration.ledger.lifecycle import (
     IntegrationPairRecord,
+    LedgerError,
     LifecycleLedger,
     store_is_authority,
 )
@@ -196,6 +197,43 @@ def stored_tree(ledger: LifecycleLedger, pair: JsonObject) -> str | None:
     stored = stored_pair(ledger, pair["candidate_sha"], pair["target_sha"])
     tree = None if stored is None else stored.get("candidate_tree_sha")
     return tree if isinstance(tree, str) else None
+
+
+def pair_selection(ledger: LifecycleLedger, candidate: str, target: str) -> str:
+    """The QA selection the stored pair ``{candidate, target}`` requires, for a reader that must
+    not accept more than the pair allows (``collect-ci``, issue #937).
+
+    ``ticket-diff`` only for a pair record of the current contract that is exactly the record the
+    writer produces; ``full`` for everything else: no record, a record of the first contract, an
+    unreadable or malformed record, or one that names another pair. The reader never repairs a
+    record and never raises, so the answer can only fail closed. Call it inside the ledger lock
+    of the command, as the other readers of the pair do (a runtime-store view is bound there)."""
+    try:
+        stored = stored_pair(ledger, candidate, target)
+    except (CoordinatorError, LedgerError):
+        return SELECTION_FULL
+    tree = None if stored is None else stored.get("candidate_tree_sha")
+    if (
+        stored is None
+        or set(stored)
+        != {
+            "pair_id",
+            "contract",
+            "candidate_sha",
+            "target_sha",
+            "candidate_tree_sha",
+            "selection",
+        }
+        or stored["contract"] != PAIR_RECORD_CONTRACT
+        or stored["pair_id"] != pair_id(candidate, target)
+        or stored["candidate_sha"] != candidate
+        or stored["target_sha"] != target
+        or not isinstance(tree, str)
+        or INTEGRATION_SHA_PATTERN.fullmatch(tree) is None
+        or stored["selection"] != SELECTION_TICKET_DIFF
+    ):
+        return SELECTION_FULL
+    return SELECTION_TICKET_DIFF
 
 
 # How long the runtime may take to judge the evidence of a pair: one read snapshot.

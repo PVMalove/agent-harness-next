@@ -2674,8 +2674,12 @@ PR, родители которого — ровно текущие candidate и
 Если integration ref ушёл вперёд, `qa_replacement.applies` становится `false`, а
 `re_refresh_required` — `true`: нужен новый refresh и новый сбор. Запасной путь — полный локальный
 QA. Он нужен при `fallback` с причиной `unsupported_tracker`, `not_configured`, `unavailable`,
-`unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`
-или `inconclusive_check`. В этом случае ничего не записывается. Недоступность CI не считается ни
+`unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`,
+`inconclusive_check` или `light_check`. В этом случае ничего не записывается. Причина `light_check`
+означает, что в `ci_required_checks` стоит проверка с именем на `-light` (задание `verify-light`
+для PR в `integration/**`), а пара требует полного QA: сохранённый выбор пары не `ticket-diff`,
+записи пары нет, она старого контракта или повреждена. Такая проверка пару не подтверждает, поэтому
+нужен полный локальный QA или полный CI. Недоступность CI не считается ни
 находкой в коде, ни успехом. Завершённый `failure` на подтверждённой паре записывается как
 `collector-failed`. Вручную привязанный через `link-evidence` CI остаётся `unverified` и проверку
 пары не закрывает. CI не заменяет исходные QA-отчёты.

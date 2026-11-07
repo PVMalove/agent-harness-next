@@ -741,7 +741,8 @@
         "missing_check": "A required check has no run.",
         "pending_check": "A required check is not finished.",
         "inconclusive_check": "A required check ended without a verdict on the code.",
-        "failed_check": "A required check failed on the combined result."
+        "failed_check": "A required check failed on the combined result.",
+        "light_check": "A required check is a light check, which never confirms a pair that requires a full QA run."
       },
       "sentinels": [
         "unavailable"
