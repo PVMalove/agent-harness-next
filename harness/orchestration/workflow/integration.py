@@ -908,7 +908,9 @@ def integration_collect_ci(args: argparse.Namespace) -> JsonObject:
     Read-only towards the tracker: it never opens or merges a pull request and never touches branch
     protection.  Only a verdict of ``accepted`` or ``failed`` is recorded; every ``fallback``
     (unsupported tracker, unavailable or unusable CI, unknown checkout, stale or foreign pair,
-    missing or pending check) records nothing and says that local QA is still needed.
+    missing or pending check) records nothing and says that local QA is still needed.  A required
+    ``*-light`` check confirms only a pair whose stored QA selection is ``ticket-diff``; for any
+    other pair it is the fallback ``light_check`` (issue #937).
     """
     repo = _repo(args)
     root = _state_root(args, repo)
@@ -922,6 +924,10 @@ def integration_collect_ci(args: argparse.Namespace) -> JsonObject:
     with _ledger_lock(ledger):
         record = _resolve_record(root, args)
         pair = pr_refresh.current_pair(root, record)
+        # Read inside the lock: in the runtime-store epoch the pair record lives in the store view.
+        selection = release_gate.pair_selection(
+            ledger, pair["candidate_sha"], pair["target_sha"]
+        )
     tracker = resolve_project_tracker(repo).effective
     if tracker.type != "github" or not tracker.host or not tracker.project:
         return _collected(
@@ -943,6 +949,7 @@ def integration_collect_ci(args: argparse.Namespace) -> JsonObject:
         target_sha=pair["target_sha"],
         required_checks=required,
         base_ref=record["identity"]["integration_ref"],
+        allow_light=selection == release_gate.SELECTION_TICKET_DIFF,
     )
     result = _collected(
         verdict.outcome,
