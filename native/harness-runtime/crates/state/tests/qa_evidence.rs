@@ -732,3 +732,41 @@ fn the_store_judges_the_selection_by_the_stored_pair_record() {
     refused_with(&into_default, "selection_not_full");
     refused_with(&old_contract, "selection_not_full");
 }
+
+#[test]
+fn the_request_carries_exactly_the_pair_and_no_requirement() {
+    let valid = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET});
+    assert_eq!(Pair::parse(Some(&valid)), Ok(pair()));
+
+    for field in ["requirement", "selection", "required_selection", "fallback"] {
+        for value in [
+            json!("full"),
+            json!("ticket-diff"),
+            json!(null),
+            json!(true),
+        ] {
+            let mut payload = valid.clone();
+            payload[field] = value;
+
+            let parsed = Pair::parse(Some(&payload));
+
+            assert!(
+                parsed.as_ref().is_err_and(|reason| reason.contains(field)),
+                "{field}: {parsed:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_request_with_a_requirement_is_malformed_and_never_judged() {
+    let repo = store_with(&accepted_qa_with(diff_stages(), qa_store::pair_record()));
+    let before = revision(&repo);
+    let weaker = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET,
+                         "requirement": "ticket-diff"});
+
+    let answer = qa_evidence::verify(&repo.state(), Some(&weaker));
+
+    assert!(matches!(answer, Err(ReadError::Malformed(_))), "{answer:?}");
+    assert_eq!(revision(&repo), before);
+}

@@ -817,6 +817,51 @@ fn qa_evidence_verify_accepts_diff_stages_only_for_a_pair_that_requires_them() {
     );
 }
 
+/// The request names the pair and nothing else: a client cannot ask for a weaker check, so a
+/// `requirement` (or a `selection`) is a malformed request, even for a pair that would accept it.
+#[test]
+fn qa_evidence_verify_answers_a_requirement_field_with_malformed_request() {
+    let fixture = Fixture::new("qa-evidence-requirement");
+    let state_dir = legacy_state(&fixture);
+    let pointer = state::legacy::read_pointer(&state_dir).unwrap().unwrap();
+    let run = qa_store::accepted_qa_with(qa_store::passed_stages(), qa_store::diff_pair_record());
+    qa_store::write_legacy(
+        &state_dir.join("generations").join(pointer.generation),
+        &run,
+    );
+    state::migrate::run(&fixture.root, &approval()).unwrap();
+    let (_runtime, mut stream, _features) = serving(&fixture, state_dir);
+    let before = exchange(
+        &mut stream,
+        &request("state.read", Some(json!({"paths": []}))),
+    );
+
+    for (field, value) in [
+        ("requirement", "full"),
+        ("requirement", "ticket-diff"),
+        ("selection", "ticket-diff"),
+    ] {
+        let answer = exchange(
+            &mut stream,
+            &request(
+                "qa.evidence.verify",
+                Some(json!({"candidate_sha": qa_store::CANDIDATE,
+                            "target_sha": qa_store::TARGET, field: value})),
+            ),
+        );
+
+        assert_eq!(error_code(&answer), ErrorCode::MalformedRequest, "{field}");
+    }
+    let plain = verify(&mut stream, qa_store::CANDIDATE, qa_store::TARGET);
+    let after = exchange(
+        &mut stream,
+        &request("state.read", Some(json!({"paths": []}))),
+    );
+
+    assert_eq!(plain.result.unwrap()["verdict"], "ok");
+    assert_eq!(before.revision, after.revision);
+}
+
 /// In the file-ledger epoch the store is not the authority: the runtime has no verdict to give.
 #[test]
 fn qa_evidence_verify_of_the_file_ledger_is_not_found() {

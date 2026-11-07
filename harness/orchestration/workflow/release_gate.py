@@ -206,6 +206,9 @@ def qa_evidence_verify(repo: Path, pair: JsonObject) -> JsonObject:
     """``qa_evidence_verify`` (ADR 0021, section 7): the runtime's verdict on the stored QA
     evidence of ``pair``, ``{"verdict", "violations", "pair", "confirmed_by"}``.
 
+    The request is exactly the pair: it carries no requirement, because the runtime reads the
+    selection the pair needs from the stored pair record, and a client cannot ask for less.
+
     Read-only on both sides, so a repeat is safe. A runtime that cannot answer raises
     ``RuntimeClientError``; an answer outside the registry vocabularies is refused."""
     from harness.orchestration.runtime_client import QA_EVIDENCE_VERIFY, RuntimeClient
