@@ -110,9 +110,33 @@ def run(ctx: SimpleNamespace) -> None:
     if wired != ["Bash", "Write|Edit|MultiEdit|NotebookEdit"]:
         sys.exit(f"protect-hook-policy.sh is wired for {wired!r}")
     config_path = str(project_json)
+    # A shell write to the project config asks a person in Claude Code: exit 0 and a "ask" answer.
+    for write in (
+        "sed -i s/a/b/ .harness/project.json",
+        "echo x > .harness/project.json",
+    ):
+        asked = run_hook(
+            protect_hook,
+            pv_project,
+            "",
+            raw_payload=json.dumps(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": write},
+                    "cwd": str(pv_project),
+                }
+            ),
+        )
+        try:
+            decision = json.loads(asked.stdout)["hookSpecificOutput"]["permissionDecision"]
+        except (ValueError, KeyError):
+            decision = None
+        if asked.returncode != 0 or decision != "ask":
+            sys.exit(
+                f"protect-hook-policy.sh did not ask a person for {write!r}: "
+                f"exit {asked.returncode}, stdout {asked.stdout!r}, stderr {asked.stderr}"
+            )
     protect_cases = (
-        ("Bash", {"command": "sed -i s/a/b/ .harness/project.json"}, 2),
-        ("Bash", {"command": "echo x > .harness/project.json"}, 2),
         ("Bash", {"command": "cat .harness/project.json"}, 0),
         (
             "Write",

@@ -24,7 +24,7 @@ Rust проверяется отдельно через cargo fmt, clippy и tes
 - Проверки настоящего parser bundle требуют `HARNESS_PARSER_BUNDLE_DIR` и выполняются
   в отдельной матрице Repo Map CI.
 - Windows-специфичные проверки пропускаются на других ОС. Общий Python job Windows
-  в текущем workflow отключён (#753); отдельный Rust/runtime job его не заменяет.
+  в workflow снова включён (#938): `verify-windows` идёт на полном пути CI, то есть не для PR в `integration/**`; отдельный Rust/runtime job `runtime-ipc-windows` его не заменяет.
 - Векторный эксперимент требует `HARNESS_VECTOR_PROBE_ARTIFACTS`.
 - Измерение производительности state требует `HARNESS_MEASURE_STATE_DIR`.
 
