@@ -27,6 +27,7 @@ FULL_PULL_REQUEST_CONDITION = "github.event_name == 'pull_request' && !startsWit
 # The jobs that run tests: the light path skips every one of them.
 FULL_JOBS = {
     "verify": FULL_CONDITION,
+    "verify-windows": FULL_CONDITION,
     "diff-coverage": FULL_PULL_REQUEST_CONDITION,
     "repo-map-bundle": FULL_CONDITION,
     "rust": FULL_CONDITION,
