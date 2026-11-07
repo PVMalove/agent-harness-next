@@ -23,20 +23,9 @@ from typing import Protocol, cast
 
 from ..errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from ..storage import storage_path
-from . import (
-    hook_policy,
-    operation_access,
-    operational_guards,
-    operational_hold,
-    qa_lease,
-)
+from . import hook_policy, operation_access, operational_guards, operational_hold, qa_lease
 from . import verification_plan
-from .qa_execution import (
-    NO_REPORT_DOMAINS,
-    RuntimeQaPolicy,
-    container_brief,
-    next_attempt,
-)
+from .qa_execution import NO_REPORT_DOMAINS, RuntimeQaPolicy, container_brief, next_attempt
 from .core import state_view
 from .pinned_configuration import read_snapshot, capture_unaccepted
 from .core.config import _execution_policy, _lease_ttl, _qa_preparation_commands
@@ -1234,9 +1223,7 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
             failure,
             "gate-run",
             ops,
-            None
-            if attempt is None
-            else {"attempt": attempt, "domain": "infrastructure"},
+            None if attempt is None else {"attempt": attempt, "domain": "infrastructure"},
         )
         raise failure from exc
     except BaseException as exc:
@@ -1431,9 +1418,7 @@ def _recover_cleared_owner(
         if container_brief(running) and store_is_authority(ledger.root):
             # The owner's container QA run may still run in the runtime: it ends before the
             # dispatch is approved again, so the next run is the next attempt.
-            attempt = ops._load_dispatch_status(root, running["dispatch_id"]).get(
-                "attempt"
-            )
+            attempt = ops._load_dispatch_status(root, running["dispatch_id"]).get("attempt")
             repo = root.parents[len(STATE_REL.parts) - 1]
             RuntimeQaPolicy(repo, running, int(cast(int, attempt or 1)), None).stop()
         _restore_approved(ledger, root, running, ops)

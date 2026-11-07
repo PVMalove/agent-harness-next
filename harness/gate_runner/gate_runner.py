@@ -615,18 +615,14 @@ def _execute_commands(
                     stdout=sanitise(result.stdout or ""),
                     stderr=sanitise(result.stderr or ""),
                     duration_ms=duration_ms,
-                    failed_nodeids=junit_failures(
-                        command_env.get(STAGE_ENV_JUNIT), checkout
-                    )
+                    failed_nodeids=junit_failures(command_env.get(STAGE_ENV_JUNIT), checkout)
                     if result.returncode != 0
                     else (),
                 )
             )
         if result.returncode != 0 and stop_on_failure:
             if unreached is not None:
-                unreached.extend(
-                    approved_command_text(item) for item in commands[index + 1 :]
-                )
+                unreached.extend(approved_command_text(item) for item in commands[index + 1 :])
             break
 
 
@@ -1098,9 +1094,7 @@ def run_qa_stages(
             checkout,
             GroupContext(outputs, started, isinstance(policy, CleanRoomPolicy)),
         )
-        stages.extend(
-            _stage_record(QA_STAGE_PREPARATION, item) for item in prepared.ran
-        )
+        stages.extend(_stage_record(QA_STAGE_PREPARATION, item) for item in prepared.ran)
         entries.extend(
             _gate_entries(QA_STAGE_PREPARATION, prepared.ran, prepared.unreached)
         )
@@ -1115,9 +1109,7 @@ def run_qa_stages(
                 _stage_record(QA_STAGE_PROJECT_FILE_CHECK, i) for i in checked.ran
             )
             entries.extend(
-                _gate_entries(
-                    QA_STAGE_GATE, (), [approved_command_text(c) for c in gate]
-                )
+                _gate_entries(QA_STAGE_GATE, (), [approved_command_text(c) for c in gate])
             )
             return QAStagesResult(
                 stages=stages,
