@@ -1,0 +1,71 @@
+# install-and-update
+
+## 1. Name and localization
+- **English name:** Hook installation and update (settings merge, second runtime adapter, hooks.policy check)
+- **Translation / Gist:**
+
+```text
+Hook installation and update: the merge of the managed entries of the settings file with the user's entries, the hooks adapter of the second coding runtime, and the hooks.policy check in harness health.
+```
+## 2. Full description
+`harness init`, `harness adopt`, and `harness update` for projects with the `engineering-suite` capability install the scripts in `.claude/hooks/` and wire them into the runtime settings files. The settings file belongs to both the harness and the user, so the commands do not rewrite it entirely: they merge the managed entries of the template into it and preserve everything else.
+
+### Merge by command path
+- **Unit of merge.** A managed entry is a handler whose command references a script `.claude/hooks/<name>` from the template. The unit of merge is the template pair "event and script"; the command path determines what counts as managed, not the order and not the entry number in the file.
+- **What the merge does.** A missing managed entry is added. An outdated entry that the harness wrote earlier is replaced with the template one. A user entry whose command does not reference a script from the template is not changed and is not deleted.
+- **Fingerprints.** What the harness has ever written is stored as fingerprints (`managed_entries`) in the integration record `.harness/integrations.json`. The merge uses them to tell an outdated managed entry from an entry the user changed. The fingerprints do not copy the command text.
+- **No file or an unreadable file.** If the file is absent, `harness` writes the template bytes. A file that does not read as a JSON object or has a mismatched `hooks` shape stays unchanged, and the report says `cannot merge` with the reason.
+- **Flags replace the merge.** `--force-seed-file .claude/settings.local.json` and `--force-seed-files` keep their former meaning: the whole file is replaced with the template, and the user's entries in it are lost. The merge does not replace them.
+
+### Conflict without overwrite
+If the user changed a managed entry in the same event (another command or another matcher with the same script, extra handler fields), the merge does not know whose change is correct and does not overwrite it. The merge treats an entry moved to another event as a user entry and does not change it, and adds the template entry on its own event anew, without a conflict. A changed entry in the same event stays as it is; `harness` prints the `[WARNING]` warning, lists each entry with the line `hooks conflict: <file>: <event> [<matcher>] <script>`, and suggests the command `--force-seed-file <file>`, which after a review replaces the file with the template. A conflict entry does not get into the written fingerprints, so a repeated `update` reports it again until the owner decides its fate.
+
+### Idempotent update
+A repeated `harness update` with no changes in the project does not change a single byte in the settings file or in `.harness/integrations.json`, does not duplicate managed entries, and prints a report for each runtime file:
+
+```text
+hooks merge: .claude/settings.local.json: added=0 replaced=0 current=<N> user=<M> conflicts=0
+hooks check: .claude/settings.local.json: critical wired 9/9
+```
+
+- `hooks merge` — the result of the merge. The counters count "event and script" units: `added` added, `replaced` replaced with the template ones, `current` already matched the template, `user` — the user entries, `conflicts` — the changed managed entries. On installation from the template the line has the form `installed from template`.
+- `hooks conflict` — one line per conflict, after the warning.
+- `hooks check` — how many critical hooks are wired out of the total and which ones are missing (`missing: <hook>`), for example when a conflict entry changed the matcher of a critical hook in the same event and the hook stopped covering its tool.
+
+### The effective hook policy file
+After the hook files, the installation writes `.harness/hook-policy.json` (ADR 0024, section 3). This is the only writer of the file: `harness health` does not write it, and the hook decisions, the coordinator, and the Rust runtime do not read it.
+
+- **Contents.** `schema` (1); `policy` — the normalized profile and escalations of the `hook_policy` key from `.harness/project.json` (a project without the key gets `standard` without escalations); `hook_policy_sha256` — the digest of the `policy` section; `critical_guards` — the hook_id of the critical rows of the matrix; `hook_versions` — SHA-256 of the bytes of each template `.claude/hooks/*.sh|*.py`. The file is JSON with 2-space indentation and sorted keys, UTF-8 without BOM, and the lines end with LF.
+- **Link to the brief.** The `hook_policy_sha256` of the file is computed by the same function and from the same `hook_policy` key as the `hook_policy_sha256` that pins the brief at `dispatch create`. For one configuration the values match.
+- **Report and idempotency.** The command prints the line `hooks policy: .harness/hook-policy.json: written|unchanged hook_policy_sha256=<hex>`. A repeated `harness update` without a configuration change does not rewrite the file.
+- **Error.** An invalid `hook_policy` or an unreadable `.harness/project.json` ends the command with code 2, a message, and a fix hint; the existing file stays as it was.
+- **Lock and removal.** The file is not part of `harness.lock` and is not accepted by `--force-seed-file`. `harness uninstall` deletes it together with `.harness/` without a backup, because the next installation creates it anew.
+
+### Second coding runtime adapter
+The second runtime gets the file `.codex/hooks.json` from the template `harness/project/codex-hooks.json.tmpl`. It calls the same scripts `.claude/hooks/*.sh`, so the hook decisions and response codes match; the run command first changes to the repository root (`cd "$(git rev-parse --show-toplevel)"`). The file is merged by the same rules as `.claude/settings.local.json`: by the command path, with conflicts without overwrite and with the same report. The integration record is called `engineering-suite-codex-hooks`; `harness uninstall` removes the file and the record.
+
+- **Wired set.** The adapter wires the critical guards on `PreToolUse` for `Bash` (`protect-hook-policy`, `block-public-attribution`, `block-direct-master`, `block-pr-merge`, `check-branch-name`, `require-qa-gate`, `block-dangerous-git`) and the behavioral `require-bounded-check`, as in the blocking set of the `standard` profile of the first runtime. This runtime sends file edits as `tool_name: "apply_patch"` with the patch body in `tool_input.command` and without `file_path`; the `PreToolUse` group with the matcher `apply_patch|Write|Edit` (the runtime matches both the canonical name and the aliases `Write`/`Edit`) wires `protect-hook-policy` and `block-scratch-outside-docs-tasks`. Both take the paths from the patch headers through the `apply_patch_payload.py` adapter and decide the same way as for `Write`/`Edit` of the first runtime; an unparseable patch is blocked with `reason_code` `apply-patch-unparseable`. The advisory `targeted-check-reminder` is wired on `Stop` and `SubagentStop`: this runtime delivers both events, the payload carries `session_id`, `stop_hook_active`, and for `SubagentStop` — `agent_id`, and on code `0` stdout accepts only JSON or an empty string.
+- **What is not wired.** The remaining hooks on `Write` and `Edit`, `EnterWorktree`, and `Skill` are not wired: this runtime has no `EnterWorktree` and `Skill` events, and the behavioral and accounting hooks are not wired to `apply_patch`. Therefore the `Write`/`Edit` rows of the ChangeImpact hooks are not wired: `impact-first-touch`, `sensitive-path-recheck`, and the touch log `targeted-check-reminder`. Without the log the reminder of the second runtime stays silent; `harness health` lists these three rows together with the check outside the hook. The accounting `mark-qa-gate-passed` on `PostToolUse` for `Bash` is also not wired: this runtime calls `PostToolUse` also after a `Bash` command with a non-zero exit code, and its payload has no exit-code field. A wired hook would write the marker `.claude/.qa-gate/passed` for a failed QA run, and `require-qa-gate` would allow the creation of a PR. The working copy has one marker for both runtimes, so in the second runtime the `qa-gate` skill writes it through `record-qa-gate-pass.sh` after a successful run of all commands. This runtime does not set `CLAUDE_PROJECT_DIR`, so the `qa-gate` and `to-pull-requests` skills take the script from the main worktree — the first entry of `git worktree list --porcelain` where `.claude/hooks/` is installed. `harness health` shows such hooks as missing (see `hooks.policy`).
+- **Project trust.** The project hooks of this runtime start only after the user has trusted the `.codex/` layer of the project and confirmed each hook by hash. Before that the hooks do not work, and the Rust runtime checks and the coordinator provide protection, not the hooks. After `harness init` and after every `harness update` that changes `.codex/hooks.json`, the hook must be confirmed again, because the hash has changed.
+
+### The hooks.policy check in harness health
+`harness health` contains the `hooks.policy` check for projects with `engineering-suite` or `backend-orchestration`. It shows:
+
+- **Profile and source.** `профиль standard (.harness/project.json)` or `профиль standard (по умолчанию)` when there is no `hook_policy` key, plus the list of escalations. An invalid `hook_policy` is `fail`, because the hooks apply `strict`.
+- **Presence and executability.** Every script of the hooks directory must exist and have the execute bit; for a critical hook a violation is `fail`, for the rest it is `warn`. A script of several events (`targeted-check-reminder.sh` on `PreToolUse`, `Stop`, and `SubagentStop`) is named once.
+- **Wiring by runtime.** `claude: критических hooks подключено 9/9`, `codex: критических hooks подключено 8/8`. A critical hook that is not wired is `fail`; a missing `.codex/hooks.json` is `warn`.
+- **Events the runtime does not have.** The line `нет события или payload: <hook>` for each hook whose event or payload the runtime does not deliver. If a critical hook has no check outside the hook, this is `warn` with the mark `нет проверки вне hook`, not a silent skip; a hook that has such a check is marked with its name (`вне hook: …`). In the second runtime the `Write`/`Edit` rows of the ChangeImpact hooks are listed this way: `impact-first-touch (вне hook: ChangeImpact-gate по ADR 0023)`, `sensitive-path-recheck (вне hook: граница strict (dispatch propose, qa run, publish))`, and `targeted-check-reminder (вне hook: сверка checks_run)`. The hooks are non-critical, each has a check outside the hook, so they give neither `fail` nor advisory warnings. The catalog marks an event without a tool (`Stop`, `SubagentStop`) with the tool `*`; a group without a matcher covers it.
+- **Drift from the template.** Conflicts of managed entries, entries to add or replace, and scripts whose bytes differ from the template. If the project templates are absent (a standalone run of the health package), the check reports `дрейф не проверен`.
+- **The effective policy file.** No `.harness/hook-policy.json` — `warn` `.harness/hook-policy.json отсутствует: effective policy hooks не записана`. Content that does not parse as JSON or differs from the effective policy of the current configuration — `warn` `дрейф: .harness/hook-policy.json не совпадает с effective policy текущей конфигурации`. The parsed JSON is compared, so CRLF line endings do not count as drift. Without the project templates only the presence of the file is verified; with an invalid `hook_policy` the comparison is skipped, because the check already gives `fail`. `harness update` fixes both warnings.
+
+A project installed now gets `ok`: both runtimes wire every critical hook they can deliver, and the hooks without an event of the second runtime have a check outside the hook. `protect-hook-policy` of the second runtime is listed as `protect-hook-policy (MultiEdit, NotebookEdit; вне hook: hook_policy_sha256 в brief)`: this runtime does not have these tools. `harness update` fixes the missing files and entries; after a review, `--force-seed-file <path>` replaces a changed file.
+
+## 3. Contracts
+- **Input (Input/Brief):** `harness init|adopt|update <repo> --capability engineering-suite`, the templates `harness/project/settings.local.json.tmpl` and `harness/project/codex-hooks.json.tmpl`, and the integration records `.harness/integrations.json`.
+- **Output (Output/Report):**
+  - **Files:** `.claude/settings.local.json` and `.codex/hooks.json` with the managed entries of the template and the unchanged user entries; the integration records `engineering-suite-hooks` and `engineering-suite-codex-hooks` with the `managed_entries` fingerprints; the generated `.harness/hook-policy.json`.
+  - **Report:** the `hooks merge`, `hooks conflict`, and `hooks check` lines for each file and the `hooks policy` line; return code `0`, and a conflict does not make the command unsuccessful; an invalid `hook_policy` is code `2`.
+  - **Check:** the `hooks.policy` record in `harness health --json` with the status `ok`, `warn`, or `fail`.
+## Source
+
+[harness.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/bin/harness.py), [hook_settings.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/hook_settings.py), [hooks.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/checks/hooks.py), [hook_policy.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/hook_policy.py), [codex-hooks.json.tmpl](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/codex-hooks.json.tmpl)

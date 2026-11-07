@@ -52,7 +52,7 @@ from scripts.verification import failed_only
 from scripts.verification.docs_sync import (
     check_docs_agents_enumeration,
     check_docs_agents_mirror,
-    check_guide_diagram_previews,
+    check_diagram_previews,
     check_no_retired_path_inventory_term,
     check_pvmalove_additions_docs_sync,
     check_pvmalove_override_docs_sync,
@@ -68,6 +68,7 @@ from scripts.verification.process import (
     run_ok,
     run_stage,
 )
+from scripts.verification.site_links import check_site_links
 from scripts.verification.text_checks import check_no_todo, grep_contains, grep_line
 from scripts.verification.vendor_pin import check_vendor_pin
 
@@ -148,9 +149,9 @@ def _check_global_skills() -> None:
     grep_contains(start_project, "until the owner confirms")
     grep_contains(start_project, "Prove each layer separately")
     grep_contains(integrate_project, "Audit is read-only")
-    grep_contains(ROOT / "docs" / "skills" / "implement.md", "module-owned guidance")
+    grep_contains(ROOT / "site" / "docs" / "skills" / "implement.md", "module-owned guidance")
     grep_contains(
-        ROOT / "docs" / "skills" / "pilot.md",
+        ROOT / "site" / "docs" / "skills" / "pilot.md",
         "самоотчёт роли не является token telemetry",
     )
 
@@ -158,7 +159,7 @@ def _check_global_skills() -> None:
 def _check_documentation() -> None:
     """Проверить согласованность документации, шаблонов и постоянных инструкций."""
     check_docs_agents_mirror()
-    check_guide_diagram_previews()
+    check_diagram_previews()
     check_no_retired_path_inventory_term()
     grep_contains(
         ROOT / "skills" / "first-party" / "engineering" / "to-tickets" / "SKILL.md",
@@ -168,6 +169,7 @@ def _check_documentation() -> None:
     grep_contains(agents_seed, "For code discovery, run the Repo Map")
     grep_contains(agents_seed, "then use targeted `rg` searches and reads.")
     check_docs_agents_enumeration()
+    check_site_links()
     check_pvmalove_override_docs_sync()
     check_pvmalove_additions_docs_sync()
     check_pvmalove_suite_summary_sync()

@@ -1,0 +1,76 @@
+/* Only what docs/design/web-console-mockups/execution-console.css lacks; never overrides it. */
+.lang-switch button { min-width: 34px; padding: 3px 8px; font-size: 10px; }
+.lang-switch button:focus-visible { outline: 1px solid var(--primary); outline-offset: -1px; }
+/* Harness · Commands: the run panel over the mockup's harness-command rows and board dialog. */
+.command-panel { display: flex; flex-direction: column; gap: 12px; }
+.command-busy { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 12px; border-color: var(--warn); color: var(--warn); font: 10px var(--mono); }
+.command-busy-actions { display: flex; gap: 6px; }
+.command-refusal { margin: 0; padding: 8px 12px; border: 1px solid var(--err); border-radius: var(--radius); color: var(--err); font-size: 11px; }
+.command-inputs { display: flex; gap: 4px; min-width: 0; }
+.command-inputs input { flex: 1; min-width: 0; padding: 3px 6px; font: 9px var(--mono); }
+.command-output .panel-head h2 code { font-size: 11px; }
+.command-output-state { display: flex; align-items: center; gap: 8px; }
+.command-output pre { margin: 10px 12px; }
+.command-confirm-body { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.command-confirm-body h2 { margin: 0; font-size: 13px; }
+.command-confirm-body p { margin: 0; }
+.command-confirm-typed { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+.command-confirm-typed input { padding: 5px 8px; font: 11px var(--mono); }
+.command-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 600px) {
+  .command-inputs { flex-direction: column; }
+}
+/* Agent activity: the mockup's .work-* rows hold the live step list; a Codex step's pill sits
+   under its details. */
+.work-event-main .orch-pill { margin-top: 4px; }
+/* Live Repo Map facts include long hashes and paths absent from the demonstration values. */
+.repo-page .repo-index-row > b { min-width: 0; overflow-wrap: anywhere; }
+.repo-page .repo-index-row > span { flex-shrink: 0; }
+.repo-page .repo-index-body > p { overflow-wrap: anywhere; }
+/* Pending decisions reuse the mockup's work panels, pills, fields and confirmation dialog. */
+.decision-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.decision-panel > p { margin: 0; font-size: 11px; color: var(--muted); }
+.decision-card { padding: 12px; min-width: 0; }
+.decision-card .panel-head { padding: 0 0 10px; }
+.decision-context { margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 8px; font: 11px var(--mono); }
+.decision-context dt { color: var(--muted); }
+.decision-context dd { margin: 0; overflow-wrap: anywhere; }
+.decision-context > div { width: 100%; min-width: 0; }
+.decision-context pre, .decision-confirm-context { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px var(--mono); max-height: 220px; overflow: auto; }
+.decision-action { padding-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.decision-fields { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+.decision-field { display: flex; flex-direction: column; gap: 4px; font: 10px var(--mono); min-width: 0; }
+.decision-field input, .decision-field select, .decision-field textarea { max-width: 100%; padding: 6px 8px; font: 11px var(--mono); }
+.decision-action details { width: 100%; font-size: 11px; }
+.decision-action details[open] summary { margin-bottom: 10px; }
+.decision-card > p { font-size: 11px; }
+@media (max-width: 600px) {
+  .decision-fields, .decision-field { width: 100%; }
+  .decision-action > .btn { width: 100%; white-space: normal; }
+}
+
+/* Diagnostics: the applied fixes under the master-detail grid, the fix commands below them and
+   the copy confirmation beside the command button. */
+.diag-page > .command-refusal { margin-bottom: 12px; }
+.diag-fixes { margin-top: 18px; }
+.diag-fixes .panel-head { padding: 12px 16px; }
+.diag-fixes-list { margin: 0; padding: 10px 16px 12px 32px; font-size: 11.5px; line-height: 1.6; }
+.diag-commands { margin-top: 18px; }
+.diag-action { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.diag-facts dd code { color: var(--selfg); font: 10.5px var(--mono); word-break: break-all; }
+/* Harness · Обзор: the maintenance panel under the installation and pipeline usage panels. */
+.harness-page > .command-refusal { margin-bottom: 12px; }
+.harness-maintenance .panel-head { padding: 10px 14px; }
+.harness-maintenance-actions { display: flex; gap: 6px; }
+.harness-maintenance-actions .btn { padding: 3px 8px; font-size: 10px; }
+.harness-maintenance-body { padding: 10px 14px 12px; font-size: 10.5px; }
+.harness-maintenance-body h3 { margin: 8px 0 4px; color: var(--muted); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.harness-maintenance-body h3:first-child { margin-top: 0; }
+.harness-maintenance-body p { margin: 0 0 6px; }
+.harness-maintenance-lines { margin: 0; padding: 0; list-style: none; font: 10px/1.7 var(--mono); }
+.harness-maintenance-error { color: var(--err); }
+.harness-plan { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: #1b222b; font: 9.5px/1.7 var(--mono); overflow-wrap: anywhere; }
+.worktree-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; border-top: 1px solid #2b3440; font: 10px var(--mono); }
+.worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
+.worktree-row .btn { flex: none; padding: 3px 8px; font-size: 9.5px; }
+.harness-component > em:empty { display: none; }

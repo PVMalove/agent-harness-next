@@ -9,15 +9,15 @@ from threading import Event
 
 import pytest
 
-from harness.console.advisor import (
+from harness.console.kernel.configuration import ConfigurationDraft
+from harness.console.tui.advisor import (
     Advice,
     AdvisorUnavailable,
     advise,
     build_request,
     parse_response,
 )
-from harness.console.configuration import ConfigurationDraft
-from harness.console.configuration_steps import steps_for
+from harness.console.tui.configuration_steps import steps_for
 from tests.console._configuration_fixture import installed_project
 
 
@@ -34,7 +34,7 @@ def test_prompt_excludes_authored_commands_and_paths(tmp_path: Path) -> None:
 def test_cli_uses_saved_login_and_disables_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import advisor
+    from harness.console.tui import advisor
 
     installed_project(tmp_path)
     draft = ConfigurationDraft.load(tmp_path, ("project.json",))
@@ -102,7 +102,7 @@ def test_claude_structured_output_and_rejection(tmp_path: Path) -> None:
 def test_claude_reuses_auth_and_never_uses_bare(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from harness.console import advisor
+    from harness.console.tui import advisor
 
     installed_project(tmp_path)
     draft = ConfigurationDraft.load(tmp_path, ("project.json",))
@@ -144,7 +144,7 @@ def test_claude_reuses_auth_and_never_uses_bare(
 def test_codex_login_status_is_matched_by_leading_words(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str, ready: bool
 ) -> None:
-    from harness.console import advisor
+    from harness.console.tui import advisor
 
     def run(
         argv: list[str],
@@ -221,6 +221,6 @@ def test_a_rejected_response_names_the_reason(tmp_path: Path) -> None:
 
 @pytest.fixture(autouse=True)
 def no_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
-    from harness.console import project_facts
+    from harness.console.tui import project_facts
 
     monkeypatch.setattr(project_facts, "_default_branch", lambda _repo: None)

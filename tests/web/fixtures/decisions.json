@@ -1,0 +1,639 @@
+{
+  "snapshot": {
+    "version": 1,
+    "items": [
+      {
+        "kind": "dispatch-approval",
+        "batch_id": "batch-proposal",
+        "dispatch_id": null,
+        "ticket": "#884",
+        "role": null,
+        "reversibility": "terminal-coordinator-action",
+        "command_ids": [
+          "dispatch-propose",
+          "dispatch-create"
+        ],
+        "values": {
+          "batch": "batch-proposal"
+        },
+        "details": {
+          "state": "awaiting-approval"
+        }
+      },
+      {
+        "kind": "report-decision",
+        "batch_id": "batch-report",
+        "dispatch_id": "dispatch-bbbb",
+        "ticket": "#884",
+        "role": "developer",
+        "reversibility": "terminal-coordinator-action",
+        "command_ids": [
+          "batch-decide"
+        ],
+        "values": {
+          "batch": "batch-report"
+        },
+        "details": {
+          "outcome": "success",
+          "blockers": "none",
+          "risks": ""
+        }
+      },
+      {
+        "kind": "native-permission",
+        "batch_id": "batch-proposal",
+        "dispatch_id": "dispatch-aaaa",
+        "ticket": "#884",
+        "role": "developer",
+        "reversibility": "external-change",
+        "command_ids": [
+          "native-permission-allow",
+          "native-permission-deny"
+        ],
+        "values": {
+          "dispatch": "dispatch-aaaa",
+          "request_id": "request-7",
+          "request_sha256": "74776382d80906ae643a5224c0d7ee863e6c4c4ba8fef19f70a372bd965e56c7"
+        },
+        "details": {
+          "tool_name": "Read",
+          "input_preview": "{\"file_path\": \"example.py\"}"
+        }
+      }
+    ],
+    "total": 3,
+    "unavailable": false
+  },
+  "commands": [
+    {
+      "command_id": "batch-approve",
+      "title": "Утвердить batch",
+      "section": "decisions",
+      "reversibility": "terminal-coordinator-action",
+      "reversibility_label": "⚠ решение",
+      "needs_confirmation": true,
+      "confirmation_reason": "Команда записывает терминальное решение coordinator — отменить его нельзя.",
+      "typed_confirmation": null,
+      "read_only": false,
+      "inputs": [
+        "batch"
+      ],
+      "plan_required": false,
+      "available": true,
+      "fields": [
+        {
+          "dest": "batch",
+          "flag": "--batch",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_by",
+          "flag": "--approved-by",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "human who approved the batch plan; omitted only under approval_policy auto, which records the approval as policy:auto",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_at",
+          "flag": "--approved-at",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "time of the approval; omitted only under approval_policy auto",
+          "default": null,
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "command_id": "batch-attention-resolve",
+      "title": "Снять сигнал внимания с batch",
+      "section": "decisions",
+      "reversibility": "terminal-coordinator-action",
+      "reversibility_label": "⚠ решение",
+      "needs_confirmation": true,
+      "confirmation_reason": "Команда записывает терминальное решение coordinator — отменить его нельзя.",
+      "typed_confirmation": null,
+      "read_only": false,
+      "inputs": [
+        "batch",
+        "note",
+        "approved_by",
+        "approved_at"
+      ],
+      "plan_required": false,
+      "available": true,
+      "fields": [
+        {
+          "dest": "batch",
+          "flag": "--batch",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "note",
+          "flag": "--note",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "what was checked before resuming",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_by",
+          "flag": "--approved-by",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_at",
+          "flag": "--approved-at",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "command_id": "batch-decide",
+      "title": "Решение по batch",
+      "section": "decisions",
+      "reversibility": "terminal-coordinator-action",
+      "reversibility_label": "⚠ решение",
+      "needs_confirmation": true,
+      "confirmation_reason": "Команда записывает терминальное решение coordinator — отменить его нельзя.",
+      "typed_confirmation": null,
+      "read_only": false,
+      "inputs": [
+        "batch",
+        "decision",
+        "approved_by",
+        "approved_at"
+      ],
+      "plan_required": false,
+      "available": true,
+      "fields": [
+        {
+          "dest": "batch",
+          "flag": "--batch",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "decision",
+          "flag": "--decision",
+          "required": true,
+          "repeatable": false,
+          "choices": [
+            "abandon",
+            "accept",
+            "accept-conditional",
+            "block",
+            "fail",
+            "override-warning",
+            "retry"
+          ],
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_by",
+          "flag": "--approved-by",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_at",
+          "flag": "--approved-at",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "note",
+          "flag": "--note",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": "none",
+          "takes_value": true
+        },
+        {
+          "dest": "infrastructure_failure",
+          "flag": "--infrastructure-failure",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "with --decision accept-conditional: the operator attests that an infrastructure failure, not the work, blocked the report; the stage stays an open condition",
+          "default": null,
+          "takes_value": false
+        },
+        {
+          "dest": "reason",
+          "flag": "--reason",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "required for abandon: why the batch is abandoned",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "reason_category",
+          "flag": "--reason-category",
+          "required": false,
+          "repeatable": false,
+          "choices": [
+            "verification-infrastructure",
+            "transport",
+            "context-pressure",
+            "tooling",
+            "block-bypass",
+            "code",
+            "requirements",
+            "candidate-change",
+            "unknown"
+          ],
+          "help": "why the reporting role stopped, for retry; structured report data overrides an unsupported claim",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "retry_role",
+          "flag": "--retry-role",
+          "required": false,
+          "repeatable": false,
+          "choices": [
+            "developer"
+          ],
+          "help": "force a developer retry where the coordinator would re-run the same candidate",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "commit_plan_file",
+          "flag": "--commit-plan-file",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "only with --decision accept on an architect report: a JSON file {\"commit_plan\": [{\"id\", \"summary\", \"expected_paths\", \"covers\"}, ...]} pinned as the batch's developer commit plan",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "findings_file",
+          "flag": "--findings-file",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "only with --decision accept or override-warning on a developer work report: a JSON file {\"findings\": [{\"summary\", \"files\", \"expected_evidence\"}, ...]} of coordinator findings every later code-review brief carries until a review settles them",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "carry_incomplete",
+          "flag": "--carry-incomplete",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "only with --decision accept or override-warning on a read-only report that lists incomplete_items: carry each item into the work brief of its target role until an accepted dispatch of that role carried it",
+          "default": null,
+          "takes_value": false
+        },
+        {
+          "dest": "narrowed",
+          "flag": "--narrowed",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "only with --decision retry on a read-only report that lists incomplete_items: re-run the same role on the same SHA with a brief that carries only those items",
+          "default": null,
+          "takes_value": false
+        }
+      ]
+    },
+    {
+      "command_id": "dispatch-propose",
+      "title": "Предложить dispatch",
+      "section": "decisions",
+      "reversibility": "reversible",
+      "reversibility_label": "✔ обратимо",
+      "needs_confirmation": false,
+      "confirmation_reason": null,
+      "typed_confirmation": null,
+      "read_only": false,
+      "inputs": [
+        "batch"
+      ],
+      "plan_required": false,
+      "available": true,
+      "fields": [
+        {
+          "dest": "batch",
+          "flag": "--batch",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "role",
+          "flag": "--role",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": "developer",
+          "takes_value": true
+        },
+        {
+          "dest": "runtime",
+          "flag": "--runtime",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "named runtime from the role assignment plan; required when a multi-runtime role has no default_runtime",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "purpose",
+          "flag": "--purpose",
+          "required": false,
+          "repeatable": false,
+          "choices": [
+            "publish",
+            "verification",
+            "work"
+          ],
+          "help": "",
+          "default": "work",
+          "takes_value": true
+        },
+        {
+          "dest": "no_memory",
+          "flag": "--no-memory",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "bypass project memory for this immutable dispatch package",
+          "default": null,
+          "takes_value": false
+        },
+        {
+          "dest": "candidate_commit",
+          "flag": "--candidate-commit",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "delta_review_of",
+          "flag": "--delta-review-of",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "prior retried code-review dispatch id this test-only fix delta-reviews; code-review role only",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "model",
+          "flag": "--model",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "session model, used only without .harness/orchestration.json",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "effort",
+          "flag": "--effort",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "session effort, used only without .harness/orchestration.json",
+          "default": null,
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "command_id": "dispatch-create",
+      "title": "Создать dispatch",
+      "section": "decisions",
+      "reversibility": "terminal-coordinator-action",
+      "reversibility_label": "⚠ решение",
+      "needs_confirmation": true,
+      "confirmation_reason": "Команда записывает терминальное решение coordinator — отменить его нельзя.",
+      "typed_confirmation": null,
+      "read_only": false,
+      "inputs": [
+        "batch"
+      ],
+      "plan_required": false,
+      "available": true,
+      "fields": [
+        {
+          "dest": "batch",
+          "flag": "--batch",
+          "required": true,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "role",
+          "flag": "--role",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": "developer",
+          "takes_value": true
+        },
+        {
+          "dest": "runtime",
+          "flag": "--runtime",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "named runtime from the role assignment plan; required when a multi-runtime role has no default_runtime",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "purpose",
+          "flag": "--purpose",
+          "required": false,
+          "repeatable": false,
+          "choices": [
+            "publish",
+            "verification",
+            "work"
+          ],
+          "help": "",
+          "default": "work",
+          "takes_value": true
+        },
+        {
+          "dest": "no_memory",
+          "flag": "--no-memory",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "bypass project memory for this immutable dispatch package",
+          "default": null,
+          "takes_value": false
+        },
+        {
+          "dest": "candidate_commit",
+          "flag": "--candidate-commit",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "delta_review_of",
+          "flag": "--delta-review-of",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "prior retried code-review dispatch id this test-only fix delta-reviews; code-review role only",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "model",
+          "flag": "--model",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "session model, used only without .harness/orchestration.json",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "effort",
+          "flag": "--effort",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "session effort, used only without .harness/orchestration.json",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_by",
+          "flag": "--approved-by",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "required by manual_all and risk milestones",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "approved_at",
+          "flag": "--approved-at",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "required by manual_all and risk milestones",
+          "default": null,
+          "takes_value": true
+        },
+        {
+          "dest": "transition_digest",
+          "flag": "--transition-digest",
+          "required": false,
+          "repeatable": false,
+          "choices": null,
+          "help": "the transition_digest 'dispatch propose' printed for exactly this dispatch; required with --approved-by, so an approval is valid only for the transition it was shown",
+          "default": null,
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "command_id": "native-permission-allow",
+      "title": "Разрешить запрос native permission",
+      "section": "decisions",
+      "reversibility": "external-change",
+      "reversibility_label": "⚠ внешнее",
+      "needs_confirmation": true,
+      "confirmation_reason": "Команда меняет внешнюю систему: это видят другие люди или это расходует токены.",
+      "typed_confirmation": null,
+      "read_only": false,
+      "inputs": [
+        "dispatch",
+        "request_id",
+        "request_sha256"
+      ],
+      "plan_required": false,
+      "available": true
+    },
+    {
+      "command_id": "native-permission-deny",
+      "title": "Отклонить запрос native permission",
+      "section": "decisions",
+      "reversibility": "external-change",
+      "reversibility_label": "⚠ внешнее",
+      "needs_confirmation": true,
+      "confirmation_reason": "Команда меняет внешнюю систему: это видят другие люди или это расходует токены.",
+      "typed_confirmation": null,
+      "read_only": false,
+      "inputs": [
+        "dispatch",
+        "request_id",
+        "request_sha256"
+      ],
+      "plan_required": false,
+      "available": true
+    }
+  ]
+}

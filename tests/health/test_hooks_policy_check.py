@@ -498,8 +498,8 @@ def test_standalone_run_reports_a_missing_policy_file(repo: Path) -> None:
 
 
 def test_console_route_of_the_policy_warn_does_not_promise_that_update_fixes_it() -> None:
-    from harness.console import i18n
-    from harness.console.shell import check_route
+    from harness.console.kernel import i18n
+    from harness.console.tui.shell import check_route
 
     route = check_route("hooks.policy")
 

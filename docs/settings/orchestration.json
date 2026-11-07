@@ -370,9 +370,7 @@
     },
     "repo_map_policy": {
         "allow_paths": [],
-        "deny_paths": [
-            "tests/console/snapshots/*"
-        ],
+        "deny_paths": [],
         "redact_paths": [],
         "redact_symbols": [],
         "max_files": 10000,

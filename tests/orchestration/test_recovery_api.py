@@ -12,19 +12,19 @@ from unittest import mock
 
 import pytest
 
-from harness.json_types import JsonObject as Document
 from harness.errors import HarnessError
+from harness.json_types import JsonObject as Document
 from harness.orchestration import recovery_api
 from harness.orchestration.core.system_fields import load_registry
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger.ledger_ops import LedgerBusyError
+from harness.orchestration.ledger.lifecycle import _canonical
 from harness.orchestration.operational_hold import OperationalHoldError
 from harness.orchestration.recovery_api import (
     RecoveryDiagnostic,
     RecoveryInternalError,
     RecoverySession,
 )
-from harness.orchestration.ledger.lifecycle import _canonical
 from harness.orchestration.runtime_client import RuntimeClientError
 from tests.orchestration.runtime_store_support import ORCHESTRATION_ROOT, Recovery
 
@@ -474,7 +474,7 @@ def test_a_secret_in_the_configuration_is_never_echoed(recovery: Recovery) -> No
 def test_fix_previews_then_applies_through_the_transaction_without_resuming(
     recovery: Recovery,
 ) -> None:
-    from harness.console.configuration import default_document
+    from harness.console.kernel.configuration import default_document
 
     (recovery.repo / ".harness/project.json").write_text(
         json.dumps(default_document(recovery.repo, "project.json")), encoding="utf-8"

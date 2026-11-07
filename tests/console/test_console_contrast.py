@@ -9,7 +9,8 @@ import pytest
 
 pytest.importorskip("textual")
 
-from harness.console import brand, shell
+from harness.console.kernel import brand
+from harness.console.tui import shell
 
 SURFACE = brand.PALETTE["surface"]
 

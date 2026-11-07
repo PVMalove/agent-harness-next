@@ -1,0 +1,3402 @@
+{
+  "$defs": {
+    "AgentStep": {
+      "additionalProperties": false,
+      "description": "A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.",
+      "properties": {
+        "batch_id": {
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "origin": {
+          "const": "agent",
+          "title": "Origin",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "structured",
+            "plain"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "structure": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Structure",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "dispatch_id",
+        "batch_id",
+        "role",
+        "source",
+        "structure",
+        "kind",
+        "text",
+        "observed_at"
+      ],
+      "title": "AgentStep",
+      "type": "object"
+    },
+    "CommandDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "command_id": {
+          "title": "Command Id",
+          "type": "string"
+        },
+        "confirmation_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmation Reason"
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CoordinatorInput"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fields"
+        },
+        "inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "needs_confirmation": {
+          "title": "Needs Confirmation",
+          "type": "boolean"
+        },
+        "plan_required": {
+          "title": "Plan Required",
+          "type": "boolean"
+        },
+        "read_only": {
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "reversibility": {
+          "enum": [
+            "reversible",
+            "deletes-local-data",
+            "terminal-coordinator-action",
+            "external-change",
+            "overwrites-managed-files",
+            "downloads-files"
+          ],
+          "title": "Reversibility",
+          "type": "string"
+        },
+        "reversibility_label": {
+          "title": "Reversibility Label",
+          "type": "string"
+        },
+        "section": {
+          "enum": [
+            "harness",
+            "diagnostics",
+            "repo-map",
+            "setup",
+            "configuration",
+            "memory",
+            "decisions"
+          ],
+          "title": "Section",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "typed_confirmation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Typed Confirmation"
+        }
+      },
+      "required": [
+        "command_id",
+        "title",
+        "section",
+        "reversibility",
+        "reversibility_label",
+        "needs_confirmation",
+        "confirmation_reason",
+        "typed_confirmation",
+        "read_only",
+        "inputs",
+        "plan_required",
+        "available"
+      ],
+      "title": "CommandDescriptor",
+      "type": "object"
+    },
+    "ConfigurationSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "configuration.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ConfigurationSnapshotRequest",
+      "type": "object"
+    },
+    "ConsoleReply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ErrorReply"
+        },
+        {
+          "$ref": "#/$defs/HomeSnapshotReply"
+        },
+        {
+          "$ref": "#/$defs/HomeProblemsReply"
+        },
+        {
+          "$ref": "#/$defs/JobListReply"
+        },
+        {
+          "$ref": "#/$defs/JobCatalogReply"
+        },
+        {
+          "$ref": "#/$defs/JobReply"
+        },
+        {
+          "$ref": "#/$defs/DecisionsSnapshotReply"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationSourceReply"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationEventsReply"
+        },
+        {
+          "$ref": "#/$defs/ScreenSnapshotReply"
+        },
+        {
+          "$ref": "#/$defs/HarnessOverviewReply"
+        },
+        {
+          "$ref": "#/$defs/PagedReply"
+        },
+        {
+          "$ref": "#/$defs/SnapshotPageReply"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationLockReply"
+        },
+        {
+          "$ref": "#/$defs/WorkerStepsReply"
+        },
+        {
+          "$ref": "#/$defs/StepsRosterReply"
+        },
+        {
+          "$ref": "#/$defs/StepsReply"
+        }
+      ]
+    },
+    "ConsoleRequest": {
+      "discriminator": {
+        "mapping": {
+          "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
+          "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
+          "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
+          "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
+          "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
+          "harness.overview": "#/$defs/HarnessOverviewRequest",
+          "harness.snapshot": "#/$defs/HarnessSnapshotRequest",
+          "help.snapshot": "#/$defs/HelpSnapshotRequest",
+          "home.problems": "#/$defs/HomeProblemsRequest",
+          "home.snapshot": "#/$defs/HomeSnapshotRequest",
+          "job.cancel": "#/$defs/JobCancelRequest",
+          "job.catalog": "#/$defs/JobCatalogRequest",
+          "job.get": "#/$defs/JobGetRequest",
+          "job.list": "#/$defs/JobListRequest",
+          "job.start": "#/$defs/JobStartRequest",
+          "job.subscribe": "#/$defs/JobSubscribeRequest",
+          "open_project.snapshot": "#/$defs/OpenProjectSnapshotRequest",
+          "orchestration.lock": "#/$defs/OrchestrationLockRequest",
+          "orchestration.snapshot": "#/$defs/OrchestrationSnapshotRequest",
+          "orchestration.subscribe": "#/$defs/OrchestrationSubscribeRequest",
+          "recovery.snapshot": "#/$defs/RecoverySnapshotRequest",
+          "repo_map.snapshot": "#/$defs/RepoMapSnapshotRequest",
+          "reports.report": "#/$defs/ReportRequest",
+          "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
+          "reports.timeline": "#/$defs/TimelineRequest",
+          "snapshot.page": "#/$defs/SnapshotPageRequest",
+          "steps.subscribe": "#/$defs/StepsSubscribeRequest",
+          "task_board.snapshot": "#/$defs/TaskBoardSnapshotRequest",
+          "task_board.specs": "#/$defs/TaskBoardSpecsRequest",
+          "update_harness.diff": "#/$defs/UpdateHarnessDiffRequest",
+          "update_harness.snapshot": "#/$defs/UpdateHarnessSnapshotRequest",
+          "worker.steps": "#/$defs/WorkerStepsRequest",
+          "worker.subscribe": "#/$defs/WorkerSubscribeRequest"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HomeSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HomeProblemsRequest"
+        },
+        {
+          "$ref": "#/$defs/JobStartRequest"
+        },
+        {
+          "$ref": "#/$defs/JobGetRequest"
+        },
+        {
+          "$ref": "#/$defs/JobSubscribeRequest"
+        },
+        {
+          "$ref": "#/$defs/JobCancelRequest"
+        },
+        {
+          "$ref": "#/$defs/JobListRequest"
+        },
+        {
+          "$ref": "#/$defs/JobCatalogRequest"
+        },
+        {
+          "$ref": "#/$defs/DecisionsSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationSubscribeRequest"
+        },
+        {
+          "$ref": "#/$defs/ReportsSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ReportRequest"
+        },
+        {
+          "$ref": "#/$defs/TimelineRequest"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/OrchestrationLockRequest"
+        },
+        {
+          "$ref": "#/$defs/RecoverySnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ContainerRouteSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/TaskBoardSpecsRequest"
+        },
+        {
+          "$ref": "#/$defs/TaskBoardSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/DiagnosticsSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessOverviewRequest"
+        },
+        {
+          "$ref": "#/$defs/HarnessMaintenanceRequest"
+        },
+        {
+          "$ref": "#/$defs/RepoMapSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/OpenProjectSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/HelpSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/UpdateHarnessSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/UpdateHarnessDiffRequest"
+        },
+        {
+          "$ref": "#/$defs/ConfigurationSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/SnapshotPageRequest"
+        },
+        {
+          "$ref": "#/$defs/WorkerStepsRequest"
+        },
+        {
+          "$ref": "#/$defs/WorkerSubscribeRequest"
+        },
+        {
+          "$ref": "#/$defs/StepsSubscribeRequest"
+        }
+      ]
+    },
+    "ContainerRouteSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "role": {
+          "default": "developer",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "runtime": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Runtime",
+          "type": "string"
+        },
+        "type": {
+          "const": "container_route.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ContainerRouteSnapshotRequest",
+      "type": "object"
+    },
+    "CoordinatorInput": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Choices"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Default"
+        },
+        "dest": {
+          "title": "Dest",
+          "type": "string"
+        },
+        "flag": {
+          "title": "Flag",
+          "type": "string"
+        },
+        "help": {
+          "title": "Help",
+          "type": "string"
+        },
+        "repeatable": {
+          "title": "Repeatable",
+          "type": "boolean"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "takes_value": {
+          "title": "Takes Value",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dest",
+        "flag",
+        "required",
+        "repeatable",
+        "choices",
+        "help",
+        "default",
+        "takes_value"
+      ],
+      "title": "CoordinatorInput",
+      "type": "object"
+    },
+    "DecisionsSnapshotReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "snapshot": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Snapshot",
+          "type": "object"
+        },
+        "type": {
+          "const": "decisions.snapshot",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "snapshot"
+      ],
+      "title": "DecisionsSnapshotReply",
+      "type": "object"
+    },
+    "DecisionsSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "decisions.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "DecisionsSnapshotRequest",
+      "type": "object"
+    },
+    "DiagnosticsSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "online": {
+          "default": false,
+          "title": "Online",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "diagnostics.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "DiagnosticsSnapshotRequest",
+      "type": "object"
+    },
+    "ErrorBody": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorBody",
+      "type": "object"
+    },
+    "ErrorReply": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorBody"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Type"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "error"
+      ],
+      "title": "ErrorReply",
+      "type": "object"
+    },
+    "HarnessMaintenanceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.maintenance",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessMaintenanceRequest",
+      "type": "object"
+    },
+    "HarnessOverviewReply": {
+      "additionalProperties": false,
+      "description": "The Harness state, the package version, the drift state and the pipeline usage.",
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "drift": {
+          "title": "Drift",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "package_version": {
+          "title": "Package Version",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/HarnessStatePayload"
+        },
+        "type": {
+          "const": "harness.overview",
+          "title": "Type",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/PipelineUsage"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "state",
+        "package_version",
+        "drift",
+        "usage",
+        "cached",
+        "age_seconds"
+      ],
+      "title": "HarnessOverviewReply",
+      "type": "object"
+    },
+    "HarnessOverviewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.overview",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessOverviewRequest",
+      "type": "object"
+    },
+    "HarnessSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "harness.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HarnessSnapshotRequest",
+      "type": "object"
+    },
+    "HarnessStatePayload": {
+      "additionalProperties": false,
+      "description": "What is installed in the project, read from `.harness/harness.lock`.",
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "installed": {
+          "title": "Installed",
+          "type": "boolean"
+        },
+        "installed_version": {
+          "title": "Installed Version",
+          "type": "string"
+        },
+        "managed_files": {
+          "minimum": 0,
+          "title": "Managed Files",
+          "type": "integer"
+        },
+        "orchestration": {
+          "title": "Orchestration",
+          "type": "boolean"
+        },
+        "skills": {
+          "minimum": 0,
+          "title": "Skills",
+          "type": "integer"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "installed",
+        "installed_version",
+        "capabilities",
+        "skills",
+        "managed_files",
+        "updated_at",
+        "orchestration"
+      ],
+      "title": "HarnessStatePayload",
+      "type": "object"
+    },
+    "HelpSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "language": {
+          "enum": [
+            "ru",
+            "en"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "type": {
+          "const": "help.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "language"
+      ],
+      "title": "HelpSnapshotRequest",
+      "type": "object"
+    },
+    "HomeProblemsReply": {
+      "additionalProperties": false,
+      "properties": {
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "next": {
+          "title": "Next",
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "home.problems",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "text",
+        "next",
+        "done"
+      ],
+      "title": "HomeProblemsReply",
+      "type": "object"
+    },
+    "HomeProblemsRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "integer"
+        },
+        "type": {
+          "const": "home.problems",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "snapshot_id",
+        "offset"
+      ],
+      "title": "HomeProblemsRequest",
+      "type": "object"
+    },
+    "HomeSnapshotReply": {
+      "additionalProperties": false,
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "problems_snapshot_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Problems Snapshot Id"
+        },
+        "snapshot": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Snapshot",
+          "type": "object"
+        },
+        "type": {
+          "const": "home.snapshot",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "cached",
+        "age_seconds",
+        "snapshot"
+      ],
+      "title": "HomeSnapshotReply",
+      "type": "object"
+    },
+    "HomeSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "online": {
+          "default": false,
+          "title": "Online",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "home.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HomeSnapshotRequest",
+      "type": "object"
+    },
+    "JobCancelRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "default": false,
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "job.cancel",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "job_id"
+      ],
+      "title": "JobCancelRequest",
+      "type": "object"
+    },
+    "JobCatalogReply": {
+      "additionalProperties": false,
+      "properties": {
+        "cancel_reason": {
+          "title": "Cancel Reason",
+          "type": "string"
+        },
+        "commands": {
+          "items": {
+            "$ref": "#/$defs/CommandDescriptor"
+          },
+          "title": "Commands",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "job.catalog",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "commands",
+        "cancel_reason"
+      ],
+      "title": "JobCatalogReply",
+      "type": "object"
+    },
+    "JobCatalogRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "section": {
+          "enum": [
+            "harness",
+            "diagnostics",
+            "repo-map",
+            "setup",
+            "configuration",
+            "memory",
+            "decisions"
+          ],
+          "title": "Section",
+          "type": "string"
+        },
+        "type": {
+          "const": "job.catalog",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "section"
+      ],
+      "title": "JobCatalogRequest",
+      "type": "object"
+    },
+    "JobGetRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Cursor",
+          "type": "integer"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "job.get",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "job_id"
+      ],
+      "title": "JobGetRequest",
+      "type": "object"
+    },
+    "JobListReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "jobs": {
+          "items": {
+            "$ref": "#/$defs/JobSummary"
+          },
+          "title": "Jobs",
+          "type": "array"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "job.list",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "jobs"
+      ],
+      "title": "JobListReply",
+      "type": "object"
+    },
+    "JobListRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "job.list",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "JobListRequest",
+      "type": "object"
+    },
+    "JobReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "job": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Job",
+          "type": "object"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "job.start",
+            "job.get",
+            "job.subscribe",
+            "job.cancel"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "job"
+      ],
+      "title": "JobReply",
+      "type": "object"
+    },
+    "JobStartRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "default": "unknown",
+          "title": "Client",
+          "type": "string"
+        },
+        "command_id": {
+          "title": "Command Id",
+          "type": "string"
+        },
+        "confirmation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirmation"
+        },
+        "confirmed": {
+          "default": false,
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "plan_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plan Digest"
+        },
+        "type": {
+          "const": "job.start",
+          "title": "Type",
+          "type": "string"
+        },
+        "values": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "default": {},
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "command_id"
+      ],
+      "title": "JobStartRequest",
+      "type": "object"
+    },
+    "JobSubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Cursor",
+          "type": "integer"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "job.subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "job_id"
+      ],
+      "title": "JobSubscribeRequest",
+      "type": "object"
+    },
+    "JobSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "title": "Command Id",
+          "type": "string"
+        },
+        "cursor": {
+          "title": "Cursor",
+          "type": "integer"
+        },
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "mutating": {
+          "title": "Mutating",
+          "type": "boolean"
+        },
+        "phase": {
+          "enum": [
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "returncode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Returncode"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "command_id",
+        "mutating",
+        "phase",
+        "cursor",
+        "done",
+        "truncated",
+        "returncode",
+        "error"
+      ],
+      "title": "JobSummary",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "OpenProjectSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "open_project.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OpenProjectSnapshotRequest",
+      "type": "object"
+    },
+    "OrchestrationEventsReply": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "title": "Cursor",
+          "type": "string"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "events",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "orchestration.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "cursor",
+        "events"
+      ],
+      "title": "OrchestrationEventsReply",
+      "type": "object"
+    },
+    "OrchestrationLockReply": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lock"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "orchestration.lock",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "lock",
+        "error"
+      ],
+      "title": "OrchestrationLockReply",
+      "type": "object"
+    },
+    "OrchestrationLockRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "orchestration.lock",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OrchestrationLockRequest",
+      "type": "object"
+    },
+    "OrchestrationSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "orchestration.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OrchestrationSnapshotRequest",
+      "type": "object"
+    },
+    "OrchestrationSourceReply": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "source",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source"
+        },
+        "type": {
+          "const": "orchestration.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "cursor",
+        "source"
+      ],
+      "title": "OrchestrationSourceReply",
+      "type": "object"
+    },
+    "OrchestrationStep": {
+      "additionalProperties": false,
+      "description": "An orchestration event with the allowlisted fields its text needs.",
+      "properties": {
+        "batch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Batch Id"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Decision"
+        },
+        "dispatch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dispatch Id"
+        },
+        "event": {
+          "enum": [
+            "batch.transition",
+            "dispatch.transition",
+            "gate.decision",
+            "qa.run",
+            "qa.attempt"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "from_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "From State"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "next_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Role"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "origin": {
+          "const": "orchestration",
+          "title": "Origin",
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcome"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Role"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stage"
+        },
+        "ticket": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ticket"
+        },
+        "to_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "To State"
+        }
+      },
+      "required": [
+        "origin",
+        "seq",
+        "observed_at",
+        "event",
+        "batch_id",
+        "dispatch_id",
+        "ticket",
+        "role",
+        "from_state",
+        "to_state",
+        "decision",
+        "next_role",
+        "outcome",
+        "stage",
+        "message"
+      ],
+      "title": "OrchestrationStep",
+      "type": "object"
+    },
+    "OrchestrationSubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "orchestration.subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OrchestrationSubscribeRequest",
+      "type": "object"
+    },
+    "PagedReply": {
+      "additionalProperties": false,
+      "description": "The first page of a report body, a batch chronology or an update diff as JSON text.",
+      "properties": {
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "next": {
+          "title": "Next",
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "reports.report",
+            "reports.timeline",
+            "update_harness.diff"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "snapshot_id",
+        "text",
+        "next",
+        "done"
+      ],
+      "title": "PagedReply",
+      "type": "object"
+    },
+    "PipelineUsage": {
+      "additionalProperties": false,
+      "description": "Pipeline usage counted from the ledger; with `unavailable` every count is 0.",
+      "properties": {
+        "batches": {
+          "minimum": 0,
+          "title": "Batches",
+          "type": "integer"
+        },
+        "dispatches": {
+          "minimum": 0,
+          "title": "Dispatches",
+          "type": "integer"
+        },
+        "reports": {
+          "minimum": 0,
+          "title": "Reports",
+          "type": "integer"
+        },
+        "tickets": {
+          "minimum": 0,
+          "title": "Tickets",
+          "type": "integer"
+        },
+        "unavailable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unavailable"
+        }
+      },
+      "required": [
+        "unavailable",
+        "batches",
+        "tickets",
+        "dispatches",
+        "reports"
+      ],
+      "title": "PipelineUsage",
+      "type": "object"
+    },
+    "RecoverySnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "skip": {
+          "default": [],
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Skip",
+          "type": "array"
+        },
+        "type": {
+          "const": "recovery.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "RecoverySnapshotRequest",
+      "type": "object"
+    },
+    "RepoMapSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "repo_map.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "RepoMapSnapshotRequest",
+      "type": "object"
+    },
+    "ReportRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "reports.report",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "dispatch_id"
+      ],
+      "title": "ReportRequest",
+      "type": "object"
+    },
+    "ReportsSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "online": {
+          "default": false,
+          "title": "Online",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "reports.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ReportsSnapshotRequest",
+      "type": "object"
+    },
+    "RosterDispatch": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "ticket": {
+          "title": "Ticket",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatch_id",
+        "batch_id",
+        "ticket",
+        "role",
+        "state"
+      ],
+      "title": "RosterDispatch",
+      "type": "object"
+    },
+    "ScreenSnapshotReply": {
+      "additionalProperties": false,
+      "description": "The first page of a screen snapshot's JSON text; `snapshot.page` reads the rest.",
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "next": {
+          "title": "Next",
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "reports.snapshot",
+            "orchestration.snapshot",
+            "recovery.snapshot",
+            "container_route.snapshot",
+            "task_board.specs",
+            "task_board.snapshot",
+            "diagnostics.snapshot",
+            "harness.snapshot",
+            "harness.maintenance",
+            "repo_map.snapshot",
+            "open_project.snapshot",
+            "help.snapshot",
+            "update_harness.snapshot",
+            "configuration.snapshot"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "snapshot_id",
+        "text",
+        "next",
+        "done",
+        "cached",
+        "age_seconds"
+      ],
+      "title": "ScreenSnapshotReply",
+      "type": "object"
+    },
+    "SnapshotPageReply": {
+      "additionalProperties": false,
+      "properties": {
+        "done": {
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "next": {
+          "title": "Next",
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "snapshot.page",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "text",
+        "next",
+        "done"
+      ],
+      "title": "SnapshotPageReply",
+      "type": "object"
+    },
+    "SnapshotPageRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "minimum": 0,
+          "title": "Snapshot Id",
+          "type": "integer"
+        },
+        "type": {
+          "const": "snapshot.page",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "snapshot_id",
+        "offset"
+      ],
+      "title": "SnapshotPageRequest",
+      "type": "object"
+    },
+    "StepsReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "steps",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "steps": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent": "#/$defs/AgentStep",
+                "orchestration": "#/$defs/OrchestrationStep"
+              },
+              "propertyName": "origin"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/AgentStep"
+              },
+              {
+                "$ref": "#/$defs/OrchestrationStep"
+              }
+            ]
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "steps"
+      ],
+      "title": "StepsReply",
+      "type": "object"
+    },
+    "StepsRosterReply": {
+      "additionalProperties": false,
+      "description": "The dispatches the live step list knows; `reset` drops the steps the client holds.",
+      "properties": {
+        "dispatches": {
+          "items": {
+            "$ref": "#/$defs/RosterDispatch"
+          },
+          "title": "Dispatches",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "kind": {
+          "const": "roster",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "orchestration": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Orchestration",
+          "type": "string"
+        },
+        "reset": {
+          "title": "Reset",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "kind",
+        "reset",
+        "orchestration",
+        "dispatches"
+      ],
+      "title": "StepsRosterReply",
+      "type": "object"
+    },
+    "StepsSubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "steps.subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "StepsSubscribeRequest",
+      "type": "object"
+    },
+    "TaskBoardSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "spec": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Spec",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_board.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "spec"
+      ],
+      "title": "TaskBoardSnapshotRequest",
+      "type": "object"
+    },
+    "TaskBoardSpecsRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "task_board.specs",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "TaskBoardSpecsRequest",
+      "type": "object"
+    },
+    "TimelineRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "reports.timeline",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "batch_id"
+      ],
+      "title": "TimelineRequest",
+      "type": "object"
+    },
+    "UpdateHarnessDiffRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "type": {
+          "const": "update_harness.diff",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "UpdateHarnessDiffRequest",
+      "type": "object"
+    },
+    "UpdateHarnessSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "update_harness.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "UpdateHarnessSnapshotRequest",
+      "type": "object"
+    },
+    "WorkerStep": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "WorkerStep",
+      "type": "object"
+    },
+    "WorkerStepsPage": {
+      "additionalProperties": false,
+      "description": "Allowlisted worker steps from a log byte offset; never thinking, tool inputs or raw JSON.",
+      "properties": {
+        "dispatch_id": {
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "last_step_age_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Step Age Seconds"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "more": {
+          "title": "More",
+          "type": "boolean"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "no_log",
+                "log_missing",
+                "log_unreadable",
+                "log_outside_storage",
+                "log_unrecognised"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason"
+        },
+        "reset": {
+          "title": "Reset",
+          "type": "boolean"
+        },
+        "source": {
+          "enum": [
+            "structured",
+            "plain",
+            "none"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "connected",
+            "waiting",
+            "unavailable"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/WorkerStep"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "structure": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Structure",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatch_id",
+        "source",
+        "structure",
+        "state",
+        "reason",
+        "message",
+        "offset",
+        "reset",
+        "more",
+        "last_step_age_seconds",
+        "steps"
+      ],
+      "title": "WorkerStepsPage",
+      "type": "object"
+    },
+    "WorkerStepsReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "page": {
+          "$ref": "#/$defs/WorkerStepsPage"
+        },
+        "type": {
+          "enum": [
+            "worker.steps",
+            "worker.subscribe"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "page"
+      ],
+      "title": "WorkerStepsReply",
+      "type": "object"
+    },
+    "WorkerStepsRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "type": {
+          "const": "worker.steps",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "dispatch_id",
+        "offset"
+      ],
+      "title": "WorkerStepsRequest",
+      "type": "object"
+    },
+    "WorkerSubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "title": "Dispatch Id",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "type": {
+          "const": "worker.subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "dispatch_id"
+      ],
+      "title": "WorkerSubscribeRequest",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Text frames on /ws: one request object per frame, replies by id.",
+  "title": "Console WebSocket protocol"
+}

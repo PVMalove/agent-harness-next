@@ -7,15 +7,18 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from harness.console.batch_history import (
+import pytest
+
+from harness.console.kernel import i18n
+from harness.console.kernel.batch_history import (
     BatchHistorySource,
+    History,
     HistoryBatch,
     load_history,
     recovery_reason,
 )
-from harness.console import i18n
-from harness.console.container_route import State
-from harness.console.coordinator_api import CoordinatorApi
+from harness.console.kernel.container_route import State
+from harness.console.kernel.coordinator_api import CoordinatorApi
 
 REPO = Path("/work/project")
 
@@ -238,3 +241,38 @@ def test_a_batch_label_translates_to_english_with_no_russian_left() -> None:
     assert i18n.tr_text("en", label) == "#711 · active · b-1 · 1 open"
     unreported = HistoryBatch.of({"batch_id": "b-3"}).label
     assert "не сообщается" not in i18n.tr_text("en", unreported)
+
+
+def test_a_history_round_trips_through_its_payload() -> None:
+    history = History(
+        (HistoryBatch("b-1", "#1", "br", "active", "t", False, 2, 1, "qa"),),
+        unavailable="",
+    )
+    payload = json.loads(json.dumps(history.to_payload()))
+    assert History.from_payload(payload) == history
+    assert History.from_payload(History(unavailable="x").to_payload()) == History(
+        unavailable="x"
+    )
+    with pytest.raises(ValueError):
+        History.from_payload({"batches": [{"batch_id": "b"}], "unavailable": ""})
+
+
+def test_the_history_and_the_recovery_gate_over_the_console_server() -> None:
+    from harness.console.kernel.coordinator_api import ApiResult, Outcome
+    from harness.console.tui.client import RecoveryFacts
+    from harness.console.tui.server_api import ServerCoordinatorApi
+
+    from ._home_client import FakeHomeClient
+
+    client = FakeHomeClient(REPO)
+    history = History(
+        (HistoryBatch("b-1", "#1", "br", "active", "t", False, 2, 1, "qa"),)
+    )
+    held = ApiResult(Outcome.DOCUMENT, ("status",), ({"hold": {"message": "held"}},), 0)
+    client.recovery_facts = RecoveryFacts(history, held)
+    source = BatchHistorySource(REPO, api=ServerCoordinatorApi(REPO, client))
+    assert source.reload() == history
+    entry = source.recovery_entry("b-1")
+    assert entry.enabled and entry.reason == "held"
+    client.recovery_facts = RecoveryFacts(History(unavailable="ledger busy"), None)
+    assert source.reload() == History(unavailable="ledger busy")

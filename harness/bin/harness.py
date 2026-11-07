@@ -741,7 +741,7 @@ def _seed_test_fields(args: argparse.Namespace) -> str:
     """Собрать записи `test_paths` и `test_runner` нового project.json для шаблона; "" — флагов нет.
 
     Поля пишутся только по флагам --test-path и --test-runner-command: без `test_paths` тест-автор
-    выключен, а значения зависят от раскладки и стека проекта (docs/hooks/run-test.md).
+    выключен, а значения зависят от раскладки и стека проекта (site/docs/hooks/run-test.md).
     """
     fields = ""
     paths = list(dict.fromkeys(getattr(args, "test_path", None) or []))
@@ -1445,10 +1445,20 @@ def cmd_health(args: argparse.Namespace) -> int:
 
 def cmd_console(args: argparse.Namespace) -> int:
     """Запустить интерактивную консоль TUI для диагностики harness."""
+    # The console theme is an exact hex palette; do not let a 16/256-colour profile remap it.
+    os.environ["TEXTUAL_COLOR_SYSTEM"] = "truecolor"
     from harness.console.launcher import run_console
 
     repo = Path(args.repo).expanduser().resolve()
-    return run_console(repo)
+    return run_console(repo, web=args.web, no_open=args.no_open)
+
+
+def cmd_console_server(args: argparse.Namespace) -> int:
+    """Запустить Сервер консоли проекта; его стартует `harness console` под `uv run --with`."""
+    from harness.console.backend.server import run
+
+    run(Path(args.repo).expanduser().resolve())
+    return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -1822,10 +1832,25 @@ def parser() -> argparse.ArgumentParser:
 
     console = commands.add_parser(
         "console",
-        help="interactive TUI diagnostics console (needs uv + network for textual)",
+        help="interactive TUI diagnostics console or --web URL (needs uv + network)",
     )
     console.add_argument("repo")
+    console.add_argument(
+        "--web",
+        action="store_true",
+        help="start the console server, print its URL with a token and exit",
+    )
+    console.add_argument(
+        "--no-open", action="store_true", help="with --web, do not open the browser"
+    )
     console.set_defaults(func=cmd_console)
+
+    console_server = commands.add_parser(
+        "console-server",
+        help="project-bound console server (started by `harness console` under `uv run --with`)",
+    )
+    console_server.add_argument("repo")
+    console_server.set_defaults(func=cmd_console_server)
     return root
 
 

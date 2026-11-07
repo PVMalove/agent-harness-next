@@ -1,34 +1,37 @@
-# Документация Harness next
+# Документация Agent Harness Next
 
-Корневой `docs/` — документация для разработчика исходного репозитория. Она не устанавливается в
-целевые проекты, включая справочник харнесса и руководство по backend-оркестрации. Агентам
-доставляются только их собственные контракты: проектные руководства из `harness/project/docs-agents/`,
-контракты `harness/docs/project-memory.md` и `harness/docs/technical-english.md`, роли и playbook
-оркестрации, скиллы и hooks. Даже когда текст проектного руководства совпадает с документом здесь,
-корневой файл не становится источником установки. Руководство по контейнерному исполнителю
-`harness/docs/container-executor.md` тоже поставляется из `harness/docs/`: его ставит только
-`backend-orchestration` как `.harness/docs/container-executor.md`.
+Публичная документация — [pvmalove.github.io/agent-harness-next](https://pvmalove.github.io/agent-harness-next/).
+Её исходники лежат в `site/`, локальный просмотр — `make docs-serve`, строгая сборка — `make docs-build`.
+
+Корневой `docs/` — внутренняя документация для разработчика исходного репозитория. Она не
+устанавливается в целевые проекты. Агентам доставляются только их собственные контракты:
+проектные руководства из `harness/project/docs-agents/`, `harness/docs/project-memory.md`,
+`harness/docs/technical-english.md`, роли и playbook оркестрации, скиллы и hooks.
+
+## Публичные страницы
+
+| Страница | Содержимое |
+| --- | --- |
+| [Быстрый старт](../site/docs/getting-started/index.md) | Требования, установка, подключение к проекту и verification. |
+| [Архитектура](../site/docs/architecture/index.md) | Слои, Rust runtime, store и безопасность. |
+| [Справочник](../site/docs/reference/index.md) | CLI, конфигурация, hooks и агенты. |
+| [Демо](../site/docs/demo/index.md) | Веб-консоль на демонстрационных данных. |
+
+## Внутренние разделы
 
 | Раздел | Содержимое |
 | --- | --- |
-| [Архитектура](./ARCHITECTURE.md) | Слои, discovery, backend-оркестрация и границы процессов. |
-| [ADR](./adr/) | Девять действующих архитектурных контрактов по доменам. |
+| [ADR](./adr/) | Действующие архитектурные контракты по доменам. |
+| [Руководства для агентов](./agents/) | Git, тикеты, артефакты, worktrees (английские источники). Описания агентов — на [сайте](../site/docs/agents/index.md). |
+| [Skills](../site/docs/skills/index.md) | Русские описания first-party, global, role и vendor skills (на сайте). |
+| [Hooks](../site/docs/hooks/index.md) | Описания проектных hooks и вспомогательных скриптов (на сайте). |
+| [Backend-оркестрация](../site/docs/backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
+| [Конфигурация консоли](../site/docs/console-configuration.md) | Целевой проект, мастер JSON, версии и откат. |
+| [Technical English](../harness/docs/technical-english.md) | Контракт английской координации агентов. |
+| [Technical Russian](./technical-russian.md) | Правила технического русского языка и Keep a Changelog. |
+| [Runtime discovery](../site/docs/runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
 | [Восстановление и runtime store](./adr/0030-runtime-store-ledger-reconciliation.md) | ADR 0030: записи восстановления в runtime store, сверка с authority lifecycle и граница гарантии. |
-| [Диаграммы](./diagrams/README.md) | Archify JSON, интерактивные HTML и PNG. |
-| [HTML-макеты консоли](./design/console-mockups/README.md) | Принятые интерактивные макеты Harness console (дизайн-источник эпика #720). |
-| [Справочник харнесса](./harness-guide.md) | Установка, команды CLI, `health`, `console`, skills и hooks. |
-| [Настройка в консоли](./console-configuration.md) | Выбор целевого проекта, мастер JSON, версии, откат и необязательные CLI-подсказки. |
-| [Backend-оркестрация](./backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
-| [Technical English](../harness/docs/technical-english.md) | Общий контракт английской координации агентов, доставляемый в каждую установку. |
-| [Контейнерный исполнитель](../harness/docs/container-executor.md) | Поставляемое руководство `backend-orchestration`: образы, конфиг, allowlist, блокеры, очистка и пример адаптера. |
-| [Technical Russian](./technical-russian.md) | Правила технического русского языка и формат Keep a Changelog. |
-| [Руководства и агенты](./agents/README.md) | Git, тикеты, артефакты, worktrees, релизы и русские описания агентов code-review-spec, code-review-standards, pr-composer и test-author. |
-| [Skills](./skills/README.md) | Русские описания first-party, global, role и vendor skills. |
-| [Hooks](./hooks/) | Русские описания проектных hooks и вспомогательных скриптов, включая `run-test.sh`, `test-author-guard.py` и `test-author-preflight.sh`. |
-| [Базовый замер 1.x](./perf/1.x-baseline/methodology.md) | Методика и сырые данные замера производительности до Harness Next. |
-| [Runtime discovery](./runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
 
-[releases.md](./agents/releases.md) описывает порядок выпуска версии, а также проверку приватных
-терминов мейнтейнера: локальный файл `.private-terms.txt` и секрет репозитория
-`HARNESS_PRIVATE_TERMS`. Операционные правила целевого проекта — в
-[harness-guide.md](./harness-guide.md) и [git-workflow.md](./agents/git-workflow.md).
+Порядок выпуска описан в [releases.md](../site/docs/agents/releases.md), рабочий процесс — в
+[git-workflow.md](./agents/git-workflow.md). Дизайн публичного сайта и макеты — в
+[design/](./design/) и [rfc/docs-site.md](./rfc/docs-site.md).

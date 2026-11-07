@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "typeRoots": ["../../harness/console/frontend/node_modules/@types"],
+    "types": ["node"],
+    "paths": {
+      "react": ["../../harness/console/frontend/node_modules/@types/react"],
+      "react/*": ["../../harness/console/frontend/node_modules/@types/react/*"],
+      "react-dom": ["../../harness/console/frontend/node_modules/@types/react-dom"],
+      "react-dom/*": ["../../harness/console/frontend/node_modules/@types/react-dom/*"],
+      "react-router": ["../../harness/console/frontend/node_modules/react-router"],
+      "vitest": ["../../harness/console/frontend/node_modules/vitest"],
+      "vitest/*": ["../../harness/console/frontend/node_modules/vitest/*"],
+      "@testing-library/react": ["../../harness/console/frontend/node_modules/@testing-library/react"],
+      "@testing-library/dom": ["../../harness/console/frontend/node_modules/@testing-library/dom"],
+      "@playwright/test": ["../../harness/console/frontend/node_modules/@playwright/test"],
+      "json-schema-to-typescript": ["../../harness/console/frontend/node_modules/json-schema-to-typescript"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../harness/console/frontend/src/vite-env.d.ts"]
+}

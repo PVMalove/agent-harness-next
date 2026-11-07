@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.console.screens.project_setup import ProjectSetupScreen
+from harness.console.tui.screens.project_setup import ProjectSetupScreen
 
 
 def test_report_summary_separates_checked_skipped_and_failing_checks() -> None:
-    from harness.console.screens.project_setup import ChecksSummary, summarize_report
+    from harness.console.tui.screens.project_setup import (
+        ChecksSummary,
+        summarize_report,
+    )
     from harness.health.model import CheckResult, Fix, Report
 
     report = Report(
@@ -27,7 +30,7 @@ def test_report_summary_separates_checked_skipped_and_failing_checks() -> None:
 
 
 def test_the_busy_note_has_an_english_text() -> None:
-    from harness.console import i18n
+    from harness.console.kernel import i18n
 
     assert (
         i18n.tr("en", "Дождитесь окончания операции")
@@ -36,7 +39,7 @@ def test_the_busy_note_has_an_english_text() -> None:
 
 
 def test_setup_output_marks_report_statuses_but_not_plain_list_items() -> None:
-    from harness.console.screens.diagnostics import styled_log
+    from harness.console.tui.screens.diagnostics import styled_log
 
     text = "- установка\nИтого: ok=1 warn=0 fail=1 skipped=1\n[FAIL] env.uv: нет\n- net: офлайн"
     assert styled_log(text).plain.split("\n") == [
@@ -48,7 +51,7 @@ def test_setup_output_marks_report_statuses_but_not_plain_list_items() -> None:
 
 
 def test_styled_log_ignores_foreign_lines_that_only_look_like_a_report_total() -> None:
-    from harness.console.screens.diagnostics import styled_log
+    from harness.console.tui.screens.diagnostics import styled_log
 
     text = "Итого: 3 файла\n- элемент списка"
     assert styled_log(text).plain == text
@@ -67,7 +70,10 @@ def test_the_screen_shows_no_demo_data_from_the_mockup() -> None:
     """The mockup's sample values (branch, counts, paths, version) are not in the sources: the
     screen shows only what the console receives."""
     root = Path(__file__).resolve().parents[2] / "harness" / "console"
-    for source in (root / "screens" / "project_setup.py", root / "project_target.py"):
+    for source in (
+        root / "tui" / "screens" / "project_setup.py",
+        root / "kernel" / "project_target.py",
+    ):
         text = source.read_text(encoding="utf-8")
         for demo in (
             "feature/issue-721",
@@ -83,7 +89,7 @@ def test_an_option_button_keeps_both_lines_of_its_label() -> None:
     """Guards the private Textual API `_OptionButton` relies on (`_make_label`, `_label`)."""
     from textual.geometry import Size
 
-    from harness.console.screens.project_setup import _OptionButton
+    from harness.console.tui.screens.project_setup import _OptionButton
 
     button = _OptionButton("name\ndescription")
     assert button._label.plain == "name\ndescription"

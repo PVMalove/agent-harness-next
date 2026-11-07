@@ -1,0 +1,125 @@
+{
+  "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "map": {
+    "schema_version": 1,
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tier": "full",
+    "parser": "bundle",
+    "degradation_reason": "parser bundle applied",
+    "token_estimator_version": "1",
+    "parser_provenance": {
+      "policy_mode": "enforced",
+      "policy_sha256": "abababababababababababababababababababababababababababababababab",
+      "policy_tier": "full",
+      "max_file_bytes": 1000,
+      "max_files": 100,
+      "timeout_seconds": 30,
+      "max_tokens": 4000,
+      "bundle_mode": "applied",
+      "bundle_source": "local-cache",
+      "python_tag": "cp314",
+      "platform_tag": "linux_x86_64",
+      "lock_sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "script_hash": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+      "core_version": "0.25.0",
+      "core_abi_range": "13-15",
+      "grammars": [
+        {
+          "name": "python",
+          "version": "0.23.6",
+          "abi": 14,
+          "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+        }
+      ]
+    },
+    "files": [
+      {
+        "path": "pkg/core.py",
+        "signatures": [
+          "def load_config(path)",
+          "class Settings"
+        ],
+        "parser_status": "ok"
+      },
+      {
+        "path": "pkg/cli.py",
+        "signatures": [
+          "def main(argv)"
+        ],
+        "parser_status": "ok"
+      },
+      {
+        "path": "pkg/broken.py",
+        "signatures": [],
+        "parser_status": "syntax_error"
+      },
+      {
+        "path": "README.md",
+        "signatures": [],
+        "parser_status": "ok"
+      }
+    ],
+    "edges": [
+      {
+        "source": "pkg/cli.py",
+        "target": "pkg/core.py",
+        "kind": "import",
+        "confidence": "high"
+      },
+      {
+        "source": "pkg/cli.py",
+        "target": "pkg/core.py",
+        "kind": "unique-name-ref",
+        "confidence": "medium"
+      },
+      {
+        "source": "pkg/broken.py",
+        "target": "pkg/core.py",
+        "kind": "ambiguous-name-ref",
+        "confidence": "low"
+      },
+      {
+        "source": "pkg/core.py",
+        "target": "pkg/cli.py",
+        "kind": "unique-name-ref",
+        "confidence": "medium"
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "syntax_error",
+        "path": "pkg/broken.py"
+      }
+    ],
+    "estimated_tokens": 512
+  },
+  "tier": {
+    "tier": "full",
+    "editable": true,
+    "reason": ""
+  },
+  "memory": {
+    "enabled": true,
+    "active": true,
+    "source_types": [
+      "adr"
+    ],
+    "indexed": 4,
+    "problem": "",
+    "inactive": "",
+    "top_k": 5,
+    "max_tokens": 1000
+  },
+  "parsers": {
+    "registry": "/work/project/registry",
+    "pair": "cp312-linux",
+    "source": "bundle",
+    "grammars": [
+      "python"
+    ],
+    "problem": null
+  },
+  "language_files": {
+    "python": 3
+  }
+}

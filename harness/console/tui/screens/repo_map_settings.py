@@ -1,0 +1,543 @@
+"""Repo Map settings: the map tier, the parsers of the project's languages, and project memory.
+
+One pane of the Repo Map screen. It shows the current state of each and offers the actions as
+buttons: switch minimal / full, open the setup wizard on the parser policy, install the parser of a
+language, initialise or refresh project memory. The state comes from the `repo_map.snapshot` of
+the console server; memory commands run as its jobs, the parser install runs the CLI command shown
+in the confirmation form, and configuration is written through a validated draft."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Callable
+
+from rich.text import Text
+from textual.app import ComposeResult
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
+from textual.widgets import Button, RadioButton, RadioSet, SelectionList, Static
+from textual.widgets.selection_list import Selection
+
+from harness.repo_map.bundle_fetch import ParserStatus
+from harness.repo_map.bundle_pins import LANGUAGES
+
+from ...kernel import brand, i18n, repo_map_settings
+from ...kernel.catalog import (
+    MEMORY_COMMANDS,
+    CatalogEntry,
+    parsers_install_entry,
+    process_argv,
+)
+from ...kernel.repo_map_settings import MemoryStatus, TierSetting
+from ...kernel.repo_map_snapshot import RepoMapFacts
+from ..client import ConsoleClientError, ScreenClient
+from ..logtext import colorize_log
+from ...kernel.runner import CommandRunner, capturing_runner
+from ..server_api import settings_runner
+from ..shell import SectionCard
+from ...kernel.status import Status
+from ..widgets import CheckList, RoundRadioButton
+from .commands import call_from_worker, render_result
+from .harness import CommandFormScreen
+
+_TIER_CHOICES = (
+    ("minimal", "minimal — только пути файлов, без парсера"),
+    ("full", "full — сигнатуры и связи (нужен парсер языка)"),
+)
+_MEMORY = {entry.key: entry for entry in MEMORY_COMMANDS}
+_UNREAD = "снимок Repo Map ещё не прочитан"
+# Why the parser bundle is not usable (`DegradationReason`), in words the user can act on.
+_REASONS = {
+    "offline parser bundle unavailable": "парсер не установлен: выберите языки и нажмите «Установить выбранные»",
+    "parser bundle hash mismatch": "bundle повреждён или изменён: установите парсеры заново",
+    "parser wheelhouse missing for interpreter/platform pair": "bundle собран для другого интерпретатора или платформы: установите парсеры заново",
+    "parser subprocess failed": "не удалось определить интерпретатор парсера",
+    "parser bundle install failed": "bundle не удалось установить локально",
+    "uv executable unavailable": "не найден uv: он нужен для офлайн-установки bundle",
+}
+
+
+def _marked(kind: str, text: str) -> Text:
+    """`text` behind the symbol of a status kind, in its colour: a state is never colour alone."""
+    status = Status(kind, text, text)
+    return Text.assemble((status.symbol + " ", status.color), text)
+
+
+class RepoMapSettings(Vertical):
+    """Cards of the tier, the language parsers, the project memory and the last result, with their
+    actions: two by two on a wide terminal, one column on a narrow one."""
+
+    DEFAULT_CSS = """
+    RepoMapSettings { width: 100%; height: 1fr; }
+    RepoMapSettings #settings-scroll { width: 100%; height: 1fr; overflow-x: hidden; }
+    RepoMapSettings .settings-row { height: auto; grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; margin-bottom: 1; }
+    RepoMapSettings .settings-row > SectionCard { height: 100%; }
+    RepoMapSettings Static { height: auto; }
+    RepoMapSettings .actions { height: auto; }
+    RepoMapSettings .actions Button { margin-right: 1; }
+    RepoMapSettings RadioSet { height: auto; }
+    RepoMapSettings SelectionList { height: auto; max-height: 8; }
+    RepoMapSettings .hint { color: $text-muted; }
+    RepoMapSettings #settings-output-scroll { height: auto; max-height: 14; }
+    """
+
+    def __init__(
+        self,
+        repo: Path,
+        *,
+        client: ScreenClient,
+        command_runner: CommandRunner = capturing_runner,
+    ) -> None:
+        super().__init__(id="repo-map-settings")
+        self.repo = repo
+        self._client = client
+        self._runner = command_runner
+        self.busy = False
+        self.facts: RepoMapFacts | None = None
+        self.parsers: ParserStatus | None = None
+        self.files: dict[str, int] = {}
+        self._output = ""
+        self._seeded = False
+        self._load_serial = 0
+        self._installed: set[str] = set()
+        self._policy_tier: str | None = None
+
+    # -- composition ---------------------------------------------------------------------------
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="settings-scroll"):
+            with Grid(classes="settings-row"):
+                with SectionCard(title="Режим карты", id="tier-frame"):
+                    yield Static("", id="tier-status", classes="no-i18n", markup=False)
+                    with RadioSet(id="tier-choice"):
+                        for key, label in _TIER_CHOICES:
+                            yield RoundRadioButton(label, id=f"tier-{key}")
+                    with Horizontal(classes="actions"):
+                        yield Button("Применить режим", id="tier-apply", compact=True)
+                        yield Button(
+                            "Настроить парсер", id="parser-settings", compact=True
+                        )
+                with SectionCard(title="Парсеры языков", id="parsers-frame"):
+                    yield Static(
+                        "", id="parser-status", classes="no-i18n", markup=False
+                    )
+                    yield CheckList(id="parser-languages")
+                    with Horizontal(classes="actions"):
+                        yield Button(
+                            "Установить выбранные", id="parser-install", compact=True
+                        )
+                        yield Button(
+                            "Проверить заново", id="parser-refresh", compact=True
+                        )
+            with Grid(classes="settings-row"):
+                with SectionCard(title="Память проекта", id="memory-frame"):
+                    yield Static(
+                        "", id="memory-status", classes="no-i18n", markup=False
+                    )
+                    with Horizontal(classes="actions"):
+                        yield Button("Инициализировать", id="memory-init", compact=True)
+                        yield Button("Синхронизировать", id="memory-sync", compact=True)
+                    with Horizontal(classes="actions"):
+                        yield Button("Пересобрать", id="memory-rebuild", compact=True)
+                        yield Button(
+                            "Настроить память", id="memory-settings", compact=True
+                        )
+                with SectionCard(
+                    title="Результат", note="последнее действие", id="result-frame"
+                ):
+                    with VerticalScroll(id="settings-output-scroll"):
+                        yield Static("", id="settings-output", classes="no-i18n")
+
+    def on_mount(self) -> None:
+        self.repaint()
+
+    # -- state ---------------------------------------------------------------------------------
+
+    @property
+    def language(self) -> str:
+        return str(getattr(self.app, "language", "ru"))
+
+    def t(self, text: str) -> str:
+        return i18n.tr_text(self.language, text)
+
+    def reload(self) -> None:
+        """Re-read the tier, parsers and memory from a fresh server snapshot in a worker, then
+        repaint; a snapshot that cannot be read keeps the last one and says why."""
+
+        # Reads never cancel each other (a cancelled worker is an error to whoever waits for it);
+        # a read that is no longer the latest is ignored when it arrives.
+        self._load_serial += 1
+        serial = self._load_serial
+
+        def work() -> None:
+            try:
+                facts = self._client.repo_map(force=True)
+            except ConsoleClientError as exc:
+                failure = str(exc)
+                call_from_worker(self, lambda: self._unread(serial, failure))
+                return
+            call_from_worker(self, lambda: self._loaded(serial, facts))
+
+        self.run_worker(work, thread=True, group="settings-load")
+
+    def _unread(self, serial: int, failure: str) -> None:
+        if serial == self._load_serial:
+            self._show(self.t("Снимок Repo Map не прочитан: ") + failure)
+
+    def _loaded(self, serial: int, facts: RepoMapFacts) -> None:
+        if serial == self._load_serial:
+            self.show_facts(facts)
+
+    def show_facts(self, facts: RepoMapFacts) -> None:
+        """Show the tier, parsers, languages and memory of a `repo_map.snapshot` reply."""
+        self.facts = facts
+        self.parsers = facts.parsers
+        self.files = facts.language_files
+        self._seeded = False
+        self.repaint()
+
+    def _tier(self) -> TierSetting | None:
+        """The tier of the last snapshot; None before the first, when the policy is unknown."""
+        return None if self.facts is None else self.facts.tier
+
+    def _memory(self) -> MemoryStatus:
+        facts = self.facts
+        return (
+            MemoryStatus(False, False, (), None, _UNREAD)
+            if facts is None
+            else facts.memory
+        )
+
+    def repaint(self) -> None:
+        """Show the current state in the current language."""
+        t = self.t
+        tier = self._tier()
+        choice = self.query_one("#tier-choice", RadioSet)
+        if tier is None:
+            # The policy is not known yet: no tier is claimed and nothing can be written.
+            text = _marked("not_started", t(_UNREAD))
+        else:
+            text = Text(t("В политике проекта: ") + tier.tier)
+            effective = self._effective_note(tier.tier)
+            if effective:
+                text.append("\n")
+                text.append_text(_marked("warning", effective))
+            if tier.reason:
+                text.append("\n")
+                text.append_text(_marked("not_started", t(tier.reason)))
+            if tier.tier != self._policy_tier:
+                # Only when the policy changed: a repaint must not undo a choice not yet applied.
+                self.query_one(f"#tier-{tier.tier}", RadioButton).value = True
+                self._policy_tier = tier.tier
+        self.query_one("#tier-status", Static).update(text)
+        editable = tier is not None and tier.editable
+        choice.disabled = not editable or self.busy
+        self.query_one("#tier-apply", Button).disabled = not editable or self.busy
+        self.query_one("#parser-settings", Button).disabled = not editable
+        self._repaint_parsers()
+        self._repaint_memory()
+        self.query_one("#settings-output", Static).update(
+            colorize_log(self._output) if self._output else t("Действий пока не было")
+        )
+
+    def _effective_note(self, policy_tier: str) -> str:
+        """Why the map is minimal although the policy asks for full: the parser is not ready."""
+        if policy_tier != "full" or self.parsers is None or self.parsers.ready:
+            return ""
+        reason = _REASONS.get(str(self.parsers.problem), str(self.parsers.problem))
+        return self.t("Фактически карта строится в minimal: ") + self.t(reason)
+
+    def _repaint_parsers(self) -> None:
+        t = self.t
+        status = self.parsers
+        if status is None:
+            line = _marked("not_started", t("Состояние парсеров не прочитано"))
+            installed: set[str] = set()
+        else:
+            installed = set(status.languages)
+            line = (
+                _marked("accepted", t("Bundle готов, режим full доступен"))
+                if status.ready
+                else _marked(
+                    "warning",
+                    t("Bundle не готов: ")
+                    + t(_REASONS.get(str(status.problem), str(status.problem))),
+                )
+            )
+            if status.pair:
+                line.append(
+                    f"\n{t('Пара')}: {status.pair}", style=brand.PALETTE["muted"]
+                )
+            line.append(
+                f"\n{t('Каталог')}: {status.registry}", style=brand.PALETTE["muted"]
+            )
+        self.query_one("#parser-status", Static).update(line)
+        options = self.query_one("#parser-languages", SelectionList)
+        self._installed = installed
+        chosen = set(options.selected) - installed
+        first = not self._seeded
+        self._seeded = True
+        options.clear_options()
+        rows = []
+        for language in LANGUAGES:
+            count = self.files.get(language.key, 0)
+            state = t("установлен") if language.key in installed else t("не установлен")
+            label = f"{language.label} — {state}"
+            if count:
+                label += " · " + t("файлов в проекте") + f": {count}"
+            if language.key in installed:
+                # An installed parser is shown ticked and locked: it cannot be unticked here.
+                rows.append(Selection(label, language.key, True, disabled=True))
+                continue
+            wanted = language.key in chosen if not first else bool(count)
+            rows.append(Selection(label, language.key, wanted))
+        options.add_options(rows)
+        self.query_one("#parser-install", Button).disabled = self.busy
+
+    def _repaint_memory(self) -> None:
+        t = self.t
+        status = self._memory()
+        if status.problem:
+            line = _marked("error", t("Память недоступна: ") + status.problem)
+        else:
+            index = (
+                f"{status.indexed} " + t("документов")
+                if status.indexed is not None
+                else t("не построен")
+            )
+            if status.active:
+                kind, state = "accepted", t("включена")
+            elif status.inactive:
+                kind = "warning"
+                state = t("включена, но не читает источники: ") + t(status.inactive)
+            else:
+                kind, state = "not_started", t("выключена")
+            rest = (
+                (
+                    (" · " + t("источники") + ": " + ", ".join(status.source_types))
+                    if status.source_types
+                    else ""
+                )
+                + " · "
+                + t("индекс")
+                + ": "
+                + index
+            )
+            line = Text(t("Память: "))
+            line.append_text(_marked(kind, state + rest))
+        self.query_one("#memory-status", Static).update(line)
+        for identifier in ("memory-init", "memory-sync", "memory-rebuild"):
+            self.query_one(f"#{identifier}", Button).disabled = self.busy
+
+    # -- actions -------------------------------------------------------------------------------
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        key = event.button.id or ""
+        if not key.startswith(("tier-", "parser-", "memory-")):
+            return
+        event.stop()
+        if self.busy:
+            return
+        if key == "tier-apply":
+            self._apply_tier()
+        elif key == "parser-settings":
+            self._open_wizard("orchestration.json", ("repo_map_policy",))
+        elif key == "parser-refresh":
+            self.reload()
+        elif key == "parser-install":
+            self._install_parsers()
+        elif key == "memory-settings":
+            self._open_wizard("project.json", ("memory",))
+        elif key == "memory-init":
+            self._init_memory()
+        elif key in ("memory-sync", "memory-rebuild"):
+            self._run_command(_MEMORY[key], reload=True)
+
+    def _open_wizard(self, name: str, path: tuple[str, ...]) -> None:
+        from .configuration import ConfigurationScreen
+
+        self.app.push_screen(
+            ConfigurationScreen(self.repo, (name, path), client=self._client),
+            lambda _: self.reload(),
+        )
+
+    def _selected_tier(self) -> str:
+        pressed = self.query_one("#tier-choice", RadioSet).pressed_button
+        return (pressed.id or "tier-full").removeprefix("tier-") if pressed else "full"
+
+    def _apply_tier(self) -> None:
+        from .configuration import ConfirmConfiguration
+
+        tier = self._selected_tier()
+        known = self._tier()
+        if known is None:
+            return
+        current = known.tier
+        if tier == current:
+            note = self._effective_note(tier)
+            self._show(
+                self.t("В политике уже ")
+                + tier
+                + (
+                    "\n" + note + "\n" + self.t("Установите парсеры в блоке ниже.")
+                    if note
+                    else ""
+                )
+            )
+            return
+        text = (
+            self.t("Записать repo_map_policy.tier = ")
+            + tier
+            + "\n"
+            + self.t("Цель: ")
+            + str(self.repo)
+            + "\n"
+            + self.t("Прежние файлы будут сохранены отдельной версией.")
+        )
+
+        def confirmed(ok: bool | None) -> None:
+            if ok:
+                self._work(
+                    lambda: self.t("Режим записан: ")
+                    + tier
+                    + "\n"
+                    + self.t("Версия с прежними файлами: ")
+                    + repo_map_settings.apply_tier(self.repo, tier)
+                    + "\n"
+                    + self.t("Построенная карта обновится при следующей сборке."),
+                )
+
+        self.app.push_screen(ConfirmConfiguration(text), confirmed)
+
+    def _install_parsers(self) -> None:
+        chosen = [
+            key
+            for key in self.query_one("#parser-languages", SelectionList).selected
+            if key not in self._installed
+        ]
+        if not chosen:
+            self._show(self.t("Отметьте язык, парсер которого нужно установить"))
+            return
+        self._confirm_and_run(parsers_install_entry(chosen), reload=True)
+
+    def _init_memory(self) -> None:
+        entry = _MEMORY["memory-build"]
+        try:
+            plan = repo_map_settings.plan_memory_enable(self.repo)
+        except ValueError as exc:
+            self._show(str(exc))
+            return
+        if not plan:
+            self._confirm_and_run(entry, reload=True)
+            return
+        from .configuration import ConfirmConfiguration
+
+        def enable() -> str:
+            backup = repo_map_settings.enable_memory(self.repo)
+            return (
+                self.t("Память настроена.")
+                + "\n"
+                + self.t("Версия с прежними файлами: ")
+                + backup
+            )
+
+        def confirmed(ok: bool | None) -> None:
+            if ok:
+                self._work(enable, then=lambda: self._run_command(entry, reload=True))
+
+        changes = "\n".join(
+            f"  {'.'.join(path)} = {json.dumps(value, ensure_ascii=False)}"
+            for path, value in plan.items()
+        )
+        self.app.push_screen(
+            ConfirmConfiguration(
+                self.t("Чтобы память читала источники, будет записано в project.json:")
+                + "\n"
+                + changes
+                + "\n"
+                + self.t("затем выполнено:")
+                + "\n$ "
+                + entry.cli_line(self.repo)
+                + "\n"
+                + self.t("Прежние файлы будут сохранены отдельной версией.")
+            ),
+            confirmed,
+        )
+
+    def _confirm_and_run(self, entry: CatalogEntry, *, reload: bool) -> None:
+        def confirmed(values: "dict[str, str] | None") -> None:
+            if values is not None:
+                self._run_command(entry, reload=reload)
+
+        self.app.push_screen(CommandFormScreen(entry, self.repo), confirmed)
+
+    # -- running -------------------------------------------------------------------------------
+
+    def _set_busy(self, value: bool) -> None:
+        self.busy = value
+        self.repaint()
+
+    def _show(self, text: str) -> None:
+        self._output = text
+        self.query_one("#settings-output", Static).update(colorize_log(text))
+
+    def _work(
+        self, run: Callable[[], str], then: Callable[[], None] | None = None
+    ) -> None:
+        """Run a configuration write in a worker and show its message."""
+        self._set_busy(True)
+        self._show(self.t("Выполняется…"))
+
+        def work() -> None:
+            try:
+                message, ok = run(), True
+            except (ValueError, OSError) as exc:
+                message, ok = str(exc), False
+            except Exception as exc:
+                message, ok = f"{exc!r}", False
+            call_from_worker(self, lambda: self._worked(message, ok, then))
+
+        self.run_worker(work, thread=True, exclusive=True, group="settings-write")
+
+    def _worked(self, message: str, ok: bool, then: Callable[[], None] | None) -> None:
+        self._set_busy(False)
+        self._show(message)
+        self.reload()
+        if ok and then is not None:
+            then()
+        elif not ok:
+            self.notify(self.t("Не выполнено"), severity="error")
+
+    def _run_command(self, entry: CatalogEntry, *, reload: bool) -> None:
+        self._set_busy(True)
+        line = entry.cli_line(self.repo)
+        self._show(f"$ {line}\n" + self.t("Выполняется…"))
+        argv = process_argv(entry.cli_argv(self.repo), self.repo)
+
+        def work() -> None:
+            try:
+                runner = settings_runner(self._client, entry, self._runner)
+                result = runner(argv, cwd=self.repo)
+                text, success = render_result(line, result), result.returncode == 0
+            except OSError as exc:
+                text, success = f"$ {line}\nне удалось запустить: {exc}", False
+            except Exception as exc:
+                text, success = f"$ {line}\nсбой запуска: {exc!r}", False
+            call_from_worker(self, lambda: self._finished(text, success, reload))
+
+        self.run_worker(work, thread=True, exclusive=True, group="settings-command")
+
+    def _finished(self, text: str, success: bool, reload: bool) -> None:
+        self._set_busy(False)
+        if success and '"indexed": 0' in text:
+            text += "\n" + self.t(
+                "Проиндексировано 0 документов: в разрешённых путях нет подходящих файлов. "
+                "Проверьте источники и пути в «Настроить память»."
+            )
+        self._show(text)
+        self.notify(
+            self.t("Готово") if success else self.t("Завершилось с ошибкой"),
+            severity="information" if success else "error",
+        )
+        if reload:
+            self.reload()

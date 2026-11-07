@@ -8,10 +8,11 @@ import pytest
 
 pytest.importorskip("textual")
 
-from harness.console import brand
-from harness.console.data import DashboardData
-from harness.console.screens.dashboard import DashboardScreen
+from harness.console.kernel import brand
+from harness.console.kernel.data import DashboardData
+from harness.console.tui.screens.dashboard import DashboardScreen
 from harness.health.model import CheckResult, Fix, Report
+from tests.console._home_client import fake_home
 
 
 def _fake_dashboard_data() -> DashboardData:
@@ -56,7 +57,7 @@ def test_dashboard_summary_lists_problems_and_splits_repo_map_facts() -> None:
 
     from rich.text import Text
 
-    from harness.console.screens.dashboard import _render_summary
+    from harness.console.tui.screens.dashboard import _render_summary
 
     data = replace(
         _fake_dashboard_data(),
@@ -81,7 +82,7 @@ def test_dashboard_summary_colors_labels_and_normalizes_repo_map() -> None:
     from rich.style import Style
     from rich.text import Text
 
-    from harness.console.screens.dashboard import _render_summary
+    from harness.console.tui.screens.dashboard import _render_summary
 
     data = replace(
         _fake_dashboard_data(),
@@ -123,7 +124,7 @@ def test_dashboard_summary_shows_memory_health_without_interpreting_markup(
 
     from rich.text import Text
 
-    from harness.console.screens.dashboard import _render_summary
+    from harness.console.tui.screens.dashboard import _render_summary
     from harness.health.model import Status
 
     data = replace(
@@ -144,11 +145,13 @@ def test_dashboard_summary_shows_memory_health_without_interpreting_markup(
 def test_dashboard_captures_command_output_by_default(tmp_path: Path) -> None:
     """Проверить, что дашборд без явного runner передаёт разделам перехватывающий runner,
     а не runner со сквозным выводом в терминал, которым владеет TUI."""
-    from harness.console.runner import capturing_runner
+    from harness.console.kernel.runner import capturing_runner
 
     screen = DashboardScreen(
         tmp_path,
-        collect_dashboard=lambda _repo, *, online=False: _fake_dashboard_data(),
+        home_client=fake_home(
+            lambda _repo, *, online=False: _fake_dashboard_data(), repo=tmp_path
+        ),
     )
 
     assert screen._command_runner is capturing_runner
@@ -157,8 +160,8 @@ def test_dashboard_captures_command_output_by_default(tmp_path: Path) -> None:
 def test_elapsed_time_and_check_counts_read_naturally() -> None:
     from datetime import UTC, datetime, timedelta
 
-    from harness.console import i18n
-    from harness.console.session_card import elapsed_text
+    from harness.console.kernel import i18n
+    from harness.console.tui.session_card import elapsed_text
 
     now = datetime(2026, 10, 17, 14, 40, tzinfo=UTC)
     assert elapsed_text(now - timedelta(seconds=30), now, "ru") == "0 мин"
@@ -192,7 +195,7 @@ def _mixed_report() -> Report:
 
 
 def test_report_statuses_and_counters_are_shown_as_symbol_plus_text() -> None:
-    from harness.console.screens.diagnostics import _styled_report, render_report
+    from harness.console.tui.screens.diagnostics import _styled_report, render_report
 
     report = _mixed_report()
     before = render_report(report)
@@ -210,7 +213,7 @@ def test_report_statuses_and_counters_are_shown_as_symbol_plus_text() -> None:
 
 
 def test_a_zero_counter_keeps_its_symbol_and_is_muted() -> None:
-    from harness.console.screens.diagnostics import _styled_report
+    from harness.console.tui.screens.diagnostics import _styled_report
 
     shown = _styled_report(_fake_report())
     assert shown.plain.split("\n")[0] == "Итого: ✔ ok=1 ⚠ warn=0 ✖ fail=1 ○ skipped=0"
@@ -227,10 +230,11 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
 
     from rich.text import Text
 
-    from harness.console.screens.dashboard import (
+    from harness.console.kernel.home_snapshot import build_home_snapshot
+    from harness.console.tui.screens.dashboard import (
         HomeContext,
         _render_summary,
-        home_facts,
+        _snapshot_facts,
     )
 
     data = replace(
@@ -254,7 +258,9 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
     )
     cards = {
         card_id: dict(rows)
-        for card_id, _title, rows in home_facts(data, banner, HomeContext(), "app")
+        for card_id, _title, rows in _snapshot_facts(
+            data, build_home_snapshot(data, HomeContext()), banner, "app"
+        )
     }
     assert cards["card-harness"]["Дрейф"].plain == "✔ нет"
     assert cards["card-memory"]["Состояние"].plain == "✔ индекс готов"
@@ -285,9 +291,9 @@ def _attention_data() -> DashboardData:
 
 
 def _home_context() -> object:
-    from harness.console.repo_map import MapEdge, MapFile, RepoMapView
-    from harness.console.repo_map_settings import MemoryStatus
-    from harness.console.screens.dashboard import HomeContext
+    from harness.console.kernel.repo_map import MapEdge, MapFile, RepoMapView
+    from harness.console.kernel.repo_map_settings import MemoryStatus
+    from harness.console.tui.screens.dashboard import HomeContext
 
     view = RepoMapView(
         payload={},
@@ -335,12 +341,14 @@ _BANNER = brand.BannerInfo(
 
 @pytest.mark.parametrize("language", ["ru", "en"])
 def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> None:
-    from harness.console.screens.dashboard import HomeContext, home_facts
+    from harness.console.kernel.home_snapshot import build_home_snapshot
+    from harness.console.tui.screens.dashboard import HomeContext, _snapshot_facts
 
-    cards = home_facts(
-        _context_data(),
+    data = _context_data()
+    cards = _snapshot_facts(
+        data,
+        build_home_snapshot(data, _home_context()),  # type: ignore[arg-type]
         _BANNER,
-        _home_context(),  # type: ignore[arg-type]
         "claude-agent-harness",
         language,
     )
@@ -396,10 +404,10 @@ def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> 
     # Without a cached map or a memory policy nothing is invented: unknown facts are a dash.
     bare = {
         title: dict((label, value.plain) for label, value in rows)
-        for _id, title, rows in home_facts(
+        for _id, title, rows in _snapshot_facts(
             _fake_dashboard_data(),
+            build_home_snapshot(_fake_dashboard_data(), HomeContext()),
             brand.BannerInfo(version="1", capabilities=(), repo="~/x", branch=None),
-            HomeContext(),
             "x",
             language,
         )
@@ -408,3 +416,15 @@ def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> 
     assert bare["Harness"]["Модули"] == "—"
     assert set(bare["Repo Map"]) == {"Уровень", "Актуальность"}
     assert bare["Память проекта"] == {"Состояние": "—"}
+
+
+def test_the_diagnostics_screen_is_a_console_server_client() -> None:
+    """Diagnostics reads its report and applies its fixes through the server client only."""
+    import inspect
+
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
+
+    parameters = inspect.signature(DiagnosticsScreen).parameters
+    assert parameters["client"].default is inspect.Parameter.empty
+    assert parameters["client"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert not {"collect_diagnostics", "apply_local_fixes"} & set(parameters)

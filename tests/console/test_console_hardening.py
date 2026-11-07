@@ -7,9 +7,9 @@ import dataclasses
 
 import pytest
 
-from harness.console import repo_map as console_repo_map
-from harness.console.coordinator_catalog import subparser
-from harness.console.reports import LedgerView
+from harness.console.kernel import repo_map as console_repo_map
+from harness.console.kernel.coordinator_catalog import subparser
+from harness.console.kernel.reports import LedgerView
 from harness.errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from harness.orchestration import coordinator
 

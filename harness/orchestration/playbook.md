@@ -687,8 +687,18 @@ python <main-repo>/.harness/orchestration/coordinator.py --repo <main-repo> batc
 ```
 
 Omit `--preserved-file` for a clean checkout. A resolver uses `--to resolve-conflict` with its
-registered resolver boundary. Preservation requires the latest dispatch to be a cancelled work
-writer with a recorded runtime stop. HEAD must descend from its immutable startup snapshot;
+registered resolver boundary. Preservation accepts either the latest cancelled work writer with
+a recorded runtime stop, or the latest work writer's unaccepted immutable `blocked` report.
+For a reported writer, inspect `batch decision-packet`, `dispatch status` and `ledger validate`;
+`startup.worker_state` must be `reported`. Use the same `batch rewind` command above directly,
+without cancelling or resubmitting the report, with its exact reported commit as
+`--preserved-commit` and every inspected pending path as `--preserved-file`. This also recovers a
+tooling retry refused because the report omitted or misstated `tooling_blocker.uncommitted_files`.
+The human approves the concrete checkout; the command does not extract paths from prose or amend
+the report. Completed, failed or accepted reports cannot authorize this preservation route.
+This is an ordinary rewind: it supersedes dependent evidence and a fresh writing attempt spends
+developer retry budget; it does not inherit the tooling-retry budget exemption.
+HEAD must descend from its immutable startup snapshot;
 committed changes and every pending path must fit its write scope. A missing or extra path,
 foreign checkout/branch, symlink, live worker or forward gate is refused without changing files
 or ledger. Ordinary rewind still requires known progress and a clean checkout.
@@ -849,7 +859,9 @@ uncommitted paths with the blocked report's `tooling_blocker.uncommitted_files`;
 and tool sandboxes do not count. The preflight passes only when both lists are equal and every path
 is inside the batch `allowed_paths` (a batch recorded before explicit scopes: inside its zone). A
 clean worktree with no list passes as before. The preflight refuses an extra, missing or
-out-of-scope file and names each discrepancy.
+out-of-scope file and names each discrepancy. If the recorded report's list is incomplete, use
+the human-approved blocked-writer preservation route in **Operator recovery**; keep the original
+report and inspect the entire checkout before approving the rewind.
 
 ## Approvals bound to the transition digest
 
@@ -989,7 +1001,7 @@ result. A command that is killed and run again builds a new `operation_id`, beca
 holds times, and gets `revision_conflict`; the remedy is to run the command again. `store_busy`,
 `revision_conflict` and `runtime_unavailable` are different errors: exit code 2 and the code in
 brackets on the first `REMEDY:` line. `coordinator.py ledger validate --full` recomputes the whole
-audit chain without the checkpoint; the details are in `docs/backend-orchestration.md`.
+audit chain without the checkpoint; the details are in `site/docs/backend-orchestration.md`.
 
 Parallel batches in the runtime-store epoch (store schema 3). Commands of different batches write
 in parallel: each command reads from one read snapshot of the store (`state.read` with

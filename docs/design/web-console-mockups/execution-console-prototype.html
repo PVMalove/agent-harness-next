@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Harness Console 2.0.0</title>
+  <link rel="stylesheet" href="execution-console.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="top">
+      <button id="menu-toggle" class="icon-btn menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="navigation"></button>
+      <button id="nav-collapse" class="icon-btn nav-collapse" type="button" aria-label="Свернуть меню" aria-expanded="true" title="Свернуть меню" aria-controls="navigation"></button>
+      <a class="brand" href="#home">
+        <span class="logo" aria-hidden="true">H›</span>
+        <b>Harness next</b>
+        <span class="version">2.0.0</span>
+        <span class="channel">pre-release</span>
+      </a>
+      <span id="project" class="where mono">claude-agent-harness</span>
+      <span id="branch" class="where mono muted">⑂ integration/harness-runtime-reliability</span>
+      <div class="top-actions">
+        <button id="connection-state" class="conn-chip connected" type="button" data-connection-cycle aria-label="Демо: переключить состояние соединения" title="Демо: переключить состояние соединения"><i></i><span>online</span></button>
+        <span class="where muted demo-note">данные симулируются</span>
+        <a class="icon-btn" href="#help" aria-label="Справка" title="Справка">?</a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div id="connection-banner" class="connection-banner" role="status" aria-live="polite" hidden></div>
+      <nav id="navigation" aria-label="Разделы консоли"></nav>
+      <div id="nav-scrim" class="nav-scrim" hidden></div>
+      <main id="content"></main>
+    </div>
+
+    <footer class="foot">
+      <div class="keys">
+        <span><b class="k">?</b>справка</span>
+        <span><b class="k">g</b> главная</span>
+        <span><b class="k">d</b> диагностика</span>
+        <span><b class="k">o</b> оркестрация</span>
+      </div>
+      <span id="foot-status" class="r">2.0.0 · runtime-store · read-only</span>
+    </footer>
+  </div>
+
+  <dialog id="reader" aria-labelledby="reader-title">
+    <form method="dialog">
+      <header>
+        <b id="reader-title"></b>
+        <div><button id="expand" type="button" aria-pressed="false">Развернуть</button> <button aria-label="Закрыть окно">✕</button></div>
+      </header>
+    </form>
+    <label class="search">Поиск по содержимому<input id="reader-search" type="search" placeholder="Строка или фрагмент текста"></label>
+    <pre id="reader-output"></pre>
+    <div id="reader-status" role="status"></div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="harness-icons.js"></script>
+  <script src="execution-console.js"></script>
+</body>
+</html>

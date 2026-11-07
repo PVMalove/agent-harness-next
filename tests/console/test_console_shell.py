@@ -11,9 +11,9 @@ pytest.importorskip("textual")
 
 from textual.binding import Binding
 
-from harness.console.data import DashboardData
-from harness.console.screens.dashboard import DashboardScreen
-from harness.console.shell import (
+from harness.console.kernel.data import DashboardData
+from harness.console.tui.screens.dashboard import DashboardScreen
+from harness.console.tui.shell import (
     SECTIONS,
     ConsoleShell,
 )
@@ -40,7 +40,7 @@ LONG_BRANCH = "feature/issue-721-console-design-system-with-a-long-tail"
 
 
 def test_where_text_never_leaves_a_dangling_separator() -> None:
-    from harness.console.chrome import where_text
+    from harness.console.tui.chrome import where_text
 
     assert where_text("project", None, 160) == "project"
     assert where_text("project", "", 80) == "project"
@@ -52,29 +52,59 @@ def test_where_text_never_leaves_a_dangling_separator() -> None:
 def test_the_shell_css_has_no_default_text_token() -> None:
     import re
 
-    from harness.console import brand
-    from harness.console.chrome import WorkspaceHeader
-    from harness.console.shell import SHELL_CSS
+    from harness.console.kernel import brand
+    from harness.console.tui.chrome import WorkspaceHeader
+    from harness.console.tui.shell import SHELL_CSS
 
     for css in (SHELL_CSS, WorkspaceHeader.DEFAULT_CSS, DashboardScreen.CSS):
         assert not re.search(r"\$text(?![\w-])", brand.shell_css(css))
 
 
-def test_a_menu_number_takes_the_colour_of_its_entry() -> None:
+def test_the_shell_draws_one_window_background_and_no_block_fill() -> None:
+    import re
+
+    from harness.console.kernel import brand
+    from harness.console.tui.chrome import WorkspaceHeader
+    from harness.console.tui.shell import SHELL_CSS
+
+    border = brand.SHELL_TOKENS["border-subtle"]
+    header = brand.shell_css(WorkspaceHeader.DEFAULT_CSS)
+    shell = brand.shell_css(SHELL_CSS)
+    assert "background: transparent" in header
+    assert f"border-bottom: solid {border}" in header
+    # Panels, buttons and fields are told apart by their frame and dividers, never by a fill.
+    for selector in (
+        "ShellSidebar",
+        "Footer",
+        r"\.section-card",
+        r"\.fold",
+        "Button",
+        "Input",
+    ):
+        assert re.search(
+            rf"{selector}[^\{{]*\{{[^}}]*background: transparent", shell
+        ), selector
+    assert re.search(
+        rf"\.section-head[^\{{]*\{{[^}}]*border-bottom: solid {border}", shell
+    )
+    assert not re.search(r"\.section-(card|head)[^\{]*\{[^}]*background: \$", shell)
+
+
+def test_a_menu_entry_shows_its_key_and_takes_the_colour_of_its_badge() -> None:
     from rich.text import Text
 
-    from harness.console.shell import menu_label
+    from harness.console.tui.shell import menu_label
 
-    label = menu_label(2, "Update Harness", ("⚠", "#E5A04B"))
+    label = menu_label("Update Harness", ("⚠", "#E5A04B"))
     name, badge = (column._cells[0] for column in label.columns)
-    assert isinstance(name, Text) and name.plain == "2 Обновить Harness"
+    assert isinstance(name, Text) and name.plain == "2  Обновить Harness"
     assert not name.style and not name.spans
     assert isinstance(badge, Text) and badge.plain.strip() == "⚠"
 
 
 def test_section_badges_come_from_the_health_facts() -> None:
-    from harness.console import brand
-    from harness.console.shell import section_badges
+    from harness.console.kernel import brand
+    from harness.console.tui.shell import section_badges
 
     badges = section_badges(_home_data())
     assert badges == {
@@ -100,20 +130,17 @@ def test_section_badges_come_from_the_health_facts() -> None:
     }
 
 
-def test_a_section_title_is_in_capitals_with_its_note_after_it() -> None:
-    from harness.console import brand, i18n
+def test_a_section_title_keeps_its_case_and_note() -> None:
+    from harness.console.kernel import brand
 
-    assert brand.section_title("Требует внимания", "2") == " ТРЕБУЕТ ВНИМАНИЯ  2 "
-    assert brand.section_title(" Действия ") == " ДЕЙСТВИЯ "
-    # A title in capitals still finds its English text.
-    assert i18n.tr("en", "HEALTH-ОТЧЁТ") == "HEALTH REPORT"
-    assert i18n.tr("en", "СОСТОЯНИЕ · 3") == "STATUS · 3"
-    assert i18n.tr("ru", "HEALTH-ОТЧЁТ") == "HEALTH-ОТЧЁТ"
+    assert brand.section_title("Требует внимания", "2") == " Требует внимания  2 "
+    assert brand.section_title(" Действия ") == " Действия "
+    assert brand.section_title("HEALTH-ОТЧЁТ") == " HEALTH-ОТЧЁТ "
 
 
 def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
-    from harness.console import i18n
-    from harness.console.shell import CHECK_ROUTES, check_route
+    from harness.console.kernel import i18n
+    from harness.console.tui.shell import CHECK_ROUTES, check_route
     from harness.health.registry import REGISTRY
 
     ids = [check_id for check_id, _check in REGISTRY]
@@ -130,7 +157,7 @@ def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
 
 
 def test_a_jump_is_labelled_by_its_section_or_its_action() -> None:
-    from harness.console import i18n
+    from harness.console.kernel import i18n
 
     assert i18n.jump_label("ru", "Update Harness") == "Обновить Harness"
     assert i18n.jump_label("en", "Update Harness") == "Update Harness"
@@ -138,7 +165,9 @@ def test_a_jump_is_labelled_by_its_section_or_its_action() -> None:
     assert i18n.jump_label("en", "Configuration") == "Open setup"
 
 
-def test_home_is_item_zero_and_keys_one_to_nine_keep_their_sections() -> None:
+def test_the_menu_is_a_flat_list_in_hotkey_order() -> None:
+    from harness.console.tui.shell import SECTION_KEYS
+
     assert SECTIONS == (
         "Home",
         "Open project",
@@ -150,14 +179,17 @@ def test_home_is_item_zero_and_keys_one_to_nine_keep_their_sections() -> None:
         "Repo Map",
         "Configuration",
         "Help",
+        "Board",
+        "Agent activity",
+        "Publish",
     )
     actions = {
         binding.key: binding.action
         for binding in ConsoleShell.BINDINGS
         if isinstance(binding, Binding)
     }
-    for number in range(10):
-        assert actions[str(number)] == f"section({number})"
+    for name, key in SECTION_KEYS.items():
+        assert actions[key] == f"section({SECTIONS.index(name)})"
 
 
 def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> None:
@@ -167,12 +199,12 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
     only Esc binding)."""
     import re
 
-    from harness.console.screens.configuration import ConfigurationScreen
-    from harness.console.screens.configuration_versions import (
+    from harness.console.tui.screens.configuration import ConfigurationScreen
+    from harness.console.tui.screens.configuration_versions import (
         ConfigurationVersionsScreen,
     )
-    from harness.console.screens.project_setup import ProjectSetupScreen
-    from harness.console.screens.update_harness import UpdateHarnessScreen
+    from harness.console.tui.screens.project_setup import ProjectSetupScreen
+    from harness.console.tui.screens.update_harness import UpdateHarnessScreen
 
     for screen_class in (
         ConfigurationScreen,
@@ -185,7 +217,7 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
         keys = [b.key if isinstance(b, Binding) else b[0] for b in own]
         assert "escape" not in keys, screen_class
 
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     names = (
         "dashboard",
         "harness",
@@ -216,7 +248,7 @@ def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> No
 def test_reports_and_repo_map_leave_back_and_breakpoints_to_the_shell() -> None:
     """Esc and the narrow layout belong to the shell: these screens add neither a back key nor
     breakpoints of their own (the build confirmation is a modal, with its own cancel)."""
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     for name, modals in (("reports", 0), ("repo_map", 1), ("repo_map_settings", 0)):
         source = (screens / f"{name}.py").read_text(encoding="utf-8")
         assert source.count('Binding("escape"') == modals, f"{name}: an Esc binding"
@@ -226,7 +258,7 @@ def test_reports_and_repo_map_leave_back_and_breakpoints_to_the_shell() -> None:
 
 def test_reports_and_repo_map_show_no_demo_data_from_the_mockups() -> None:
     """The mockups' sample values (ids, commits, paths, counts) are not in the screens' sources."""
-    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "screens"
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
     demo = (
         "85abd57e",
         "generation-1e1684b3",
@@ -242,3 +274,22 @@ def test_reports_and_repo_map_show_no_demo_data_from_the_mockups() -> None:
         source = (screens / f"{name}.py").read_text(encoding="utf-8")
         for value in demo:
             assert value not in source, f"{name}: the mockup's sample {value!r}"
+
+
+def test_every_screen_that_opens_the_wizard_hands_it_the_console_server_client() -> None:
+    """The wizard writes the served project through the server; only «Открыть проект» may open it
+    without a client, for a project the server does not serve."""
+    import ast
+
+    screens = Path(__file__).resolve().parents[2] / "harness" / "console" / "tui" / "screens"
+    for name in ("dashboard", "container_route", "recovery", "repo_map_settings", "project_setup"):
+        tree = ast.parse((screens / f"{name}.py").read_text(encoding="utf-8"))
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "id", "") == "ConfigurationScreen"
+        ]
+        assert calls, name
+        for call in calls:
+            assert "client" in {keyword.arg for keyword in call.keywords}, name

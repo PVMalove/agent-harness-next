@@ -26,7 +26,6 @@ HOOK = (
 )
 ROOT = Path(__file__).resolve().parents[2]
 SKILLS = ROOT / "skills" / "first-party" / "engineering"
-DESCRIPTIONS = ROOT / "docs" / "skills"
 BRANCH = "feature/issue-7-demo"
 QA = "make verify"
 # The marker's state is `<HEAD>:<hash of git diff HEAD>`; a clean tree hashes the empty diff.
@@ -343,10 +342,3 @@ def test_the_skill_records_the_marker_that_opens_the_pr_in_each_runtime(
     assert recorded.returncode == 0, recorded.stderr
     assert (project.linked / ".claude" / ".qa-gate" / "passed").is_file()
     assert after_marker.returncode == 0, after_marker.stderr
-
-
-@pytest.mark.parametrize("skill", ["qa-gate", "to-pull-requests"])
-def test_the_russian_description_gives_the_same_record_command(skill: str) -> None:
-    description = (DESCRIPTIONS / f"{skill}.md").read_text(encoding="utf-8")
-
-    assert skill_record_command(skill) in description

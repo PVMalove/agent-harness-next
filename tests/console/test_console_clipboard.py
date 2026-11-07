@@ -8,7 +8,7 @@ from typing import Sequence
 
 import pytest
 
-from harness.console import clipboard
+from harness.console.tui import clipboard
 
 
 class _Tool:

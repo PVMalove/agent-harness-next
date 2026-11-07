@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console import data as console_data
+from harness.console.kernel import data as console_data
 
 
 def test_harness_version_reads_the_package_version_file() -> None:

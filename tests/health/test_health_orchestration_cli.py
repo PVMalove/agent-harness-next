@@ -9,9 +9,9 @@ from pathlib import Path
 
 from harness.health.model import JsonObject
 from harness.orchestration.core.constants import STATE_REL
-from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from harness.orchestration.ledger.lifecycle import JsonObject as LedgerJsonObject
 from harness.orchestration.ledger.lifecycle import JsonValue as LedgerJsonValue
+from harness.orchestration.ledger.lifecycle import LifecycleLedger
 
 _HARNESS_BIN = Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"
 
