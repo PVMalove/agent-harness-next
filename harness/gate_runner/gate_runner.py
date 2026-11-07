@@ -250,13 +250,29 @@ _TRAILER_LINE = re.compile(r"^stage-evidence: (\S+) sha256:([0-9a-f]{64})$")
 
 
 @dataclass(frozen=True)
+class PlannedStage:
+    """What a verification plan says about one stage: its kind, selection and explicit node ids."""
+
+    stage_id: str
+    kind: str
+    selection: str
+    nodeids: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
 class EvidenceContext:
-    """What identifies a verification run in its stage evidence."""
+    """What identifies a verification run in its stage evidence.
+
+    ``planned`` describes the executed commands by stage id (``gate-1`` ...); ``unselected`` lists
+    plan stages that selected no test, which the evidence records as ``not_run`` without a command.
+    """
 
     candidate_sha: str
     plan_sha256: str | None = None
     image_digest: str | None = None
     environment_fingerprint: str | None = None
+    planned: tuple[PlannedStage, ...] = ()
+    unselected: tuple[PlannedStage, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -310,6 +326,26 @@ def _stream_ref(files: dict[str, str], directory: str, kind: str, text: str) -> 
     return FileRef(relative, sha256)
 
 
+def _unselected_stage(context: EvidenceContext, stage: PlannedStage) -> StageEvidence:
+    """A plan stage that selected no test: ``not_run``, with no command, streams or exit code."""
+    return StageEvidence(
+        stage_id=stage.stage_id,
+        kind=stage.kind,
+        selection=stage.selection,
+        candidate_sha=context.candidate_sha,
+        plan_sha256=context.plan_sha256,
+        image_digest=context.image_digest,
+        environment_fingerprint=context.environment_fingerprint,
+        result="not_run",
+        exit_code=None,
+        stdout=None,
+        stderr=None,
+        duration_ms=0,
+        failed_nodeids=(),
+        nodeids=stage.nodeids or (),
+    )
+
+
 def build_stage_evidence(
     context: EvidenceContext,
     entries: Sequence[tuple[str, StageCommand | None]],
@@ -327,13 +363,17 @@ def build_stage_evidence(
     """
     files: dict[str, str] = {}
     stages: list[StageEvidence] = []
+    planned = {stage.stage_id: stage for stage in context.planned}
     for stage_id, item in entries:
         failed = item is not None and item.exit_code != 0 and not item.not_run
+        plan = planned.get(stage_id)
         stages.append(
             StageEvidence(
                 stage_id=stage_id,
-                kind=(kinds or {}).get(stage_id, "custom"),
-                selection=(selections or {}).get(stage_id, "full"),
+                kind=plan.kind if plan else (kinds or {}).get(stage_id, "custom"),
+                selection=plan.selection
+                if plan
+                else (selections or {}).get(stage_id, "full"),
                 candidate_sha=context.candidate_sha,
                 plan_sha256=context.plan_sha256,
                 image_digest=context.image_digest,
@@ -354,8 +394,10 @@ def build_stage_evidence(
                 failed_nodeids=item.failed_nodeids
                 if item is not None and failed
                 else (),
+                nodeids=plan.nodeids if plan else None,
             )
         )
+    stages.extend(_unselected_stage(context, stage) for stage in context.unselected)
     # Round-trip through the validator: a writer can never emit a document its readers refuse.
     document = StageEvidenceDocument.from_json(
         StageEvidenceDocument(tuple(stages)).to_json()
@@ -573,14 +615,18 @@ def _execute_commands(
                     stdout=sanitise(result.stdout or ""),
                     stderr=sanitise(result.stderr or ""),
                     duration_ms=duration_ms,
-                    failed_nodeids=junit_failures(command_env.get(STAGE_ENV_JUNIT), checkout)
+                    failed_nodeids=junit_failures(
+                        command_env.get(STAGE_ENV_JUNIT), checkout
+                    )
                     if result.returncode != 0
                     else (),
                 )
             )
         if result.returncode != 0 and stop_on_failure:
             if unreached is not None:
-                unreached.extend(approved_command_text(item) for item in commands[index + 1 :])
+                unreached.extend(
+                    approved_command_text(item) for item in commands[index + 1 :]
+                )
             break
 
 
@@ -1052,7 +1098,9 @@ def run_qa_stages(
             checkout,
             GroupContext(outputs, started, isinstance(policy, CleanRoomPolicy)),
         )
-        stages.extend(_stage_record(QA_STAGE_PREPARATION, item) for item in prepared.ran)
+        stages.extend(
+            _stage_record(QA_STAGE_PREPARATION, item) for item in prepared.ran
+        )
         entries.extend(
             _gate_entries(QA_STAGE_PREPARATION, prepared.ran, prepared.unreached)
         )
@@ -1067,7 +1115,9 @@ def run_qa_stages(
                 _stage_record(QA_STAGE_PROJECT_FILE_CHECK, i) for i in checked.ran
             )
             entries.extend(
-                _gate_entries(QA_STAGE_GATE, (), [approved_command_text(c) for c in gate])
+                _gate_entries(
+                    QA_STAGE_GATE, (), [approved_command_text(c) for c in gate]
+                )
             )
             return QAStagesResult(
                 stages=stages,

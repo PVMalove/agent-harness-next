@@ -151,15 +151,16 @@ Python строит план при propose. План входит в brief, а 
 
 Выбор никогда не расширяется до `full`: ни `unknown` из ChangeImpact, ни роль QA его не меняют.
 Diff без тестов оставляет статические стадии, не запускает тесты, а стадия тестов пишется в
-stage evidence как `not_run` с причиной `no tests in diff`. План несёт раздел `ticket_diff`
-(`python_tests` и `cargo_targets`), а `impact` остаётся как есть, чтобы профиль hooks `strict` видел те же причины
-`unknown`. Выбор `ticket-diff` — диагностика ветки тикета, а не Release Gate: полный `master`-QA
+stage evidence как `not_run` со стадией `no-tests-in-diff` (`no tests in diff`), без команды и потоков.
+План несёт раздел `ticket_diff` (`python_tests` и `cargo_targets`), а `impact` остаётся как есть, чтобы профиль
+hooks `strict` видел те же причины `unknown`. Выбор `ticket-diff` — диагностика ветки тикета, а не Release Gate: полный `master`-QA
 остаётся единственным evidence для publish (раздел 5).
 
 Gate из раздела 6 для такого плана требует каждый тест выбора diff в планах code-review и QA и
 отказывает `impact_not_covered`, перечисляя пропущенные тесты. Команды `verification_commands`
 этих brief выводятся из плана: lint и typecheck шаблона плюс точные команды выбранных тестов.
-`qa run` записывает в stage evidence выбор `ticket-diff` и явные nodeid.
+`qa run` записывает в stage evidence выбор `ticket-diff` и явные nodeid в необязательном ключе
+`nodeids` стадии `stage-evidence.v1` (Python и Rust-близнец; стадия без ключа пишется как раньше).
 
 ## Операционные последствия
 

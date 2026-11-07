@@ -23,9 +23,20 @@ from typing import Protocol, cast
 
 from ..errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from ..storage import storage_path
-from . import hook_policy, operation_access, operational_guards, operational_hold, qa_lease
+from . import (
+    hook_policy,
+    operation_access,
+    operational_guards,
+    operational_hold,
+    qa_lease,
+)
 from . import verification_plan
-from .qa_execution import NO_REPORT_DOMAINS, RuntimeQaPolicy, container_brief, next_attempt
+from .qa_execution import (
+    NO_REPORT_DOMAINS,
+    RuntimeQaPolicy,
+    container_brief,
+    next_attempt,
+)
 from .core import state_view
 from .pinned_configuration import read_snapshot, capture_unaccepted
 from .core.config import _execution_policy, _lease_ttl, _qa_preparation_commands
@@ -51,6 +62,7 @@ from ..gate_runner.gate_runner import (
     CleanRoomPolicy,
     EvidenceBundle,
     EvidenceContext,
+    PlannedStage,
     GateRunnerError,
     format_evidence_trailer,
     parse_command_log,
@@ -256,6 +268,42 @@ def _artifact_path(ledger: LifecycleLedger, checksum: str) -> Path:
     return _records_root(ledger) / "qa-artifacts" / f"{checksum}.log"
 
 
+NO_TESTS_IN_DIFF = "no-tests-in-diff"
+
+
+def _plan_stages(
+    plan: object,
+) -> tuple[tuple[PlannedStage, ...], tuple[PlannedStage, ...]]:
+    """The stage descriptions a ticket-diff plan gives its QA run (ADR 0023, section 7).
+
+    The brief commands are the plan stages minus the pytest stages that selected no test, so the
+    n-th remaining stage is the evidence stage ``gate-n``. A pytest stage without a selected test
+    has no command: the evidence records it as ``not_run`` under the id ``no-tests-in-diff``
+    (``no-tests-in-diff-2`` and so on for further ones). Any other plan describes nothing.
+    """
+    if not isinstance(plan, dict) or "ticket_diff" not in plan:
+        return (), ()
+    planned: list[PlannedStage] = []
+    unselected: list[PlannedStage] = []
+    for stage in plan["stages"]:
+        nodeids = tuple(stage["nodeids"])
+        if stage["kind"] == "pytest" and not nodeids:
+            suffix = f"-{len(unselected) + 1}" if unselected else ""
+            unselected.append(
+                PlannedStage(
+                    f"{NO_TESTS_IN_DIFF}{suffix}", stage["kind"], stage["selection"], ()
+                )
+            )
+            continue
+        selected = nodeids if stage["selection"] == "ticket-diff" else None
+        planned.append(
+            PlannedStage(
+                f"gate-{len(planned) + 1}", stage["kind"], stage["selection"], selected
+            )
+        )
+    return tuple(planned), tuple(unselected)
+
+
 def evidence_context(
     repo: Path, candidate: str, dispatch: JsonObject | None = None
 ) -> EvidenceContext:
@@ -278,6 +326,7 @@ def evidence_context(
         except HarnessError:
             # The fingerprint is optional evidence: an unreadable manifest must not stop QA.
             fingerprint = None
+    planned, unselected = _plan_stages(plan)
     return EvidenceContext(
         candidate_sha=candidate,
         plan_sha256=verification_plan.plan_sha256(plan)
@@ -287,6 +336,8 @@ def evidence_context(
         if isinstance(images, dict)
         else None,
         environment_fingerprint=fingerprint,
+        planned=planned,
+        unselected=unselected,
     )
 
 
@@ -1183,7 +1234,9 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
             failure,
             "gate-run",
             ops,
-            None if attempt is None else {"attempt": attempt, "domain": "infrastructure"},
+            None
+            if attempt is None
+            else {"attempt": attempt, "domain": "infrastructure"},
         )
         raise failure from exc
     except BaseException as exc:
@@ -1378,7 +1431,9 @@ def _recover_cleared_owner(
         if container_brief(running) and store_is_authority(ledger.root):
             # The owner's container QA run may still run in the runtime: it ends before the
             # dispatch is approved again, so the next run is the next attempt.
-            attempt = ops._load_dispatch_status(root, running["dispatch_id"]).get("attempt")
+            attempt = ops._load_dispatch_status(root, running["dispatch_id"]).get(
+                "attempt"
+            )
             repo = root.parents[len(STATE_REL.parts) - 1]
             RuntimeQaPolicy(repo, running, int(cast(int, attempt or 1)), None).stop()
         _restore_approved(ledger, root, running, ops)

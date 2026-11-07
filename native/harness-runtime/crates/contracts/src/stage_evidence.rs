@@ -70,6 +70,14 @@ where
     Option::<T>::deserialize(deserializer)
 }
 
+/// An optional key that, when written, must hold a list: `null` is an error, a missing key is not.
+fn present<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Vec::<String>::deserialize(deserializer).map(Some)
+}
+
 /// A stored output stream: where it lies, relative to the evidence root, and its sha256.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -101,6 +109,14 @@ pub struct StageEvidence {
     pub stderr: Option<FileRef>,
     pub duration_ms: u64,
     pub failed_nodeids: Vec<String>,
+    /// The explicit node ids a plan selected (the `ticket-diff` selection). Optional: a stage
+    /// written without it keeps the document of the earlier writers byte for byte.
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub nodeids: Option<Vec<String>>,
 }
 
 /// The evidence document of one verification run: its stages in execution order.
@@ -139,6 +155,14 @@ impl StageEvidence {
         }
         if self.failed_nodeids.iter().any(String::is_empty) {
             return refuse("failed_nodeids must not hold an empty string");
+        }
+        if self
+            .nodeids
+            .iter()
+            .flatten()
+            .any(|nodeid| nodeid.is_empty())
+        {
+            return refuse("nodeids must not hold an empty string");
         }
         for stream in [&self.stdout, &self.stderr].into_iter().flatten() {
             if stream.path.is_empty() || !is_lower_hex(&stream.sha256, &[64]) {

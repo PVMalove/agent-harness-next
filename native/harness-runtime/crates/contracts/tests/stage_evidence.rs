@@ -54,7 +54,7 @@ fn the_golden_fixture_covers_pass_fail_and_not_run() {
 
     let results: Vec<_> = document.stages.iter().map(|stage| stage.result).collect();
     assert_eq!(
-        results,
+        results[..3],
         [StageResult::Pass, StageResult::Fail, StageResult::NotRun]
     );
     let failed = &document.stages[1];
@@ -81,6 +81,45 @@ fn the_vocabularies_match_the_registry() {
         rust_values(StageKind::ALL.into_iter().map(StageKind::as_str)),
         registry_values("verification_plan.stage_kind")
     );
+}
+
+#[test]
+fn the_golden_fixture_covers_the_ticket_diff_selection_with_explicit_nodeids() {
+    let document = StageEvidenceDocument::from_json_str(&golden()).expect("the fixture is valid");
+
+    let (selected, empty) = (&document.stages[3], &document.stages[4]);
+    assert_eq!(selected.selection, StageSelection::TicketDiff);
+    assert_eq!(selected.result, StageResult::Pass);
+    assert_eq!(
+        selected.nodeids,
+        Some(vec!["tests/core/test_b.py".to_owned()])
+    );
+    assert_eq!(empty.stage_id, "no-tests-in-diff");
+    assert_eq!(empty.result, StageResult::NotRun);
+    assert_eq!(empty.nodeids, Some(Vec::new()));
+    assert_eq!(document.stages[0].nodeids, None);
+}
+
+#[test]
+fn a_stage_without_nodeids_is_written_without_the_key() {
+    let document = StageEvidenceDocument::from_json_str(&golden()).expect("the fixture is valid");
+
+    let written = serde_json::to_value(&document).expect("a document serializes");
+
+    assert!(written["stages"][0].get("nodeids").is_none());
+    assert_eq!(
+        written["stages"][3]["nodeids"],
+        json!(["tests/core/test_b.py"])
+    );
+    assert_eq!(written["stages"][4]["nodeids"], json!([]));
+}
+
+#[test]
+fn invalid_nodeids_are_refused() {
+    assert!(refused(|d| d["stages"][3]["nodeids"] = json!("tests/a.py")));
+    assert!(refused(|d| d["stages"][3]["nodeids"] = json!([1])));
+    assert!(refused(|d| d["stages"][3]["nodeids"] = json!([""])));
+    assert!(refused(|d| d["stages"][3]["nodeids"] = Value::Null));
 }
 
 #[test]
