@@ -3,10 +3,10 @@
 - **Русский перевод / Суть:**
 
 ```text
-Защита политики hooks: запрет агенту менять ключ hook_policy, настройки и каталоги hooks и писать в .harness/project.json через shell.
+Защита политики hooks: запрет агенту менять ключ hook_policy, настройки и каталоги hooks; запись в .harness/project.json через shell идёт только по ручному подтверждению человека.
 ```
 ## 2. Полное описание
-Критичный hook `PreToolUse` для Bash и инструментов файлов (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `apply_patch` второго runtime). Он блокирует во всех профилях (`minimal`, `standard`, `strict`) и не зависит от роли и окружения: `HOOK_PROFILE` и подобные переменные не читаются. Изменения политики hooks делает человек (ADR 0024, раздел 1).
+Критичный hook `PreToolUse` для Bash и инструментов файлов (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `apply_patch` второго runtime). Он защищает во всех профилях (`minimal`, `standard`, `strict`): блокирует, а запись в `.harness/project.json` через shell отдаёт на ручное подтверждение человека (см. раздел про Bash) и не зависит от роли и окружения: `HOOK_PROFILE` и подобные переменные не читаются. Изменения политики hooks делает человек (ADR 0024, раздел 1).
 
 Решение принимает `protect_hook_policy.py` по принципу fail closed: разрешение — только код `0` и слово `allow`; отсутствие Python, любой другой код и частичная копия модуля дают код `2`. Через конверт `hook_response.py` hook отвечает вердиктом с `hook_id` `protect-hook-policy` и одним из `reason_code`, которые сценарий называет префиксом `[reason_code]` в первой строке stderr.
 
@@ -14,7 +14,7 @@
 - `.claude/settings*.json`, `.codex/hooks.json` и всё внутри каталогов `.claude/hooks` и `.codex/hooks` — блок, `agent-config-edit`.
 - `.harness/project.json` — правка разрешена, только если разобранный ключ `hook_policy` до и после неё совпадает (сравниваются разобранные значения, а не байты; отсутствие ключа тоже значение). Ключ добавлен, изменён или удалён — `hook-policy-changed`. JSON до или после правки не разбирается, не является объектом или содержит повторяющийся ключ, либо результат правки нельзя вычислить заранее (`old_string` не найден или неоднозначен, `NotebookEdit`) — `hook-policy-unparseable`. Правка других ключей разрешена.
 
-**Bash.** Любая запись в `.harness/project.json` — блок, `project-json-shell-write`. Записью считается:
+**Bash.** Любая запись в `.harness/project.json` требует ручного подтверждения человека, `project-json-shell-write`: в Claude Code (задан `CLAUDE_PROJECT_DIR`) hook отвечает вердиктом `ask`, runtime показывает запрос с причиной, а человек подтверждает или отклоняет. Агент называет в `description` команды, что и зачем меняется. Вне Claude Code и без конверта `hook_response.py` тот же отказ остаётся блоком (код `2`). Записью считается:
 - перенаправление в этот файл (`>`, `>>`, `>|`, `&>`, `<>`, с номером дескриптора и heredoc): цели перенаправлений записывает строгий лексер `pr_commands.StrictLexer` (`strict_redirections`);
 - упоминание файла аргументом любой программы, кроме читающих (`cat`, `grep`, `rg`, `head`, `tail`, `wc`, `ls`, `jq`, `diff`, `sed` без `-i`/`--in-place`, `echo`, `printf`, `cd` и безопасные подкоманды git: `status`, `diff`, `log`, `show`, `add`, `commit`, `blame`, `ls-files` и т. п.): `tee`, `cp`, `mv`, `install`, `dd of=`, `truncate`, `ln`, `sed -i`, `git checkout|restore`, код интерпретатора (`python -c`, `perl -pi`), `bash -c`;
 - программа за обёрткой `command`, `env`, `sudo` или `timeout` решает так же, как без обёртки: `command ls .harness` и `timeout 5 sed -n 1,5p .harness/project.json` разрешены, `sudo cp a .harness/project.json` — блок. Опции обёртки разбираются по таблице `WRAPPERS`. Обёртка с опцией не из таблицы (`env -C`, `env -S`, `sudo -D`, `sudo -e`) сама считается пишущей программой. Присваивание `env F=.harness/project.json` перед пишущей программой — тоже упоминание;
@@ -35,6 +35,7 @@
 - **Вход (Input/Brief):** JSON-payload PreToolUse через stdin: `tool_name`, `tool_input` (`command` либо `file_path`/`notebook_path` с содержимым правки; у `apply_patch` в `command` лежит патч) и `cwd`.
 - **Выход (Output/Report):**
   - **Разрешение:** код `0`; последняя строка stderr — вердикт `allow`.
+  - **Ручное подтверждение:** только `project-json-shell-write` в Claude Code: тело завершается кодом `3`, конверт отвечает кодом `0`, вердиктом `ask` и JSON `hookSpecificOutput.permissionDecision: "ask"` в stdout. Остальные отказы никогда не спрашивают.
   - **Блокировка:** код `2`, сообщение с префиксом `[reason_code]` в stderr и вердикт `block`. Коды: `hook-policy-changed`, `hook-policy-unparseable`, `project-json-shell-write`, `agent-config-edit`, `apply-patch-unparseable` (патч `apply_patch` не разбирается), `hook-policy-protected` (payload не разобран или в нём нет пути и команды, модуль не дал решения). Все зарегистрированы в `harness/orchestration/system_fields.v1.json` (`hook.reason_code`).
 ## Источник
 
