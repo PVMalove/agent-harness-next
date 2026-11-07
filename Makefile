@@ -34,7 +34,8 @@ format: $(HARNESS_ENV_STAMP) ## Автоформатирование кода (r
 	$(HARNESS_PYTHON) -m ruff format .
 	$(HARNESS_PYTHON) -m ruff check --fix-only .
 
-lint: typecheck $(HARNESS_ENV_STAMP) ## Линтинг кода (ruff check + mypy)
+lint: typecheck $(HARNESS_ENV_STAMP) ## Линтинг кода (ruff check + mypy + лицензионные шапки)
+	$(HARNESS_PYTHON) scripts/check_license_headers.py
 	$(HARNESS_PYTHON) -m ruff check .
 
 verify: $(HARNESS_ENV_STAMP) ## Запустить полный набор проверок проекта (sanity checks, mypy, tests, clean-room)
