@@ -250,6 +250,11 @@
           "minimum": 1,
           "description": "Порог числа related_tests ChangeImpact: при превышении выбор стадии pytest расширяется до full, а не завершается ошибкой."
         },
+        "ticket_diff_selection": {
+          "type": "boolean",
+          "default": false,
+          "description": "Выключатель выбора тестов по diff тикета (ADR 0023). При true и цели integration/* планы developer-retry, code-review и qa выбирают ровно тесты diff base..candidate (selection ticket-diff) и никогда не расширяются до full; при false или цели в ветку по умолчанию планы прежние. Замораживается в batch вместе с политикой."
+        },
         "stages": {
           "type": "array",
           "minItems": 1,

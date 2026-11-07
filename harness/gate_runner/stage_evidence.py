@@ -25,7 +25,7 @@ SCHEMA = "stage-evidence.v1"
 # The exact values of the registry fields ``report.check_result``, ``verification_plan.selection``
 # and ``verification_plan.stage_kind``.
 RESULTS = ("pass", "fail", "not_run")
-SELECTIONS = ("full", "focused", "failed-only")
+SELECTIONS = ("full", "focused", "failed-only", "ticket-diff")
 KINDS = ("lint", "typecheck", "pytest", "clean-room", "custom")
 
 DOCUMENT_KEYS = frozenset({"schema", "stages"})
@@ -46,6 +46,9 @@ STAGE_KEYS = frozenset(
         "failed_nodeids",
     }
 )
+# ``nodeids`` is optional: the explicit node ids a plan selected (the ``ticket-diff`` selection).
+# A stage written without it keeps the document of the earlier writers byte for byte.
+OPTIONAL_STAGE_KEYS = frozenset({"nodeids"})
 REF_KEYS = frozenset({"path", "sha256"})
 # A process exit status: signed (POSIX, Rust ``i32``) or unsigned (a Windows NTSTATUS such as
 # 0xC0000005) 32-bit; the Rust twin enforces the same range.
@@ -67,11 +70,16 @@ def _refuse(where: str, problem: str) -> StageEvidenceError:
     )
 
 
-def _object(value: object, where: str, keys: frozenset[str]) -> Mapping[str, object]:
+def _object(
+    value: object,
+    where: str,
+    keys: frozenset[str],
+    optional: frozenset[str] = frozenset(),
+) -> Mapping[str, object]:
     if not isinstance(value, dict):
         raise _refuse(where, "must be an object")
     missing = sorted(keys - set(value))
-    unknown = sorted(set(value) - keys)
+    unknown = sorted(set(value) - keys - optional)
     if missing or unknown:
         raise _refuse(
             where,
@@ -149,11 +157,12 @@ class StageEvidence:
     stderr: FileRef | None
     duration_ms: int
     failed_nodeids: tuple[str, ...]
+    nodeids: tuple[str, ...] | None = None
 
     @classmethod
     def from_json(cls, value: object, where: str) -> StageEvidence:
         """Validate one stage record: exact keys, closed vocabularies and cross-field rules."""
-        data = _object(value, where, STAGE_KEYS)
+        data = _object(value, where, STAGE_KEYS, OPTIONAL_STAGE_KEYS)
         exit_code = (
             None
             if data["exit_code"] is None
@@ -174,6 +183,12 @@ class StageEvidence:
             raise _refuse(
                 f"{where}.failed_nodeids", "must be a list of non-empty strings"
             )
+        selected = data.get("nodeids")
+        if "nodeids" in data and (
+            not isinstance(selected, list)
+            or not all(isinstance(item, str) and item for item in selected)
+        ):
+            raise _refuse(f"{where}.nodeids", "must be a list of non-empty strings")
         stage = cls(
             stage_id=_text(data["stage_id"], f"{where}.stage_id"),
             kind=_member(data["kind"], f"{where}.kind", KINDS),
@@ -198,6 +213,7 @@ class StageEvidence:
             else FileRef.from_json(data["stderr"], f"{where}.stderr"),
             duration_ms=duration,
             failed_nodeids=tuple(cast(list[str], nodeids)),
+            nodeids=None if selected is None else tuple(cast(list[str], selected)),
         )
         stage._check_consistency(where)
         return stage
@@ -224,8 +240,11 @@ class StageEvidence:
             )
 
     def to_json(self) -> dict[str, object]:
-        """The JSON form with every key present (``null`` for an absent value)."""
-        return {
+        """The JSON form with every key present (``null`` for an absent value).
+
+        ``nodeids`` is written only when the stage carries it.
+        """
+        document: dict[str, object] = {
             "stage_id": self.stage_id,
             "kind": self.kind,
             "selection": self.selection,
@@ -240,6 +259,9 @@ class StageEvidence:
             "duration_ms": self.duration_ms,
             "failed_nodeids": list(self.failed_nodeids),
         }
+        if self.nodeids is not None:
+            document["nodeids"] = list(self.nodeids)
+        return document
 
 
 @dataclass(frozen=True)

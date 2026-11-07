@@ -29,6 +29,7 @@ from harness.gate_runner.gate_runner import (
     approved_command_text,
     GateRunnerError,
     LocalPolicy,
+    PlannedStage,
     _clean_room_python,
     diagnose,
     format_evidence_trailer,
@@ -849,6 +850,54 @@ def test_failed_nodeids_come_from_the_junit_report_the_command_wrote(
         "tests/test_x.py::test_a[1]",
         "tests/test_x.py::TestK::test_b",
     )
+
+
+def test_a_planned_gate_command_records_the_plan_selection_and_explicit_nodeids(
+    tmp_path: Path,
+) -> None:
+    context = EvidenceContext(
+        "a" * 40,
+        planned=(
+            PlannedStage("gate-1", "pytest", "ticket-diff", ("tests/test_x.py",)),
+        ),
+        unselected=(PlannedStage("no-tests-in-diff", "pytest", "ticket-diff"),),
+    )
+
+    result = run_gate(
+        [[sys.executable, "-c", "pass"], [sys.executable, "-c", "pass"]],
+        LocalPolicy(tmp_path),
+        stop_on_failure=True,
+        evidence=context,
+    )
+
+    assert result.evidence is not None
+    stages = result.evidence.document.stages
+    assert [(s.stage_id, s.kind, s.selection, s.nodeids) for s in stages] == [
+        ("gate-1", "pytest", "ticket-diff", ("tests/test_x.py",)),
+        ("gate-2", "custom", "full", None),
+        ("no-tests-in-diff", "pytest", "ticket-diff", ()),
+    ]
+    assert [s.result for s in stages] == ["pass", "pass", "not_run"]
+    skipped = stages[-1]
+    assert (
+        skipped.exit_code is None and skipped.stdout is None and skipped.stderr is None
+    )
+
+
+def test_a_run_without_a_plan_selection_keeps_the_evidence_it_always_had(
+    tmp_path: Path,
+) -> None:
+    result = run_gate(
+        [[sys.executable, "-c", "pass"]],
+        LocalPolicy(tmp_path),
+        stop_on_failure=True,
+        evidence=EvidenceContext("a" * 40),
+    )
+
+    assert result.evidence is not None
+    (stage,) = result.evidence.document.stages
+    assert (stage.kind, stage.selection, stage.nodeids) == ("custom", "full", None)
+    assert "nodeids" not in stage.to_json()
 
 
 _RECORD_ENV = (

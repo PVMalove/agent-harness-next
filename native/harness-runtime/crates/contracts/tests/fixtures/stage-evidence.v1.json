@@ -60,6 +60,46 @@
       "stderr": null,
       "duration_ms": 0,
       "failed_nodeids": []
+    },
+    {
+      "stage_id": "gate-4",
+      "kind": "pytest",
+      "selection": "ticket-diff",
+      "candidate_sha": "de6916a0ef3080eddc0d32c86fe567ff4d334f62",
+      "plan_sha256": "64879f7d6b960a01909762d911a32d4582c20010c5641ee90278b644a9e3b525",
+      "image_digest": "6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d",
+      "environment_fingerprint": "44863b03e9909b7100e05b02526909a346fd7455183f6619e0fe6198c89981e0",
+      "result": "pass",
+      "exit_code": 0,
+      "stdout": {
+        "path": "qa-artifacts/1033b53b7c1704168c45b722ef1b02259048e7f3f4a7d442e391ca7bc022f2e7.stdout.txt",
+        "sha256": "1033b53b7c1704168c45b722ef1b02259048e7f3f4a7d442e391ca7bc022f2e7"
+      },
+      "stderr": {
+        "path": "qa-artifacts/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.stderr.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "duration_ms": 2100,
+      "failed_nodeids": [],
+      "nodeids": [
+        "tests/core/test_b.py"
+      ]
+    },
+    {
+      "stage_id": "no-tests-in-diff",
+      "kind": "pytest",
+      "selection": "ticket-diff",
+      "candidate_sha": "de6916a0ef3080eddc0d32c86fe567ff4d334f62",
+      "plan_sha256": "64879f7d6b960a01909762d911a32d4582c20010c5641ee90278b644a9e3b525",
+      "image_digest": "6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d",
+      "environment_fingerprint": "44863b03e9909b7100e05b02526909a346fd7455183f6619e0fe6198c89981e0",
+      "result": "not_run",
+      "exit_code": null,
+      "stdout": null,
+      "stderr": null,
+      "duration_ms": 0,
+      "failed_nodeids": [],
+      "nodeids": []
     }
   ]
 }

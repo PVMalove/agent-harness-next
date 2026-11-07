@@ -51,6 +51,7 @@ from ..gate_runner.gate_runner import (
     CleanRoomPolicy,
     EvidenceBundle,
     EvidenceContext,
+    PlannedStage,
     GateRunnerError,
     format_evidence_trailer,
     parse_command_log,
@@ -256,6 +257,42 @@ def _artifact_path(ledger: LifecycleLedger, checksum: str) -> Path:
     return _records_root(ledger) / "qa-artifacts" / f"{checksum}.log"
 
 
+NO_TESTS_IN_DIFF = "no-tests-in-diff"
+
+
+def _plan_stages(
+    plan: object,
+) -> tuple[tuple[PlannedStage, ...], tuple[PlannedStage, ...]]:
+    """The stage descriptions a ticket-diff plan gives its QA run (ADR 0023, section 7).
+
+    The brief commands are the plan stages minus the pytest stages that selected no test, so the
+    n-th remaining stage is the evidence stage ``gate-n``. A pytest stage without a selected test
+    has no command: the evidence records it as ``not_run`` under the id ``no-tests-in-diff``
+    (``no-tests-in-diff-2`` and so on for further ones). Any other plan describes nothing.
+    """
+    if not isinstance(plan, dict) or "ticket_diff" not in plan:
+        return (), ()
+    planned: list[PlannedStage] = []
+    unselected: list[PlannedStage] = []
+    for stage in plan["stages"]:
+        nodeids = tuple(stage["nodeids"])
+        if stage["kind"] == "pytest" and not nodeids:
+            suffix = f"-{len(unselected) + 1}" if unselected else ""
+            unselected.append(
+                PlannedStage(
+                    f"{NO_TESTS_IN_DIFF}{suffix}", stage["kind"], stage["selection"], ()
+                )
+            )
+            continue
+        selected = nodeids if stage["selection"] == "ticket-diff" else None
+        planned.append(
+            PlannedStage(
+                f"gate-{len(planned) + 1}", stage["kind"], stage["selection"], selected
+            )
+        )
+    return tuple(planned), tuple(unselected)
+
+
 def evidence_context(
     repo: Path, candidate: str, dispatch: JsonObject | None = None
 ) -> EvidenceContext:
@@ -278,6 +315,7 @@ def evidence_context(
         except HarnessError:
             # The fingerprint is optional evidence: an unreadable manifest must not stop QA.
             fingerprint = None
+    planned, unselected = _plan_stages(plan)
     return EvidenceContext(
         candidate_sha=candidate,
         plan_sha256=verification_plan.plan_sha256(plan)
@@ -287,6 +325,8 @@ def evidence_context(
         if isinstance(images, dict)
         else None,
         environment_fingerprint=fingerprint,
+        planned=planned,
+        unselected=unselected,
     )
 
 

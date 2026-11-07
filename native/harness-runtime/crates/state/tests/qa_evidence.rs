@@ -171,8 +171,12 @@ fn a_qa_run_of_another_target_does_not_confirm_the_pair() {
 }
 
 #[test]
-fn focused_and_failed_only_stages_are_not_full() {
-    for selection in [StageSelection::Focused, StageSelection::FailedOnly] {
+fn focused_failed_only_and_ticket_diff_stages_are_not_full() {
+    for selection in [
+        StageSelection::Focused,
+        StageSelection::FailedOnly,
+        StageSelection::TicketDiff,
+    ] {
         let mut stages = passed_stages();
         stages[1].selection = selection;
 
