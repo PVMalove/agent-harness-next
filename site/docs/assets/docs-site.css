@@ -3456,3 +3456,34 @@ body {
   padding-left: 0.4rem;
   border-left: 1px solid var(--ah-rule);
 }
+
+/* Tree icons: folders group child pages, files mark a page. */
+.md-sidebar--primary {
+  --ah-nav-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
+  --ah-nav-file: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'/%3E%3Cpath d='M14 3v6h6'/%3E%3C/svg%3E");
+}
+
+.md-sidebar--primary .md-nav__item--nested > .md-nav__container > a.md-nav__link::before,
+.md-sidebar--primary .md-nav__item--nested > label.md-nav__link::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.12rem;
+  background-color: currentColor;
+  opacity: 0.7;
+  -webkit-mask: var(--ah-nav-folder) center / contain no-repeat;
+  mask: var(--ah-nav-folder) center / contain no-repeat;
+}
+
+.md-sidebar--primary .md-nav__item:not(.md-nav__item--nested) > a.md-nav__link::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.12rem;
+  background-color: currentColor;
+  opacity: 0.7;
+  -webkit-mask: var(--ah-nav-file) center / contain no-repeat;
+  mask: var(--ah-nav-file) center / contain no-repeat;
+}
