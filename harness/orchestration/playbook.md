@@ -1625,6 +1625,15 @@ dispatch or report, or changes Git:
   After the merge, `integration next --pull-request N --merge-commit <sha>` compares the tree of
   the merge commit with `candidate_tree_sha`: `merged`, or `merge-tree-mismatch`, a blocker after
   which the next merge from the target branch needs a new full QA of its head.
+- **Test policy by PR target** (ADR 0023 and ADR 0026, amendments of 2026-11-07). With the
+  `ticket_diff_selection` policy flag on, the PR of a ticket into an `integration/*` branch is
+  confirmed by the run of its own diff: the pair records `selection` `ticket-diff`, the QA plan
+  selects the diff tests, and CI runs the light job `verify-light`. The PR of the integration branch
+  into `master` needs a pair that requires `full`: the full CI that `integration collect-ci`
+  accepts, or the fallback local full QA (`integration local-qa`). A `-light` check never confirms a
+  `full` pair (`collect-ci` answers `light_check`). A failed full run before `master` is fixed by
+  ordinary fix tickets whose base is the integration branch; the coordinator does not patch the
+  integration branch directly, and no fix ticket is created automatically.
 
 Records live under `reports/integration/`, `reports/integration-evidence/`,
 `reports/integration-pair/`, `reports/resolver/` and `reports/resolver-events/` in the existing
