@@ -770,6 +770,53 @@ fn qa_evidence_verify_judges_the_stored_pair_and_writes_nothing() {
     assert_eq!(before.revision, after.revision);
 }
 
+/// The selection a pair requires is the one its stored record says: the stages of the ticket's diff
+/// confirm the pair into an integration branch and are refused for the pair into the default
+/// branch, over the same transport and with the same request.
+#[test]
+fn qa_evidence_verify_accepts_diff_stages_only_for_a_pair_that_requires_them() {
+    let mut stages = qa_store::passed_stages();
+    stages[1].selection = contracts::StageSelection::TicketDiff;
+    stages[1].nodeids = Some(vec!["tests/test_x.py".to_owned()]);
+    let pairs = [
+        ("qa-evidence-into-integration", qa_store::diff_pair_record()),
+        ("qa-evidence-into-default", qa_store::pair_record()),
+        ("qa-evidence-old-contract", qa_store::legacy_pair_record()),
+    ];
+    let mut verdicts = Vec::new();
+
+    for (name, pair) in pairs {
+        let fixture = Fixture::new(name);
+        let state_dir = legacy_state(&fixture);
+        let pointer = state::legacy::read_pointer(&state_dir).unwrap().unwrap();
+        let run = qa_store::accepted_qa_with(stages.clone(), pair);
+        qa_store::write_legacy(
+            &state_dir.join("generations").join(pointer.generation),
+            &run,
+        );
+        state::migrate::run(&fixture.root, &approval()).unwrap();
+        let (_runtime, mut stream, _features) = serving(&fixture, state_dir);
+
+        let answer = verify(&mut stream, qa_store::CANDIDATE, qa_store::TARGET);
+
+        assert_eq!(answer.status, Status::Ok, "{name}: {answer:?}");
+        let result = answer.result.unwrap();
+        let codes: Vec<String> = result["violations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|violation| violation["code"].as_str().unwrap().to_owned())
+            .collect();
+        verdicts.push((result["verdict"].as_str().unwrap().to_owned(), codes));
+    }
+
+    let refused = ("refused".to_owned(), vec!["selection_not_full".to_owned()]);
+    assert_eq!(
+        verdicts,
+        [("ok".to_owned(), Vec::new()), refused.clone(), refused]
+    );
+}
+
 /// In the file-ledger epoch the store is not the authority: the runtime has no verdict to give.
 #[test]
 fn qa_evidence_verify_of_the_file_ledger_is_not_found() {
