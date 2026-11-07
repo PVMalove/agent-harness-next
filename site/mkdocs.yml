@@ -72,6 +72,12 @@ plugins:
           nav_translations:
             Главная: Home
             Начало: Getting started
+            Настройки: Settings
+            Роли и транспорт: Roles and transport
+            Политики: Policies
+            Доступ и контейнер: Access and container
+            Верификация: Verification
+            Контейнерный исполнитель: Container executor
             Руководства: Guides
             Рабочий поток: Workflow
             Примеры: Examples
@@ -130,6 +136,17 @@ nav:
   - Главная: index.md
   - Начало:
       - getting-started/index.md
+      - Настройки:
+          - getting-started/settings/index.md
+          - project.json: getting-started/settings/project.md
+          - orchestration.json:
+              - getting-started/settings/orchestration/index.md
+              - Роли и транспорт: getting-started/settings/orchestration/roles.md
+              - Политики: getting-started/settings/orchestration/policies.md
+              - Доступ и контейнер: getting-started/settings/orchestration/access.md
+              - Верификация: getting-started/settings/orchestration/verification.md
+          - Контейнерный исполнитель: getting-started/settings/container.md
+          - Test-author: getting-started/settings/test-author.md
   - Руководства:
       - Рабочий поток: guides/workflow.md
       - "/implement": guides/implement.md
