@@ -418,6 +418,38 @@ class TicketDiffDispatchTests(TicketDiffFixture):
                     plan["ticket_diff"]["python_tests"], ["services/test_y.py"]
                 )
 
+    def test_the_brief_commands_are_derived_from_the_plan(self) -> None:
+        self._configure(self._on())
+
+        briefs = self._briefs("test_y", "z")
+
+        derived = ["make lint", "python -m pytest -q services/test_y.py"]
+        for name in ("retry", "clean_review", "qa"):
+            with self.subTest(brief=name):
+                self.assertEqual(briefs[name]["verification_commands"], derived)
+                self.assertEqual(
+                    briefs[name]["transition"]["verification_commands"], derived
+                )
+        self.assertEqual(briefs["first"]["verification_commands"], ["make dev"])
+
+    def test_a_diff_without_tests_reports_only_the_static_commands(self) -> None:
+        self._configure(self._on())
+
+        briefs = self._briefs("x", "z")
+
+        for name in ("retry", "clean_review", "qa"):
+            self.assertEqual(briefs[name]["verification_commands"], ["make lint"])
+
+    def test_the_flag_off_keeps_the_role_commands(self) -> None:
+        self._configure(self._on(ticket_diff_selection=False))
+
+        briefs = self._briefs("test_y", "z")
+
+        self.assertEqual(
+            briefs["clean_review"]["verification_commands"], ["make review"]
+        )
+        self.assertEqual(briefs["qa"]["verification_commands"], ["make verify"])
+
     def test_the_plan_digest_is_bound_to_the_approval(self) -> None:
         self._configure(self._on())
 

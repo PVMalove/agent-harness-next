@@ -32,6 +32,7 @@ from harness.orchestration.contract import (
     resolve_min_repo_map_tier,
     retry_verification_commands,
     role_verification_commands,
+    ticket_diff_plan_commands,
 )
 from harness.orchestration.core import config as core_config
 from harness.orchestration.core import utils
@@ -1375,6 +1376,10 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         )
         if plan is not None and role_name in {"code-review", "qa"}:
             verification_plan.require_covered(plan)
+        # A ticket-diff plan derives the commands the role reports from its own stages.
+        derived_commands = ticket_diff_plan_commands(plan)
+        if derived_commands is not None:
+            dispatch_commands = derived_commands
         project_snapshot = getattr(config, "project_snapshot", None)
         if not isinstance(project_snapshot, dict):
             project_snapshot = core_config._project(repo)
