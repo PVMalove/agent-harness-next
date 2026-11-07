@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+// SPDX-License-Identifier: BUSL-1.1
+// Licensed under the Business Source License 1.1 (BSL-1.1).
+// Commercial use, sale, or use in commercial application development is strictly
+// prohibited without prior written permission from the copyright holder.
+// Removing or altering this header is prohibited and voids all license rights.
+
 //! The process supervisor of `harness-runtime` (ADR 0022, sections 2 and 3; ADR 0021,
 //! sections 4 and 6).
 //!
