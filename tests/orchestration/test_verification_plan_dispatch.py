@@ -174,6 +174,45 @@ class PlanFixture(unittest.TestCase):
             "qa": qa,
         }
 
+    def _cli(self, *argv: str) -> tuple[int, str, str]:
+        fx = self.fx
+        out, err = io.StringIO(), io.StringIO()
+        command = [
+            "coordinator.py",
+            "--repo",
+            str(fx.repo),
+            "--state-dir",
+            str(fx.state_dir),
+            *argv,
+        ]
+        with (
+            mock.patch.object(sys, "argv", command),
+            contextlib.redirect_stdout(out),
+            contextlib.redirect_stderr(err),
+        ):
+            code = coordinator.main()
+        return code, out.getvalue(), err.getvalue()
+
+    def _propose_cli(
+        self, batch_id: str, role: str, candidate: str
+    ) -> tuple[int, str, str]:
+        return self._cli(
+            "dispatch", "propose", "--batch", batch_id, "--role", role,
+            "--candidate-commit", candidate, "--runtime", "claude",
+            "--model", "sonnet", "--effort", "high",
+        )  # fmt: skip
+
+    def _create_cli(
+        self, batch_id: str, role: str, candidate: str
+    ) -> tuple[int, str, str]:
+        return self._cli(
+            "dispatch", "create", "--batch", batch_id, "--role", role,
+            "--candidate-commit", candidate, "--runtime", "claude",
+            "--model", "sonnet", "--effort", "high",
+            "--approved-by", "Malove", "--approved-at", self.fx.APPROVED_AT,
+            "--transition-digest", "0" * 64,
+        )  # fmt: skip
+
 
 class VerificationPlanDispatchTests(PlanFixture):
     def test_the_developer_retry_review_and_qa_briefs_carry_a_plan(self) -> None:
@@ -340,8 +379,8 @@ class VerificationPlanDispatchTests(PlanFixture):
             operational_guards.validate_binding(brief, briefs["batch_id"])
 
 
-class TicketDiffDispatchTests(PlanFixture):
-    """Briefs of a batch whose integration target is ``integration/*`` (ADR 0023, section 7)."""
+class TicketDiffFixture(PlanFixture):
+    """A batch whose integration target is ``integration/*`` (ADR 0023, section 7)."""
 
     integration_ref = "integration/it"
 
@@ -358,6 +397,10 @@ class TicketDiffDispatchTests(PlanFixture):
 
     def _on(self, **changes: object) -> JsonObject:
         return {**POLICY, "ticket_diff_selection": True, **changes}
+
+
+class TicketDiffDispatchTests(TicketDiffFixture):
+    """Briefs of a batch on an ``integration/*`` target."""
 
     def test_the_retry_review_and_qa_plans_select_the_tests_of_the_diff(self) -> None:
         self._configure(self._on())
@@ -452,45 +495,6 @@ class ImpactGateTests(PlanFixture):
             return plan
 
         return mock.patch.object(verification_plan, "build_plan", side_effect=build)
-
-    def _cli(self, *argv: str) -> tuple[int, str, str]:
-        fx = self.fx
-        out, err = io.StringIO(), io.StringIO()
-        command = [
-            "coordinator.py",
-            "--repo",
-            str(fx.repo),
-            "--state-dir",
-            str(fx.state_dir),
-            *argv,
-        ]
-        with (
-            mock.patch.object(sys, "argv", command),
-            contextlib.redirect_stdout(out),
-            contextlib.redirect_stderr(err),
-        ):
-            code = coordinator.main()
-        return code, out.getvalue(), err.getvalue()
-
-    def _propose_cli(
-        self, batch_id: str, role: str, candidate: str
-    ) -> tuple[int, str, str]:
-        return self._cli(
-            "dispatch", "propose", "--batch", batch_id, "--role", role,
-            "--candidate-commit", candidate, "--runtime", "claude",
-            "--model", "sonnet", "--effort", "high",
-        )  # fmt: skip
-
-    def _create_cli(
-        self, batch_id: str, role: str, candidate: str
-    ) -> tuple[int, str, str]:
-        return self._cli(
-            "dispatch", "create", "--batch", batch_id, "--role", role,
-            "--candidate-commit", candidate, "--runtime", "claude",
-            "--model", "sonnet", "--effort", "high",
-            "--approved-by", "Malove", "--approved-at", self.fx.APPROVED_AT,
-            "--transition-digest", "0" * 64,
-        )  # fmt: skip
 
     def _accepted_review(self) -> tuple[str, str]:
         batch_id, candidate = self._assessed_candidate()
@@ -588,6 +592,91 @@ class ImpactGateTests(PlanFixture):
         self.assertEqual(code, 0)
 
 
+class TicketDiffGateTests(TicketDiffFixture):
+    """The impact gate of a ticket-diff plan lists every skipped test of the diff selection."""
+
+    def _skipping(self, *skipped: str) -> mock._patch[mock.MagicMock]:
+        """Replace the built plan by one whose stages do not select the named tests."""
+        real = verification_plan.build_plan
+
+        def build(*args: object, **kwargs: object) -> JsonObject:
+            plan = real(*args, **kwargs)  # type: ignore[arg-type]
+            for stage in plan["stages"]:
+                stage["nodeids"] = [n for n in stage["nodeids"] if n not in skipped]
+            return plan
+
+        return mock.patch.object(verification_plan, "build_plan", side_effect=build)
+
+    def _reviewed(self) -> tuple[str, str]:
+        self._configure({**POLICY, "ticket_diff_selection": True})
+        batch_id, candidate = self._assessed_candidate_with_test()
+        return batch_id, candidate
+
+    def _assessed_candidate_with_test(self) -> tuple[str, str]:
+        fx = self.fx
+        batch_id = fx._create_batch(integration_ref=self.integration_ref)["batch_id"]
+        fx._accepted_architect(batch_id)
+        first = fx._dispatch(batch_id, "developer")["brief"]
+        fx._start(first["dispatch_id"])
+        candidate, changed = fx._developer_commit("test_y")
+        fx._submit(
+            first["dispatch_id"], fx._developer_report(first, candidate, changed)
+        )
+        fx._decide(batch_id, "accept")
+        fx._assess(batch_id, candidate, changed)
+        return batch_id, candidate
+
+    def test_a_review_plan_that_skips_a_diff_test_is_refused_with_exit_code_2(
+        self,
+    ) -> None:
+        batch_id, candidate = self._reviewed()
+        before = self.fx._batch_record(batch_id)
+
+        with self._skipping("services/test_y.py"):
+            code, out, err = self._propose_cli(batch_id, "code-review", candidate)
+
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("impact_not_covered", err)
+        self.assertIn("services/test_y.py", err)
+        self.assertEqual(self.fx._batch_record(batch_id), before)
+
+    def test_creating_a_review_dispatch_is_refused_too_and_writes_no_brief(
+        self,
+    ) -> None:
+        batch_id, candidate = self._reviewed()
+        before = self.fx._batch_record(batch_id)["dispatches"]
+
+        with self._skipping("services/test_y.py"):
+            code, _, err = self._create_cli(batch_id, "code-review", candidate)
+
+        self.assertEqual(code, 2)
+        self.assertIn("services/test_y.py", err)
+        self.assertEqual(self.fx._batch_record(batch_id)["dispatches"], before)
+
+    def test_the_real_ticket_diff_plan_is_proposed_with_exit_code_0(self) -> None:
+        batch_id, candidate = self._reviewed()
+
+        code, out, _ = self._propose_cli(batch_id, "code-review", candidate)
+
+        self.assertEqual(code, 0)
+        plan = json.loads(out)["verification_plan"]
+        self.assertEqual(_stage(plan, "tests")["nodeids"], ["services/test_y.py"])
+
+    def test_a_qa_plan_that_skips_a_diff_test_is_refused_with_exit_code_2(
+        self,
+    ) -> None:
+        batch_id, candidate = self._reviewed()
+        self.fx._reported_review(batch_id, candidate)
+        self.fx._decide(batch_id, "accept")
+
+        with self._skipping("services/test_y.py"):
+            code, _, err = self._propose_cli(batch_id, "qa", candidate)
+
+        self.assertEqual(code, 2)
+        self.assertIn("services/test_y.py", err)
+
+
 class UncoveredTestsTests(unittest.TestCase):
     @staticmethod
     def _plan(*stages: tuple[str, str, list[str]], related: list[str]) -> JsonObject:
@@ -626,6 +715,73 @@ class UncoveredTestsTests(unittest.TestCase):
 
     def test_no_related_tests_leave_nothing_uncovered(self) -> None:
         plan = self._plan(("pytest", "focused", []), related=[])
+
+        self.assertEqual(verification_plan.uncovered_tests(plan), [])
+
+
+class TicketDiffUncoveredTests(unittest.TestCase):
+    @staticmethod
+    def _plan(
+        *stages: tuple[str, str, list[str]],
+        python: list[str],
+        cargo: list[str] = (),  # type: ignore[assignment]
+        related: list[str] | None = None,
+    ) -> JsonObject:
+        return {
+            "role": "qa",
+            "impact": {"related_tests": related or []},
+            "ticket_diff": {
+                "python_tests": python,
+                "cargo_targets": [
+                    {"target_id": target, "argv": []} for target in cargo
+                ],
+            },
+            "stages": [
+                {"kind": kind, "selection": selection, "nodeids": nodeids}
+                for kind, selection, nodeids in stages
+            ],
+        }
+
+    def test_a_plan_selecting_every_diff_test_leaves_nothing_uncovered(self) -> None:
+        plan = self._plan(
+            ("pytest", "ticket-diff", ["tests/a.py", "tests/b.py"]),
+            ("custom", "ticket-diff", ["state::lib"]),
+            python=["tests/a.py", "tests/b.py"],
+            cargo=["state::lib"],
+        )
+
+        self.assertEqual(verification_plan.uncovered_tests(plan), [])
+
+    def test_every_skipped_python_and_cargo_test_is_listed(self) -> None:
+        plan = self._plan(
+            ("pytest", "ticket-diff", ["tests/a.py"]),
+            python=["tests/a.py", "tests/b.py"],
+            cargo=["state::lib", "state::test::x"],
+        )
+
+        self.assertEqual(
+            verification_plan.uncovered_tests(plan),
+            ["tests/b.py", "state::lib", "state::test::x"],
+        )
+
+    def test_a_full_pytest_stage_covers_python_tests_but_not_cargo_targets(
+        self,
+    ) -> None:
+        plan = self._plan(
+            ("pytest", "full", []), python=["tests/a.py"], cargo=["state::lib"]
+        )
+
+        self.assertEqual(verification_plan.uncovered_tests(plan), ["state::lib"])
+
+    def test_the_import_graph_related_tests_are_not_required(self) -> None:
+        plan = self._plan(
+            ("pytest", "ticket-diff", []), python=[], related=["tests/other.py"]
+        )
+
+        self.assertEqual(verification_plan.uncovered_tests(plan), [])
+
+    def test_a_diff_without_tests_requires_nothing(self) -> None:
+        plan = self._plan(("pytest", "ticket-diff", []), python=[])
 
         self.assertEqual(verification_plan.uncovered_tests(plan), [])
 

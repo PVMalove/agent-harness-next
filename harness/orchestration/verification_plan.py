@@ -211,11 +211,11 @@ def uncovered_tests(plan: Mapping[str, object]) -> list[str]:
     """Связанные тесты ImpactSet, которые план не выбирает (ADR 0023, раздел 6).
 
     Тесты покрыты, если любая стадия pytest имеет выбор ``full`` либо ``nodeids`` перечисляют сам
-    тестовый файл целиком: nodeid внутри файла (``file::test``) файл не покрывает.
+    тестовый файл целиком: nodeid внутри файла (``file::test``) файл не покрывает. План с разделом
+    ``ticket_diff`` проверяется по выбору diff тикета (``_uncovered_diff_tests``).
     """
     if "ticket_diff" in plan:
-        # A ticket-diff plan is gated by its own selection, not by the import graph.
-        return []
+        return _uncovered_diff_tests(plan)
     impact = cast(Mapping[str, Sequence[str]], plan["impact"])
     related = list(impact["related_tests"])
     stages = [
@@ -231,6 +231,33 @@ def uncovered_tests(plan: Mapping[str, object]) -> list[str]:
     return [path for path in related if path not in selected]
 
 
+def _uncovered_diff_tests(plan: Mapping[str, object]) -> list[str]:
+    """Tests of a ticket-diff plan's selection that no stage selects (ADR 0023, section 7).
+
+    A Python test is covered by a ``full`` pytest stage or by a stage listing its module; a cargo
+    target only by a stage listing its ``target_id``. The import graph's ``related_tests`` do not
+    count: the selection is the diff, never widened. Python tests come first, in plan order.
+    """
+    diff = cast(Mapping[str, object], plan["ticket_diff"])
+    python_tests = cast(Sequence[str], diff["python_tests"])
+    cargo_targets = cast(Sequence[Mapping[str, str]], diff["cargo_targets"])
+    stages = cast(Sequence[Mapping[str, object]], plan["stages"])
+    selected = {
+        nodeid for stage in stages for nodeid in cast(Sequence[str], stage["nodeids"])
+    }
+    full = any(
+        stage["kind"] == PYTEST_KIND and stage["selection"] == "full"
+        for stage in stages
+    )
+    python = [path for path in python_tests if not full and path not in selected]
+    cargo = [
+        target["target_id"]
+        for target in cargo_targets
+        if target["target_id"] not in selected
+    ]
+    return python + cargo
+
+
 def require_covered(plan: Mapping[str, object]) -> None:
     """Отказать ``impact_not_covered``, если план не выбирает связанный тест ImpactSet.
 
@@ -238,6 +265,13 @@ def require_covered(plan: Mapping[str, object]) -> None:
     не заменяет.
     """
     missing = uncovered_tests(plan)
+    if missing and "ticket_diff" in plan:
+        raise CoordinatorError(
+            f"{IMPACT_NOT_COVERED}: the verification plan skips "
+            f"{len(missing)} test(s) of the ticket diff selection: {', '.join(missing)}",
+            remedy="select every test of the ticket diff (a pytest stage listing each module "
+            "and a cargo stage per target), then propose the dispatch again",
+        )
     if missing:
         raise CoordinatorError(
             f"{IMPACT_NOT_COVERED}: the verification plan does not select "
