@@ -114,6 +114,17 @@ _Avoid_: таск-трекер команды, remote, хостинг кода.
 после merge состояние тикета проверяют, поскольку GitLab может отключить или изменить closing pattern.
 _Avoid_: project-level base branch, ветка реализации отдельного тикета.
 
+**PR тикета** (`pr::ticket`):
+PR или MR issue-ветки одного тикета: в `integration/*` своего эпика или, у тикета без эпика,
+прямо в `base_branch`. Наследует `type::*` тикета.
+_Avoid_: feature-PR, обычный PR.
+
+**Интеграционный PR** (`pr::integration`):
+PR или MR, head которого — ветка `integration/*`, в `base_branch` или в другую интеграционную
+ветку. Вливает работу тикетов эпика; эпик закрывает только PR в `base_branch`. `type::*` не
+получает, потому что собирает тикеты разных типов.
+_Avoid_: release-PR (слово «release» занято Release Gate), merge integration.
+
 **Проверка публичных метаданных** (`block-public-attribution.sh`):
 Локальный PreToolUse hook, который разбирает только `tool_input.command` и проверяет содержимое
 commit message, PR/MR title/body и явно переданного literal-файла сообщения; путь к этому файлу не
