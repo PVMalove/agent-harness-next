@@ -14,6 +14,9 @@
 | [Архитектура](./ARCHITECTURE.md) | Слои, discovery, backend-оркестрация и границы процессов. |
 | [ADR](./adr/) | Девять действующих архитектурных контрактов по доменам. |
 | [Восстановление и runtime store](./adr/0030-runtime-store-ledger-reconciliation.md) | ADR 0030: записи восстановления в runtime store, сверка с authority lifecycle и граница гарантии. |
+| [Каталог FMEA и remedy](./adr/0031-fmea-catalog-remedy.md) | ADR 0031: remedy-шаг только для проанализированных отказов, GUID записи, генерируемый `FmeaId` и производный SQLite. |
+| [Остановка и RCA](./adr/0032-stop-triggers-rca.md) | ADR 0032: любой вызов человека из-за ошибки запускает RCA, агент продолжает со следующим тикетом. |
+| [Жизненный цикл тикета в эпике](./adr/0033-ticket-lifecycle-status-done.md) | ADR 0033: `status::done`, закрытие при слиянии в `integration/*` и интеграционный PR. |
 | [Диаграммы](./diagrams/README.md) | Archify JSON, интерактивные HTML и PNG. |
 | [HTML-макеты консоли](./design/console-mockups/README.md) | Принятые интерактивные макеты Harness console (дизайн-источник эпика #720). |
 | [Справочник харнесса](./harness-guide.md) | Установка, команды CLI, `health`, `console`, skills и hooks. |
