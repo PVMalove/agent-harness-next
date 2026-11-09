@@ -39,7 +39,15 @@ export function RowList({
                   {row.mark && <span className={`view-mark ${row.state ?? ""}`}>{t(row.mark)}</span>}
                   <span className="view-label">{t(row.label)}</span>
                 </dt>
-                <dd>{t(row.value)}</dd>
+                <dd>
+                  {t(row.value)
+                    .split("\n")
+                    .map((line, lineIndex) => (
+                      <span key={lineIndex} className="view-line">
+                        {line}
+                      </span>
+                    ))}
+                </dd>
               </div>
             ))}
           </dl>

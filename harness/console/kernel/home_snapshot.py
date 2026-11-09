@@ -18,10 +18,13 @@ from .protocol import ID_BYTES, MESSAGE_BYTES, _clip
 from .repo_map import RepoMapView
 from .repo_map_settings import MemoryStatus
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 PROBLEMS_LIMIT = 100
 SOURCE_TYPES_LIMIT = 32
+AREAS_LIMIT = 64
+RECENT_SESSIONS_LIMIT = 3
+ROUTE_LIMIT = 16
 
 _TIER = re.compile(r"tier=(\w+)")
 
@@ -33,6 +36,10 @@ class HomeContext:
 
     repo_map: RepoMapView | None = None
     memory: MemoryStatus | None = None
+    project: ProjectFacts | None = None
+    harness: HarnessInstall | None = None
+    store: StoreFacts | None = None
+    recent_sessions: tuple[RecentSession, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -48,6 +55,85 @@ class Problem:
     status: str
     id: str
     message: str
+    # The health area (`CheckResult.group`) of the check; "" when it is unknown.
+    group: str = ""
+
+
+@dataclass(frozen=True)
+class ProjectFacts:
+    """The repository the console is pointed at: its name, checked-out branch, short HEAD and the
+    resolved tracker type. A fact that cannot be read is None (tracker: "")."""
+
+    name: str
+    branch: str | None
+    commit: str | None
+    tracker: str
+
+
+@dataclass(frozen=True)
+class HarnessInstall:
+    """What `.harness/harness.lock` and the skills directory say is installed."""
+
+    installed: bool
+    installed_version: str
+    capabilities: int
+    skills: int
+    managed_files: int
+
+
+@dataclass(frozen=True)
+class StoreFacts:
+    """The authority of the orchestration state and what can be read without the ledger lock or a
+    runtime call: `authority` is "file-ledger", "runtime-store" or "none"; an unread fact is None."""
+
+    authority: str
+    schema: int | None
+    generation: str | None
+    audit_records: int | None
+
+
+@dataclass(frozen=True)
+class DriftCounts:
+    """The managed-file counts of `harness diff --json`; `total` is every differing file."""
+
+    total: int
+    added: int
+    missing: int
+    package_changed: int
+    local_changed: int
+    conflict: int
+    retired: int
+
+
+@dataclass(frozen=True)
+class AreaCounters:
+    """The health check counts of one area (`CheckResult.group`)."""
+
+    area: str
+    ok: int
+    warn: int
+    fail: int
+    skipped: int
+
+
+@dataclass(frozen=True)
+class RouteStep:
+    """One recorded dispatch of a batch, in dispatch order."""
+
+    role: str
+    state: str
+
+
+@dataclass(frozen=True)
+class RecentSession:
+    """A recent batch of the ledger with the route of its dispatches."""
+
+    batch_id: str
+    ticket: str
+    state: str
+    branch: str
+    created_at: str
+    route: tuple[RouteStep, ...]
 
 
 @dataclass(frozen=True)
@@ -105,6 +191,14 @@ class HomeSnapshot:
     active_batches: int | None  # None: orchestration is not connected
     repo_map: RepoMapCard
     memory: MemoryCard
+    project: ProjectFacts | None = None
+    harness: HarnessInstall | None = None
+    store: StoreFacts | None = None
+    drift_counts: DriftCounts | None = None  # None: `harness diff --json` could not be read
+    areas: tuple[AreaCounters, ...] = ()
+    # The skipped checks (bounded by PROBLEMS_LIMIT); they are not part of `problems`.
+    skipped_checks: tuple[Problem, ...] = ()
+    recent_sessions: tuple[RecentSession, ...] = ()
 
     def to_payload(self) -> dict[str, object]:
         """The snapshot as one reply carries it: only the `listed_problems`, so that any reply
@@ -121,6 +215,7 @@ class HomeSnapshot:
                 _clip(problem.status, ID_BYTES),
                 _clip(problem.id, ID_BYTES),
                 _clip(problem.message, MESSAGE_BYTES),
+                _clip(problem.group, ID_BYTES),
             )
             for problem in self.problems[:PROBLEMS_LIMIT]
         )
@@ -143,6 +238,17 @@ class HomeSnapshot:
             active_batches=_optional(found["active_batches"], _int),
             repo_map=_repo_map_from(found["repo_map"]),
             memory=_memory_from(found["memory"]),
+            project=_optional(found["project"], _project_from),
+            harness=_optional(found["harness"], _harness_from),
+            store=_optional(found["store"], _store_from),
+            drift_counts=_optional(found["drift_counts"], _drift_counts_from),
+            areas=tuple(_area_from(item) for item in _list(found["areas"])),
+            skipped_checks=tuple(
+                _problem_from(item) for item in _list(found["skipped_checks"])
+            ),
+            recent_sessions=tuple(
+                _session_from(item) for item in _list(found["recent_sessions"])
+            ),
         )
 
 
@@ -202,6 +308,71 @@ def _problem_from(value: object) -> Problem:
         status=_str(found["status"]),
         id=_str(found["id"]),
         message=_str(found["message"]),
+        group=_str(found["group"]),
+    )
+
+
+def _project_from(value: object) -> ProjectFacts:
+    found = _fields(value, ProjectFacts)
+    return ProjectFacts(
+        name=_str(found["name"]),
+        branch=_optional(found["branch"], _str),
+        commit=_optional(found["commit"], _str),
+        tracker=_str(found["tracker"]),
+    )
+
+
+def _harness_from(value: object) -> HarnessInstall:
+    found = _fields(value, HarnessInstall)
+    return HarnessInstall(
+        installed=_bool(found["installed"]),
+        installed_version=_str(found["installed_version"]),
+        capabilities=_int(found["capabilities"]),
+        skills=_int(found["skills"]),
+        managed_files=_int(found["managed_files"]),
+    )
+
+
+def _store_from(value: object) -> StoreFacts:
+    found = _fields(value, StoreFacts)
+    return StoreFacts(
+        authority=_str(found["authority"]),
+        schema=_optional(found["schema"], _int),
+        generation=_optional(found["generation"], _str),
+        audit_records=_optional(found["audit_records"], _int),
+    )
+
+
+def _drift_counts_from(value: object) -> DriftCounts:
+    found = _fields(value, DriftCounts)
+    return DriftCounts(**{name: _int(found[name]) for name in found})
+
+
+def _area_from(value: object) -> AreaCounters:
+    found = _fields(value, AreaCounters)
+    return AreaCounters(
+        area=_str(found["area"]),
+        ok=_int(found["ok"]),
+        warn=_int(found["warn"]),
+        fail=_int(found["fail"]),
+        skipped=_int(found["skipped"]),
+    )
+
+
+def _route_step_from(value: object) -> RouteStep:
+    found = _fields(value, RouteStep)
+    return RouteStep(role=_str(found["role"]), state=_str(found["state"]))
+
+
+def _session_from(value: object) -> RecentSession:
+    found = _fields(value, RecentSession)
+    return RecentSession(
+        batch_id=_str(found["batch_id"]),
+        ticket=_str(found["ticket"]),
+        state=_str(found["state"]),
+        branch=_str(found["branch"]),
+        created_at=_str(found["created_at"]),
+        route=tuple(_route_step_from(item) for item in _list(found["route"])),
     )
 
 
@@ -313,14 +484,73 @@ def _memory_card(data: DashboardData, status: MemoryStatus | None) -> MemoryCard
     )
 
 
+_AREA_STATUSES = ("ok", "warn", "fail", "skipped")
+
+
+def _areas(data: DashboardData) -> tuple[AreaCounters, ...]:
+    """The check counts per area, in the order the areas first appear in the report."""
+    counts: dict[str, dict[str, int]] = {}
+    for status, _check_id, _message, group in data.checks:
+        area = counts.setdefault(group, dict.fromkeys(_AREA_STATUSES, 0))
+        if status in area:
+            area[status] += 1
+    return tuple(
+        AreaCounters(_clip(name, ID_BYTES), **found)
+        for name, found in list(counts.items())[:AREAS_LIMIT]
+    )
+
+
+def _skipped(data: DashboardData) -> tuple[Problem, ...]:
+    return tuple(
+        Problem(
+            _clip(status, ID_BYTES),
+            _clip(check_id, ID_BYTES),
+            _clip(message, MESSAGE_BYTES),
+            _clip(group, ID_BYTES),
+        )
+        for status, check_id, message, group in data.checks
+        if status == "skipped"
+    )[:PROBLEMS_LIMIT]
+
+
+def _drift_counts(data: DashboardData) -> DriftCounts | None:
+    if data.drift_counts is None:
+        return None
+    found = dict(data.drift_counts)
+    names = [field.name for field in fields(DriftCounts) if field.name != "total"]
+    values = {name: max(0, found.get(name, 0)) for name in names}
+    return DriftCounts(total=sum(values.values()), **values)
+
+
+def _bounded_sessions(
+    sessions: tuple[RecentSession, ...],
+) -> tuple[RecentSession, ...]:
+    return tuple(
+        RecentSession(
+            batch_id=_clip(session.batch_id, ID_BYTES),
+            ticket=_clip(session.ticket, ID_BYTES),
+            state=_clip(session.state, ID_BYTES),
+            branch=_clip(session.branch, ID_BYTES),
+            created_at=_clip(session.created_at, ID_BYTES),
+            route=tuple(
+                RouteStep(_clip(step.role, ID_BYTES), _clip(step.state, ID_BYTES))
+                for step in session.route[-ROUTE_LIMIT:]
+            ),
+        )
+        for session in sessions[:RECENT_SESSIONS_LIMIT]
+    )
+
+
 def build_home_snapshot(data: DashboardData, context: HomeContext) -> HomeSnapshot:
     """Map the dashboard data and the Home context to JSON-safe values. The problems stay whole,
     as the Home screen shows them; `to_payload` bounds what one reply lists."""
+    groups = {check_id: group for _status, check_id, _message, group in data.checks}
+    project = context.project
     return HomeSnapshot(
         version=SCHEMA_VERSION,
         health=HealthCounters(data.ok, data.warn, data.fail, data.skipped),
         problems=tuple(
-            Problem(status, check_id, message)
+            Problem(status, check_id, message, groups.get(check_id, ""))
             for status, check_id, message in data.problems
         ),
         problems_total=len(data.problems),
@@ -329,4 +559,18 @@ def build_home_snapshot(data: DashboardData, context: HomeContext) -> HomeSnapsh
         active_batches=data.active_batches,
         repo_map=_repo_map_card(data, context.repo_map),
         memory=_memory_card(data, context.memory),
+        project=ProjectFacts(
+            _clip(project.name, ID_BYTES),
+            _clip(project.branch, ID_BYTES) if project.branch is not None else None,
+            _clip(project.commit, ID_BYTES) if project.commit is not None else None,
+            _clip(project.tracker, ID_BYTES),
+        )
+        if project is not None
+        else None,
+        harness=context.harness,
+        store=context.store,
+        drift_counts=_drift_counts(data),
+        areas=_areas(data),
+        skipped_checks=_skipped(data),
+        recent_sessions=_bounded_sessions(context.recent_sessions),
     )

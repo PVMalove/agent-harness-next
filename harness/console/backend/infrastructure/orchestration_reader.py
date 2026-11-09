@@ -60,6 +60,7 @@ def _observation(
         facts[batch_id] = BatchFacts(
             ticket=text(record.get("ticket")),
             state=text(record.get("state")),
+            branch=text(record.get("branch")),
             dispatches=tuple(
                 (
                     text(entry.get("dispatch_id")),

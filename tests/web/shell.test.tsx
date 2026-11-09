@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
+import { menuCounter, preRelease } from "../../harness/console/frontend/src/AppShell";
+import type { HomeSnapshot } from "../../harness/console/frontend/src/ws/types";
+import fixture from "./fixtures/home-snapshot.json";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import { FakeSocket, ManualClock } from "./fake-socket";
@@ -21,6 +24,32 @@ function renderApp() {
 }
 
 const navigation = () => screen.getByRole("navigation", { name: "Разделы консоли" });
+
+describe("the shell header and menu counters", () => {
+  test("a pre-release badge only for a semver pre-release suffix", () => {
+    expect(preRelease("2.1.0-rc.1")).toBe("rc.1");
+    expect(preRelease("2.0.0-pre")).toBe("pre");
+    expect(preRelease("v2.0.0-beta.2+build.5")).toBe("beta.2");
+    expect(preRelease("2.0.0")).toBeNull();
+    expect(preRelease("unknown")).toBeNull();
+  });
+
+  test("counters come from the Home snapshot and stay hidden without data", () => {
+    const snapshot = {
+      ...(fixture as unknown as HomeSnapshot),
+      health: { ok: 1, warn: 1, fail: 2, skipped: 0 },
+      drift_counts: { total: 3, added: 1, missing: 0, package_changed: 2, local_changed: 0, conflict: 0, retired: 0 },
+      repo_map: { tier: "full", message: "", head_map: null },
+    };
+    expect(menuCounter("diagnostics", snapshot)).toEqual({ text: "2", css: "err" });
+    expect(menuCounter("update-harness", snapshot)).toEqual({ text: "3", css: "warn" });
+    expect(menuCounter("harness", snapshot)).toEqual({ text: "3", css: "warn" });
+    expect(menuCounter("repo-map", snapshot)).toEqual({ text: "full", css: "full" });
+    expect(menuCounter("board", snapshot)).toBeNull();
+    expect(menuCounter("diagnostics", null)).toBeNull();
+    expect(menuCounter("update-harness", { ...snapshot, drift_counts: null })).toBeNull();
+  });
+});
 
 describe("the shell", () => {
   beforeEach(() => {

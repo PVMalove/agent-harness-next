@@ -212,6 +212,8 @@ def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
             assert isinstance(harness, dict)
             assert HarnessState.from_payload(harness["state"]) == HARNESS_STATE
             assert (harness["package_version"], harness["drift"]) == ("1.0.1", "clean")
+            # The TUI decoder reads exactly these keys; the overview-only facts stay out.
+            assert set(harness) == {"state", "package_version", "drift", "ledger"}
             assert ledger_from_payload(harness["ledger"]).batches[0].batch_id == "b-1"
             assert (await ask(socket, {"type": "harness.snapshot"}))["cached"] is True
             assert facts.calls["harness"] == 1
@@ -220,6 +222,16 @@ def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
             assert REPLIES.validate_python(overview) is not None
             assert HarnessState.from_payload(overview["state"]) == HARNESS_STATE
             assert (overview["package_version"], overview["drift"]) == ("1.0.1", "clean")
+            assert overview["drift_files"] == 0
+            assert overview["store"] == {
+                "authority": "file-ledger",
+                "schema": 3,
+                "generation": "generation-1",
+                "audit_records": 4,
+            }
+            assert overview["adapters"] == [
+                {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
+            ]
             # The same counts the TUI shows in its usage line for this ledger.
             assert overview["usage"] == {
                 "unavailable": None,

@@ -36,23 +36,35 @@ describe("Home", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  test("shows every block with the snapshot facts in Russian", () => {
+  test("shows the mockup blocks in order with the snapshot facts in Russian", () => {
     renderHome();
     expect(headings(1)).toEqual(["Состояние харнесса"]);
-    expect(headings(2)).toEqual([
+    expect(headings(2).map((text) => text!.replace(/\s*\d+$/, ""))).toEqual([
       "Требует внимания",
       "Контекст",
       "Последние задачи",
       "Здоровье",
-      "Контур Harness 2.0.0",
+      "Контур Harness",
     ]);
-    expect(headings(3)).toEqual(["Проект", "Harness", "Runtime store", "Repo Map", "Память", "По областям", "Проверки"]);
+    expect(headings(3).map((text) => text!.trim())).toEqual([
+      "Проектgithub",
+      "Harness",
+      "Runtime store",
+      "Repo Map",
+      "Память",
+      "Маршрут сессии #7",
+      "По областям",
+      "Проверки",
+    ]);
     const health = document.getElementById("home-health")!;
     expect(within(health).getByText("42").className).toBe("ok");
     expect(document.getElementById("health-fail")!.textContent).toBe("2");
-    expect(document.getElementById("home-facts")!.textContent).toBe(
-      "пройдено: 42 · внимание: 1 · ошибки: 2 · пропущено: 11",
-    );
+    expect(document.getElementById("home-facts")!.textContent).toBe("42 ok · 1 warn · 2 fail · 11 skip");
+    const chips = document.getElementById("home-chips")!.textContent!;
+    expect(chips).toContain("установлено 1.5.1");
+    expect(chips).toContain("file-ledger");
+    expect(chips).toContain("32 навыков");
+    expect(chips).not.toContain("2.0.0");
     const attention = document.getElementById("attention-list")!;
     expect(within(attention).getByText("skills.drift")).toBeTruthy();
     expect(within(attention).getAllByRole("img").map((icon) => icon.getAttribute("aria-label"))).toEqual([
@@ -60,11 +72,35 @@ describe("Home", () => {
       "ошибки",
       "внимание",
     ]);
+    expect(within(attention).getAllByRole("link", { name: "Открыть →" }).map((link) => link.getAttribute("href"))).toEqual([
+      "#/diagnostics",
+      "#/update-harness",
+      "#/diagnostics",
+    ]);
     expect(screen.getByText("local · b3e4d28")).toBeTruthy();
     const context = document.getElementById("home-context")!;
+    expect(within(context).getByText("feature/issue-7")).toBeTruthy();
+    expect(within(context).getByText("generation-1a2b3c4d")).toBeTruthy();
     expect(context.compareDocumentPosition(document.getElementById("home-tasks")!)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  test("recent sessions, areas and the check filters come from the snapshot", () => {
+    renderHome();
+    const tasks = document.getElementById("home-tasks")!;
+    expect([...tasks.querySelectorAll(".task-id")].map((cell) => cell.textContent)).toEqual(["#7", "#6"]);
+    expect([...tasks.querySelectorAll(".route-step")].map((step) => step.className)).toEqual([
+      "route-step done",
+      "route-step current",
+    ]);
+    expect(document.querySelectorAll("#home-areas .health-row")).toHaveLength(4);
+    const checks = () => [...document.querySelectorAll("#home-checks .check-main b")].map((cell) => cell.textContent);
+    expect(checks()).toEqual(["integration.config", "skills.drift", "hooks.bash", "tracker.online"]);
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Пропущено" })));
+    expect(checks()).toEqual(["tracker.online"]);
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Проблемы" })));
+    expect(checks()).toEqual(["integration.config", "skills.drift", "hooks.bash"]);
   });
 
   test("says how many problems are listed of how many", () => {
@@ -72,25 +108,34 @@ describe("Home", () => {
     expect(document.getElementById("problems-limit")!.textContent).toBe(
       "Показано 3 из 5 · Полный каталог проверок недоступен",
     );
-    expect(document.getElementById("problem-count")!.textContent).toBe("3 / 5");
+    expect(document.getElementById("problem-count")!.textContent).toBe("2 ошибки · 1 предупреждения · 3 / 5");
   });
 
-  test("facts the snapshot lacks are unavailable, never zero", () => {
-    renderHome();
+  test("facts without a source show an explicit no-data state, never a demo value", () => {
+    renderHome({ ...fixture, project: null, recent_sessions: [] });
     const tasks = document.getElementById("home-tasks")!;
-    expect(within(tasks).getByText("Недоступно в текущем снимке")).toBeTruthy();
-    expect(within(tasks).queryByText("0")).toBeNull();
-    const memory = within(document.getElementById("home-context")!).getByText("Политика").parentElement!;
-    expect(memory.querySelector("dd")!.textContent).toBe("Недоступно в текущем снимке");
-    const project = within(document.getElementById("home-context")!).getByText("Ветка").parentElement!;
-    expect(project.querySelector("dd")!.textContent).toBe("—");
-    expect(project.querySelector("dd")!.getAttribute("title")).toBe("Недоступно в текущем снимке");
+    expect(within(tasks).getByText("Сессий в ledger нет")).toBeTruthy();
+    const context = document.getElementById("home-context")!;
+    const branch = within(context).getByText("Ветка").parentElement!;
+    expect(branch.querySelector("dd")!.textContent).toBe("нет данных");
+    expect(branch.querySelector("dd")!.getAttribute("title")).toBe("Недоступно в текущем снимке");
+    const cutover = within(context).getByText("Cutover").parentElement!;
+    expect(cutover.querySelector("dd")!.textContent).toBe("нет данных");
+    const limit = within(context).getByText("Лимит").parentElement!;
+    expect(limit.querySelector("dd")!.textContent).toBe("нет данных");
+    expect(document.getElementById("home-contour")!.textContent).not.toContain("2.0.0");
   });
 
   test("switches to English in place", () => {
     renderHome();
     act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
-    expect(headings(2)).toEqual(["Requires attention", "Context", "Recent tasks", "Health", "Harness 2.0.0 outline"]);
+    expect(headings(2).map((text) => text!.replace(/\s*\d+$/, ""))).toEqual([
+      "Requires attention",
+      "Context",
+      "Recent tasks",
+      "Health",
+      "Harness outline",
+    ]);
     expect(document.getElementById("problems-limit")!.textContent).toBe(
       "Showing 3 of 5 · Full check catalog unavailable",
     );

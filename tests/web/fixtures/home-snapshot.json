@@ -1,22 +1,157 @@
 {
-  "version": 1,
-  "health": { "ok": 42, "warn": 1, "fail": 2, "skipped": 11 },
+  "version": 2,
+  "health": {
+    "ok": 42,
+    "warn": 1,
+    "fail": 2,
+    "skipped": 11
+  },
   "problems": [
-    { "status": "fail", "id": "integration.config", "message": "Integration configuration is missing the tracker host" },
-    { "status": "fail", "id": "skills.drift", "message": "3 skills differ from the packaged snapshot" },
-    { "status": "warn", "id": "hooks.bash", "message": "Bash for hooks is not found" }
+    {
+      "status": "fail",
+      "id": "integration.config",
+      "message": "Integration configuration is missing the tracker host",
+      "group": "integration"
+    },
+    {
+      "status": "fail",
+      "id": "skills.drift",
+      "message": "3 skills differ from the packaged snapshot",
+      "group": "skills"
+    },
+    {
+      "status": "warn",
+      "id": "hooks.bash",
+      "message": "Bash for hooks is not found",
+      "group": "hooks"
+    }
   ],
   "problems_total": 5,
-  "harness_version": "2.0.0",
+  "harness_version": "1.5.1",
   "drift": "skills: 3",
   "active_batches": null,
   "repo_map": {
     "tier": "full",
     "message": "cached for HEAD",
-    "head_map": { "origin": "local", "commit": "b3e4d28", "files": 1204, "edges": 5310, "estimated_tokens": 48000 }
+    "head_map": {
+      "origin": "local",
+      "commit": "b3e4d28",
+      "files": 1204,
+      "edges": 5310,
+      "estimated_tokens": 48000
+    }
   },
   "memory": {
-    "state": { "status": "warn", "message": "index missing" },
+    "state": {
+      "status": "warn",
+      "message": "index missing"
+    },
     "policy": null
-  }
+  },
+  "project": {
+    "name": "claude-agent-harness",
+    "branch": "feature/issue-7",
+    "commit": "b3e4d28",
+    "tracker": "github"
+  },
+  "harness": {
+    "installed": true,
+    "installed_version": "1.5.1",
+    "capabilities": 2,
+    "skills": 32,
+    "managed_files": 232
+  },
+  "store": {
+    "authority": "file-ledger",
+    "schema": 3,
+    "generation": "generation-1a2b3c4d",
+    "audit_records": 1240
+  },
+  "drift_counts": {
+    "total": 3,
+    "added": 1,
+    "missing": 0,
+    "package_changed": 2,
+    "local_changed": 0,
+    "conflict": 0,
+    "retired": 0
+  },
+  "areas": [
+    {
+      "area": "integration",
+      "ok": 5,
+      "warn": 0,
+      "fail": 1,
+      "skipped": 2
+    },
+    {
+      "area": "skills",
+      "ok": 12,
+      "warn": 0,
+      "fail": 1,
+      "skipped": 0
+    },
+    {
+      "area": "hooks",
+      "ok": 8,
+      "warn": 1,
+      "fail": 0,
+      "skipped": 4
+    },
+    {
+      "area": "files",
+      "ok": 17,
+      "warn": 0,
+      "fail": 0,
+      "skipped": 5
+    }
+  ],
+  "skipped_checks": [
+    {
+      "status": "skipped",
+      "id": "tracker.online",
+      "message": "Online check skipped in offline mode",
+      "group": "integration"
+    }
+  ],
+  "recent_sessions": [
+    {
+      "batch_id": "batch-7",
+      "ticket": "#7",
+      "state": "active",
+      "branch": "feature/issue-7",
+      "created_at": "2026-11-09T10:00:00+00:00",
+      "route": [
+        {
+          "role": "architect",
+          "state": "reported"
+        },
+        {
+          "role": "developer",
+          "state": "working"
+        }
+      ]
+    },
+    {
+      "batch_id": "batch-6",
+      "ticket": "#6",
+      "state": "published",
+      "branch": "feature/issue-6",
+      "created_at": "2026-11-08T09:00:00+00:00",
+      "route": [
+        {
+          "role": "developer",
+          "state": "reported"
+        },
+        {
+          "role": "code-review",
+          "state": "reported"
+        },
+        {
+          "role": "qa",
+          "state": "reported"
+        }
+      ]
+    }
+  ]
 }

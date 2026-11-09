@@ -19,9 +19,16 @@ from harness.console.backend.infrastructure.home_facts import collect_home
 from harness.console.kernel.data import DashboardData
 from harness.console.kernel.home_snapshot import (
     SCHEMA_VERSION,
+    AreaCounters,
+    DriftCounts,
+    HarnessInstall,
     HomeContext,
     HomeSnapshot,
     Problem,
+    ProjectFacts,
+    RecentSession,
+    RouteStep,
+    StoreFacts,
     build_home_snapshot,
     problems_from_text,
 )
@@ -65,6 +72,36 @@ VIEW = RepoMapView(
 )
 MEMORY = MemoryStatus(True, True, ("adr", "glossary"), 18, top_k=5, max_tokens=1000)
 
+FULL_DATA = replace(
+    DATA,
+    checks=(
+        ("ok", "files.lock", "ready", "files"),
+        ("fail", "files.skill_snapshot", "snapshot differs from 1.4.6", "files"),
+        ("fail", "files.integrations", "tracker token missing", "files"),
+        ("warn", "memory.index", "index is stale", "memory"),
+        ("skipped", "tracker.online", "offline mode", "integration"),
+    ),
+    drift_counts=(("added", 2), ("package_changed", 3), ("conflict", 1)),
+)
+FULL_CONTEXT = HomeContext(
+    repo_map=VIEW,
+    memory=MEMORY,
+    project=ProjectFacts("demo", "feature/x", "abc1234", "github"),
+    harness=HarnessInstall(True, "1.4.6", 2, 30, 200),
+    store=StoreFacts("file-ledger", 3, "generation-1", 12),
+    recent_sessions=tuple(
+        RecentSession(
+            f"batch-{index}",
+            f"#{index}",
+            "active",
+            "feature/x",
+            "2026-11-01T10:00:00+00:00",
+            (RouteStep("architect", "reported"), RouteStep("developer", "working")),
+        )
+        for index in range(5)
+    ),
+)
+
 
 def _wire(snapshot: HomeSnapshot) -> dict[str, object]:
     """The payload as a client reads it: tuples are JSON arrays."""
@@ -72,7 +109,7 @@ def _wire(snapshot: HomeSnapshot) -> dict[str, object]:
 
 
 def test_constants_are_the_documented_contract() -> None:
-    assert SCHEMA_VERSION == 1
+    assert SCHEMA_VERSION == 2
     assert HOME_TTL_SECONDS == 15.0
 
 
@@ -81,20 +118,27 @@ def test_constants_are_the_documented_contract() -> None:
 def test_snapshot_mirrors_the_home_facts_with_a_cached_map() -> None:
     snapshot = build_home_snapshot(DATA, HomeContext(repo_map=VIEW, memory=MEMORY))
     assert _wire(snapshot) == {
-        "version": 1,
+        "version": 2,
         "health": {"ok": 14, "warn": 1, "fail": 2, "skipped": 11},
         "problems": [
             {
                 "status": "fail",
                 "id": "files.skill_snapshot",
                 "message": "snapshot differs from 1.4.6",
+                "group": "",
             },
             {
                 "status": "fail",
                 "id": "files.integrations",
                 "message": "tracker token missing",
+                "group": "",
             },
-            {"status": "warn", "id": "memory.index", "message": "index is stale"},
+            {
+                "status": "warn",
+                "id": "memory.index",
+                "message": "index is stale",
+                "group": "",
+            },
         ],
         "problems_total": 3,
         "harness_version": "1.4.6",
@@ -124,6 +168,13 @@ def test_snapshot_mirrors_the_home_facts_with_a_cached_map() -> None:
                 "max_tokens": 1000,
             },
         },
+        "project": None,
+        "harness": None,
+        "store": None,
+        "drift_counts": None,
+        "areas": [],
+        "skipped_checks": [],
+        "recent_sessions": [],
     }
 
 
@@ -266,7 +317,7 @@ def test_a_clipped_message_is_a_prefix_of_the_original(raw: str) -> None:
     message = snapshot.listed_problems()[0].message
     assert raw.startswith(message) and 0 < len(message) <= 300
     assert _wire(snapshot)["problems"] == [
-        {"status": "fail", "id": "a.b", "message": message}
+        {"status": "fail", "id": "a.b", "message": message, "group": ""}
     ]
 
 
@@ -660,9 +711,7 @@ def test_from_payload_is_the_inverse_of_to_payload_with_and_without_a_map() -> N
 
 
 def _broken(change: dict[str, object]) -> dict[str, object]:
-    payload = _wire(
-        build_home_snapshot(DATA, HomeContext(repo_map=VIEW, memory=MEMORY))
-    )
+    payload = _wire(build_home_snapshot(FULL_DATA, FULL_CONTEXT))
     for path, value in change.items():
         *parents, last = path.split(".")
         node: object = payload
@@ -683,8 +732,14 @@ _DROP = object()
 @pytest.mark.parametrize(
     "change",
     [
-        {"version": 2},
+        {"version": 1},
         {"version": True},
+        {"problems.0.group": None},
+        {"project": "repo"},
+        {"store.schema": "3"},
+        {"drift_counts.total": -1.5},
+        {"areas.0": {"area": "files"}},
+        {"recent_sessions.0.route": None},
         {"health.ok": True},
         {"health.warn": "1"},
         {"health.fail": _DROP},
@@ -990,3 +1045,36 @@ def test_a_problem_page_with_a_missing_or_invalid_field_is_bad_request(
         "home.problems",
         "bad_request",
     )
+
+
+def test_snapshot_carries_project_store_drift_areas_and_recent_sessions() -> None:
+    snapshot = build_home_snapshot(FULL_DATA, FULL_CONTEXT)
+    assert snapshot.project == ProjectFacts("demo", "feature/x", "abc1234", "github")
+    assert snapshot.store == StoreFacts("file-ledger", 3, "generation-1", 12)
+    assert snapshot.harness == HarnessInstall(True, "1.4.6", 2, 30, 200)
+    assert snapshot.drift_counts == DriftCounts(6, 2, 0, 3, 0, 1, 0)
+    assert [problem.group for problem in snapshot.problems] == ["files", "files", "memory"]
+    assert snapshot.areas == (
+        AreaCounters("files", 1, 0, 2, 0),
+        AreaCounters("memory", 0, 1, 0, 0),
+        AreaCounters("integration", 0, 0, 0, 1),
+    )
+    assert snapshot.skipped_checks == (
+        Problem("skipped", "tracker.online", "offline mode", "integration"),
+    )
+    assert [session.batch_id for session in snapshot.recent_sessions] == [
+        "batch-0",
+        "batch-1",
+        "batch-2",
+    ]
+
+
+def test_snapshot_with_new_facts_round_trips_through_the_wire() -> None:
+    snapshot = build_home_snapshot(FULL_DATA, FULL_CONTEXT)
+    assert HomeSnapshot.from_payload(_wire(snapshot)) == snapshot
+
+
+def test_unreadable_drift_is_null_not_zero() -> None:
+    snapshot = build_home_snapshot(replace(FULL_DATA, drift_counts=None), FULL_CONTEXT)
+    assert snapshot.drift_counts is None
+    assert _wire(snapshot)["drift_counts"] is None

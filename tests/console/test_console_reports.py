@@ -215,7 +215,12 @@ def _codec_view() -> reports.LedgerView:
         role="developer",
         outcome="completed",
         reported_at="2026-01-01T00:00:00+00:00",
-        report={"output": "body", "checks_run": []},
+        report={
+            "output": "body",
+            "checks_run": [],
+            "risks": {"status": "present", "details": "r"},
+            "blockers": {"status": "none", "details": ""},
+        },
     )
     view = reports.LedgerView(
         reports=[report],
@@ -245,7 +250,9 @@ def _codec_view() -> reports.LedgerView:
     view.stages.extend(
         [
             reports.StageEntry("d-1", "b-1", "#1", "developer", "reported", "t", report),
-            reports.StageEntry("d-2", "b-1", "#1", "qa", "working", "t"),
+            reports.StageEntry(
+                "d-2", "b-1", "#1", "qa", "working", "t", None, "t0", "t1"
+            ),
         ]
     )
     return view
@@ -256,6 +263,10 @@ def test_the_ledger_payload_round_trips_without_report_bodies_or_raw_records() -
     payload = reports.ledger_payload(view)
     text_form = json.dumps(payload)
     assert "body" not in text_form and "secret" not in text_form
+    head = payload["reports"][0]  # type: ignore[index]
+    assert (head["has_risks"], head["has_blockers"]) == (True, False)
+    stage = payload["stages"][1]  # type: ignore[index]
+    assert (stage["started_at"], stage["heartbeat_at"]) == ("t0", "t1")
     back = reports.ledger_from_payload(json.loads(text_form))
     bodiless = replace(view.reports[0], report={})
     assert back.reports == [bodiless]
@@ -280,6 +291,9 @@ def test_a_malformed_ledger_payload_is_refused() -> None:
         {**payload, "stages": [{**payload["stages"][0], "report": "nope"}]},  # type: ignore[index]
         {**payload, "qa_runs": [{**payload["qa_runs"][0], "commands": [["x"]]}]},  # type: ignore[index]
         {**payload, "dispatches": {"d": {"role": 1}}},
+        {**payload, "version": 1},
+        {**payload, "reports": [{**payload["reports"][0], "has_risks": "yes"}]},  # type: ignore[index]
+        {**payload, "stages": [{**payload["stages"][1], "heartbeat_at": None}]},  # type: ignore[index]
     ):
         with pytest.raises(ValueError):
             reports.ledger_from_payload(broken)

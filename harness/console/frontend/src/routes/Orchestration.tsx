@@ -2,7 +2,10 @@
    KPI and analytics figures are the server's; the page words them as the TUI Orchestration screen
    does, shows the ledger lock, the batch history with its chronology and the pending human
    decisions. Recovery and Container route open as hidden routes carrying the selected batch. The
-   TUI's command menu is not reproduced: decisions cover the human gate. */
+   TUI's command menu is not reproduced: decisions cover the human gate. The mockup blocks
+   (summary, KPI row, Scheme/Flow/Quality/Runtime/Gates tabs, batch cards, dispatch table, QA lane,
+   all tickets) come first; the TUI-worded KPI row, analytics, statistics, lock, batch history and
+   decisions have no mockup slot and follow them (H4). */
 import { useState } from "react";
 import { DecisionPanel } from "../decisions/DecisionPanel";
 import { Icon } from "../icons";
@@ -12,6 +15,8 @@ import { Analytics, KpiRow } from "../orchestration/Analytics";
 import { BatchHistory } from "../orchestration/BatchHistory";
 import { ALL_STATES, kpiTiles, pipelineStats, pipelineStatsFields } from "../orchestration/format";
 import { LedgerLock } from "../orchestration/LedgerLock";
+import { BatchCards, DispatchTable, OrchKpis, OrchSummary, OrchTabs, TicketList, orchCounts } from "../orchestration/OrchViews";
+import { QaLane } from "../reports/ReportViews";
 import { useScreen } from "../screens/useScreen";
 import { parseOrchestration } from "../ws/ledger";
 
@@ -34,6 +39,9 @@ export function Orchestration() {
           <p>{t("Состояние пайплайна, история batch и решения человека.")}</p>
           {data && (
             <div className="home-facts">
+              <span>{t("{count} батчей", { count: orchCounts(data).batches })}</span>
+              <span>{orchCounts(data).dispatches} dispatch</span>
+              <span>{t("{count} активны", { count: orchCounts(data).active })}</span>
               <span id="orch-cache">
                 {screen.cached ? t("Кэш") : t("Новый снимок")} · {screen.ageSeconds ?? 0} s
               </span>
@@ -72,6 +80,13 @@ export function Orchestration() {
 
       {data && (
         <>
+          <OrchSummary data={data} />
+          <OrchKpis data={data} />
+          <OrchTabs data={data} />
+          <BatchCards data={data} />
+          <DispatchTable data={data} />
+          <QaLane ledger={data.ledger} ticket={data.ledger.batches[0]?.ticket ?? ""} />
+          <TicketList data={data} />
           <KpiRow tiles={kpiTiles(data.kpi, t, language)} id="orch-kpi" className="orch-kpis" />
           <div className="orch-overview-grid">
             <Analytics analytics={data.analytics} />

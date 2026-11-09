@@ -157,6 +157,8 @@ export interface HomeRequest {
 }
 
 export interface ConsoleClient {
+  /** The WebSocket endpoint this client connects to. */
+  readonly url: string;
   requestDecisions(): boolean;
   subscribeDecisions(listener: (event: DecisionsEvent) => void): () => void;
   requestRepoMap(force?: boolean): boolean;
@@ -617,6 +619,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   }
 
   return {
+    url,
     requestDecisions: decisionReader.request,
     subscribeDecisions(listener) {
       decisionListeners.add(listener);

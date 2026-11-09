@@ -95,11 +95,11 @@ export class ManualClock implements Timers {
 }
 
 export const SNAPSHOT = {
-  version: 1,
+  version: 2,
   health: { ok: 3, warn: 1, fail: 1, skipped: 2 },
   problems: [
-    { status: "fail", id: "skills.drift", message: "Skill drift" },
-    { status: "warn", id: "hooks", message: "Hook missing" },
+    { status: "fail", id: "skills.drift", message: "Skill drift", group: "skills" },
+    { status: "warn", id: "hooks", message: "Hook missing", group: "hooks" },
   ],
   problems_total: 2,
   harness_version: "2.0.0",
@@ -107,6 +107,13 @@ export const SNAPSHOT = {
   active_batches: null,
   repo_map: { tier: null, message: "no cache", head_map: null },
   memory: { state: null, policy: null },
+  project: null,
+  harness: null,
+  store: null,
+  drift_counts: null,
+  areas: [],
+  skipped_checks: [],
+  recent_sessions: [],
 };
 
 export function snapshotReply(id: unknown, snapshot: unknown = SNAPSHOT): Record<string, unknown> {
@@ -187,8 +194,16 @@ export function jobReply(
 /* The live step feed as steps.subscribe sends it (tests/web/fixtures/live-steps.json for the
    Playwright mock): a Claude developer, a Codex reviewer and one orchestration event. */
 export const ROSTER = [
-  { dispatch_id: "dispatch-dev", batch_id: "batch-885", ticket: "#885", role: "developer", state: "working" },
-  { dispatch_id: "dispatch-rev", batch_id: "batch-885", ticket: "#885", role: "review", state: "working" },
+  {
+    dispatch_id: "dispatch-dev", batch_id: "batch-885", ticket: "#885", role: "developer", state: "working",
+    batch_state: "active", branch: "feature/issue-885", started_at: "2026-11-05T10:00:00+00:00",
+    last_event_at: "2026-11-05T10:20:00+00:00", silent: false,
+  },
+  {
+    dispatch_id: "dispatch-rev", batch_id: "batch-885", ticket: "#885", role: "review", state: "working",
+    batch_state: "active", branch: "feature/issue-885", started_at: "2026-11-05T10:05:00+00:00",
+    last_event_at: "2026-11-05T10:06:00+00:00", silent: true,
+  },
 ];
 
 export const AGENT_STEP = {
@@ -316,6 +331,23 @@ export const HARNESS_OVERVIEW = {
   },
   package_version: "2.0.1",
   drift: "drift",
+  drift_files: 0,
+  store: { authority: "file-ledger", schema: 3, generation: "generation-1", audit_records: 12 },
+  adapters: [{ path: ".harness/adapters/claude/settings.json", status: "current", problem: null }],
+  // The sandbox has no Docker socket: every probe of the engine fails with its reason.
+  containers: {
+    engine: "docker",
+    version: null,
+    cgroup_driver: null,
+    cgroup_version: null,
+    selinux: null,
+    rootless: null,
+    info_problem: "docker info: код 1: Cannot connect to the Docker daemon",
+    images: null,
+    images_problem: "docker images: код 1",
+    volumes: null,
+    volumes_problem: "docker volume ls: код 1",
+  },
   usage: { unavailable: null, batches: 4, tickets: 3, dispatches: 12, reports: 9 },
 };
 

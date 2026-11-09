@@ -282,6 +282,7 @@ def live_steps(
         now=utc_now_iso,
         live_states={state.value for state in LIVE_DISPATCH_STATES},
         poll_seconds=poll_seconds,
+        timing=workers.timing,
     )
 
 

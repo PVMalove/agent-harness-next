@@ -1,5 +1,6 @@
 """The Repo Map screen's facts as one value: HEAD, the map cached for it, the tier the policy asks
-for, the parser bundle, the project languages and the memory status. `RepoMapFacts.to_payload` and
+for, the parser bundle, the project languages and the memory status, with what the kernel derives
+from the map (`repo_map_coverage`): the kind of each signature and the coverage by file class. `RepoMapFacts.to_payload` and
 `RepoMapFacts.from_payload` are the wire codec of a `repo_map.snapshot` reply; reading the payload
 back is strict, so a reply off the schema is a `ValueError`, never a half-filled screen."""
 
@@ -13,11 +14,24 @@ from typing import TypeVar
 from harness.repo_map.bundle_fetch import ParserStatus
 
 from .repo_map import RepoMapView, parse_map
+from .repo_map_coverage import coverage, symbol_kinds
 from .repo_map_settings import MemoryStatus, TierSetting
 
 T = TypeVar("T")
 
-_FIELDS = frozenset({"head", "map", "tier", "memory", "parsers", "language_files"})
+_FIELDS = frozenset(
+    {
+        "head",
+        "map",
+        "tier",
+        "memory",
+        "parsers",
+        "language_files",
+        "symbol_kinds",
+        "coverage",
+    }
+)
+_COVERAGE_FIELDS = frozenset({"source", "docs", "tests", "excluded"})
 _TIER_FIELDS = frozenset({"tier", "editable", "reason"})
 _MEMORY_FIELDS = frozenset(
     {
@@ -37,7 +51,9 @@ _PARSER_FIELDS = frozenset({"registry", "pair", "source", "grammars", "problem"}
 @dataclass(frozen=True)
 class RepoMapFacts:
     """What the Repo Map screen shows; `head` is None outside a Git repository with commits,
-    `view` without a cached map for HEAD and `parsers` when the bundle cannot be read."""
+    `view` without a cached map for HEAD and `parsers` when the bundle cannot be read.
+    `excluded` counts the files tracked at the map's commit that the map leaves out; None when
+    there is no map or Git cannot tell."""
 
     head: str | None
     view: RepoMapView | None
@@ -45,6 +61,7 @@ class RepoMapFacts:
     memory: MemoryStatus
     parsers: ParserStatus | None
     language_files: dict[str, int]
+    excluded: int | None = None
 
     def to_payload(self) -> dict[str, object]:
         """The JSON object of a `repo_map.snapshot` reply."""
@@ -77,6 +94,10 @@ class RepoMapFacts:
                 "problem": parsers.problem,
             },
             "language_files": dict(self.language_files),
+            "symbol_kinds": None if self.view is None else symbol_kinds(self.view),
+            "coverage": None
+            if self.view is None
+            else coverage(self.view, self.excluded).to_payload(),
         }
 
     @classmethod
@@ -91,6 +112,7 @@ class RepoMapFacts:
                 raise ValueError(parsed)
             view = parsed
         files = _object(found["language_files"], None)
+        excluded = _derived(view, found["symbol_kinds"], found["coverage"])
         return cls(
             head=_optional(found["head"], _str),
             view=view,
@@ -98,7 +120,22 @@ class RepoMapFacts:
             memory=_memory(found["memory"]),
             parsers=_optional(found["parsers"], _parsers),
             language_files={key: _int(count) for key, count in files.items()},
+            excluded=excluded,
         )
+
+
+def _derived(view: RepoMapView | None, kinds: object, found: object) -> int | None:
+    """The `excluded` count of the payload; the kinds and the class counts must be the ones the
+    kernel derives from the map, and both are null without a map."""
+    if view is None:
+        if kinds is not None or found is not None:
+            raise ValueError("symbol kinds and coverage need a map")
+        return None
+    fields = _object(found, _COVERAGE_FIELDS)
+    excluded = _optional(fields["excluded"], _int)
+    if kinds != symbol_kinds(view) or found != coverage(view, excluded).to_payload():
+        raise ValueError("symbol kinds or coverage do not match the map")
+    return excluded
 
 
 def _object(value: object, fields: frozenset[str] | None) -> dict[str, object]:

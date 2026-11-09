@@ -12,8 +12,8 @@
    - [x] Master-detail of equal height; the detail shows pill, group, id, message, «Как исправить:»,
          the manual command with «Копировать команду», the source line and the skip callout.
    - [x] «Экспорт» saves JSON of the visible checks with the filter (Blob, no CSP change).
-   - Deviations: every check of the report instead of the mockup's «7 ключевых»; no «Что
-     проверено»/«Почему важно» rows (the report has no such facts); «Исправить» runs the section's
+   - Deviations: every check of the report instead of the mockup's «7 ключевых»; «Что проверено» is
+     the check message and «Почему важно» the kernel catalog of check rationales; «Исправить» runs the section's
      server fix command (all internal fixers, as `harness health --fix`), not a per-check plan;
      no jump links from a check (TUI-only routes); no download/search icons (not in the icon set). */
 import { readFileSync } from "node:fs";

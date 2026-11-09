@@ -1,14 +1,23 @@
 /* Harness: the mockup's #harness with the facts of harness.overview (state, package version,
    drift, pipeline usage) and harness.maintenance (cleanup plans, worktrees). Tabs "Обзор" and
    "Команды" are both mounted, the inactive one hidden, so a page button can hand a run to the
-   command panel, whose dialog shows the server's confirmation. The other tabs of the mockup
-   (Runtime, Adapters, Containers) have no TUI facts yet and are not shown. */
+   command panel, whose dialog shows the server's confirmation. Runtime and Adapters show the
+   store and adapter facts of harness.overview, Containers its container engine inventory; facts
+   without a source say so. The
+   maintenance and usage panels have no mockup slot and follow the mockup blocks (H4). */
 import { useCallback, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
-import { InstallPanel, UsagePanel } from "../harness/HarnessOverview";
+import {
+  AdaptersPanel,
+  AuditPanel,
+  ContainersPanel,
+  InstallPanel,
+  RuntimePanel,
+  UsagePanel,
+} from "../harness/HarnessOverview";
 import { Maintenance } from "../harness/Maintenance";
-import { driftLabel, formatSize } from "../harness/format";
+import { driftLabel } from "../harness/format";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -18,7 +27,7 @@ import { parseHarnessOverview, parseMaintenance } from "../ws/screens";
 /** The plan each plan-bound cleanup command deletes: the wire contract of `plan_digest`. */
 export const PLAN_OF_COMMAND = { "cleanup-apply": "soft", "cleanup-hard-apply": "hard" } as const;
 
-type Tab = "overview" | "commands";
+type Tab = "overview" | "runtime" | "adapters" | "containers" | "commands";
 
 export function Harness() {
   const { t, section, tab: tabLabel } = useI18n();
@@ -28,7 +37,6 @@ export function Harness() {
   const maintenance = useScreen({ type: "harness.maintenance" }, parseMaintenance);
   const data = overview.data;
   const state = data?.state;
-  const usage = data?.usage;
   const view = maintenance.data?.maintenance ?? null;
 
   const digests: Record<string, string> = {};
@@ -47,19 +55,26 @@ export function Harness() {
 
   const tabs: [Tab, string][] = [
     ["overview", tabLabel("Обзор")],
+    ["runtime", "Runtime"],
+    ["adapters", t("Адаптеры")],
+    ["containers", t("Контейнеры")],
     ["commands", tabLabel("Команды")],
   ];
+  const store = data?.store ?? null;
   const unavailable = t("Недоступно в текущем снимке");
   return (
     <div className="harness-page" data-section="Harness">
       <div className="page-title harness-title">
         <div>
           <h1>{section("Harness")}</h1>
-          <p>{t("Установка, использование пайплайна и обслуживание. Команды выполняются как job сервера после подтверждения.")}</p>
+          <p>{t("Установка, runtime, адаптеры и обслуживание. Команды выполняются как job сервера после подтверждения.")}</p>
           <div className="home-facts">
             <span id="harness-version">
               {state ? (state.installed ? state.installed_version : t("не установлен")) : unavailable}
             </span>
+            {data && <span>→ {data.package_version}</span>}
+            {store && <span>{store.authority}</span>}
+            {store?.schema != null && <span>schema {store.schema}</span>}
             {state && <span>{t("{count} скилов", { count: state.skills })}</span>}
             {data && <span id="harness-drift">{t(driftLabel(data.drift))}</span>}
             {state?.updated_at && <span>Lock {state.updated_at}</span>}
@@ -73,7 +88,7 @@ export function Harness() {
             <Icon name="pulse" /> {section("Diagnostics")}
           </a>
           <a className="btn primary" href={href("update-harness")}>
-            {section("Update Harness")}
+            {t("Обновление")}
           </a>
         </div>
       </div>
@@ -89,32 +104,35 @@ export function Harness() {
         <div>
           <span>{t("Установлено")}</span>
           <b className="violet">{state ? (state.installed ? state.installed_version : "—") : "—"}</b>
-          <small>{data ? `${t("Пакет")} ${data.package_version}` : unavailable}</small>
-        </div>
-        <div>
-          <span>Skills</span>
-          <b className="lavender">{state ? state.skills : "—"}</b>
-          <small>{state ? t("{count} управляемых файлов", { count: state.managed_files }) : unavailable}</small>
-        </div>
-        <div>
-          <span>{t("Пайплайн")}</span>
-          <b className="mint">{usage ? (usage.unavailable === null ? usage.batches : "—") : "—"}</b>
           <small>
-            {usage
-              ? usage.unavailable === null
-                ? t("тикетов {tickets} · диспатчей {dispatches} · отчётов {reports}", {
-                    tickets: usage.tickets,
-                    dispatches: usage.dispatches,
-                    reports: usage.reports,
-                  })
-                : t(usage.unavailable)
+            {data ? `${t("доступно {version}", { version: data.package_version })} · channel ` : unavailable}
+            {data ? <span className="muted no-data">{t("нет данных")}</span> : null}
+          </small>
+        </div>
+        <div>
+          <span>Runtime store</span>
+          <b className="mint">{store?.schema != null ? `schema ${store.schema}` : t("нет данных")}</b>
+          <small>
+            {store
+              ? `generation ${store.generation ?? "—"} · audit ${store.audit_records ?? "—"}`
               : unavailable}
           </small>
         </div>
         <div>
-          <span>{t("Временные файлы")}</span>
-          <b className="cyan">{view ? formatSize(view.soft.total.bytes) : "—"}</b>
-          <small>{view ? t("{count} объектов", { count: view.soft.items }) : t("Статистика считается…")}</small>
+          <span>Audit chain</span>
+          <b className="cyan">{store?.audit_records ?? t("нет данных")}</b>
+          <small>
+            cutover <span className="muted no-data">{t("нет данных")}</span>
+          </small>
+        </div>
+        <div>
+          <span>Skills</span>
+          <b className="lavender">{state ? state.skills : "—"}</b>
+          <small>
+            {state
+              ? `drift ${data?.drift_files ?? "—"} · ${t("{count} управляемых файлов", { count: state.managed_files })}`
+              : unavailable}
+          </small>
         </div>
       </div>
 
@@ -137,8 +155,10 @@ export function Harness() {
       <div id="harness-tab-overview" role="tabpanel" hidden={tab !== "overview"}>
         <div className="harness-grid">
           <InstallPanel overview={data} />
-          <UsagePanel overview={data} />
+          <RuntimePanel overview={data} compact />
         </div>
+        <AdaptersPanel overview={data} compact />
+        <UsagePanel overview={data} />
         <Maintenance
           facts={maintenance.data}
           error={maintenance.error && !maintenance.data ? maintenance.error.message || maintenance.error.code : null}
@@ -147,6 +167,22 @@ export function Harness() {
           onRefresh={() => maintenance.refresh(true)}
         />
       </div>
+      {tab === "runtime" ? (
+        <div id="harness-tab-runtime" role="tabpanel" className="harness-runtime-tab">
+          <RuntimePanel overview={data} compact={false} />
+          <AuditPanel overview={data} />
+        </div>
+      ) : null}
+      {tab === "adapters" ? (
+        <div id="harness-tab-adapters" role="tabpanel">
+          <AdaptersPanel overview={data} compact={false} />
+        </div>
+      ) : null}
+      {tab === "containers" ? (
+        <div id="harness-tab-containers" role="tabpanel">
+          <ContainersPanel overview={data} maintenance={view} />
+        </div>
+      ) : null}
       <div id="harness-tab-commands" role="tabpanel" hidden={tab !== "commands"}>
         <CommandPanel section="harness" planDigests={digests} request={request} onJobDone={refreshAll} />
       </div>
