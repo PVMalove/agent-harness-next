@@ -30,7 +30,7 @@ until you explicitly request their replacement.
 ## Contracts for agents
 
 The project receives the operational guides
-`docs/agents/{artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. These are
+`docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. These are
 the documents an agent follows to do the work: branches and commits, tracker work, labels, temporary
 artifacts, worktrees, and the test zone.
 

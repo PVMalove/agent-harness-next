@@ -58,16 +58,41 @@ def _documented(pattern: str, text: str) -> set[str]:
     return set(re.findall(pattern, text, re.MULTILINE))
 
 
+# Шаблоны-заготовки, которые проект заполняет сам: с копией сверяются текст до первого `## `
+# и список заголовков `## `, а тела секций у этого репозитория свои.
+PROJECT_FILLED_TEMPLATES = frozenset({"agent-prompt.md"})
+
+
+def _filled_template_shape(text: str) -> tuple[str, list[str]]:
+    """Вводный текст до первого заголовка `## ` и сами заголовки `## ` по порядку."""
+    lines = text.split("\n")
+    headings = [line for line in lines if line.startswith("## ")]
+    first = next(
+        (i for i, line in enumerate(lines) if line.startswith("## ")), len(lines)
+    )
+    return "\n".join(lines[:first]).strip(), headings
+
+
 def check_docs_agents_mirror() -> None:
     """Проверить, что docs/agents/*.md совпадают с harness/project/docs-agents/*.md.
 
     docs/agents — собственная копия файлов, которые scaffold_engineering_extras разворачивает в каждый
     проект engineering-suite. Обе копии правятся вручную, поэтому расхождение ловится здесь.
+    У заготовок из PROJECT_FILLED_TEMPLATES сверяются только вводный текст и заголовки секций.
     """
     for template in sorted(DOCS_AGENTS_TEMPLATE.glob("*.md")):
         counterpart = ROOT / "docs" / "agents" / template.name
         if not counterpart.is_file():
             sys.exit(f"{template} has no docs/agents counterpart: {counterpart}")
+        if template.name in PROJECT_FILLED_TEMPLATES:
+            if _filled_template_shape(
+                normalized_text(template)
+            ) != _filled_template_shape(normalized_text(counterpart)):
+                sys.exit(
+                    f"docs/agents/{template.name} intro or sections have drifted from "
+                    f"harness/project/docs-agents/{template.name}"
+                )
+            continue
         if normalized_text(template) != normalized_text(counterpart):
             sys.exit(
                 f"docs/agents/{template.name} has drifted from harness/project/docs-agents/{template.name}"

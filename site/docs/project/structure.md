@@ -30,7 +30,7 @@
 ## Контракты для агентов
 
 В проект разворачиваются операционные руководства
-`docs/agents/{artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. Это
+`docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. Это
 документы, по которым агент выполняет работу: ветки и коммиты, работа с трекером, метки, временные
 артефакты, worktree и тестовая зона.
 
