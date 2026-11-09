@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { BoardBanner, BoardColumns, BoardKpis, BoardStatePanel, BoardToolbar } from "../board/BoardViews";
 import { NO_FILTERS } from "../board/format";
+import { TicketModal } from "../board/TicketModal";
 import type { BoardFilters } from "../board/format";
 import { useBoard, useBoardSpecs } from "../board/useTaskBoard";
 import { Icon } from "../icons";
@@ -102,7 +103,9 @@ function SpecBoard({
 }) {
   const { board: screen, refreshing, refresh } = useBoard(spec);
   const [filters, setFilters] = useState<BoardFilters>(NO_FILTERS);
+  const [selected, setSelected] = useState<string | null>(null);
   const board = screen.data;
+  const open = board?.tickets.find((card) => card.id === selected) ?? null;
   const refreshAll = () => {
     onRefreshSpecs();
     refresh();
@@ -127,12 +130,13 @@ function SpecBoard({
               <>
                 <BoardKpis board={board} />
                 <BoardToolbar filters={filters} onChange={setFilters} />
-                <BoardColumns board={board} filters={filters} />
+                <BoardColumns board={board} filters={filters} onOpen={(card) => setSelected(card.id)} />
               </>
             )}
           </>
         )
       )}
+      {board && open && <TicketModal key={open.id} card={open} board={board} onClose={() => setSelected(null)} />}
     </>
   );
 }

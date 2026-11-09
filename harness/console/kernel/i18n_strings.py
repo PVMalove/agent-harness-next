@@ -2166,3 +2166,17 @@ EN.update(
         "Трекер не нашёл данные": "The tracker found no data",
     }
 )
+
+# Web Task Board ticket modal.
+EN.update(
+    {
+        "Acceptance ({count})": "Acceptance ({count})",
+        "Копировать": "Copy",
+        "Текущий статус": "Current status",
+        "Промпт скопирован": "Prompt copied",
+        "Критерии скопированы": "Criteria copied",
+        "Скопируйте текст вручную": "Copy the text manually",
+        "Блокеров нет.": "No blockers.",
+        "Файлы не указаны.": "No files listed.",
+    }
+)
