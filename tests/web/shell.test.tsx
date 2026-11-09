@@ -44,7 +44,7 @@ describe("the shell", () => {
     ]);
   });
 
-  test("a section route moves aria-current and shows its placeholder", async () => {
+  test("a section route moves aria-current and shows its page", async () => {
     renderApp();
     await act(async () => {
       window.location.hash = "#/board";
@@ -54,7 +54,7 @@ describe("the shell", () => {
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Доска задач");
     expect(document.title).toBe("Harness Console · Доска задач");
-    expect(screen.getByText("Этот раздел ещё недоступен в веб-консоли")).toBeTruthy();
+    expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
 
   test("the hidden Recovery and Container routes have no menu item and highlight Orchestration", async () => {

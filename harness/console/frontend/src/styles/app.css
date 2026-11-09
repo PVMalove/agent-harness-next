@@ -180,3 +180,9 @@ button.diff-file { grid-template-columns: minmax(0, 1fr) auto; width: 100%; bord
 .settings-page .settings-resolved { margin: 8px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .settings-page .settings-note, .settings-page .settings-config-foot, .settings-history > code, .settings-history > .field { margin: 6px 14px; }
 .settings-page .settings-textarea { width: 100%; min-height: 320px; box-sizing: border-box; font-family: var(--mono); }
+/* Task Board: main#content takes the mockup's main.board-main layout; ticket text wraps in place. */
+main#content:has(> .board-page) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 12px; }
+@media (max-width: 980px) { main#content:has(> .board-page) { padding-bottom: 8px; } }
+.board-card h3, .board-card p, .board-spec-meta, .board-banner span { overflow-wrap: anywhere; }
+.board-specbar select { max-width: 100%; }
+.board-specbar label { min-width: 0; max-width: 100%; }
