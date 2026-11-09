@@ -468,6 +468,28 @@ DIAGNOSTICS_COMMANDS: tuple[CatalogEntry, ...] = (
     ),
 )
 
+# The task board's status change of one ticket: `harness ticket-status` enforces the transitions and
+# replaces the ticket's `status::*` label in the tracker, so it is an external change behind a
+# confirmation and the one mutating slot. Only the board starts it; no menu lists it.
+BOARD_STATUS = CatalogEntry(
+    "board-status",
+    "Сменить статус тикета",
+    (
+        "harness",
+        "ticket-status",
+        "{repo}",
+        "--spec",
+        "{spec}",
+        "--ticket",
+        "{ticket}",
+        "--to",
+        "{to}",
+    ),
+    Reversibility.EXTERNAL_CHANGE,
+    f"{_HARNESS_CLI}:cmd_ticket_status",
+)
+BOARD_COMMANDS: tuple[CatalogEntry, ...] = (BOARD_STATUS,)
+
 # The Repo Map screen's build of the map for the HEAD it showed, run as a console server job whose
 # stdout is the map; it is not listed in the Harness menu.
 # The CLI of the harness package the server runs, so the build never depends on a copy installed

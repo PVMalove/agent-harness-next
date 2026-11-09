@@ -310,3 +310,25 @@ def test_the_configuration_writes_run_the_configuration_cli_by_reversibility() -
         assert entry.available(REPO) and not entry.read_only and entry.title in EN
         assert entry.typed_confirmation is None
         assert entry.inputs == (() if entry.key == "configuration-recover" else ("request",))
+
+
+def test_the_board_status_change_is_an_external_change_of_cmd_ticket_status() -> None:
+    """Смена статуса тикета доски — внешнее изменение, и значения доходят до cmd_ticket_status."""
+    from harness.console.kernel.catalog import BOARD_COMMANDS, BOARD_STATUS
+
+    assert BOARD_COMMANDS == (BOARD_STATUS,)
+    assert BOARD_STATUS.key == "board-status"
+    assert BOARD_STATUS.reversibility is Reversibility.EXTERNAL_CHANGE
+    assert BOARD_STATUS.needs_confirmation
+    assert not BOARD_STATUS.read_only
+    assert BOARD_STATUS.inputs == ("spec", "ticket", "to")
+    values = {"spec": "#900", "ticket": "#915", "to": "progress"}
+    cli = runpy.run_path(str(BIN_HARNESS_PATH))
+    args = cli["parser"]().parse_args(BOARD_STATUS.cli_argv(REPO, values)[1:])
+    assert args.func.__name__ == BOARD_STATUS.function.split(":")[1] == "cmd_ticket_status"
+    assert (args.repo, args.spec, args.ticket, args.to) == (
+        str(REPO),
+        "#900",
+        "#915",
+        "progress",
+    )

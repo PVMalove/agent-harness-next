@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..kernel.catalog import (
+    BOARD_COMMANDS,
     CONFIGURATION_COMMANDS,
     DIAGNOSTICS_COMMANDS,
     HARNESS_COMMANDS,
@@ -176,7 +177,7 @@ UPDATE_COMMANDS = ("update", "update-force-managed")
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
     """The job service over the harness, the selected seed update, Diagnostics, Repo Map,
-    installation, configuration, memory, coordinator and native permission commands; without
+    installation, configuration, memory, coordinator, native permission and task-board commands; without
     `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
@@ -188,6 +189,8 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
+        # The task board starts its status change itself; no section lists it.
+        *BOARD_COMMANDS,
     )
     listed: dict[str, tuple[CommandSpec, ...]] = {
         "harness": tuple(
