@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
-import { formatSize } from "../../harness/console/frontend/src/harness/format";
 import { LanguageProvider, translate } from "../../harness/console/frontend/src/i18n";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import {
@@ -71,9 +70,21 @@ describe("the Harness route", () => {
     expect(screen.getByRole("tab", { name: "Обзор" }).getAttribute("aria-selected")).toBe("true");
     expect(document.querySelector("#harness-version")?.textContent).toBe("2.0.0");
     expect(document.querySelector("#harness-drift")?.textContent).toBe("⚠ дрейф есть");
-    expect(within(kpis()).getByText("4")).toBeTruthy();
-    expect(within(kpis()).getByText("тикетов 3 · диспатчей 12 · отчётов 9")).toBeTruthy();
-    expect(within(kpis()).getByText(formatSize(2048))).toBeTruthy();
+    expect([...kpis().querySelectorAll(":scope > div > span:first-child")].map((label) => label.textContent)).toEqual([
+      "Установлено",
+      "Runtime store",
+      "Audit chain",
+      "Skills",
+    ]);
+    expect(within(kpis()).getByText("schema 3")).toBeTruthy();
+    expect(within(kpis()).getAllByText("нет данных").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Обзор",
+      "Runtime",
+      "Адаптеры",
+      "Контейнеры",
+      "Команды",
+    ]);
     const usage = document.querySelector("#harness-usage") as HTMLElement;
     for (const value of ["4", "3", "12", "9"]) expect(within(usage).getByText(value)).toBeTruthy();
     expect(within(document.querySelector("#harness-install") as HTMLElement).getByText("engineering-suite")).toBeTruthy();
@@ -84,7 +95,7 @@ describe("the Harness route", () => {
       ...HARNESS_OVERVIEW,
       usage: { unavailable: "Леджер не найден", batches: 0, tickets: 0, dispatches: 0, reports: 0 },
     });
-    expect(within(kpis()).getByText("Леджер не найден")).toBeTruthy();
+    expect(within(document.querySelector("#harness-usage") as HTMLElement).getByText(/Леджер не найден/)).toBeTruthy();
   });
 
   test("the maintenance panel shows the server's plan, skips and worktree reasons", () => {
@@ -150,9 +161,23 @@ describe("the Harness route", () => {
       "?lang=en",
     );
     const english = "the orchestration ledger is not found or not initialized";
-    expect(within(kpis()).getByText(english)).toBeTruthy();
     expect(within(document.querySelector("#harness-usage") as HTMLElement).getByText(`Pipeline usage: ${english}`)).toBeTruthy();
     expect(screen.queryByText(new RegExp(reason))).toBeNull();
+  });
+
+  test("Runtime, Adapters and Containers show the overview facts and say what has no source", () => {
+    renderHarness();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Runtime" })));
+    const runtime = document.querySelector("#harness-tab-runtime") as HTMLElement;
+    expect(within(runtime).getByText("generation-1")).toBeTruthy();
+    expect(within(runtime).getByRole("heading", { level: 2, name: "Audit chain" })).toBeTruthy();
+    expect(within(runtime).getAllByText("нет данных").length).toBeGreaterThan(0);
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Адаптеры" })));
+    const adapters = document.querySelector("#harness-tab-adapters") as HTMLElement;
+    expect(within(adapters).getByText("current")).toBeTruthy();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Контейнеры" })));
+    const containers = document.querySelector("#harness-tab-containers") as HTMLElement;
+    expect(within(containers).getAllByText("нет данных")).toHaveLength(4);
   });
 
   test("in English the overview tab reads Overview, apart from folder browsing", () => {

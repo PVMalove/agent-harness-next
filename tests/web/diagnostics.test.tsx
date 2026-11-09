@@ -63,7 +63,8 @@ describe("the Diagnostics route", () => {
     expect(document.querySelector("#diag-total")?.textContent).toBe("5 проверок");
     expect(document.querySelector("#diag-checked")?.textContent).toContain("проверено 4 из 5");
     expect(rows()).toEqual(["hooks.policy", "environment.uv", "tracker.online", "files.lock", "directories.sandboxes"]);
-    expect(within(detail()).getByText("Нет .harness/hook-policy.json")).toBeTruthy();
+    expect(within(detail()).getAllByText("Нет .harness/hook-policy.json").length).toBe(2);
+    expect(within(detail()).getByText("Почему важно").nextElementSibling!.textContent).toBe("нет данных");
     expect(within(detail()).getByText("Запустите обновление")).toBeTruthy();
     expect(within(detail()).getByText("harness update .")).toBeTruthy();
     expect(within(detail()).getByText("Hooks проекта")).toBeTruthy();
@@ -156,6 +157,6 @@ describe("the Diagnostics route", () => {
     renderDiagnostics(HEALTH_REPORT, "?lang=en");
     expect(screen.getByRole("heading", { level: 2, name: "Health summary" })).toBeTruthy();
     expect(within(detail()).getByText("Project hooks")).toBeTruthy();
-    expect(within(detail()).getByText("How to fix:")).toBeTruthy();
+    expect(within(detail()).getByText("What to do")).toBeTruthy();
   });
 });

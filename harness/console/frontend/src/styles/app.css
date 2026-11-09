@@ -195,3 +195,5 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .board-modal-links select { max-width: 100%; }
 /* Mockup parity: a field without a data source shows an explicit no-data state in its place. */
 .no-data { font-style: italic; color: var(--muted); }
+/* A multi-line kernel value renders as lines, not as a string with line breaks. */
+.view-line { display: block; overflow-wrap: anywhere; }

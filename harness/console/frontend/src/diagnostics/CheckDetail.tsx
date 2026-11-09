@@ -64,9 +64,20 @@ export function CheckDetail({
           <code>{check.id}</code>
         </div>
         <h3>{check.message}</h3>
+        <p className="diag-detail-lead">{groupLabel(language, check.group)} · {meta.short}</p>
         <dl className="diag-facts">
           <div>
-            <dt>{t("Как исправить:")}</dt>
+            <dt>{t("Что проверено")}</dt>
+            <dd>{check.message}</dd>
+          </div>
+          <div>
+            <dt>{t("Почему важно")}</dt>
+            <dd className="muted no-data" title={t("Каталога описаний проверок нет")}>
+              {t("нет данных")}
+            </dd>
+          </div>
+          <div>
+            <dt>{t("Что сделать")}</dt>
             <dd>{check.fix ? check.fix.text : t("Рекомендация отсутствует")}</dd>
           </div>
           <div>
