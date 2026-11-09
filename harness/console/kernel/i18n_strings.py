@@ -2073,3 +2073,34 @@ EN.update(
         "Выберите файл, чтобы увидеть его изменения.": "Choose a file to see its changes.",
     }
 )
+
+# The web Configuration page (#889): the TUI configuration texts and the page's own labels.
+EN.update(
+    {
+        "История": "History",
+        "удалить": "remove",
+        "Описание версии": "Version description",
+        "Сохранить черновик как версию": "Save the draft as a version",
+        "Запись идёт через транзакцию: проверка устаревания, резервная копия, подтверждение.": "Writes go through a transaction: a staleness check, a backup, a confirmation.",
+        "Файлы конфигурации": "Configuration files",
+        "есть": "present",
+        "нет — показан документ по умолчанию": "missing — the default document is shown",
+        "Обновить адаптеры": "Update the adapters",
+        "Настройка project.json и orchestration.json: черновик, различия и подтверждённая запись с резервной копией.": "Configure project.json and orchestration.json: a draft, the differences and a confirmed write with a backup.",
+        "✔ валиден": "✔ valid",
+        "○ нет файла": "○ no file",
+        "✖ ошибка": "✖ error",
+        "Схема": "Schema",
+        "✔ установлена": "✔ installed",
+        "○ не установлена": "○ not installed",
+        "Незавершённая запись": "Unfinished write",
+        "⚠ есть": "⚠ present",
+        "Незавершённая запись конфигурации: сначала восстановите её": "An unfinished configuration write: recover it first",
+        "Восстановить незавершённую запись": "Recover the unfinished write",
+        "Сначала установите engineering-suite или backend-orchestration через меню подключения проекта": "Install engineering-suite or backend-orchestration through the project setup menu first",
+        "Хранилище версий": "Version store",
+        "Список версий и восстановление доступны в TUI.": "The version list and restore are available in the TUI.",
+        "Скрытое значение нельзя записать: введите его заново": "A hidden value cannot be written: enter it again",
+        "Файл должен быть JSON-объектом": "The file must be a JSON object",
+    }
+)

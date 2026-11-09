@@ -6,6 +6,7 @@ import { AppShell } from "./AppShell";
 import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
 import { HIDDEN_ROUTES, NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
+import { Configuration } from "./routes/Configuration";
 import { ContainerRoute } from "./routes/ContainerRoute";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
@@ -43,6 +44,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   publish: <Decisions section="Публикация" />,
   "open-project": <OpenProject />,
   "update-harness": <UpdateHarness />,
+  configuration: <Configuration />,
 };
 
 export function createRouter() {
