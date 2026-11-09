@@ -5,8 +5,8 @@ import type { Page } from "@playwright/test";
 const base = () => process.env.CONSOLE_BASE_URL!;
 const token = () => process.env.CONSOLE_TOKEN!;
 
-const RU_BLOCKS = ["Требует внимания", "Контекст", "Последние задачи", "Здоровье", "Контур Harness 2.0.0"];
-const EN_BLOCKS = ["Requires attention", "Context", "Recent tasks", "Health", "Harness 2.0.0 outline"];
+const RU_BLOCKS = [/^Требует внимания$/, /^Контекст$/, /^Последние задачи \d+$/, /^Здоровье$/, /^Контур Harness$/];
+const EN_BLOCKS = [/^Requires attention$/, /^Context$/, /^Recent tasks \d+$/, /^Health$/, /^Harness outline$/];
 
 async function watch(page: Page) {
   const errors: string[] = [];
@@ -41,15 +41,9 @@ test("the launch URL opens Home over the cookie and switches language in place",
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected", { timeout: 60000 });
   await expect(blocks(page)).toHaveText(RU_BLOCKS);
   await expect(page.locator("#home h1")).toHaveText("Состояние харнесса");
-  await expect(page.locator("#home h3")).toHaveText([
-    "Проект",
-    "Harness",
-    "Runtime store",
-    "Repo Map",
-    "Память",
-    "По областям",
-    "Проверки",
-  ]);
+  await expect(page.locator("#home-context h3")).toHaveText([/Проект/, /Harness/, /Runtime store/, /Repo Map/, /Память/]);
+  await expect(page.locator("#home-health h3")).toHaveText(["По областям", "Проверки"]);
+  await expect(page.locator("#home")).not.toContainText("Контур Harness 2.0.0");
   await expect(page.locator("#health-ok")).toHaveText(/^\d+$/);
   await expect(page.locator("#problems-limit")).toContainText("Показано");
   await expect(page.locator("html")).toHaveAttribute("lang", "ru");

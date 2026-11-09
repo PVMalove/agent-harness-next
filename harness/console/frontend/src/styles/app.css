@@ -193,3 +193,5 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 #board-confirm-body h2, #board-confirm-body p, .board-confirm-diff { overflow-wrap: anywhere; min-width: 0; }
 .board-confirm-diff { flex-wrap: wrap; }
 .board-modal-links select { max-width: 100%; }
+/* Mockup parity: a field without a data source shows an explicit no-data state in its place. */
+.no-data { font-style: italic; color: var(--muted); }
