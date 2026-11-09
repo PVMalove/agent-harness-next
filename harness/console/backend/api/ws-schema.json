@@ -145,7 +145,8 @@
             "configuration",
             "memory",
             "decisions",
-            "recovery"
+            "recovery",
+            "update"
           ],
           "title": "Section",
           "type": "string"
@@ -1405,7 +1406,8 @@
             "configuration",
             "memory",
             "decisions",
-            "recovery"
+            "recovery",
+            "update"
           ],
           "title": "Section",
           "type": "string"

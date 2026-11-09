@@ -2012,3 +2012,103 @@ EN.update(
     }
 )
 
+
+# The web Open Project page (#889): its own labels and the TUI plan phrases it words one by one.
+EN.update(
+    {
+        "Шаг {current} из {total}": "Step {current} of {total}",
+        "Команда для другой консоли": "Command for another console",
+        "Этот проект уже открыт этим сервером": "This server already serves this project",
+        "✖ заблокировано: {n}": "✖ blocked: {n}",
+        "Перезаписывает только управляемые файлы Harness.": "Overwrites managed Harness files only.",
+        "Сервер консоли обслуживает один проект; другой проект открывается своей командой в терминале.": "The console server serves one project; another project opens with its own command in a terminal.",
+        "Данные не получены": "No data received",
+        "Действие": "Action",
+        "Заблокированные составы": "Blocked sets",
+        "Проверка пути не читает Git и .harness: команда открывает проект своим сервером.": "Checking the path reads neither Git nor .harness: the command opens the project with its own server.",
+        "Git-проект найден · действие:": "Git project found · action:",
+        "обновление": "update",
+        "новая установка": "new installation",
+        "внедрение": "adoption",
+        "harness.lock есть · установлено:": "harness.lock present · installed:",
+        "Найдено:": "Found:",
+        "— конфликты разберите до установки.": "— resolve the conflicts before installing.",
+        "Файлов Harness в проекте нет.": "The project has no Harness files.",
+    }
+)
+
+# The web Update Harness page (#889): the TUI update screen"s texts and the page"s own labels.
+EN.update(
+    {
+        "загружается…": "loading…",
+        "Харнесс не установлен: нет читаемого .harness/harness.lock": "Harness is not installed: no readable .harness/harness.lock",
+        "Установите его через «Открыть проект».": "Install it through “Open project”.",
+        "Доступно": "Available",
+        "Версия актуальна": "Version is up to date",
+        "Доступно обновление": "Update available",
+        "Расхождений нет": "No differences",
+        "Состояние:": "State:",
+        "обновятся": "will be updated",
+        "добавятся": "will be added",
+        "будут восстановлены": "will be restored",
+        "будут убраны": "will be removed",
+        "с локальными правками (сохранятся)": "with local changes (kept)",
+        "в конфликте (нужна перезапись)": "in conflict (overwrite needed)",
+        "конфликт": "conflict",
+        "Изменён и у вас, и в пакете: обычное обновление остановится, перезапись заменит файл версией пакета.": "Changed both by you and in the package: a normal update stops; overwriting replaces the file with the package version.",
+        "обновится": "will be updated",
+        "Файл будет заменён версией из пакета.": "The file will be replaced with the package version.",
+        "добавится": "will be added",
+        "Новый файл пакета: будет добавлен.": "A new package file: it will be added.",
+        "восстановится": "will be restored",
+        "Файла нет на диске: он будет восстановлен.": "The file is missing on disk: it will be restored.",
+        "удалится": "will be removed",
+        "Файла больше нет в пакете: он будет удалён.": "The package no longer has this file: it will be removed.",
+        "ваши правки": "your changes",
+        "Ваши локальные правки: обычное обновление их сохранит.": "Your local changes: a normal update keeps them.",
+        "Seed-файл отличается от шаблона: обновление его не трогает, пока не выбрана перезапись.": "The seed file differs from the template: the update leaves it alone unless overwriting is chosen.",
+        "diff недоступен:": "diff unavailable:",
+        "Обновление управляемых файлов Harness в проекте сервера; перед запуском — подтверждение.": "Updates the managed Harness files of the server’s project; a confirmation comes first.",
+        "отмечено {ticked} из {total}": "{ticked} of {total} ticked",
+        "Выберите файл, чтобы увидеть его изменения.": "Choose a file to see its changes.",
+    }
+)
+
+# The web Configuration page (#889): the TUI configuration texts and the page's own labels.
+EN.update(
+    {
+        "История": "History",
+        "удалить": "remove",
+        "Описание версии": "Version description",
+        "Сохранить черновик как версию": "Save the draft as a version",
+        "Запись идёт через транзакцию: проверка устаревания, резервная копия, подтверждение.": "Writes go through a transaction: a staleness check, a backup, a confirmation.",
+        "Файлы конфигурации": "Configuration files",
+        "есть": "present",
+        "нет — показан документ по умолчанию": "missing — the default document is shown",
+        "Обновить адаптеры": "Update the adapters",
+        "Настройка project.json и orchestration.json: черновик, различия и подтверждённая запись с резервной копией.": "Configure project.json and orchestration.json: a draft, the differences and a confirmed write with a backup.",
+        "✔ валиден": "✔ valid",
+        "○ нет файла": "○ no file",
+        "✖ ошибка": "✖ error",
+        "Схема": "Schema",
+        "✔ установлена": "✔ installed",
+        "○ не установлена": "○ not installed",
+        "Незавершённая запись": "Unfinished write",
+        "⚠ есть": "⚠ present",
+        "Незавершённая запись конфигурации: сначала восстановите её": "An unfinished configuration write: recover it first",
+        "Восстановить незавершённую запись": "Recover the unfinished write",
+        "Сначала установите engineering-suite или backend-orchestration через меню подключения проекта": "Install engineering-suite or backend-orchestration through the project setup menu first",
+        "Хранилище версий": "Version store",
+        "Список версий и восстановление доступны в TUI.": "The version list and restore are available in the TUI.",
+        "Скрытое значение нельзя записать: введите его заново": "A hidden value cannot be written: enter it again",
+        "Файл должен быть JSON-объектом": "The file must be a JSON object",
+    }
+)
+
+# The web Help page (#889).
+EN.update(
+    {
+        "Справка по разделам, клавишам и правилам безопасности консоли.": "A guide to the console's sections, keys and safety rules.",
+        "Разделов справки: {n}": "Guide sections: {n}",
+    }
+)

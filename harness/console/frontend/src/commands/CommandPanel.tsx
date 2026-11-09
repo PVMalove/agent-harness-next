@@ -3,7 +3,8 @@
    Labels and reasons are the server's Russian source strings; catalog.json translates them.
    A page may hand over the digests of the cleanup plans it shows (a plan_required command then
    runs bound to that plan), ask to run a command from its own buttons through the same
-   server-driven confirmation, and learn when the shown job finishes. */
+   server-driven confirmation, hide the command table when it runs commands only from its own
+   controls, and learn when the shown job finishes. */
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { JOB_ERROR_LABELS } from "../ws/jobs";
@@ -92,11 +93,15 @@ export function CommandPanel({
   request,
   onJobDone,
   confirmAll = false,
+  listed = true,
 }: {
   section: Section;
   /** Every run opens the confirmation first, whatever the command's class: a reversible
       command is then started with `confirmed: true` too. */
   confirmAll?: boolean;
+  /** Whether the section's command table is shown; a page that runs its commands only from
+      its own controls passes false, so no free-text input of a command is offered. */
+  listed?: boolean;
   /** command_id -> the server digest of the plan the page shows. */
   planDigests?: Readonly<Record<string, string>>;
   request?: RunRequest | null;
@@ -207,7 +212,7 @@ export function CommandPanel({
           {unavailable}
         </p>
       )}
-      <section className="panel harness-commands">
+      {listed && <section className="panel harness-commands">
         <div className="panel-head">
           <h2>{t("Команды")}</h2>
         </div>
@@ -227,7 +232,7 @@ export function CommandPanel({
             ))}
           </div>
         )}
-      </section>
+      </section>}
       {shown && <JobOutput job={shown} onCancel={() => askCancel(shown.id, shown.command_id)} />}
       {pending && <ConfirmDialog request={pending.dialog} onConfirm={confirm} onClose={() => setPending(null)} />}
     </div>

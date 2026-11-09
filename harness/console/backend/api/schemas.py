@@ -93,6 +93,7 @@ CommandSection = Literal[
     "memory",
     "decisions",
     "recovery",
+    "update",
 ]
 ReversibilityClass = Literal[
     "reversible",

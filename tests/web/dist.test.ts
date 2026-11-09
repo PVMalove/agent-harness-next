@@ -102,6 +102,21 @@ describe("the build in harness/console/frontend/dist", () => {
     expect(scripts).not.toContain("dangerouslySetInnerHTML:");
   });
 
+  test("ships Open Project, Update Harness, Configuration and Help over the screen snapshots of the same server", () => {
+    const scripts = ofType(".js").map(text).join("\n");
+    for (const request of [
+      "open_project.snapshot",
+      "update_harness.snapshot",
+      "update_harness.diff",
+      "configuration.snapshot",
+      "help.snapshot",
+    ]) {
+      expect(scripts).toContain(request);
+    }
+    // The guide's Markdown and the configuration documents become elements, never HTML.
+    expect(scripts).not.toContain("dangerouslySetInnerHTML:");
+  });
+
   test("the server's CSP for the build stays strict", () => {
     const source = readFileSync(join(REPO, "harness/console/backend/api/static.py"), "utf-8");
     expect(source).toContain(

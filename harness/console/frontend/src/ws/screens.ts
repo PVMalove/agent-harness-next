@@ -158,7 +158,8 @@ const view = exact({
 });
 const maintenance = exact({ maintenance: nullable(view), error: string });
 
-const state = exact({
+/** The `HarnessState` payload of harness/console/kernel/harness_facts.py. */
+export const harnessState = exact({
   installed: flag,
   installed_version: string,
   capabilities: list(string),
@@ -174,7 +175,7 @@ const usage = exact({
   dispatches: count,
   reports: count,
 });
-const overview = has({ state, package_version: string, drift: string, usage });
+const overview = has({ state: harnessState, package_version: string, drift: string, usage });
 
 /** The `harness health --json` report (schema v1), or null for any other shape. */
 export function parseHealthReport(value: unknown): HealthReport | null {

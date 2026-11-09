@@ -156,3 +156,27 @@
 .route-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 0; }
 .route-tab-state { margin: 8px 14px 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 #route-context { overflow-wrap: anywhere; }
+/* Help: the guide's Markdown (headings, lists, tables, code) inside the mockup's help panels. */
+.help-markdown { padding: 12px 16px; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.help-markdown h2, .help-markdown h3 { margin: 4px 0 8px; }
+.help-markdown ul { margin: 6px 0; padding-left: 18px; }
+.help-markdown .table-wrap { overflow-x: auto; max-width: 100%; }
+.help-markdown table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.help-markdown th, .help-markdown td { padding: 4px 8px; border-top: 1px solid var(--rule); text-align: left; vertical-align: top; }
+.help-section { margin-top: 10px; }
+/* Update Harness and Open Project: the diff rows and the option cards are buttons and labels here. */
+button.diff-file { grid-template-columns: minmax(0, 1fr) auto; width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: transparent; font: inherit; font-size: 11px; text-align: left; }
+.diff-path { min-width: 0; overflow-wrap: anywhere; }
+.diff-kind.fail { color: var(--err); } .diff-kind.warn { color: var(--warn); }
+.update-page .modes, .project-page .modes { flex-direction: column; align-items: stretch; gap: 0; padding: 10px 14px; }
+.update-page .mode-card, .project-page .mode-card { margin-bottom: 7px; }
+.update-page .plan-card, .update-page .modes-card { min-width: 0; }
+@media (max-width: 600px) {
+  .diff-layout { grid-template-columns: 1fr; }
+  .diff-list { border-right: 0; border-bottom: 1px solid var(--rule); }
+}
+/* Configuration: a file or adapter row wraps its facts instead of the mockup's fixed columns. */
+.settings-page .settings-config-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 8px 14px; overflow-wrap: anywhere; }
+.settings-page .settings-resolved { margin: 8px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.settings-page .settings-note, .settings-page .settings-config-foot, .settings-history > code, .settings-history > .field { margin: 6px 14px; }
+.settings-page .settings-textarea { width: 100%; min-height: 320px; box-sizing: border-box; font-family: var(--mono); }

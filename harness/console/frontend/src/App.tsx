@@ -6,16 +6,20 @@ import { AppShell } from "./AppShell";
 import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
 import { HIDDEN_ROUTES, NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
+import { Configuration } from "./routes/Configuration";
 import { ContainerRoute } from "./routes/ContainerRoute";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
 import { Decisions } from "./routes/Decisions";
+import { Help } from "./routes/Help";
 import { Home } from "./routes/Home";
+import { OpenProject } from "./routes/OpenProject";
 import { Orchestration } from "./routes/Orchestration";
 import { Placeholder } from "./routes/Placeholder";
 import { RepoMap } from "./routes/RepoMap";
 import { Recovery } from "./routes/Recovery";
 import { Reports } from "./routes/Reports";
+import { UpdateHarness } from "./routes/UpdateHarness";
 import { ConsoleProvider, useConsole } from "./useConsole";
 import type { ConsoleClient } from "./ws/client";
 
@@ -39,6 +43,10 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   "agent-activity": <AgentActivity />,
   orchestration: <Orchestration />,
   publish: <Decisions section="Публикация" />,
+  "open-project": <OpenProject />,
+  "update-harness": <UpdateHarness />,
+  configuration: <Configuration />,
+  help: <Help />,
 };
 
 export function createRouter() {

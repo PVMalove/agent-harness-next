@@ -35,7 +35,7 @@ export type Reversibility =
   | "downloads-files";
 export type ReversibilityLabel = string;
 export type Section =
-  "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions" | "recovery";
+  "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions" | "recovery" | "update";
 export type Title = string;
 export type TypedConfirmation = string | null;
 export type Force = boolean;
@@ -324,7 +324,7 @@ export type Id25 = string | number | null;
 export type Type24 = "job.list";
 export type Id26 = string | number | null;
 export type Section1 =
-  "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions" | "recovery";
+  "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions" | "recovery" | "update";
 export type Type25 = "job.catalog";
 export type Id27 = string | number | null;
 export type Type26 = "decisions.snapshot";
