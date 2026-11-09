@@ -21,6 +21,10 @@ LOCK_REQUEST = "orchestration.lock"
 RECOVERY_REQUEST = "recovery.snapshot"
 ROUTE_REQUEST = "container_route.snapshot"
 PAGE_REQUEST = "snapshot.page"
+# The Recovery and Container route views of the Web console: the same facts as `recovery.snapshot`
+# and `container_route.snapshot`, drawn by the kernel view-models the TUI uses, paged like them.
+RECOVERY_VIEW_REQUEST = "recovery.view"
+ROUTE_VIEW_REQUEST = "container_route.view"
 # The task board: the open specs and the board of one spec, paged like the screen snapshots.
 TASK_BOARD_SPECS_REQUEST = "task_board.specs"
 TASK_BOARD_REQUEST = "task_board.snapshot"

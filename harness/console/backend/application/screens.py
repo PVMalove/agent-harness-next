@@ -18,6 +18,7 @@ from ...kernel.help_text import help_sections
 from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
 from ...kernel.pipeline_stats import pipeline_usage
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
+from ...kernel.screen_views import recovery_view_payload, route_view_payload
 from ...kernel.update_harness_snapshot import diff_paths
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
 from ....json_types import JsonObject
@@ -271,6 +272,44 @@ class ScreenService:
             cached,
             age,
         )
+
+    async def recovery_view(
+        self, batch: str = "", skip: Sequence[str] = (), *, force: bool = False
+    ) -> Paged:
+        """The Recovery screen as the kernel view-models draw it: the history with its labels,
+        the recovery gate, the view and the resume plan of the selected batch, from the same
+        history cache and `recovery status` reader as `recovery`."""
+        history, cached, age = await self._history.get(
+            lambda: self._recovery.history(self._repo), force=force
+        )
+        status = (
+            await asyncio.to_thread(self._recovery.status, self._repo, batch, skip)
+            if batch
+            else None
+        )
+        payload = await asyncio.to_thread(
+            recovery_view_payload, history, status, batch, skip
+        )
+        return await self._paged(payload, cached, age)
+
+    async def container_route_view(
+        self, batch: str = "", role: str = "developer", runtime: str = ""
+    ) -> Paged:
+        """The Container route as the kernel view-models draw it: the selection, the executor
+        context, the six stage tabs and every stage view, from the same readers as
+        `container_route`; never cached."""
+        authored = await asyncio.to_thread(self._route.authored, self._repo)
+        preflight = (
+            await asyncio.to_thread(
+                self._route.preflight, self._repo, batch, role, runtime
+            )
+            if batch
+            else None
+        )
+        payload = await asyncio.to_thread(
+            route_view_payload, authored, preflight, batch, role, runtime
+        )
+        return await self._paged(payload)
 
     async def container_route(
         self, batch: str = "", role: str = "developer", runtime: str = ""

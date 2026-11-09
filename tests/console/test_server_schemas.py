@@ -85,6 +85,8 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "orchestration.lock": schemas.OrchestrationLockRequest,
         "recovery.snapshot": schemas.RecoverySnapshotRequest,
         "container_route.snapshot": schemas.ContainerRouteSnapshotRequest,
+        "recovery.view": schemas.RecoveryViewRequest,
+        "container_route.view": schemas.ContainerRouteViewRequest,
         "snapshot.page": schemas.SnapshotPageRequest,
         "task_board.specs": schemas.TaskBoardSpecsRequest,
         "task_board.snapshot": schemas.TaskBoardSnapshotRequest,
@@ -126,6 +128,8 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 17, "type": "update_harness.diff", "path": "AGENTS.md", "force": True},
         {"id": 18, "type": "configuration.snapshot", "force": True},
         {"id": 19, "type": "harness.overview", "force": True},
+        {"id": 20, "type": "recovery.view", "batch": "b-1", "skip": ["a1"]},
+        {"id": 21, "type": "container_route.view", "batch": "b", "role": "qa"},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -149,6 +153,10 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "update_harness.diff", "path": ""},
         {"type": "update_harness.diff", "path": "a" * 513},
         {"type": "configuration.snapshot", "names": ["project.json"]},
+        {"type": "recovery.view", "skip": [""]},
+        {"type": "recovery.view", "online": True},
+        {"type": "container_route.view", "role": ""},
+        {"type": "container_route.view", "force": True},
     ):
         with pytest.raises(ValueError):
             schemas.REQUESTS.validate_python(broken)
@@ -185,6 +193,8 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
             "harness.maintenance",
             "update_harness.snapshot",
             "configuration.snapshot",
+            "recovery.view",
+            "container_route.view",
         )
     )
     replies.append(
