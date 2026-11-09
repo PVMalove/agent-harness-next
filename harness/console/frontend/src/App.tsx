@@ -1,9 +1,9 @@
 /* Hash routes: the static build needs no server-side fallback (ADR 0029). */
 import { useState } from "react";
 import type { ReactElement } from "react";
-import { createHashRouter, Navigate, Outlet, RouterProvider } from "react-router";
+import { createHashRouter, Navigate, Outlet, RouterProvider, useLocation } from "react-router";
 import { AppShell } from "./AppShell";
-import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
+import { ConnectionBanner, ConnectionChip, ConnectionPage, showsConnectionPage } from "./ConnectionViews";
 import { HIDDEN_ROUTES, NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
 import { Configuration } from "./routes/Configuration";
@@ -26,9 +26,10 @@ import type { ConsoleClient } from "./ws/client";
 
 function Layout() {
   const { state } = useConsole();
+  const route = useLocation().pathname.replace(/^\/+/, "").split("/")[0] ?? "";
   return (
     <AppShell chip={<ConnectionChip />} banner={<ConnectionBanner />}>
-      {PAGE_STATUSES.includes(state.status) ? <ConnectionPage /> : <Outlet />}
+      {showsConnectionPage(state.status, route) ? <ConnectionPage /> : <Outlet />}
     </AppShell>
   );
 }
