@@ -17,6 +17,7 @@ import { Placeholder } from "./routes/Placeholder";
 import { RepoMap } from "./routes/RepoMap";
 import { Recovery } from "./routes/Recovery";
 import { Reports } from "./routes/Reports";
+import { UpdateHarness } from "./routes/UpdateHarness";
 import { ConsoleProvider, useConsole } from "./useConsole";
 import type { ConsoleClient } from "./ws/client";
 
@@ -41,6 +42,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   orchestration: <Orchestration />,
   publish: <Decisions section="Публикация" />,
   "open-project": <OpenProject />,
+  "update-harness": <UpdateHarness />,
 };
 
 export function createRouter() {

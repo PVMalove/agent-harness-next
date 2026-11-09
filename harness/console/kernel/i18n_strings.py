@@ -2036,3 +2036,40 @@ EN.update(
         "Файлов Harness в проекте нет.": "The project has no Harness files.",
     }
 )
+
+# The web Update Harness page (#889): the TUI update screen"s texts and the page"s own labels.
+EN.update(
+    {
+        "загружается…": "loading…",
+        "Харнесс не установлен: нет читаемого .harness/harness.lock": "Harness is not installed: no readable .harness/harness.lock",
+        "Установите его через «Открыть проект».": "Install it through “Open project”.",
+        "Доступно": "Available",
+        "Версия актуальна": "Version is up to date",
+        "Доступно обновление": "Update available",
+        "Расхождений нет": "No differences",
+        "Состояние:": "State:",
+        "обновятся": "will be updated",
+        "добавятся": "will be added",
+        "будут восстановлены": "will be restored",
+        "будут убраны": "will be removed",
+        "с локальными правками (сохранятся)": "with local changes (kept)",
+        "в конфликте (нужна перезапись)": "in conflict (overwrite needed)",
+        "конфликт": "conflict",
+        "Изменён и у вас, и в пакете: обычное обновление остановится, перезапись заменит файл версией пакета.": "Changed both by you and in the package: a normal update stops; overwriting replaces the file with the package version.",
+        "обновится": "will be updated",
+        "Файл будет заменён версией из пакета.": "The file will be replaced with the package version.",
+        "добавится": "will be added",
+        "Новый файл пакета: будет добавлен.": "A new package file: it will be added.",
+        "восстановится": "will be restored",
+        "Файла нет на диске: он будет восстановлен.": "The file is missing on disk: it will be restored.",
+        "удалится": "will be removed",
+        "Файла больше нет в пакете: он будет удалён.": "The package no longer has this file: it will be removed.",
+        "ваши правки": "your changes",
+        "Ваши локальные правки: обычное обновление их сохранит.": "Your local changes: a normal update keeps them.",
+        "Seed-файл отличается от шаблона: обновление его не трогает, пока не выбрана перезапись.": "The seed file differs from the template: the update leaves it alone unless overwriting is chosen.",
+        "diff недоступен:": "diff unavailable:",
+        "Обновление управляемых файлов Harness в проекте сервера; перед запуском — подтверждение.": "Updates the managed Harness files of the server’s project; a confirmation comes first.",
+        "отмечено {ticked} из {total}": "{ticked} of {total} ticked",
+        "Выберите файл, чтобы увидеть его изменения.": "Choose a file to see its changes.",
+    }
+)
