@@ -80,6 +80,45 @@ def test_local_write_replaces_only_the_first_workflow_line(tmp_path: Path) -> No
     )
 
 
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("# A\n**workflow:** ready\n", "# A\n**Workflow:** status::in-progress\n"),
+        ("**WORKFLOW:** ready\n# A\nbody\n", "**Workflow:** status::in-progress\n# A\nbody\n"),
+    ],
+)
+def test_local_write_replaces_a_workflow_line_in_any_case(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    ticket = tmp_path / ".scratch" / "f" / "issues" / "01-a.md"
+    ticket.parent.mkdir(parents=True)
+    ticket.write_text(before, encoding="utf-8")
+    writer = _writer(ProjectTracker("local", None, None, "config"), [])
+
+    writer.write(tmp_path, _ticket(".scratch/f/issues/01-a.md"), (), "status::in-progress")
+
+    assert ticket.read_text(encoding="utf-8") == after
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        (b"# A\r\n**Workflow:** ready\r\nbody\r\n", b"# A\r\n**Workflow:** status::ready\r\nbody\r\n"),
+        (b"# X\r\n\r\nbody\r\n", b"# X\r\n**Workflow:** status::ready\r\n\r\nbody\r\n"),
+        (b"body\r\n", b"**Workflow:** status::ready\r\nbody\r\n"),
+    ],
+)
+def test_local_write_keeps_crlf_line_endings(tmp_path: Path, before: bytes, after: bytes) -> None:
+    ticket = tmp_path / ".scratch" / "f" / "issues" / "01-a.md"
+    ticket.parent.mkdir(parents=True)
+    ticket.write_bytes(before)
+    writer = _writer(ProjectTracker("local", None, None, "config"), [])
+
+    writer.write(tmp_path, _ticket(".scratch/f/issues/01-a.md"), (), "status::ready")
+
+    assert ticket.read_bytes() == after
+
+
 def test_local_write_refuses_a_file_outside_scratch(tmp_path: Path) -> None:
     (tmp_path / ".scratch").mkdir()
     outside = tmp_path / "x.md"

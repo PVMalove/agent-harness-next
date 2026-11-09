@@ -24,8 +24,9 @@ from .task_board_tracker import Runner
 TIMEOUT_SECONDS = 30.0
 _NUMBER = re.compile(r"^#?(\d{1,9})$")
 _STATUS = re.compile(r"^status::[a-z][a-z-]{0,40}$")
-_WORKFLOW = re.compile(r"^\*\*Workflow:\*\*[^\n]*$", re.MULTILINE)
-_H1 = re.compile(r"^# [^\n]*$", re.MULTILINE)
+# The board reads the field name in any case, so the writer replaces the same line.
+_WORKFLOW = re.compile(r"^\*\*[ \t]*workflow[ \t]*:\*\*[^\r\n]*", re.MULTILINE | re.IGNORECASE)
+_H1 = re.compile(r"^# [^\r\n]*", re.MULTILINE)
 
 
 class StatusWriteError(Exception):
@@ -166,14 +167,17 @@ def _write_local(repo: Path, ref: str, add: str) -> None:
         )
         if not inside:
             raise StatusWriteError(f"not a ticket file of the local tracker: {ref}")
-        text = path.read_text(encoding="utf-8")
+        # Read without newline translation: the file keeps its own line endings.
+        with path.open(encoding="utf-8", newline="") as source:
+            text = source.read()
+        eol = "\r\n" if "\r\n" in text else "\n"
         line = f"**Workflow:** {add}"
         if _WORKFLOW.search(text):
             text = _WORKFLOW.sub(lambda _m: line, text, count=1)
         elif (title := _H1.search(text)) is not None:
-            text = f"{text[: title.end()]}\n{line}{text[title.end() :]}"
+            text = f"{text[: title.end()]}{eol}{line}{text[title.end() :]}"
         else:
-            text = f"{line}\n{text}"
+            text = f"{line}{eol}{text}"
         handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=".status-", suffix=".tmp")
         try:
             with os.fdopen(handle, "w", encoding="utf-8", newline="") as out:
