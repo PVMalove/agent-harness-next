@@ -6,6 +6,7 @@ import { AppShell } from "./AppShell";
 import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
 import { HIDDEN_ROUTES, NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
+import { ContainerRoute } from "./routes/ContainerRoute";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
 import { Decisions } from "./routes/Decisions";
@@ -34,6 +35,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   harness: <Harness />,
   reports: <Reports />,
   recovery: <Recovery />,
+  "container-route": <ContainerRoute />,
   "agent-activity": <AgentActivity />,
   orchestration: <Orchestration />,
   publish: <Decisions section="Публикация" />,

@@ -150,3 +150,9 @@
 @media (max-width: 600px) {
   .view-row { grid-template-columns: 1fr; }
 }
+/* Container route: the selection form and the stage tabs wrap on a phone. */
+.route-select { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; }
+.route-select input { flex: 1 1 140px; min-width: 0; }
+.route-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 0; }
+.route-tab-state { margin: 8px 14px 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+#route-context { overflow-wrap: anywhere; }
