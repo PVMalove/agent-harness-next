@@ -45,6 +45,9 @@ export interface ReportHead {
   role: string;
   outcome: string;
   reported_at: string;
+  /** Whether the body records a risk, and a blocker. */
+  has_risks: boolean;
+  has_blockers: boolean;
 }
 
 export interface StageHead {
@@ -56,6 +59,9 @@ export interface StageHead {
   at: string;
   /** The dispatch id of the stage's report, or null while none is recorded. */
   report: string | null;
+  /** When the dispatch was created and its worker last sent a heartbeat; "" when unknown. */
+  started_at: string;
+  heartbeat_at: string;
 }
 
 export interface QaRun {
@@ -77,7 +83,7 @@ export interface QaAttempt {
 }
 
 export interface Ledger {
-  version: 1;
+  version: 2;
   batches: BatchSummary[];
   reports: ReportHead[];
   stages: StageHead[];
@@ -89,11 +95,57 @@ export interface Ledger {
 
 export type Figures = Record<string, number | null>;
 
-export interface ReportsSnapshot extends Ledger {
-  reports_kpi: Figures;
+export interface ReportRef {
+  dispatch_id: string;
+  outcome: string;
+  has_blockers: boolean;
 }
 
-export type Figure = number | null | number[] | Record<string, number>;
+/** One batch of the read-only publication view (kernel/publish_view.py); unread facts are null. */
+export interface PublishEntry {
+  batch_id: string;
+  ticket: string;
+  state: string;
+  branch: string;
+  candidate: string | null;
+  target: string | null;
+  integration_ref: string | null;
+  /** The local remote-tracking ref of the branch: as old as the last fetch. */
+  head: string | null;
+  head_matches: boolean | null;
+  target_in_history: boolean | null;
+  refusals: string[];
+  review: ReportRef | null;
+  qa: ReportRef | null;
+  pr_url: string;
+  pr_state: string;
+  /** The console's Release Gate reading of these facts (kernel/publish_view.py `verdict`). */
+  verdict: "ready" | "blocked" | "unknown";
+}
+
+/** A cell of the evidence matrix: "none" is a column without a source. */
+export type EvidenceCell = "present" | "stale" | "missing" | "none";
+
+/** One batch of the evidence matrix the kernel builds (pipeline_kpi.py `evidence_matrix`). */
+export interface EvidenceRow {
+  batch_id: string;
+  ticket: string;
+  developer: EvidenceCell;
+  review: EvidenceCell;
+  qa: EvidenceCell;
+  qa_run: EvidenceCell;
+  receipt: EvidenceCell;
+  publish: EvidenceCell;
+}
+
+export interface ReportsSnapshot extends Ledger {
+  reports_kpi: Figures;
+  publish: PublishEntry[];
+  evidence: EvidenceRow[];
+}
+
+/** A count, a duration, a list of counts or of durations (null: no data) or a map of counts. */
+export type Figure = number | null | (number | null)[] | Record<string, number>;
 export type AnalyticsSection = "flow" | "quality" | "runtime" | "gates";
 export type Analytics = Record<AnalyticsSection, Record<string, Figure>>;
 
@@ -139,6 +191,10 @@ export const KPI_KEYS = [
   "cycle_p95_seconds",
   "throughput_7d",
   "failed",
+  "unknown",
+  "batches",
+  "rework_batches",
+  "flow_efficiency_pct",
 ] as const;
 export const REPORTS_KPI_KEYS = [
   "reports",
@@ -149,6 +205,7 @@ export const REPORTS_KPI_KEYS = [
   "qa_tickets",
   "attention",
   "blocked",
+  "stale_evidence",
 ] as const;
 export const ANALYTICS_SECTIONS: readonly AnalyticsSection[] = ["flow", "quality", "runtime", "gates"];
 
@@ -174,6 +231,8 @@ const reportHead = exact({
   role: string,
   outcome: string,
   reported_at: string,
+  has_risks: flag,
+  has_blockers: flag,
 });
 const stage = exact({
   dispatch_id: string,
@@ -183,6 +242,8 @@ const stage = exact({
   state: string,
   at: string,
   report: nullable(string),
+  started_at: string,
+  heartbeat_at: string,
 });
 const command: Check = (value) =>
   Array.isArray(value) && value.length === 2 && string(value[0]) && Number.isSafeInteger(value[1]);
@@ -203,7 +264,7 @@ const dispatches: Check = (value) =>
     (record) => isObject(record) && Object.entries(record).every(([key, role]) => key === "role" && string(role)),
   );
 const ledgerFields = {
-  version: (value: unknown) => value === 1,
+  version: (value: unknown) => value === 2,
   batches: list(batch),
   reports: list(reportHead),
   stages: list(stage),
@@ -212,12 +273,47 @@ const ledgerFields = {
   unavailable: nullable(string),
   dispatches,
 };
-const reportsSnapshot = exact({ ...ledgerFields, reports_kpi: figures(REPORTS_KPI_KEYS) });
+const reportRef = exact({ dispatch_id: string, outcome: string, has_blockers: flag });
+const publishEntry = exact({
+  batch_id: string,
+  ticket: string,
+  state: string,
+  branch: string,
+  candidate: nullable(string),
+  target: nullable(string),
+  integration_ref: nullable(string),
+  head: nullable(string),
+  head_matches: nullable(flag),
+  target_in_history: nullable(flag),
+  refusals: list(string),
+  review: nullable(reportRef),
+  qa: nullable(reportRef),
+  pr_url: string,
+  pr_state: string,
+  verdict: (value) => value === "ready" || value === "blocked" || value === "unknown",
+});
+const cell: Check = (value) => value === "present" || value === "stale" || value === "missing" || value === "none";
+const evidenceRow = exact({
+  batch_id: string,
+  ticket: string,
+  developer: cell,
+  review: cell,
+  qa: cell,
+  qa_run: cell,
+  receipt: cell,
+  publish: cell,
+});
+const reportsSnapshot = exact({
+  ...ledgerFields,
+  reports_kpi: figures(REPORTS_KPI_KEYS),
+  publish: list(publishEntry),
+  evidence: list(evidenceRow),
+});
 
 const figure: Check = (value) =>
   value === null ||
   count(value) ||
-  list(count)(value) ||
+  list(nullable(count))(value) ||
   (isObject(value) && Object.values(value).every(count));
 const section: Check = (value) => isObject(value) && Object.values(value).every(figure);
 const analytics = exact(Object.fromEntries(ANALYTICS_SECTIONS.map((name) => [name, section])));

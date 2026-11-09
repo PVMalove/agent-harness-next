@@ -54,6 +54,29 @@ describe("the agent activity route", () => {
     expect(within(sources).getByText("структура недоступна")).toBeTruthy();
   });
 
+  test("the mockup summary, KPI row, status chips, session route and tabs", () => {
+    renderActivity();
+    expect(document.querySelector("#work-summary")!.textContent).toContain("Сессии2");
+    expect(document.querySelector("#work-kpis")!.textContent).toContain("Последнее событие");
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Обзор", "Таймлайн", "Статистика"]);
+    const chips = document.querySelector("#work-status-chips")!;
+    act(() => fireEvent.click(within(chips as HTMLElement).getByRole("button", { name: /Выполняется/ })));
+    expect(document.querySelectorAll(".work-sessions .work-row")).toHaveLength(2);
+    const route = document.querySelector("#work-route")!;
+    expect(route.textContent).toContain("Маршрут сессии #885");
+    expect([...route.querySelectorAll(".work-flow-node b")].map((node) => node.textContent)).toEqual([
+      "Architect",
+      "Developer",
+      "Review",
+      "QA",
+      "PR",
+    ]);
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Статистика" })));
+    expect(document.querySelector("#work-stats")!.textContent).toContain("События в минуту");
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Таймлайн" })));
+    expect(document.querySelector("#work-timeline")).not.toBeNull();
+  });
+
   test("the rendered list never shows thinking, tool inputs or raw JSON", () => {
     const { socket, id } = renderActivity();
     act(() =>

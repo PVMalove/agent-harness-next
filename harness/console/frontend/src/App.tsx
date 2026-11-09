@@ -1,16 +1,16 @@
 /* Hash routes: the static build needs no server-side fallback (ADR 0029). */
 import { useState } from "react";
 import type { ReactElement } from "react";
-import { createHashRouter, Navigate, Outlet, RouterProvider } from "react-router";
+import { createHashRouter, Navigate, Outlet, RouterProvider, useLocation } from "react-router";
 import { AppShell } from "./AppShell";
-import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
+import { ConnectionBanner, ConnectionChip, ConnectionPage, showsConnectionPage } from "./ConnectionViews";
 import { HIDDEN_ROUTES, NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
 import { Configuration } from "./routes/Configuration";
 import { ContainerRoute } from "./routes/ContainerRoute";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
-import { Decisions } from "./routes/Decisions";
+import { Publish } from "./routes/Publish";
 import { Help } from "./routes/Help";
 import { Home } from "./routes/Home";
 import { OpenProject } from "./routes/OpenProject";
@@ -26,9 +26,10 @@ import type { ConsoleClient } from "./ws/client";
 
 function Layout() {
   const { state } = useConsole();
+  const route = useLocation().pathname.replace(/^\/+/, "").split("/")[0] ?? "";
   return (
     <AppShell chip={<ConnectionChip />} banner={<ConnectionBanner />}>
-      {PAGE_STATUSES.includes(state.status) ? <ConnectionPage /> : <Outlet />}
+      {showsConnectionPage(state.status, route) ? <ConnectionPage /> : <Outlet />}
     </AppShell>
   );
 }
@@ -44,7 +45,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   "container-route": <ContainerRoute />,
   "agent-activity": <AgentActivity />,
   orchestration: <Orchestration />,
-  publish: <Decisions section="Публикация" />,
+  publish: <Publish />,
   "open-project": <OpenProject />,
   "update-harness": <UpdateHarness />,
   configuration: <Configuration />,

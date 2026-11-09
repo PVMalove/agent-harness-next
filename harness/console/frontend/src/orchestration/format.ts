@@ -104,8 +104,9 @@ function countText(counts: Figure | undefined, labels: Readonly<Record<string, s
 }
 
 /** The seven daily counts as bars and numbers; `—` without any. */
-function spark(values: Figure | undefined): string {
-  if (!Array.isArray(values) || !values.some(Boolean)) return "—";
+function spark(figure: Figure | undefined): string {
+  if (!Array.isArray(figure) || !figure.some(Boolean)) return "—";
+  const values = figure.map((value) => value ?? 0);
   const peak = Math.max(...values);
   const bars = values.map((value) => (value ? SPARK[pyRound(((SPARK.length - 1) * value) / peak)] : " ")).join("");
   return `${bars}  (${values.join(" ")})`;

@@ -2,7 +2,8 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
-import type { MapFile, RepoMap as MapData, RepoMapFacts } from "../ws/repoMap";
+import { SYMBOL_KINDS } from "../ws/repoMap";
+import type { MapFile, RepoMap as MapData, RepoMapFacts, SymbolKind } from "../ws/repoMap";
 
 export function Panel({ title, children, className = "repo-index" }: {
   title: string; children: ReactNode; className?: string;
@@ -88,22 +89,46 @@ export function Files({ map }: { map: MapData }) {
     </div></section>;
 }
 
-export function Symbols({ map, selectedPath, onClear }: { map: MapData; selectedPath: string | null; onClear: () => void }) {
+/** The mockup's symbol chips: Functions are functions and methods, Modules are the types. */
+const CHIPS: [string, string, readonly SymbolKind[]][] = [
+  ["all", "Все", SYMBOL_KINDS],
+  ["function", "Functions", ["function", "method"]],
+  ["module", "Modules", ["class", "struct", "interface"]],
+];
+
+export function Symbols({ map, kinds, selectedPath, onClear }: {
+  map: MapData; kinds: Record<string, SymbolKind[]> | null; selectedPath: string | null; onClear: () => void;
+}) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
+  const [chip, setChip] = useState("all");
   const [selected, setSelected] = useState<string | null>(null);
-  const symbols = map.files.flatMap((f) => (f.signatures ?? []).map((name, i) => ({ name, path: f.path, id: `${f.path}:${i}` })));
+  const noKinds = t("Вид символа считается только для карты из кэша сервера");
+  const symbols = map.files.flatMap((f) => (f.signatures ?? []).map((name, i) =>
+    ({ name, path: f.path, id: `${f.path}:${i}`, kind: kinds?.[f.path]?.[i] ?? null })));
+  const allowed = CHIPS.find(([key]) => key === chip)?.[2] ?? SYMBOL_KINDS;
   const matches = symbols.filter((s) => (!selectedPath || s.path === selectedPath) &&
+    (chip === "all" || (s.kind !== null && allowed.includes(s.kind))) &&
     `${s.name} ${s.path}`.toLowerCase().includes(query.trim().toLowerCase()));
   const item = matches.find((s) => s.id === selected) ?? matches[0];
   return <div className="repo-symbol-grid"><section className="panel repo-symbols"><div className="panel-head"><h2>{t("Символы")}</h2>
-    <span>{matches.length} / {symbols.length}</span></div><div className="repo-filters"><input type="search" aria-label={t("Поиск символа")}
+    <span>{matches.length} / {symbols.length}</span></div><div className="repo-filters"><div className="chips" id="repo-kind-chips">
+      {CHIPS.map(([key, label, members]) => <button key={key} type="button" className={`chip ${chip === key ? "on" : ""}`}
+        aria-pressed={chip === key} data-repo-kind={key} disabled={key !== "all" && kinds === null}
+        title={key !== "all" && kinds === null ? noKinds : undefined} onClick={() => setChip(key)}>
+        {t(label)} {key === "all" ? symbols.length : kinds === null ? "—" : symbols.filter((s) => s.kind !== null && members.includes(s.kind)).length}
+      </button>)}</div>
+      <input type="search" aria-label={t("Поиск символа")}
       placeholder={t("Найти символ")} value={query} onChange={(e) => setQuery(e.target.value)} />
       {selectedPath && <button className="btn" onClick={onClear}>{t("Все файлы")}</button>}</div>
     {matches.map((s) => <button className={`repo-symbol-row ${s.id === item?.id ? "on" : ""}`} key={s.id} onClick={() => setSelected(s.id)}>
-      <span className="repo-kind">{t("Сигнатура")}</span><span className="repo-symbol-main"><b>{s.name}</b><small>{s.path}</small></span></button>)}
+      {s.kind === null ? <span className="repo-kind muted no-data" title={noKinds}>{t("нет данных")}</span> :
+        <span className={`repo-kind ${s.kind}`}>{s.kind}</span>}
+      <span className="repo-symbol-main"><b>{s.name}</b><small>{s.path}</small></span></button>)}
     {!matches.length && <p className="repo-empty">{t("Символов с такими фильтрами нет.")}</p>}</section>
-    <Panel title="Символ" className="repo-detail">{item && <><code className="repo-symbol-name">{item.name}</code><p>{item.path}</p>
+    <Panel title="Символ" className="repo-detail">{item && <><code className="repo-symbol-name">{item.name}</code>
+      <p>{item.path} · {item.kind ?? <span className="muted no-data" title={noKinds}>{t("нет данных")}</span>}</p>
+      <Fields rows={[["Строка", <span className="muted no-data" title={t("Схема Repo Map v1 не хранит строки, связи уровня символа и summary")}>{t("нет данных")}</span>]]} />
       <Relations map={map} path={item.path} /></>}</Panel></div>;
 }
 

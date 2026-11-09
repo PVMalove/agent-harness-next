@@ -503,14 +503,54 @@ class PipelineUsage(_Strict):  # type: ignore[explicit-any]
     reports: Annotated[int, Field(ge=0)]
 
 
+class StorePayload(_Strict):  # type: ignore[explicit-any]
+    """The state authority read without the ledger lock or a runtime call; unread facts are null."""
+
+    authority: Literal["file-ledger", "runtime-store", "none"]
+    schema_: Annotated[int | None, Field(alias="schema")]
+    generation: str | None
+    audit_records: Annotated[int | None, Field(ge=0)]
+
+
+class AdapterPayload(_Strict):  # type: ignore[explicit-any]
+    """One runtime adapter file of the installed capabilities."""
+
+    path: str
+    status: Literal["current", "outdated", "missing"]
+    problem: str | None
+
+
+class ContainersPayload(_Strict):  # type: ignore[explicit-any]
+    """The read-only inventory of the configured container engine; a fact a probe could not
+    give is null with the probe's reason beside it."""
+
+    engine: str
+    version: str | None
+    cgroup_driver: str | None
+    cgroup_version: str | None
+    selinux: bool | None
+    rootless: bool | None
+    info_problem: str | None
+    images: Annotated[int | None, Field(ge=0)]
+    images_problem: str | None
+    volumes: Annotated[int | None, Field(ge=0)]
+    volumes_problem: str | None
+
+
 class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
-    """The Harness state, the package version, the drift state and the pipeline usage."""
+    """The Harness state, the package version, the drift state and file count, the state store,
+    the runtime adapters (null: unreadable), the container engine inventory (null: not
+    collected) and the pipeline usage."""
 
     type: Literal["harness.overview"]
     ok: Literal[True]
     state: HarnessStatePayload
     package_version: str
     drift: str
+    drift_files: Annotated[int | None, Field(ge=0)]
+    store: StorePayload | None
+    adapters: list[AdapterPayload] | None
+    containers: ContainersPayload | None
     usage: PipelineUsage
     cached: bool
     age_seconds: float
@@ -579,11 +619,19 @@ class WorkerStepsReply(_Envelope):  # type: ignore[explicit-any]
 
 
 class RosterDispatch(_Strict):  # type: ignore[explicit-any]
+    """A dispatch of the journal view; the timing is read for a live dispatch only ("" and
+    false otherwise)."""
+
     dispatch_id: str
     batch_id: str
     ticket: str
     role: str
     state: str
+    batch_state: str
+    branch: str
+    started_at: str
+    last_event_at: str
+    silent: bool
 
 
 class StepsRosterReply(_Envelope):  # type: ignore[explicit-any]

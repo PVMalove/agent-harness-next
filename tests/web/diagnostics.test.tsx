@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { exportName, exportPayload } from "../../harness/console/frontend/src/diagnostics/exportReport";
-import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
+import { LanguageProvider, checkRationale } from "../../harness/console/frontend/src/i18n";
 import { fixReport } from "../../harness/console/frontend/src/routes/Diagnostics";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import { CANCEL_REASON, FakeSocket, HEALTH_REPORT, ManualClock, jobReply, screenPage } from "./fake-socket";
@@ -63,10 +63,23 @@ describe("the Diagnostics route", () => {
     expect(document.querySelector("#diag-total")?.textContent).toBe("5 проверок");
     expect(document.querySelector("#diag-checked")?.textContent).toContain("проверено 4 из 5");
     expect(rows()).toEqual(["hooks.policy", "environment.uv", "tracker.online", "files.lock", "directories.sandboxes"]);
-    expect(within(detail()).getByText("Нет .harness/hook-policy.json")).toBeTruthy();
+    expect(within(detail()).getAllByText("Нет .harness/hook-policy.json").length).toBe(2);
+    expect(within(detail()).getByText("Почему важно").nextElementSibling!.textContent).toBe(
+      checkRationale("ru", "hooks.policy"),
+    );
     expect(within(detail()).getByText("Запустите обновление")).toBeTruthy();
     expect(within(detail()).getByText("harness update .")).toBeTruthy();
     expect(within(detail()).getByText("Hooks проекта")).toBeTruthy();
+  });
+
+  test("a check the kernel catalog does not describe keeps the explicit no-data rationale", () => {
+    renderDiagnostics();
+    expect(checkRationale("en", "hooks.policy")).toMatch(/^Without a recorded hook policy/);
+    expect(checkRationale("ru", "tracker.online")).toBeNull();
+    act(() => fireEvent.click(document.querySelector('[data-check="tracker.online"]')!));
+    const why = within(detail()).getByText("Почему важно").nextElementSibling as HTMLElement;
+    expect(why.textContent).toBe("нет данных");
+    expect(why.className).toContain("no-data");
   });
 
   test("the summary counts are the server's even when they differ from the list", () => {
@@ -156,6 +169,6 @@ describe("the Diagnostics route", () => {
     renderDiagnostics(HEALTH_REPORT, "?lang=en");
     expect(screen.getByRole("heading", { level: 2, name: "Health summary" })).toBeTruthy();
     expect(within(detail()).getByText("Project hooks")).toBeTruthy();
-    expect(within(detail()).getByText("How to fix:")).toBeTruthy();
+    expect(within(detail()).getByText("What to do")).toBeTruthy();
   });
 });

@@ -15,8 +15,14 @@ from typing import Generic, TypeVar
 
 from ...kernel.batch_history import History
 from ...kernel.help_text import help_sections
-from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
+from ...kernel.pipeline_kpi import (
+    evidence_payload,
+    pipeline_analytics,
+    pipeline_kpi,
+    reports_kpi,
+)
 from ...kernel.pipeline_stats import pipeline_usage
+from ...kernel.publish_view import GitFacts, LocalGit, publish_payload
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
 from ...kernel.screen_views import recovery_view_payload, route_view_payload
 from ...kernel.update_harness_snapshot import diff_paths
@@ -125,10 +131,15 @@ def snapshot_text(payload: object) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False, sort_keys=True)
 
 
-def _ledger(view: LedgerView) -> _Ledger:
-    """The view with its payload: the ledger without report bodies and the Reports KPIs, which the
-    server reads from the whole bodies."""
-    payload = {**ledger_payload(view), "reports_kpi": reports_kpi(view).to_payload()}
+def _ledger(view: LedgerView, git: GitFacts) -> _Ledger:
+    """The view with its payload: the ledger without report bodies, the Reports KPIs, which the
+    server reads from the whole bodies, the read-only publication view and the evidence matrix."""
+    payload = {
+        **ledger_payload(view),
+        "reports_kpi": reports_kpi(view).to_payload(),
+        "publish": publish_payload(view, git),
+        "evidence": evidence_payload(view),
+    }
     return _Ledger(view, payload)
 
 
@@ -155,8 +166,10 @@ class ScreenService:
         update_diff: UpdateDiffReader | None = None,
         configuration: ConfigurationCollector | None = None,
         board: TaskBoardService | None = None,
+        publish_git: GitFacts | None = None,
     ) -> None:
         self._repo = repo
+        self._git: GitFacts = publish_git or LocalGit(repo)
         self._collect_ledger = ledger
         self._collect_online = ledger_online
         self._read_lock = lock
@@ -196,7 +209,7 @@ class ScreenService:
 
     async def _cached_ledger(self, force: bool) -> tuple[_Ledger, bool, float]:
         return await self._ledger.get(
-            lambda: _ledger(self._collect_ledger(self._repo)), force=force
+            lambda: _ledger(self._collect_ledger(self._repo), self._git), force=force
         )
 
     async def reports(self, *, force: bool = False, online: bool = False) -> Paged:
@@ -204,7 +217,7 @@ class ScreenService:
         never cached."""
         if online:
             found = await asyncio.to_thread(
-                lambda: _ledger(self._collect_online(self._repo))
+                lambda: _ledger(self._collect_online(self._repo), self._git)
             )
             return await self._paged(found.payload)
         ledger, cached, age = await self._cached_ledger(force)
@@ -352,11 +365,12 @@ class ScreenService:
             lambda: collect(self._repo), force=force
         )
         ledger, _, _ = await self._cached_ledger(force)
-        return await self._paged({**facts, "ledger": ledger.payload}, cached, age)
+        snapshot = {key: facts[key] for key in ("state", "package_version", "drift")}
+        return await self._paged({**snapshot, "ledger": ledger.payload}, cached, age)
 
     async def harness_overview(self, *, force: bool = False) -> dict[str, object]:
-        """The installed harness, the package version, the drift state and the pipeline usage
-        counts, from the same Harness and ledger caches as `harness`; `NotFound` without a
+        """The installed harness, the package version, the drift state, the container engine
+        inventory and the pipeline usage counts, from the same Harness and ledger caches as `harness`; `NotFound` without a
         Harness collector."""
         collect = self._collect_harness
         if collect is None:
@@ -369,6 +383,10 @@ class ScreenService:
             "state": facts["state"],
             "package_version": facts["package_version"],
             "drift": facts["drift"],
+            "drift_files": facts.get("drift_files"),
+            "store": facts.get("store"),
+            "adapters": facts.get("adapters"),
+            "containers": facts.get("containers"),
             "usage": pipeline_usage(ledger.view),
             "cached": cached,
             "age_seconds": round(age, 3),

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ..domain.live_steps import (
+    DispatchTiming,
     RosterDispatch,
     Step,
     agent_steps,
@@ -23,6 +24,7 @@ from ..domain.live_steps import (
     followed,
     orchestration_step,
     roster_from_view,
+    timed,
 )
 from ..domain.worker_steps import StepsPage
 from .events import JournalPage
@@ -76,7 +78,9 @@ class LiveSteps:
         backlog: int = BACKLOG_EVENTS,
         max_followed: int = MAX_FOLLOWED,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        timing: Callable[[str], Awaitable[DispatchTiming | None]] | None = None,
     ) -> None:
+        self._timing = timing
         self._events = events
         self._workers = workers
         self._now = now
@@ -85,6 +89,19 @@ class LiveSteps:
         self._backlog = backlog
         self._cap = max_followed
         self._sleep = sleep
+
+    async def _timed(
+        self, roster: tuple[RosterDispatch, ...]
+    ) -> tuple[RosterDispatch, ...]:
+        """The roster with the timing of its live dispatches; the others keep none."""
+        if self._timing is None:
+            return roster
+        now = self._now()
+        found: list[RosterDispatch] = []
+        for entry in roster:
+            timing = await self._timing(entry.dispatch_id) if entry.state in self._live else None
+            found.append(timed(entry, timing, now))
+        return tuple(found)
 
     async def subscribe(self) -> AsyncGenerator[RosterItem | StepsItem, None]:
         """The roster and the steps until the subscriber stops."""
@@ -110,7 +127,9 @@ class LiveSteps:
                 journal_id = page.journal_id
                 position = max(page.floor, page.head - self._backlog)
                 page = self._events.read_after(position, _BATCH_EVENTS)
-            roster = roster_from_view(page.view if page is not None else None)
+            roster = await self._timed(
+                roster_from_view(page.view if page is not None else None)
+            )
             source = (
                 "available" if page is not None and page.available else "unavailable"
             )

@@ -1,6 +1,9 @@
 /* Generated from harness/console/backend/api/ws-schema.json by scripts/gen-protocol.mjs.
    Do not edit: run `npm run gen:protocol` in harness/console/frontend. */
 
+export type Path = string;
+export type Problem = string | null;
+export type Status = "current" | "outdated" | "missing";
 export type BatchId = string;
 export type DispatchId = string;
 export type Kind = string;
@@ -159,9 +162,22 @@ export type Type10 =
   | "update_harness.snapshot"
   | "configuration.snapshot";
 export type V9 = 1;
+export type Adapters = AdapterPayload[] | null;
 export type AgeSeconds2 = number;
 export type Cached2 = boolean;
+export type CgroupDriver = string | null;
+export type CgroupVersion = string | null;
+export type Engine = string;
+export type Images = number | null;
+export type ImagesProblem = string | null;
+export type InfoProblem = string | null;
+export type Rootless = boolean | null;
+export type Selinux = boolean | null;
+export type Version = string | null;
+export type Volumes = number | null;
+export type VolumesProblem = string | null;
 export type Drift = string;
+export type DriftFiles = number | null;
 export type Id12 = string | number | null;
 export type Ok10 = true;
 export type PackageVersion = string;
@@ -172,6 +188,10 @@ export type ManagedFiles = number;
 export type Orchestration = boolean;
 export type Skills = number;
 export type UpdatedAt = string;
+export type AuditRecords = number | null;
+export type Authority = "file-ledger" | "runtime-store" | "none";
+export type Generation = string | null;
+export type Schema = number | null;
 export type Type11 = "harness.overview";
 export type Batches = number;
 export type Dispatches = number;
@@ -220,8 +240,13 @@ export type Structure1 = "available" | "unavailable";
 export type Type15 = "worker.steps" | "worker.subscribe";
 export type V14 = 1;
 export type BatchId1 = string;
+export type BatchState = string;
+export type Branch = string;
 export type DispatchId2 = string;
+export type LastEventAt = string;
 export type Role1 = string;
+export type Silent = boolean;
+export type StartedAt = string;
 export type State1 = string;
 export type Ticket = string;
 export type Dispatches1 = RosterDispatch[];
@@ -406,7 +431,7 @@ export type Id47 = string | number | null;
 export type Type46 = "update_harness.snapshot";
 export type Force15 = boolean;
 export type Id48 = string | number | null;
-export type Path = string;
+export type Path1 = string;
 export type Type47 = "update_harness.diff";
 export type Id49 = string | number | null;
 export type Offset2 = number;
@@ -428,6 +453,17 @@ export type Type51 = "steps.subscribe";
  */
 export interface ConsoleWebSocketProtocol {
   [k: string]: unknown | undefined;
+}
+/**
+ * One runtime adapter file of the installed capabilities.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "AdapterPayload".
+ */
+export interface AdapterPayload {
+  path: Path;
+  problem: Problem;
+  status: Status;
 }
 /**
  * A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.
@@ -649,22 +685,48 @@ export interface ScreenSnapshotReply {
   v: V9;
 }
 /**
- * The Harness state, the package version, the drift state and the pipeline usage.
+ * The Harness state, the package version, the drift state and file count, the state store,
+ * the runtime adapters (null: unreadable), the container engine inventory (null: not
+ * collected) and the pipeline usage.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HarnessOverviewReply".
  */
 export interface HarnessOverviewReply {
+  adapters: Adapters;
   age_seconds: AgeSeconds2;
   cached: Cached2;
+  containers: ContainersPayload | null;
   drift: Drift;
+  drift_files: DriftFiles;
   id: Id12;
   ok: Ok10;
   package_version: PackageVersion;
   state: HarnessStatePayload;
+  store: StorePayload | null;
   type: Type11;
   usage: PipelineUsage;
   v: V10;
+}
+/**
+ * The read-only inventory of the configured container engine; a fact a probe could not
+ * give is null with the probe's reason beside it.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ContainersPayload".
+ */
+export interface ContainersPayload {
+  cgroup_driver: CgroupDriver;
+  cgroup_version: CgroupVersion;
+  engine: Engine;
+  images: Images;
+  images_problem: ImagesProblem;
+  info_problem: InfoProblem;
+  rootless: Rootless;
+  selinux: Selinux;
+  version: Version;
+  volumes: Volumes;
+  volumes_problem: VolumesProblem;
 }
 /**
  * What is installed in the project, read from `.harness/harness.lock`.
@@ -680,6 +742,18 @@ export interface HarnessStatePayload {
   orchestration: Orchestration;
   skills: Skills;
   updated_at: UpdatedAt;
+}
+/**
+ * The state authority read without the ledger lock or a runtime call; unread facts are null.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "StorePayload".
+ */
+export interface StorePayload {
+  audit_records: AuditRecords;
+  authority: Authority;
+  generation: Generation;
+  schema: Schema;
 }
 /**
  * Pipeline usage counted from the ledger; with `unavailable` every count is 0.
@@ -790,13 +864,21 @@ export interface StepsRosterReply {
   v: V15;
 }
 /**
+ * A dispatch of the journal view; the timing is read for a live dispatch only ("" and
+ * false otherwise).
+ *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "RosterDispatch".
  */
 export interface RosterDispatch {
   batch_id: BatchId1;
+  batch_state: BatchState;
+  branch: Branch;
   dispatch_id: DispatchId2;
+  last_event_at: LastEventAt;
   role: Role1;
+  silent: Silent;
+  started_at: StartedAt;
   state: State1;
   ticket: Ticket;
 }
@@ -1124,7 +1206,7 @@ export interface UpdateHarnessSnapshotRequest {
 export interface UpdateHarnessDiffRequest {
   force?: Force15;
   id?: Id48;
-  path: Path;
+  path: Path1;
   type: Type47;
 }
 /**

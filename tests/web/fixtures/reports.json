@@ -38,6 +38,56 @@
       "role": "developer"
     }
   },
+  "evidence": [
+    {
+      "batch_id": "b-887",
+      "developer": "present",
+      "publish": "none",
+      "qa": "present",
+      "qa_run": "present",
+      "receipt": "none",
+      "review": "present",
+      "ticket": "#887"
+    },
+    {
+      "batch_id": "b-886",
+      "developer": "present",
+      "publish": "none",
+      "qa": "missing",
+      "qa_run": "missing",
+      "receipt": "none",
+      "review": "missing",
+      "ticket": "#886"
+    }
+  ],
+  "publish": [
+    {
+      "batch_id": "b-887",
+      "branch": "feature/issue-887",
+      "candidate": "c0ffee1",
+      "head": "c0ffee1",
+      "head_matches": true,
+      "integration_ref": null,
+      "pr_state": "missing",
+      "pr_url": "",
+      "qa": {
+        "dispatch_id": "d-qa",
+        "has_blockers": true,
+        "outcome": "failed"
+      },
+      "refusals": [],
+      "review": {
+        "dispatch_id": "d-rev",
+        "has_blockers": false,
+        "outcome": "completed"
+      },
+      "state": "active",
+      "target": null,
+      "target_in_history": null,
+      "ticket": "#887",
+      "verdict": "blocked"
+    }
+  ],
   "qa_attempts": [
     {
       "dispatch_id": "d-qa",
@@ -74,6 +124,8 @@
     {
       "batch_id": "b-887",
       "dispatch_id": "d-qa",
+      "has_blockers": true,
+      "has_risks": false,
       "outcome": "failed",
       "reported_at": "2026-11-08T12:00:00+00:00",
       "role": "qa",
@@ -82,6 +134,8 @@
     {
       "batch_id": "b-887",
       "dispatch_id": "d-rev",
+      "has_blockers": false,
+      "has_risks": true,
       "outcome": "completed",
       "reported_at": "2026-11-08T11:00:00+00:00",
       "role": "review",
@@ -90,6 +144,8 @@
     {
       "batch_id": "b-887",
       "dispatch_id": "d-dev",
+      "has_blockers": false,
+      "has_risks": false,
       "outcome": "completed",
       "reported_at": "2026-11-08T10:00:00+00:00",
       "role": "developer",
@@ -98,6 +154,8 @@
     {
       "batch_id": "b-886",
       "dispatch_id": "d-old",
+      "has_blockers": false,
+      "has_risks": false,
       "outcome": "completed",
       "reported_at": "2026-11-01T09:00:00+00:00",
       "role": "developer",
@@ -112,15 +170,18 @@
     "latency_p95_seconds": 3000,
     "qa_first_pass": 0,
     "qa_tickets": 1,
-    "reports": 4
+    "reports": 4,
+    "stale_evidence": 0
   },
   "stages": [
     {
       "at": "2026-11-08T12:00:00+00:00",
       "batch_id": "b-887",
       "dispatch_id": "d-qa",
+      "heartbeat_at": "",
       "report": "d-qa",
       "role": "qa",
+      "started_at": "2026-11-08T11:15:00+00:00",
       "state": "reported",
       "ticket": "#887"
     },
@@ -128,8 +189,10 @@
       "at": "2026-11-08T11:30:00+00:00",
       "batch_id": "b-887",
       "dispatch_id": "d-wip",
+      "heartbeat_at": "2026-11-08T11:35:00+00:00",
       "report": null,
       "role": "developer",
+      "started_at": "2026-11-08T11:30:00+00:00",
       "state": "working",
       "ticket": "#887"
     },
@@ -137,8 +200,10 @@
       "at": "2026-11-08T11:00:00+00:00",
       "batch_id": "b-887",
       "dispatch_id": "d-rev",
+      "heartbeat_at": "",
       "report": "d-rev",
       "role": "review",
+      "started_at": "2026-11-08T10:20:00+00:00",
       "state": "reported",
       "ticket": "#887"
     },
@@ -146,8 +211,10 @@
       "at": "2026-11-08T10:00:00+00:00",
       "batch_id": "b-887",
       "dispatch_id": "d-dev",
+      "heartbeat_at": "",
       "report": "d-dev",
       "role": "developer",
+      "started_at": "2026-11-08T09:10:00+00:00",
       "state": "reported",
       "ticket": "#887"
     },
@@ -155,12 +222,14 @@
       "at": "2026-11-01T09:00:00+00:00",
       "batch_id": "b-886",
       "dispatch_id": "d-old",
+      "heartbeat_at": "",
       "report": "d-old",
       "role": "developer",
+      "started_at": "2026-11-01T08:10:00+00:00",
       "state": "reported",
       "ticket": "#886"
     }
   ],
   "unavailable": null,
-  "version": 1
+  "version": 2
 }

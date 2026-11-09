@@ -13,6 +13,8 @@ export interface ConsoleValue {
   replies: number;
   /** Grows with every batch of orchestration events. */
   events: number;
+  /** When the last valid Home snapshot arrived; null before the first one. */
+  snapshotAt: Date | null;
 }
 
 const ConsoleContext = createContext<ConsoleValue | null>(null);
@@ -46,10 +48,12 @@ export function ConsoleProvider({
   const [state, dispatch] = useReducer(reduce, INITIAL);
   const [replies, setReplies] = useState(0);
   const [events, setEvents] = useState(0);
+  const [snapshotAt, setSnapshotAt] = useState<Date | null>(null);
 
   useEffect(() => {
     const unsubscribe = client.subscribe((event) => {
       dispatch(event);
+      if (event.type === "snapshot") setSnapshotAt(new Date());
       if (event.type === "snapshot" || event.type === "invalid" || event.type === "error") {
         setReplies((count) => count + 1);
       }
@@ -65,7 +69,10 @@ export function ConsoleProvider({
     };
   }, [client]);
 
-  const value = useMemo(() => ({ state, client, replies, events }), [state, client, replies, events]);
+  const value = useMemo(
+    () => ({ state, client, replies, events, snapshotAt }),
+    [state, client, replies, events, snapshotAt],
+  );
   return createElement(ConsoleContext.Provider, { value }, children);
 }
 

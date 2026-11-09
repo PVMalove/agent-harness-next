@@ -18,6 +18,7 @@ from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult, Outcome
 from harness.console.kernel.harness_facts import HarnessState
 from harness.console.kernel.open_project_snapshot import Candidate, OpenProjectFacts
+from harness.console.kernel.publish_view import GitFacts
 from harness.console.kernel.project_target import ProjectTarget
 from harness.console.kernel.repo_map import parse_map
 from harness.console.kernel.repo_map_settings import MemoryStatus, TierSetting
@@ -97,6 +98,7 @@ def repo_map_facts() -> RepoMapFacts:
             Path("/work/project/registry"), "cp312-linux", "bundle", ("python",), None
         ),
         language_files={"python": 3},
+        excluded=2,
     )
 
 
@@ -171,6 +173,16 @@ class Facts:
             "state": HARNESS_STATE.to_payload(),
             "package_version": "1.0.1",
             "drift": "clean",
+            "drift_files": 0,
+            "store": {
+                "authority": "file-ledger",
+                "schema": 3,
+                "generation": "generation-1",
+                "audit_records": 4,
+            },
+            "adapters": [
+                {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
+            ],
         }
 
     def maintenance(self, repo: Path, /) -> dict[str, object]:
@@ -211,7 +223,11 @@ class Clock:
 
 
 def service(
-    facts: Facts, clock: Clock | None = None, *, ttl: float = 15.0
+    facts: Facts,
+    clock: Clock | None = None,
+    *,
+    ttl: float = 15.0,
+    publish_git: GitFacts | None = None,
 ) -> ScreenService:
     return ScreenService(
         Path("/work/project"),
@@ -230,4 +246,5 @@ def service(
         update_harness=facts.update_harness,
         update_diff=facts.update_diff,
         configuration=facts.configuration,
+        publish_git=publish_git,
     )

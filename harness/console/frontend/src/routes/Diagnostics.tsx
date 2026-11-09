@@ -131,7 +131,7 @@ export function Diagnostics() {
             <Icon name="reports" /> {t("Экспорт")}
           </button>
           <a className="btn primary" href={href("update-harness")}>
-            {section("Update Harness")}
+            {t("Обновление")}
           </a>
         </div>
       </div>

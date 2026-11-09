@@ -21,7 +21,7 @@ def test_committed_catalog_equals_the_rendered_tables() -> None:
 
 def test_the_catalog_carries_strings_facts_and_sections() -> None:
     catalog = json.loads(web_catalog.render())
-    assert set(catalog) == {"en", "facts", "sections", "reasons", "groups", "tabs"}
+    assert set(catalog) == {"en", "facts", "sections", "reasons", "groups", "tabs", "rationales"}
     assert catalog["en"] == EN
     assert catalog["facts"]["Ветка"] == "Branch"
     assert catalog["sections"]["Home"] == {

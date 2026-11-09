@@ -108,7 +108,18 @@ function parseStep(value: unknown): Step | null {
 
 function parseDispatch(value: unknown): RosterDispatch | null {
   if (!isObject(value)) return null;
-  const fields = ["dispatch_id", "batch_id", "ticket", "role", "state"];
+  const fields = [
+    "dispatch_id",
+    "batch_id",
+    "ticket",
+    "role",
+    "state",
+    "batch_state",
+    "branch",
+    "started_at",
+    "last_event_at",
+  ];
+  if (Object.keys(value).length !== fields.length + 1 || typeof value.silent !== "boolean") return null;
   return fields.every((key) => isText(value[key])) ? (value as unknown as RosterDispatch) : null;
 }
 

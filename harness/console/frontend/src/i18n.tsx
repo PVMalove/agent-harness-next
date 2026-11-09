@@ -18,6 +18,8 @@ const SECTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = cat
 // the Russian labels of the health check groups (harness/health/render.py GROUP_LABELS_RU).
 const REASONS: Readonly<Record<string, string>> = catalog.reasons;
 const GROUPS: Readonly<Record<string, string>> = catalog.groups;
+// Why each health check matters (kernel/check_rationale.py RATIONALES), by check id.
+const RATIONALES: Readonly<Record<string, Readonly<Record<Language, string>>>> = catalog.rationales;
 
 const fill = (text: string, values?: Values): string =>
   values
@@ -55,6 +57,11 @@ export function reasonText(language: Language, reason: string): string {
 export function groupLabel(language: Language, group: string): string {
   const russian = GROUPS[group];
   return russian === undefined ? group : translate(language, russian);
+}
+
+/** Why a health check matters; null for an id the kernel catalog does not describe. */
+export function checkRationale(language: Language, id: string): string | null {
+  return RATIONALES[id]?.[language] ?? null;
 }
 
 const isLanguage = (value: unknown): value is Language =>
