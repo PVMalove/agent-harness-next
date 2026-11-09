@@ -2731,17 +2731,38 @@
     },
     "RosterDispatch": {
       "additionalProperties": false,
+      "description": "A dispatch of the journal view; the timing is read for a live dispatch only (\"\" and\nfalse otherwise).",
       "properties": {
         "batch_id": {
           "title": "Batch Id",
+          "type": "string"
+        },
+        "batch_state": {
+          "title": "Batch State",
+          "type": "string"
+        },
+        "branch": {
+          "title": "Branch",
           "type": "string"
         },
         "dispatch_id": {
           "title": "Dispatch Id",
           "type": "string"
         },
+        "last_event_at": {
+          "title": "Last Event At",
+          "type": "string"
+        },
         "role": {
           "title": "Role",
+          "type": "string"
+        },
+        "silent": {
+          "title": "Silent",
+          "type": "boolean"
+        },
+        "started_at": {
+          "title": "Started At",
           "type": "string"
         },
         "state": {
@@ -2758,7 +2779,12 @@
         "batch_id",
         "ticket",
         "role",
-        "state"
+        "state",
+        "batch_state",
+        "branch",
+        "started_at",
+        "last_event_at",
+        "silent"
       ],
       "title": "RosterDispatch",
       "type": "object"

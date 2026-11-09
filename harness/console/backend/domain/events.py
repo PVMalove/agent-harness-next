@@ -21,6 +21,7 @@ class BatchFacts:
     # (dispatch_id, role, state of the batch entry), in the batch's order.
     dispatches: tuple[tuple[str, str, str], ...]
     decisions: tuple[Record, ...]
+    branch: str = ""
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ def compact(observation: Observation) -> View:
             batch_id: {
                 "ticket": batch.ticket,
                 "state": batch.state,
+                "branch": batch.branch,
                 "dispatches": [list(entry) for entry in batch.dispatches],
                 "decisions": len(batch.decisions),
             }

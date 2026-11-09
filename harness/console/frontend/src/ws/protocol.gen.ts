@@ -229,8 +229,13 @@ export type Structure1 = "available" | "unavailable";
 export type Type15 = "worker.steps" | "worker.subscribe";
 export type V14 = 1;
 export type BatchId1 = string;
+export type BatchState = string;
+export type Branch = string;
 export type DispatchId2 = string;
+export type LastEventAt = string;
 export type Role1 = string;
+export type Silent = boolean;
+export type StartedAt = string;
 export type State1 = string;
 export type Ticket = string;
 export type Dispatches1 = RosterDispatch[];
@@ -826,13 +831,21 @@ export interface StepsRosterReply {
   v: V15;
 }
 /**
+ * A dispatch of the journal view; the timing is read for a live dispatch only ("" and
+ * false otherwise).
+ *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "RosterDispatch".
  */
 export interface RosterDispatch {
   batch_id: BatchId1;
+  batch_state: BatchState;
+  branch: Branch;
   dispatch_id: DispatchId2;
+  last_event_at: LastEventAt;
   role: Role1;
+  silent: Silent;
+  started_at: StartedAt;
   state: State1;
   ticket: Ticket;
 }

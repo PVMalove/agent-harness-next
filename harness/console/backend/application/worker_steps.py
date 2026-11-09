@@ -10,6 +10,7 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from pathlib import Path
 
+from ..domain.live_steps import DispatchTiming, dispatch_timing
 from ..domain.worker_steps import (
     STEP_BUDGET_BYTES,
     StepsPage,
@@ -46,6 +47,12 @@ class WorkerStepsQuery:
         self._budget = budget
         self._poll = poll_seconds
         self._sleep = sleep
+
+    async def timing(self, dispatch_id: str) -> DispatchTiming | None:
+        """When the dispatch was created and its latest heartbeat or state change; None without a
+        ledger record."""
+        facts = await asyncio.to_thread(self._facts, self.repo, dispatch_id)
+        return dispatch_timing(facts.dispatch, facts.status) if facts else None
 
     async def read(self, dispatch_id: str, offset: int) -> StepsPage:
         facts = await asyncio.to_thread(self._facts, self.repo, dispatch_id)

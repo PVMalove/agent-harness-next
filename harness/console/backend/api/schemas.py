@@ -600,11 +600,19 @@ class WorkerStepsReply(_Envelope):  # type: ignore[explicit-any]
 
 
 class RosterDispatch(_Strict):  # type: ignore[explicit-any]
+    """A dispatch of the journal view; the timing is read for a live dispatch only ("" and
+    false otherwise)."""
+
     dispatch_id: str
     batch_id: str
     ticket: str
     role: str
     state: str
+    batch_state: str
+    branch: str
+    started_at: str
+    last_event_at: str
+    silent: bool
 
 
 class StepsRosterReply(_Envelope):  # type: ignore[explicit-any]
