@@ -171,6 +171,8 @@ RECOVERY_COMMANDS = frozenset(
     }
 )
 
+UPDATE_COMMANDS = ("update", "update-force-managed")
+
 
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
     """The job service over the harness, the selected seed update, Diagnostics, Repo Map,
@@ -187,7 +189,7 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
     )
-    listed = {
+    listed: dict[str, tuple[CommandSpec, ...]] = {
         "harness": tuple(
             entry for entry in HARNESS_COMMANDS if entry.key not in HARNESS_MENU_HIDDEN
         ),
@@ -203,6 +205,11 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         # The Recovery page runs these behind a confirmation; `recovery-status` is its screen read.
         "recovery": tuple(
             entry for entry in COORDINATOR_COMMANDS if entry.key in RECOVERY_COMMANDS
+        ),
+        # The Update Harness page runs these behind a confirmation.
+        "update": (
+            *(entry for entry in HARNESS_COMMANDS if entry.key in UPDATE_COMMANDS),
+            UPDATE_SEED_SELECTED,
         ),
     }
     return JobService(

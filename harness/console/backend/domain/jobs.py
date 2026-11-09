@@ -35,6 +35,7 @@ COMMAND_SECTIONS = (
     "memory",
     "decisions",
     "recovery",
+    "update",
 )
 
 
