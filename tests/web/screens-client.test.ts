@@ -251,3 +251,37 @@ describe("Reports, Orchestration, Recovery and Container route reads", () => {
     expect(groupRows([ROW, { ...ROW, label: "b" }, { ...ROW, group: "Проверки" }]).map((item) => item.rows.length)).toEqual([2, 1]);
   });
 });
+
+describe("Open Project, Update Harness, Configuration and Help reads", () => {
+  beforeEach(() => FakeSocket.reset());
+
+  test("help is asked by language without force; each language is its own key", () => {
+    const { events, client, socket } = setup();
+    client.requestScreen({ type: "help.snapshot", params: { language: "en" } });
+    const request = socket.request("help.snapshot");
+    expect(request).toEqual({ id: request.id, type: "help.snapshot", language: "en" });
+    expect(screenKey({ type: "help.snapshot", params: { language: "en" } })).not.toBe(
+      screenKey({ type: "help.snapshot", params: { language: "ru" } }),
+    );
+    const body = JSON.stringify({ language: "en", intro: "# Guide", sections: [] });
+    socket.reply(screenPage(request.id, "help.snapshot", body, { cached: false, age: 0 }));
+    const key = screenKey({ type: "help.snapshot", params: { language: "en" } });
+    expect(events).toEqual([{ type: "screen", key, value: { language: "en", intro: "# Guide", sections: [] }, cached: false, ageSeconds: 0 }]);
+  });
+
+  test("the snapshots take force; a file diff takes none and comes without cache facts", () => {
+    const { events, client, socket } = setup();
+    for (const type of ["open_project.snapshot", "update_harness.snapshot", "configuration.snapshot"] as const) {
+      client.requestScreen({ type, force: true });
+      expect(socket.request(type)).toMatchObject({ type, force: true });
+    }
+    client.requestScreen({ type: "update_harness.diff", params: { path: "AGENTS.md" } });
+    const diff = socket.request("update_harness.diff");
+    expect(diff).toEqual({ id: diff.id, type: "update_harness.diff", path: "AGENTS.md" });
+    const text = JSON.stringify({ path: "AGENTS.md", text: "+x" });
+    socket.reply({ v: 1, id: diff.id, type: "update_harness.diff", ok: true, snapshot_id: 9, text, next: text.length, done: true });
+    const key = screenKey({ type: "update_harness.diff", params: { path: "AGENTS.md" } });
+    expect(events.at(-1)).toEqual({ type: "screen", key, value: { path: "AGENTS.md", text: "+x" }, cached: false, ageSeconds: 0 });
+  });
+});
+

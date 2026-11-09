@@ -231,6 +231,7 @@ function renderPanel(props: {
   request?: RunRequest | null;
   onJobDone?: (job: LocalJob) => void;
   confirmAll?: boolean;
+  listed?: boolean;
 }) {
   const client = createConsoleClient({
     url: "ws://127.0.0.1:1/ws",
@@ -319,5 +320,14 @@ describe("the command panel inside a page", () => {
     act(() => socket.reply(jobReply(follow.id, "job.subscribe", final)));
     expect(done).toHaveBeenCalledTimes(1);
     expect(done.mock.calls[0]![0]).toMatchObject({ id: "job-1", phase: "completed", returncode: 0 });
+  });
+
+  test("an unlisted panel shows no command table but still runs a page's request behind the dialog", () => {
+    const request = { command_id: "diff", values: {}, nonce: 1 };
+    const { socket } = renderPanel({ request, confirmAll: true, listed: false });
+    expect(screen.queryByRole("button", { name: "Запустить diff" })).toBeNull();
+    expect(screen.queryByText("Команды")).toBeNull();
+    act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Запустить" })));
+    expect(socket.request("job.start")).toMatchObject({ command_id: "diff", confirmed: true });
   });
 });

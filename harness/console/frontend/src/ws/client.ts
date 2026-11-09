@@ -73,7 +73,8 @@ export type JobEvent =
 
 /** The screen snapshots the web console reads: the paged health report and maintenance facts,
     the typed Harness overview, the Reports and Orchestration ledgers with a report body and a
-    batch chronology, and the Recovery and Container route views. */
+    batch chronology, the Recovery and Container route views, and the Open Project, Update
+    Harness (with a file diff), Configuration and Help facts. */
 export type ScreenType =
   | "diagnostics.snapshot"
   | "harness.maintenance"
@@ -83,10 +84,17 @@ export type ScreenType =
   | "reports.timeline"
   | "orchestration.snapshot"
   | "recovery.view"
-  | "container_route.view";
+  | "container_route.view"
+  | "open_project.snapshot"
+  | "help.snapshot"
+  | "update_harness.snapshot"
+  | "update_harness.diff"
+  | "configuration.snapshot";
 
-/** The paged replies without cache facts: a report body and a batch chronology. */
-const UNCACHED_TYPES: ReadonlySet<string> = new Set(["reports.report", "reports.timeline"]);
+/** The paged replies without cache facts: a report body, a batch chronology and a file diff. */
+const UNCACHED_TYPES: ReadonlySet<string> = new Set(["reports.report", "reports.timeline", "update_harness.diff"]);
+/** The requests without a `force` field besides the uncached ones: the server refuses it. */
+const NO_FORCE_TYPES: ReadonlySet<string> = new Set(["container_route.view", "help.snapshot"]);
 
 export interface ScreenRequest {
   type: ScreenType;
@@ -305,8 +313,8 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   const requestScreen = (request: ScreenRequest): boolean => {
     const key = screenKey(request);
     const body: Record<string, unknown> = { type: request.type, ...request.params };
-    // A report body, a chronology and the container route view take no `force`.
-    if (!UNCACHED_TYPES.has(request.type) && request.type !== "container_route.view") {
+    // A report body, a chronology, a file diff, the container route view and help take no `force`.
+    if (!UNCACHED_TYPES.has(request.type) && !NO_FORCE_TYPES.has(request.type)) {
       body.force = request.force ?? false;
     }
     if (request.type === "diagnostics.snapshot") body.online = request.online ?? false;
