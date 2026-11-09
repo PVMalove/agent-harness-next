@@ -1860,3 +1860,15 @@ EN.update(
         "Repo Map": "Repo Map",
     }
 )
+
+# Web console: the Reports page.
+EN.update(
+    {
+        "Отчёты не заменяют решение; evidence доступен в деталях.": "Reports do not replace a decision; the evidence is in the details.",
+        "Обновить отчёты": "Refresh reports",
+        "Логи QA": "QA logs",
+        "маршрут": "route",
+        "Выберите batch, чтобы открыть его хронологию": "Choose a batch to open its timeline",
+        "начало: неизвестно": "started: unknown",
+    }
+)

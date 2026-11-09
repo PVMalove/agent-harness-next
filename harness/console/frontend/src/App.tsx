@@ -12,6 +12,7 @@ import { Decisions } from "./routes/Decisions";
 import { Home } from "./routes/Home";
 import { Placeholder } from "./routes/Placeholder";
 import { RepoMap } from "./routes/RepoMap";
+import { Reports } from "./routes/Reports";
 import { ConsoleProvider, useConsole } from "./useConsole";
 import type { ConsoleClient } from "./ws/client";
 
@@ -29,6 +30,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   "repo-map": <RepoMap />,
   diagnostics: <Diagnostics />,
   harness: <Harness />,
+  reports: <Reports />,
   "agent-activity": <AgentActivity />,
   orchestration: <Decisions section="Orchestration" />,
   publish: <Decisions section="Публикация" />,

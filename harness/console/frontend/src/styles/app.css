@@ -74,3 +74,24 @@
 .worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
 .worktree-row .btn { flex: none; padding: 3px 8px; font-size: 9.5px; }
 .harness-component > em:empty { display: none; }
+/* Reports: the stage rows carry no type icon, the report sections and the QA log keep the
+   untrusted text wrapped, and the batch history sits under the stage list. */
+.reports-page > .command-refusal { margin-bottom: 12px; }
+.reports-page .report-row { grid-template-columns: minmax(0, 1fr) auto; }
+.reports-page .report-row .report-time { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.reports-page .report-row.on { background: #232c37; }
+.reports-page .report-filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.reports-page .report-filter-row > * { flex: 1 1 120px; min-width: 0; }
+.reports-detail-column { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.report-section { margin-top: 10px; }
+.report-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; font-size: 11px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.report-line-text { min-width: 0; }
+.report-log { margin: 0; padding: 10px 14px; max-height: 320px; overflow: auto; font: 10px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-route { margin: 8px 14px; font-size: 11px; overflow-wrap: anywhere; }
+.report-timeline .timeline { margin: 0; padding: 6px 14px 12px 30px; font-size: 11px; }
+.report-timeline .timeline li { margin: 4px 0; overflow-wrap: anywhere; }
+.report-timeline .timeline small { display: block; color: var(--muted); font: 9.5px var(--mono); }
+.report-timeline .report-meta { padding: 0 14px; }
+@media (max-width: 760px) {
+  .report-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
