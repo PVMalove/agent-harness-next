@@ -1,0 +1,159 @@
+/* Reports, Orchestration, Recovery and Container route in the real build over a mocked socket that
+   serves the committed fixtures: the content of each route at 1440 and 390 px without horizontal
+   overflow, the hidden routes absent from the menu with «Оркестрация» highlighted, and a Recovery
+   confirmation that, cancelled, starts nothing. No screenshot baselines (ADR 0029).
+
+   Manual mockup-conformance checklist (docs/design/web-console-mockups):
+   #reports
+   - [ ] Title: h1 «Отчёты», subtitle, cache fact, actions «Обновить отчёты» and «Оркестрация».
+   - [ ] KPI row (`report-kpis`): Отчётов, Evidence полно, Задержка отчёта, QA с первого раза,
+         С рисками, С блокерами; a figure that needs attention starts with ⚠.
+   - [ ] Master-detail grid (`reports-grid`): «Стадии и отчёты» with the TUI filters (тикет, роль,
+         outcome, дата, статус стадии, completion, sort, direction) and stage rows with a status
+         symbol; «Детали отчёта» with the report sections and the QA log.
+   - [ ] «История batch» with state, start and time to PR; a chosen batch opens «Хронология batch».
+   - Deviations: no type chips and no evidence matrix (the ledger carries no report types); the
+     stage list replaces the mockup's report cards, as in the TUI.
+   #orchestration
+   - [ ] Title with links «Восстановление», «Контейнерный маршрут», «Ход работы», «Отчёты».
+   - [ ] KPI row (`orch-kpis`) of the eight TUI tiles.
+   - [ ] «Аналитика» with tabs Поток работ / Качество / Runtime / Гейты; «Состояние и
+         статистика»; «Lock ledger».
+   - [ ] «История batch» with the state filter; a chosen batch opens its chronology and is carried
+         to Recovery and Container route.
+   - [ ] «Решения»: the pending human decisions with their confirmations.
+   - Deviations: no flow map, heatmap or gate charts (no TUI facts); the TUI command menu is not
+     reproduced (decisions cover the human gate).
+   #recovery (hidden)
+   - [ ] No menu item; «Оркестрация» highlighted; reached from Orchestration with the batch.
+   - [ ] History, the recovery gate (mark and reason) and «Открыть recovery».
+   - [ ] Blockers first, facts by group, unavailable actions with their reasons, notes.
+   - [ ] Every action that changes something opens the confirmation; Cancel starts nothing.
+   - Deviations: Fix offers the core's normalization only (no «edit at pointer» wizard).
+   #container-route (hidden)
+   - [ ] No menu item; «Оркестрация» highlighted; batch, role and runtime selection.
+   - [ ] Executor context strip; six stage tabs with state marks that only switch the pane.
+   - [ ] Per stage: blockers, facts by group, unavailable actions with reasons, notes.
+   - [ ] Only the re-check is interactive; propose, approve, send, QA and cleanup are disabled with
+         «Действие доступно только в TUI: команда не входит в каталог job сервера».
+   - Deviations: the Harness «Контейнеры» tab (engine inventory) stays unshown: no TUI facts. */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { expect, test } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
+
+type Body = Record<string, unknown>;
+
+const base = () => process.env.CONSOLE_BASE_URL!;
+const read = (name: string) => JSON.parse(readFileSync(resolve(__dirname, "fixtures", name), "utf-8")) as Body;
+const HOME = read("home-snapshot.json");
+const PAGED: Readonly<Record<string, Body>> = {
+  "reports.snapshot": read("reports.json"),
+  "reports.report": read("reports-report.json"),
+  "reports.timeline": read("reports-timeline.json"),
+  "orchestration.snapshot": read("orchestration.json"),
+  "recovery.view": read("recovery.json"),
+  "container_route.view": read("container-route.json"),
+};
+const UNCACHED = new Set(["reports.report", "reports.timeline"]);
+const RECOVERY_CATALOG = read("recovery-catalog.json");
+
+const send = (ws: WebSocketRoute, body: Body) => ws.send(JSON.stringify({ v: 1, ok: true, ...body }));
+
+async function mockSocket(page: Page) {
+  const starts: Body[] = [];
+  await page.routeWebSocket("**/ws", (ws) => {
+    ws.onMessage((message) => {
+      const request = JSON.parse(String(message)) as Body;
+      const id = request.id;
+      const type = String(request.type);
+      if (type === "home.snapshot") {
+        send(ws, { id, type, cached: true, age_seconds: 3, snapshot: HOME });
+      } else if (type in PAGED) {
+        const text = JSON.stringify(PAGED[type]);
+        const cache = UNCACHED.has(type) ? {} : { cached: false, age_seconds: 0 };
+        send(ws, { id, type, snapshot_id: 1, text, next: text.length, done: true, ...cache });
+      } else if (type === "decisions.snapshot") {
+        send(ws, { id, type, snapshot: { version: 1, items: [], total: 0, unavailable: false } });
+      } else if (type === "job.catalog") {
+        send(ws, { id, type, ...(request.section === "recovery" ? RECOVERY_CATALOG : { commands: [], cancel_reason: "" }) });
+      } else if (type === "job.list") {
+        send(ws, { id, type, jobs: [] });
+      } else if (type === "job.start") {
+        starts.push(request);
+      }
+    });
+  });
+  return starts;
+}
+
+async function open(page: Page, route: string, width: number, ready: string) {
+  await page.setViewportSize({ width, height: width > 600 ? 900 : 844 });
+  await page.goto(`${base()}/#/${route}`);
+  await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
+  await expect(page.locator(ready).first()).toBeVisible();
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+}
+
+const noOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+
+async function menuKeepsOrchestration(page: Page, width: number) {
+  if (width < 600) await page.locator("#menu-toggle").click();
+  const nav = page.getByRole("navigation", { name: "Разделы консоли" });
+  await expect(nav.getByRole("link")).toHaveCount(13);
+  await expect(nav.locator('a[href*="recovery"], a[href*="container-route"]')).toHaveCount(0);
+  await expect(nav.locator('a[aria-current="page"]')).toHaveAttribute("href", "#/orchestration");
+}
+
+for (const width of [1440, 390]) {
+  test(`reports at ${width} px`, async ({ page }) => {
+    await mockSocket(page);
+    await open(page, "reports", width, "#reports-kpi");
+    await expect(page.locator("#report-list [data-stage]")).toHaveCount(5);
+    await expect(page.locator("#report-detail")).toContainText("✖ fail");
+    await expect(page.locator("#report-qa-log")).toContainText("хвост лога (последние 2 из 42 строк):");
+    await page.locator('#batch-list [data-batch="b-887"]').click();
+    await expect(page.locator("#report-timeline")).toContainText("developer → review → qa → developer");
+    expect(await noOverflow(page)).toBe(true);
+  });
+
+  test(`orchestration at ${width} px`, async ({ page }) => {
+    await mockSocket(page);
+    await open(page, "orchestration", width, "#orch-kpi");
+    await expect(page.locator("#ledger-lock")).toContainText("Lock ledger занят: report submit");
+    await expect(page.getByRole("heading", { name: "Ожидающие решения" })).toBeVisible();
+    await page.locator('#batch-history [data-batch="b-887"]').click();
+    await expect(page.locator("#open-recovery")).toHaveAttribute("href", "#/recovery?batch=b-887");
+    expect(await noOverflow(page)).toBe(true);
+  });
+
+  test(`recovery at ${width} px: hidden route, a cancelled confirmation starts nothing`, async ({ page }) => {
+    const starts = await mockSocket(page);
+    await open(page, "recovery?batch=b-887", width, "#recovery-view");
+    await expect(page.locator("#recovery-view")).toContainText("✖ недоступно: Resume — ядро: проверка не пройдена");
+    expect(await noOverflow(page)).toBe(true);
+    await page.locator('#view-actions [data-action="reload"] button').click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("recovery-reload");
+    await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(starts).toEqual([]);
+    await page.locator('#view-actions [data-action="abort"] button').click();
+    await expect(page.getByRole("dialog")).toContainText("recovery-abort");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(starts).toEqual([]);
+    await menuKeepsOrchestration(page, width);
+  });
+
+  test(`container route at ${width} px: hidden route, tabs only switch the pane`, async ({ page }) => {
+    const starts = await mockSocket(page);
+    await open(page, "container-route?batch=b-887&role=developer", width, "#route-view");
+    await expect(page.locator("#route-context")).toContainText("Worker: не создан");
+    await page.getByRole("tab", { name: "✖ Plan / approval" }).click();
+    await expect(page.locator('#view-actions [data-action="propose"] button')).toBeDisabled();
+    expect(await noOverflow(page)).toBe(true);
+    expect(starts).toEqual([]);
+    await menuKeepsOrchestration(page, width);
+  });
+}
