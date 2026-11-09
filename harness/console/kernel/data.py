@@ -50,6 +50,30 @@ class DashboardData:
     # (status, check id, message) of every failed and then every warning check.
     problems: tuple[tuple[str, str, str], ...] = ()
     memory_index: CheckResult | None = None
+    # (status, check id, message, area) of every check, in report order.
+    checks: tuple[tuple[str, str, str, str], ...] = ()
+    # The managed-file counts of `harness diff --json` by kind; None when it cannot be read.
+    drift_counts: tuple[tuple[str, int], ...] | None = None
+
+
+_DRIFT_KINDS = (
+    "added",
+    "missing",
+    "package_changed",
+    "local_changed",
+    "conflict",
+    "retired",
+)
+
+
+def drift_counts(payload: JsonObject | None) -> tuple[tuple[str, int], ...] | None:
+    """The number of files of each drift kind in a `harness diff --json` result, or None."""
+    if payload is None:
+        return None
+    return tuple(
+        (kind, len(found) if isinstance(found := payload.get(kind), list) else 0)
+        for kind in _DRIFT_KINDS
+    )
 
 
 def harness_version() -> str:
@@ -85,7 +109,10 @@ def drift_report(repo: Path, *, timeout: float = 30.0) -> JsonObject | None:
 
 def drift_state(repo: Path, *, timeout: float = 30.0) -> str:
     """Вызывает `harness diff --json` в подпроцессе для определения состояния дрейфа управляемых файлов."""
-    payload = drift_report(repo, timeout=timeout)
+    return _drift_state_of(drift_report(repo, timeout=timeout))
+
+
+def _drift_state_of(payload: JsonObject | None) -> str:
     state = payload.get("state") if payload is not None else None
     return state if isinstance(state, str) else "неизвестно"
 
@@ -179,6 +206,7 @@ def collect_dashboard(repo: Path, *, online: bool = False) -> DashboardData:
     """Собирает сводные данные для экрана Dashboard. По умолчанию работает в режиме офлайн без ожидания сети."""
     report = run_health(repo, online=online)
     summary = report.summary()
+    drift = drift_report(repo)
     return DashboardData(
         ok=summary["ok"],
         warn=summary["warn"],
@@ -186,7 +214,8 @@ def collect_dashboard(repo: Path, *, online: bool = False) -> DashboardData:
         skipped=summary["skipped"],
         repo_map_tier=_repo_map_tier(report),
         harness_version=harness_version(),
-        drift_state=drift_state(repo),
+        drift_state=_drift_state_of(drift),
+        drift_counts=drift_counts(drift),
         active_batches=active_batches(repo),
         memory_index=next(
             (check for check in report.checks if check.id == "memory.index"), None
@@ -196,6 +225,10 @@ def collect_dashboard(repo: Path, *, online: bool = False) -> DashboardData:
             for status in ("fail", "warn")
             for check in report.checks
             if check.status == status
+        ),
+        checks=tuple(
+            (check.status, check.id, check.message, check.group)
+            for check in report.checks
         ),
     )
 

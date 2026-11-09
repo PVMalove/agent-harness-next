@@ -12,6 +12,64 @@ export interface Problem {
   status: string;
   id: string;
   message: string;
+  /** The health area of the check; "" when unknown. */
+  group: string;
+}
+
+export interface ProjectFacts {
+  name: string;
+  branch: string | null;
+  commit: string | null;
+  /** The resolved tracker type; "" when unknown. */
+  tracker: string;
+}
+
+export interface HarnessInstall {
+  installed: boolean;
+  installed_version: string;
+  capabilities: number;
+  skills: number;
+  managed_files: number;
+}
+
+export interface StoreFacts {
+  /** "file-ledger", "runtime-store" or "none". */
+  authority: string;
+  schema: number | null;
+  generation: string | null;
+  audit_records: number | null;
+}
+
+export interface DriftCounts {
+  total: number;
+  added: number;
+  missing: number;
+  package_changed: number;
+  local_changed: number;
+  conflict: number;
+  retired: number;
+}
+
+export interface AreaCounters {
+  area: string;
+  ok: number;
+  warn: number;
+  fail: number;
+  skipped: number;
+}
+
+export interface RouteStep {
+  role: string;
+  state: string;
+}
+
+export interface RecentSession {
+  batch_id: string;
+  ticket: string;
+  state: string;
+  branch: string;
+  created_at: string;
+  route: RouteStep[];
 }
 
 export interface HeadMap {
@@ -51,7 +109,7 @@ export interface MemoryCard {
 }
 
 export interface HomeSnapshot {
-  version: 1;
+  version: 2;
   health: HealthCounters;
   problems: Problem[];
   problems_total: number;
@@ -61,6 +119,14 @@ export interface HomeSnapshot {
   active_batches: number | null;
   repo_map: RepoMapCard;
   memory: MemoryCard;
+  project: ProjectFacts | null;
+  harness: HarnessInstall | null;
+  store: StoreFacts | null;
+  /** null: `harness diff --json` could not be read. */
+  drift_counts: DriftCounts | null;
+  areas: AreaCounters[];
+  skipped_checks: Problem[];
+  recent_sessions: RecentSession[];
 }
 
 type Check = (value: unknown) => boolean;
@@ -85,10 +151,13 @@ const list =
   (value) =>
     Array.isArray(value) && value.every(check);
 
+const PROBLEM = fields({ status: string, id: string, message: string, group: string });
+const COUNTS = { ok: count, warn: count, fail: count, skipped: count };
+
 const SNAPSHOT = fields({
-  version: (value) => value === 1,
-  health: fields({ ok: count, warn: count, fail: count, skipped: count }),
-  problems: list(fields({ status: string, id: string, message: string })),
+  version: (value) => value === 2,
+  health: fields(COUNTS),
+  problems: list(PROBLEM),
   problems_total: count,
   harness_version: string,
   drift: string,
@@ -115,6 +184,36 @@ const SNAPSHOT = fields({
       }),
     ),
   }),
+  project: nullable(fields({ name: string, branch: nullable(string), commit: nullable(string), tracker: string })),
+  harness: nullable(
+    fields({ installed: flag, installed_version: string, capabilities: count, skills: count, managed_files: count }),
+  ),
+  store: nullable(
+    fields({ authority: string, schema: nullable(count), generation: nullable(string), audit_records: nullable(count) }),
+  ),
+  drift_counts: nullable(
+    fields({
+      total: count,
+      added: count,
+      missing: count,
+      package_changed: count,
+      local_changed: count,
+      conflict: count,
+      retired: count,
+    }),
+  ),
+  areas: list(fields({ area: string, ...COUNTS })),
+  skipped_checks: list(PROBLEM),
+  recent_sessions: list(
+    fields({
+      batch_id: string,
+      ticket: string,
+      state: string,
+      branch: string,
+      created_at: string,
+      route: list(fields({ role: string, state: string })),
+    }),
+  ),
 });
 
 /** The snapshot when `value` has exactly its shape, otherwise null. */

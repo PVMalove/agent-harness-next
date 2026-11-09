@@ -95,11 +95,11 @@ export class ManualClock implements Timers {
 }
 
 export const SNAPSHOT = {
-  version: 1,
+  version: 2,
   health: { ok: 3, warn: 1, fail: 1, skipped: 2 },
   problems: [
-    { status: "fail", id: "skills.drift", message: "Skill drift" },
-    { status: "warn", id: "hooks", message: "Hook missing" },
+    { status: "fail", id: "skills.drift", message: "Skill drift", group: "skills" },
+    { status: "warn", id: "hooks", message: "Hook missing", group: "hooks" },
   ],
   problems_total: 2,
   harness_version: "2.0.0",
@@ -107,6 +107,13 @@ export const SNAPSHOT = {
   active_batches: null,
   repo_map: { tier: null, message: "no cache", head_map: null },
   memory: { state: null, policy: null },
+  project: null,
+  harness: null,
+  store: null,
+  drift_counts: null,
+  areas: [],
+  skipped_checks: [],
+  recent_sessions: [],
 };
 
 export function snapshotReply(id: unknown, snapshot: unknown = SNAPSHOT): Record<string, unknown> {
