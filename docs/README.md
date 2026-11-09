@@ -22,7 +22,7 @@
 | Раздел | Содержимое |
 | --- | --- |
 | [ADR](./adr/) | Действующие архитектурные контракты по доменам. |
-| [Руководства для агентов](./agents/) | Git, тикеты, артефакты, worktrees (английские источники). Описания агентов — на [сайте](../site/docs/agents/index.md). |
+| [Руководства для агентов](./agents/) | Git, тикеты, артефакты, worktrees, блоки промпта агента доски задач (английские источники). Описания агентов — на [сайте](../site/docs/agents/index.md). |
 | [Skills](../site/docs/skills/index.md) | Русские описания first-party, global, role и vendor skills (на сайте). |
 | [Hooks](../site/docs/hooks/index.md) | Описания проектных hooks и вспомогательных скриптов (на сайте). |
 | [Backend-оркестрация](../site/docs/backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
