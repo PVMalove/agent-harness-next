@@ -142,20 +142,37 @@
 | Элемент макета | Источник | Статус |
 | --- | --- | --- |
 | Сводка, KPI completeness, latency, first-pass | KPI отчётов | ЕСТЬ |
-| KPI stale evidence | QA-запуск старше отчёта или кандидата | KERNEL |
+| KPI stale evidence | `reports_kpi.stale_evidence`: QA-отчёты без свежего QA-лога своего dispatch (см. ниже) | KERNEL |
 | Вкладки «Отчёты», «Evidence», «Качество», «Готовность» | — | ЕСТЬ |
 | Чипы типов QA, Review, Developer | роль этапа | ЕСТЬ |
 | Чипы Health и Publish | ссылки на Диагностику и Публикацию | ЕСТЬ |
 | Статус passed/attention/blocked | `has_risks`, `has_blockers` | KERNEL |
 | Деталь: summary, evidence, conclusion | `output`, `checks`, `changed_files`, `next_coordinator_action` | ЕСТЬ |
 | QA lane | `qa_attempts`, `qa_runs` | ЕСТЬ |
-| Матрица evidence | `evidence_matrix` | KERNEL |
+| Матрица evidence | группировка на клиенте (`evidenceMatrix`) по отчётам этапов и `qa_runs` (см. ниже) | ЕСТЬ |
 | Колонки receipt и publish матрицы | источника нет | НЕТ ДАННЫХ |
 | Качество: findings по severity, latency по ролям, попытки | аналитика ledger | KERNEL |
 | Готовность: матрица Release Gate | раздел `publish` снимка | KERNEL |
 | Вердикт Release Gate в эпохе файлового ledger | источника нет | НЕТ ДАННЫХ |
 | «Экспорт» | JSON текущей выборки | ЕСТЬ |
 | История batch и хронология | существующие блоки (H4) | ЕСТЬ |
+
+### Два определения «устаревшего» evidence
+
+На странице Отчётов два признака устаревания с разным смыслом, поэтому число в KPI и число
+ячеек «!» в матрице могут расходиться:
+
+- **KPI stale evidence** считает kernel (`_stale_evidence` в `harness/console/kernel/pipeline_kpi.py`):
+  QA-отчёт устарел, если у его dispatch нет QA-лога (`qa_runs`), записанного не раньше старта
+  этого dispatch. Единица счёта — QA-отчёт.
+- **Ячейка QA run матрицы evidence** строит клиент (`evidenceMatrix` в
+  `harness/console/frontend/src/reports/ReportViews.tsx`): ячейка batch устарела, если последний
+  QA-запуск тикета старше последнего отчёта developer. Единица — batch; клиент только группирует
+  и сравнивает метки времени, аналитику не пересчитывает.
+
+Первый признак отвечает на вопрос «подкреплён ли QA-отчёт собственным запуском», второй — «был ли
+QA после последней правки developer». Перенос матрицы в kernel с общим определением — отдельная
+задача.
 
 ## Оркестрация
 
