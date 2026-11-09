@@ -45,6 +45,9 @@ export interface ReportHead {
   role: string;
   outcome: string;
   reported_at: string;
+  /** Whether the body records a risk, and a blocker. */
+  has_risks: boolean;
+  has_blockers: boolean;
 }
 
 export interface StageHead {
@@ -56,6 +59,9 @@ export interface StageHead {
   at: string;
   /** The dispatch id of the stage's report, or null while none is recorded. */
   report: string | null;
+  /** When the dispatch was created and its worker last sent a heartbeat; "" when unknown. */
+  started_at: string;
+  heartbeat_at: string;
 }
 
 export interface QaRun {
@@ -77,7 +83,7 @@ export interface QaAttempt {
 }
 
 export interface Ledger {
-  version: 1;
+  version: 2;
   batches: BatchSummary[];
   reports: ReportHead[];
   stages: StageHead[];
@@ -139,6 +145,10 @@ export const KPI_KEYS = [
   "cycle_p95_seconds",
   "throughput_7d",
   "failed",
+  "unknown",
+  "batches",
+  "rework_batches",
+  "flow_efficiency_pct",
 ] as const;
 export const REPORTS_KPI_KEYS = [
   "reports",
@@ -149,6 +159,7 @@ export const REPORTS_KPI_KEYS = [
   "qa_tickets",
   "attention",
   "blocked",
+  "stale_evidence",
 ] as const;
 export const ANALYTICS_SECTIONS: readonly AnalyticsSection[] = ["flow", "quality", "runtime", "gates"];
 
@@ -174,6 +185,8 @@ const reportHead = exact({
   role: string,
   outcome: string,
   reported_at: string,
+  has_risks: flag,
+  has_blockers: flag,
 });
 const stage = exact({
   dispatch_id: string,
@@ -183,6 +196,8 @@ const stage = exact({
   state: string,
   at: string,
   report: nullable(string),
+  started_at: string,
+  heartbeat_at: string,
 });
 const command: Check = (value) =>
   Array.isArray(value) && value.length === 2 && string(value[0]) && Number.isSafeInteger(value[1]);
@@ -203,7 +218,7 @@ const dispatches: Check = (value) =>
     (record) => isObject(record) && Object.entries(record).every(([key, role]) => key === "role" && string(role)),
   );
 const ledgerFields = {
-  version: (value: unknown) => value === 1,
+  version: (value: unknown) => value === 2,
   batches: list(batch),
   reports: list(reportHead),
   stages: list(stage),

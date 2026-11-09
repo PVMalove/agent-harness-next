@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Mapping, Sequence
 
+from .json_fields import text
+from ...orchestration.core.constants import BatchState
 from .reports import BatchSummary, LedgerView, StageEntry, timestamp
 
 # The batch states that still hold work: WIP is their count.
@@ -22,6 +24,10 @@ STALE_AFTER = timedelta(hours=6)
 THROUGHPUT_DAYS = 7
 # The report outcome that counts as a pass of the first QA report of a ticket.
 PASS_OUTCOME = "completed"
+# The batch states the console knows; any other state counts as unknown.
+KNOWN_BATCH_STATES = frozenset(state.value for state in BatchState)
+# An unfinished dispatch without a heartbeat for this long is stale (the ledger's own default).
+STALE_DISPATCH_AFTER = timedelta(hours=2)
 
 KPI_KEYS = frozenset(
     {
@@ -38,6 +44,10 @@ KPI_KEYS = frozenset(
         "cycle_p95_seconds",
         "throughput_7d",
         "failed",
+        "unknown",
+        "batches",
+        "rework_batches",
+        "flow_efficiency_pct",
     }
 )
 
@@ -62,6 +72,15 @@ class PipelineKpi:
     # Batches whose PR was opened in the last seven days.
     throughput_7d: int = 0
     failed: int = 0
+    # Batches in a state the console does not know.
+    unknown: int = 0
+    # Every batch of the ledger, and those with rework: the denominator and numerator of
+    # "rework N of M".
+    batches: int = 0
+    rework_batches: int = 0
+    # Worker time (dispatch to report) over the cycle time (batch to PR), in percent; None without
+    # a batch that opened its PR.
+    flow_efficiency_pct: int | None = None
 
     def to_payload(self) -> dict[str, int | None]:
         return {key: getattr(self, key) for key in sorted(KPI_KEYS)}
@@ -132,7 +151,12 @@ def pipeline_kpi(view: LedgerView, now: datetime | None = None) -> PipelineKpi:
         if pull >= window:
             opened += 1
     passed, with_qa = _qa_first_pass(view)
+    reworked = {batch_id for (batch_id, _), count in per_role.items() if count > 1}
     return PipelineKpi(
+        unknown=sum(batch.state not in KNOWN_BATCH_STATES for batch in view.batches),
+        batches=len(view.batches),
+        rework_batches=len(reworked),
+        flow_efficiency_pct=_flow_efficiency(view),
         wip=len(in_flight),
         oldest_wip_seconds=int(max(ages)) if ages else None,
         awaiting_approval=len(approval),
@@ -149,6 +173,29 @@ def pipeline_kpi(view: LedgerView, now: datetime | None = None) -> PipelineKpi:
     )
 
 
+def _stage_seconds(stage: StageEntry) -> float | None:
+    """From the dispatch to its report; None for a stage without both moments."""
+    start = timestamp(stage.started_at)
+    end = timestamp(stage.report.reported_at) if stage.report else None
+    return max(0.0, (end - start).total_seconds()) if start and end else None
+
+
+def _flow_efficiency(view: LedgerView) -> int | None:
+    worked = cycle = 0.0
+    for batch in view.batches:
+        start, pull = timestamp(batch.created_at), timestamp(batch.pr_created_at)
+        if start is None or pull is None:
+            continue
+        cycle += max(0.0, (pull - start).total_seconds())
+        worked += sum(
+            seconds
+            for stage in view.stages
+            if stage.batch_id == batch.batch_id
+            and (seconds := _stage_seconds(stage)) is not None
+        )
+    return min(100, round(100 * worked / cycle)) if cycle > 0 else None
+
+
 def pipeline_kpi_from_payload(value: object) -> PipelineKpi:
     """The KPIs a `PipelineKpi.to_payload` result describes; `ValueError` when it is outside the
     schema."""
@@ -158,6 +205,7 @@ def pipeline_kpi_from_payload(value: object) -> PipelineKpi:
         "oldest_approval_seconds",
         "cycle_p50_seconds",
         "cycle_p95_seconds",
+        "flow_efficiency_pct",
     }
     if any(numbers[key] is None for key in KPI_KEYS - optional):
         raise ValueError("kpi payload: a count is missing")
@@ -193,6 +241,7 @@ REPORTS_KPI_KEYS = frozenset(
         "qa_tickets",
         "attention",
         "blocked",
+        "stale_evidence",
     }
 )
 
@@ -212,6 +261,9 @@ class ReportsKpi:
     # Reports that carry a recorded risk, and those that carry a blocker.
     attention: int = 0
     blocked: int = 0
+    # QA reports without a QA gate log of their own dispatch written at or after the dispatch
+    # started: the evidence they cite is older than the run, or missing.
+    stale_evidence: int = 0
 
     def to_payload(self) -> dict[str, int | None]:
         return {key: getattr(self, key) for key in sorted(REPORTS_KPI_KEYS)}
@@ -257,6 +309,7 @@ def reports_kpi(view: LedgerView) -> ReportsKpi:
             delays.append(max(0.0, (reported - started).total_seconds()))
     passed, with_qa = _qa_first_pass(view)
     return ReportsKpi(
+        stale_evidence=_stale_evidence(view),
         reports=len(view.reports),
         evidence_complete=sum(_report_complete(report.report) for report in view.reports),
         latency_p50_seconds=_percentile(delays, 0.5),
@@ -266,6 +319,23 @@ def reports_kpi(view: LedgerView) -> ReportsKpi:
         attention=sum(_evidence_present(report.report.get("risks")) for report in view.reports),
         blocked=sum(_evidence_present(report.report.get("blockers")) for report in view.reports),
     )
+
+
+def _stale_evidence(view: LedgerView) -> int:
+    started = {stage.dispatch_id: timestamp(stage.started_at) for stage in view.stages}
+    stale = 0
+    for report in view.reports:
+        if report.role != "qa":
+            continue
+        start = started.get(report.dispatch_id)
+        fresh = any(
+            run.dispatch_id == report.dispatch_id
+            and (logged := timestamp(run.logged_at)) is not None
+            and (start is None or logged >= start)
+            for run in view.qa_runs
+        )
+        stale += not fresh
+    return stale
 
 
 def reports_kpi_from_payload(value: object) -> ReportsKpi:
@@ -292,6 +362,8 @@ def _numbers(value: object, keys: frozenset[str], what: str) -> dict[str, int | 
 
 ANALYTICS_SECTIONS = ("flow", "quality", "runtime", "gates")
 AGING_BUCKETS = ("lt_1d", "d1_3", "d3_7", "gt_7d")
+# The age buckets of an unfinished dispatch; `aging_by_role` keys are "<role>:<bucket>".
+STAGE_AGING_BUCKETS = ("lt_15m", "m15_60", "h1_4", "gt_4h")
 type Figure = int | None | list[int] | dict[str, int]
 
 
@@ -317,6 +389,135 @@ def _bucket(seconds: float) -> str:
     if days < 3:
         return "d1_3"
     return "d3_7" if days < 7 else "gt_7d"
+
+
+def _stage_bucket(seconds: float) -> str:
+    minutes = seconds / 60
+    if minutes < 15:
+        return "lt_15m"
+    if minutes < 60:
+        return "m15_60"
+    return "h1_4" if minutes < 240 else "gt_4h"
+
+
+def _by_role_percentile(
+    values: Mapping[str, list[float]], share: float
+) -> dict[str, int]:
+    return {
+        role: found
+        for role, items in sorted(values.items())
+        if (found := _percentile(items, share)) is not None
+    }
+
+
+def _role_flow_figures(view: LedgerView, now: datetime) -> dict[str, Figure]:
+    """Per-role flow figures: unfinished dispatches and their age buckets, the dispatch-to-report
+    p50/p95, and the p50 wait from the previous report of the batch to the dispatch."""
+    current: Counter[str] = Counter()
+    aging: Counter[str] = Counter()
+    durations: dict[str, list[float]] = {}
+    waits: dict[str, list[float]] = {}
+    by_batch: dict[str, list[StageEntry]] = {}
+    for stage in view.stages:
+        by_batch.setdefault(stage.batch_id, []).append(stage)
+        if not stage.finished:
+            current[stage.role] += 1
+            age = _age(stage.started_at or stage.at, now)
+            if age is not None:
+                aging[f"{stage.role}:{_stage_bucket(age)}"] += 1
+        seconds = _stage_seconds(stage)
+        if seconds is not None:
+            durations.setdefault(stage.role, []).append(seconds)
+    for stages in by_batch.values():
+        reported = sorted(
+            moment
+            for stage in stages
+            if stage.report and (moment := timestamp(stage.report.reported_at))
+        )
+        for stage in stages:
+            start = timestamp(stage.started_at)
+            before = [moment for moment in reported if start and moment <= start]
+            if start is not None and before:
+                waits.setdefault(stage.role, []).append(
+                    (start - before[-1]).total_seconds()
+                )
+    return {
+        "current_by_role": dict(current),
+        "aging_by_role": dict(aging),
+        "stage_p50_by_role": _by_role_percentile(durations, 0.5),
+        "stage_p95_by_role": _by_role_percentile(durations, 0.95),
+        "wait_p50_by_role": _by_role_percentile(waits, 0.5),
+    }
+
+
+def _findings_by_severity(view: LedgerView) -> dict[str, int]:
+    found: Counter[str] = Counter()
+    for report in view.reports:
+        review = report.report.get("review")
+        if not isinstance(review, dict):
+            continue
+        for axis in ("standards", "spec"):
+            evidence = review.get(axis)
+            findings = evidence.get("findings") if isinstance(evidence, dict) else None
+            for item in findings if isinstance(findings, list) else []:
+                if isinstance(item, dict):
+                    found[text(item.get("severity"), "unknown")] += 1
+    return dict(found)
+
+
+def _runtime_figures(view: LedgerView, now: datetime) -> dict[str, Figure]:
+    """Heartbeat age p95 and stale dispatches of the unfinished stages, and the oldest
+    unfinished stage per role."""
+    beats: list[float] = []
+    stale = 0
+    oldest: dict[str, int] = {}
+    for stage in view.stages:
+        if stage.finished:
+            continue
+        beat = _age(stage.heartbeat_at, now) if stage.heartbeat_at else None
+        if beat is not None:
+            beats.append(beat)
+        silence = beat if beat is not None else _age(stage.started_at or stage.at, now)
+        if silence is not None and silence > STALE_DISPATCH_AFTER.total_seconds():
+            stale += 1
+        age = _age(stage.started_at or stage.at, now)
+        if age is not None:
+            oldest[stage.role] = max(oldest.get(stage.role, 0), int(age))
+    return {
+        "heartbeat_age_p95_seconds": _percentile(beats, 0.95),
+        "stale_dispatches": stale,
+        "open_age_by_role": oldest,
+    }
+
+
+def _gate_figures(view: LedgerView) -> dict[str, Figure]:
+    """Coordinator decisions by verdict, and the p50/p95 latency from the report a decision
+    follows to the decision, keyed by the role of that report."""
+    verdicts: Counter[str] = Counter()
+    latency: dict[str, list[float]] = {}
+    for batch_id, record in view._batch_records.items():
+        reports = sorted(
+            (moment, stage.role)
+            for stage in view.stages
+            if stage.batch_id == batch_id
+            and stage.report
+            and (moment := timestamp(stage.report.reported_at))
+        )
+        decisions = record.get("coordinator_decisions")
+        for decision in decisions if isinstance(decisions, list) else []:
+            if not isinstance(decision, dict):
+                continue
+            verdicts[text(decision.get("decision"), "unknown")] += 1
+            at = timestamp(text(decision.get("approved_at")))
+            before = [item for item in reports if at and item[0] <= at]
+            if at is not None and before:
+                moment, role = before[-1]
+                latency.setdefault(role, []).append((at - moment).total_seconds())
+    return {
+        "decisions_by_verdict": dict(verdicts),
+        "latency_p50_by_gate": _by_role_percentile(latency, 0.5),
+        "latency_p95_by_gate": _by_role_percentile(latency, 0.95),
+    }
 
 
 def pipeline_analytics(view: LedgerView, now: datetime | None = None) -> PipelineAnalytics:
@@ -346,6 +547,7 @@ def pipeline_analytics(view: LedgerView, now: datetime | None = None) -> Pipelin
         "pr_per_day": per_day,
         "cycle_p50_seconds": _percentile(cycles, 0.5),
         "cycle_p95_seconds": _percentile(cycles, 0.95),
+        **_role_flow_figures(view, now),
     }
     per_role: Counter[tuple[str, str]] = Counter(
         (stage.batch_id, stage.role) for stage in view.stages
@@ -362,6 +564,12 @@ def pipeline_analytics(view: LedgerView, now: datetime | None = None) -> Pipelin
         "qa_attempts_failed": len(view.qa_attempts),
         "qa_first_pass": passed,
         "qa_tickets": with_qa,
+        "findings_by_severity": _findings_by_severity(view),
+        "returns_by_role": dict(
+            Counter(
+                report.role for report in view.reports if report.outcome != PASS_OUTCOME
+            )
+        ),
     }
     open_ages = [
         age
@@ -373,6 +581,7 @@ def pipeline_analytics(view: LedgerView, now: datetime | None = None) -> Pipelin
         "unfinished": sum(not stage.finished for stage in view.stages),
         "oldest_unfinished_seconds": int(max(open_ages)) if open_ages else None,
         "stale": pipeline_kpi(view, now).stale,
+        **_runtime_figures(view, now),
     }
     waiting = [
         age
@@ -386,6 +595,7 @@ def pipeline_analytics(view: LedgerView, now: datetime | None = None) -> Pipelin
         "approval_p95_seconds": _percentile(waiting, 0.95),
         "approval_oldest_seconds": int(max(waiting)) if waiting else None,
         "pr_states": dict(Counter(batch.pr_state for batch in view.batches)),
+        **_gate_figures(view),
     }
     return PipelineAnalytics(flow, quality, runtime, gates)
 

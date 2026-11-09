@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from harness.console.kernel import reports as console_reports
@@ -259,10 +259,19 @@ def ledger() -> LedgerView:
                 states[dispatch_id],
                 report.reported_at if report else str(record["created_at"]),
                 report,
+                started_at=str(record["created_at"]),
+                heartbeat_at=""
+                if report
+                else _shifted(str(record["created_at"]), minutes=5),
             )
         )
     view.stages[:] = console_reports.select_stages(view.stages)
     return view
+
+
+def _shifted(moment: str, *, minutes: int) -> str:
+    """`moment` moved by `minutes`, in the same ISO form."""
+    return (datetime.fromisoformat(moment) + timedelta(minutes=minutes)).isoformat()
 
 
 def reports_payload(view: LedgerView) -> JsonObject:

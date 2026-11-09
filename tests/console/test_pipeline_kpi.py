@@ -193,3 +193,102 @@ def test_analytics_come_from_the_ledger_and_round_trip() -> None:
         pipeline_analytics_from_payload({"flow": {}})
     with pytest.raises(ValueError):
         pipeline_analytics_from_payload({**analytics.to_payload(), "flow": {"x": "y"}})
+
+
+def _timed(
+    batch_id: str, role: str, started: str, reported: str = "", body: JsonObject | None = None
+) -> StageEntry:
+    dispatch = f"d-{batch_id}-{role}-{started}"
+    report = (
+        ReportEntry(dispatch, batch_id, f"#{batch_id}", role, "completed", reported, body or {})
+        if reported
+        else None
+    )
+    return StageEntry(
+        dispatch,
+        batch_id,
+        f"#{batch_id}",
+        role,
+        "reported" if reported else "working",
+        reported or started,
+        report,
+        started_at=started,
+    )
+
+
+def test_unknown_rework_share_and_flow_efficiency_come_from_the_ledger() -> None:
+    view = LedgerView(
+        batches=[
+            _batch("a", "mystery", "2026-11-06T06:00:00+00:00"),
+            _batch(
+                "b", "completed", "2026-11-06T00:00:00+00:00", pr="2026-11-06T10:00:00+00:00"
+            ),
+        ],
+        stages=[
+            _timed("b", "developer", "2026-11-06T01:00:00+00:00", "2026-11-06T03:00:00+00:00"),
+            _timed("b", "developer", "2026-11-06T04:00:00+00:00", "2026-11-06T05:00:00+00:00"),
+            _timed("b", "qa", "2026-11-06T06:00:00+00:00", "2026-11-06T07:00:00+00:00"),
+        ],
+    )
+    kpi = pipeline_kpi(view, NOW)
+    assert (kpi.unknown, kpi.batches, kpi.rework_batches) == (1, 2, 1)
+    # Four worker hours out of a ten-hour cycle.
+    assert kpi.flow_efficiency_pct == 40
+    assert pipeline_kpi(LedgerView(batches=view.batches[:1]), NOW).flow_efficiency_pct is None
+
+
+def test_role_analytics_findings_heartbeats_and_gate_latency() -> None:
+    review = {
+        "review": {
+            "standards": {"findings": [{"severity": "warning"}, {"severity": "info"}]},
+            "spec": {"findings": [{"severity": "warning"}]},
+        }
+    }
+    open_stage = StageEntry(
+        "d-open",
+        "b",
+        "#b",
+        "qa",
+        "working",
+        "2026-11-06T11:30:00+00:00",
+        started_at="2026-11-06T11:30:00+00:00",
+        heartbeat_at="2026-11-06T09:00:00+00:00",
+    )
+    view = LedgerView(
+        batches=[_batch("b", "active", "2026-11-06T00:00:00+00:00")],
+        stages=[
+            _timed("b", "developer", "2026-11-06T01:00:00+00:00", "2026-11-06T02:00:00+00:00"),
+            _timed(
+                "b", "code-review", "2026-11-06T02:10:00+00:00", "2026-11-06T02:40:00+00:00", review
+            ),
+            open_stage,
+        ],
+        _batch_records={
+            "b": {
+                "coordinator_decisions": [
+                    {"decision": "accept", "approved_at": "2026-11-06T02:50:00+00:00"}
+                ]
+            }
+        },
+    )
+    view.reports.extend(stage.report for stage in view.stages if stage.report)
+    analytics = pipeline_analytics(view, NOW)
+    assert analytics.flow["current_by_role"] == {"qa": 1}
+    assert analytics.flow["aging_by_role"] == {"qa:m15_60": 1}
+    assert analytics.flow["stage_p50_by_role"] == {"code-review": 1800, "developer": 3600}
+    assert analytics.flow["wait_p50_by_role"] == {"code-review": 600, "qa": 31800}
+    assert analytics.quality["findings_by_severity"] == {"warning": 2, "info": 1}
+    assert analytics.runtime["heartbeat_age_p95_seconds"] == 3 * 3600
+    assert analytics.runtime["stale_dispatches"] == 1
+    assert analytics.runtime["open_age_by_role"] == {"qa": 1800}
+    assert analytics.gates["decisions_by_verdict"] == {"accept": 1}
+    assert analytics.gates["latency_p50_by_gate"] == {"code-review": 600}
+    assert pipeline_analytics_from_payload(analytics.to_payload()) == analytics
+
+
+def test_a_qa_report_without_its_own_run_log_is_stale_evidence() -> None:
+    stage = _timed("b", "qa", "2026-11-06T01:00:00+00:00", "2026-11-06T02:00:00+00:00")
+    assert stage.report is not None
+    view = LedgerView(reports=[stage.report], stages=[stage])
+    assert reports_kpi(view).stale_evidence == 1
+    assert reports_kpi_from_payload(reports_kpi(view).to_payload()).stale_evidence == 1
