@@ -19,6 +19,9 @@ export interface RunRequest {
   command_id: string;
   values: Record<string, string>;
   nonce: number;
+  /** What the page says the run will do, shown in the confirmation instead of the server's
+      class reason. */
+  reason?: string;
 }
 
 type Pending =
@@ -88,8 +91,12 @@ export function CommandPanel({
   planDigests = NO_DIGESTS,
   request,
   onJobDone,
+  confirmAll = false,
 }: {
   section: Section;
+  /** Every run opens the confirmation first, whatever the command's class: a reversible
+      command is then started with `confirmed: true` too. */
+  confirmAll?: boolean;
   /** command_id -> the server digest of the plan the page shows. */
   planDigests?: Readonly<Record<string, string>>;
   request?: RunRequest | null;
@@ -105,9 +112,9 @@ export function CommandPanel({
   const digest = (command: CommandDescriptor) =>
     command.plan_required ? { plan_digest: planDigests[command.command_id] } : {};
 
-  const run = (command: CommandDescriptor, values: Record<string, string>) => {
+  const run = (command: CommandDescriptor, values: Record<string, string>, reason?: string) => {
     setUnavailable(null);
-    if (!command.needs_confirmation) {
+    if (!command.needs_confirmation && !confirmAll) {
       jobs.start({ command_id: command.command_id, values, ...digest(command) });
       return;
     }
@@ -118,7 +125,7 @@ export function CommandPanel({
       dialog: {
         title: t("Подтвердите запуск"),
         command: command.command_id,
-        reason: t(command.confirmation_reason ?? command.title),
+        reason: reason ?? t(command.confirmation_reason ?? command.title),
         typed: command.typed_confirmation,
         action: t("Запустить"),
       },
@@ -163,7 +170,7 @@ export function CommandPanel({
       setUnavailable(blocked);
       return;
     }
-    run(command, request.values);
+    run(command, request.values, request.reason);
     // `run` and `t` change with every render; the nonce decides.
   }, [request, commands]);
 

@@ -122,3 +122,31 @@
   .orch-history-grid { grid-template-columns: 1fr; }
   .orch-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Recovery and Container route: the view body as the TUI draws it (blockers, grouped facts,
+   unavailable actions, notes), the action buttons with their reasons and the inputs. */
+.recovery-page > .command-refusal, .route-page > .command-refusal { margin-bottom: 12px; }
+.recovery-history, .recovery-view, .route-view, .route-select { margin-bottom: 18px; }
+.recovery-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.view-body { padding: 8px 14px 4px; font-size: 11px; }
+.view-blockers { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--err); border-radius: 6px; }
+.view-blockers h3, .view-group h3 { margin: 0 0 4px; color: var(--muted); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.view-blockers p { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.view-group { margin-bottom: 10px; }
+.view-group dl { margin: 0; }
+.view-row { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 8px; padding: 3px 0; border-top: 1px solid #2b3440; }
+.view-row dt { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.view-row dd { margin: 0; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.view-mark { flex: none; }
+.view-mark.ok { color: var(--ok); } .view-mark.warn { color: var(--warn); }
+.view-mark.blocked, .view-mark.failed { color: var(--err); }
+.view-unavailable { margin: 6px 0; padding-left: 18px; color: var(--muted); overflow-wrap: anywhere; }
+.view-note { margin: 6px 0; color: var(--muted); overflow-wrap: anywhere; }
+.view-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 14px; }
+.view-action { display: inline-flex; flex-direction: column; gap: 2px; max-width: 100%; }
+.view-action-reason { max-width: 260px; color: var(--muted); font-size: 9.5px; overflow-wrap: anywhere; }
+.recovery-inputs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px; }
+.recovery-inputs input { flex: 1 1 160px; min-width: 0; }
+.command-confirm .board-confirm-note { white-space: pre-line; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .view-row { grid-template-columns: 1fr; }
+}
