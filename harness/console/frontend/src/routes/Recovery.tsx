@@ -116,7 +116,8 @@ export function Recovery() {
     <div className="recovery-page work-page" data-section="Orchestration">
       <div className="page-title">
         <div>
-          <h1>{t("Восстановление batch")}</h1>
+          <h1>{t("Восстановление")}</h1>
+          <p>{t("Исход запуска неизвестен: сначала изучите доступные факты.")}</p>
           <p id="recovery-context">
             batch: {batch || t("не выбран")}
           </p>
@@ -136,6 +137,47 @@ export function Recovery() {
           {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
         </p>
       )}
+
+      <div className="note" id="recovery-note">
+        {t("Неизвестный исход не считается успехом. Действия восстановления выполняются только после подтверждения.")}
+      </div>
+      <div className="grid" id="recovery-summary">
+        <section className="panel">
+          <div className="panel-head">
+            <h2>{t("Состояние")}</h2>
+          </div>
+          {view ? (
+            view.rows.slice(0, 3).map((row, index) => (
+              <div className="row" key={index}>
+                <div>
+                  <b>{t(row.label)}</b>
+                  <small>{t(row.value).split("\n")[0]}</small>
+                </div>
+                <span className={`status ${row.state === "ok" ? "active" : "warn"}`}>{row.mark ? t(row.mark) : "—"}</span>
+              </div>
+            ))
+          ) : (
+            <div className="body">
+              <p className="muted">{t("Откройте recovery выбранного batch, чтобы увидеть его состояние.")}</p>
+            </div>
+          )}
+        </section>
+        <section className="panel">
+          <div className="panel-head">
+            <h2>{t("Безопасный просмотр")}</h2>
+          </div>
+          <div className="body">
+            <div className="actions">
+              <a className="btn" href={href("agent-activity")}>
+                {t("Просмотреть журнал")}
+              </a>
+              <a className="btn" href={href("reports")}>
+                {t("Показать evidence")}
+              </a>
+            </div>
+          </div>
+        </section>
+      </div>
 
       {data && (
         <section className="panel recovery-history" id="recovery-history">
