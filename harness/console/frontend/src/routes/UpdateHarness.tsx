@@ -271,8 +271,8 @@ export function UpdateHarness() {
                     data-path={item.path}
                     onClick={() => setOpened(item.path)}
                   >
-                    <span className={`diff-kind ${item.tone}`}>{`${ICONS[item.tone]} ${t(item.tag)}`}</span>
                     <span className="diff-path">{item.path}</span>
+                    <span className={`diff-kind ${item.tone}`}>{`${ICONS[item.tone]} ${t(item.tag)}`}</span>
                   </button>
                 ))}
               </div>

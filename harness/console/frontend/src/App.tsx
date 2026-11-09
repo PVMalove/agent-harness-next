@@ -11,6 +11,7 @@ import { ContainerRoute } from "./routes/ContainerRoute";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
 import { Decisions } from "./routes/Decisions";
+import { Help } from "./routes/Help";
 import { Home } from "./routes/Home";
 import { OpenProject } from "./routes/OpenProject";
 import { Orchestration } from "./routes/Orchestration";
@@ -45,6 +46,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   "open-project": <OpenProject />,
   "update-harness": <UpdateHarness />,
   configuration: <Configuration />,
+  help: <Help />,
 };
 
 export function createRouter() {

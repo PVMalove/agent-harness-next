@@ -2104,3 +2104,11 @@ EN.update(
         "Файл должен быть JSON-объектом": "The file must be a JSON object",
     }
 )
+
+# The web Help page (#889).
+EN.update(
+    {
+        "Справка по разделам, клавишам и правилам безопасности консоли.": "A guide to the console's sections, keys and safety rules.",
+        "Разделов справки: {n}": "Guide sections: {n}",
+    }
+)
