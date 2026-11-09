@@ -187,7 +187,7 @@ def test_the_pages_read_the_fixture_data_over_the_websocket_route(
     assert found["timeline"] == _fixture("reports-timeline.json")
     orchestration = found["orchestration"]
     assert isinstance(orchestration, dict)
-    fixture = _fixture("orchestration.json")
+    fixture = _fixture("orch-snapshot.json")
     assert isinstance(fixture, dict)
     # The ledger and the lock are the fixture's; the KPIs are computed at the time of the read.
     assert orchestration["ledger"] == fixture["ledger"]

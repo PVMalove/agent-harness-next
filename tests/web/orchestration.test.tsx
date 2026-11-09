@@ -5,8 +5,8 @@ import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
 import { lockLines } from "../../harness/console/frontend/src/orchestration/format";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import { CANCEL_REASON, FakeSocket, ManualClock, screenPage } from "./fake-socket";
-import FACTS from "./fixtures/orchestration-facts.json";
-import ORCHESTRATION from "./fixtures/orchestration.json";
+import FACTS from "./fixtures/orch-snapshot-facts.json";
+import ORCHESTRATION from "./fixtures/orch-snapshot.json";
 import TIMELINE from "./fixtures/reports-timeline.json";
 
 function renderOrchestration(language = "") {

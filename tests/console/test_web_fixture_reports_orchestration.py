@@ -486,8 +486,8 @@ def fixtures() -> JsonObject:
         "reports-report.json": QA_BODY,
         "reports-timeline.json": chronology,
         "reports-facts.json": report_facts(reports, QA_BODY, chronology),
-        "orchestration.json": orchestration,
-        "orchestration-facts.json": orchestration_facts(orchestration),
+        "orch-snapshot.json": orchestration,
+        "orch-snapshot-facts.json": orchestration_facts(orchestration),
         "recovery.json": (recovery := recovery_view_payload(*recovery_inputs())),
         "recovery-facts.json": recovery_facts(recovery),
         "recovery-catalog.json": recovery_catalog(),
@@ -529,7 +529,7 @@ def test_the_ledger_fixtures_decode_with_the_tui_decoders() -> None:
     assert reports_kpi_from_payload(reports.reports_kpi).reports == 4
     timeline = timeline_from_payload(_committed("reports-timeline.json"))
     assert timeline.batch.batch_id == "b-887"
-    orchestration = _committed("orchestration.json")
+    orchestration = _committed("orch-snapshot.json")
     assert isinstance(orchestration, dict)
     assert ledger_from_payload(orchestration["ledger"]).batches == reports.batches
     assert pipeline_kpi_from_payload(orchestration["kpi"]).wip == 1
@@ -553,9 +553,9 @@ def test_each_facts_file_is_what_the_tui_shows_for_its_fixture() -> None:
     assert _committed("reports-facts.json") == report_facts(
         reports, body, _committed("reports-timeline.json")
     )
-    orchestration = _committed("orchestration.json")
+    orchestration = _committed("orch-snapshot.json")
     assert isinstance(orchestration, dict)
-    assert _committed("orchestration-facts.json") == orchestration_facts(orchestration)
+    assert _committed("orch-snapshot-facts.json") == orchestration_facts(orchestration)
     recovery = _committed("recovery.json")
     assert isinstance(recovery, dict)
     assert _committed("recovery-facts.json") == recovery_facts(recovery)

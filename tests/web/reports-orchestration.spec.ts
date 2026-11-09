@@ -51,7 +51,7 @@ const PAGED: Readonly<Record<string, Body>> = {
   "reports.snapshot": read("reports.json"),
   "reports.report": read("reports-report.json"),
   "reports.timeline": read("reports-timeline.json"),
-  "orchestration.snapshot": read("orchestration.json"),
+  "orchestration.snapshot": read("orch-snapshot.json"),
   "recovery.view": read("recovery.json"),
   "container_route.view": read("container-route.json"),
 };

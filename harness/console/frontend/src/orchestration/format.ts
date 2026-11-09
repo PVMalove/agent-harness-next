@@ -2,7 +2,7 @@
    `analytics_rows`, `pipeline_stats_fields`, `state_filter_items`, `batch_label`),
    harness/console/kernel/pipeline_stats.py (`pipeline_stats`) and harness/console/tui/ledger_lock.py
    (`lock_text`). Every KPI and analytics figure is the server's; these functions only word and
-   count the served ledger lists, as the TUI does. tests/web/fixtures/orchestration-facts.json
+   count the served ledger lists, as the TUI does. tests/web/fixtures/orch-snapshot-facts.json
    pins every text to the one the TUI shows for the same snapshot. */
 import type { Language } from "../i18n";
 import { durationText, pyRound } from "../reports/format";
