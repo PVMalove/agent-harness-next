@@ -97,6 +97,7 @@ def repo_map_facts() -> RepoMapFacts:
             Path("/work/project/registry"), "cp312-linux", "bundle", ("python",), None
         ),
         language_files={"python": 3},
+        excluded=2,
     )
 
 

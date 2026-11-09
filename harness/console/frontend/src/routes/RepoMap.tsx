@@ -1,9 +1,11 @@
 /* Repo Map uses the same snapshot as TUI; opening it never builds or installs anything. */
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
 import { ConfirmDialog } from "../commands/ConfirmDialog";
 import { PHASE_LABELS } from "../commands/JobOutput";
 import { JOB_ERROR_LABELS } from "../ws/jobs";
+import type { RepoMapFacts } from "../ws/repoMap";
 import { useRepoMap } from "./useRepoMap";
 import { Fields, Files, Links, Panel, Settings, Symbols } from "./repoMapViews";
 
@@ -14,6 +16,16 @@ const ERROR_LABELS: Readonly<Record<string, string>> = {
   build_failed: "Не удалось построить Repo Map",
   snapshot_expired: "Снимок Repo Map устарел: обновите страницу",
 };
+
+/** The coverage rows of the overview: the kernel's file classes, else an explicit no-data value. */
+function coverageRows(coverage: RepoMapFacts["coverage"], t: (text: string) => string): [string, ReactNode][] {
+  const none = (why: string) => <span className="muted no-data" title={t(why)}>{t("нет данных")}</span>;
+  if (coverage === null) {
+    return ["source", "docs", "tests", "excluded"].map((kind) => [kind, none("Покрытие считается только для карты из кэша сервера")]);
+  }
+  return [["source", coverage.source], ["docs", coverage.docs], ["tests", coverage.tests],
+    ["excluded", coverage.excluded ?? none("Git не перечислил файлы коммита карты")]];
+}
 
 export function RepoMap() {
   const { t } = useI18n();
@@ -55,14 +67,14 @@ export function RepoMap() {
       <div className="orch-tabbar repo-tabbar" role="tablist">{["Обзор", "Символы", "Связи", "Настройки"].map((name) =>
         <button className={`orch-tab ${name === tab ? "on" : ""}`} role="tab" aria-selected={name === tab} key={name} onClick={() => setTab(name)}>{t(name)}</button>)}</div>
       {tab === "Настройки" ? <Settings facts={facts} /> : !map ? <p className="repo-empty">{t(facts.head ? "Кэша карты для HEAD нет" : "HEAD не найден")}</p> :
-        tab === "Символы" ? <Symbols map={map} selectedPath={path} onClear={() => setPath(null)} /> :
+        tab === "Символы" ? <Symbols map={map} kinds={facts.map ? facts.symbol_kinds : null} selectedPath={path} onClear={() => setPath(null)} /> :
         tab === "Связи" ? <Links map={map} select={(path) => { setPath(path); setTab("Символы"); }} /> : <>
           <div className="repo-grid"><Panel title="Индекс"><Fields rows={[["Коммит", map.commit], ["Парсер", map.parser],
             ["Причина", t(map.degradation_reason)], ["Сигнатуры", map.tier === "minimal" ? "—" : map.files.reduce((n, f) => n + (f.signatures?.length ?? 0), 0)],
             ["Generation", t("нет данных")], [t("Построен"), t("нет данных")]]} /></Panel>
             <Panel title="Покрытие"><Fields rows={[["С сигнатурами", map.files.filter((f) => f.signatures?.length).length],
               ["Успешно разобраны", map.files.filter((f) => f.parser_status === "ok").length], ["Диагностики", map.diagnostics.length],
-              ...["source", "docs", "tests", "excluded"].map((kind): [string, string] => [kind, t("нет данных")])]} /></Panel></div>
+              ...coverageRows(facts.coverage, t)]} /></Panel></div>
           <Files map={map} /><Panel title="Provenance парсера"><Fields rows={Object.entries(map.parser_provenance).map(([key, value]) =>
             [key, typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "—")])} /></Panel>
           <Panel title="Диагностики">{map.diagnostics.length ? map.diagnostics.map((d, i) => <p key={i}>{d.code}: {d.path}</p>) : t("диагностик нет")}</Panel>

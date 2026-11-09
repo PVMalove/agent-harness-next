@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { NoData } from "../steps/ActivityViews";
-import type { AnalyticsSection, OrchestrationSnapshot, StageHead } from "../ws/ledger";
+import type { AnalyticsSection, Figure, OrchestrationSnapshot, StageHead } from "../ws/ledger";
 import { analyticsRows } from "./format";
 
 const ACTIVE = new Set(["working", "dispatched", "approved"]);
@@ -105,8 +105,93 @@ const NO_SOURCE: Record<AnalyticsSection, string[]> = {
   flow: ["PR handoff"],
   quality: ["Defect escape", "Verification mix", "Причины повторов", "Release Gate"],
   runtime: ["Fencing", "Holds", "MTTR", "Operations"],
-  gates: ["Тренд latency за сутки"],
+  gates: [],
 };
+
+const TREND = { width: 1000, height: 250, left: 54, right: 18, top: 16, bottom: 34 };
+
+/** The hourly gate latency of the last day (`latency_p50_by_hour`, `latency_p95_by_hour`), in
+    minutes, as the mockup's line chart; an hour without a decision has no point. */
+export function GateTrend({ gates }: { gates: Record<string, Figure> }) {
+  const { t } = useI18n();
+  const series = (key: string): (number | null)[] | null => {
+    const figure = gates[key];
+    return Array.isArray(figure) ? figure.map((value) => (value === null ? null : value / 60)) : null;
+  };
+  const p50 = series("latency_p50_by_hour");
+  const p95 = series("latency_p95_by_hour");
+  const known = [...(p50 ?? []), ...(p95 ?? [])].filter((value): value is number => value !== null);
+  const { width: W, height: H, left: L, right: R, top: T, bottom: B } = TREND;
+  const hours = Math.max(p50?.length ?? 0, 2);
+  const max = Math.max(10, Math.ceil(Math.max(0, ...known) / 10) * 10);
+  const x = (index: number) => L + (index * (W - L - R)) / (hours - 1);
+  const y = (value: number) => T + ((max - value) / max) * (H - T - B);
+  // Each run of hours with a value is one polyline; a lone hour is a dot.
+  const lines = (values: (number | null)[], className: string) => {
+    const runs: [number, number][][] = [];
+    values.forEach((value, index) => {
+      if (value === null) return;
+      const point: [number, number] = [x(index), y(value)];
+      if (index > 0 && values[index - 1] !== null) runs.at(-1)!.push(point);
+      else runs.push([point]);
+    });
+    return runs.map((run, index) =>
+      run.length === 1 ? (
+        <circle key={index} cx={run[0]![0]} cy={run[0]![1]} r="3" className={`${className}-dot`} />
+      ) : (
+        <polyline key={index} className={className} points={run.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ")} />
+      ),
+    );
+  };
+  const ticks = [0, max / 4, max / 2, (3 * max) / 4, max];
+  const labels = [0, 6, 12, 18, hours - 1].filter((index) => index < hours);
+  return (
+    <article className="orch-chart wide gate-trend" id="orch-gate-trend">
+      <div className="orch-chart-head">
+        <h3>{t("Тренд latency за сутки")}</h3>
+        <span>{t("p50 / p95 по часам, минуты")}</span>
+      </div>
+      {p50 === null || p95 === null ? (
+        <NoData />
+      ) : known.length === 0 ? (
+        <p className="orch-note">{t("За сутки решений координатора не было")}</p>
+      ) : (
+        <div className="orch-line-chart">
+          <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("Тренд latency за сутки")}>
+            {ticks.map((value) => (
+              <g key={value}>
+                <line x1={L} y1={y(value)} x2={W - R} y2={y(value)} className="orch-line-grid" />
+                <text x={L - 8} y={y(value) + 3} textAnchor="end" className="orch-line-axis">
+                  {Math.round(value)}
+                </text>
+              </g>
+            ))}
+            {labels.map((index) => (
+              <text key={index} x={x(index)} y={H - 12} textAnchor="middle" className="orch-line-axis">
+                {t("−{hours} ч", { hours: hours - index })}
+              </text>
+            ))}
+            {lines(p95, "orch-line-p95")}
+            {lines(p50, "orch-line-avg")}
+            <text x={L - 8} y={T + 4} textAnchor="end" className="orch-line-axis">
+              {t("мин")}
+            </text>
+          </svg>
+        </div>
+      )}
+      <div className="orch-legend">
+        <span>
+          <i className="cyan" />
+          p50
+        </span>
+        <span>
+          <i className="lavender" />
+          p95
+        </span>
+      </div>
+    </article>
+  );
+}
 
 const ROLE_NODES: [string, string, number][] = [
   ["coordinator", "coordinator", 10],
@@ -199,6 +284,7 @@ export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
               </div>
             ))}
           </dl>
+          {tab === "gates" && <GateTrend gates={data.analytics.gates} />}
         </section>
       )}
     </>

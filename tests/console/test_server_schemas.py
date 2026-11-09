@@ -217,21 +217,27 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
     store = {"authority": "file-ledger", "schema": 3, "generation": "g-1",
              "audit_records": 9}
     adapter = {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
+    containers = {
+        "engine": "docker", "version": "27.4.1", "cgroup_driver": "systemd",
+        "cgroup_version": "v2", "selinux": False, "rootless": True, "info_problem": None,
+        "images": 3, "images_problem": None, "volumes": None, "volumes_problem": "no volume",
+    }
     reply: dict[str, object] = {
         "v": 1, "id": 1, "type": "harness.overview", "ok": True, "state": state,
         "package_version": "1.0.1", "drift": "clean", "drift_files": 0,
-        "store": store, "adapters": [adapter], "usage": usage,
+        "store": store, "adapters": [adapter], "containers": containers, "usage": usage,
         "cached": False, "age_seconds": 0.0,
     }
     assert schemas.REPLIES.validate_python(reply).type == "harness.overview"
     assert schemas.REPLIES.validate_python(
-        {**reply, "store": None, "adapters": None, "drift_files": None}
+        {**reply, "store": None, "adapters": None, "drift_files": None, "containers": None}
     ).type == "harness.overview"
     assert {
         field.alias or name
         for name, field in schemas.StorePayload.model_fields.items()
     } == set(store)
     assert _fields(schemas.AdapterPayload) == set(adapter)
+    assert _fields(schemas.ContainersPayload) == set(containers)
     assert _fields(schemas.HarnessStatePayload) == set(state)
     assert _fields(schemas.PipelineUsage) == set(usage)
     assert _fields(schemas.HarnessOverviewReply) == set(reply)
@@ -243,6 +249,8 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
         {**reply, "store": {**store, "authority": "sqlite"}},
         {**reply, "adapters": [{**adapter, "status": "fine"}]},
         {**reply, "drift_files": -1},
+        {**reply, "containers": {**containers, "images": -1}},
+        {**reply, "containers": {**containers, "extra": 1}},
     ):
         with pytest.raises(ValueError):
             schemas.REPLIES.validate_python(broken)

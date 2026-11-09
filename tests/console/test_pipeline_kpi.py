@@ -8,9 +8,11 @@ import pytest
 
 from harness.json_types import JsonObject
 from harness.console.kernel.pipeline_kpi import (
+    EvidenceRow,
     PipelineKpi,
     ReportsKpi,
     duration_text,
+    evidence_matrix,
     pipeline_analytics,
     pipeline_analytics_from_payload,
     pipeline_kpi,
@@ -21,6 +23,7 @@ from harness.console.kernel.pipeline_kpi import (
 from harness.console.kernel.reports import (
     BatchSummary,
     LedgerView,
+    QaRun,
     ReportEntry,
     StageEntry,
 )
@@ -289,6 +292,88 @@ def test_role_analytics_findings_heartbeats_and_gate_latency() -> None:
 def test_a_qa_report_without_its_own_run_log_is_stale_evidence() -> None:
     stage = _timed("b", "qa", "2026-11-06T01:00:00+00:00", "2026-11-06T02:00:00+00:00")
     assert stage.report is not None
-    view = LedgerView(reports=[stage.report], stages=[stage])
+    view = LedgerView(
+        batches=[_batch("b", "active", "2026-11-06T00:00:00+00:00")],
+        reports=[stage.report],
+        stages=[stage],
+    )
     assert reports_kpi(view).stale_evidence == 1
     assert reports_kpi_from_payload(reports_kpi(view).to_payload()).stale_evidence == 1
+
+
+def _run(dispatch_id: str, logged: str) -> QaRun:
+    return QaRun("qa.log", logged, dispatch_id, "#t", "passed", [], [], 0)
+
+
+def _evidence_view() -> LedgerView:
+    """Four batches: "p" with a QA run after its QA dispatch started and after the last developer
+    report, "s1" whose run predates its own QA dispatch, "s2" whose run predates a later developer
+    report, and "m" without a QA report."""
+    stages = [
+        _timed("p", "developer", "2026-11-06T01:00:00+00:00", "2026-11-06T02:00:00+00:00"),
+        _timed("p", "code-review", "2026-11-06T02:10:00+00:00", "2026-11-06T02:30:00+00:00"),
+        _timed("p", "qa", "2026-11-06T03:00:00+00:00", "2026-11-06T04:00:00+00:00"),
+        _timed("s1", "qa", "2026-11-06T03:00:00+00:00", "2026-11-06T04:00:00+00:00"),
+        _timed("s2", "qa", "2026-11-06T03:00:00+00:00", "2026-11-06T04:00:00+00:00"),
+        _timed("s2", "developer", "2026-11-06T04:10:00+00:00", "2026-11-06T05:00:00+00:00"),
+        _timed("m", "developer", "2026-11-06T01:00:00+00:00", "2026-11-06T02:00:00+00:00"),
+    ]
+    view = LedgerView(
+        batches=[
+            _batch(name, "active", "2026-11-06T00:00:00+00:00") for name in ("p", "s1", "s2", "m")
+        ],
+        stages=stages,
+        qa_runs=[
+            _run("d-p-qa-2026-11-06T03:00:00+00:00", "2026-11-06T03:50:00+00:00"),
+            _run("d-s1-qa-2026-11-06T03:00:00+00:00", "2026-11-06T02:50:00+00:00"),
+            _run("d-s2-qa-2026-11-06T03:00:00+00:00", "2026-11-06T03:50:00+00:00"),
+        ],
+    )
+    view.reports.extend(stage.report for stage in stages if stage.report)
+    return view
+
+
+def test_the_evidence_matrix_has_one_qa_run_definition_per_batch() -> None:
+    rows = {row.batch_id: row for row in evidence_matrix(_evidence_view())}
+    assert rows["p"] == EvidenceRow("p", "#p", "present", "present", "present", "present")
+    assert rows["s1"].qa_run == "stale" and rows["s1"].developer == "missing"
+    assert rows["s2"].qa_run == "stale" and rows["s2"].developer == "present"
+    assert rows["m"] == EvidenceRow("m", "#m", "present", "missing", "missing", "missing")
+    assert {(row.receipt, row.publish) for row in rows.values()} == {("none", "none")}
+    assert list(rows) == ["p", "s1", "s2", "m"]
+
+
+def test_the_stale_evidence_kpi_counts_the_stale_cells_of_the_matrix() -> None:
+    view = _evidence_view()
+    stale = sum(row.qa_run == "stale" for row in evidence_matrix(view))
+    assert reports_kpi(view).stale_evidence == stale == 2
+    assert evidence_matrix(LedgerView(unavailable="none")) == ()
+
+
+def _decided(batch_id: str, reported: str, approved: str) -> tuple[StageEntry, JsonObject]:
+    stage = _timed(batch_id, "qa", reported, reported)
+    return stage, {"coordinator_decisions": [{"decision": "accept", "approved_at": approved}]}
+
+
+def test_the_gate_latency_trend_is_hourly_over_the_last_day() -> None:
+    pairs = [
+        # 10 and 30 minutes in the last hour, 20 minutes three hours ago, one older than a day.
+        _decided("a", "2026-11-06T11:20:00+00:00", "2026-11-06T11:30:00+00:00"),
+        _decided("b", "2026-11-06T11:15:00+00:00", "2026-11-06T11:45:00+00:00"),
+        _decided("c", "2026-11-06T08:10:00+00:00", "2026-11-06T08:30:00+00:00"),
+        _decided("d", "2026-11-05T10:00:00+00:00", "2026-11-05T11:00:00+00:00"),
+    ]
+    view = LedgerView(
+        batches=[_batch(name, "active", "2026-11-05T00:00:00+00:00") for name in "abcd"],
+        stages=[stage for stage, _ in pairs],
+        _batch_records={stage.batch_id: record for stage, record in pairs},
+    )
+    view.reports.extend(stage.report for stage, _ in pairs if stage.report)
+    analytics = pipeline_analytics(view, NOW)
+    p50, p95 = analytics.gates["latency_p50_by_hour"], analytics.gates["latency_p95_by_hour"]
+    assert isinstance(p50, list) and isinstance(p95, list)
+    assert len(p50) == len(p95) == 24
+    assert (p50[23], p95[23]) == (600, 1800)
+    assert (p50[20], p95[20]) == (1200, 1200)
+    assert [index for index, value in enumerate(p50) if value is not None] == [20, 23]
+    assert pipeline_analytics_from_payload(analytics.to_payload()) == analytics

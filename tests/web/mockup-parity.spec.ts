@@ -158,10 +158,55 @@ test("a mockup tab without a source shows an explicit no-data state", async ({ p
   await mockSocket(page);
   await open(page, "harness", 1440);
   await page.getByRole("tab", { name: "Контейнеры" }).click();
-  await expect(page.locator("#harness-containers .no-data")).toHaveCount(4);
+  // Running and Disk have no source; the fixture's volume probe failed with its reason.
+  await expect(page.locator("#harness-containers .harness-container-summary .no-data")).toHaveCount(3);
+  await expect(page.locator("[data-fact='images-volumes'] .no-data")).toHaveAttribute("title", /docker volume ls/);
   await page.getByRole("tab", { name: "Runtime" }).click();
   await expect(page.locator("#harness-tab-runtime")).toContainText("нет данных");
 });
+
+for (const width of [1440, 390]) {
+  test(`kernel sources at ${width} px fill the former no-data places`, async ({ page }) => {
+    await mockSocket(page);
+    await open(page, "diagnostics", width);
+    await page.locator('#diag-list [data-check="hooks.policy"]').click();
+    await expect(page.locator(".diag-detail-panel .diag-rationale")).toHaveText(/^Без записанной политики хуков/);
+    // An id the kernel catalog does not describe keeps the no-data state.
+    await page.locator('#diag-list [data-check="files.managed"]').click();
+    await expect(page.locator(".diag-detail-panel .diag-facts .no-data")).toHaveText("нет данных");
+    expect(await noOverflow(page)).toBe(true);
+
+    await open(page, "harness", width);
+    await page.getByRole("tab", { name: "Контейнеры" }).click();
+    await expect(page.locator("#harness-engine-line")).toHaveText("docker · 27.4.1 · rootless · cgroup v2 · systemd");
+    await expect(page.locator("#harness-engine")).toContainText("SELinux выключен");
+    expect(await noOverflow(page)).toBe(true);
+
+    await open(page, "repo-map", width);
+    const coverage = page.locator(".repo-index", { has: page.getByRole("heading", { name: "Покрытие" }) });
+    await expect(coverage.locator(".repo-index-row", { hasText: "excluded" }).locator("b")).toHaveText("2");
+    await page.getByRole("tab", { name: "Символы" }).click();
+    await expect(page.locator("#repo-kind-chips .chip")).toHaveText(["Все 3", "Functions 2", "Modules 1"]);
+    await expect(page.locator(".repo-symbol-row .repo-kind").first()).toHaveText("function");
+    expect(await noOverflow(page)).toBe(true);
+
+    await open(page, "orchestration", width);
+    await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
+    await expect(page.locator("#orch-gate-trend circle")).toHaveCount(2);
+    expect(await noOverflow(page)).toBe(true);
+
+    await open(page, "reports", width);
+    await page.getByRole("tab", { name: "Evidence" }).click();
+    await expect(page.locator("#reports-evidence .report-evidence-row")).toHaveCount(2);
+    await page.getByRole("tab", { name: "Готовность" }).click();
+    await expect(page.locator("#reports-readiness [data-verdict]")).toHaveText("blocked");
+    expect(await noOverflow(page)).toBe(true);
+
+    await open(page, "publish", width);
+    await expect(page.locator("#publish-verdict")).toHaveText("blocked");
+    expect(await noOverflow(page)).toBe(true);
+  });
+}
 
 for (const spec of PAGES) {
   const name = spec.route.split("?")[0] || "home";

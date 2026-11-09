@@ -26,6 +26,7 @@
     "Findings нет": "No findings",
     "Findings по severity": "Findings by severity",
     "Force/replace не включены. При конфликте операция остановится.": "Force/replace are off. A conflict stops the operation.",
+    "Git не перечислил файлы коммита карты": "Git did not list the files of the map's commit",
     "Git недоступен": "Git is unavailable",
     "Git недоступен или не отвечает": "Git is unavailable or not responding",
     "Git-проект найден · действие:": "Git project found · action:",
@@ -95,6 +96,7 @@
     "minimal — только пути файлов, без парсера": "minimal — file paths only, no parser",
     "orchestration.json не читается.": "orchestration.json cannot be read.",
     "output, risks, blockers": "output, risks, blockers",
+    "p50 / p95 по часам, минуты": "p50 / p95 per hour, minutes",
     "r Обновить": "r Update",
     "refused: выход 2": "refused: exit 2",
     "uv недоступен": "uv is unavailable",
@@ -171,13 +173,13 @@
     "Введите значение": "Enter a value",
     "Введите имя записи": "Enter an entry name",
     "Введите элемент": "Enter an item",
-    "Вердикта Release Gate в файловом ledger нет": "The file ledger has no Release Gate verdict",
     "Версии": "Versions",
     "Версии / восстановить": "Versions / restore",
     "Версии и откат": "Versions / restore",
     "Версия": "Version",
     "Версия glab устарела": "glab is outdated",
     "Версия актуальна": "Version is up to date",
+    "Вид символа считается только для карты из кэша сервера": "The symbol kind is derived only for the server's cached map",
     "Включено — да; выключено — нет": "On — yes; off — no",
     "Внедрить харнесс в существующий проект": "Adopt Harness in an existing project",
     "Внимание": "Attention",
@@ -262,6 +264,7 @@
     "Данные проверки ещё не получены": "Check results not received yet",
     "Данных пока нет": "No data yet",
     "Движок": "Engine",
+    "Движок не сообщил этот факт": "The engine did not report this fact",
     "Деградация": "Degradation",
     "Действие": "Action",
     "Действие доступно только в TUI: команда не входит в каталог job сервера": "Available in the TUI only: the command is not in the server job catalog",
@@ -316,6 +319,7 @@
     "Журнал событий не агрегируется сервером": "The server does not aggregate the event log",
     "Жёсткий режим: +": "Hard mode: +",
     "ЗАГРУЗКА · ОШИБКА": "LOADING · ERROR",
+    "За сутки решений координатора не было": "No coordinator decisions in the last day",
     "Заблокированные составы": "Blocked sets",
     "Заблокировано": "Blocked",
     "Завершена": "Completed",
@@ -368,7 +372,7 @@
     "Изменить в мастере настройки": "Edit in the setup wizard",
     "Изменён и у вас, и в пакете: обычное обновление остановится, перезапись заменит файл версией пакета.": "Changed both by you and in the package: a normal update stops; overwriting replaces the file with the package version.",
     "Имя новой записи": "New entry name",
-    "Инвентаря Docker/Podman в консоли нет": "The console has no Docker/Podman inventory",
+    "Инвентарь движка контейнеров не собран": "The container engine inventory was not collected",
     "Индекс": "Index",
     "Индекс памяти проекта требует внимания": "The project memory index needs attention",
     "Индекс символов, модулей и импортов.": "Index of symbols, modules and imports.",
@@ -390,6 +394,7 @@
     "Источник": "Source",
     "Источник оркестрации недоступен": "The orchestration source is unavailable",
     "Источника нет": "No source",
+    "Источника нет в инвентаре движка": "The engine inventory has no source for this",
     "Источники": "Sources",
     "Источники шагов": "Step sources",
     "Исход worker от наблюдения не зависит.": "The worker outcome does not depend on observation.",
@@ -411,7 +416,6 @@
     "Каталог Harness недоступен": "A Harness directory is unavailable",
     "Каталог проекта не существует": "The project directory does not exist",
     "Каталог состояния оркестрации недоступен": "The orchestration state directory is unavailable",
-    "Каталога описаний проверок нет": "There is no catalog of check descriptions",
     "Каталоги харнесса": "Harness directories",
     "Качество": "Quality",
     "Клавиши": "Keys",
@@ -602,6 +606,7 @@
     "Описание версии": "Version description",
     "Описание версии (необязательно)": "Version description (optional)",
     "Описание выбранной команды": "Selected command details",
+    "Описания этой проверки в каталоге нет": "The catalog does not describe this check",
     "Оркестрация": "Orchestration",
     "Оркестрация недоступна": "Orchestration unavailable",
     "Основа": "Core",
@@ -743,6 +748,7 @@
     "Показать evidence": "Show evidence",
     "Показать вывод": "Show output",
     "Покрытие": "Coverage",
+    "Покрытие считается только для карты из кэша сервера": "Coverage is derived only for the server's cached map",
     "Политика": "Policy",
     "Политика hooks проекта требует внимания": "The project hook policy needs attention",
     "Политику можно изменить": "Policy can be edited",
@@ -922,7 +928,6 @@
     "Сессий пока нет": "No sessions yet",
     "Сессия": "Session",
     "Сигнатур нет": "No signatures",
-    "Сигнатура": "Signature",
     "Сигнатуры": "Signatures",
     "Символ": "Symbol",
     "Символические ссылки недоступны": "Symbolic links are unavailable",
@@ -1019,7 +1024,9 @@
     "Статус QA lane": "QA lane status",
     "Статус dispatch": "Dispatch status",
     "Статусы": "Statuses",
+    "Строка": "Line",
     "Схема": "Schema",
+    "Схема Repo Map v1 не хранит строки, связи уровня символа и summary": "Repo Map schema v1 stores no lines, symbol-level relations or summaries",
     "Схема контура Harness": "Harness outline diagram",
     "Схема показывает устройство контура, а не поток конкретного batch.": "The diagram shows how the outline is built, not the flow of a specific batch.",
     "Схема ролей оркестрации": "Orchestration role diagram",
@@ -1178,6 +1185,7 @@
     "вид": "kind",
     "включена": "enabled",
     "включена, но не читает источники": "enabled, but not reading sources",
+    "включён": "enabled",
     "внедрение": "adoption",
     "внешний транспорт оркестрации (transport: external)": "external orchestration transport (transport: external)",
     "внимание": "warnings",
@@ -1186,6 +1194,7 @@
     "все": "all",
     "входящие": "incoming",
     "выберите файл": "select a file",
+    "выключен": "disabled",
     "выключена": "disabled",
     "готово": "done",
     "групп:": "groups:",
@@ -1232,6 +1241,7 @@
     "лог worker не читается": "the worker log is unreadable",
     "локальном трекере": "the local tracker",
     "маршрут": "route",
+    "мин": "min",
     "минуты": "minutes",
     "можно удалить": "can remove",
     "наблюдаемые данные": "observed data",
@@ -1289,6 +1299,7 @@
     "одобрение человека": "human approval",
     "ок": "ok",
     "онлайн": "online",
+    "отвечает": "responds",
     "отдельный dispatch роли qa ещё не создан": "the separate qa dispatch is not created yet",
     "отменён": "abandoned",
     "отмечено {ticked} из {total}": "{ticked} of {total} ticked",
@@ -1366,6 +1377,7 @@
     "… ожидается": "… pending",
     "↑↓ выбор · Enter — открыть наблюдение. Выбор сессии не запускает новый процесс.": "↑↓ select · Enter opens observation. Selecting a session starts no new process.",
     "↑↓ выбор · → раскрыть · Enter — подставить путь · Esc — закрыть": "↑↓ select · → open · Enter — put in the path · Esc — close",
+    "−{hours} ч": "−{hours} h",
     "≈{count} токенов": "≈{count} tokens",
     "□ Остановить": "□ Stop",
     "◉ КОНТЕКСТ ЗАПУСКА": "◉ LAUNCH CONTEXT",
@@ -1457,6 +1469,236 @@
     "orchestration": "Оркестрация",
     "repo_map": "Repo Map",
     "tracker": "Трекер задач"
+  },
+  "rationales": {
+    "directories.cache": {
+      "en": "The cache stores the parser bundle and Repo Map results; without write access they are rebuilt each time or cannot be built.",
+      "ru": "В кэш пишутся parser bundle и результаты Repo Map; без записи их приходится строить заново или нельзя построить."
+    },
+    "directories.harness": {
+      "en": "The .harness directory holds all harness state; without write access every command fails.",
+      "ru": "Каталог .harness хранит всё состояние харнесса; без прав на запись любая команда упадёт."
+    },
+    "directories.logs": {
+      "en": "QA and command logs go to logs; without write access the evidence of a run is lost.",
+      "ru": "В logs пишутся журналы QA и команд; без записи evidence прогона теряется."
+    },
+    "directories.orchestration_state": {
+      "en": "The coordinator ledger lives here; without write access no batch or dispatch can be recorded.",
+      "ru": "Здесь лежит ledger координатора; без записи ни один batch или dispatch не будет записан."
+    },
+    "directories.pr_body": {
+      "en": "PR and comment texts are drafted in pr_body and checked by the hook; without write access a publication cannot be prepared.",
+      "ru": "Тексты PR и комментариев готовятся в pr_body и проверяются хуком; без записи публикация не подготовить."
+    },
+    "directories.reports": {
+      "en": "Role reports are written to reports; without write access the coordinator gets no completion report.",
+      "ru": "В reports пишутся отчёты ролей; без записи координатор не получит отчёт о завершении."
+    },
+    "directories.runs": {
+      "en": "Worker run data lives in runs; without write access a dispatch cannot save its result.",
+      "ru": "В runs хранятся данные запусков worker; без записи dispatch не сохранит результат."
+    },
+    "directories.sandboxes": {
+      "en": "The .harness/.sandboxes directory is the root of disposable data; without write access a session fails on its first write.",
+      "ru": "Каталог .harness/.sandboxes — корень одноразовых данных; без прав на запись сессия упадёт при первой записи."
+    },
+    "directories.scratch": {
+      "en": "Scratch is the commands' temporary work area; without write access commands fail mid-way.",
+      "ru": "Scratch — рабочая область временных файлов команд; без записи команды падают на промежуточных шагах."
+    },
+    "directories.worktrees": {
+      "en": "Task worktrees are created in worktrees; without write access a task cannot be isolated from the main checkout.",
+      "ru": "Рабочие копии задач создаются в worktrees; без записи задачу нельзя изолировать от основного checkout."
+    },
+    "environment.claude_sandbox": {
+      "en": "Without the filesystem sandbox and local Unix socket permission Claude cannot reach the harness runtime.",
+      "ru": "Без файлового sandbox и разрешения на локальные Unix-сокеты Claude не достучится до runtime харнесса."
+    },
+    "environment.claude_uv_cache": {
+      "en": "If the Claude Code sandbox cannot write the uv cache, dependency installs and QA inside it fail.",
+      "ru": "Если sandbox Claude Code не может писать в кэш uv, установка зависимостей и QA внутри него падают."
+    },
+    "environment.codex_sandbox": {
+      "en": "Without workspace write access and the needed network the Codex sandbox stops the agent from doing the task.",
+      "ru": "Без записи в рабочую область и нужной сети sandbox Codex не даст агенту выполнить задачу."
+    },
+    "environment.codex_uv_cache": {
+      "en": "If the Codex sandbox cannot write the uv cache, dependency installs and QA inside it fail.",
+      "ru": "Если sandbox Codex не может писать в кэш uv, установка зависимостей и QA внутри него падают."
+    },
+    "environment.dev_env": {
+      "en": "A .harness/.venv that differs from uv.lock runs tests on other dependency versions than CI.",
+      "ru": ".harness/.venv, не совпадающий с uv.lock, даёт тесты на других версиях зависимостей, чем в CI."
+    },
+    "environment.git": {
+      "en": "Branches, worktrees and integrity checks rely on git; without a suitable version the workflow does not work.",
+      "ru": "Ветки, worktree и проверки целостности опираются на git; без нужной версии рабочий процесс не работает."
+    },
+    "environment.git_identity": {
+      "en": "Without user.name and user.email commits fail or get the wrong author.",
+      "ru": "Без user.name и user.email коммиты не создаются или получают чужое авторство."
+    },
+    "environment.gitattributes": {
+      "en": "Without .gitattributes line endings are not normalized, and snapshot comparisons report false drift.",
+      "ru": "Без .gitattributes переводы строк не нормализуются, и сравнение снэпшотов даёт ложные расхождения."
+    },
+    "environment.glab": {
+      "en": "With a GitLab tracker issue and MR operations go through glab; an old version breaks tracker commands.",
+      "ru": "Для GitLab-трекера операции с задачами и MR идут через glab; старая версия ломает команды трекера."
+    },
+    "environment.hook_bash": {
+      "en": "Project hooks run through bash; without Git Bash or with the WSL stub they do not run as intended.",
+      "ru": "Хуки проекта запускаются через bash; без Git Bash или с заглушкой WSL они не выполняются как задумано."
+    },
+    "environment.line_endings": {
+      "en": "Line endings that disagree with gitattributes produce noisy diffs and false drift of managed files.",
+      "ru": "Переводы строк, не совпадающие с gitattributes, дают шумные diff и ложный drift управляемых файлов."
+    },
+    "environment.long_paths": {
+      "en": "Without long paths Windows cannot open files deeper than 260 characters, and checkouts or tests fail.",
+      "ru": "Без длинных путей Windows не открывает файлы глубже 260 символов, и checkout или тесты падают."
+    },
+    "environment.os": {
+      "en": "Some rules and checks depend on the OS; without this context other results are hard to read.",
+      "ru": "Часть правил и проверок зависит от ОС; без этого контекста результаты других проверок трудно трактовать."
+    },
+    "environment.output_encoding": {
+      "en": "Without UTF-8 output Russian text and status symbols are garbled or raise encoding errors.",
+      "ru": "Без UTF-8 вывода русский текст и символы статусов искажаются или вызывают ошибки кодировки."
+    },
+    "environment.path_length": {
+      "en": "A long repository path eats the headroom under MAX_PATH, and nested files stop opening on Windows.",
+      "ru": "Длинный путь к репозиторию съедает запас до MAX_PATH, и вложенные файлы перестают открываться в Windows."
+    },
+    "environment.pytest_temp": {
+      "en": "If pytest's temp directory is not writable or belongs to another user, tests fail before they start.",
+      "ru": "Если временный каталог pytest не записываем или чужой, тесты падают ещё до запуска."
+    },
+    "environment.python": {
+      "en": "The harness and its checks need a minimum Python; an older interpreter fails on syntax and APIs.",
+      "ru": "Харнесс и его проверки требуют минимальной версии Python; старый интерпретатор падает на синтаксисе и API."
+    },
+    "environment.symlinks": {
+      "en": "Without the right to create symlinks the skill discovery links and some tests do not work.",
+      "ru": "Без права создавать symlink discovery-ссылки навыков и часть тестов не работают."
+    },
+    "environment.uv": {
+      "en": "uv installs dependencies and runs QA; without it the environment is not reproducible.",
+      "ru": "uv ставит зависимости и запускает QA; без него окружение не воспроизводится."
+    },
+    "files.agents_md": {
+      "en": "AGENTS.md is the agents' first instruction; template placeholders give them wrong project rules.",
+      "ru": "AGENTS.md — первая инструкция агентам; плейсхолдеры шаблона дают им неверные правила проекта."
+    },
+    "files.discovery_links": {
+      "en": "Runtimes find the project's skills through the discovery links; a broken link hides skills from the agent.",
+      "ru": "Через discovery-ссылки runtime находит навыки проекта; битая ссылка скрывает навыки от агента."
+    },
+    "files.integrations": {
+      "en": "Unlisted integration files (MCP, hooks) change agent behaviour outside the harness inventory.",
+      "ru": "Неучтённые файлы интеграций (MCP, хуки) меняют поведение агентов в обход инвентаря харнесса."
+    },
+    "files.lock": {
+      "en": "harness.lock tells the harness its installed version, capabilities and managed files; without it update and diff cannot work.",
+      "ru": "По harness.lock харнесс знает установленную версию, capability и управляемые файлы; без него update и diff не работают."
+    },
+    "files.orchestration_config": {
+      "en": "The coordinator reads roles, limits and policies from orchestration.json; an error there stops orchestration.",
+      "ru": "Координатор читает роли, лимиты и политики из orchestration.json; ошибка в нём останавливает оркестрацию."
+    },
+    "files.overlay_locks": {
+      "en": "Overlay locks record local edits over the package; an inconsistent lock loses those edits on update.",
+      "ru": "Overlay-локи фиксируют локальные правки поверх пакета; рассогласованный лок теряет правки при update."
+    },
+    "files.project_json": {
+      "en": "project.json sets the tracker, branches and QA commands; an invalid file breaks the task workflow.",
+      "ru": "project.json задаёт трекер, ветки и QA-команды; некорректный файл ломает рабочий процесс задач."
+    },
+    "files.sandboxes": {
+      "en": "The harness writes caches, logs and worktrees to .harness/.sandboxes; without write access its commands fail.",
+      "ru": "В .harness/.sandboxes харнесс пишет кэш, логи и рабочие копии; без доступа на запись команды падают."
+    },
+    "files.skill_registry": {
+      "en": "A stale skill registry points the agent to missing or outdated skills.",
+      "ru": "Устаревший реестр навыков ведёт агента к несуществующим или старым навыкам."
+    },
+    "files.skill_snapshot": {
+      "en": "A skill snapshot that differs from the package breaks skill reproducibility across machines.",
+      "ru": "Расхождение снэпшота навыков с пакетом ломает воспроизводимость навыков между машинами."
+    },
+    "files.verification_routing": {
+      "en": "Without verification_commands roles get no checks, and a task result is not confirmed by tests.",
+      "ru": "Без verification_commands роли не получают проверок, и результат задачи не подтверждён тестами."
+    },
+    "hooks.policy": {
+      "en": "Without a recorded hook policy critical checks may differ between runtimes or not run at all.",
+      "ru": "Без записанной политики хуков критичные проверки могут расходиться между runtime или не работать вовсе."
+    },
+    "hooks.test_author": {
+      "en": "The test author writes tests through a protected adapter; without it the TDD Red step is unavailable or not isolated.",
+      "ru": "Test-author пишет тесты через защищённый адаптер; без него шаг Red в TDD недоступен или не изолирован."
+    },
+    "memory.index": {
+      "en": "Without the memory index search over ADRs and the glossary is unavailable, and the agent relies on random files.",
+      "ru": "Без индекса памяти поиск по ADR и глоссарию недоступен, и агент опирается на случайные файлы."
+    },
+    "memory.model": {
+      "en": "Shows which search slice (FTS5 or vector) answers memory queries, so its answers are not overrated.",
+      "ru": "Показывает, каким срезом поиска (FTS5 или векторным) отвечает память, чтобы не переоценивать её ответы."
+    },
+    "orchestration.blocked_batches": {
+      "en": "A blocked batch does not move without a human decision.",
+      "ru": "Заблокированный batch не движется без решения человека."
+    },
+    "orchestration.disposable_data": {
+      "en": "Shows how much disposable data harness cleanup would free.",
+      "ru": "Показывает объём одноразовых данных, которые освободит harness cleanup."
+    },
+    "orchestration.ledger_summary": {
+      "en": "The ledger is the source of orchestration state; an unavailable or unmigrated ledger hides the work.",
+      "ru": "Ledger — источник состояния оркестрации; недоступный или не мигрированный ledger скрывает работу."
+    },
+    "orchestration.orphaned_worktrees": {
+      "en": "Orphaned worktrees take space and may hold unsaved work.",
+      "ru": "Осиротевшие worktree занимают место и могут содержать несохранённую работу."
+    },
+    "orchestration.stale_dispatches": {
+      "en": "A dispatch without a heartbeat has likely hung or lost its worker and holds the slot.",
+      "ru": "Dispatch без heartbeat, скорее всего, завис или потерял worker и держит слот."
+    },
+    "orchestration.unfinished_batches": {
+      "en": "Unfinished batches hold branches and worktrees; the list shows what still waits for a decision.",
+      "ru": "Незавершённые batch держат ветки и worktree; список показывает, что ещё ждёт решения."
+    },
+    "repo_map.tier": {
+      "en": "Dispatches get their context from the Repo Map; an incomplete map gives roles a wrong picture of the code.",
+      "ru": "Dispatch получает контекст из Repo Map; неполная карта даёт роли неверное представление о коде."
+    },
+    "tracker.auth": {
+      "en": "Without tracker CLI authentication issues, PRs and comments cannot be created.",
+      "ru": "Без авторизации CLI трекера задачи, PR и комментарии не создаются."
+    },
+    "tracker.git_base": {
+      "en": "A task without the right Git base starts from the wrong branch, and its PR targets the wrong integration branch.",
+      "ru": "Задача без верной Git base начинается не от той ветки, и PR попадает не в ту integration-ветку."
+    },
+    "tracker.labels": {
+      "en": "The board and issue routing rely on the canonical labels; without them issues lose status and priority.",
+      "ru": "Доска и маршрутизация задач опираются на канонические метки; без них задачи теряют статус и приоритет."
+    },
+    "tracker.permissions": {
+      "en": "Without rights for PRs, comments and labels the workflow stops at publication.",
+      "ru": "Без прав на PR, комментарии и метки рабочий процесс останавливается на публикации."
+    },
+    "tracker.project": {
+      "en": "Every issue operation goes to the tracker resolved here; a mistake sends them to the wrong project.",
+      "ru": "Все операции с задачами идут в трекер, который определён здесь; ошибка направит их не в тот проект."
+    },
+    "tracker.reachability": {
+      "en": "If origin is unreachable, pushes and branch checks do not work.",
+      "ru": "Если origin недостижим, push и проверка веток не работают."
+    }
   },
   "reasons": {
     "Git or ledger state unavailable": "Git или ledger недоступен",

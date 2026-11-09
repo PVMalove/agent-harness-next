@@ -561,6 +561,143 @@
       "title": "ContainerRouteViewRequest",
       "type": "object"
     },
+    "ContainersPayload": {
+      "additionalProperties": false,
+      "description": "The read-only inventory of the configured container engine; a fact a probe could not\ngive is null with the probe's reason beside it.",
+      "properties": {
+        "cgroup_driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cgroup Driver"
+        },
+        "cgroup_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cgroup Version"
+        },
+        "engine": {
+          "title": "Engine",
+          "type": "string"
+        },
+        "images": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Images"
+        },
+        "images_problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Images Problem"
+        },
+        "info_problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Info Problem"
+        },
+        "rootless": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rootless"
+        },
+        "selinux": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selinux"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        },
+        "volumes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Volumes"
+        },
+        "volumes_problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Volumes Problem"
+        }
+      },
+      "required": [
+        "engine",
+        "version",
+        "cgroup_driver",
+        "cgroup_version",
+        "selinux",
+        "rootless",
+        "info_problem",
+        "images",
+        "images_problem",
+        "volumes",
+        "volumes_problem"
+      ],
+      "title": "ContainersPayload",
+      "type": "object"
+    },
     "CoordinatorInput": {
       "additionalProperties": false,
       "properties": {
@@ -872,7 +1009,7 @@
     },
     "HarnessOverviewReply": {
       "additionalProperties": false,
-      "description": "The Harness state, the package version, the drift state and file count, the state store,\nthe runtime adapters (null: unreadable) and the pipeline usage.",
+      "description": "The Harness state, the package version, the drift state and file count, the state store,\nthe runtime adapters (null: unreadable), the container engine inventory (null: not\ncollected) and the pipeline usage.",
       "properties": {
         "adapters": {
           "anyOf": [
@@ -895,6 +1032,16 @@
         "cached": {
           "title": "Cached",
           "type": "boolean"
+        },
+        "containers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContainersPayload"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "drift": {
           "title": "Drift",
@@ -974,6 +1121,7 @@
         "drift_files",
         "store",
         "adapters",
+        "containers",
         "usage",
         "cached",
         "age_seconds"

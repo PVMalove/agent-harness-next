@@ -38,6 +38,28 @@
       "role": "developer"
     }
   },
+  "evidence": [
+    {
+      "batch_id": "b-887",
+      "developer": "present",
+      "publish": "none",
+      "qa": "present",
+      "qa_run": "present",
+      "receipt": "none",
+      "review": "present",
+      "ticket": "#887"
+    },
+    {
+      "batch_id": "b-886",
+      "developer": "present",
+      "publish": "none",
+      "qa": "missing",
+      "qa_run": "missing",
+      "receipt": "none",
+      "review": "missing",
+      "ticket": "#886"
+    }
+  ],
   "publish": [
     {
       "batch_id": "b-887",
@@ -62,7 +84,8 @@
       "state": "active",
       "target": null,
       "target_in_history": null,
-      "ticket": "#887"
+      "ticket": "#887",
+      "verdict": "blocked"
     }
   ],
   "qa_attempts": [

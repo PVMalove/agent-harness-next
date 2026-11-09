@@ -10,6 +10,7 @@ from harness.console.kernel.publish_view import (
     PublishEntry,
     ReportRef,
     publish_entries,
+    verdict,
 )
 from harness.console.kernel.reports import BatchSummary, LedgerView, ReportEntry
 
@@ -77,6 +78,7 @@ def test_a_moved_branch_and_a_foreign_target_are_refused_without_the_network() -
         qa=ReportRef("d-qa", "completed", True),
         pr_url="",
         pr_state="open",
+        verdict="blocked",
     )
     # A batch without a review report has nothing to publish yet.
     assert git.asked == ["feature/a"]
@@ -85,6 +87,30 @@ def test_a_moved_branch_and_a_foreign_target_are_refused_without_the_network() -
 def test_unknown_git_facts_refuse_nothing() -> None:
     (entry,) = publish_entries(_view(), Git(None, None))
     assert (entry.head_matches, entry.target_in_history, entry.refusals) == (None, None, ())
+    # The QA report still records a blocker.
+    assert entry.verdict == "blocked"
+
+
+CLEAN = ReportRef("d", "completed", False)
+
+
+def test_a_matching_head_and_target_with_clean_reports_are_ready() -> None:
+    assert verdict((), CLEAN, CLEAN, True, True) == "ready"
+
+
+def test_a_refusal_a_blocker_or_an_unfinished_report_blocks() -> None:
+    assert verdict(("branch_head_mismatch",), CLEAN, CLEAN, False, True) == "blocked"
+    assert verdict((), CLEAN, ReportRef("d", "completed", True), True, True) == "blocked"
+    assert verdict((), ReportRef("d", "failed", False), CLEAN, True, True) == "blocked"
+    # A blocking report wins over facts Git could not read.
+    assert verdict((), None, ReportRef("d", "blocked", False), None, None) == "blocked"
+
+
+def test_an_unread_git_fact_or_a_missing_report_is_unknown() -> None:
+    assert verdict((), CLEAN, CLEAN, None, True) == "unknown"
+    assert verdict((), CLEAN, CLEAN, True, None) == "unknown"
+    assert verdict((), CLEAN, None, True, True) == "unknown"
+    assert verdict((), None, None, True, True) == "unknown"
 
 
 def test_an_unavailable_ledger_has_no_publication() -> None:

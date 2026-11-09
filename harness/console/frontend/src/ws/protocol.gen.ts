@@ -165,6 +165,17 @@ export type V9 = 1;
 export type Adapters = AdapterPayload[] | null;
 export type AgeSeconds2 = number;
 export type Cached2 = boolean;
+export type CgroupDriver = string | null;
+export type CgroupVersion = string | null;
+export type Engine = string;
+export type Images = number | null;
+export type ImagesProblem = string | null;
+export type InfoProblem = string | null;
+export type Rootless = boolean | null;
+export type Selinux = boolean | null;
+export type Version = string | null;
+export type Volumes = number | null;
+export type VolumesProblem = string | null;
 export type Drift = string;
 export type DriftFiles = number | null;
 export type Id12 = string | number | null;
@@ -675,7 +686,8 @@ export interface ScreenSnapshotReply {
 }
 /**
  * The Harness state, the package version, the drift state and file count, the state store,
- * the runtime adapters (null: unreadable) and the pipeline usage.
+ * the runtime adapters (null: unreadable), the container engine inventory (null: not
+ * collected) and the pipeline usage.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HarnessOverviewReply".
@@ -684,6 +696,7 @@ export interface HarnessOverviewReply {
   adapters: Adapters;
   age_seconds: AgeSeconds2;
   cached: Cached2;
+  containers: ContainersPayload | null;
   drift: Drift;
   drift_files: DriftFiles;
   id: Id12;
@@ -694,6 +707,26 @@ export interface HarnessOverviewReply {
   type: Type11;
   usage: PipelineUsage;
   v: V10;
+}
+/**
+ * The read-only inventory of the configured container engine; a fact a probe could not
+ * give is null with the probe's reason beside it.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ContainersPayload".
+ */
+export interface ContainersPayload {
+  cgroup_driver: CgroupDriver;
+  cgroup_version: CgroupVersion;
+  engine: Engine;
+  images: Images;
+  images_problem: ImagesProblem;
+  info_problem: InfoProblem;
+  rootless: Rootless;
+  selinux: Selinux;
+  version: Version;
+  volumes: Volumes;
+  volumes_problem: VolumesProblem;
 }
 /**
  * What is installed in the project, read from `.harness/harness.lock`.

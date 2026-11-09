@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Mapping, Sequence
 
 from .json_fields import text
 from ...orchestration.core.constants import BatchState
-from .reports import BatchSummary, LedgerView, StageEntry, timestamp
+from .reports import BatchSummary, LedgerView, ReportEntry, StageEntry, timestamp
 
 # The batch states that still hold work: WIP is their count.
 WIP_STATES = ("planned", "awaiting-approval", "active", "blocked")
@@ -261,8 +261,9 @@ class ReportsKpi:
     # Reports that carry a recorded risk, and those that carry a blocker.
     attention: int = 0
     blocked: int = 0
-    # QA reports without a QA gate log of their own dispatch written at or after the dispatch
-    # started: the evidence they cite is older than the run, or missing.
+    # Batches whose QA-run evidence is stale (`evidence_matrix`): the latest QA report has no QA
+    # gate log of its own dispatch logged at or after the dispatch started and not before the
+    # latest developer report.
     stale_evidence: int = 0
 
     def to_payload(self) -> dict[str, int | None]:
@@ -321,21 +322,91 @@ def reports_kpi(view: LedgerView) -> ReportsKpi:
     )
 
 
-def _stale_evidence(view: LedgerView) -> int:
+# The columns of the evidence matrix: the role reports, the QA run, and the PR receipt and the
+# publication, which have no source in the file ledger and are always "none".
+EVIDENCE_COLUMNS = ("developer", "review", "qa", "qa_run", "receipt", "publish")
+EVIDENCE_CELLS = frozenset({"present", "stale", "missing", "none"})
+
+
+@dataclass(frozen=True)
+class EvidenceRow:
+    """One batch of the evidence matrix. The role cells are "present" or "missing"; `qa_run` is
+    "missing" without a QA report, "present" when the latest QA report's dispatch has a QA run
+    logged at or after that dispatch started and not before the latest developer report of the
+    batch, else "stale"."""
+
+    batch_id: str
+    ticket: str
+    developer: str
+    review: str
+    qa: str
+    qa_run: str
+    receipt: str = "none"
+    publish: str = "none"
+
+    def to_payload(self) -> dict[str, str]:
+        return asdict(self)
+
+
+def _latest_report(view: LedgerView, batch_id: str, *roles: str) -> ReportEntry | None:
+    found = [
+        report
+        for report in view.reports
+        if report.batch_id == batch_id and report.role in roles
+    ]
+    return max(found, key=lambda report: report.reported_at) if found else None
+
+
+def _qa_run_cell(
+    view: LedgerView,
+    qa: ReportEntry | None,
+    developer: ReportEntry | None,
+    started: Mapping[str, datetime | None],
+) -> str:
+    if qa is None:
+        return "missing"
+    start = started.get(qa.dispatch_id)
+    developed = timestamp(developer.reported_at) if developer is not None else None
+    fresh = any(
+        run.dispatch_id == qa.dispatch_id
+        and (logged := timestamp(run.logged_at)) is not None
+        and (start is None or logged >= start)
+        and (developed is None or logged >= developed)
+        for run in view.qa_runs
+    )
+    return "present" if fresh else "stale"
+
+
+def evidence_matrix(view: LedgerView) -> tuple[EvidenceRow, ...]:
+    """One row per batch of `view`, in ledger order; empty without a ledger. The Reports KPI
+    `stale_evidence` counts the rows whose `qa_run` is "stale"."""
+    if view.unavailable:
+        return ()
     started = {stage.dispatch_id: timestamp(stage.started_at) for stage in view.stages}
-    stale = 0
-    for report in view.reports:
-        if report.role != "qa":
-            continue
-        start = started.get(report.dispatch_id)
-        fresh = any(
-            run.dispatch_id == report.dispatch_id
-            and (logged := timestamp(run.logged_at)) is not None
-            and (start is None or logged >= start)
-            for run in view.qa_runs
+    rows: list[EvidenceRow] = []
+    for batch in view.batches:
+        developer = _latest_report(view, batch.batch_id, "developer")
+        review = _latest_report(view, batch.batch_id, "review", "code-review")
+        qa = _latest_report(view, batch.batch_id, "qa")
+        rows.append(
+            EvidenceRow(
+                batch_id=batch.batch_id,
+                ticket=batch.ticket,
+                developer="present" if developer else "missing",
+                review="present" if review else "missing",
+                qa="present" if qa else "missing",
+                qa_run=_qa_run_cell(view, qa, developer, started),
+            )
         )
-        stale += not fresh
-    return stale
+    return tuple(rows)
+
+
+def evidence_payload(view: LedgerView) -> list[dict[str, str]]:
+    return [row.to_payload() for row in evidence_matrix(view)]
+
+
+def _stale_evidence(view: LedgerView) -> int:
+    return sum(row.qa_run == "stale" for row in evidence_matrix(view))
 
 
 def reports_kpi_from_payload(value: object) -> ReportsKpi:
@@ -364,14 +435,16 @@ ANALYTICS_SECTIONS = ("flow", "quality", "runtime", "gates")
 AGING_BUCKETS = ("lt_1d", "d1_3", "d3_7", "gt_7d")
 # The age buckets of an unfinished dispatch; `aging_by_role` keys are "<role>:<bucket>".
 STAGE_AGING_BUCKETS = ("lt_15m", "m15_60", "h1_4", "gt_4h")
-type Figure = int | None | list[int] | dict[str, int]
+# The hourly buckets of the gate latency trend, the oldest first, the last one ending at `now`.
+TREND_HOURS = 24
+type Figure = int | None | list[int] | list[int | None] | dict[str, int]
 
 
 @dataclass(frozen=True)
 class PipelineAnalytics:
     """The four analytics tabs of the Orchestration screen: flow, quality, runtime and gates.
     Each section maps a figure name to a count, a duration in seconds (`None` when unknown), a list
-    of counts or a map of counts."""
+    of counts, a list of durations (`None` for a bucket without data) or a map of counts."""
 
     flow: Mapping[str, Figure]
     quality: Mapping[str, Figure]
@@ -490,11 +563,27 @@ def _runtime_figures(view: LedgerView, now: datetime) -> dict[str, Figure]:
     }
 
 
-def _gate_figures(view: LedgerView) -> dict[str, Figure]:
-    """Coordinator decisions by verdict, and the p50/p95 latency from the report a decision
-    follows to the decision, keyed by the role of that report."""
+def _hourly_percentile(
+    points: Sequence[tuple[datetime, float]], now: datetime, share: float
+) -> list[int | None]:
+    """The percentile of the values in each of the `TREND_HOURS` hours before `now`, the oldest
+    hour first: bucket i holds the moments in (now - (24 - i) h, now - (23 - i) h]; an hour
+    without a value is None."""
+    buckets: list[list[float]] = [[] for _ in range(TREND_HOURS)]
+    for moment, value in points:
+        offset = (now - moment).total_seconds()
+        if 0 <= offset < TREND_HOURS * 3600:
+            buckets[TREND_HOURS - 1 - int(offset // 3600)].append(value)
+    return [_percentile(values, share) for values in buckets]
+
+
+def _gate_figures(view: LedgerView, now: datetime) -> dict[str, Figure]:
+    """Coordinator decisions by verdict, the p50/p95 latency from the report a decision follows
+    to the decision, keyed by the role of that report, and the p50/p95 of that same latency per
+    hour of the last day, by the hour of the decision (`_hourly_percentile`)."""
     verdicts: Counter[str] = Counter()
     latency: dict[str, list[float]] = {}
+    points: list[tuple[datetime, float]] = []
     for batch_id, record in view._batch_records.items():
         reports = sorted(
             (moment, stage.role)
@@ -512,11 +601,15 @@ def _gate_figures(view: LedgerView) -> dict[str, Figure]:
             before = [item for item in reports if at and item[0] <= at]
             if at is not None and before:
                 moment, role = before[-1]
-                latency.setdefault(role, []).append((at - moment).total_seconds())
+                seconds = (at - moment).total_seconds()
+                latency.setdefault(role, []).append(seconds)
+                points.append((at, seconds))
     return {
         "decisions_by_verdict": dict(verdicts),
         "latency_p50_by_gate": _by_role_percentile(latency, 0.5),
         "latency_p95_by_gate": _by_role_percentile(latency, 0.95),
+        "latency_p50_by_hour": _hourly_percentile(points, now, 0.5),
+        "latency_p95_by_hour": _hourly_percentile(points, now, 0.95),
     }
 
 
@@ -595,7 +688,7 @@ def pipeline_analytics(view: LedgerView, now: datetime | None = None) -> Pipelin
         "approval_p95_seconds": _percentile(waiting, 0.95),
         "approval_oldest_seconds": int(max(waiting)) if waiting else None,
         "pr_states": dict(Counter(batch.pr_state for batch in view.batches)),
-        **_gate_figures(view),
+        **_gate_figures(view, now),
     }
     return PipelineAnalytics(flow, quality, runtime, gates)
 
@@ -606,7 +699,8 @@ def _figure(value: object, where: str) -> Figure:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
     if isinstance(value, list) and all(
-        isinstance(item, int) and not isinstance(item, bool) for item in value
+        item is None or (isinstance(item, int) and not isinstance(item, bool))
+        for item in value
     ):
         return list(value)
     if isinstance(value, dict) and all(

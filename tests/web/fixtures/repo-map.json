@@ -121,5 +121,22 @@
   },
   "language_files": {
     "python": 3
+  },
+  "symbol_kinds": {
+    "pkg/core.py": [
+      "function",
+      "class"
+    ],
+    "pkg/cli.py": [
+      "function"
+    ],
+    "pkg/broken.py": [],
+    "README.md": []
+  },
+  "coverage": {
+    "source": 3,
+    "docs": 1,
+    "tests": 0,
+    "excluded": 2
   }
 }

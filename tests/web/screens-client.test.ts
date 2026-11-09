@@ -46,6 +46,10 @@ const OVERVIEW = {
   drift_files: 0,
   store: { authority: "file-ledger", schema: 3, generation: "generation-1", audit_records: 12 },
   adapters: [{ path: ".harness/adapters/claude/settings.json", status: "current", problem: null }],
+  containers: {
+    engine: "podman", version: "5.2.0", cgroup_driver: "systemd", cgroup_version: "v2", selinux: true, rootless: true,
+    info_problem: null, images: 2, images_problem: null, volumes: 0, volumes_problem: null,
+  },
   usage: { unavailable: null, batches: 4, tickets: 3, dispatches: 12, reports: 9 },
 };
 
@@ -146,6 +150,8 @@ describe("screen parsers", () => {
     expect(parseMaintenance({ maintenance: null, error: "boom" })).toEqual({ maintenance: null, error: "boom" });
     expect(parseMaintenance({ maintenance: { ...view, soft: { ...SUMMARY, items: -1 } }, error: "" })).toBeNull();
     expect(parseHarnessOverview({ ...OVERVIEW, usage: { ...OVERVIEW.usage, batches: "4" } })).toBeNull();
+    expect(parseHarnessOverview({ ...OVERVIEW, containers: { ...OVERVIEW.containers, images: -1 } })).toBeNull();
+    expect(parseHarnessOverview({ ...OVERVIEW, containers: null })).not.toBeNull();
   });
 });
 
@@ -187,6 +193,13 @@ const LEDGER = {
       batch_id: "b-1", ticket: "#1", state: "active", branch: "feature/x", candidate: "abc1234", target: null,
       integration_ref: null, head: null, head_matches: null, target_in_history: null, refusals: [],
       review: { dispatch_id: "d-2", outcome: "completed", has_blockers: false }, qa: null, pr_url: "", pr_state: "unknown",
+      verdict: "unknown",
+    },
+  ],
+  evidence: [
+    {
+      batch_id: "b-1", ticket: "#1", developer: "present", review: "missing", qa: "missing", qa_run: "missing",
+      receipt: "none", publish: "none",
     },
   ],
 };
@@ -195,7 +208,12 @@ const KPI = {
   rework: 0, qa_first_pass: 0, qa_tickets: 0, cycle_p50_seconds: null, cycle_p95_seconds: null,
   throughput_7d: 0, failed: 0, unknown: 0, batches: 1, rework_batches: 0, flow_efficiency_pct: null,
 };
-const ANALYTICS = { flow: { by_state: { active: 1 }, pr_per_day: [0, 1] }, quality: {}, runtime: { unfinished: 1 }, gates: { approval_p50_seconds: null } };
+const ANALYTICS = {
+  flow: { by_state: { active: 1 }, pr_per_day: [0, 1] },
+  quality: {},
+  runtime: { unfinished: 1 },
+  gates: { approval_p50_seconds: null, latency_p50_by_hour: [null, 600] },
+};
 const ROW = { label: "Причина", value: "удержание", state: "warn", mark: "⚠ внимание", group: "Причина и граница" };
 const ACTION = { key: "status", label: "Проверить состояние", enabled: true, reason: "", effect: "observe", needs_confirmation: false };
 const STAGE = { rows: [ROW], actions: [ACTION], blockers: [], notes: [] };
@@ -240,9 +258,16 @@ describe("Reports, Orchestration, Recovery and Container route reads", () => {
     expect(parseReports(LEDGER)).toEqual(LEDGER);
     expect(parseReports({ ...LEDGER, reports_kpi: { ...LEDGER.reports_kpi, extra: 1 } })).toBeNull();
     expect(parseReports({ ...LEDGER, version: 1 })).toBeNull();
+    expect(parseReports({ ...LEDGER, evidence: [{ ...LEDGER.evidence[0], qa_run: "fresh" }] })).toBeNull();
+    expect(parseReports({ ...LEDGER, publish: [{ ...LEDGER.publish[0], verdict: "allowed" }] })).toBeNull();
+    const { evidence: _evidence, ...withoutEvidence } = LEDGER;
+    expect(parseReports(withoutEvidence)).toBeNull();
     const orchestration = { ledger: LEDGER, lock: { lock: null, error: "занят" }, kpi: KPI, analytics: ANALYTICS };
     expect(parseOrchestration(orchestration)).toEqual(orchestration);
     expect(parseOrchestration({ ...orchestration, kpi: { ...KPI, wip: -1 } })).toBeNull();
+    const hourly = (values: unknown[]) => ({ ...orchestration, analytics: { ...ANALYTICS, gates: { latency_p50_by_hour: values } } });
+    expect(parseOrchestration(hourly([null, 60]))).not.toBeNull();
+    expect(parseOrchestration(hourly([-1]))).toBeNull();
     const timeline = { batch: BATCH, role_flow: ["developer"], events: [{ at: "t", kind: "dispatch", text: "x", role: null }] };
     expect(parseTimeline(timeline)).toEqual(timeline);
     expect(parseTimeline({ ...timeline, batch: { ...BATCH, pr_url: 1 } })).toBeNull();

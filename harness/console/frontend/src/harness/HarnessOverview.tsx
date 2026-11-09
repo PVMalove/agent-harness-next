@@ -297,27 +297,81 @@ export function AuditPanel({ overview }: { overview: HarnessOverview | null }) {
 
 const CONTAINER_KINDS = /container|network|volume|image/;
 
-export function ContainersPanel({ maintenance }: { maintenance: MaintenanceView | null }) {
+export function ContainersPanel({
+  overview,
+  maintenance,
+}: {
+  overview: HarnessOverview | null;
+  maintenance: MaintenanceView | null;
+}) {
   const { t } = useI18n();
   const planned = maintenance
     ? [...maintenance.soft.plan.remove, ...maintenance.hard.plan.remove].filter((item) => CONTAINER_KINDS.test(item.kind))
     : null;
-  const why = t("Инвентаря Docker/Podman в консоли нет");
-  const tiles = ["Engine", "Running", "Images / volumes", "Disk"];
+  const inventory = overview?.containers ?? null;
+  const unprobed = t("Инвентарь движка контейнеров не собран");
+  const noSource = t("Источника нет в инвентаре движка");
+  // A fact of `info` that is null: the probe's reason, else the engine did not report it.
+  const infoWhy = inventory?.info_problem ?? t("Движок не сообщил этот факт");
+  const fact = (value: string | null, why: string) => (value === null ? <NoData why={why} /> : value);
+  const cgroup =
+    inventory && (inventory.cgroup_version !== null || inventory.cgroup_driver !== null)
+      ? [inventory.cgroup_version, inventory.cgroup_driver].filter((part) => part !== null).join(" · ")
+      : null;
+  const flag = (value: boolean | null | undefined, on: string, off: string) =>
+    value === null || value === undefined ? null : value ? on : off;
   return (
     <section className="panel harness-containers" id="harness-containers">
       <div className="panel-head">
         <h2>{t("Контейнеры")}</h2>
-        <span className="small muted">{why}</span>
+        <span className="small muted" id="harness-engine-line">
+          {inventory
+            ? [inventory.engine, inventory.version, flag(inventory.rootless, "rootless", "rootful"), cgroup && `cgroup ${cgroup}`]
+                .filter(Boolean)
+                .join(" · ")
+            : unprobed}
+        </span>
       </div>
-      <div className="harness-container-summary">
-        {tiles.map((tile) => (
-          <div key={tile}>
-            <span>{tile}</span>
-            <NoData why={why} />
-          </div>
-        ))}
+      <div className="harness-container-summary" id="harness-container-summary">
+        <div>
+          <span>Engine</span>
+          {inventory ? <b className="mint">{inventory.engine}</b> : <NoData why={unprobed} />}
+          <small>
+            {inventory ? fact(inventory.version, infoWhy) : "—"}
+            {inventory?.rootless != null && ` · ${inventory.rootless ? "rootless" : "rootful"}`}
+          </small>
+        </div>
+        <div>
+          <span>Running</span>
+          <NoData why={noSource} />
+        </div>
+        <div>
+          <span>Images / volumes</span>
+          <b className="cyan" data-fact="images-volumes">
+            {inventory?.images ?? <NoData why={inventory?.images_problem ?? unprobed} />} /{" "}
+            {inventory?.volumes ?? <NoData why={inventory?.volumes_problem ?? unprobed} />}
+          </b>
+        </div>
+        <div>
+          <span>Disk</span>
+          <NoData why={noSource} />
+        </div>
       </div>
+      {inventory && (
+        <div className="harness-engine" id="harness-engine">
+          <span className={inventory.info_problem === null ? "ok" : undefined}>
+            daemon {inventory.info_problem === null ? t("отвечает") : <NoData why={inventory.info_problem} />}
+          </span>
+          <span className={inventory.rootless ? "ok" : undefined}>
+            {flag(inventory.rootless, "rootless", "rootful") ?? <>rootless <NoData why={infoWhy} /></>}
+          </span>
+          <span className={cgroup ? "ok" : undefined}>cgroup {fact(cgroup, infoWhy)}</span>
+          <span className={inventory.selinux ? "ok" : undefined}>
+            SELinux {fact(flag(inventory.selinux, t("включён"), t("выключен")), infoWhy)}
+          </span>
+          <span>{[inventory.images_problem, inventory.volumes_problem].filter(Boolean).join(" · ")}</span>
+        </div>
+      )}
       <div className="harness-container-table" id="harness-container-plan">
         <div className="harness-container-head">
           <span>{t("объект")}</span>

@@ -197,3 +197,10 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .no-data { font-style: italic; color: var(--muted); }
 /* A multi-line kernel value renders as lines, not as a string with line breaks. */
 .view-line { display: block; overflow-wrap: anywhere; }
+/* The gate latency trend of Orchestration → Гейты: a lone hour of the mockup's line chart is a dot. */
+.gate-trend { margin: 0 14px 12px; }
+.orch-line-avg-dot { fill: var(--orch-cyan); }
+.orch-line-p95-dot { fill: var(--orch-lav); }
+/* Repo Map: the kind of a symbol the kernel derives from its signature. */
+.repo-kind.method { color: var(--orch-mint); }
+.repo-kind.class, .repo-kind.struct, .repo-kind.interface { color: var(--orch-blue); }

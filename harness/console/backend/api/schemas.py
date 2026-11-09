@@ -520,9 +520,27 @@ class AdapterPayload(_Strict):  # type: ignore[explicit-any]
     problem: str | None
 
 
+class ContainersPayload(_Strict):  # type: ignore[explicit-any]
+    """The read-only inventory of the configured container engine; a fact a probe could not
+    give is null with the probe's reason beside it."""
+
+    engine: str
+    version: str | None
+    cgroup_driver: str | None
+    cgroup_version: str | None
+    selinux: bool | None
+    rootless: bool | None
+    info_problem: str | None
+    images: Annotated[int | None, Field(ge=0)]
+    images_problem: str | None
+    volumes: Annotated[int | None, Field(ge=0)]
+    volumes_problem: str | None
+
+
 class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     """The Harness state, the package version, the drift state and file count, the state store,
-    the runtime adapters (null: unreadable) and the pipeline usage."""
+    the runtime adapters (null: unreadable), the container engine inventory (null: not
+    collected) and the pipeline usage."""
 
     type: Literal["harness.overview"]
     ok: Literal[True]
@@ -532,6 +550,7 @@ class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     drift_files: Annotated[int | None, Field(ge=0)]
     store: StorePayload | None
     adapters: list[AdapterPayload] | None
+    containers: ContainersPayload | None
     usage: PipelineUsage
     cached: bool
     age_seconds: float

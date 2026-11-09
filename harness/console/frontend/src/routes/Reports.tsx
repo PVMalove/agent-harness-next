@@ -141,7 +141,7 @@ export function Reports() {
         </div>
       )}
 
-      {ledger && tab === "evidence" && <EvidenceTab ledger={ledger} />}
+      {ledger && tab === "evidence" && <EvidenceTab rows={ledger.evidence} />}
       {ledger && tab === "quality" && <QualityTab ledger={ledger} analytics={orchestration.data?.analytics ?? null} />}
       {ledger && tab === "readiness" && <ReadinessTab ledger={ledger} />}
 

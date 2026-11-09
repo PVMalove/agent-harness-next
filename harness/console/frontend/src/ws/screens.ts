@@ -87,7 +87,7 @@ export interface MaintenanceFacts {
 /** The harness.overview reply without its envelope. */
 export type HarnessOverview = Pick<
   HarnessOverviewReply,
-  "state" | "package_version" | "drift" | "drift_files" | "store" | "adapters" | "usage"
+  "state" | "package_version" | "drift" | "drift_files" | "store" | "adapters" | "containers" | "usage"
 >;
 
 type Check = (value: unknown) => boolean;
@@ -189,6 +189,20 @@ const adapter = exact({
   status: (value) => value === "current" || value === "outdated" || value === "missing",
   problem: nullable(string),
 });
+/** The container engine inventory of harness/console/kernel/container_inventory.py. */
+const containers = exact({
+  engine: string,
+  version: nullable(string),
+  cgroup_driver: nullable(string),
+  cgroup_version: nullable(string),
+  selinux: nullable(flag),
+  rootless: nullable(flag),
+  info_problem: nullable(string),
+  images: nullable(count),
+  images_problem: nullable(string),
+  volumes: nullable(count),
+  volumes_problem: nullable(string),
+});
 const overview = has({
   state: harnessState,
   package_version: string,
@@ -196,6 +210,7 @@ const overview = has({
   drift_files: nullable(count),
   store: nullable(store),
   adapters: nullable(list(adapter)),
+  containers: nullable(containers),
   usage,
 });
 
@@ -220,6 +235,7 @@ export function parseHarnessOverview(value: unknown): HarnessOverview | null {
     drift_files: found.drift_files,
     store: found.store,
     adapters: found.adapters,
+    containers: found.containers,
     usage: found.usage,
   };
 }

@@ -18,6 +18,7 @@ const entry = (batch_id: string, reviewed: boolean): PublishEntry => ({
   qa: null,
   pr_url: "",
   pr_state: "",
+  verdict: "unknown",
 });
 
 describe("the Publication batch selector", () => {

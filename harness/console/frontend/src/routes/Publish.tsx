@@ -8,6 +8,7 @@ import { DecisionPanel } from "../decisions/DecisionPanel";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
+import { VERDICT_TONE } from "../reports/ReportViews";
 import { Timeline } from "../reports/Timeline";
 import { useScreen } from "../screens/useScreen";
 import { NoData } from "../steps/ActivityViews";
@@ -54,8 +55,8 @@ export function preflightRows(entry: PublishEntry): Check[] {
     },
     {
       label: "Release Gate",
-      status: entry.refusals.length ? "blocked" : "unknown",
-      tone: entry.refusals.length ? "violet" : "blue",
+      status: entry.verdict,
+      tone: VERDICT_TONE[entry.verdict],
       detail: entry.refusals.join(" · ") || "—",
     },
     { label: "Branch head", status: head, tone: headTone, detail: `${short(entry.head)} ↔ ${short(entry.candidate)}` },
@@ -149,7 +150,9 @@ export function Publish() {
         </div>
         <div>
           <span>Release Gate</span>
-          <b className="violet">{entry?.refusals.length ? "blocked" : <NoData why={t("Вердикта Release Gate в файловом ledger нет")} />}</b>
+          <b className={entry ? VERDICT_TONE[entry.verdict] : undefined} id="publish-verdict">
+            {entry ? entry.verdict : <NoData />}
+          </b>
           <small>{entry?.refusals[0] ?? "—"}</small>
         </div>
         <div>
@@ -203,9 +206,7 @@ export function Publish() {
               <section className="panel publish-gate">
                 <div className="panel-head">
                   <h2>Release Gate</h2>
-                  <span className={`orch-pill ${entry.refusals.length ? "violet" : "blue"}`}>
-                    {entry.refusals.length ? "blocked" : "unknown"}
-                  </span>
+                  <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{entry.verdict}</span>
                 </div>
                 <div className="publish-gate-body">
                   <div className="publish-gate-facts">

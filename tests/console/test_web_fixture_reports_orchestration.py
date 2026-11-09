@@ -12,6 +12,7 @@ from pathlib import Path
 
 from harness.console.kernel import reports as console_reports
 from harness.console.kernel.pipeline_kpi import (
+    evidence_payload,
     pipeline_analytics,
     pipeline_analytics_from_payload,
     pipeline_kpi,
@@ -291,6 +292,7 @@ def reports_payload(view: LedgerView) -> JsonObject:
         **ledger_payload(view),
         "reports_kpi": reports_kpi(view).to_payload(),
         "publish": publish_payload(view, FixtureGit()),
+        "evidence": evidence_payload(view),
     }
 
 

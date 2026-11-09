@@ -16,9 +16,11 @@ from pathlib import Path
 from ....health.report_json import to_json
 from ....json_types import JsonObject
 from ....repo_map.bundle_fetch import ParserStatus, parser_status
+from ....storage import storage_root
 from ...kernel import data as console_data
 from ...kernel.batch_history import History, load_history
 from ...kernel.configuration_snapshot import collect_configuration
+from ...kernel.container_inventory import configured_engine, container_inventory
 from ...kernel.container_route import Authored, read_authored
 from ...kernel.coordinator_api import ApiResult, CoordinatorApi
 from ...kernel.harness_facts import harness_state
@@ -32,6 +34,7 @@ from ...kernel.project_target import (
 )
 from ...kernel.pr_timings import load_reports_view
 from ...kernel.repo_map import cached_map, head_commit
+from ...kernel.repo_map_coverage import excluded_files
 from ...kernel.repo_map_settings import language_files, memory_status, tier_setting
 from ...kernel.repo_map_snapshot import RepoMapFacts
 from ...kernel.reports import LedgerView, load_ledger_view
@@ -116,10 +119,16 @@ def adapter_facts(repo: Path) -> list[dict[str, object]] | None:
     return [dict(status) for status in statuses]
 
 
+def container_facts(repo: Path) -> dict[str, object]:
+    """The read-only inventory of the container engine the project's access policy names."""
+    return container_inventory(configured_engine(storage_root(repo))).to_payload()
+
+
 def harness_facts(repo: Path) -> dict[str, object]:
     """The installed harness, the package version, the drift state and file count (`harness diff
-    --json` in a subprocess), the state store and the runtime adapters; a drift that cannot be
-    read is "unknown" with a null count."""
+    --json` in a subprocess), the state store, the runtime adapters and the read-only inventory of
+    the configured container engine; a drift that cannot be read is "unknown" with a null
+    count."""
     try:
         report = console_data.drift_report(repo)
     except Exception:  # an unreadable drift is shown as unknown, never as clean
@@ -138,6 +147,7 @@ def harness_facts(repo: Path) -> dict[str, object]:
         "drift_files": drift_files,
         "store": asdict(store_facts(repo)),
         "adapters": adapter_facts(repo),
+        "containers": container_facts(repo),
     }
 
 
@@ -153,19 +163,22 @@ def maintenance_facts(repo: Path) -> dict[str, object]:
 
 def repo_map_facts(repo: Path) -> dict[str, object]:
     """HEAD, the map cached for it, the tier, the parser bundle (null when it cannot be read),
-    the project languages and the memory status; never runs the Repo Map CLI."""
+    the project languages, the memory status and the tracked files the map leaves out
+    (`git ls-tree`, read-only); never runs the Repo Map CLI."""
     head = head_commit(repo)
+    view = cached_map(repo, head) if head is not None else None
     try:
         parsers: ParserStatus | None = parser_status(repo)
     except Exception:  # an unreadable bundle is shown as unknown, never as installed
         parsers = None
     return RepoMapFacts(
         head=head,
-        view=cached_map(repo, head) if head is not None else None,
+        view=view,
         tier=tier_setting(repo),
         memory=memory_status(repo),
         parsers=parsers,
         language_files=language_files(repo),
+        excluded=excluded_files(repo, view) if view is not None else None,
     ).to_payload()
 
 

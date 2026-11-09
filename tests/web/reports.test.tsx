@@ -27,7 +27,7 @@ function answer(socket: FakeSocket, type: string, value: unknown, cached = true)
   }
 }
 
-function renderReports(language = "") {
+function renderReports(language = "", snapshot: unknown = REPORTS) {
   window.location.hash = `#/reports${language}`;
   const client = createConsoleClient({
     url: "ws://127.0.0.1:1/ws",
@@ -42,12 +42,16 @@ function renderReports(language = "") {
   );
   const socket = FakeSocket.last;
   act(() => socket.open());
-  answer(socket, "reports.snapshot", REPORTS);
+  answer(socket, "reports.snapshot", snapshot);
   answer(socket, "reports.report", REPORT);
   return socket;
 }
 
 const content = () => document.querySelector("main#content")?.textContent ?? "";
+const evidenceMarks = () =>
+  [...document.querySelectorAll("#reports-evidence .report-evidence-row")].map((row) =>
+    [...row.querySelectorAll(".report-evidence-cell")].map((cell) => cell.textContent).join(""),
+  );
 
 describe("the Reports route", () => {
   beforeEach(() => {
@@ -105,6 +109,21 @@ describe("the Reports route", () => {
     expect(document.querySelector("#reports-quality")).not.toBeNull();
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Готовность" })));
     expect(document.querySelector("#reports-readiness")!.textContent).toContain("Release Gate");
+    // The QA report of #887 records a blocker: the kernel's verdict is "blocked".
+    expect(document.querySelector("#reports-readiness [data-verdict]")!.textContent).toBe("blocked");
+  });
+
+  test("the evidence matrix shows the kernel's cells", () => {
+    renderReports();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
+    expect(evidenceMarks()).toEqual(["✓✓✓✓··", "✓———··"]);
+  });
+
+  test("the client does not recompute a cell the kernel marked stale", () => {
+    const stale = { ...REPORTS, evidence: REPORTS.evidence.map((row) => ({ ...row, qa_run: "stale" })) };
+    renderReports("", stale);
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
+    expect(evidenceMarks()).toEqual(["✓✓✓!··", "✓——!··"]);
   });
 
   test("English labels come from the catalog", () => {

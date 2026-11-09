@@ -1,8 +1,9 @@
 /* Harness: the mockup's #harness with the facts of harness.overview (state, package version,
    drift, pipeline usage) and harness.maintenance (cleanup plans, worktrees). Tabs "Обзор" and
    "Команды" are both mounted, the inactive one hidden, so a page button can hand a run to the
-   command panel, whose dialog shows the server's confirmation. Runtime, Adapters and Containers
-   show the store and adapter facts of harness.overview; facts without a source say so. The
+   command panel, whose dialog shows the server's confirmation. Runtime and Adapters show the
+   store and adapter facts of harness.overview, Containers its container engine inventory; facts
+   without a source say so. The
    maintenance and usage panels have no mockup slot and follow the mockup blocks (H4). */
 import { useCallback, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
@@ -179,7 +180,7 @@ export function Harness() {
       ) : null}
       {tab === "containers" ? (
         <div id="harness-tab-containers" role="tabpanel">
-          <ContainersPanel maintenance={view} />
+          <ContainersPanel overview={data} maintenance={view} />
         </div>
       ) : null}
       <div id="harness-tab-commands" role="tabpanel" hidden={tab !== "commands"}>

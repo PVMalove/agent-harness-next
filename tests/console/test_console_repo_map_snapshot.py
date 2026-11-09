@@ -29,6 +29,7 @@ def test_the_facts_survive_the_json_round_trip_with_and_without_optional_values(
         full,
         head=None,
         view=None,
+        excluded=None,
         parsers=None,
         memory=MemoryStatus(False, False, (), None, "нет Git"),
         language_files={},

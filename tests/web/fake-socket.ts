@@ -334,6 +334,20 @@ export const HARNESS_OVERVIEW = {
   drift_files: 0,
   store: { authority: "file-ledger", schema: 3, generation: "generation-1", audit_records: 12 },
   adapters: [{ path: ".harness/adapters/claude/settings.json", status: "current", problem: null }],
+  // The sandbox has no Docker socket: every probe of the engine fails with its reason.
+  containers: {
+    engine: "docker",
+    version: null,
+    cgroup_driver: null,
+    cgroup_version: null,
+    selinux: null,
+    rootless: null,
+    info_problem: "docker info: код 1: Cannot connect to the Docker daemon",
+    images: null,
+    images_problem: "docker images: код 1",
+    volumes: null,
+    volumes_problem: "docker volume ls: код 1",
+  },
   usage: { unavailable: null, batches: 4, tickets: 3, dispatches: 12, reports: 9 },
 };
 

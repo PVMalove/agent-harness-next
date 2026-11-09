@@ -4,7 +4,15 @@ the target its QA ran on, what the local Git refs say about them and the PR rece
 Nothing here writes, fetches or calls the network: the branch head is the local remote-tracking
 ref (as old as the last fetch), and the Release Gate refusals are the two Git facts of
 `release_gate.git_refusals` judged on those local refs. The runtime's QA evidence verdict is not
-asked; a fact that cannot be read is None. Standard library only."""
+asked; a fact that cannot be read is None. Standard library only.
+
+The `verdict` of an entry is the console's reading of these facts, never the runtime's gate:
+
+- `blocked` when there is a refusal, or the latest review or QA report records a blocker or has an
+  outcome other than `completed`;
+- `ready` when the branch head matches the candidate, the target is in the candidate's history and
+  the latest review and QA reports both exist, are `completed` and record no blocker;
+- `unknown` otherwise (a Git fact could not be read, or a review or QA report is missing)."""
 
 from __future__ import annotations
 
@@ -22,6 +30,8 @@ PUBLISH_LIMIT = 20
 # The role names a review report is recorded under.
 REVIEW_ROLES = ("code-review", "review")
 REMOTE = "origin"
+# The report outcome a review or QA report needs for a `ready` verdict.
+COMPLETED = "completed"
 _GIT_TIMEOUT_SECONDS = 5.0
 
 
@@ -99,6 +109,8 @@ class PublishEntry:
     qa: ReportRef | None
     pr_url: str
     pr_state: str
+    # "ready", "blocked" or "unknown": see the module docstring.
+    verdict: str
 
     def to_payload(self) -> dict[str, object]:
         return {**asdict(self), "refusals": list(self.refusals)}
@@ -129,6 +141,22 @@ def _candidate(review: ReportEntry | None, developer: ReportEntry | None) -> str
     return None
 
 
+def verdict(
+    refusals: Sequence[str],
+    review: ReportRef | None,
+    qa: ReportRef | None,
+    head_matches: bool | None,
+    target_in_history: bool | None,
+) -> str:
+    """The Release Gate verdict of one entry, by the rule of the module docstring."""
+    refs = [ref for ref in (review, qa) if ref is not None]
+    if refusals or any(ref.has_blockers or ref.outcome != COMPLETED for ref in refs):
+        return "blocked"
+    if head_matches is True and target_in_history is True and len(refs) == 2:
+        return "ready"
+    return "unknown"
+
+
 def publish_entries(view: LedgerView, git: GitFacts) -> tuple[PublishEntry, ...]:
     """The newest batches with a review report, at most `PUBLISH_LIMIT`; empty without a ledger."""
     if view.unavailable:
@@ -155,6 +183,7 @@ def publish_entries(view: LedgerView, git: GitFacts) -> tuple[PublishEntry, ...]
             )
             if refused
         )
+        review_ref, qa_ref = _ref(review), _ref(_latest(reports, "qa"))
         entries.append(
             PublishEntry(
                 batch_id=batch.batch_id,
@@ -168,10 +197,11 @@ def publish_entries(view: LedgerView, git: GitFacts) -> tuple[PublishEntry, ...]
                 head_matches=matches,
                 target_in_history=ancestor,
                 refusals=refusals,
-                review=_ref(review),
-                qa=_ref(_latest(reports, "qa")),
+                review=review_ref,
+                qa=qa_ref,
                 pr_url=batch.pr_url,
                 pr_state=batch.pr_state,
+                verdict=verdict(refusals, review_ref, qa_ref, matches, ancestor),
             )
         )
         if len(entries) == PUBLISH_LIMIT:

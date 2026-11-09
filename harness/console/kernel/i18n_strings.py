@@ -574,13 +574,11 @@ EN: dict[str, str] = {
     "Все проверки →": "All checks →",
     "Что проверено": "What was checked",
     "Почему важно": "Why it matters",
-    "Каталога описаний проверок нет": "There is no catalog of check descriptions",
     "Что сделать": "What to do",
     "Адаптеры": "Adapters",
     "{count} файлов адаптеров": "{count} adapter files",
     "Файлов адаптеров нет": "No adapter files",
     "Цепочка audit не читается консолью: показано только число записей.": "The console does not read the audit chain: only the record count is shown.",
-    "Инвентаря Docker/Podman в консоли нет": "The console has no Docker/Podman inventory",
     "объект": "object",
     "вид": "kind",
     "план": "plan",
@@ -617,7 +615,6 @@ EN: dict[str, str] = {
     "минуты": "minutes",
     "Готовность": "Readiness",
     "Batch для публикации нет": "No batches to publish",
-    "Вердикта Release Gate в файловом ledger нет": "The file ledger has no Release Gate verdict",
     "{count} в очереди": "{count} queued",
     "Блокеров публикации нет": "No publish blockers",
     "Таймлайн": "Timeline",
@@ -1929,7 +1926,6 @@ EN.update(
         "С сигнатурами": "With signatures",
         "Связи файлов": "File relations",
         "Сигнатур нет": "No signatures",
-        "Сигнатура": "Signature",
         "Сигнатуры": "Signatures",
         "Символ": "Symbol",
         "Символов с такими фильтрами нет.": "No symbols match these filters.",
@@ -2368,5 +2364,28 @@ EN.update(
         "Тикет не найден в спеке": "The ticket is not in the spec",
         "Леджер оркестрации недоступен: перенос не записан": "The orchestration ledger is unavailable: the move was not written",
         "Смена статуса не выполнена": "The status change failed",
+    }
+)
+
+# Web console: kernel sources in place of the former no-data states (container engine inventory,
+# gate latency trend, Repo Map symbol kinds and coverage, check rationales).
+EN.update(
+    {
+        "Описания этой проверки в каталоге нет": "The catalog does not describe this check",
+        "Инвентарь движка контейнеров не собран": "The container engine inventory was not collected",
+        "Источника нет в инвентаре движка": "The engine inventory has no source for this",
+        "Движок не сообщил этот факт": "The engine did not report this fact",
+        "отвечает": "responds",
+        "включён": "enabled",
+        "выключен": "disabled",
+        "p50 / p95 по часам, минуты": "p50 / p95 per hour, minutes",
+        "За сутки решений координатора не было": "No coordinator decisions in the last day",
+        "−{hours} ч": "−{hours} h",
+        "мин": "min",
+        "Вид символа считается только для карты из кэша сервера": "The symbol kind is derived only for the server's cached map",
+        "Схема Repo Map v1 не хранит строки, связи уровня символа и summary": "Repo Map schema v1 stores no lines, symbol-level relations or summaries",
+        "Строка": "Line",
+        "Покрытие считается только для карты из кэша сервера": "Coverage is derived only for the server's cached map",
+        "Git не перечислил файлы коммита карты": "Git did not list the files of the map's commit",
     }
 )

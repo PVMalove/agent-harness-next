@@ -1,9 +1,18 @@
 /* The mockup's Reports blocks over reports.snapshot and the ledger analytics: the summary, the QA
-   lane, and the Evidence, Quality and Readiness tabs. The evidence matrix is grouped on the client
-   from the report heads and the QA runs of each batch; a column without a source shows no data. */
+   lane, and the Evidence, Quality and Readiness tabs. The evidence matrix is the kernel's
+   (`evidence` of the snapshot, pipeline_kpi.py `evidence_matrix`); a column without a source shows
+   no data. */
 import { useI18n } from "../i18n";
 import { Bar, NoData } from "../steps/ActivityViews";
-import type { Analytics, Ledger, ReportHead, ReportsSnapshot } from "../ws/ledger";
+import type {
+  Analytics,
+  EvidenceCell,
+  EvidenceRow,
+  Ledger,
+  PublishEntry,
+  ReportHead,
+  ReportsSnapshot,
+} from "../ws/ledger";
 
 export type ReportState = "passed" | "attention" | "blocked";
 
@@ -93,50 +102,22 @@ export function QaLane({ ledger, ticket }: { ledger: Ledger; ticket: string }) {
   );
 }
 
-export type Cell = "present" | "stale" | "missing" | "none";
+/** The matrix columns: the wire field of `EvidenceRow` and its header. */
+export const EVIDENCE_COLUMNS: readonly [Exclude<keyof EvidenceRow, "batch_id" | "ticket">, string][] = [
+  ["developer", "developer"],
+  ["review", "review"],
+  ["qa", "qa"],
+  ["qa_run", "QA run"],
+  ["receipt", "receipt"],
+  ["publish", "publish"],
+];
 
-export interface EvidenceRow {
-  label: string;
-  cells: Cell[];
-}
+const MARK: Record<EvidenceCell, string> = { present: "✓", stale: "!", missing: "—", none: "·" };
 
-export const EVIDENCE_COLUMNS = ["developer", "review", "qa", "QA run", "receipt", "publish"] as const;
-
-/** One row per batch: which role reports exist, whether a QA run exists and is newer than the
-    latest developer report (else stale); receipt and publish have no source. */
-export function evidenceMatrix(ledger: Ledger): EvidenceRow[] {
-  return ledger.batches.map((batch) => {
-    const reports = ledger.reports.filter((report) => report.batch_id === batch.batch_id);
-    const latest = (roles: string[]) =>
-      reports
-        .filter((report) => roles.includes(report.role))
-        .map((report) => report.reported_at)
-        .sort()
-        .at(-1) ?? null;
-    const developer = latest(["developer"]);
-    const runs = ledger.qa_runs.filter((run) => run.ticket === batch.ticket).map((run) => run.logged_at).sort();
-    const run = runs.at(-1) ?? null;
-    const runCell: Cell = run === null ? "missing" : developer !== null && run < developer ? "stale" : "present";
-    return {
-      label: batch.ticket || batch.batch_id,
-      cells: [
-        developer ? "present" : "missing",
-        latest(["review", "code-review"]) ? "present" : "missing",
-        latest(["qa"]) ? "present" : "missing",
-        runCell,
-        "none",
-        "none",
-      ],
-    };
-  });
-}
-
-const MARK: Record<Cell, string> = { present: "✓", stale: "!", missing: "—", none: "·" };
-
-export function EvidenceTab({ ledger }: { ledger: Ledger }) {
+export function EvidenceTab({ rows }: { rows: readonly EvidenceRow[] }) {
   const { t } = useI18n();
-  const rows = evidenceMatrix(ledger);
   const known = 4;
+  const cells = (row: EvidenceRow) => EVIDENCE_COLUMNS.map(([field]) => row[field]);
   return (
     <section className="panel report-analytics" id="reports-evidence">
       <div className="orch-analytics-head">
@@ -155,18 +136,18 @@ export function EvidenceTab({ ledger }: { ledger: Ledger }) {
             <div className="report-evidence-matrix">
               <div className="report-evidence-head">
                 <span>batch</span>
-                {EVIDENCE_COLUMNS.map((column) => (
-                  <span key={column}>{column}</span>
+                {EVIDENCE_COLUMNS.map(([field, column]) => (
+                  <span key={field}>{column}</span>
                 ))}
               </div>
               {rows.map((row) => (
-                <div className="report-evidence-row" key={row.label}>
-                  <b>{row.label}</b>
-                  {row.cells.map((cell, index) => (
+                <div className="report-evidence-row" key={row.batch_id} data-batch={row.batch_id}>
+                  <b>{row.ticket || row.batch_id}</b>
+                  {cells(row).map((cell, index) => (
                     <span
                       key={index}
                       className={`report-evidence-cell ${cell === "none" ? "missing" : cell}`}
-                      title={cell === "none" ? t("Источника нет") : `${EVIDENCE_COLUMNS[index]}: ${cell}`}
+                      title={cell === "none" ? t("Источника нет") : `${EVIDENCE_COLUMNS[index]![1]}: ${cell}`}
                     >
                       {MARK[cell]}
                     </span>
@@ -196,10 +177,10 @@ export function EvidenceTab({ ledger }: { ledger: Ledger }) {
             <span>present / {known}</span>
           </div>
           {rows.map((row) => {
-            const present = row.cells.filter((cell) => cell === "present").length;
+            const present = cells(row).filter((cell) => cell === "present").length;
             return (
-              <div className="report-complete-row" key={row.label}>
-                <span>{row.label}</span>
+              <div className="report-complete-row" key={row.batch_id}>
+                <span>{row.ticket || row.batch_id}</span>
                 <Bar value={present} max={known} tone={present === known ? "mint" : "lavender"} />
                 <b>
                   {present} / {known}
@@ -336,6 +317,13 @@ export function QualityTab({ ledger, analytics }: { ledger: ReportsSnapshot; ana
 const tree = (matches: boolean | null): [string, string] =>
   matches === null ? ["unknown", "blue"] : matches ? ["match", "mint"] : ["mismatch", "violet"];
 
+/** The tone of a Release Gate verdict (kernel/publish_view.py `verdict`). */
+export const VERDICT_TONE: Record<PublishEntry["verdict"], "mint" | "violet" | "blue"> = {
+  ready: "mint",
+  blocked: "violet",
+  unknown: "blue",
+};
+
 export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
   const { t } = useI18n();
   const blocked = ledger.publish.filter((entry) => entry.refusals.length > 0);
@@ -371,7 +359,9 @@ export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
                     <span>{entry.target ? entry.target.slice(0, 12) : "—"}</span>
                     <span className={`orch-pill ${tone}`}>{label}</span>
                     <span>{entry.qa ? entry.qa.outcome : "—"}</span>
-                    <NoData why={t("Вердикта Release Gate в файловом ledger нет")} />
+                    <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`} data-verdict={entry.verdict}>
+                      {entry.verdict}
+                    </span>
                     <small>{entry.refusals.join(" · ") || "—"}</small>
                   </div>
                 );

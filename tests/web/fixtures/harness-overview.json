@@ -32,6 +32,19 @@
       "problem": "locally changed adapter"
     }
   ],
+  "containers": {
+    "engine": "docker",
+    "version": "27.4.1",
+    "cgroup_driver": "systemd",
+    "cgroup_version": "v2",
+    "selinux": false,
+    "rootless": true,
+    "info_problem": null,
+    "images": 3,
+    "images_problem": null,
+    "volumes": null,
+    "volumes_problem": "docker volume ls: код 1: permission denied"
+  },
   "usage": {
     "unavailable": null,
     "batches": 48,

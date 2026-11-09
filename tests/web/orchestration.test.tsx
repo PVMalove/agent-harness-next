@@ -95,6 +95,21 @@ describe("the Orchestration route", () => {
     expect(analytics.querySelector('[data-tab="flow"]')?.hasAttribute("hidden")).toBe(true);
   });
 
+  test("the Gates tab draws the kernel's hourly latency trend of the last day", () => {
+    renderOrchestration();
+    const gates = ORCHESTRATION.analytics.gates.latency_p50_by_hour;
+    expect(gates).toHaveLength(24);
+    expect(gates[23]).toBe(600);
+    const tabs = document.querySelector("#orch-tabs") as HTMLElement;
+    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Гейты" })));
+    const trend = document.querySelector("#orch-gate-trend") as HTMLElement;
+    expect(trend.querySelector("h3")?.textContent).toBe("Тренд latency за сутки");
+    // One hour with a decision: a dot per series, no line, no no-data state.
+    expect(trend.querySelectorAll("circle.orch-line-avg-dot, circle.orch-line-p95-dot")).toHaveLength(2);
+    expect(trend.querySelector(".no-data")).toBeNull();
+    expect(document.querySelector("#orch-tab-view")?.textContent).not.toContain("нет данных");
+  });
+
   test("the lock panel words a free, an unreadable and a held lock as the TUI does", () => {
     expect(lockLines({ locked: false }, null, "ru")).toEqual(["Lock ledger свободен."]);
     expect(lockLines(null, "boom", "en")).toEqual(["Ledger lock: state unavailable: boom"]);

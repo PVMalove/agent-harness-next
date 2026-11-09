@@ -71,7 +71,7 @@
 | Строка: заголовок, область · id | `message`, `area`, `id` | ЕСТЬ |
 | Деталь «Что сделать» | `fix.text` | ЕСТЬ |
 | Деталь «Что проверено» | `message` | ЕСТЬ |
-| Деталь «Почему важно» | каталога описаний проверок нет | НЕТ ДАННЫХ |
+| Деталь «Почему важно» | каталог `harness/console/kernel/check_rationale.py` (ru/en на каждый id `REGISTRY`, включая `directories.*`) в `catalog.json` как `rationales`; неизвестный id — «нет данных» | KERNEL |
 | Источник: команда и время | `generated_at` конверта снимка | ЕСТЬ |
 | «Запустить онлайн» для пропущенной проверки | переключение режима | ЕСТЬ |
 
@@ -88,7 +88,8 @@
 | Runtime: binary, protocol, uptime, cutover, цепочка audit | источника нет | НЕТ ДАННЫХ |
 | Адаптеры: статус файлов и хуков | `harness_overview.adapters[]` | KERNEL |
 | Адаптеры: версии CLI | источника нет | НЕТ ДАННЫХ |
-| Контейнеры: engine, cgroup, SELinux, images, volumes | инвентаря Docker в kernel нет | НЕТ ДАННЫХ |
+| Контейнеры: engine, cgroup, SELinux, images, volumes | `harness_overview.containers` (`container_inventory.py`): `<engine> info`, `images -q`, `volume ls -q` с таймаутом, только чтение; сбой пробы — «нет данных» с причиной | KERNEL |
+| Контейнеры: running, disk, список контейнеров, сети | инвентарь движка их не собирает | НЕТ ДАННЫХ |
 | Контейнеры и сети из плана обслуживания | план maintenance soft/hard | ЕСТЬ |
 | Команды: команда, назначение, режим, запуск | каталог команд (режим = reversibility) | ЕСТЬ |
 | Команды: последний результат | только задание текущей сессии | НЕТ ДАННЫХ |
@@ -112,10 +113,11 @@
 | Факты: tier, файлы, символы, связи, возраст | снимок Repo Map | ЕСТЬ |
 | KPI с подписями и тонами | снимок Repo Map | ЕСТЬ |
 | Индекс: generation и время построения | источника нет | НЕТ ДАННЫХ |
-| Покрытие source/docs/tests/excluded | источника нет (решение repo-map-acceptance.md) | НЕТ ДАННЫХ |
+| Покрытие source/docs/tests/excluded | `repo_map.coverage` (`repo_map_coverage.py`): классы файлов карты по пути; excluded — файлы коммита карты из `git ls-tree` вне карты, без ответа Git — «нет данных» | KERNEL |
 | Дерево со статусами парсера | `parser_status` | ЕСТЬ |
 | Просмотр файла: сигнатуры, число связей | сигнатуры, агрегация рёбер | ЕСТЬ |
-| Чипы Functions/Modules, строка и kind символа, связи уровня символа, summary | схема Repo Map v1 их не содержит | НЕТ ДАННЫХ |
+| Чипы Functions/Modules, kind символа | `repo_map.symbol_kinds`: вид по тексту сигнатуры (Functions — function и method, Modules — class, struct, interface) | KERNEL |
+| Строка символа, связи уровня символа, summary | схема Repo Map v1 их не содержит; схема не меняется | НЕТ ДАННЫХ |
 | Таблица связей from/to/type/count | рёбра снимка | ЕСТЬ |
 | «Перестроить» с подтверждением, «Экспорт», вкладка «Настройки» | каталог команд, снимок (H4) | ЕСТЬ |
 
@@ -142,37 +144,45 @@
 | Элемент макета | Источник | Статус |
 | --- | --- | --- |
 | Сводка, KPI completeness, latency, first-pass | KPI отчётов | ЕСТЬ |
-| KPI stale evidence | `reports_kpi.stale_evidence`: QA-отчёты без свежего QA-лога своего dispatch (см. ниже) | KERNEL |
+| KPI stale evidence | `reports_kpi.stale_evidence`: число batch с ячейкой QA run `stale` (см. ниже) | KERNEL |
 | Вкладки «Отчёты», «Evidence», «Качество», «Готовность» | — | ЕСТЬ |
 | Чипы типов QA, Review, Developer | роль этапа | ЕСТЬ |
 | Чипы Health и Publish | ссылки на Диагностику и Публикацию | ЕСТЬ |
 | Статус passed/attention/blocked | `has_risks`, `has_blockers` | KERNEL |
 | Деталь: summary, evidence, conclusion | `output`, `checks`, `changed_files`, `next_coordinator_action` | ЕСТЬ |
 | QA lane | `qa_attempts`, `qa_runs` | ЕСТЬ |
-| Матрица evidence | группировка на клиенте (`evidenceMatrix`) по отчётам этапов и `qa_runs` (см. ниже) | ЕСТЬ |
+| Матрица evidence | `evidence` снимка отчётов (`evidence_matrix` в `pipeline_kpi.py`, см. ниже) | KERNEL |
 | Колонки receipt и publish матрицы | источника нет | НЕТ ДАННЫХ |
 | Качество: findings по severity, latency по ролям, попытки | аналитика ledger | KERNEL |
 | Готовность: матрица Release Gate | раздел `publish` снимка | KERNEL |
-| Вердикт Release Gate в эпохе файлового ledger | источника нет | НЕТ ДАННЫХ |
+| Вердикт Release Gate | `publish[].verdict` (`publish_view.verdict`): ready, blocked или unknown по правилу ниже | KERNEL |
 | «Экспорт» | JSON текущей выборки | ЕСТЬ |
 | История batch и хронология | существующие блоки (H4) | ЕСТЬ |
 
-### Два определения «устаревшего» evidence
+### Одно определение «устаревшего» evidence
 
-На странице Отчётов два признака устаревания с разным смыслом, поэтому число в KPI и число
-ячеек «!» в матрице могут расходиться:
+Матрицу evidence и KPI stale evidence считает одна функция kernel — `evidence_matrix` в
+`harness/console/kernel/pipeline_kpi.py`. Единица — batch. Ячейка QA run:
 
-- **KPI stale evidence** считает kernel (`_stale_evidence` в `harness/console/kernel/pipeline_kpi.py`):
-  QA-отчёт устарел, если у его dispatch нет QA-лога (`qa_runs`), записанного не раньше старта
-  этого dispatch. Единица счёта — QA-отчёт.
-- **Ячейка QA run матрицы evidence** строит клиент (`evidenceMatrix` в
-  `harness/console/frontend/src/reports/ReportViews.tsx`): ячейка batch устарела, если последний
-  QA-запуск тикета старше последнего отчёта developer. Единица — batch; клиент только группирует
-  и сравнивает метки времени, аналитику не пересчитывает.
+- `missing` — у batch нет QA-отчёта;
+- `present` — у dispatch последнего QA-отчёта batch есть QA-лог (`qa_runs`), записанный не раньше
+  старта этого dispatch и не раньше последнего отчёта developer этого batch;
+- `stale` — иначе.
 
-Первый признак отвечает на вопрос «подкреплён ли QA-отчёт собственным запуском», второй — «был ли
-QA после последней правки developer». Перенос матрицы в kernel с общим определением — отдельная
-задача.
+Ячейки developer, review и qa — признаки наличия отчёта роли; receipt и publish — `none`, источника
+нет. KPI `reports_kpi.stale_evidence` — число batch с ячейкой `stale`, поэтому KPI и число ячеек «!»
+совпадают. Клиент только показывает матрицу из поля `evidence` снимка отчётов.
+
+### Вердикт Release Gate
+
+`verdict` в `harness/console/kernel/publish_view.py` — прочтение консолью фактов записи публикации,
+а не вердикт runtime:
+
+- `blocked` — есть отказ (`refusals`), или у последнего отчёта review или QA есть блокер или итог не
+  `completed`;
+- `ready` — branch head совпадает с candidate, target есть в истории candidate, отчёты review и QA
+  есть, оба `completed` и без блокеров;
+- `unknown` — иначе: факт Git не прочитан или отчёта review или QA нет.
 
 ## Оркестрация
 
@@ -193,7 +203,7 @@ QA после последней правки developer». Перенос мат
 | Runtime: heartbeat p95, устаревшие dispatch | `heartbeat_at` этапа | KERNEL |
 | Runtime: QA lease | QA lane | ЕСТЬ |
 | Runtime: fencing, holds, MTTR, operations | источника нет | НЕТ ДАННЫХ |
-| Гейты: тренд latency за сутки | история не хранится | НЕТ ДАННЫХ |
+| Гейты: тренд latency за сутки | `analytics.gates.latency_p50_by_hour`, `latency_p95_by_hour`: 24 часовых интервала до `now` по `coordinator_decisions[].approved_at` и предшествующему отчёту; час без решения — пустая точка | KERNEL |
 | Гейты: p50/p95 по гейтам, решения по вердиктам | решения координатора | KERNEL |
 | Карточки батчей, таблица dispatch с фильтрами, QA lane, «Все тикеты» | снимок ledger | ЕСТЬ |
 | Название тикета | источника нет | НЕТ ДАННЫХ |
@@ -212,11 +222,11 @@ QA после последней правки developer». Перенос мат
 | Элемент макета | Источник | Статус |
 | --- | --- | --- |
 | Выбор batch над KPI | список batch с отчётом review (H1) | ЕСТЬ |
-| KPI candidate, target, Release Gate, QA full | раздел `publish` снимка отчётов | KERNEL |
+| KPI candidate, target, Release Gate, QA full | раздел `publish` снимка отчётов, Release Gate — `publish[].verdict` | KERNEL |
 | KPI PR receipt | `pr_url`, `pr_state` | ЕСТЬ |
 | Вкладки «Обзор», «Preflight», «PR/MR», «Evidence» | — | ЕСТЬ |
 | Preflight: QA evidence, Review | снимок ledger | ЕСТЬ |
-| Preflight: Release Gate, branch head, свежесть target | `publish` (remote-tracking refs без fetch) | KERNEL |
+| Preflight: Release Gate, branch head, свежесть target | `publish` (remote-tracking refs без fetch), вердикт `publish[].verdict` | KERNEL |
 | Черновик PR: title, labels, body | черновик не формируется | НЕТ ДАННЫХ |
 | «Подготовить PR» | всегда неактивна; merge выполняет человек | ЕСТЬ |
 | Provider и репозиторий | источника нет | НЕТ ДАННЫХ |

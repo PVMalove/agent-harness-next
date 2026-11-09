@@ -15,7 +15,12 @@ from typing import Generic, TypeVar
 
 from ...kernel.batch_history import History
 from ...kernel.help_text import help_sections
-from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
+from ...kernel.pipeline_kpi import (
+    evidence_payload,
+    pipeline_analytics,
+    pipeline_kpi,
+    reports_kpi,
+)
 from ...kernel.pipeline_stats import pipeline_usage
 from ...kernel.publish_view import GitFacts, LocalGit, publish_payload
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
@@ -128,11 +133,12 @@ def snapshot_text(payload: object) -> str:
 
 def _ledger(view: LedgerView, git: GitFacts) -> _Ledger:
     """The view with its payload: the ledger without report bodies, the Reports KPIs, which the
-    server reads from the whole bodies, and the read-only publication view."""
+    server reads from the whole bodies, the read-only publication view and the evidence matrix."""
     payload = {
         **ledger_payload(view),
         "reports_kpi": reports_kpi(view).to_payload(),
         "publish": publish_payload(view, git),
+        "evidence": evidence_payload(view),
     }
     return _Ledger(view, payload)
 
@@ -363,8 +369,8 @@ class ScreenService:
         return await self._paged({**snapshot, "ledger": ledger.payload}, cached, age)
 
     async def harness_overview(self, *, force: bool = False) -> dict[str, object]:
-        """The installed harness, the package version, the drift state and the pipeline usage
-        counts, from the same Harness and ledger caches as `harness`; `NotFound` without a
+        """The installed harness, the package version, the drift state, the container engine
+        inventory and the pipeline usage counts, from the same Harness and ledger caches as `harness`; `NotFound` without a
         Harness collector."""
         collect = self._collect_harness
         if collect is None:
@@ -380,6 +386,7 @@ class ScreenService:
             "drift_files": facts.get("drift_files"),
             "store": facts.get("store"),
             "adapters": facts.get("adapters"),
+            "containers": facts.get("containers"),
             "usage": pipeline_usage(ledger.view),
             "cached": cached,
             "age_seconds": round(age, 3),

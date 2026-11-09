@@ -119,14 +119,33 @@ export interface PublishEntry {
   qa: ReportRef | null;
   pr_url: string;
   pr_state: string;
+  /** The console's Release Gate reading of these facts (kernel/publish_view.py `verdict`). */
+  verdict: "ready" | "blocked" | "unknown";
+}
+
+/** A cell of the evidence matrix: "none" is a column without a source. */
+export type EvidenceCell = "present" | "stale" | "missing" | "none";
+
+/** One batch of the evidence matrix the kernel builds (pipeline_kpi.py `evidence_matrix`). */
+export interface EvidenceRow {
+  batch_id: string;
+  ticket: string;
+  developer: EvidenceCell;
+  review: EvidenceCell;
+  qa: EvidenceCell;
+  qa_run: EvidenceCell;
+  receipt: EvidenceCell;
+  publish: EvidenceCell;
 }
 
 export interface ReportsSnapshot extends Ledger {
   reports_kpi: Figures;
   publish: PublishEntry[];
+  evidence: EvidenceRow[];
 }
 
-export type Figure = number | null | number[] | Record<string, number>;
+/** A count, a duration, a list of counts or of durations (null: no data) or a map of counts. */
+export type Figure = number | null | (number | null)[] | Record<string, number>;
 export type AnalyticsSection = "flow" | "quality" | "runtime" | "gates";
 export type Analytics = Record<AnalyticsSection, Record<string, Figure>>;
 
@@ -271,17 +290,30 @@ const publishEntry = exact({
   qa: nullable(reportRef),
   pr_url: string,
   pr_state: string,
+  verdict: (value) => value === "ready" || value === "blocked" || value === "unknown",
+});
+const cell: Check = (value) => value === "present" || value === "stale" || value === "missing" || value === "none";
+const evidenceRow = exact({
+  batch_id: string,
+  ticket: string,
+  developer: cell,
+  review: cell,
+  qa: cell,
+  qa_run: cell,
+  receipt: cell,
+  publish: cell,
 });
 const reportsSnapshot = exact({
   ...ledgerFields,
   reports_kpi: figures(REPORTS_KPI_KEYS),
   publish: list(publishEntry),
+  evidence: list(evidenceRow),
 });
 
 const figure: Check = (value) =>
   value === null ||
   count(value) ||
-  list(count)(value) ||
+  list(nullable(count))(value) ||
   (isObject(value) && Object.values(value).every(count));
 const section: Check = (value) => isObject(value) && Object.values(value).every(figure);
 const analytics = exact(Object.fromEntries(ANALYTICS_SECTIONS.map((name) => [name, section])));

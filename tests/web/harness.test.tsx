@@ -177,7 +177,29 @@ describe("the Harness route", () => {
     expect(within(adapters).getByText("current")).toBeTruthy();
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Контейнеры" })));
     const containers = document.querySelector("#harness-tab-containers") as HTMLElement;
-    expect(within(containers).getAllByText("нет данных")).toHaveLength(4);
+    // Every probe failed: the engine is named, each fact says no data with the probe's reason.
+    expect(within(containers).getByText("docker", { selector: "b" })).toBeTruthy();
+    const daemon = containers.querySelector("#harness-engine .no-data") as HTMLElement;
+    expect(daemon.title).toBe("docker info: код 1: Cannot connect to the Docker daemon");
+    const counts = containers.querySelectorAll("[data-fact='images-volumes'] .no-data");
+    expect([...counts].map((item) => (item as HTMLElement).title)).toEqual(["docker images: код 1", "docker volume ls: код 1"]);
+    expect(within(containers).getAllByText("нет данных").length).toBeGreaterThan(4);
+  });
+
+  test("the Containers tab shows the engine inventory the kernel probed", () => {
+    renderHarness({
+      ...HARNESS_OVERVIEW,
+      containers: {
+        engine: "podman", version: "5.2.0", cgroup_driver: "systemd", cgroup_version: "v2", selinux: true,
+        rootless: true, info_problem: null, images: 3, images_problem: null, volumes: 2, volumes_problem: null,
+      },
+    });
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Контейнеры" })));
+    expect(document.querySelector("#harness-engine-line")?.textContent).toBe("podman · 5.2.0 · rootless · cgroup v2 · systemd");
+    expect(document.querySelector("[data-fact='images-volumes']")?.textContent).toBe("3 / 2");
+    const engine = document.querySelector("#harness-engine")?.textContent ?? "";
+    expect(engine).toContain("daemon отвечает");
+    expect(engine).toContain("SELinux включён");
   });
 
   test("in English the overview tab reads Overview, apart from folder browsing", () => {
