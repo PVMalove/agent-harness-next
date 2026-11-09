@@ -66,6 +66,14 @@ describe("the Orchestration route", () => {
     expect(screen.getByRole("heading", { name: "Ожидающие решения" })).toBeTruthy();
   });
 
+  test("the QA lane follows the newest batch; the snapshot lists batches newest first", () => {
+    renderOrchestration();
+    expect(ORCHESTRATION.ledger.batches.map((batch) => batch.ticket)).toEqual(["#887", "#886"]);
+    const lane = document.querySelector("#qa-lane") as HTMLElement;
+    expect(within(lane).getByRole("heading").textContent).toBe("QA lane · #887");
+    expect(lane.querySelectorAll(".qa-attempt")).toHaveLength(2);
+  });
+
   test("a chosen batch opens its chronology and is carried to Recovery and Container route", () => {
     const socket = renderOrchestration();
     expect(document.querySelector("#open-recovery")?.getAttribute("href")).toBe("#/recovery");

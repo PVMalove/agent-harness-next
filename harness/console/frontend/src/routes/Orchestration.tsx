@@ -85,7 +85,7 @@ export function Orchestration() {
           <OrchTabs data={data} />
           <BatchCards data={data} />
           <DispatchTable data={data} />
-          <QaLane ledger={data.ledger} ticket={data.ledger.batches.at(-1)?.ticket ?? ""} />
+          <QaLane ledger={data.ledger} ticket={data.ledger.batches[0]?.ticket ?? ""} />
           <TicketList data={data} />
           <KpiRow tiles={kpiTiles(data.kpi, t, language)} id="orch-kpi" className="orch-kpis" />
           <div className="orch-overview-grid">
