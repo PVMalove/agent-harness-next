@@ -89,7 +89,9 @@ export type ScreenType =
   | "help.snapshot"
   | "update_harness.snapshot"
   | "update_harness.diff"
-  | "configuration.snapshot";
+  | "configuration.snapshot"
+  | "task_board.specs"
+  | "task_board.snapshot";
 
 /** The paged replies without cache facts: a report body, a batch chronology and a file diff. */
 const UNCACHED_TYPES: ReadonlySet<string> = new Set(["reports.report", "reports.timeline", "update_harness.diff"]);

@@ -1,0 +1,26 @@
+{
+  "age_seconds": 0.0,
+  "specs": [
+    {
+      "branch": "integration/board-fixture",
+      "id": "#501",
+      "n": 501,
+      "tickets_open": 6,
+      "tickets_total": 7,
+      "title": "Синтетическая спека доски",
+      "url": "https://tracker.example.test/acme/app/issues/501"
+    },
+    {
+      "branch": null,
+      "id": "#502",
+      "n": 502,
+      "tickets_open": null,
+      "tickets_total": null,
+      "title": "Вторая синтетическая спека",
+      "url": null
+    }
+  ],
+  "stale": null,
+  "tracker": "github",
+  "truncated": false
+}

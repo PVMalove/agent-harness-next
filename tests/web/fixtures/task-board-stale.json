@@ -1,0 +1,297 @@
+{
+  "age_seconds": 95.0,
+  "columns": [
+    {
+      "count": 2,
+      "id": "backlog"
+    },
+    {
+      "count": 2,
+      "id": "ready"
+    },
+    {
+      "count": 1,
+      "id": "progress"
+    },
+    {
+      "count": 1,
+      "id": "review"
+    },
+    {
+      "count": 1,
+      "id": "done"
+    }
+  ],
+  "kpis": {
+    "active_batch": 2,
+    "open": 6,
+    "total": 7,
+    "with_open_blockers": 1
+  },
+  "ledger": "ok",
+  "spec": {
+    "branch": "integration/board-fixture",
+    "id": "#501",
+    "n": 501,
+    "title": "Синтетическая спека доски",
+    "url": "https://tracker.example.test/acme/app/issues/501"
+  },
+  "stale": {
+    "message": "tracker login required",
+    "reason": "auth"
+  },
+  "tickets": [
+    {
+      "batch": null,
+      "batch_state": null,
+      "blockers": [
+        {
+          "id": "#512",
+          "n": 512,
+          "state": "open",
+          "why": "нужен источник"
+        }
+      ],
+      "branch": null,
+      "closed": false,
+      "column": "backlog",
+      "command": "/implement",
+      "criteria": [
+        "Список открывается",
+        "Пустой список подписан"
+      ],
+      "dispatch": null,
+      "dispatch_state": null,
+      "files": [
+        {
+          "path": "harness/console/",
+          "why": "консоль"
+        }
+      ],
+      "id": "#511",
+      "labels": [
+        "afk",
+        "status::blocked",
+        "priority::p1"
+      ],
+      "n": 511,
+      "open_blockers": 1,
+      "pr": null,
+      "priority": "priority::p1",
+      "prompt": "/implement #511\n\nTICKET: #511 — Экран списка задач\nEPIC: #501 — Синтетическая спека доски\nBRANCH: integration/board-fixture\n\nWHAT TO BUILD:\nПоказать список задач спеки.\nВторая строка описания.\n\nACCEPTANCE:\n1. Список открывается\n2. Пустой список подписан\n\nBLOCKERS:\n- #512 — нужен источник\n\nDISCOVERY:\n- harness/console/ — консоль",
+      "sp": 3,
+      "title": "Экран списка задач",
+      "truncated": false,
+      "url": "https://tracker.example.test/acme/app/issues/511",
+      "what": "Показать список задач спеки.\nВторая строка описания."
+    },
+    {
+      "batch": null,
+      "batch_state": null,
+      "blockers": [
+        {
+          "id": "#599",
+          "n": 599,
+          "state": "unknown",
+          "why": "внешний тикет"
+        }
+      ],
+      "branch": null,
+      "closed": false,
+      "column": "backlog",
+      "command": "/implement",
+      "criteria": [
+        "<b>не HTML</b>",
+        "`код` и [ссылка](javascript:alert(1))"
+      ],
+      "dispatch": null,
+      "dispatch_state": null,
+      "files": [],
+      "id": "#516",
+      "labels": [
+        "afk",
+        "status::blocked"
+      ],
+      "n": 516,
+      "open_blockers": 0,
+      "pr": null,
+      "priority": null,
+      "prompt": "/implement #516\n\nTICKET: #516 — <script>alert(1)</script> Небезопасный заголовок\nEPIC: #501 — Синтетическая спека доски\nBRANCH: integration/board-fixture\n\nWHAT TO BUILD:\n<img src=x onerror=alert(1)> **жирный** текст\n\nACCEPTANCE:\n1. <b>не HTML</b>\n2. `код` и [ссылка](javascript:alert(1))\n\nBLOCKERS:\n- #599 — внешний тикет\n\nDISCOVERY:\n- None",
+      "sp": null,
+      "title": "<script>alert(1)</script> Небезопасный заголовок",
+      "truncated": false,
+      "url": "javascript:alert(1)",
+      "what": "<img src=x onerror=alert(1)> **жирный** текст"
+    },
+    {
+      "batch": null,
+      "batch_state": null,
+      "blockers": [],
+      "branch": null,
+      "closed": false,
+      "column": "ready",
+      "command": "/implement",
+      "criteria": [
+        "Снимок читается",
+        "Ошибка трекера видна",
+        "TTL соблюдается"
+      ],
+      "dispatch": null,
+      "dispatch_state": null,
+      "files": [
+        {
+          "path": "harness/console/backend/",
+          "why": "сервер"
+        },
+        {
+          "path": "docs/board.md",
+          "why": "заметки"
+        }
+      ],
+      "id": "#512",
+      "labels": [
+        "afk",
+        "status::ready",
+        "priority::p0"
+      ],
+      "n": 512,
+      "open_blockers": 0,
+      "pr": null,
+      "priority": "priority::p0",
+      "prompt": "/implement #512\n\nTICKET: #512 — Источник данных доски\nEPIC: #501 — Синтетическая спека доски\nBRANCH: integration/board-fixture\n\nWHAT TO BUILD:\nЧитать снимок трекера.\n\nACCEPTANCE:\n1. Снимок читается\n2. Ошибка трекера видна\n3. TTL соблюдается\n\nBLOCKERS:\n- None\n\nDISCOVERY:\n- harness/console/backend/ — сервер\n- docs/board.md — заметки",
+      "sp": 5,
+      "title": "Источник данных доски",
+      "truncated": false,
+      "url": "https://tracker.example.test/acme/app/issues/512",
+      "what": "Читать снимок трекера."
+    },
+    {
+      "batch": null,
+      "batch_state": null,
+      "blockers": [],
+      "branch": null,
+      "closed": false,
+      "column": "ready",
+      "command": "/implement",
+      "criteria": [
+        "Счётчик равен снимку"
+      ],
+      "dispatch": null,
+      "dispatch_state": null,
+      "files": [],
+      "id": "#517",
+      "labels": [
+        "afk",
+        "status::ready",
+        "priority::p1"
+      ],
+      "n": 517,
+      "open_blockers": 0,
+      "pr": null,
+      "priority": "priority::p1",
+      "prompt": "/implement #517\n\nTICKET: #517 — Счётчики колонок\nEPIC: #501 — Синтетическая спека доски\nBRANCH: integration/board-fixture\n\nWHAT TO BUILD:\nСчётчики из снимка.\n\nACCEPTANCE:\n1. Счётчик равен снимку\n\nBLOCKERS:\n- None\n\nDISCOVERY:\n- None",
+      "sp": null,
+      "title": "Счётчики колонок",
+      "truncated": false,
+      "url": "https://tracker.example.test/acme/app/issues/517",
+      "what": "Счётчики из снимка."
+    },
+    {
+      "batch": "b-513",
+      "batch_state": "active",
+      "blockers": [],
+      "branch": null,
+      "closed": false,
+      "column": "progress",
+      "command": "/fast-implement",
+      "criteria": [
+        "Фильтр сужает карточки"
+      ],
+      "dispatch": "developer",
+      "dispatch_state": "working",
+      "files": [],
+      "id": "#513",
+      "labels": [
+        "afk",
+        "pipeline::fast",
+        "status::in-progress",
+        "priority::p2"
+      ],
+      "n": 513,
+      "open_blockers": 0,
+      "pr": null,
+      "priority": "priority::p2",
+      "prompt": "/fast-implement #513\n\nTICKET: #513 — Фильтры доски\nEPIC: #501 — Синтетическая спека доски\nBRANCH: integration/board-fixture\n\nWHAT TO BUILD:\nПоиск и приоритет.\n\nACCEPTANCE:\n1. Фильтр сужает карточки\n\nBLOCKERS:\n- None\n\nDISCOVERY:\n- None",
+      "sp": 2,
+      "title": "Фильтры доски",
+      "truncated": false,
+      "url": "https://tracker.example.test/acme/app/issues/513",
+      "what": "Поиск и приоритет."
+    },
+    {
+      "batch": "b-514",
+      "batch_state": "active",
+      "blockers": [],
+      "branch": null,
+      "closed": false,
+      "column": "review",
+      "command": "/to-guide",
+      "criteria": [
+        "Вкладки переключаются"
+      ],
+      "dispatch": "code-review",
+      "dispatch_state": "working",
+      "files": [],
+      "id": "#514",
+      "labels": [
+        "hitl",
+        "status::in-progress"
+      ],
+      "n": 514,
+      "open_blockers": 0,
+      "pr": {
+        "ref": "#520",
+        "url": "https://tracker.example.test/acme/app/pull/520"
+      },
+      "priority": null,
+      "prompt": "/to-guide #514\n\nTICKET: #514 — Модальное окно тикета\nEPIC: #501 — Синтетическая спека доски\nBRANCH: integration/board-fixture\n\nWHAT TO BUILD:\nВкладки и копирование.\n\nACCEPTANCE:\n1. Вкладки переключаются\n\nBLOCKERS:\n- None\n\nDISCOVERY:\n- None",
+      "sp": 3,
+      "title": "Модальное окно тикета",
+      "truncated": false,
+      "url": "https://tracker.example.test/acme/app/issues/514",
+      "what": "Вкладки и копирование."
+    },
+    {
+      "batch": null,
+      "batch_state": null,
+      "blockers": [],
+      "branch": null,
+      "closed": true,
+      "column": "done",
+      "command": "/implement",
+      "criteria": [
+        "Маршрут открывается"
+      ],
+      "dispatch": null,
+      "dispatch_state": null,
+      "files": [],
+      "id": "#515",
+      "labels": [
+        "afk",
+        "status::in-progress"
+      ],
+      "n": 515,
+      "open_blockers": 0,
+      "pr": null,
+      "priority": null,
+      "prompt": "/implement #515\n\nTICKET: #515 — Каркас страницы\nEPIC: #501 — Синтетическая спека доски\nBRANCH: integration/board-fixture\n\nWHAT TO BUILD:\nМаршрут в AppShell.\n\nACCEPTANCE:\n1. Маршрут открывается\n\nBLOCKERS:\n- None\n\nDISCOVERY:\n- None",
+      "sp": 1,
+      "title": "Каркас страницы",
+      "truncated": false,
+      "url": "https://tracker.example.test/acme/app/issues/515",
+      "what": "Маршрут в AppShell."
+    }
+  ],
+  "tracker": "github",
+  "truncated": false
+}
