@@ -35,6 +35,7 @@ from .test_server_screens import PORT, TOKEN, Runtime, _read
 from .test_web_fixture_reports_orchestration import (
     FIXTURES,
     LOCK,
+    FixtureGit,
     QA_BODY,
     ledger,
     recovery_inputs,
@@ -137,7 +138,7 @@ def _runtime(tmp_path: Path) -> Runtime:
         jobs=composition.job_service(tmp_path, executor=_idle),
         decisions=cast(DecisionService, object()),
         events=cast(OrchestrationEvents, object()),
-        screens=service(_Facts()),
+        screens=service(_Facts(), publish_git=FixtureGit()),
     )
     return Runtime(parts.router, tmp_path / "no-build")
 
