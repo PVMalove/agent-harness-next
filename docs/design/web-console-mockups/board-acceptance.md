@@ -89,7 +89,7 @@
 | Вкладка «Контекст»: блокеры | `blockers[].id/why/state` | реализовано; `unknown` → «нет данных» |
 | Вкладка «Контекст»: Discovery Context | `files[].path/why` | реализовано |
 | Вкладка «Acceptance (N)» | `criteria[]` | реализовано |
-| Вкладка «Промпт» | `card.prompt` (сервер, формат `/to-guide` планировщика) | реализовано, без пересборки; блоки ARCHITECTURE INVARIANTS и IMPLEMENTATION DISCIPLINE — из `docs/agents/agent-prompt.md` проекта |
+| Вкладка «Промпт» | `card.prompt` (сервер, формат `/to-guide` планировщика) | реализовано, без пересборки; блоки ARCHITECTURE INVARIANTS и IMPLEMENTATION DISCIPLINE — из секций тела эпика, иначе из `docs/agents/agent-prompt.md` проекта |
 | «Промпт агента» (`#board-copy`) | `card.prompt` с любой вкладки | реализовано (#1045) |
 | Состояние «Спек пока нет» | `specs=[]`, `stale=null` | реализовано |
 | Состояние «На доске нет задач» | `tickets=[]` | реализовано |
