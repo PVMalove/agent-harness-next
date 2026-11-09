@@ -18,10 +18,11 @@ type Tab = "overview" | "preflight" | "pr" | "evidence";
 
 const short = (sha: string | null): string => (sha ? sha.slice(0, 12) : "—");
 
-/** The default batch of the selector: the latest one with a review report, else the latest. */
+/** The default batch of the selector: the latest one with a review report, else the latest.
+    Entries come newest first (kernel/reports.py sorts batches by created_at, descending). */
 export function defaultBatch(entries: readonly PublishEntry[]): string | null {
   const reviewed = entries.filter((entry) => entry.review !== null);
-  return (reviewed.at(-1) ?? entries.at(-1))?.batch_id ?? null;
+  return (reviewed[0] ?? entries[0])?.batch_id ?? null;
 }
 
 type Tone = "mint" | "violet" | "blue";
