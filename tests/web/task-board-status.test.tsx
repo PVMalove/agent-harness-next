@@ -147,6 +147,37 @@ describe("the Task Board status change", () => {
     expect(boards(socket).at(-1)).toMatchObject({ spec: "#501", force: true });
   });
 
+  test("a confirmed move keeps the board on screen under the updating overlay until the new snapshot", () => {
+    const socket = renderBoard();
+    const overlay = () => document.querySelector("#board-updating");
+    const columns = () => document.querySelectorAll("[data-board-col]").length;
+
+    confirmMove(socket, "#512", "progress");
+
+    expect(columns()).toBe(5);
+    expect(document.querySelector('[data-board-state="loading"]')).toBeNull();
+    expect(overlay()?.getAttribute("role")).toBe("status");
+    expect(overlay()?.textContent).toContain("Идёт обновление…");
+    expect(overlay()?.querySelector(".board-mascot")).not.toBeNull();
+    expect(overlay()?.contains(document.activeElement)).toBe(false);
+
+    finish(socket, result({ result: "changed", message: "status::ready -> status::in-progress" }));
+
+    expect(columns()).toBe(5);
+    expect(document.querySelector('[data-board-state="loading"]')).toBeNull();
+    expect(overlay()).not.toBeNull();
+
+    const moved = {
+      ...BOARD,
+      tickets: BOARD.tickets.map((ticket) => (ticket.id === "#512" ? { ...ticket, column: "progress" } : ticket)),
+    };
+    const snapshot = socket.request("task_board.snapshot");
+    act(() => socket.reply(screenPage(snapshot.id, "task_board.snapshot", JSON.stringify(moved))));
+
+    expect(overlay()).toBeNull();
+    expect(column("progress").querySelector('[data-board-ticket="#512"]')).not.toBeNull();
+  });
+
   test("a busy server refuses the move with the running job", () => {
     const socket = renderBoard();
     const start = confirmMove(socket, "#512", "progress");

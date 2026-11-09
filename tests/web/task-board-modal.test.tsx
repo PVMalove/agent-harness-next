@@ -88,18 +88,24 @@ describe("the ticket modal", () => {
     expect(modal.querySelector("pre.board-prompt")?.textContent).toBe(card("#511").prompt);
   });
 
-  test("copies the prompt and the numbered criteria", async () => {
+  test("the Agent prompt button copies the prompt from every tab", async () => {
     const writeText = vi.fn(async () => undefined);
     stubClipboard(writeText);
     renderBoard();
     open("#512");
-    await act(async () => fireEvent.click(document.querySelector("#board-copy") as HTMLElement));
-    expect(writeText).toHaveBeenLastCalledWith(card("#512").prompt);
-    expect(dialog().querySelector('[role="status"]')?.textContent).toBe("Промпт скопирован");
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Acceptance (3)" })));
-    await act(async () => fireEvent.click(document.querySelector("#board-copy") as HTMLElement));
-    expect(writeText).toHaveBeenLastCalledWith("1. Снимок читается\n2. Ошибка трекера видна\n3. TTL соблюдается");
-    expect(dialog().querySelector('[role="status"]')?.textContent).toBe("Критерии скопированы");
+    const button = screen.getByRole("button", { name: "Промпт агента" });
+    expect(button.id).toBe("board-copy");
+    expect(button.classList.contains("board-agent-prompt")).toBe(true);
+    expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+
+    for (const tab of ["Контекст", "Acceptance (3)", "Промпт"]) {
+      act(() => fireEvent.click(screen.getByRole("tab", { name: tab })));
+      writeText.mockClear();
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Промпт агента" })));
+
+      expect(writeText).toHaveBeenCalledExactlyOnceWith(card("#512").prompt);
+      expect(dialog().querySelector('[role="status"]')?.textContent).toBe("Промпт скопирован");
+    }
   });
 
   test("a refused copy leaves the text to copy by hand", async () => {
@@ -150,6 +156,6 @@ describe("the ticket modal", () => {
     ]);
     expect(dialog().querySelector("#board-status-label")?.textContent).toBe("Backlog");
     expect(dialog().querySelector("#board-status")?.getAttribute("aria-label")).toBe("Change status");
-    expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Agent prompt" })).toBeTruthy();
   });
 });

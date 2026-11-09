@@ -120,6 +120,17 @@ describe("the Task Board route", () => {
     expect(document.querySelectorAll(".board-empty")).toHaveLength(4);
   });
 
+  test("the search field shows a magnifier hidden from screen readers", () => {
+    renderBoard();
+    const search = document.querySelector(".board-search") as HTMLElement;
+    const icon = search.querySelector("svg.hi") as SVGElement;
+
+    expect(icon).not.toBeNull();
+    expect(icon.getAttribute("aria-hidden")).toBe("true");
+    expect(icon.nextElementSibling).toBe(search.querySelector("input#board-search"));
+    expect(screen.getByRole("searchbox", { name: "Поиск задач" })).toBe(search.querySelector("input"));
+  });
+
   test("Refresh asks for the specs and the board with force and shows the refreshing state", () => {
     const socket = renderBoard();
     act(() => fireEvent.click(document.querySelector("#board-refresh") as HTMLElement));

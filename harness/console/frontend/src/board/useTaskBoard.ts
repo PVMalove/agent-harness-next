@@ -66,13 +66,18 @@ export interface BoardState {
   board: Screen<TaskBoard>;
   /** The refreshing panel shows on the first read and after a manual refresh only. */
   refreshing: boolean;
+  /** A `reload` is under way: the board stays on screen under the updating overlay. */
+  updating: boolean;
   refresh(): void;
+  /** Asks for the board with force and keeps the shown one until the new snapshot. */
+  reload(): void;
 }
 
 export function useBoard(spec: string): BoardState {
   const { client } = useConsole();
   const board = useScreen({ type: "task_board.snapshot", params: { spec } }, parseBoard);
   const [manual, setManual] = useState(false);
+  const [quiet, setQuiet] = useState(false);
   const data = useRef(board.data);
   data.current = board.data;
   const { refresh: ask, loading } = board;
@@ -96,7 +101,9 @@ export function useBoard(spec: string): BoardState {
   }, [board.data, loading, ask]);
 
   useEffect(() => {
-    if (!loading) setManual(false);
+    if (loading) return;
+    setManual(false);
+    setQuiet(false);
   }, [loading]);
 
   const refresh = useCallback(() => {
@@ -104,5 +111,11 @@ export function useBoard(spec: string): BoardState {
     ask(true);
   }, [ask]);
 
-  return { board, refreshing: loading && (board.data === null || manual), refresh };
+  const reload = useCallback(() => {
+    setQuiet(true);
+    ask(true);
+  }, [ask]);
+
+  const refreshing = loading && (board.data === null || manual);
+  return { board, refreshing, updating: quiet && !refreshing, refresh, reload };
 }

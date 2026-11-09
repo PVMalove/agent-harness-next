@@ -2148,6 +2148,7 @@ EN.update(
         "На доске нет задач": "The board has no tickets",
         "В выбранной спеке пока нет тикетов. Разбейте спеку через /to-tickets.": "The selected spec has no tickets yet. Split the spec with /to-tickets.",
         "Обновление доски": "Refreshing the board",
+        "Идёт обновление…": "Updating…",
         "Читаем трекер и статусы. Показан последний подтверждённый снимок; карточки временно недоступны.": "Reading the tracker and the statuses. The last confirmed snapshot is kept; the cards are unavailable for now.",
         "Снимка доски ещё нет": "No board snapshot yet",
         "Доска появится, когда трекер снова ответит.": "The board appears when the tracker answers again.",
@@ -2171,10 +2172,9 @@ EN.update(
 EN.update(
     {
         "Acceptance ({count})": "Acceptance ({count})",
-        "Копировать": "Copy",
+        "Промпт агента": "Agent prompt",
         "Текущий статус": "Current status",
         "Промпт скопирован": "Prompt copied",
-        "Критерии скопированы": "Criteria copied",
         "Скопируйте текст вручную": "Copy the text manually",
         "Блокеров нет.": "No blockers.",
         "Файлы не указаны.": "No files listed.",

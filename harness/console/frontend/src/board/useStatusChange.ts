@@ -1,7 +1,8 @@
 /* A ticket status change of the Task Board: a refused move shows its reason at once, an allowed one
    waits for the confirmation, then runs `board-status` as the server's mutating job and follows it
    to its result. After the command answers (changed, refused or a write error) the board is asked
-   again with force: the snapshot that offered the move is no longer current. */
+   again with force, keeping the shown board until the new snapshot: the snapshot that offered the
+   move is no longer current. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { useConsole } from "../useConsole";
@@ -31,7 +32,7 @@ export interface StatusChange {
   cancel(): void;
 }
 
-export function useStatusChange(spec: string, refresh: () => void): StatusChange {
+export function useStatusChange(spec: string, reload: () => void): StatusChange {
   const { client } = useConsole();
   const { t } = useI18n();
   const [pending, setPending] = useState<PendingMove | null>(null);
@@ -39,8 +40,8 @@ export function useStatusChange(spec: string, refresh: () => void): StatusChange
   const [notice, setNotice] = useState<StatusNotice | null>(null);
   // The move under way and its job id; "start" until the start reply names the job.
   const active = useRef<{ move: PendingMove; job: string } | null>(null);
-  const words = useRef({ t, refresh });
-  words.current = { t, refresh };
+  const words = useRef({ t, reload });
+  words.current = { t, reload };
 
   const say = useCallback((move: PendingMove, kind: StatusNotice["kind"], reason: string, text: string) => {
     const name = columnLabels(words.current.t)[move.to].name;
@@ -79,7 +80,7 @@ export function useStatusChange(spec: string, refresh: () => void): StatusChange
           const reason = result?.reason ?? "write_failed";
           say(current.move, "err", reason, refusalCaption(tr, reason, result ?? {}));
         }
-        words.current.refresh();
+        words.current.reload();
       }),
     [client, say],
   );

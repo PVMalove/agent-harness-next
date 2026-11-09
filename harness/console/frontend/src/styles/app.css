@@ -193,3 +193,13 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 #board-confirm-body h2, #board-confirm-body p, .board-confirm-diff { overflow-wrap: anywhere; min-width: 0; }
 .board-confirm-diff { flex-wrap: wrap; }
 .board-modal-links select { max-width: 100%; }
+/* Task Board: the mint "Agent prompt" button and the updating overlay over a kept board (#1045). */
+.board-modal-tabs .btn.board-agent-prompt { display: inline-flex; align-items: center; gap: 4px; border-color: var(--orch-mint); background: var(--orch-mint); color: #10221c; font-weight: 600; }
+.board-modal-tabs .btn.board-agent-prompt:hover { background: #8ad8c1; }
+.board-agent-prompt .hi { width: 11px; height: 11px; }
+.board-page { position: relative; }
+.board-updating { position: absolute; inset: 0; z-index: 5; display: flex; justify-content: center; align-items: flex-start; padding-top: 96px; pointer-events: none; }
+.board-updating-card { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid #44786a; border-radius: 7px; background: #1d2927ee; color: var(--orch-mint); font: 11px var(--mono); box-shadow: 0 10px 30px #0008; }
+.board-mascot { width: 34px; height: 44px; animation: board-mascot-jump 0.9s ease-in-out infinite; }
+@keyframes board-mascot-jump { 0%, 100% { transform: translateY(0); } 45%, 55% { transform: translateY(-9px); } }
+@media (prefers-reduced-motion: reduce) { .board-mascot { animation: none; } }

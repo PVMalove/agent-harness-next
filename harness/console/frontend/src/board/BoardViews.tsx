@@ -3,6 +3,8 @@
    show the server's allowed (drop-ok) and refused (drop-no) targets; a refused drop gets its reason. Ticket text is
    untrusted: React text only. */
 import { useState } from "react";
+// The docs-site mascot (docs/rfc/docs-site.md §5.2), shipped as a local file.
+import mascot from "../../../../../docs/design/docs-site-mockups/mascot.svg";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -62,6 +64,7 @@ export function BoardToolbar({ filters, onChange }: { filters: BoardFilters; onC
   return (
     <div className="board-toolbar">
       <label className="board-search">
+        <Icon name="search" />
         <input
           id="board-search"
           type="search"
@@ -270,5 +273,19 @@ export function BoardStatePanel({ kind, onRefresh }: { kind: BoardStateKind; onR
         </a>
       </div>
     </section>
+  );
+}
+
+/** Over the board while a status change runs and its new snapshot is read: the columns stay
+    readable under it, it never takes the focus, and reduced motion stops the mascot's jump. */
+export function BoardUpdating() {
+  const { t } = useI18n();
+  return (
+    <div className="board-updating" id="board-updating" role="status" aria-live="polite">
+      <span className="board-updating-card">
+        <img className="board-mascot" src={mascot} alt="" width={34} height={44} />
+        {t("Идёт обновление…")}
+      </span>
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 /* The ticket modal of the #board mockup: labels, story points, issue / PR / branch, the current
    status with its status select (the same moves and refusals as drag and drop) and the Context,
-   Acceptance and Prompt tabs. Ticket text is untrusted: React text only, links only for http(s). */
+   Acceptance and Prompt tabs; the Agent prompt button copies the prompt from any tab. Ticket text is untrusted: React text only, links only for http(s). */
 import { useEffect, useId, useRef, useState } from "react";
+import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { BOARD_COLUMNS } from "../ws/taskBoard";
 import type { BoardCard, BoardColumn, TaskBoard } from "../ws/taskBoard";
@@ -13,9 +14,6 @@ import type { StatusNotice } from "./useStatusChange";
 type Tab = "context" | "acceptance" | "prompt";
 
 const pill = (label: string) => (label.includes("p0") ? "violet" : label.includes("p1") ? "blue" : "muted");
-
-export const numberedCriteria = (card: BoardCard): string =>
-  card.criteria.map((criterion, index) => `${index + 1}. ${criterion}`).join("\n");
 
 export function TicketModal({
   card,
@@ -37,7 +35,7 @@ export function TicketModal({
   const manual = useRef<HTMLPreElement>(null);
   const titleId = useId();
   const [tab, setTab] = useState<Tab>("context");
-  const [copied, setCopied] = useState<"prompt" | "criteria" | null>(null);
+  const [copied, setCopied] = useState(false);
   const [fallback, setFallback] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,13 +62,12 @@ export function TicketModal({
   const status = labels[card.column].name;
 
   const copy = () => {
-    const criteria = tab === "acceptance";
-    const text = criteria ? numberedCriteria(card) : card.prompt;
-    setCopied(null);
+    const text = card.prompt;
+    setCopied(false);
     setFallback(null);
     const failed = () => setFallback(text);
     try {
-      void navigator.clipboard.writeText(text).then(() => setCopied(criteria ? "criteria" : "prompt"), failed);
+      void navigator.clipboard.writeText(text).then(() => setCopied(true), failed);
     } catch {
       failed();
     }
@@ -177,24 +174,20 @@ export function TicketModal({
               data-board-tab={id}
               onClick={() => {
                 setTab(id);
-                setCopied(null);
+                setCopied(false);
                 setFallback(null);
               }}
             >
               {label}
             </button>
           ))}
-          <button className="btn" type="button" id="board-copy" onClick={copy}>
-            {t("Копировать")}
+          <button className="btn board-agent-prompt" type="button" id="board-copy" onClick={copy}>
+            <Icon name="terminal" /> {t("Промпт агента")}
           </button>
         </div>
         {(copied || fallback !== null) && (
           <p className="small muted board-copy-status" role="status">
-            {copied === "prompt"
-              ? t("Промпт скопирован")
-              : copied === "criteria"
-                ? t("Критерии скопированы")
-                : t("Скопируйте текст вручную")}
+            {copied ? t("Промпт скопирован") : t("Скопируйте текст вручную")}
           </p>
         )}
         <div className="board-modal-body" role="tabpanel">
