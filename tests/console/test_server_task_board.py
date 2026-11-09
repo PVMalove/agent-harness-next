@@ -166,7 +166,7 @@ def _ledger(repo: Path) -> LedgerView:
     )
 
 
-def _runtime(tmp_path: Path, tracker: Tracker) -> Runtime:
+def _runtime(tmp_path: Path, tracker: Tracker, jobs: JobService | None = None) -> Runtime:
     facts, clock = Facts(), Clock()
     board = TaskBoardService(
         tmp_path,
@@ -192,7 +192,7 @@ def _runtime(tmp_path: Path, tracker: Tracker) -> Runtime:
     parts = composition.compose(
         tmp_path,
         snapshots=cast(SnapshotService, object()),
-        jobs=cast(JobService, object()),
+        jobs=cast(JobService, object()) if jobs is None else jobs,
         decisions=cast(DecisionService, object()),
         events=cast(OrchestrationEvents, object()),
         screens=screens,
