@@ -2012,3 +2012,27 @@ EN.update(
     }
 )
 
+
+# The web Open Project page (#889): its own labels and the TUI plan phrases it words one by one.
+EN.update(
+    {
+        "Шаг {current} из {total}": "Step {current} of {total}",
+        "Команда для другой консоли": "Command for another console",
+        "Этот проект уже открыт этим сервером": "This server already serves this project",
+        "✖ заблокировано: {n}": "✖ blocked: {n}",
+        "Перезаписывает только управляемые файлы Harness.": "Overwrites managed Harness files only.",
+        "Сервер консоли обслуживает один проект; другой проект открывается своей командой в терминале.": "The console server serves one project; another project opens with its own command in a terminal.",
+        "Данные не получены": "No data received",
+        "Действие": "Action",
+        "Заблокированные составы": "Blocked sets",
+        "Проверка пути не читает Git и .harness: команда открывает проект своим сервером.": "Checking the path reads neither Git nor .harness: the command opens the project with its own server.",
+        "Git-проект найден · действие:": "Git project found · action:",
+        "обновление": "update",
+        "новая установка": "new installation",
+        "внедрение": "adoption",
+        "harness.lock есть · установлено:": "harness.lock present · installed:",
+        "Найдено:": "Found:",
+        "— конфликты разберите до установки.": "— resolve the conflicts before installing.",
+        "Файлов Harness в проекте нет.": "The project has no Harness files.",
+    }
+)

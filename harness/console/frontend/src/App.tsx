@@ -11,6 +11,7 @@ import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
 import { Decisions } from "./routes/Decisions";
 import { Home } from "./routes/Home";
+import { OpenProject } from "./routes/OpenProject";
 import { Orchestration } from "./routes/Orchestration";
 import { Placeholder } from "./routes/Placeholder";
 import { RepoMap } from "./routes/RepoMap";
@@ -39,6 +40,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   "agent-activity": <AgentActivity />,
   orchestration: <Orchestration />,
   publish: <Decisions section="Публикация" />,
+  "open-project": <OpenProject />,
 };
 
 export function createRouter() {
