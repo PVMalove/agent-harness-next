@@ -13,12 +13,13 @@ from typing import Protocol
 
 from ....orchestration.core.constants import TERMINAL_BATCH_STATES
 from ...kernel.protocol import MESSAGE_BYTES, _clip
+from .ticket_status import COLUMNS as COLUMNS
+from .ticket_status import MoveFacts, moves
 
 BOARD_TTL_SECONDS = 60.0
 # Spec boards kept for the stale fallback; the least recently served goes first.
 KEPT_BOARDS = 8
 REVIEW_ROLES = frozenset({"code-review", "qa"})
-COLUMNS = ("backlog", "ready", "progress", "review", "done")
 # Caps in wire bytes (a JSON string's encoded size), counts in items.
 BODY_READ_BYTES = 65536
 TITLE_BYTES = 300
@@ -528,6 +529,31 @@ def ticket_blockers(
     return _blocker_cards(ticket, parse_body(ticket.body), states, _Caps())
 
 
+def _moves(
+    card: Mapping[str, object],
+    blockers: Sequence[Mapping[str, object]],
+    stage: BatchStage | None,
+) -> list[dict[str, object]]:
+    """The status-change decision for every column. A blocker of unknown state does not refuse
+    a move here; the command reads it again and fails closed."""
+    facts = MoveFacts(
+        card["column"] if isinstance(card["column"], str) else None,
+        tuple(str(item["id"]) for item in blockers if item["state"] == "open"),
+        tuple(str(item["id"]) for item in blockers if item["state"] == "unknown"),
+        stage.batch_id if stage else None,
+    )
+    return [
+        {
+            "to": move.to,
+            "allowed": move.allowed,
+            "reason": move.reason,
+            "blockers": list(move.blockers),
+            "batch": move.batch,
+        }
+        for move in moves(facts, strict=False)
+    ]
+
+
 def _json_bytes(value: object) -> int:
     """An upper bound of the bytes `value` takes as JSON on the wire: every non-ASCII character
     counted as its `\\uXXXX` escape."""
@@ -638,6 +664,7 @@ def build_board_payload(
             "dispatch": stage.role if stage else None,
             "dispatch_state": stage.dispatch_state if stage else None,
         }
+        card["moves"] = _moves(card, blockers, stage)
         card["prompt"] = agent_prompt(card, spec_card)
         card["truncated"] = own.fired or body.truncated
         used += _json_bytes(card)

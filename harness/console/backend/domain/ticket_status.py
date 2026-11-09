@@ -9,8 +9,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from .task_board import COLUMNS
-
+# The task-board columns in board order; `task_board` takes them from here.
+COLUMNS = ("backlog", "ready", "progress", "review", "done")
 # The single `status::*` label of each column a move can write. Backlog keeps `status::blocked`,
 # so a ticket always carries exactly one status label after a move.
 STATUS_LABEL = {
