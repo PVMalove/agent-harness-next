@@ -1,0 +1,64 @@
+{
+  "adapters": {
+    "error": "",
+    "preview": {
+      "adapters": [
+        {
+          "path": ".harness/adapters/claude.json",
+          "problem": null,
+          "status": "current"
+        },
+        {
+          "path": ".harness/adapters/codex.json",
+          "problem": "локальная правка",
+          "status": "outdated"
+        },
+        {
+          "path": ".harness/adapters/opencode.json",
+          "problem": null,
+          "status": "missing"
+        }
+      ],
+      "blocked": false,
+      "capabilities": [
+        "engineering-suite"
+      ],
+      "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "reason": "",
+      "text": "Будут обновлены: .harness/adapters/codex.json\nБудут добавлены: .harness/adapters/opencode.json"
+    }
+  },
+  "files": {
+    "orchestration.json": {
+      "digest": "",
+      "document": {
+        "roles": {
+          "developer": {
+            "model": "opus"
+          }
+        }
+      },
+      "error": "",
+      "exists": false
+    },
+    "project.json": {
+      "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "document": {
+        "branch_pattern": "feature/issue-{id}-{slug}",
+        "qa_gate_commands": [
+          "make lint"
+        ],
+        "tracker": {
+          "kind": "github",
+          "token": "••••••"
+        }
+      },
+      "error": "",
+      "exists": true
+    }
+  },
+  "orchestration_installed": true,
+  "schema_installed": true,
+  "store_root": "/work/project/.harness/config_versions",
+  "transaction_pending": false
+}

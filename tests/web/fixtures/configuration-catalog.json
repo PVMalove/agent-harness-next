@@ -1,0 +1,99 @@
+{
+  "cancel_reason": "Отмена останавливает команду; уже внесённые изменения не откатываются.",
+  "commands": [
+    {
+      "available": true,
+      "command_id": "configuration-save-draft",
+      "confirmation_reason": null,
+      "inputs": [
+        "request"
+      ],
+      "needs_confirmation": false,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "reversible",
+      "reversibility_label": "✔ обратимо",
+      "section": "configuration",
+      "title": "Сохранить черновик настройки как версию",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "configuration-save-current",
+      "confirmation_reason": null,
+      "inputs": [
+        "request"
+      ],
+      "needs_confirmation": false,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "reversible",
+      "reversibility_label": "✔ обратимо",
+      "section": "configuration",
+      "title": "Сохранить текущую конфигурацию как версию",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "configuration-apply",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [
+        "request"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "configuration",
+      "title": "Применить конфигурацию",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "configuration-adapters",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [
+        "request"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "configuration",
+      "title": "Обновить адаптеры runtime",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "configuration-recover",
+      "confirmation_reason": null,
+      "inputs": [],
+      "needs_confirmation": false,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "reversible",
+      "reversibility_label": "✔ обратимо",
+      "section": "configuration",
+      "title": "Восстановить незавершённую запись конфигурации",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "configuration-restore",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [
+        "request"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "configuration",
+      "title": "Восстановить версию конфигурации",
+      "typed_confirmation": null
+    }
+  ]
+}
