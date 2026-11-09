@@ -31,7 +31,9 @@ export function RepoMap() {
     a.click(); URL.revokeObjectURL(url);
   };
   return <div className="repo-page"><div className="page-title repo-title"><div><h1>Repo Map</h1>
-    <p>{t("Индекс символов, модулей и импортов.")}</p><div className="home-facts"><span>HEAD {facts?.head?.slice(0, 12) ?? "—"}</span></div></div>
+    <p>{t("Индекс символов, модулей и импортов.")}</p><div className="home-facts" id="repo-facts"><span>HEAD {facts?.head?.slice(0, 12) ?? "—"}</span>
+      {map && <><span>tier {map.tier}</span><span>{t("{count} файлов", { count: map.files.length })}</span>
+        <span>{t("{count} связей", { count: map.edges.length })}</span></>}</div></div>
     <div className="actions"><button className="btn" onClick={() => client.requestRepoMap(true)} disabled={state.status !== "connected"}>{t("Обновить")}</button>
       <button className="btn" disabled={!facts?.head || starting || jobs.busy !== null || state.status !== "connected"}
         onClick={() => { if (facts?.head) setPending({ head: facts.head }); }}>{t("Перестроить")}</button>
@@ -56,9 +58,11 @@ export function RepoMap() {
         tab === "Символы" ? <Symbols map={map} selectedPath={path} onClear={() => setPath(null)} /> :
         tab === "Связи" ? <Links map={map} select={(path) => { setPath(path); setTab("Символы"); }} /> : <>
           <div className="repo-grid"><Panel title="Индекс"><Fields rows={[["Коммит", map.commit], ["Парсер", map.parser],
-            ["Причина", t(map.degradation_reason)], ["Сигнатуры", map.tier === "minimal" ? "—" : map.files.reduce((n, f) => n + (f.signatures?.length ?? 0), 0)]]} /></Panel>
+            ["Причина", t(map.degradation_reason)], ["Сигнатуры", map.tier === "minimal" ? "—" : map.files.reduce((n, f) => n + (f.signatures?.length ?? 0), 0)],
+            ["Generation", t("нет данных")], [t("Построен"), t("нет данных")]]} /></Panel>
             <Panel title="Покрытие"><Fields rows={[["С сигнатурами", map.files.filter((f) => f.signatures?.length).length],
-              ["Успешно разобраны", map.files.filter((f) => f.parser_status === "ok").length], ["Диагностики", map.diagnostics.length]]} /></Panel></div>
+              ["Успешно разобраны", map.files.filter((f) => f.parser_status === "ok").length], ["Диагностики", map.diagnostics.length],
+              ...["source", "docs", "tests", "excluded"].map((kind): [string, string] => [kind, t("нет данных")])]} /></Panel></div>
           <Files map={map} /><Panel title="Provenance парсера"><Fields rows={Object.entries(map.parser_provenance).map(([key, value]) =>
             [key, typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "—")])} /></Panel>
           <Panel title="Диагностики">{map.diagnostics.length ? map.diagnostics.map((d, i) => <p key={i}>{d.code}: {d.path}</p>) : t("диагностик нет")}</Panel>

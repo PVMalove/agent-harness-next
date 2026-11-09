@@ -10,7 +10,7 @@ import { Configuration } from "./routes/Configuration";
 import { ContainerRoute } from "./routes/ContainerRoute";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
-import { Decisions } from "./routes/Decisions";
+import { Publish } from "./routes/Publish";
 import { Help } from "./routes/Help";
 import { Home } from "./routes/Home";
 import { OpenProject } from "./routes/OpenProject";
@@ -45,7 +45,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   "container-route": <ContainerRoute />,
   "agent-activity": <AgentActivity />,
   orchestration: <Orchestration />,
-  publish: <Decisions section="Публикация" />,
+  publish: <Publish />,
   "open-project": <OpenProject />,
   "update-harness": <UpdateHarness />,
   configuration: <Configuration />,
