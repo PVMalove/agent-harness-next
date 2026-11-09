@@ -107,6 +107,7 @@ def _gh_node(
     state: str = "OPEN",
     body: str = "",
     blocked: list[tuple[int, str]] = (),  # type: ignore[assignment]
+    more_blocked: bool = False,
 ) -> dict[str, object]:
     return {
         "number": number,
@@ -116,7 +117,7 @@ def _gh_node(
         "body": body,
         "labels": {"nodes": [{"name": label} for label in labels]},
         "blockedBy": {
-            "pageInfo": {"hasNextPage": False},
+            "pageInfo": {"hasNextPage": more_blocked},
             "nodes": [
                 {"number": n, "title": f"Ticket {n}", "state": s} for n, s in blocked
             ],
@@ -217,6 +218,43 @@ def test_a_blocker_whose_state_cannot_be_read_counts_as_open(github: Project) ->
     code, result = github.run("1", "#5", "ready")
 
     assert (code, result["reason"], result["blockers"]) == (3, "open_blockers", ["#77"])
+    assert github.writes() == []
+
+
+def test_an_open_blocker_past_the_display_cap_refuses_backlog_to_ready(
+    github: Project,
+) -> None:
+    # 21 body blockers: the board shows 20, the command must not decide on that list.
+    listed = "".join(f"- #{n}\n" for n in range(101, 122))
+    github.answer(
+        "gh api", "graphql",
+        stdout=_gh_board(_gh_node(5, ["status::blocked"], body=f"## Blocked by\n\n{listed}")),
+    )  # fmt: skip
+    github.answer("gh issue view 121 ", stdout={"state": "OPEN"})
+    github.answer("gh issue view", stdout={"state": "CLOSED"})
+    github.answer("gh issue edit", stdout="")
+
+    code, result = github.run("1", "#5", "ready")
+
+    assert (code, result["result"], result["reason"]) == (3, "refused", "open_blockers")
+    assert result["blockers"] == ["\u2026"]
+    assert github.writes() == []
+
+
+def test_a_native_blocker_list_with_more_pages_refuses_backlog_to_ready(
+    github: Project,
+) -> None:
+    closed = [(n, "CLOSED") for n in range(101, 121)]
+    github.answer(
+        "gh api", "graphql",
+        stdout=_gh_board(_gh_node(5, ["status::blocked"], blocked=closed, more_blocked=True)),
+    )  # fmt: skip
+    github.answer("gh issue edit", stdout="")
+
+    code, result = github.run("1", "#5", "ready")
+
+    assert (code, result["result"], result["reason"]) == (3, "refused", "open_blockers")
+    assert result["blockers"] == ["\u2026"]
     assert github.writes() == []
 
 

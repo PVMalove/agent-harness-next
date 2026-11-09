@@ -75,6 +75,8 @@ class TrackerTicket:
     body: str
     native_blockers: tuple[BlockerFact, ...] = ()
     pr: PullRef | None = None
+    # The tracker stopped before the end of the body or of the native blocker list.
+    blockers_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,8 @@ class TicketBody:
     branch: str | None
     story_points: int | None
     truncated: bool = False
+    # `blocked_by` misses a blocker: the body or the blocker list hit its cap.
+    blockers_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -277,6 +281,7 @@ def parse_body(body: str) -> TicketBody:
     `**Field:**` lines of the local template. Never raises; every field is capped."""
     caps = _Caps()
     text = caps.text(body, BODY_READ_BYTES).replace("\r\n", "\n").replace("\r", "\n")
+    body_cut = caps.fired
     sections: dict[str, list[str]] = {}
     inline: dict[str, list[str]] = {}
     loose: list[str] = []
@@ -336,6 +341,7 @@ def parse_body(body: str) -> TicketBody:
         branch=caps.text(branch, BRANCH_BYTES) if branch else None,
         story_points=_story_points(lines("sp")),
         truncated=caps.fired,
+        blockers_truncated=body_cut or len(raw_blocked) > BLOCKERS_MAX,
     )
 
 
@@ -523,10 +529,18 @@ def _blocker_cards(
 
 def ticket_blockers(
     ticket: TrackerTicket, states: Mapping[str, bool]
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], bool]:
     """The blockers of a ticket as the board shows them: the body's `Blocked by` merged with the
-    tracker's native blockers, each with its state `open`, `closed` or `unknown`."""
-    return _blocker_cards(ticket, parse_body(ticket.body), states, _Caps())
+    tracker's native blockers, each with its state `open`, `closed` or `unknown`; and whether
+    that list is complete. It is not when the body, the native list or the shown list hit a cap,
+    so a blocker past the cap is unseen and a caller deciding on the list must fail closed."""
+    body = parse_body(ticket.body)
+    keys = {number if number is not None else ref for ref, number, _ in body.blocked_by}
+    keys |= {fact.n if fact.n is not None else fact.ref for fact in ticket.native_blockers}
+    complete = not (
+        ticket.blockers_truncated or body.blockers_truncated or len(keys) > BLOCKERS_MAX
+    )
+    return _blocker_cards(ticket, body, states, _Caps()), complete
 
 
 def _moves(

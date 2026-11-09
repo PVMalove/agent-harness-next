@@ -22,6 +22,8 @@ from .ports import SpecNotFound, TrackerUnavailable
 
 # The exit code of each result: a refusal never wrote anything.
 EXIT_CODES = {"changed": 0, "refused": 3, "write_error": 1}
+# The blocker entry that stands for the blockers past a cap of the tracker or the board.
+UNSEEN_BLOCKERS = "…"
 
 _MESSAGES = {
     "same": "the ticket is already in this column",
@@ -146,12 +148,15 @@ def change_status(
     except Exception:  # an unreadable ledger only refuses the moves that depend on it
         stage, ledger_ok = None, False
     source = column(found, stage)
-    blockers = ticket_blockers(found, board.blocker_states)
+    blockers, complete = ticket_blockers(found, board.blocker_states)
     open_refs = tuple(str(item["id"]) for item in blockers if item["state"] == "open")
     unknown = [str(item["id"]) for item in blockers if item["state"] == "unknown"]
     if source == "backlog" and to == "ready" and not open_refs:
         # The board could not tell these states; read each once, and fail closed on silence.
         unknown = [ref for ref in unknown if writer.blocker_closed(repo, ref) is not True]
+    if not complete:
+        # The list stopped at a cap: a blocker past it is unseen, so it counts as open.
+        unknown.append(UNSEEN_BLOCKERS)
     move = decide(
         MoveFacts(source, open_refs, tuple(unknown), stage.batch_id if stage else None),
         to,
