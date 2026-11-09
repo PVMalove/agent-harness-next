@@ -286,13 +286,11 @@ def test_the_board_round_trips_with_every_column_row(tmp_path: Path) -> None:
             assert prompts["#903"].startswith("/to-guide #903\n")
             assert prompts["#904"].startswith("/implement #904\n")
             for part in (
-                "TICKET: #901 — Ticket 901",
-                "EPIC: #862 — Web console",
-                "BRANCH: integration/web-console",
-                "WHAT TO BUILD:\nBuild the board.",
-                "ACCEPTANCE:\n1. Columns follow the table",
-                "BLOCKERS:\n- #903 — needs ready",
-                "DISCOVERY:\n- harness/console/ — console",
+                "EPIC: #862 Web console\nTASK: #901 — Ticket 901\nISSUES: #901, #862",
+                "DEPENDENCIES: #903\nPIPELINE: afk → /fast-implement",
+                "SPECIFIC SCOPE:\nBuild the board.",
+                "ACCEPTANCE CRITERIA:\n1. Columns follow the table",
+                "CODE DISCOVERY (verify current paths/branches first):\n- harness/console/ — console",
             ):
                 assert part in prompts["#901"]
             assert cards["#901"]["blockers"] == [
