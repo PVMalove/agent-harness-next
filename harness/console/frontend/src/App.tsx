@@ -19,6 +19,7 @@ import { Placeholder } from "./routes/Placeholder";
 import { RepoMap } from "./routes/RepoMap";
 import { Recovery } from "./routes/Recovery";
 import { Reports } from "./routes/Reports";
+import { TaskBoard } from "./routes/TaskBoard";
 import { UpdateHarness } from "./routes/UpdateHarness";
 import { ConsoleProvider, useConsole } from "./useConsole";
 import type { ConsoleClient } from "./ws/client";
@@ -34,6 +35,7 @@ function Layout() {
 
 /** The sections the web console shows; the others are placeholders. */
 const ROUTES: Readonly<Record<string, ReactElement>> = {
+  board: <TaskBoard />,
   "repo-map": <RepoMap />,
   diagnostics: <Diagnostics />,
   harness: <Harness />,
