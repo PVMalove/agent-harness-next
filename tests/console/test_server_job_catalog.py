@@ -126,6 +126,7 @@ def test_every_section_lists_only_kernel_catalog_entries(tmp_path: Path) -> None
         "configuration",
         "memory",
         "decisions",
+        "recovery",
     }
     listed = {section: served.commands(section) for section in COMMAND_SECTIONS}
     assert [c["command_id"] for c in listed["diagnostics"]] == [
@@ -143,6 +144,18 @@ def test_every_section_lists_only_kernel_catalog_entries(tmp_path: Path) -> None
     assert not any(
         str(c["command_id"]).startswith(("batch-", "dispatch-", "native-"))
         for section, commands in listed.items() if section != "decisions" for c in commands
+    )
+    recovery = [str(c["command_id"]) for c in listed["recovery"]]
+    assert recovery == [
+        "recovery-reload",
+        "recovery-resume",
+        "recovery-fix",
+        "recovery-fix-apply",
+        "recovery-abort",
+    ]
+    assert not any(
+        str(c["command_id"]).startswith("recovery-")
+        for section, commands in listed.items() if section != "recovery" for c in commands
     )
     with pytest.raises(JobRejected) as refused:
         served.commands("coordinator")

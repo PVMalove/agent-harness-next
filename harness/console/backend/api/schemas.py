@@ -85,7 +85,14 @@ class JobListRequest(_Strict):  # type: ignore[explicit-any]
 
 
 CommandSection = Literal[
-    "harness", "diagnostics", "repo-map", "setup", "configuration", "memory", "decisions"
+    "harness",
+    "diagnostics",
+    "repo-map",
+    "setup",
+    "configuration",
+    "memory",
+    "decisions",
+    "recovery",
 ]
 ReversibilityClass = Literal[
     "reversible",
