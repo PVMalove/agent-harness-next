@@ -8,6 +8,8 @@ export default defineConfig({
   testDir: __dirname,
   testMatch: "**/*.spec.ts",
   outputDir: resolve(FRONTEND, "test-results"),
+  // Visual baselines live next to the specs: tests/web/__screenshots__/<name>.png.
+  snapshotPathTemplate: "{testDir}/__screenshots__/{arg}{ext}",
   globalSetup: resolve(__dirname, "global-setup.ts"),
   fullyParallel: false,
   workers: 1,
