@@ -214,12 +214,24 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
     }
     usage = {"unavailable": None, "batches": 2, "tickets": 1, "dispatches": 5,
              "reports": 4}
+    store = {"authority": "file-ledger", "schema": 3, "generation": "g-1",
+             "audit_records": 9}
+    adapter = {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
     reply: dict[str, object] = {
         "v": 1, "id": 1, "type": "harness.overview", "ok": True, "state": state,
-        "package_version": "1.0.1", "drift": "clean", "usage": usage,
+        "package_version": "1.0.1", "drift": "clean", "drift_files": 0,
+        "store": store, "adapters": [adapter], "usage": usage,
         "cached": False, "age_seconds": 0.0,
     }
     assert schemas.REPLIES.validate_python(reply).type == "harness.overview"
+    assert schemas.REPLIES.validate_python(
+        {**reply, "store": None, "adapters": None, "drift_files": None}
+    ).type == "harness.overview"
+    assert {
+        field.alias or name
+        for name, field in schemas.StorePayload.model_fields.items()
+    } == set(store)
+    assert _fields(schemas.AdapterPayload) == set(adapter)
     assert _fields(schemas.HarnessStatePayload) == set(state)
     assert _fields(schemas.PipelineUsage) == set(usage)
     assert _fields(schemas.HarnessOverviewReply) == set(reply)
@@ -228,6 +240,9 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
         {**reply, "state": {**state, "extra": 1}},
         {**reply, "usage": {**usage, "batches": -1}},
         {**reply, "usage": {**usage, "qa_runs": 0}},
+        {**reply, "store": {**store, "authority": "sqlite"}},
+        {**reply, "adapters": [{**adapter, "status": "fine"}]},
+        {**reply, "drift_files": -1},
     ):
         with pytest.raises(ValueError):
             schemas.REPLIES.validate_python(broken)

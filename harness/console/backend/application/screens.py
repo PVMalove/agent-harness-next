@@ -352,7 +352,8 @@ class ScreenService:
             lambda: collect(self._repo), force=force
         )
         ledger, _, _ = await self._cached_ledger(force)
-        return await self._paged({**facts, "ledger": ledger.payload}, cached, age)
+        snapshot = {key: facts[key] for key in ("state", "package_version", "drift")}
+        return await self._paged({**snapshot, "ledger": ledger.payload}, cached, age)
 
     async def harness_overview(self, *, force: bool = False) -> dict[str, object]:
         """The installed harness, the package version, the drift state and the pipeline usage
@@ -369,6 +370,9 @@ class ScreenService:
             "state": facts["state"],
             "package_version": facts["package_version"],
             "drift": facts["drift"],
+            "drift_files": facts.get("drift_files"),
+            "store": facts.get("store"),
+            "adapters": facts.get("adapters"),
             "usage": pipeline_usage(ledger.view),
             "cached": cached,
             "age_seconds": round(age, 3),

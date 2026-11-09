@@ -171,6 +171,16 @@ class Facts:
             "state": HARNESS_STATE.to_payload(),
             "package_version": "1.0.1",
             "drift": "clean",
+            "drift_files": 0,
+            "store": {
+                "authority": "file-ledger",
+                "schema": 3,
+                "generation": "generation-1",
+                "audit_records": 4,
+            },
+            "adapters": [
+                {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
+            ],
         }
 
     def maintenance(self, repo: Path, /) -> dict[str, object]:

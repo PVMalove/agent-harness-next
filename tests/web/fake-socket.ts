@@ -323,6 +323,9 @@ export const HARNESS_OVERVIEW = {
   },
   package_version: "2.0.1",
   drift: "drift",
+  drift_files: 0,
+  store: { authority: "file-ledger", schema: 3, generation: "generation-1", audit_records: 12 },
+  adapters: [{ path: ".harness/adapters/claude/settings.json", status: "current", problem: null }],
   usage: { unavailable: null, batches: 4, tickets: 3, dispatches: 12, reports: 9 },
 };
 

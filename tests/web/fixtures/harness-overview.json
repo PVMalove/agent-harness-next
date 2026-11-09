@@ -13,6 +13,25 @@
   },
   "package_version": "2.0.1",
   "drift": "drift",
+  "drift_files": 3,
+  "store": {
+    "authority": "file-ledger",
+    "schema": 3,
+    "generation": "generation-1a2b3c4d",
+    "audit_records": 1240
+  },
+  "adapters": [
+    {
+      "path": ".harness/adapters/claude/settings.json",
+      "status": "current",
+      "problem": null
+    },
+    {
+      "path": ".harness/adapters/codex/config.toml",
+      "status": "outdated",
+      "problem": "locally changed adapter"
+    }
+  ],
   "usage": {
     "unavailable": null,
     "batches": 48,

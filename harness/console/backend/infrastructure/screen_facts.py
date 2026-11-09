@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import threading
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 
 from ....health.report_json import to_json
@@ -36,6 +37,7 @@ from ...kernel.repo_map_snapshot import RepoMapFacts
 from ...kernel.reports import LedgerView, load_ledger_view
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.update_harness_snapshot import UpdateHarnessFacts
+from .home_facts import store_facts
 
 
 def collect_ledger(repo: Path) -> LedgerView:
@@ -95,17 +97,47 @@ class HealthFacts:
             return to_json(console_data.collect_diagnostics(repo, online=online))
 
 
-def harness_facts(repo: Path) -> dict[str, object]:
-    """The installed harness, the package version and the drift state (`harness diff --json` in
-    a subprocess); a drift that cannot be read is "unknown"."""
+def adapter_facts(repo: Path) -> list[dict[str, object]] | None:
+    """The runtime adapter files of the installed capabilities with their status (current,
+    outdated, missing) and problem; None when the lock or the package cannot be read."""
     try:
-        drift = console_data.drift_state(repo)
+        from harness.bin.harness import load_lock, package_files
+        from harness.runtime_adapters import adapter_statuses
+
+        lock = load_lock(repo)
+        if lock is None:
+            return None
+        selected = list(lock.get("capabilities") or [])
+        statuses = adapter_statuses(
+            repo, package_files(selected), lock.get("files") or {}
+        )
+    except (Exception, SystemExit):  # an unreadable adapter set is unknown, never current
+        return None
+    return [dict(status) for status in statuses]
+
+
+def harness_facts(repo: Path) -> dict[str, object]:
+    """The installed harness, the package version, the drift state and file count (`harness diff
+    --json` in a subprocess), the state store and the runtime adapters; a drift that cannot be
+    read is "unknown" with a null count."""
+    try:
+        report = console_data.drift_report(repo)
     except Exception:  # an unreadable drift is shown as unknown, never as clean
-        drift = "unknown"
+        report = None
+    drift = "unknown"
+    drift_files: int | None = None
+    if report is not None:
+        state = report.get("state")
+        drift = state if isinstance(state, str) else "unknown"
+        counts = console_data.drift_counts(report) or ()
+        drift_files = sum(count for _kind, count in counts)
     return {
         "state": harness_state(repo).to_payload(),
         "package_version": console_data.harness_version(),
         "drift": drift,
+        "drift_files": drift_files,
+        "store": asdict(store_facts(repo)),
+        "adapters": adapter_facts(repo),
     }
 
 

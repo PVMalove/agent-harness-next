@@ -503,14 +503,35 @@ class PipelineUsage(_Strict):  # type: ignore[explicit-any]
     reports: Annotated[int, Field(ge=0)]
 
 
+class StorePayload(_Strict):  # type: ignore[explicit-any]
+    """The state authority read without the ledger lock or a runtime call; unread facts are null."""
+
+    authority: Literal["file-ledger", "runtime-store", "none"]
+    schema_: Annotated[int | None, Field(alias="schema")]
+    generation: str | None
+    audit_records: Annotated[int | None, Field(ge=0)]
+
+
+class AdapterPayload(_Strict):  # type: ignore[explicit-any]
+    """One runtime adapter file of the installed capabilities."""
+
+    path: str
+    status: Literal["current", "outdated", "missing"]
+    problem: str | None
+
+
 class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
-    """The Harness state, the package version, the drift state and the pipeline usage."""
+    """The Harness state, the package version, the drift state and file count, the state store,
+    the runtime adapters (null: unreadable) and the pipeline usage."""
 
     type: Literal["harness.overview"]
     ok: Literal[True]
     state: HarnessStatePayload
     package_version: str
     drift: str
+    drift_files: Annotated[int | None, Field(ge=0)]
+    store: StorePayload | None
+    adapters: list[AdapterPayload] | None
     usage: PipelineUsage
     cached: bool
     age_seconds: float
