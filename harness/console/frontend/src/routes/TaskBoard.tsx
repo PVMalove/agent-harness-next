@@ -1,10 +1,13 @@
 /* Task Board: the #913 snapshot laid out as the mockup's #board. One board per spec; the columns,
-   the card order and the prompt are the server's. Read-only: moving a ticket belongs to #915. */
+   the card order, the prompt and the allowed moves are the server's. A card moves by drag and drop
+   or by the status select of its modal, after a confirmation, through the server's mutating job. */
 import { useMemo, useState } from "react";
 import { BoardBanner, BoardColumns, BoardKpis, BoardStatePanel, BoardToolbar } from "../board/BoardViews";
 import { NO_FILTERS } from "../board/format";
+import { StatusConfirm, StatusNoticeLine } from "../board/StatusConfirm";
 import { TicketModal } from "../board/TicketModal";
 import type { BoardFilters } from "../board/format";
+import { useStatusChange } from "../board/useStatusChange";
 import { useBoard, useBoardSpecs } from "../board/useTaskBoard";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
@@ -110,12 +113,14 @@ function SpecBoard({
     onRefreshSpecs();
     refresh();
   };
+  const change = useStatusChange(spec, refresh);
   const unavailable = board?.stale && board.tickets.length === 0;
   return (
     <>
       <Title board={board} onRefresh={refreshAll} />
       <SpecBar specs={specs} spec={spec} board={board} onChoose={onChoose} />
       <ScreenRefusal screen={screen} />
+      <StatusNoticeLine notice={change.notice} running={change.running} />
       {refreshing ? (
         <BoardStatePanel kind="loading" onRefresh={refreshAll} />
       ) : (
@@ -130,13 +135,39 @@ function SpecBoard({
               <>
                 <BoardKpis board={board} />
                 <BoardToolbar filters={filters} onChange={setFilters} />
-                <BoardColumns board={board} filters={filters} onOpen={(card) => setSelected(card.id)} />
+                <BoardColumns
+                  board={board}
+                  filters={filters}
+                  onOpen={(card) => setSelected(card.id)}
+                  onMove={change.request}
+                />
               </>
             )}
           </>
         )
       )}
-      {board && open && <TicketModal key={open.id} card={open} board={board} onClose={() => setSelected(null)} />}
+      {board && open && (
+        <TicketModal
+          key={open.id}
+          card={open}
+          board={board}
+          onClose={() => setSelected(null)}
+          onMove={change.request}
+          notice={change.notice}
+          running={change.running}
+        />
+      )}
+      {board && change.pending && (
+        <StatusConfirm
+          move={change.pending}
+          tracker={board.tracker}
+          onClose={change.cancel}
+          onConfirm={() => {
+            change.confirm();
+            setSelected(null);
+          }}
+        />
+      )}
     </>
   );
 }

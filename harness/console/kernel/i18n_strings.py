@@ -2180,3 +2180,29 @@ EN.update(
         "Файлы не указаны.": "No files listed.",
     }
 )
+
+# Web Task Board status change (drag and drop, the status select and its confirmation).
+EN.update(
+    {
+        "Сменить статус тикета": "Change the ticket status",
+        "Сменить статус": "Change status",
+        "СМЕНА СТАТУСА": "STATUS CHANGE",
+        "Сервер запустит смену метки в {tracker} как мутирующий job и обновит доску.": "The server runs the label change in {tracker} as a mutating job and refreshes the board.",
+        "локальном трекере": "the local tracker",
+        "Смена статуса…": "Changing the status…",
+        "{ticket}: статус обновлён": "{ticket}: status updated",
+        "{ticket} → «{column}»: {reason}": "{ticket} → “{column}”: {reason}",
+        "Открыты блокеры: {list}": "Open blockers: {list}",
+        "Активный batch {batch}": "Active batch {batch}",
+        "Ошибка записи в трекер: изменение не сохранено": "Tracker write error: the change was not saved",
+        "Трекер недоступен: смена статуса не записана": "The tracker is unavailable: the status change was not written",
+        "«Review / QA» вычисляют dispatch и PR; карточку туда не переносят": "“Review / QA” is computed from the dispatch and the PR; a card is not moved there",
+        "«Готово» заполняет закрытие тикета после подтверждённого merge": "“Done” is filled by closing the ticket after a confirmed merge",
+        "Закрытый тикет не переносится": "A closed ticket is not moved",
+        "У тикета активный batch или PR": "The ticket has an active batch or PR",
+        "Переход идёт через «Готово к работе»": "The move goes through “Ready”",
+        "Тикет не найден в спеке": "The ticket is not in the spec",
+        "Леджер оркестрации недоступен: перенос не записан": "The orchestration ledger is unavailable: the move was not written",
+        "Смена статуса не выполнена": "The status change failed",
+    }
+)

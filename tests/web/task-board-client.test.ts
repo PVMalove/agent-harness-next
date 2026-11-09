@@ -47,6 +47,23 @@ describe("the task-board read models", () => {
     expect(parseBoard(badLedger)).toBeNull();
   });
 
+  test("every card carries one move per column, in column order", () => {
+    const board = parseBoard(BOARD);
+    expect(board?.tickets.every((card) => card.moves.map((move) => move.to).join() === BOARD_COLUMNS.join())).toBe(true);
+    const noMoves = copy(BOARD);
+    delete (noMoves.tickets[0] as Record<string, unknown>).moves;
+    expect(parseBoard(noMoves)).toBeNull();
+    const shortMoves = copy(BOARD);
+    shortMoves.tickets[0]!.moves.pop();
+    expect(parseBoard(shortMoves)).toBeNull();
+    const badAllowed = copy(BOARD);
+    (badAllowed.tickets[0]!.moves[1] as Record<string, unknown>).allowed = "yes";
+    expect(parseBoard(badAllowed)).toBeNull();
+    const badBlockers = copy(BOARD);
+    (badBlockers.tickets[0]!.moves[1] as Record<string, unknown>).blockers = [512];
+    expect(parseBoard(badBlockers)).toBeNull();
+  });
+
   test("a board request is keyed by its spec", () => {
     const one = screenKey({ type: "task_board.snapshot", params: { spec: "#501" } });
     const other = screenKey({ type: "task_board.snapshot", params: { spec: "#502" } });
