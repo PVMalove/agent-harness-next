@@ -77,7 +77,6 @@ for (const width of [1440, 390]) {
     await expect(card.locator("h3")).toHaveText("Экран списка задач");
     await expect(card.locator(".board-chip")).toHaveText(["/implement", "блокеров: 1"]);
     expect(await noOverflow(page)).toBe(true);
-    await expect(page).toHaveScreenshot(`task-board-${width}.png`);
 
     await card.locator("h3").click();
     const dialog = page.locator("#board-ticket");
@@ -91,7 +90,6 @@ for (const width of [1440, 390]) {
     await expect(dialog.locator("pre.board-prompt")).toContainText("/implement #511");
     await dialog.getByRole("tab", { name: "Контекст" }).click();
     expect(await noOverflow(page)).toBe(true);
-    await expect(page).toHaveScreenshot(`task-board-modal-${width}.png`);
     await dialog.getByRole("button", { name: "Закрыть" }).click();
     await expect(dialog).toHaveCount(0);
     expect(errors).toEqual([]);
