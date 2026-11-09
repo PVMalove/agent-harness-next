@@ -61,7 +61,7 @@ describe("the Task Board route", () => {
     vi.useRealTimers();
   });
 
-  test("shows the spec switcher, KPIs and five columns with the snapshot counters", () => {
+  test("shows the spec switcher, KPIs and five columns with their card counters", () => {
     const socket = renderBoard();
     expect(socket.request("task_board.specs")).toMatchObject({ force: false });
     expect(socket.request("task_board.snapshot")).toMatchObject({ spec: "#501", force: false });
@@ -96,23 +96,27 @@ describe("the Task Board route", () => {
     expect(boards(socket).map((body) => body.spec)).toEqual(["#501"]);
   });
 
-  test("search, priority and only-without-blockers narrow the cards; counters stay the snapshot's", () => {
+  test("search, priority and only-without-blockers narrow the cards and the column counters", () => {
     renderBoard();
+    expect(counters()).toEqual(["2", "2", "1", "1", "1"]);
     const search = document.querySelector("#board-search") as HTMLElement;
     act(() => fireEvent.change(search, { target: { value: "фильтры" } }));
     expect(cards()).toEqual(["#513"]);
     expect(document.querySelector("#board-count")?.textContent).toBe("1 из 7");
-    expect(counters()).toEqual(["2", "2", "1", "1", "1"]);
+    expect(counters()).toEqual(["0", "0", "1", "0", "0"]);
     act(() => fireEvent.change(search, { target: { value: "docs/board.md" } }));
     expect(cards()).toEqual(["#512"]);
     act(() => fireEvent.change(search, { target: { value: "нужен источник" } }));
     expect(cards()).toEqual(["#511"]);
     act(() => fireEvent.click(document.querySelector("#board-reset") as HTMLElement));
     expect(cards()).toHaveLength(7);
+    expect(counters()).toEqual(["2", "2", "1", "1", "1"]);
     act(() => fireEvent.change(document.querySelector("#board-priority") as HTMLElement, { target: { value: "priority::p1" } }));
     expect(cards()).toEqual(["#511", "#517"]);
+    expect(counters()).toEqual(["1", "1", "0", "0", "0"]);
     act(() => fireEvent.click(document.querySelector("#board-free") as HTMLElement));
     expect(cards()).toEqual(["#517"]);
+    expect(counters()).toEqual(["0", "1", "0", "0", "0"]);
     expect(document.querySelectorAll(".board-empty")).toHaveLength(4);
   });
 

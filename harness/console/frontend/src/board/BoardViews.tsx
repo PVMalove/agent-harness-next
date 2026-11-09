@@ -1,5 +1,5 @@
 /* The blocks of the #board mockup over the snapshot: KPIs, the tracker banner, the filters, five
-   columns with the snapshot's counters and the cards. Ticket text is untrusted: React text only. */
+   columns with counters of the visible cards and the cards. Ticket text is untrusted: React text only. */
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -166,7 +166,6 @@ export function BoardColumns({
         <div className="board-columns">
           {BOARD_COLUMNS.map((id) => {
             const items = shown.filter((card) => card.column === id);
-            const count = board.columns.find((column) => column.id === id)?.count ?? 0;
             return (
               <section className="board-col" data-board-col={id} key={id}>
                 <header>
@@ -174,7 +173,7 @@ export function BoardColumns({
                     <b>{labels[id].name}</b>
                     <small>{labels[id].hint}</small>
                   </div>
-                  <span className="board-col-count">{count}</span>
+                  <span className="board-col-count">{items.length}</span>
                 </header>
                 <div className="board-cards">
                   {items.length ? (
