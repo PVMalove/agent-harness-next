@@ -1872,3 +1872,27 @@ EN.update(
         "начало: неизвестно": "started: unknown",
     }
 )
+
+# Web console: the Orchestration page.
+EN.update(
+    {
+        "Фильтр по состоянию": "Filter by state",
+        "Состояние пайплайна, история batch и решения человека.": "Pipeline state, batch history and human decisions.",
+        "Обновить снимок": "Refresh snapshot",
+        "Пайплайн ещё не запускался: batch в леджере нет.": "The pipeline has not run yet: the ledger has no batches.",
+        "все": "all",
+        "По состояниям": "By state",
+        "Диспатчи по ролям": "Dispatches by role",
+        "Отчёты по итогам": "Reports by outcome",
+        "QA-прогонов": "QA runs",
+        "Период": "Period",
+        "запланирован": "planned",
+        "ждёт подтверждения": "awaiting approval",
+        "в работе": "in progress",
+        "заблокирован": "blocked",
+        "завершён": "completed",
+        "провален": "failed",
+        "не требуется": "not required",
+        "отменён": "abandoned",
+    }
+)

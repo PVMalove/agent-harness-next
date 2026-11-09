@@ -10,6 +10,7 @@ import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
 import { Decisions } from "./routes/Decisions";
 import { Home } from "./routes/Home";
+import { Orchestration } from "./routes/Orchestration";
 import { Placeholder } from "./routes/Placeholder";
 import { RepoMap } from "./routes/RepoMap";
 import { Reports } from "./routes/Reports";
@@ -32,7 +33,7 @@ const ROUTES: Readonly<Record<string, ReactElement>> = {
   harness: <Harness />,
   reports: <Reports />,
   "agent-activity": <AgentActivity />,
-  orchestration: <Decisions section="Orchestration" />,
+  orchestration: <Orchestration />,
   publish: <Decisions section="Публикация" />,
 };
 

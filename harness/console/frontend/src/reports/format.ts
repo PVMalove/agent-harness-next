@@ -334,6 +334,14 @@ export function durationText(seconds: number | null | undefined, language: Langu
   return `${minutes} ${minute}`;
 }
 
+/** Python's `round`: halves go to the even neighbour, so `round(2.5)` is 2. */
+export function pyRound(value: number): number {
+  const floor = Math.floor(value);
+  const diff = value - floor;
+  if (Math.abs(diff - 0.5) < 1e-9) return floor % 2 === 0 ? floor : floor + 1;
+  return Math.round(value);
+}
+
 export interface Tile {
   label: string;
   figure: string;
@@ -345,7 +353,7 @@ const figure = (figures: Figures, key: string): number => figures[key] ?? 0;
 
 /** `reports_kpi_tiles`: a figure that needs attention starts with its status symbol. */
 export function reportsKpiTiles(kpi: Figures, t: (text: string) => string, language: Language): Tile[] {
-  const share = (part: number, total: number) => (total ? `${part} / ${total}  (${Math.round((100 * part) / total)}%)` : "—");
+  const share = (part: number, total: number) => (total ? `${part} / ${total}  (${pyRound((100 * part) / total)}%)` : "—");
   const flagged = (count: number): [string, Tile["tone"]] => (count ? [`⚠ ${count}`, "warning"] : [String(count), ""]);
   const reports = figure(kpi, "reports");
   const [risks, risksTone] = flagged(figure(kpi, "attention"));
