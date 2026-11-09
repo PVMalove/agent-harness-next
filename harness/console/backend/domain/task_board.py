@@ -520,6 +520,14 @@ def _blocker_cards(
     return cards
 
 
+def ticket_blockers(
+    ticket: TrackerTicket, states: Mapping[str, bool]
+) -> list[dict[str, object]]:
+    """The blockers of a ticket as the board shows them: the body's `Blocked by` merged with the
+    tracker's native blockers, each with its state `open`, `closed` or `unknown`."""
+    return _blocker_cards(ticket, parse_body(ticket.body), states, _Caps())
+
+
 def _json_bytes(value: object) -> int:
     """An upper bound of the bytes `value` takes as JSON on the wire: every non-ASCII character
     counted as its `\\uXXXX` escape."""

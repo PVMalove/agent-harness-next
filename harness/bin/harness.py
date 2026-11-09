@@ -1468,6 +1468,33 @@ def cmd_console_server(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ticket_status(args: argparse.Namespace) -> int:
+    """Сменить статус тикета спеки: заменить метку status::* в трекере, если переход разрешён.
+
+    Печатает одну строку JSON с результатом; код выхода 0 — изменено, 3 — отказ без записи,
+    1 — ошибка записи или трекер недоступен."""
+    from harness.console.backend.application.ticket_status import change_status
+    from harness.console.backend.infrastructure.screen_facts import collect_ledger
+    from harness.console.backend.infrastructure.task_board_tracker import (
+        TrackerBoardReader,
+    )
+    from harness.console.backend.infrastructure.ticket_status_writer import (
+        TrackerStatusWriter,
+    )
+
+    outcome = change_status(
+        Path(args.repo).expanduser().resolve(),
+        spec=args.spec,
+        ticket=args.ticket,
+        to=args.to,
+        reader=TrackerBoardReader(),
+        ledger=collect_ledger,
+        writer=TrackerStatusWriter(),
+    )
+    print(json.dumps(outcome.to_json(), ensure_ascii=False))
+    return outcome.exit_code
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     """Вывести отсортированный список имён всех доступных в проекте скиллов."""
     repo = Path(args.repo).expanduser().resolve()
@@ -1832,6 +1859,18 @@ def parser() -> argparse.ArgumentParser:
         "skipped",
     )
     health.set_defaults(func=cmd_health)
+
+    ticket_status = commands.add_parser(
+        "ticket-status",
+        help="move a spec's ticket to a task-board column (replaces its status::* label)",
+    )
+    ticket_status.add_argument("repo")
+    ticket_status.add_argument("--spec", required=True, help="the spec (epic) of the ticket")
+    ticket_status.add_argument("--ticket", required=True, help="the ticket as the board shows it")
+    ticket_status.add_argument(
+        "--to", required=True, choices=("backlog", "ready", "progress", "review", "done")
+    )
+    ticket_status.set_defaults(func=cmd_ticket_status)
 
     list_cmd = commands.add_parser("list")
     list_cmd.add_argument("repo")
