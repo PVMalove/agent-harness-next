@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { createHashRouter, Navigate, Outlet, RouterProvider } from "react-router";
 import { AppShell } from "./AppShell";
 import { ConnectionBanner, ConnectionChip, ConnectionPage, PAGE_STATUSES } from "./ConnectionViews";
-import { NAV_ITEMS } from "./navigation";
+import { HIDDEN_ROUTES, NAV_ITEMS } from "./navigation";
 import { AgentActivity } from "./routes/AgentActivity";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Harness } from "./routes/Harness";
@@ -45,6 +45,10 @@ export function createRouter() {
             ? { path: item.route, element: ROUTES[item.route] ?? <Placeholder section={item.section} /> }
             : { index: true, element: <Home /> },
         ),
+        ...Object.keys(HIDDEN_ROUTES).map((route) => ({
+          path: route,
+          element: ROUTES[route] ?? <Placeholder section="Orchestration" />,
+        })),
         { path: "*", element: <Navigate to="/" replace /> },
       ],
     },

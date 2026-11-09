@@ -72,14 +72,30 @@ export type JobEvent =
   | { type: "job-error"; request: JobRequestType; code: string; message: string; jobId: string | null };
 
 /** The screen snapshots the web console reads: the paged health report and maintenance facts,
-    and the typed Harness overview. */
-export type ScreenType = "diagnostics.snapshot" | "harness.maintenance" | "harness.overview";
+    the typed Harness overview, the Reports and Orchestration ledgers with a report body and a
+    batch chronology, and the Recovery and Container route views. */
+export type ScreenType =
+  | "diagnostics.snapshot"
+  | "harness.maintenance"
+  | "harness.overview"
+  | "reports.snapshot"
+  | "reports.report"
+  | "reports.timeline"
+  | "orchestration.snapshot"
+  | "recovery.view"
+  | "container_route.view";
+
+/** The paged replies without cache facts: a report body and a batch chronology. */
+const UNCACHED_TYPES: ReadonlySet<string> = new Set(["reports.report", "reports.timeline"]);
 
 export interface ScreenRequest {
   type: ScreenType;
   force?: boolean;
   /** Diagnostics only: the online report, cached apart from the offline one. */
   online?: boolean;
+  /** The request's own fields: a dispatch or batch id, the selected batch, role or runtime and
+      the advisories skipped this session. */
+  params?: Readonly<Record<string, string | readonly string[]>>;
 }
 
 /** What a screen request brings: the parsed JSON value of a snapshot (or the overview reply
@@ -88,9 +104,23 @@ export type ScreenEvent =
   | { type: "screen"; key: string; value: unknown; cached: boolean; ageSeconds: number }
   | { type: "screen-error"; key: string; code: string; message: string };
 
-/** The key a screen request is answered under: the latest request per key wins. */
-export const screenKey = (request: ScreenRequest): string =>
-  request.type === "diagnostics.snapshot" && request.online ? `${request.type}:online` : request.type;
+const stableParams = (params: ScreenRequest["params"]): string =>
+  params === undefined
+    ? ""
+    : JSON.stringify(
+        Object.keys(params)
+          .sort()
+          .map((name) => [name, params[name]]),
+      );
+
+/** The key a screen request is answered under: the latest request per key wins. Requests with
+    other parameters are other keys. */
+export const screenKey = (request: ScreenRequest): string => {
+  const base =
+    request.type === "diagnostics.snapshot" && request.online ? `${request.type}:online` : request.type;
+  const params = stableParams(request.params);
+  return params ? `${base}:${params}` : base;
+};
 
 export interface StartJob {
   command_id: string;
@@ -274,7 +304,11 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
 
   const requestScreen = (request: ScreenRequest): boolean => {
     const key = screenKey(request);
-    const body: Record<string, unknown> = { type: request.type, force: request.force ?? false };
+    const body: Record<string, unknown> = { type: request.type, ...request.params };
+    // A report body, a chronology and the container route view take no `force`.
+    if (!UNCACHED_TYPES.has(request.type) && request.type !== "container_route.view") {
+      body.force = request.force ?? false;
+    }
     if (request.type === "diagnostics.snapshot") body.online = request.online ?? false;
     const id = send(body);
     if (id === null) return false;
@@ -323,12 +357,14 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     }
     if (reply.type !== "snapshot.page") {
       const first = reply as unknown as ScreenSnapshotReply;
-      if (typeof first.snapshot_id !== "number" || typeof first.cached !== "boolean") {
+      // Only a report body and a chronology come without cache facts; any other reply needs them.
+      const uncached = UNCACHED_TYPES.has(String(reply.type)) && !Object.hasOwn(reply, "cached");
+      if (typeof first.snapshot_id !== "number" || (!uncached && typeof first.cached !== "boolean")) {
         screenFailed(key, "invalid", "");
         return;
       }
       read.snapshotId = first.snapshot_id;
-      read.cached = first.cached;
+      read.cached = uncached ? false : first.cached;
       read.ageSeconds = typeof first.age_seconds === "number" ? first.age_seconds : 0;
     }
     read.text += page.text;

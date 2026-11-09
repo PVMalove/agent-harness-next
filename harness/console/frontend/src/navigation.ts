@@ -48,6 +48,19 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 
 export const NAV_ITEMS: readonly NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
+/** Routes without a menu item, each with the section it belongs to: the TUI opens Recovery and
+    Container route from Orchestration, so the Orchestration item stays highlighted. */
+export const HIDDEN_ROUTES: Readonly<Record<string, string>> = {
+  recovery: "orchestration",
+  "container-route": "orchestration",
+};
+
+/** The menu item a route belongs to: its own, a hidden route's owner, else Home. */
+export function navItemOf(route: string): NavItem {
+  const owner = HIDDEN_ROUTES[route] ?? route;
+  return NAV_ITEMS.find((item) => item.route === owner) ?? NAV_ITEMS[0];
+}
+
 /** Keyboard shortcuts of the mockup: key -> route. */
 export const SHORTCUTS: Readonly<Record<string, string>> = {
   g: "",
