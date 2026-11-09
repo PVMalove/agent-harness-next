@@ -1,10 +1,14 @@
 /* The ticket modal of the #board mockup: labels, story points, issue / PR / branch, the current
-   status (display only: moving a ticket belongs to #915) and the Context, Acceptance and Prompt
-   tabs. Ticket text is untrusted: React text only, links only for http(s). */
+   status with its status select (the same moves and refusals as drag and drop) and the Context,
+   Acceptance and Prompt tabs. Ticket text is untrusted: React text only, links only for http(s). */
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "../i18n";
-import type { BoardCard, TaskBoard } from "../ws/taskBoard";
+import { BOARD_COLUMNS } from "../ws/taskBoard";
+import type { BoardCard, BoardColumn, TaskBoard } from "../ws/taskBoard";
 import { columnLabels, safeUrl } from "./format";
+import { StatusNoticeLine } from "./StatusConfirm";
+import { refusalCaption } from "./statusChange";
+import type { StatusNotice } from "./useStatusChange";
 
 type Tab = "context" | "acceptance" | "prompt";
 
@@ -13,7 +17,21 @@ const pill = (label: string) => (label.includes("p0") ? "violet" : label.include
 export const numberedCriteria = (card: BoardCard): string =>
   card.criteria.map((criterion, index) => `${index + 1}. ${criterion}`).join("\n");
 
-export function TicketModal({ card, board, onClose }: { card: BoardCard; board: TaskBoard; onClose: () => void }) {
+export function TicketModal({
+  card,
+  board,
+  onClose,
+  onMove,
+  notice = null,
+  running = false,
+}: {
+  card: BoardCard;
+  board: TaskBoard;
+  onClose: () => void;
+  onMove?: (card: BoardCard, to: BoardColumn) => void;
+  notice?: StatusNotice | null;
+  running?: boolean;
+}) {
   const { t } = useI18n();
   const ref = useRef<HTMLDialogElement>(null);
   const manual = useRef<HTMLPreElement>(null);
@@ -42,7 +60,8 @@ export function TicketModal({ card, board, onClose }: { card: BoardCard; board: 
   const issue = safeUrl(card.url);
   const pr = card.pr ? safeUrl(card.pr.url) : null;
   const branch = card.branch ?? board.spec.branch;
-  const status = columnLabels(t)[card.column].name;
+  const labels = columnLabels(t);
+  const status = labels[card.column].name;
 
   const copy = () => {
     const criteria = tab === "acceptance";
@@ -117,10 +136,36 @@ export function TicketModal({ card, board, onClose }: { card: BoardCard; board: 
           <span className="branch-inline">
             <b>{branch ?? t("нет данных")}</b>
           </span>
-          <span className="board-status-label" id="board-status" aria-label={t("Текущий статус")}>
+          <span className="board-status-label" id="board-status-label" aria-label={t("Текущий статус")}>
             {status}
           </span>
+          {onMove && (
+            <select
+              id="board-status"
+              aria-label={t("Сменить статус")}
+              value={card.column}
+              disabled={running}
+              onChange={(event) => onMove(card, event.target.value as BoardColumn)}
+            >
+              {BOARD_COLUMNS.map((id) => {
+                const move = card.moves.find((item) => item.to === id);
+                const refused = move !== undefined && !move.allowed && move.reason !== "same";
+                return (
+                  <option
+                    key={id}
+                    value={id}
+                    data-allowed={move?.allowed ? "true" : "false"}
+                    title={refused ? refusalCaption(t, move.reason, move) : undefined}
+                  >
+                    {labels[id].name}
+                    {refused ? " ✕" : ""}
+                  </option>
+                );
+              })}
+            </select>
+          )}
         </div>
+        <StatusNoticeLine notice={notice} running={running} id="board-modal-notice" />
         <div className="board-modal-tabs" role="tablist">
           {tabs.map(([id, label]) => (
             <button

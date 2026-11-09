@@ -71,6 +71,45 @@
         "status::blocked",
         "priority::p1"
       ],
+      "moves": [
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "same",
+          "to": "backlog"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [
+            "#512"
+          ],
+          "reason": "open_blockers",
+          "to": "ready"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "via_ready",
+          "to": "progress"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "review_target",
+          "to": "review"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "done_target",
+          "to": "done"
+        }
+      ],
       "n": 511,
       "open_blockers": 1,
       "pr": null,
@@ -108,6 +147,43 @@
       "labels": [
         "afk",
         "status::blocked"
+      ],
+      "moves": [
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "same",
+          "to": "backlog"
+        },
+        {
+          "allowed": true,
+          "batch": null,
+          "blockers": [],
+          "reason": null,
+          "to": "ready"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "via_ready",
+          "to": "progress"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "review_target",
+          "to": "review"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "done_target",
+          "to": "done"
+        }
       ],
       "n": 516,
       "open_blockers": 0,
@@ -151,6 +227,43 @@
         "status::ready",
         "priority::p0"
       ],
+      "moves": [
+        {
+          "allowed": true,
+          "batch": null,
+          "blockers": [],
+          "reason": null,
+          "to": "backlog"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "same",
+          "to": "ready"
+        },
+        {
+          "allowed": true,
+          "batch": null,
+          "blockers": [],
+          "reason": null,
+          "to": "progress"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "review_target",
+          "to": "review"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "done_target",
+          "to": "done"
+        }
+      ],
       "n": 512,
       "open_blockers": 0,
       "pr": null,
@@ -181,6 +294,43 @@
         "afk",
         "status::ready",
         "priority::p1"
+      ],
+      "moves": [
+        {
+          "allowed": true,
+          "batch": null,
+          "blockers": [],
+          "reason": null,
+          "to": "backlog"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "same",
+          "to": "ready"
+        },
+        {
+          "allowed": true,
+          "batch": null,
+          "blockers": [],
+          "reason": null,
+          "to": "progress"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "review_target",
+          "to": "review"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "done_target",
+          "to": "done"
+        }
       ],
       "n": 517,
       "open_blockers": 0,
@@ -214,6 +364,43 @@
         "status::in-progress",
         "priority::p2"
       ],
+      "moves": [
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "via_ready",
+          "to": "backlog"
+        },
+        {
+          "allowed": false,
+          "batch": "b-513",
+          "blockers": [],
+          "reason": "active_batch",
+          "to": "ready"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "same",
+          "to": "progress"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "review_target",
+          "to": "review"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "done_target",
+          "to": "done"
+        }
+      ],
       "n": 513,
       "open_blockers": 0,
       "pr": null,
@@ -243,6 +430,43 @@
       "labels": [
         "hitl",
         "status::in-progress"
+      ],
+      "moves": [
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "in_review",
+          "to": "backlog"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "in_review",
+          "to": "ready"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "in_review",
+          "to": "progress"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "same",
+          "to": "review"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "done_target",
+          "to": "done"
+        }
       ],
       "n": 514,
       "open_blockers": 0,
@@ -276,6 +500,43 @@
       "labels": [
         "afk",
         "status::in-progress"
+      ],
+      "moves": [
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "closed",
+          "to": "backlog"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "closed",
+          "to": "ready"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "closed",
+          "to": "progress"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "review_target",
+          "to": "review"
+        },
+        {
+          "allowed": false,
+          "batch": null,
+          "blockers": [],
+          "reason": "same",
+          "to": "done"
+        }
       ],
       "n": 515,
       "open_blockers": 0,

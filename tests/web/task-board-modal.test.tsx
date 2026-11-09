@@ -47,7 +47,7 @@ describe("the ticket modal", () => {
     Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
   });
 
-  test("shows the labels, story points, issue, PR, branch and the read-only status", () => {
+  test("shows the labels, story points, issue, PR, branch, the status and its select", () => {
     renderBoard();
     open("#514");
     const modal = dialog();
@@ -61,9 +61,12 @@ describe("the ticket modal", () => {
       ["PR #520", "https://tracker.example.test/acme/app/pull/520"],
     ]);
     expect(modal.querySelector(".branch-inline")?.textContent).toBe("integration/board-fixture");
-    expect(modal.querySelector("#board-status")?.textContent).toBe("Review / QA");
-    // The status is shown only: no control changes it here.
-    expect(modal.querySelector("select, input")).toBeNull();
+    expect(modal.querySelector("#board-status-label")?.textContent).toBe("Review / QA");
+    // The status select offers the server's moves; a ticket in review has none.
+    const select = modal.querySelector("#board-status") as HTMLSelectElement;
+    expect(select.value).toBe("review");
+    expect([...select.options].map((option) => option.dataset.allowed)).toEqual(["false", "false", "false", "false", "false"]);
+    expect(modal.querySelector("input")).toBeNull();
   });
 
   test("the Context, Acceptance and Prompt tabs show the snapshot's text", () => {
@@ -145,7 +148,8 @@ describe("the ticket modal", () => {
       "Acceptance (2)",
       "Prompt",
     ]);
-    expect(dialog().querySelector("#board-status")?.textContent).toBe("Backlog");
+    expect(dialog().querySelector("#board-status-label")?.textContent).toBe("Backlog");
+    expect(dialog().querySelector("#board-status")?.getAttribute("aria-label")).toBe("Change status");
     expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
   });
 });

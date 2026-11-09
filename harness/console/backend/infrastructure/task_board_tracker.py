@@ -327,6 +327,8 @@ class _GitHub:
                     body=_text(_path(node, "body")),
                     native_blockers=blockers,
                     pr=pulls.get(n),
+                    blockers_truncated=_path(node, "blockedBy", "pageInfo", "hasNextPage")
+                    is True,
                 )
             )
         spec = TrackerSpec(
@@ -524,6 +526,7 @@ class _Local:
                     closed=closed,
                     labels=labels,
                     body=body,
+                    blockers_truncated=path.stat().st_size > BODY_READ_BYTES,
                 )
             )
         by_number = {ticket.n: ticket for ticket in tickets}
@@ -544,6 +547,7 @@ class _Local:
                     ticket.labels,
                     ticket.body,
                     blockers,
+                    blockers_truncated=ticket.blockers_truncated,
                 )  # fmt: skip
             )
         return resolved

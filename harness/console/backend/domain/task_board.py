@@ -13,12 +13,13 @@ from typing import Protocol
 
 from ....orchestration.core.constants import TERMINAL_BATCH_STATES
 from ...kernel.protocol import MESSAGE_BYTES, _clip
+from .ticket_status import COLUMNS as COLUMNS
+from .ticket_status import MoveFacts, moves
 
 BOARD_TTL_SECONDS = 60.0
 # Spec boards kept for the stale fallback; the least recently served goes first.
 KEPT_BOARDS = 8
 REVIEW_ROLES = frozenset({"code-review", "qa"})
-COLUMNS = ("backlog", "ready", "progress", "review", "done")
 # Caps in wire bytes (a JSON string's encoded size), counts in items.
 BODY_READ_BYTES = 65536
 TITLE_BYTES = 300
@@ -74,6 +75,8 @@ class TrackerTicket:
     body: str
     native_blockers: tuple[BlockerFact, ...] = ()
     pr: PullRef | None = None
+    # The tracker stopped before the end of the body or of the native blocker list.
+    blockers_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,8 @@ class TicketBody:
     branch: str | None
     story_points: int | None
     truncated: bool = False
+    # `blocked_by` misses a blocker: the body or the blocker list hit its cap.
+    blockers_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -276,6 +281,7 @@ def parse_body(body: str) -> TicketBody:
     `**Field:**` lines of the local template. Never raises; every field is capped."""
     caps = _Caps()
     text = caps.text(body, BODY_READ_BYTES).replace("\r\n", "\n").replace("\r", "\n")
+    body_cut = caps.fired
     sections: dict[str, list[str]] = {}
     inline: dict[str, list[str]] = {}
     loose: list[str] = []
@@ -335,6 +341,7 @@ def parse_body(body: str) -> TicketBody:
         branch=caps.text(branch, BRANCH_BYTES) if branch else None,
         story_points=_story_points(lines("sp")),
         truncated=caps.fired,
+        blockers_truncated=body_cut or len(raw_blocked) > BLOCKERS_MAX,
     )
 
 
@@ -520,6 +527,47 @@ def _blocker_cards(
     return cards
 
 
+def ticket_blockers(
+    ticket: TrackerTicket, states: Mapping[str, bool]
+) -> tuple[list[dict[str, object]], bool]:
+    """The blockers of a ticket as the board shows them: the body's `Blocked by` merged with the
+    tracker's native blockers, each with its state `open`, `closed` or `unknown`; and whether
+    that list is complete. It is not when the body, the native list or the shown list hit a cap,
+    so a blocker past the cap is unseen and a caller deciding on the list must fail closed."""
+    body = parse_body(ticket.body)
+    keys = {number if number is not None else ref for ref, number, _ in body.blocked_by}
+    keys |= {fact.n if fact.n is not None else fact.ref for fact in ticket.native_blockers}
+    complete = not (
+        ticket.blockers_truncated or body.blockers_truncated or len(keys) > BLOCKERS_MAX
+    )
+    return _blocker_cards(ticket, body, states, _Caps()), complete
+
+
+def _moves(
+    card: Mapping[str, object],
+    blockers: Sequence[Mapping[str, object]],
+    stage: BatchStage | None,
+) -> list[dict[str, object]]:
+    """The status-change decision for every column. A blocker of unknown state does not refuse
+    a move here; the command reads it again and fails closed."""
+    facts = MoveFacts(
+        card["column"] if isinstance(card["column"], str) else None,
+        tuple(str(item["id"]) for item in blockers if item["state"] == "open"),
+        tuple(str(item["id"]) for item in blockers if item["state"] == "unknown"),
+        stage.batch_id if stage else None,
+    )
+    return [
+        {
+            "to": move.to,
+            "allowed": move.allowed,
+            "reason": move.reason,
+            "blockers": list(move.blockers),
+            "batch": move.batch,
+        }
+        for move in moves(facts, strict=False)
+    ]
+
+
 def _json_bytes(value: object) -> int:
     """An upper bound of the bytes `value` takes as JSON on the wire: every non-ASCII character
     counted as its `\\uXXXX` escape."""
@@ -630,6 +678,7 @@ def build_board_payload(
             "dispatch": stage.role if stage else None,
             "dispatch_state": stage.dispatch_state if stage else None,
         }
+        card["moves"] = _moves(card, blockers, stage)
         card["prompt"] = agent_prompt(card, spec_card)
         card["truncated"] = own.fired or body.truncated
         used += _json_bytes(card)

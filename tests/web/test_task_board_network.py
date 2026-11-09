@@ -1,15 +1,22 @@
 """The web Task Board over the real FastAPI application: the /ws route and its security middleware
-driven over ASGI with a fake GitHub runner serve the specs and the board the page parses, and every
-label of the board page has its ru/en catalog entry."""
+driven over ASGI with a fake GitHub runner serve the specs and the board the page parses, the status
+change runs as a confirmed mutating job, and every label of the board page has its ru/en catalog
+entry."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import threading
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
 
+import pytest
+
+from harness.console.backend import composition
 from harness.console.backend.api.app import create_app
+from harness.console.backend.infrastructure import command_journal
 from harness.console.kernel import web_catalog
 from tests.console._asgi_ws import AsgiWebSocket
 from tests.console.test_server_screens import PORT, TOKEN
@@ -89,6 +96,28 @@ BOARD_LABELS = (
     "Блокеры",
     "Блокеров нет.",
     "Файлы не указаны.",
+    # The status change: the select, the confirmation and the refusal captions.
+    "Сменить статус",
+    "СМЕНА СТАТУСА",
+    "Сервер запустит смену метки в {tracker} как мутирующий job и обновит доску.",
+    "локальном трекере",
+    "Отмена",
+    "Смена статуса…",
+    "{ticket}: статус обновлён",
+    "{ticket} → «{column}»: {reason}",
+    "Открыты блокеры: {list}",
+    "Активный batch {batch}",
+    "Занято: {command}",
+    "Ошибка записи в трекер: изменение не сохранено",
+    "Трекер недоступен: смена статуса не записана",
+    "«Review / QA» вычисляют dispatch и PR; карточку туда не переносят",
+    "«Готово» заполняет закрытие тикета после подтверждённого merge",
+    "Закрытый тикет не переносится",
+    "У тикета активный batch или PR",
+    "Переход идёт через «Готово к работе»",
+    "Тикет не найден в спеке",
+    "Леджер оркестрации недоступен: перенос не записан",
+    "Смена статуса не выполнена",
 )
 # Labels whose English text is the same words.
 SAME_IN_ENGLISH = {"Review / QA", "Acceptance ({count})", "dispatch: {role}"}
@@ -165,3 +194,108 @@ def test_every_board_label_is_one_the_page_uses() -> None:
         ]
     )
     assert [label for label in BOARD_LABELS if f'"{label}"' not in sources] == []
+
+
+RESULT: dict[str, object] = {
+    "ticket": "#903",
+    "from": "ready",
+    "to": "progress",
+    "result": "changed",
+    "reason": None,
+    "blockers": [],
+    "batch": None,
+    "message": "status::ready -> status::in-progress",
+}
+
+
+def test_the_status_change_data_and_job_round_trip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(command_journal, "append", lambda *args, **kwargs: None)
+    executed: list[list[str]] = []
+    release = threading.Event()
+
+    async def executor(
+        argv: Sequence[str],
+        *,
+        cwd: Path,
+        on_output: Callable[[str, str], None],
+        cancel_event: threading.Event,
+    ) -> int:
+        executed.append(list(argv))
+        if "memory" in argv:
+            await asyncio.to_thread(release.wait, 10)
+            return 0
+        on_output("stdout", json.dumps(RESULT) + "\n")
+        return 0
+
+    tracker = Tracker()
+    jobs = composition.job_service(tmp_path, executor=executor)
+    runtime = _runtime(tmp_path, tracker, jobs)
+
+    async def send(socket: AsgiWebSocket, request: dict[str, object]) -> dict[str, object]:
+        await socket.send_text(json.dumps(request))
+        reply = json.loads(await socket.receive_text())
+        assert isinstance(reply, dict)
+        return reply
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            _, board = await _read(socket, {"type": "task_board.snapshot", "spec": "#862"})
+            moves = {
+                ref: {move["to"]: move for move in cast(list[dict[str, object]], card["moves"])}
+                for ref, card in _cards(board).items()
+            }
+            assert moves["#903"]["progress"]["allowed"] is True
+            assert moves["#901"]["ready"] == {
+                "to": "ready", "allowed": False, "reason": "open_blockers",
+                "blockers": ["#903"], "batch": None,
+            }  # fmt: skip
+            assert moves["#904"]["ready"]["reason"] == "active_batch"
+            assert moves["#904"]["ready"]["batch"] == "b-904"
+            start: dict[str, object] = {
+                "id": "move",
+                "type": "job.start",
+                "command_id": "board-status",
+                "values": {"spec": "#862", "ticket": "#903", "to": "progress"},
+                "client": "browser",
+            }
+            refused = await send(socket, start)
+            assert refused["ok"] is False
+            assert cast(dict[str, str], refused["error"])["code"] == "confirmation_required"
+            assert executed == []
+            started = await send(socket, {**start, "id": "confirmed", "confirmed": True})
+            assert started["ok"] is True
+            job = cast(dict[str, object], started["job"])
+            assert job["command_id"] == "board-status" and job["mutating"] is True
+            while not job["done"]:
+                reply = await send(
+                    socket, {"id": "follow", "type": "job.subscribe", "job_id": job["id"], "cursor": 0}
+                )
+                job = cast(dict[str, object], reply["job"])
+            output = cast(list[dict[str, str]], job["output"])
+            assert json.loads("".join(item["text"] for item in output)) == RESULT
+            holder = await send(socket, {"id": "hold", "type": "job.start", "command_id": "memory-build"})
+            assert holder["ok"] is True
+            busy = await send(socket, {**start, "id": "busy", "confirmed": True})
+            error = cast(dict[str, str], busy["error"])
+            assert error["code"] == "busy"
+            assert error["job_id"] == cast(dict[str, str], holder["job"])["id"]
+            release.set()
+
+    asyncio.run(asyncio.wait_for(scenario(), timeout=30))
+    assert executed[0][2:] == [
+        "ticket-status", str(tmp_path), "--spec", "#862", "--ticket", "#903", "--to", "progress",
+    ]  # fmt: skip
+
+
+def test_the_status_change_captions_have_their_english_text() -> None:
+    english = json.loads(web_catalog.render())["en"]
+    assert english["Открыты блокеры: {list}"] == "Open blockers: {list}"
+    assert english["Активный batch {batch}"] == "Active batch {batch}"
+    assert english["Занято: {command}"] == "Busy: {command}"
+    assert english["Ошибка записи в трекер: изменение не сохранено"] == (
+        "Tracker write error: the change was not saved"
+    )
+    assert english["СМЕНА СТАТУСА"] == "STATUS CHANGE"
+    assert english["Сменить статус тикета"] == "Change the ticket status"

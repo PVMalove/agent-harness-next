@@ -1,5 +1,6 @@
 /* Task Board at 1440 and 390 px over the production build and the real FastAPI process, the
-   socket answered with the synthetic #913 fixtures and a frozen clock. Manual mockup checklist:
+   socket answered with the synthetic #913 fixtures and a frozen clock. The status change has its own
+   spec (task-board-status.spec.ts). Manual mockup checklist:
    docs/design/web-console-mockups/board-acceptance.md. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -82,7 +83,8 @@ for (const width of [1440, 390]) {
     const dialog = page.locator("#board-ticket");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("tab")).toHaveText(["Контекст", "Acceptance (2)", "Промпт"]);
-    await expect(dialog.locator("#board-status")).toHaveText("Бэклог");
+    await expect(dialog.locator("#board-status-label")).toHaveText("Бэклог");
+    await expect(dialog.locator("select#board-status")).toHaveValue("backlog");
     await expect(dialog.locator(".board-blocker")).toHaveCount(1);
     await dialog.getByRole("tab", { name: "Acceptance (2)" }).click();
     await expect(dialog.locator(".board-acceptance li")).toHaveCount(2);

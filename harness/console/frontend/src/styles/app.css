@@ -186,3 +186,10 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .board-card h3, .board-card p, .board-spec-meta, .board-banner span { overflow-wrap: anywhere; }
 .board-specbar select { max-width: 100%; }
 .board-specbar label { min-width: 0; max-width: 100%; }
+/* Task Board status change: the move notice and the confirmation wrap ticket text in place; the
+   status select fits a narrow modal. */
+.board-move-notice { margin: 4px 0; overflow-wrap: anywhere; }
+#board-modal-notice { margin: 6px 14px 0; }
+#board-confirm-body h2, #board-confirm-body p, .board-confirm-diff { overflow-wrap: anywhere; min-width: 0; }
+.board-confirm-diff { flex-wrap: wrap; }
+.board-modal-links select { max-width: 100%; }

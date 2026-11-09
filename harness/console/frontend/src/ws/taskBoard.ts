@@ -1,5 +1,6 @@
 /* Read models of task_board.specs and task_board.snapshot (#913). The server builds the columns,
-   the card order and the prompt; the page only checks the shape of the fields it shows. */
+   the card order, the prompt and the allowed moves of each card; the page only checks the shape of
+   the fields it shows and never decides a move itself. */
 
 /** The server's snapshot TTL (`BOARD_TTL_SECONDS` in backend/domain/task_board.py). */
 export const BOARD_TTL_MS = 60000;
@@ -38,6 +39,15 @@ export interface BoardBlocker {
   state: "open" | "closed" | "unknown";
 }
 
+/** Whether a card may move to a column, with the reason of a refusal (`same` is its own column). */
+export interface BoardMove {
+  to: BoardColumn;
+  allowed: boolean;
+  reason: string | null;
+  blockers: string[];
+  batch: string | null;
+}
+
 export interface BoardCard {
   id: string;
   n: number | null;
@@ -62,6 +72,7 @@ export interface BoardCard {
   dispatch_state: string | null;
   prompt: string;
   truncated: boolean;
+  moves: BoardMove[];
 }
 
 export interface TaskBoard {
@@ -97,6 +108,10 @@ const spec = (v: unknown) =>
 const blocker = (v: unknown) =>
   object(v) && text(v.id) && optionalCount(v.n) && text(v.why) && ["open", "closed", "unknown"].includes(String(v.state));
 
+const move = (v: unknown, i: number) =>
+  object(v) && v.to === BOARD_COLUMNS[i] && typeof v.allowed === "boolean" && optionalText(v.reason) &&
+  texts(v.blockers) && optionalText(v.batch);
+
 const card = (v: unknown) =>
   object(v) && text(v.id) && optionalCount(v.n) && text(v.title) && optionalText(v.url) &&
   typeof v.closed === "boolean" && column(v.column) && texts(v.labels) && optionalText(v.priority) &&
@@ -105,7 +120,8 @@ const card = (v: unknown) =>
   Array.isArray(v.blockers) && v.blockers.every(blocker) && count(v.open_blockers) &&
   (v.pr === null || (object(v.pr) && text(v.pr.ref) && optionalText(v.pr.url))) &&
   optionalText(v.batch) && optionalText(v.batch_state) && optionalText(v.dispatch) &&
-  optionalText(v.dispatch_state) && text(v.prompt) && typeof v.truncated === "boolean";
+  optionalText(v.dispatch_state) && text(v.prompt) && typeof v.truncated === "boolean" &&
+  Array.isArray(v.moves) && v.moves.length === BOARD_COLUMNS.length && v.moves.every(move);
 
 /** The open specs, or null for another shape. */
 export function parseSpecs(v: unknown): BoardSpecs | null {

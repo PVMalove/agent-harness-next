@@ -1,12 +1,16 @@
 /* The blocks of the #board mockup over the snapshot: KPIs, the tracker banner, the filters, five
-   columns with counters of the visible cards and the cards. Ticket text is untrusted: React text only. */
+   columns with counters of the visible cards and the cards. While a card is dragged the columns
+   show the server's allowed (drop-ok) and refused (drop-no) targets; a refused drop gets its reason. Ticket text is
+   untrusted: React text only. */
+import { useState } from "react";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { BOARD_COLUMNS } from "../ws/taskBoard";
-import type { BoardCard, BoardStale, TaskBoard } from "../ws/taskBoard";
+import type { BoardCard, BoardColumn, BoardStale, TaskBoard } from "../ws/taskBoard";
 import { ageText, columnLabels, firstLine, priorityLabel, safeUrl, trackerReason, visible } from "./format";
 import type { BoardFilters } from "./format";
+import { dropClass, moveOf, refusalCaption } from "./statusChange";
 
 export function BoardKpis({ board }: { board: TaskBoard }) {
   const { t } = useI18n();
@@ -94,17 +98,39 @@ export function BoardToolbar({ filters, onChange }: { filters: BoardFilters; onC
   );
 }
 
-function Card({ card, onOpen }: { card: BoardCard; onOpen?: (card: BoardCard) => void }) {
+function Card({
+  card,
+  onOpen,
+  onDrag,
+}: {
+  card: BoardCard;
+  onOpen?: (card: BoardCard) => void;
+  onDrag?: (card: BoardCard | null) => void;
+}) {
   const { t } = useI18n();
   const prio = priorityLabel(card);
   const link = safeUrl(card.url);
   const what = firstLine(card.what);
+  const draggable = onDrag !== undefined;
+  const [dragging, setDragging] = useState(false);
   return (
     <article
-      className="board-card"
+      className={dragging ? "board-card dragging" : "board-card"}
       tabIndex={0}
+      draggable={draggable}
       data-board-ticket={card.id}
       aria-label={`${card.id} ${card.title}`}
+      onDragStart={(event) => {
+        if (!draggable) return;
+        event.dataTransfer?.setData("text/plain", card.id);
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+        setDragging(true);
+        onDrag?.(card);
+      }}
+      onDragEnd={() => {
+        setDragging(false);
+        onDrag?.(null);
+      }}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("a")) return;
         onOpen?.(card);
@@ -149,14 +175,17 @@ export function BoardColumns({
   board,
   filters,
   onOpen,
+  onMove,
 }: {
   board: TaskBoard;
   filters: BoardFilters;
   onOpen?: (card: BoardCard) => void;
+  onMove?: (card: BoardCard, to: BoardColumn) => void;
 }) {
   const { t } = useI18n();
   const labels = columnLabels(t);
   const shown = board.tickets.filter((card) => visible(card, filters));
+  const [dragged, setDragged] = useState<BoardCard | null>(null);
   return (
     <>
       <div className="board-count" id="board-count">
@@ -166,8 +195,24 @@ export function BoardColumns({
         <div className="board-columns">
           {BOARD_COLUMNS.map((id) => {
             const items = shown.filter((card) => card.column === id);
+            const target = dragged ? dropClass(dragged, id) : "";
+            const move = dragged && target === "drop-no" ? moveOf(dragged, id) : undefined;
             return (
-              <section className="board-col" data-board-col={id} key={id}>
+              <section
+                className={target ? `board-col ${target}` : "board-col"}
+                data-board-col={id}
+                data-reason={move ? refusalCaption(t, move.reason, move) : undefined}
+                key={id}
+                onDragOver={(event) => {
+                  if (dragged) event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const card = dragged;
+                  setDragged(null);
+                  if (card) onMove?.(card, id);
+                }}
+              >
                 <header>
                   <div>
                     <b>{labels[id].name}</b>
@@ -177,7 +222,9 @@ export function BoardColumns({
                 </header>
                 <div className="board-cards">
                   {items.length ? (
-                    items.map((card) => <Card key={card.id} card={card} onOpen={onOpen} />)
+                    items.map((card) => (
+                      <Card key={card.id} card={card} onOpen={onOpen} onDrag={onMove ? setDragged : undefined} />
+                    ))
                   ) : (
                     <div className="board-empty">{t("пусто")}</div>
                   )}
