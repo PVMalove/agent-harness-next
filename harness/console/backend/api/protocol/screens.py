@@ -22,10 +22,12 @@ from ....kernel.protocol import (
     PAGE_REQUEST,
     PROTOCOL_VERSION,
     RECOVERY_REQUEST,
+    RECOVERY_VIEW_REQUEST,
     REPO_MAP_REQUEST,
     REPORT_REQUEST,
     REPORTS_REQUEST,
     ROUTE_REQUEST,
+    ROUTE_VIEW_REQUEST,
     TASK_BOARD_REQUEST,
     TASK_BOARD_SPECS_REQUEST,
     TIMELINE_REQUEST,
@@ -52,6 +54,9 @@ _FIELDS: dict[str, frozenset[str]] = {
     LOCK_REQUEST: frozenset(),
     RECOVERY_REQUEST: frozenset({"batch", "skip", "force"}),
     ROUTE_REQUEST: frozenset({"batch", "role", "runtime"}),
+    # The Web console views of Recovery and Container route, built by the kernel view-models.
+    RECOVERY_VIEW_REQUEST: frozenset({"batch", "skip", "force"}),
+    ROUTE_VIEW_REQUEST: frozenset({"batch", "role", "runtime"}),
     PAGE_REQUEST: frozenset({"snapshot_id", "offset"}),
     TASK_BOARD_SPECS_REQUEST: frozenset({"force"}),
     TASK_BOARD_REQUEST: frozenset({"spec", "force"}),
@@ -72,7 +77,7 @@ _FIELDS: dict[str, frozenset[str]] = {
 }
 # The replies that carry whether they came from the cache and how old it is.
 _CACHED_TYPES = frozenset(
-    {TASK_BOARD_SPECS_REQUEST, MAINTENANCE_REQUEST}
+    {TASK_BOARD_SPECS_REQUEST, MAINTENANCE_REQUEST, RECOVERY_VIEW_REQUEST, ROUTE_VIEW_REQUEST}
     | {kind for kind in _FIELDS if kind.endswith(".snapshot")}
 )
 SCREEN_TYPES = frozenset(_FIELDS)
@@ -155,6 +160,9 @@ def _call(
     if kind == RECOVERY_REQUEST:
         batch, skip, force = _id(body, "batch", ""), _skip(body), _flag(body, "force")
         return lambda: screens.recovery(batch, skip, force=force)
+    if kind == RECOVERY_VIEW_REQUEST:
+        batch, skip, force = _id(body, "batch", ""), _skip(body), _flag(body, "force")
+        return lambda: screens.recovery_view(batch, skip, force=force)
     if kind == TASK_BOARD_SPECS_REQUEST:
         force = _flag(body, "force")
         return lambda: screens.task_board_specs(force=force)
@@ -197,6 +205,8 @@ def _call(
     runtime = _id(body, "runtime", "")
     if not role:
         raise _Bad("role")
+    if kind == ROUTE_VIEW_REQUEST:
+        return lambda: screens.container_route_view(batch, role, runtime)
     return lambda: screens.container_route(batch, role, runtime)
 
 

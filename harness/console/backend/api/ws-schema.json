@@ -144,7 +144,8 @@
             "setup",
             "configuration",
             "memory",
-            "decisions"
+            "decisions",
+            "recovery"
           ],
           "title": "Section",
           "type": "string"
@@ -278,6 +279,7 @@
         "mapping": {
           "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
+          "container_route.view": "#/$defs/ContainerRouteViewRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
           "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
@@ -297,6 +299,7 @@
           "orchestration.snapshot": "#/$defs/OrchestrationSnapshotRequest",
           "orchestration.subscribe": "#/$defs/OrchestrationSubscribeRequest",
           "recovery.snapshot": "#/$defs/RecoverySnapshotRequest",
+          "recovery.view": "#/$defs/RecoveryViewRequest",
           "repo_map.snapshot": "#/$defs/RepoMapSnapshotRequest",
           "reports.report": "#/$defs/ReportRequest",
           "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
@@ -363,6 +366,12 @@
         },
         {
           "$ref": "#/$defs/ContainerRouteSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/RecoveryViewRequest"
+        },
+        {
+          "$ref": "#/$defs/ContainerRouteViewRequest"
         },
         {
           "$ref": "#/$defs/TaskBoardSpecsRequest"
@@ -462,6 +471,56 @@
         "type"
       ],
       "title": "ContainerRouteSnapshotRequest",
+      "type": "object"
+    },
+    "ContainerRouteViewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "role": {
+          "default": "developer",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "runtime": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Runtime",
+          "type": "string"
+        },
+        "type": {
+          "const": "container_route.view",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ContainerRouteViewRequest",
       "type": "object"
     },
     "CoordinatorInput": {
@@ -1345,7 +1404,8 @@
             "setup",
             "configuration",
             "memory",
-            "decisions"
+            "decisions",
+            "recovery"
           ],
           "title": "Section",
           "type": "string"
@@ -2423,6 +2483,59 @@
       "title": "RecoverySnapshotRequest",
       "type": "object"
     },
+    "RecoveryViewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "skip": {
+          "default": [],
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Skip",
+          "type": "array"
+        },
+        "type": {
+          "const": "recovery.view",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "RecoveryViewRequest",
+      "type": "object"
+    },
     "RepoMapSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
@@ -2626,6 +2739,8 @@
             "orchestration.snapshot",
             "recovery.snapshot",
             "container_route.snapshot",
+            "recovery.view",
+            "container_route.view",
             "task_board.specs",
             "task_board.snapshot",
             "diagnostics.snapshot",

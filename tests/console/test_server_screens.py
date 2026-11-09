@@ -27,6 +27,7 @@ from harness.console.kernel.health_report import report_from_payload
 from harness.console.kernel.repo_map_settings import MemoryStatus
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
 from harness.console.kernel.reports import ledger_from_payload, timeline_from_payload
+from harness.console.kernel.screen_views import recovery_view_payload, route_view_payload
 
 from ._asgi_ws import AsgiWebSocket, Rejected
 from ._screen_facts import (
@@ -130,6 +131,27 @@ def test_every_screen_request_round_trips_through_the_websocket_route(
             assert isinstance(route, dict)
             assert Authored.from_payload(route["authored"]).document == {"roles": {}}
             assert facts.preflights == [("b-1", "developer", "")]
+            recovery_view = await _read(
+                socket, {"type": "recovery.view", "batch": "b-1", "skip": ["a1"]}
+            )
+            assert recovery_view == recovery_view_payload(
+                facts.history(tmp_path),
+                ApiResult.from_payload(recovery["status"]),
+                "b-1",
+                ("a1",),
+            )
+            assert facts.statuses[-1] == ("b-1", ("a1",))
+            route_view = await _read(
+                socket, {"type": "container_route.view", "batch": "b-1", "role": "qa"}
+            )
+            assert route_view == route_view_payload(
+                Authored({"roles": {}}),
+                facts.preflight(tmp_path, "b-1", "qa", ""),
+                "b-1",
+                "qa",
+                "",
+            )
+            assert facts.preflights[-2] == ("b-1", "qa", "")
             await socket.send_text(json.dumps({"id": "l", "type": "orchestration.lock"}))
             lock = json.loads(await socket.receive_text())
             assert lock == {
@@ -145,6 +167,18 @@ def test_every_screen_request_round_trips_through_the_websocket_route(
             )
             missing = json.loads(await socket.receive_text())
             assert missing["error"]["code"] == "not_found" and missing["id"] == 9
+            for bad in (
+                {"type": "recovery.view", "skip": "a1"},
+                {"type": "recovery.view", "online": True},
+                {"type": "container_route.view", "role": ""},
+            ):
+                await socket.send_text(json.dumps({"id": 10, **bad}))
+                refused = json.loads(await socket.receive_text())
+                assert refused["error"]["code"] == "bad_request", refused
+            await socket.send_text(json.dumps({"id": 11, "type": "container_route.view"}))
+            first = json.loads(await socket.receive_text())
+            assert first["cached"] is False and first["age_seconds"] == 0
+            assert REPLIES.validate_python(first).type == "container_route.view"
         assert runtime.clients == 0
 
     asyncio.run(scenario())

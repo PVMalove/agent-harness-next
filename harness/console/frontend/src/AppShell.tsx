@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Icon } from "./icons";
 import { useI18n, LANGUAGES } from "./i18n";
-import { NAV_GROUPS, NAV_ITEMS, SHORTCUTS, href } from "./navigation";
+import { NAV_GROUPS, SHORTCUTS, href, navItemOf } from "./navigation";
 
 export const COLLAPSED_KEY = "harness-nav-collapsed";
 export const VERSION = "2.0.0";
@@ -33,7 +33,7 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const current = location.pathname.replace(/^\/+/, "").split("/")[0] ?? "";
-  const selected = NAV_ITEMS.find((item) => item.route === current) ?? NAV_ITEMS[0];
+  const selected = navItemOf(current);
 
   useEffect(() => {
     document.body.classList.toggle("nav-open", open);

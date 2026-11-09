@@ -85,7 +85,14 @@ class JobListRequest(_Strict):  # type: ignore[explicit-any]
 
 
 CommandSection = Literal[
-    "harness", "diagnostics", "repo-map", "setup", "configuration", "memory", "decisions"
+    "harness",
+    "diagnostics",
+    "repo-map",
+    "setup",
+    "configuration",
+    "memory",
+    "decisions",
+    "recovery",
 ]
 ReversibilityClass = Literal[
     "reversible",
@@ -159,6 +166,22 @@ class RecoverySnapshotRequest(_Strict):  # type: ignore[explicit-any]
 class ContainerRouteSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["container_route.snapshot"]
+    batch: OptionalScreenId = ""
+    role: ScreenId = "developer"
+    runtime: OptionalScreenId = ""
+
+
+class RecoveryViewRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["recovery.view"]
+    batch: OptionalScreenId = ""
+    skip: Annotated[list[ScreenId], Field(max_length=MAX_SKIPPED)] = []
+    force: bool = False
+
+
+class ContainerRouteViewRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["container_route.view"]
     batch: OptionalScreenId = ""
     role: ScreenId = "developer"
     runtime: OptionalScreenId = ""
@@ -288,6 +311,8 @@ ConsoleRequest = Annotated[
     | OrchestrationLockRequest
     | RecoverySnapshotRequest
     | ContainerRouteSnapshotRequest
+    | RecoveryViewRequest
+    | ContainerRouteViewRequest
     | TaskBoardSpecsRequest
     | TaskBoardSnapshotRequest
     | DiagnosticsSnapshotRequest
@@ -433,6 +458,8 @@ class ScreenSnapshotReply(_Envelope):  # type: ignore[explicit-any]
         "orchestration.snapshot",
         "recovery.snapshot",
         "container_route.snapshot",
+        "recovery.view",
+        "container_route.view",
         "task_board.specs",
         "task_board.snapshot",
         "diagnostics.snapshot",

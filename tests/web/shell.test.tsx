@@ -47,14 +47,30 @@ describe("the shell", () => {
   test("a section route moves aria-current and shows its placeholder", async () => {
     renderApp();
     await act(async () => {
-      window.location.hash = "#/reports";
+      window.location.hash = "#/board";
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
-    const current = within(navigation()).getByRole("link", { name: "Отчёты" });
+    const current = within(navigation()).getByRole("link", { name: "Доска задач" });
     expect(current.getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Отчёты");
-    expect(document.title).toBe("Harness Console · Отчёты");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Доска задач");
+    expect(document.title).toBe("Harness Console · Доска задач");
     expect(screen.getByText("Этот раздел ещё недоступен в веб-консоли")).toBeTruthy();
+  });
+
+  test("the hidden Recovery and Container routes have no menu item and highlight Orchestration", async () => {
+    renderApp();
+    for (const hash of ["#/recovery?batch=b-1", "#/container-route?batch=b-1&role=qa"]) {
+      await act(async () => {
+        window.location.hash = hash;
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
+      const links = within(navigation()).getAllByRole("link");
+      expect(links).toHaveLength(13);
+      expect(links.some((link) => /recovery|container-route/.test(link.getAttribute("href") ?? ""))).toBe(false);
+      expect(links.filter((link) => link.getAttribute("aria-current") === "page")).toEqual([
+        within(navigation()).getByRole("link", { name: "Оркестрация" }),
+      ]);
+    }
   });
 
   test("the Harness route renders its commands inside the shell, not a placeholder", async () => {

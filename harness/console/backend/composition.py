@@ -161,6 +161,17 @@ def screen_service(
     )
 
 
+RECOVERY_COMMANDS = frozenset(
+    {
+        "recovery-reload",
+        "recovery-fix",
+        "recovery-fix-apply",
+        "recovery-resume",
+        "recovery-abort",
+    }
+)
+
+
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
     """The job service over the harness, the selected seed update, Diagnostics, Repo Map,
     installation, configuration, memory, coordinator and native permission commands; without
@@ -189,6 +200,10 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
             entry for entry in COORDINATOR_COMMANDS
             if entry.key in {"batch-approve", "batch-decide", "batch-attention-resolve", "dispatch-propose", "dispatch-create"}
         ) + NATIVE_PERMISSION_COMMANDS,
+        # The Recovery page runs these behind a confirmation; `recovery-status` is its screen read.
+        "recovery": tuple(
+            entry for entry in COORDINATOR_COMMANDS if entry.key in RECOVERY_COMMANDS
+        ),
     }
     return JobService(
         repo,

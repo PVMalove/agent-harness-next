@@ -7,6 +7,13 @@ import {
   parseHealthReport,
   parseMaintenance,
 } from "../../harness/console/frontend/src/ws/screens";
+import {
+  parseOrchestration,
+  parseReport,
+  parseReports,
+  parseTimeline,
+} from "../../harness/console/frontend/src/ws/ledger";
+import { groupRows, parseRecoveryView, parseRouteView } from "../../harness/console/frontend/src/ws/views";
 import { FakeSocket, HEALTH_REPORT, ManualClock, nextPage, screenPage } from "./fake-socket";
 
 function setup() {
@@ -136,5 +143,111 @@ describe("screen parsers", () => {
     expect(parseMaintenance({ maintenance: null, error: "boom" })).toEqual({ maintenance: null, error: "boom" });
     expect(parseMaintenance({ maintenance: { ...view, soft: { ...SUMMARY, items: -1 } }, error: "" })).toBeNull();
     expect(parseHarnessOverview({ ...OVERVIEW, usage: { ...OVERVIEW.usage, batches: "4" } })).toBeNull();
+  });
+});
+
+const BATCH = {
+  batch_id: "b-1",
+  ticket: "#1",
+  state: "active",
+  created_at: "2026-11-01T10:00:00+00:00",
+  branch: "feature/x",
+  pr_created_at: "",
+  pr_url: "",
+  pr_state: "unknown",
+};
+const LEDGER = {
+  version: 1,
+  batches: [BATCH],
+  reports: [{ dispatch_id: "d-1", batch_id: "b-1", ticket: "#1", role: "developer", outcome: "completed", reported_at: "t1" }],
+  stages: [{ dispatch_id: "d-1", batch_id: "b-1", ticket: "#1", role: "developer", state: "reported", at: "t1", report: "d-1" }],
+  qa_runs: [],
+  qa_attempts: [],
+  unavailable: null,
+  dispatches: { "d-1": { role: "developer" } },
+  reports_kpi: {
+    reports: 1, evidence_complete: 1, latency_p50_seconds: null, latency_p95_seconds: null,
+    qa_first_pass: 0, qa_tickets: 0, attention: 0, blocked: 0,
+  },
+};
+const KPI = {
+  wip: 1, oldest_wip_seconds: 60, awaiting_approval: 0, oldest_approval_seconds: null, blocked: 0, stale: 0,
+  rework: 0, qa_first_pass: 0, qa_tickets: 0, cycle_p50_seconds: null, cycle_p95_seconds: null,
+  throughput_7d: 0, failed: 0,
+};
+const ANALYTICS = { flow: { by_state: { active: 1 }, pr_per_day: [0, 1] }, quality: {}, runtime: { unfinished: 1 }, gates: { approval_p50_seconds: null } };
+const ROW = { label: "Причина", value: "удержание", state: "warn", mark: "⚠ внимание", group: "Причина и граница" };
+const ACTION = { key: "status", label: "Проверить состояние", enabled: true, reason: "", effect: "observe", needs_confirmation: false };
+const STAGE = { rows: [ROW], actions: [ACTION], blockers: [], notes: [] };
+
+describe("Reports, Orchestration, Recovery and Container route reads", () => {
+  beforeEach(() => FakeSocket.reset());
+
+  test("parameters are sent, keyed in a stable order and a new value is a new key", () => {
+    const { client, socket } = setup();
+    client.requestScreen({ type: "recovery.view", params: { skip: ["a1"], batch: "b-1" } });
+    expect(socket.request("recovery.view")).toMatchObject({ batch: "b-1", skip: ["a1"], force: false });
+    client.requestScreen({ type: "container_route.view", params: { batch: "b-1", role: "qa", runtime: "" } });
+    expect(socket.request("container_route.view")).not.toHaveProperty("force");
+    expect(screenKey({ type: "recovery.view", params: { batch: "b-1", skip: [] } })).toBe(
+      screenKey({ type: "recovery.view", params: { skip: [], batch: "b-1" } }),
+    );
+    expect(screenKey({ type: "recovery.view", params: { batch: "b-1" } })).not.toBe(
+      screenKey({ type: "recovery.view", params: { batch: "b-2" } }),
+    );
+  });
+
+  test("a report body and a chronology come without cache facts; other replies still need them", () => {
+    const { events, client, socket } = setup();
+    client.requestScreen({ type: "reports.report", params: { dispatch_id: "d-1" } });
+    const report = socket.request("reports.report");
+    expect(report).not.toHaveProperty("force");
+    const body = JSON.stringify({ output: "готово" });
+    socket.reply({ v: 1, id: report.id, type: "reports.report", ok: true, snapshot_id: 3, text: body, next: body.length, done: true });
+    const key = screenKey({ type: "reports.report", params: { dispatch_id: "d-1" } });
+    expect(events).toEqual([{ type: "screen", key, value: { output: "готово" }, cached: false, ageSeconds: 0 }]);
+    client.requestScreen({ type: "recovery.view" });
+    const view = socket.request("recovery.view");
+    socket.reply({ v: 1, id: view.id, type: "recovery.view", ok: true, snapshot_id: 4, text: "{}", next: 2, done: true });
+    expect(events.at(-1)).toEqual({ type: "screen-error", key: "recovery.view", code: "invalid", message: "" });
+    client.requestScreen({ type: "reports.timeline", params: { batch_id: "b-1" } });
+    const timeline = socket.request("reports.timeline");
+    socket.reply({ ...screenPage(timeline.id, "reports.timeline", "{}"), cached: "no" });
+    expect(events.at(-1)).toMatchObject({ type: "screen-error", code: "invalid" });
+  });
+
+  test("the parsers accept the server shapes and refuse an extra or missing field", () => {
+    expect(parseReports(LEDGER)).toEqual(LEDGER);
+    expect(parseReports({ ...LEDGER, reports_kpi: { ...LEDGER.reports_kpi, extra: 1 } })).toBeNull();
+    expect(parseReports({ ...LEDGER, version: 2 })).toBeNull();
+    const orchestration = { ledger: LEDGER, lock: { lock: null, error: "занят" }, kpi: KPI, analytics: ANALYTICS };
+    expect(parseOrchestration(orchestration)).toEqual(orchestration);
+    expect(parseOrchestration({ ...orchestration, kpi: { ...KPI, wip: -1 } })).toBeNull();
+    const timeline = { batch: BATCH, role_flow: ["developer"], events: [{ at: "t", kind: "dispatch", text: "x", role: null }] };
+    expect(parseTimeline(timeline)).toEqual(timeline);
+    expect(parseTimeline({ ...timeline, batch: { ...BATCH, pr_url: 1 } })).toBeNull();
+    expect(parseReport({ output: "<b>x</b>" })).toEqual({ output: "<b>x</b>" });
+    expect(parseReport([])).toBeNull();
+    const recovery = {
+      history: [{ batch_id: "b-1", label: "#1 · active · b-1" }],
+      history_unavailable: "",
+      entry: { batch_id: "b-1", enabled: true, state: "warn", mark: "⚠ внимание", reason: "удержание" },
+      view: { batch: "b-1", unknown_outcome: false, rows: [ROW], blockers: [], notes: [], actions: [ACTION] },
+      resume_plan: { command: "coordinator.py recovery resume", checks: [["config", "passed"]], approval_required: false, next_step: "—" },
+    };
+    expect(parseRecoveryView(recovery)).toEqual(recovery);
+    expect(parseRecoveryView({ ...recovery, view: { ...recovery.view, rows: [{ ...ROW, mark: 1 }] } })).toBeNull();
+    const stages = Object.fromEntries(
+      ["setup", "preflight", "plan", "worker", "qa", "cleanup"].map((stage) => [stage, { stage, ...STAGE }]),
+    );
+    const route = {
+      selection: { batch: "", role: "developer", runtime: "" },
+      context: [["Worker", "не создан"]],
+      tabs: [{ stage: "setup", title: "Setup", state: "info", mark: "·", reason: "" }],
+      stages,
+    };
+    expect(parseRouteView(route)).toEqual(route);
+    expect(parseRouteView({ ...route, stages: { ...stages, deploy: stages.setup } })).toBeNull();
+    expect(groupRows([ROW, { ...ROW, label: "b" }, { ...ROW, group: "Проверки" }]).map((item) => item.rows.length)).toEqual([2, 1]);
   });
 });

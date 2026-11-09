@@ -226,7 +226,12 @@ const CLEANUP = {
 };
 const DIGEST = "c".repeat(64);
 
-function renderPanel(props: { planDigests?: Record<string, string>; request?: RunRequest | null; onJobDone?: (job: LocalJob) => void }) {
+function renderPanel(props: {
+  planDigests?: Record<string, string>;
+  request?: RunRequest | null;
+  onJobDone?: (job: LocalJob) => void;
+  confirmAll?: boolean;
+}) {
   const client = createConsoleClient({
     url: "ws://127.0.0.1:1/ws",
     WebSocket: FakeSocket,
@@ -284,6 +289,21 @@ describe("the command panel inside a page", () => {
     expect(socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
     rerender({ request: { command_id: "cleanup-apply", values: {}, nonce: 2 } });
     expect(screen.getByRole("alert").textContent).toBe("Нужно превью плана очистки: запустите команду из TUI");
+  });
+
+  test("confirmAll asks before a reversible command and shows the page's reason", () => {
+    const request = { command_id: "diff", values: { json: "1" }, nonce: 1, reason: "Перечитать конфигурацию batch." };
+    const { socket } = renderPanel({ request, confirmAll: true });
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Перечитать конфигурацию batch.")).toBeTruthy();
+    expect(socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
+    act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" })));
+    expect(socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Запустить diff" })));
+    act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Запустить" })));
+    const starts = socket.sent.filter((body) => body.type === "job.start");
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toMatchObject({ command_id: "diff", confirmed: true });
   });
 
   test("the page learns once that the shown job finished", () => {
