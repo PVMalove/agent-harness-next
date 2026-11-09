@@ -74,6 +74,10 @@ for (const width of [1440, 390]) {
     await expect(page.locator("[data-board-ticket]")).toHaveCount(7);
     await expect(page.locator("#board-spec")).toHaveValue("#501");
     await expect(page.locator("#board-kpis > div")).toHaveCount(4);
+    await expect(page.locator(".board-search svg.hi")).toBeVisible();
+    await page.locator("#board-search").fill("фильтры");
+    await expect(page.locator("[data-board-ticket]")).toHaveCount(1);
+    await page.locator("#board-search").fill("");
     const card = page.locator('[data-board-ticket="#511"]');
     await expect(card.locator("h3")).toHaveText("Экран списка задач");
     await expect(card.locator(".board-chip")).toHaveText(["/implement", "блокеров: 1"]);
@@ -90,6 +94,9 @@ for (const width of [1440, 390]) {
     await expect(dialog.locator(".board-acceptance li")).toHaveCount(2);
     await dialog.getByRole("tab", { name: "Промпт" }).click();
     await expect(dialog.locator("pre.board-prompt")).toContainText("/implement #511");
+    const agent = dialog.getByRole("button", { name: "Промпт агента" });
+    await expect(agent).toBeVisible();
+    expect(await agent.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(118, 203, 178)");
     await dialog.getByRole("tab", { name: "Контекст" }).click();
     expect(await noOverflow(page)).toBe(true);
     await dialog.getByRole("button", { name: "Закрыть" }).click();

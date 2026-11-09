@@ -2,7 +2,7 @@
    the card order, the prompt and the allowed moves are the server's. A card moves by drag and drop
    or by the status select of its modal, after a confirmation, through the server's mutating job. */
 import { useMemo, useState } from "react";
-import { BoardBanner, BoardColumns, BoardKpis, BoardStatePanel, BoardToolbar } from "../board/BoardViews";
+import { BoardBanner, BoardColumns, BoardKpis, BoardStatePanel, BoardToolbar, BoardUpdating } from "../board/BoardViews";
 import { NO_FILTERS } from "../board/format";
 import { StatusConfirm, StatusNoticeLine } from "../board/StatusConfirm";
 import { TicketModal } from "../board/TicketModal";
@@ -104,7 +104,7 @@ function SpecBoard({
   onChoose: (spec: string) => void;
   onRefreshSpecs: () => void;
 }) {
-  const { board: screen, refreshing, refresh } = useBoard(spec);
+  const { board: screen, refreshing, updating, refresh, reload } = useBoard(spec);
   const [filters, setFilters] = useState<BoardFilters>(NO_FILTERS);
   const [selected, setSelected] = useState<string | null>(null);
   const board = screen.data;
@@ -113,7 +113,7 @@ function SpecBoard({
     onRefreshSpecs();
     refresh();
   };
-  const change = useStatusChange(spec, refresh);
+  const change = useStatusChange(spec, reload);
   const unavailable = board?.stale && board.tickets.length === 0;
   return (
     <>
@@ -141,6 +141,7 @@ function SpecBoard({
                   onOpen={(card) => setSelected(card.id)}
                   onMove={change.request}
                 />
+                {(change.running || updating) && <BoardUpdating />}
               </>
             )}
           </>

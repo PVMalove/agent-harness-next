@@ -12,13 +12,18 @@ from pathlib import Path
 
 from ..domain.task_board import (
     BOARD_TTL_SECONDS,
+    BODY_READ_BYTES,
     KEPT_BOARDS,
+    NO_TEMPLATE,
+    PROMPT_TEMPLATE_PATH,
     BatchStage,
+    PromptTemplate,
     SpecTickets,
     TrackerSpec,
     batch_stages,
     build_board_payload,
     build_specs_payload,
+    parse_prompt_template,
 )
 from .ports import Clock, LedgerCollector, TaskBoardReader, TrackerUnavailable
 
@@ -163,6 +168,15 @@ class TaskBoardService:
             return {}, False
         return dict(batch_stages(view)), True
 
+    def _template(self) -> PromptTemplate:
+        """The project's prompt blocks, read again with every board; none without the file."""
+        try:
+            with (self._repo / PROMPT_TEMPLATE_PATH).open("rb") as handle:
+                raw = handle.read(BODY_READ_BYTES)
+        except OSError:
+            return NO_TEMPLATE
+        return parse_prompt_template(raw.decode("utf-8", "replace"))
+
     async def board(self, spec: str, force: bool = False) -> BoardServed:
         """The board of one spec; `SpecNotFound` when the tracker has no such spec."""
 
@@ -170,7 +184,9 @@ class TaskBoardService:
             kind = self._reader.tracker_type(self._repo)
             tickets = self._reader.board(self._repo, spec)
             stages, ledger_ok = self._stages()
-            return build_board_payload(kind, tickets, stages, ledger_ok)
+            return build_board_payload(
+                kind, tickets, stages, ledger_ok, template=self._template()
+            )
 
         def empty() -> Payload:
             stub = TrackerSpec(spec, None, "", None, "", None, None)

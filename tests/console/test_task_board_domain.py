@@ -20,6 +20,7 @@ from harness.console.backend.domain.task_board import (
     WHAT_BYTES,
     BatchStage,
     BlockerFact,
+    PromptTemplate,
     PullRef,
     SpecList,
     SpecTickets,
@@ -266,64 +267,144 @@ SPEC = TrackerSpec(
 )
 
 
-def test_agent_prompt_exact_text() -> None:
+def _release_card(**fields: object) -> dict[str, object]:
     card: dict[str, object] = {
-        "id": "#913",
-        "title": "Task board snapshot",
-        "command": "/fast-implement",
-        "branch": "integration/web-console",
-        "what": "Build it.",
-        "criteria": ["First", "Second"],
-        "blockers": [
-            {"id": "#882", "n": 882, "why": "shell", "state": "open"},
-            {"id": "#880", "n": 880, "why": "", "state": "closed"},
+        "id": "#814",
+        "title": "chore(release): cutover и релиз 2.0.0",
+        "url": "https://tracker.example.test/acme/app/issues/814",
+        "labels": ["hitl", "status::blocked"],
+        "command": "/to-guide",
+        "branch": None,
+        "what": "Cut over and release.",
+        "criteria": ["Release is tagged", "Changelog is final"],
+        "files": [
+            {"path": "CHANGELOG.md", "why": "release notes"},
+            {"path": "harness/VERSION", "why": ""},
         ],
-        "files": [{"path": "a.py", "why": "rules"}, {"path": "b/", "why": ""}],
+        "blockers": [
+            {"id": f"#{n}", "n": n, "why": "", "state": state}
+            for n, state in (
+                (803, "closed"),
+                (806, "open"),
+                (812, "closed"),
+                (802, "unknown"),
+                (799, "closed"),
+                (809, "open"),
+                (813, "closed"),
+                (811, "closed"),
+                (795, "closed"),
+            )
+        ],
     }
-    spec: dict[str, object] = {"id": "#862", "title": "Web console", "branch": None}
+    card.update(fields)
+    return card
 
-    assert agent_prompt(card, spec) == "\n".join(
+
+EPIC: dict[str, object] = {"id": "#784", "title": "Harness Next", "branch": None}
+TEMPLATE = PromptTemplate(
+    invariants="- Target architecture only.\n- One writer per entity.",
+    discipline="Read the approved ADR first.",
+)
+
+
+def test_agent_prompt_is_the_planner_prompt_of_a_hitl_ticket() -> None:
+    sut = agent_prompt(_release_card(), EPIC, template=TEMPLATE)
+
+    assert sut == "\n".join(
         [
-            "/fast-implement #913",
+            "/to-guide #814",
             "",
-            "TICKET: #913 — Task board snapshot",
-            "EPIC: #862 — Web console",
-            "BRANCH: integration/web-console",
+            "REPOSITORY: https://tracker.example.test/acme/app",
+            "EPIC: #784 Harness Next",
+            "TASK: #814 — chore(release): cutover и релиз 2.0.0",
+            "ISSUES: #814, #784",
+            "DEPENDENCIES: #803, #806, #812, #802, #799, #809, #813, #811, #795",
+            "PIPELINE: hitl → /to-guide",
             "",
-            "WHAT TO BUILD:",
-            "Build it.",
+            "ARCHITECTURE INVARIANTS (MANDATORY):",
+            "- Target architecture only.",
+            "- One writer per entity.",
             "",
-            "ACCEPTANCE:",
-            "1. First",
-            "2. Second",
+            "SPECIFIC SCOPE:",
+            "Cut over and release.",
             "",
-            "BLOCKERS:",
-            "- #882 — shell",
-            "- #880 (closed)",
+            "CODE DISCOVERY (verify current paths/branches first):",
+            "- CHANGELOG.md — release notes",
+            "- harness/VERSION",
             "",
-            "DISCOVERY:",
-            "- a.py — rules",
-            "- b/",
+            "ACCEPTANCE CRITERIA:",
+            "1. Release is tagged",
+            "2. Changelog is final",
+            "",
+            "TESTS / ADVERSARIAL SCENARIOS:",
+            "- Release is tagged",
+            "- Changelog is final",
+            "",
+            "IMPLEMENTATION DISCIPLINE:",
+            "Read the approved ADR first.",
         ]
     )
 
 
-def test_agent_prompt_without_blockers_files_or_branch() -> None:
+def test_agent_prompt_of_an_afk_ticket_without_blockers_lists_its_own_tests() -> None:
+    card = _release_card(
+        labels=["afk", "pipeline::fast"], command="/fast-implement", blockers=[]
+    )
+
+    sut = agent_prompt(card, EPIC, tests=("Retry after a crash",), template=TEMPLATE)
+
+    assert sut.startswith("/fast-implement #814\n\n")
+    assert "\nDEPENDENCIES: None\nPIPELINE: afk → /fast-implement\n" in sut
+    assert "\nTESTS / ADVERSARIAL SCENARIOS:\n- Retry after a crash\n\n" in sut
+
+
+def test_agent_prompt_leaves_out_every_block_without_data() -> None:
     card: dict[str, object] = {
         "id": "#5",
         "title": "T",
-        "command": "/to-guide",
-        "branch": None,
+        "url": None,
+        "labels": [],
+        "command": "/implement",
         "what": "",
         "criteria": [],
-        "blockers": [],
         "files": [],
+        "blockers": [],
     }
-    prompt = agent_prompt(card, {"id": "#1", "title": "S", "branch": None})
 
-    assert prompt.startswith("/to-guide #5\n")
-    assert "BRANCH: not recorded" in prompt
-    assert prompt.endswith("BLOCKERS:\n- None\n\nDISCOVERY:\n- None")
+    sut = agent_prompt(card, {"id": "#1", "title": "S", "branch": None})
+
+    assert sut == "\n".join(
+        [
+            "/implement #5",
+            "",
+            "EPIC: #1 S",
+            "TASK: #5 — T",
+            "ISSUES: #5, #1",
+            "DEPENDENCIES: None",
+            "PIPELINE: /implement",
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    ("url", "repository"),
+    [
+        (
+            "https://github.example.test/acme/app/issues/814",
+            "https://github.example.test/acme/app",
+        ),
+        (
+            "https://gitlab.example.test/grp/sub/app/-/issues/12",
+            "https://gitlab.example.test/grp/sub/app",
+        ),
+    ],
+)
+def test_agent_prompt_repository_is_the_tracker_of_the_ticket(
+    url: str, repository: str
+) -> None:
+    sut = agent_prompt(_release_card(url=url), EPIC)
+
+    assert f"\nREPOSITORY: {repository}\n" in sut
 
 
 @dataclass
@@ -458,10 +539,30 @@ def test_board_payload_columns_kpis_and_cards() -> None:
     assert tickets[2]["pr"] == {"ref": "#958", "url": "https://example.test/pull/958"}
     prompt = card["prompt"]
     assert isinstance(prompt, str)
-    assert prompt.startswith("/fast-implement #913\n\nTICKET: #913 — Ticket #913\n")
-    assert "EPIC: #862 — Web console" in prompt
-    assert "BRANCH: integration/web-console" in prompt
+    assert prompt.startswith(
+        "/fast-implement #913\n\nREPOSITORY: https://example.test\n"
+        "EPIC: #862 Web console\nTASK: #913 — Ticket #913\nISSUES: #913, #862\n"
+        "DEPENDENCIES: #882, #880\nPIPELINE: afk → /fast-implement\n"
+    )
     assert payload["truncated"] is False
+
+
+def test_board_payload_prompt_takes_tests_and_the_project_template() -> None:
+    body = HOSTED_BODY + "\n## Tests\n- Two moves at once\n- A closed blocker\n"
+    board = SpecTickets(SPEC, (_ticket("hitl", ref="#913", n=913, body=body),), {})
+
+    payload = build_board_payload("github", board, {}, True, template=TEMPLATE)
+
+    cards = cast(list[dict[str, object]], payload["tickets"])
+    prompt = str(cards[0]["prompt"])
+    assert (
+        "\nTESTS / ADVERSARIAL SCENARIOS:\n- Two moves at once\n- A closed blocker\n\n"
+        "IMPLEMENTATION DISCIPLINE:\nRead the approved ADR first."
+    ) in prompt
+    assert (
+        "\nARCHITECTURE INVARIANTS (MANDATORY):\n- Target architecture only.\n"
+        in prompt
+    )
 
 
 def test_board_payload_without_ledger_marks_it_unavailable() -> None:
@@ -574,3 +675,30 @@ def test_order_cards_sorts_by_column_then_priority_then_number() -> None:
         ]
     )
     assert [item["id"] for item in ordered] == ["#1", "#2", "#None", "#3", "#4", "#5"]
+
+
+def test_board_payload_prompt_prefers_the_blocks_of_the_epic_body() -> None:
+    epic = TrackerSpec(
+        ref="#862",
+        n=862,
+        title="Web console",
+        url=None,
+        body=(
+            "## Integration Branch\n`integration/web-console`\n\n"
+            "## Architecture invariants\n- The server owns every board rule.\n"
+        ),
+        tickets_total=1,
+        tickets_open=1,
+    )
+    board = SpecTickets(epic, (_ticket("hitl", ref="#913", n=913),), {})
+
+    payload = build_board_payload("github", board, {}, True, template=TEMPLATE)
+
+    prompt = str(cast(list[dict[str, object]], payload["tickets"])[0]["prompt"])
+    assert (
+        "\n\nARCHITECTURE INVARIANTS (MANDATORY):\n- The server owns every board rule.\n\n"
+    ) in prompt
+    assert "Target architecture only." not in prompt
+    assert prompt.endswith(
+        "\n\nIMPLEMENTATION DISCIPLINE:\nRead the approved ADR first."
+    )

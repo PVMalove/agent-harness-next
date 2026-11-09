@@ -33,9 +33,11 @@ const job = (stdout: string) => ({
 const result = (fields: Record<string, unknown>) =>
   JSON.stringify({ ticket: "#512", from: "ready", to: "progress", reason: null, blockers: [], batch: null, message: "", ...fields }) + "\n";
 
-async function open(page: Page, width: number, answer: Answer = "changed") {
+/** With `hold`, the forced snapshot read after a job start waits for `release(board)`. */
+async function open(page: Page, width: number, answer: Answer = "changed", hold = false) {
   const asked: Record<string, unknown>[] = [];
   const started: Record<string, unknown>[] = [];
+  let held: ((board: unknown) => void) | null = null;
   await page.setViewportSize({ width, height: width > 600 ? 900 : 844 });
   await page.clock.setFixedTime(new Date("2026-11-09T10:41:00Z"));
   await page.routeWebSocket("**/ws", (ws) => {
@@ -51,7 +53,8 @@ async function open(page: Page, width: number, answer: Answer = "changed") {
       if (request.type === "task_board.specs") paged(SPECS);
       if (request.type === "task_board.snapshot") {
         asked.push(request);
-        paged(BOARD);
+        if (hold && request.force === true && started.length) held = paged;
+        else paged(BOARD);
       }
       if (request.type === "job.start") {
         started.push(request);
@@ -77,7 +80,7 @@ async function open(page: Page, width: number, answer: Answer = "changed") {
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
   await expect(page.locator("[data-board-ticket]")).toHaveCount(7);
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
-  return { asked, started };
+  return { asked, started, release: (board: unknown) => held?.(board) };
 }
 
 const noOverflow = (page: Page) =>
@@ -167,6 +170,39 @@ for (const width of [1440, 390]) {
       confirmed: true,
     });
     await expect.poll(() => asked.at(-1)).toMatchObject({ spec: "#501", force: true });
+    expect(seen.errors).toEqual([]);
+    expect(seen.foreign).toEqual([]);
+  });
+
+  test(`the board stays under the updating overlay until the new snapshot at ${width} px`, async ({ page }) => {
+    const seen = watch(page);
+    const { release } = await open(page, width, "changed", true);
+    await drop(page, "#512", "progress");
+    await page.locator("#board-confirm-ok").click();
+
+    const overlay = page.locator("#board-updating");
+    await expect(overlay).toBeVisible();
+    await expect(overlay).toHaveAttribute("role", "status");
+    await expect(overlay).toContainText("Идёт обновление…");
+    await expect(page.locator("[data-board-col]")).toHaveCount(5);
+    await expect(page.locator('[data-board-state="loading"]')).toHaveCount(0);
+    const mascot = overlay.locator(".board-mascot");
+    await expect.poll(() => mascot.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+    expect(await mascot.evaluate((el) => getComputedStyle(el).animationName)).toBe("board-mascot-jump");
+    expect(await overlay.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+    expect(await overlay.evaluate((el) => el.contains(document.activeElement))).toBe(false);
+    expect(await noOverflow(page)).toBe(true);
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect(await mascot.evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
+
+    const moved = {
+      ...BOARD,
+      tickets: BOARD.tickets.map((ticket) => (ticket.id === "#512" ? { ...ticket, column: "progress" } : ticket)),
+    };
+    release(moved);
+    await expect(overlay).toHaveCount(0);
+    await expect(column(page, "progress").locator('[data-board-ticket="#512"]')).toHaveCount(1);
     expect(seen.errors).toEqual([]);
     expect(seen.foreign).toEqual([]);
   });

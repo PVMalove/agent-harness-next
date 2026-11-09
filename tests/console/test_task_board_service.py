@@ -333,3 +333,32 @@ def test_screen_service_without_a_board_is_not_found(tmp_path: Path) -> None:
 
     with pytest.raises(NotFound):
         asyncio.run(screens_without.task_board_specs())
+
+
+def test_board_prompt_takes_the_blocks_of_the_project_prompt_file(tmp_path: Path) -> None:
+    reader, clock = FakeReader(), Clock()
+    sut = TaskBoardService(tmp_path, clock=clock, reader=reader, ledger=_ledger)  # type: ignore[arg-type]
+    template = tmp_path / "docs" / "agents" / "agent-prompt.md"
+
+    async def scenario() -> tuple[str, str]:
+        without = str(_cards(await sut.board("#862"))[0]["prompt"])
+        template.parent.mkdir(parents=True)
+        template.write_text(
+            "# Agent prompt\n\nIntro text.\n\n"
+            "## Architecture invariants\n\n- One writer per entity.\n- No force push.\n"
+            "### Storage\n# a shell comment\n- WAL only.\n\n"
+            "## Implementation discipline\n\nRead the approved ADR first.\n",
+            encoding="utf-8",
+        )
+        return without, str(_cards(await sut.board("#862", force=True))[0]["prompt"])
+
+    without, prompt = asyncio.run(scenario())
+
+    assert "ARCHITECTURE INVARIANTS" not in without
+    assert "IMPLEMENTATION DISCIPLINE" not in without
+    assert (
+        "\n\nARCHITECTURE INVARIANTS (MANDATORY):\n- One writer per entity.\n- No force push.\n"
+        "### Storage\n# a shell comment\n- WAL only.\n\nIMPLEMENTATION DISCIPLINE:"
+    ) in prompt
+    assert prompt.endswith("\n\nIMPLEMENTATION DISCIPLINE:\nRead the approved ADR first.")
+    assert "Intro text." not in prompt
