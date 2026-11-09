@@ -17,6 +17,7 @@ from ...kernel.batch_history import History
 from ...kernel.help_text import help_sections
 from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
 from ...kernel.pipeline_stats import pipeline_usage
+from ...kernel.publish_view import GitFacts, LocalGit, publish_payload
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
 from ...kernel.screen_views import recovery_view_payload, route_view_payload
 from ...kernel.update_harness_snapshot import diff_paths
@@ -125,10 +126,14 @@ def snapshot_text(payload: object) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False, sort_keys=True)
 
 
-def _ledger(view: LedgerView) -> _Ledger:
-    """The view with its payload: the ledger without report bodies and the Reports KPIs, which the
-    server reads from the whole bodies."""
-    payload = {**ledger_payload(view), "reports_kpi": reports_kpi(view).to_payload()}
+def _ledger(view: LedgerView, git: GitFacts) -> _Ledger:
+    """The view with its payload: the ledger without report bodies, the Reports KPIs, which the
+    server reads from the whole bodies, and the read-only publication view."""
+    payload = {
+        **ledger_payload(view),
+        "reports_kpi": reports_kpi(view).to_payload(),
+        "publish": publish_payload(view, git),
+    }
     return _Ledger(view, payload)
 
 
@@ -155,8 +160,10 @@ class ScreenService:
         update_diff: UpdateDiffReader | None = None,
         configuration: ConfigurationCollector | None = None,
         board: TaskBoardService | None = None,
+        publish_git: GitFacts | None = None,
     ) -> None:
         self._repo = repo
+        self._git: GitFacts = publish_git or LocalGit(repo)
         self._collect_ledger = ledger
         self._collect_online = ledger_online
         self._read_lock = lock
@@ -196,7 +203,7 @@ class ScreenService:
 
     async def _cached_ledger(self, force: bool) -> tuple[_Ledger, bool, float]:
         return await self._ledger.get(
-            lambda: _ledger(self._collect_ledger(self._repo)), force=force
+            lambda: _ledger(self._collect_ledger(self._repo), self._git), force=force
         )
 
     async def reports(self, *, force: bool = False, online: bool = False) -> Paged:
@@ -204,7 +211,7 @@ class ScreenService:
         never cached."""
         if online:
             found = await asyncio.to_thread(
-                lambda: _ledger(self._collect_online(self._repo))
+                lambda: _ledger(self._collect_online(self._repo), self._git)
             )
             return await self._paged(found.payload)
         ledger, cached, age = await self._cached_ledger(force)

@@ -182,6 +182,13 @@ const LEDGER = {
     reports: 1, evidence_complete: 1, latency_p50_seconds: null, latency_p95_seconds: null,
     qa_first_pass: 0, qa_tickets: 0, attention: 0, blocked: 0, stale_evidence: 0,
   },
+  publish: [
+    {
+      batch_id: "b-1", ticket: "#1", state: "active", branch: "feature/x", candidate: "abc1234", target: null,
+      integration_ref: null, head: null, head_matches: null, target_in_history: null, refusals: [],
+      review: { dispatch_id: "d-2", outcome: "completed", has_blockers: false }, qa: null, pr_url: "", pr_state: "unknown",
+    },
+  ],
 };
 const KPI = {
   wip: 1, oldest_wip_seconds: 60, awaiting_approval: 0, oldest_approval_seconds: null, blocked: 0, stale: 0,

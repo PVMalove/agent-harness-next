@@ -19,6 +19,7 @@ from harness.console.kernel.pipeline_kpi import (
     reports_kpi,
     reports_kpi_from_payload,
 )
+from harness.console.kernel.publish_view import publish_payload
 from harness.console.kernel.reports import (
     BatchSummary,
     LedgerView,
@@ -274,9 +275,23 @@ def _shifted(moment: str, *, minutes: int) -> str:
     return (datetime.fromisoformat(moment) + timedelta(minutes=minutes)).isoformat()
 
 
+class FixtureGit:
+    """Local refs of the fixture: the issue branch points at the reviewed candidate."""
+
+    def tip(self, branch: str) -> str | None:
+        return "c0ffee1" if branch else None
+
+    def is_ancestor(self, older: str, newer: str) -> bool | None:
+        return True
+
+
 def reports_payload(view: LedgerView) -> JsonObject:
     """The reports.snapshot payload, as `ScreenService` builds it."""
-    return {**ledger_payload(view), "reports_kpi": reports_kpi(view).to_payload()}
+    return {
+        **ledger_payload(view),
+        "reports_kpi": reports_kpi(view).to_payload(),
+        "publish": publish_payload(view, FixtureGit()),
+    }
 
 
 def orchestration_payload(view: LedgerView) -> JsonObject:

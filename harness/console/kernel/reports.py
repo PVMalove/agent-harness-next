@@ -892,8 +892,9 @@ _LEDGER_KEYS = frozenset(
         "dispatches",
     }
 )
-# A payload may also carry the Reports KPIs the server computed beside the ledger.
-_OPTIONAL_LEDGER_KEYS = frozenset({"reports_kpi"})
+# A payload may also carry the Reports KPIs the server computed beside the ledger and the
+# read-only publication view (`publish_view.publish_payload`), which a TUI does not decode.
+_OPTIONAL_LEDGER_KEYS = frozenset({"reports_kpi", "publish"})
 
 
 def _present(value: object) -> bool:

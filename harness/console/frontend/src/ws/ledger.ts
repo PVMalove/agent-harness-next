@@ -95,8 +95,35 @@ export interface Ledger {
 
 export type Figures = Record<string, number | null>;
 
+export interface ReportRef {
+  dispatch_id: string;
+  outcome: string;
+  has_blockers: boolean;
+}
+
+/** One batch of the read-only publication view (kernel/publish_view.py); unread facts are null. */
+export interface PublishEntry {
+  batch_id: string;
+  ticket: string;
+  state: string;
+  branch: string;
+  candidate: string | null;
+  target: string | null;
+  integration_ref: string | null;
+  /** The local remote-tracking ref of the branch: as old as the last fetch. */
+  head: string | null;
+  head_matches: boolean | null;
+  target_in_history: boolean | null;
+  refusals: string[];
+  review: ReportRef | null;
+  qa: ReportRef | null;
+  pr_url: string;
+  pr_state: string;
+}
+
 export interface ReportsSnapshot extends Ledger {
   reports_kpi: Figures;
+  publish: PublishEntry[];
 }
 
 export type Figure = number | null | number[] | Record<string, number>;
@@ -227,7 +254,29 @@ const ledgerFields = {
   unavailable: nullable(string),
   dispatches,
 };
-const reportsSnapshot = exact({ ...ledgerFields, reports_kpi: figures(REPORTS_KPI_KEYS) });
+const reportRef = exact({ dispatch_id: string, outcome: string, has_blockers: flag });
+const publishEntry = exact({
+  batch_id: string,
+  ticket: string,
+  state: string,
+  branch: string,
+  candidate: nullable(string),
+  target: nullable(string),
+  integration_ref: nullable(string),
+  head: nullable(string),
+  head_matches: nullable(flag),
+  target_in_history: nullable(flag),
+  refusals: list(string),
+  review: nullable(reportRef),
+  qa: nullable(reportRef),
+  pr_url: string,
+  pr_state: string,
+});
+const reportsSnapshot = exact({
+  ...ledgerFields,
+  reports_kpi: figures(REPORTS_KPI_KEYS),
+  publish: list(publishEntry),
+});
 
 const figure: Check = (value) =>
   value === null ||

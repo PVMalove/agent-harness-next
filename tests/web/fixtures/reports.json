@@ -38,6 +38,33 @@
       "role": "developer"
     }
   },
+  "publish": [
+    {
+      "batch_id": "b-887",
+      "branch": "feature/issue-887",
+      "candidate": "c0ffee1",
+      "head": "c0ffee1",
+      "head_matches": true,
+      "integration_ref": null,
+      "pr_state": "missing",
+      "pr_url": "",
+      "qa": {
+        "dispatch_id": "d-qa",
+        "has_blockers": true,
+        "outcome": "failed"
+      },
+      "refusals": [],
+      "review": {
+        "dispatch_id": "d-rev",
+        "has_blockers": false,
+        "outcome": "completed"
+      },
+      "state": "active",
+      "target": null,
+      "target_in_history": null,
+      "ticket": "#887"
+    }
+  ],
   "qa_attempts": [
     {
       "dispatch_id": "d-qa",
