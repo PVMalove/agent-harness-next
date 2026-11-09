@@ -1,6 +1,7 @@
 /* The selected stage's completion report, read with reports.report: its sections as the TUI draws
    them (a check, a review axis, a risk and a blocker carry a status). The body is untrusted
    role output: it is only ever rendered as React text. */
+import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { useScreen } from "../screens/useScreen";
 import { parseReport } from "../ws/ledger";
@@ -18,8 +19,12 @@ export function ReportDetail({ stage, report }: { stage: StageHead; report: Repo
       </div>
       <div className="report-detail-body">
         <div className="report-detail-top">
+          <span className="report-type-label">
+            <Icon name="reports" /> {stage.role}
+          </span>
           <code>{stage.dispatch_id}</code>
         </div>
+        <h3>{t("Отчёт {role} · {ticket}", { role: stage.role, ticket: stage.ticket || "?" })}</h3>
         <div className="report-meta">
           <span>{stage.ticket}</span>
           <span>{stage.role}</span>
@@ -43,8 +48,17 @@ function ReportBody({ dispatchId }: { dispatchId: string }) {
     );
   }
   if (!body.data) return <p className="report-empty">{t("Обновление…")}</p>;
+  const next = body.data.next_coordinator_action;
+  const outcome = typeof body.data.outcome === "string" ? body.data.outcome : "";
+  const tone = outcome === "completed" ? "passed" : outcome === "blocked" || outcome === "failed" ? "blocked" : "attention";
   return (
     <div className="report-sections">
+      {typeof next === "string" && next ? (
+        <div className={`report-conclusion ${tone}`} id="report-conclusion">
+          <Icon name={tone === "passed" ? "check" : tone === "blocked" ? "x" : "warning"} />
+          <p>{next}</p>
+        </div>
+      ) : null}
       {reportSectionLines(body.data).map(([title, lines]) => (
         <section key={title} className="report-section" data-section={title}>
           <div className="report-evidence-head">{title}</div>

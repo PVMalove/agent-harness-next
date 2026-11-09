@@ -92,10 +92,25 @@ describe("the Reports route", () => {
     expect(selectStages(stages, reports, { ...NO_FILTERS, sortBy: "ticket", descending: false })[0].ticket).toBe("#886");
   });
 
+  test("the mockup summary, QA lane and the Evidence, Quality and Readiness tabs", () => {
+    renderReports();
+    expect(document.querySelector("#reports-summary")!.textContent).toContain("Отчётов4");
+    expect(document.querySelector("#qa-lane")!.textContent).toContain("QA lane · #887");
+    expect(document.querySelector("#report-conclusion")!.textContent).toBe("developer-retry");
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
+    const matrix = document.querySelector("#reports-evidence")!;
+    expect(matrix.querySelectorAll(".report-evidence-row").length).toBeGreaterThan(0);
+    expect(matrix.textContent).toContain("receipt");
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Качество" })));
+    expect(document.querySelector("#reports-quality")).not.toBeNull();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Готовность" })));
+    expect(document.querySelector("#reports-readiness")!.textContent).toContain("Release Gate");
+  });
+
   test("English labels come from the catalog", () => {
     renderReports("?lang=en");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Reports");
-    expect(content()).toContain("Stages and reports");
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Reports", "Evidence", "Quality", "Readiness"]);
     expect(content()).toContain("✖ report received · failed");
     expect(content()).toContain("Evidence complete");
   });

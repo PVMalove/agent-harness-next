@@ -4,6 +4,8 @@ import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { rosterRoles } from "../ws/steps";
 import type { HeldStep, RosterDispatch, StepFilter } from "../ws/steps";
+import { STATUS_TONE, ageMinutes, formatMinutes, sessionStatus, statusCounts } from "./ActivityViews";
+import type { SessionStatus } from "./ActivityViews";
 
 const tone = (state: string): string =>
   state === "dispatched" || state === "working" ? "ok" : state === "failed" || state === "blocked" ? "err" : "";
@@ -13,17 +15,33 @@ export function StepFilters({
   steps,
   filter,
   onChange,
+  status = "all",
+  onStatus,
+  now = Date.now(),
 }: {
   dispatches: readonly RosterDispatch[];
   steps: readonly HeldStep[];
   filter: StepFilter;
   onChange: (filter: StepFilter) => void;
+  status?: "all" | SessionStatus;
+  onStatus?: (status: "all" | SessionStatus) => void;
+  now?: number;
 }) {
   const { t } = useI18n();
-  const shown = dispatches.filter((entry) => filter.role === null || entry.role === filter.role);
-  const counts = new Map<string, number>();
+  const counts = statusCounts(dispatches);
+  const shown = dispatches.filter(
+    (entry) =>
+      (filter.role === null || entry.role === filter.role) && (status === "all" || sessionStatus(entry) === status),
+  );
+  const chips: ["all" | SessionStatus, string][] = [
+    ["all", t("Все")],
+    ["running", t("Выполняется")],
+    ["blocked", t("Заблокировано")],
+    ["awaiting", t("Ждёт")],
+  ];
+  const stepCounts = new Map<string, number>();
   for (const { step } of steps) {
-    if (step.dispatch_id) counts.set(step.dispatch_id, (counts.get(step.dispatch_id) ?? 0) + 1);
+    if (step.dispatch_id) stepCounts.set(step.dispatch_id, (stepCounts.get(step.dispatch_id) ?? 0) + 1);
   }
   return (
     <section className="panel work-sessions">
@@ -32,7 +50,21 @@ export function StepFilters({
         <span className="small muted">{t("{shown} из {total}", { shown: shown.length, total: dispatches.length })}</span>
       </div>
       <div className="work-filters">
-        <div className="chips">
+        <div className="chips" id="work-status-chips">
+          {onStatus
+            ? chips.map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`chip ${status === key ? "on" : ""}`}
+                  type="button"
+                  aria-pressed={status === key}
+                  data-status={key}
+                  onClick={() => onStatus(key)}
+                >
+                  {label} {counts[key]}
+                </button>
+              ))
+            : null}
           <button
             className={`chip ${filter.dispatch === null ? "on" : ""}`}
             type="button"
@@ -77,11 +109,16 @@ export function StepFilters({
                   {entry.dispatch_id}
                 </b>
                 <small>
-                  {entry.role} · {entry.batch_id}
+                  {entry.role} · {entry.branch || entry.batch_id}
                 </small>
               </span>
-              <span className={`work-status ${tone(entry.state)}`}>{entry.state}</span>
-              <span className="work-time">{counts.get(entry.dispatch_id) ?? 0}</span>
+              <span className={`work-status ${STATUS_TONE[sessionStatus(entry)] || tone(entry.state)}`}>
+                {entry.state}
+                {entry.silent ? ` · ${t("тишина")}` : ""}
+              </span>
+              <span className="work-time" title={t("{count} шагов", { count: stepCounts.get(entry.dispatch_id) ?? 0 })}>
+                {formatMinutes(ageMinutes(entry.started_at, now))}
+              </span>
             </button>
           );
         })}
