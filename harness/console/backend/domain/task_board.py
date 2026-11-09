@@ -487,7 +487,9 @@ def agent_prompt(
                 [template.invariants] if template.invariants else [],
             ),
             *_titled_block("SPECIFIC SCOPE:", [what] if what else []),
-            *_titled_block("CODE DISCOVERY (verify current paths/branches first):", files),
+            *_titled_block(
+                "CODE DISCOVERY (verify current paths/branches first):", files
+            ),
             *_titled_block(
                 "ACCEPTANCE CRITERIA:",
                 [f"{index}. {item}" for index, item in enumerate(criteria, 1)],
@@ -681,7 +683,8 @@ def build_board_payload(
     template: PromptTemplate = NO_TEMPLATE,
 ) -> dict[str, object]:
     """The `task_board.snapshot` payload of one spec: its cards with columns, blockers, batch
-    stage and prompt, and the KPIs. Closed `resolution::wontfix` tickets are left out."""
+    stage and prompt, and the KPIs. Closed `resolution::wontfix` tickets are left out. The
+    prompt blocks come from the epic body's sections, else from the project's `template`."""
     caps = _Caps()
     caps.fired = board.truncated
     shown = sorted(
@@ -696,6 +699,12 @@ def build_board_payload(
     bodies = [parse_body(ticket.body) for ticket in shown]
     spec = board.spec
     branch = _spec_branch(spec)
+    # The epic's own blocks win; a block the epic lacks comes from the project file.
+    epic = parse_prompt_template(spec.body)
+    template = PromptTemplate(
+        invariants=epic.invariants or template.invariants,
+        discipline=epic.discipline or template.discipline,
+    )
     if branch is None:
         common = Counter(body.branch for body in bodies if body.branch).most_common(1)
         branch = common[0][0] if common else None

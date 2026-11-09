@@ -389,8 +389,14 @@ def test_agent_prompt_leaves_out_every_block_without_data() -> None:
 @pytest.mark.parametrize(
     ("url", "repository"),
     [
-        ("https://github.example.test/acme/app/issues/814", "https://github.example.test/acme/app"),
-        ("https://gitlab.example.test/grp/sub/app/-/issues/12", "https://gitlab.example.test/grp/sub/app"),
+        (
+            "https://github.example.test/acme/app/issues/814",
+            "https://github.example.test/acme/app",
+        ),
+        (
+            "https://gitlab.example.test/grp/sub/app/-/issues/12",
+            "https://gitlab.example.test/grp/sub/app",
+        ),
     ],
 )
 def test_agent_prompt_repository_is_the_tracker_of_the_ticket(
@@ -541,7 +547,7 @@ def test_board_payload_columns_kpis_and_cards() -> None:
     assert payload["truncated"] is False
 
 
-def test_board_payload_prompt_takes_the_tests_section_and_the_project_template() -> None:
+def test_board_payload_prompt_takes_tests_and_the_project_template() -> None:
     body = HOSTED_BODY + "\n## Tests\n- Two moves at once\n- A closed blocker\n"
     board = SpecTickets(SPEC, (_ticket("hitl", ref="#913", n=913, body=body),), {})
 
@@ -553,7 +559,10 @@ def test_board_payload_prompt_takes_the_tests_section_and_the_project_template()
         "\nTESTS / ADVERSARIAL SCENARIOS:\n- Two moves at once\n- A closed blocker\n\n"
         "IMPLEMENTATION DISCIPLINE:\nRead the approved ADR first."
     ) in prompt
-    assert "\nARCHITECTURE INVARIANTS (MANDATORY):\n- Target architecture only.\n" in prompt
+    assert (
+        "\nARCHITECTURE INVARIANTS (MANDATORY):\n- Target architecture only.\n"
+        in prompt
+    )
 
 
 def test_board_payload_without_ledger_marks_it_unavailable() -> None:
@@ -666,3 +675,30 @@ def test_order_cards_sorts_by_column_then_priority_then_number() -> None:
         ]
     )
     assert [item["id"] for item in ordered] == ["#1", "#2", "#None", "#3", "#4", "#5"]
+
+
+def test_board_payload_prompt_prefers_the_blocks_of_the_epic_body() -> None:
+    epic = TrackerSpec(
+        ref="#862",
+        n=862,
+        title="Web console",
+        url=None,
+        body=(
+            "## Integration Branch\n`integration/web-console`\n\n"
+            "## Architecture invariants\n- The server owns every board rule.\n"
+        ),
+        tickets_total=1,
+        tickets_open=1,
+    )
+    board = SpecTickets(epic, (_ticket("hitl", ref="#913", n=913),), {})
+
+    payload = build_board_payload("github", board, {}, True, template=TEMPLATE)
+
+    prompt = str(cast(list[dict[str, object]], payload["tickets"])[0]["prompt"])
+    assert (
+        "\n\nARCHITECTURE INVARIANTS (MANDATORY):\n- The server owns every board rule.\n\n"
+    ) in prompt
+    assert "Target architecture only." not in prompt
+    assert prompt.endswith(
+        "\n\nIMPLEMENTATION DISCIPLINE:\nRead the approved ADR first."
+    )
