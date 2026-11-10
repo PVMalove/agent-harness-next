@@ -911,6 +911,34 @@ class AutoDecisionTableTests(unittest.TestCase):
         # The same evidence from any other stage is no QA environment failure.
         self.assertIsNone(auto_policy.environment_stop("developer", report, Path("/work/repo")))
 
+    def test_a_qa_gate_without_a_linker_stops_with_the_toolchain_remedy(self) -> None:
+        report = self._failed_gate(
+            "error: linker `cc` not found\n"
+            "error: could not compile `harness-runtime` (bin \"harness-runtime\") due to 1 previous error"
+        )
+        stop = auto_policy.environment_stop("qa", report, Path("/work/repo"))
+        assert stop is not None
+        self.assertEqual(
+            (stop.category, stop.reason), ("no-automatic-route", "qa-environment-failure")
+        )
+        self.assertEqual(stop.evidence["classification"]["category"], "missing-linker")
+        self.assertIn("C toolchain", stop.evidence["remedy"])
+        self.assertIn("batch rewind --to qa", stop.evidence["remedy"])
+
+    def test_a_qa_gate_with_a_long_socket_path_stops_with_the_short_directory_remedy(
+        self,
+    ) -> None:
+        report = self._failed_gate(
+            "runtime_unavailable: the socket path /tmp/x.sock is longer than 100 bytes"
+        )
+        stop = auto_policy.environment_stop("qa", report, Path("/work/repo"))
+        assert stop is not None
+        self.assertEqual(
+            stop.evidence["classification"]["category"], "socket-path-too-long"
+        )
+        self.assertIn("XDG_RUNTIME_DIR", stop.evidence["remedy"])
+        self.assertIn("batch rewind --to qa", stop.evidence["remedy"])
+
     def test_a_qa_gate_failed_on_the_code_keeps_the_developer_retry(self) -> None:
         report = self._failed_gate(
             "FAILED tests/a.py::t - AssertionError: assert 1 == 2\n1 failed in 1.00s"

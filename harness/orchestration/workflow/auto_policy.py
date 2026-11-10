@@ -93,6 +93,19 @@ QA_ENVIRONMENT_REMEDY = (
     "TMPDIR under .harness/.sandboxes/), then a human re-runs QA on the same candidate with "
     "batch rewind --to qa"
 )
+# A QA environment that cannot build or start the runtime (#1015) needs its own fix.
+QA_ENVIRONMENT_REMEDIES = {
+    "missing-linker": (
+        "cargo found no linker in the QA environment, so a developer retry cannot fix it: install "
+        "a C toolchain (cc) in the QA environment, then a human re-runs QA on the same candidate "
+        "with batch rewind --to qa"
+    ),
+    "socket-path-too-long": (
+        "the runtime socket path in the QA environment is longer than the Unix limit, so a "
+        "developer retry cannot fix it: set a short absolute XDG_RUNTIME_DIR (or TMPDIR) for QA, "
+        "then a human re-runs QA on the same candidate with batch rewind --to qa"
+    ),
+}
 CLEAN_BASIS = (
     "the report is clean: completed, no blockers, every check passed, and nothing is left "
     "uncovered, unclosed, open or outside the approved scope"
@@ -361,7 +374,9 @@ def environment_stop(stage: str, report: JsonObject, repo: Path) -> Stop | None:
         {
             "command": failed.get("command"),
             "classification": found,
-            "remedy": QA_ENVIRONMENT_REMEDY,
+            "remedy": QA_ENVIRONMENT_REMEDIES.get(
+                str(found["category"]), QA_ENVIRONMENT_REMEDY
+            ),
             "failure": failure.to_json()
             if failure is not None
             else failure_domains.unrecognised(
