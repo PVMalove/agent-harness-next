@@ -417,3 +417,62 @@ def test_a_container_without_an_init_event_gets_heartbeats_but_no_self_report(
     assert status["state"] == "dispatched"
     assert status["heartbeat_at"] != before
     assert status["heartbeat_note"] == "container running"
+
+
+def test_a_container_writer_that_exits_before_report_submit_keeps_its_staged_report(
+    podman: Podman,
+) -> None:
+    """#1014, criterion 2: the worker stages its report and exits before the coordinator submits
+    it. The exit does not block the dispatch: dispatch wait names the staged report, and report
+    submit records it."""
+    from tests.orchestration.runtime_store_support import architect_report_file
+
+    repo, engine = podman()
+    _script_stream(
+        engine, _stream({"type": "system", "subtype": "init", "model": "sonnet"})
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    staged = Path(str(repo.brief["report_staging_path"]))
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_bytes(
+        architect_report_file(repo.repo, repo.dispatch, repo.brief).read_bytes()
+    )
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+
+    waited = answer(
+        repo.run("dispatch", "wait", "--dispatch", repo.dispatch, "--timeout", "5")
+    )
+
+    assert waited["event"] == "report_staged", waited
+    assert waited["report_staging_path"] == str(staged)
+    assert repo.status()["state"] == "working"
+    answer(repo.run("report", "submit", "--file", str(staged)))
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    assert repo.status()["state"] == "reported"
+
+
+def test_a_container_that_exits_without_a_staged_report_is_blocked(
+    podman: Podman,
+) -> None:
+    repo, engine = podman()
+    _script_stream(
+        engine, _stream({"type": "system", "subtype": "init", "model": "sonnet"})
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+
+    status = repo.status()
+    assert status["state"] == "blocked"
+    assert dig(status, "runtime_failure", "kind") == "worker-exited-without-report"

@@ -730,6 +730,15 @@ def wait_dispatch(args: argparse.Namespace) -> JsonObject:
                 }
             if state == "reported":
                 return {"dispatch_id": dispatch["dispatch_id"], "event": "reported"}
+            staged = status.get("staged_report")
+            if state in LIVE_DISPATCH_STATES and isinstance(staged, dict):
+                # The attested container worker exited with its report staged: report submit
+                # of that file records it (#1014).
+                return {
+                    "dispatch_id": dispatch["dispatch_id"],
+                    "event": "report_staged",
+                    "report_staging_path": staged.get("path"),
+                }
             if startup["classification"] == "worker-exited-without-report":
                 # Read-only: the work may be done and its report not yet delivered, so the
                 # ledger keeps the dispatch as it is and the coordinator decides.

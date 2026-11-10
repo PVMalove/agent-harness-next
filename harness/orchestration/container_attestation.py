@@ -160,3 +160,28 @@ def attest(
         # A mismatch is recorded on the status; dispatch wait reports it, and the exit of the
         # execution blocks the dispatch. Stopping the worker stays the operator's command.
         return
+
+
+def staged_report(
+    dispatch: Mapping[str, object], status: Mapping[str, object]
+) -> Path | None:
+    """The report a host-attested container worker staged before it exited, or ``None``.
+
+    Such a worker cannot run ``report submit`` itself, so its exit before the coordinator
+    submits the staged report is no failure: the dispatch waits for that submit (#1014)."""
+    plan = dispatch.get("runtime_access")
+    reported = status.get("model_self_report")
+    attestation = status.get("worktree_attestation")
+    staging = dispatch.get("report_staging_path")
+    if not (
+        isinstance(plan, dict)
+        and plan.get("runtime_extension") == container_executor.EXTENSION_NAME
+        and isinstance(reported, dict)
+        and reported.get("source") == SOURCE
+        and reported.get("match") is True
+        and (not isinstance(attestation, dict) or attestation.get("match") is True)
+        and isinstance(staging, str)
+    ):
+        return None
+    path = Path(staging)
+    return path if path.is_file() else None

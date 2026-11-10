@@ -12,7 +12,9 @@ what the runtime observed:
   submit``. A refusal of that code keeps the report pending, and ``dispatch status --dispatch``
   shows it as ``reaction_error``.
 - ``exited`` without a report: ``blocked``, domain ``timeout`` when the runtime stopped the
-  worker at its deadline, otherwise the classification ``worker-exited-without-report``.
+  worker at its deadline, otherwise the classification ``worker-exited-without-report``. A
+  host-attested container worker that staged its report keeps the dispatch live with
+  ``staged_report`` until ``report submit`` records that file (#1014).
 - ``lost``: ``blocked``, domain ``infrastructure``; the developer retry budget is untouched. A
   report that waited for the exit is never dropped: it stays on the status as ``held_report``,
   and ``dispatch status`` shows it to the operator.
@@ -138,6 +140,7 @@ def _failure(execution: JsonObject) -> JsonObject:
 
 def react(repo: Path, root: Path, dispatch: JsonObject, execution: JsonObject) -> None:
     """Choose the dispatch transition of an execution that ended."""
+    from harness.orchestration import container_attestation
     from harness.orchestration.pinned_configuration import read_snapshot
     from harness.orchestration.workflow.reports import _record_report
 
@@ -166,6 +169,19 @@ def react(repo: Path, root: Path, dispatch: JsonObject, execution: JsonObject) -
                 pinned["config"],
                 cast(JsonObject, relay) if isinstance(relay, dict) else None,
             )
+            return
+        staged = (
+            container_attestation.staged_report(dispatch, status)
+            if execution.get("state") == "exited" and pending is None
+            else None
+        )
+        if staged is not None:
+            # The attested container worker staged its report and exited: the dispatch waits
+            # for report submit of that file instead of blocking (#1014).
+            moment = utils._now()
+            status["staged_report"] = {"path": str(staged), "noticed_at": moment}
+            status["updated_at"] = moment
+            _replace_record(ledger, DispatchStatusRecord.from_dict(status))
             return
         status.update(
             {
