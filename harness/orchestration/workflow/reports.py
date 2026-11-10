@@ -224,9 +224,33 @@ def self_report_dispatch(args: argparse.Namespace) -> JsonObject:
             "a model self-report must name the actually active model",
             remedy="pass --model naming the model actually running this session",
         )
+    return record_self_report(
+        repo, root, args.dispatch, reported, getattr(args, "worktree", None)
+    )
+
+
+def record_self_report(
+    repo: Path,
+    root: Path,
+    dispatch_id: str,
+    reported: str,
+    supplied_worktree: str | None,
+    *,
+    source: str | None = None,
+    evidence: JsonObject | None = None,
+    block: bool = True,
+) -> JsonObject:
+    """Record the model and checkout a worker runs in, and block the dispatch on a mismatch.
+
+    The worker reports them itself (``dispatch self-report``); a container worker, which has no
+    runtime socket, is reported by the host coordinator from its event stream and its plan
+    (``source``, with the launch ``evidence``; #1014, ADR 0025). Both take the same checks.
+
+    ``block=False`` records a mismatch without blocking: the store refuses ``blocked`` while the
+    execution of a supervised dispatch runs, so its state waits for the exit (ADR 0021)."""
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
-        dispatch, status = _live_status(root, args.dispatch)
+        dispatch, status = _live_status(root, dispatch_id)
         operational_hold.require_no_hold(root, dispatch["batch_id"])
         progress = dispatch.get("preserved_progress")
         if (
@@ -244,7 +268,6 @@ def self_report_dispatch(args: argparse.Namespace) -> JsonObject:
         attestation: JsonObject | None = None
         worktree_matched = True
         if requires_attestation(dispatch):
-            supplied_worktree = getattr(args, "worktree", None)
             if not _non_empty(supplied_worktree):
                 worktree_matched = False
                 attestation = {
@@ -294,20 +317,31 @@ def self_report_dispatch(args: argparse.Namespace) -> JsonObject:
                     attestation = {"match": False, "error": str(exc)}
         matched = model_matched and worktree_matched
         moment = utils._now()
-        status["state"] = "working" if matched else "blocked"
+        if matched:
+            status["state"] = "working"
+        elif block:
+            status["state"] = "blocked"
         status["updated_at"] = moment
         status["heartbeat_at"] = moment
+        # A record without ``source`` is the worker's own report.
+        origin: JsonObject = {"source": source} if source else {}
         status["model_self_report"] = {
             "reported_model": reported,
             "expected_model": expected,
             "match": model_matched,
             "reported_at": moment,
+            **origin,
         }
         if attestation is not None:
-            status["worktree_attestation"] = {**attestation, "reported_at": moment}
+            status["worktree_attestation"] = {
+                **attestation,
+                "reported_at": moment,
+                **origin,
+                **({"container": evidence} if evidence is not None else {}),
+            }
         _safe_id(dispatch["dispatch_id"], "dispatch")
         _replace_record(ledger, DispatchStatusRecord.from_dict(status))
-        if not matched:
+        if not matched and block:
             batch = _load_batch(root, dispatch["batch_id"])
             for entry in batch.get("dispatches", []):
                 if entry["dispatch_id"] == dispatch["dispatch_id"]:

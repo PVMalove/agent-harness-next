@@ -35,6 +35,8 @@ from tests.orchestration.runtime_store_support import Supervised
 from tests.orchestration.test_docker_smoke import (
     ADAPTER,
     ALLOWED_HOST,
+    OFFLINE,
+    attested_round_trip,
     ENGINE_TIMEOUT_SECONDS,
     EVIDENCE,
     LABEL_DISPATCH,
@@ -286,6 +288,32 @@ def test_a_worker_reaches_only_its_allowed_host_and_writes_as_the_host_user(
         # Past the proxy the internal network has no route out.
         direct = evidence["direct"]
         assert direct["exit"] != 0 and direct["http"] == "000", evidence
+        assert wait_removed(repo.dispatch) == ([], [])
+    finally:
+        repo.close()
+
+
+def test_a_container_worker_is_attested_on_the_host_and_its_report_accepted(
+    tmp_path: Path, labelled: list[str], host_runtime_dir: Path
+) -> None:
+    """#1014: the full route of a writer role under rootless Podman with SELinux enforcing."""
+    require_engine()
+    policy: JsonObject = {
+        "defaults": {
+            **OFFLINE,
+            "container": {"engine": "podman", "worker_image": WORKER_TAG},
+        }
+    }
+    repo = Supervised(
+        tmp_path / "attested",
+        access_policy=policy,
+        create=False,
+        host_runtime_dir=host_runtime_dir,
+    )
+    try:
+        repo.create()
+        labelled.append(repo.dispatch)
+        attested_round_trip(repo, "podman")
         assert wait_removed(repo.dispatch) == ([], [])
     finally:
         repo.close()

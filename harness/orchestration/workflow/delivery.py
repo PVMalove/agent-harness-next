@@ -744,18 +744,18 @@ def wait_dispatch(args: argparse.Namespace) -> JsonObject:
                     "event": "rate_limited",
                     "retry_not_before": status.get("retry_not_before"),
                 }
-            if (
-                state == "blocked"
-                and status.get("model_self_report", {}).get("match") is False
-            ):
+            # A running supervised worker keeps its state until it exits (ADR 0021): its
+            # refused host-side self-report is reported while it runs (#1014).
+            if (state == "blocked" or state in LIVE_DISPATCH_STATES) and status.get(
+                "model_self_report", {}
+            ).get("match") is False:
                 return {
                     "dispatch_id": dispatch["dispatch_id"],
                     "event": "model_mismatch",
                 }
-            if (
-                state == "blocked"
-                and status.get("worktree_attestation", {}).get("match") is False
-            ):
+            if (state == "blocked" or state in LIVE_DISPATCH_STATES) and status.get(
+                "worktree_attestation", {}
+            ).get("match") is False:
                 return {
                     "dispatch_id": dispatch["dispatch_id"],
                     "event": "worktree_mismatch",
@@ -794,7 +794,6 @@ def wait_dispatch(args: argparse.Namespace) -> JsonObject:
 def observe_dispatch(args: argparse.Namespace) -> JsonObject:
     """Read process/status/event facts locally, without running or prompting any model."""
     from harness.orchestration.worker_observation import (
-        read_events,
         read_terminal,
         redact_visible,
     )
@@ -852,8 +851,39 @@ def observe_dispatch(args: argparse.Namespace) -> JsonObject:
         "runtime_session_id": receipt.get("runtime_session_id")
         if isinstance(receipt, dict)
         else None,
-        **read_events(repo, receipt, offset),
+        **_events(repo, root, dispatch, receipt, offset),
     }
+
+
+def _events(
+    repo: Path, root: Path, dispatch: JsonObject, receipt: object, offset: int
+) -> JsonObject:
+    """The worker's events: its adapter's log, or the stream snapshot the runtime keeps of a
+    running container worker (#1014)."""
+    from harness.orchestration import container_attestation
+    from harness.orchestration.runtime_client import RuntimeClientError
+    from harness.orchestration.worker_observation import read_events
+    from harness.orchestration.workflow import execution_reaction
+
+    plan = dispatch.get("runtime_access")
+    if (
+        isinstance(plan, dict)
+        and plan.get("runtime_extension") == container_executor.EXTENSION_NAME
+        and execution_reaction.supervised(root, dispatch)
+    ):
+        try:
+            execution = observed_execution(repo, dispatch["dispatch_id"])
+        except RuntimeClientError:
+            execution = None
+        path = container_attestation.stream_path(root, execution) if execution else None
+        if path is not None:
+            return read_events(
+                repo,
+                {"log_path": str(path)},
+                offset,
+                (container_attestation.stream_root(root),),
+            )
+    return read_events(repo, receipt, offset)
 
 
 def respond_native_permission(
