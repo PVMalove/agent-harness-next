@@ -60,10 +60,11 @@ Launcher повторно проверяет защищённый адаптер
 и отдаёт текст задания через stdin. Он нужен и когда модель текущей сессии отличается от
 профиля проекта. Настроенный runtime без защищённого адаптера даёт `runtime_unsupported`;
 другой CLI вместо него не запускается. Сейчас защищённый адаптер реализован для Claude Code;
-чтобы переключить автора на него, задайте `claude` в `assignment_plans.developer.default_runtime`
-файла `.harness/orchestration.json`, а без плана developer — в `test_author.runtime` файла
-`.harness/project.json`.
-упоминания `.claude` ниже относятся к его guard и runner, а не к выбору исполнителя.
+упоминания `.claude` ниже относятся к его guard и runner, а не к выбору исполнителя. Чтобы
+переключить автора на Claude Code, добавьте `claude` с `model` и `effort` в
+`assignment_plans.developer.runtimes` файла `.harness/orchestration.json`. Если runtime в плане
+несколько, выберите `claude` в `assignment_plans.developer.default_runtime`. Без плана developer
+runtime задаёт `test_author.runtime` файла `.harness/project.json`.
 
 ## 3. Защита
 

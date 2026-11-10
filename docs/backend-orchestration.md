@@ -840,7 +840,11 @@ QA, publish и рискованные переходы остаются ручн
    `.harness/orchestration.json` к `dispatch create` добавляются `--model` и `--effort` вызывающей
    сессии. Для coordinator и architect выбирайте `medium`, если разработчик явно не одобрил иное.
 
-   Accept отчёта architect может закрепить предложенный им commit plan вместо плана по умолчанию:
+   Architect кладёт предложенный commit plan в поле `commit_plan` отчёта. `report submit` проверяет
+   его теми же правилами, что файл плана ниже, и отказывает, если путь плана лежит вне
+   `allowed_paths` batch: brief каждой роли называет их в поле `allowed_paths`. Accept такого
+   отчёта закрепляет план без файла. Если отчёт плана не несёт, accept может закрепить план из
+   файла:
 
    ```bash
    python .harness/orchestration/coordinator.py --repo . batch decide \
@@ -848,7 +852,9 @@ QA, publish и рискованные переходы остаются ручн
      --approved-at 2026-09-09T12:00:30Z --commit-plan-file .harness/.sandboxes/scratch/commit-plan.json
    ```
 
-   Файл лежит в репозитории или одном из его worktree и содержит ровно один ключ
+   Файл лежит в репозитории или одном из его worktree, например в
+   `.harness/.sandboxes/scratch/inbox/`; внешний `/tmp` отклоняется. Файл рядом с планом из отчёта
+   должен содержать тот же план. Файл содержит ровно один ключ
    `{"commit_plan": [...]}`. Каждая entry содержит ровно четыре поля: уникальный `id`
    (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`), непустой `summary`, непустой список `expected_paths`
    (относительные пути или glob без ведущего `/` и сегмента `..`) и `covers` — номера пунктов DoD
@@ -858,7 +864,9 @@ QA, publish и рискованные переходы остаются ручн
    решения, а batch не меняется. Coordinator сохраняет проверенный план в batch как `commit_plan`.
    Решение architect получает `commit_plan_sha256`. Этот план становится `commit_plan` каждого
    developer brief batch-а, включая `developer-retry`. Если план в batch не совпадает с digest
-   принятого решения, developer brief не создаётся. Без файла brief содержит по одной entry `step-N`
+   принятого решения, developer brief не создаётся. Brief developer также несёт `accepted_design`:
+   id dispatch architect-а, `report_sha256` и `output` принятого отчёта, поэтому coordinator не
+   пересказывает дизайн в промпте. Без файла brief содержит по одной entry `step-N`
    на пункт DoD с `covers: [N]`. При `low_risk` и `milestone` coordinator автоматически принимает
    чистый architect report с планом по умолчанию. Поэтому architect, который предлагает другой план,
    указывает это в `risks`, и report ждёт ручного решения.
@@ -1581,8 +1589,10 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 `policy:auto` с маршрутом, причиной и evidence. Сессия передаёт только входы, которые требуют
 суждения:
 
-- `--commit-plan-file` — план architect-а. Политика закрепляет план, если он лежит внутри
-  `allowed_paths` и покрывает все пункты DoD. Иначе путь останавливается. Если команда не может
+- `--commit-plan-file` — план architect-а, если отчёт не несёт поле `commit_plan`; план из отчёта
+  политика закрепляет без файла. Политика закрепляет план, если он лежит внутри `allowed_paths` и
+  покрывает все пункты DoD. Иначе, а также при расхождении файла и плана из отчёта, путь
+  останавливается. Если команда не может
   прочитать файл как JSON-объект, она отказывает и ничего не пишет.
 - `--findings-file` — находки координатора для принятого отчёта developer-а.
 - `--bug-ticket` — bug-тикет на инструмент для `tooling-retry`. Без него команда отказывает и
