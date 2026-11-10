@@ -15075,6 +15075,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertNotIn("auto_stop", before)
         self.assertEqual(rendered["state"], "abandoned")
         self.assertEqual(rendered["observed_stop"]["reason"], "supersede-dead-end")
+        self.assertEqual(rendered["abandoned"], before["abandoned"])
+        self.assertEqual(rendered["abandoned"]["reason"], "the plan is obsolete")
 
     def test_an_exhausted_developer_retry_budget_stops_the_automatic_path(
         self,
