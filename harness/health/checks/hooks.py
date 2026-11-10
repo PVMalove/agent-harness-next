@@ -59,8 +59,9 @@ def check_test_author(context: HealthContext) -> CheckResult:
         else "исполнитель не выбран"
     )
     hint = (
-        f" (поддержан runtime: {', '.join(sorted(AUTHOR_ADAPTERS))}; задайте его в "
-        ".harness/orchestration.json assignment_plans.developer.default_runtime, "
+        f" (поддержан runtime: {', '.join(sorted(AUTHOR_ADAPTERS))}; добавьте его с model и "
+        "effort в assignment_plans.developer.runtimes файла .harness/orchestration.json и, "
+        "если runtime несколько, выберите в assignment_plans.developer.default_runtime; "
         "без плана developer — test_author.runtime в .harness/project.json)"
         if reason == "runtime_unsupported"
         else ""

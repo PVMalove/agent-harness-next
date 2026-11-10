@@ -148,6 +148,7 @@ def test_health_names_the_supported_runtime_and_where_to_select_it(
 
     assert "runtime_unsupported" in result.message
     assert "поддержан runtime: claude" in result.message
+    assert "assignment_plans.developer.runtimes" in result.message
     assert "assignment_plans.developer.default_runtime" in result.message
 
 
