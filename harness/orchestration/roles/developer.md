@@ -32,7 +32,7 @@ answer keeps the ordinary route. The cycle is prose for the developer, not a new
 ledger record. Per step, in order:
 
 1. **Handoff.** Before implementing a step, call the author with the requirement and the seam taken
-   from the architect brief, the public signatures, the existing fixtures and one scenario. Never
+   from the accepted architect design in the brief's `accepted_design.output`, the public signatures, the existing fixtures and one scenario. Never
    pass a proposed algorithm or implementation snippet as the basis of an expectation. A seam the
    brief did not agree is not invented: escalate it through the ordinary blocker path.
 2. **Reply.** The author answers in compact English with `status` (`red`, `needs_skeleton` or

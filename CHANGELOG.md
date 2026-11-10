@@ -75,6 +75,14 @@
 
 ### Fixed
 
+- **[Находки маршрута `/implement`]:** Исправлены находки полного маршрута `/implement` на задаче #936 (#1015):
+  - `batch abandon` пишет в аудит перехода approver, время, причину и открытые dispatch, а `batch list` и `batch auto-report` показывают запись `abandoned`. План и результат `harness cleanup --mode hard` называют `batch_id` и состояние batch у каждого worktree.
+  - Brief каждой роли содержит `allowed_paths` batch. Отчёт architect несёт необязательное поле `commit_plan`: `report submit` проверяет его правилами `--commit-plan-file` и отказывает при путях вне `allowed_paths`, а accept и `batch auto-decide` закрепляют его без файла плана.
+  - Brief developer содержит `accepted_design`: id dispatch архитектора, `report_sha256` и `output` принятого отчёта.
+  - `dispatch preflight` до регистрации Context Package отдаёт статус `not-registered` вместо пустого указателя.
+  - Классификатор QA считает отсутствие C-компоновщика и слишком длинный путь сокета сбоем окружения (`qa-environment-failure`), а не дефектом кода.
+  - `harness health` для test-author называет поддержанный runtime и где его задать, уточняет, что preflight проверяет основной checkout, а in-process developer идёт обычным TDD.
+  - `dispatch observe` объясняет отсутствие потока у in-process воркера и показывает чекпоинты; консоль выводит `stream_reason`.
 - **[Контейнерный воркер]:** Architect, developer и code-review в контейнере исполнителя `docker` проходят `report submit` без ручного обхода: coordinator на хосте сам подтверждает воркера, а веб-консоль показывает его шаги. Контейнерный QA больше не требует переводить все роли на `external` (#1014).
 - **[Approval старого store]:** Команда `harness-runtime repair-import-approval` восстанавливает отсутствующее human approval в store, мигрированном до #826, сохраняет данные после cutover и продолжает прерванную операцию по intent и backup. `--check` и полный validate объясняют необходимость repair; проверка исторических writer handoff принимает неизменные blocked-отчёты по правилу #850 (#970).
 
