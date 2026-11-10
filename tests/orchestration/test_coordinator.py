@@ -2270,6 +2270,42 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(proof["evidence"]["hosts"], ["github.com"])
         self.assertEqual(launches, [brief["dispatch_id"]])
 
+    def test_preflight_before_a_context_package_names_who_registers_it(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        preview = coordinator.preflight_dispatch(
+            self._args(
+                batch=batch["batch_id"],
+                role="architect",
+                purpose="work",
+                runtime="claude",
+                candidate_commit=None,
+            )
+        )
+        self.assertEqual(
+            preview["context_package"]["starting_files"],
+            {"status": "not-registered", "registered_by": "dispatch create"},
+        )
+
+        self._dispatch(batch["batch_id"], "architect")
+        registered = coordinator.preflight_dispatch(
+            self._args(
+                batch=batch["batch_id"],
+                role="architect",
+                purpose="work",
+                runtime="claude",
+                candidate_commit=None,
+            )
+        )
+        self.assertEqual(
+            set(registered["context_package"]["starting_files"]),
+            {"package_id", "sha256", "freshness"},
+        )
+
     def _start(self, dispatch_id: str, *, checkout: Path | None = None) -> None:
         launched = coordinator.send_dispatch(
             self._args(

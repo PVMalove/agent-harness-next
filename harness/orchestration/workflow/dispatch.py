@@ -482,7 +482,12 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
         if progress is not None:
             preserved_progress.require_current(repo, root, batch, progress)
         package = _latest_context_package(root, batch)
-        package_pointer: JsonObject = {}
+        # Preflight writes nothing: before `dispatch create` registers the package it names who
+        # will, instead of an empty pointer that reads like an empty package (#1015).
+        package_pointer: JsonObject = {
+            "status": "not-registered",
+            "registered_by": "dispatch create",
+        }
         if package is not None:
             package_pointer = {
                 "package_id": package["context_package_id"],
