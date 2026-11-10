@@ -20,7 +20,7 @@ from harness.errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from harness.storage import storage_root
 
 from . import container_executor, extensions
-from .contract import access_policy_problems
+from .contract import access_policy_problems, role_access_authored
 from .core.constants import ACCESS_OPERATIONS, ACCESS_RESOURCES, CONTAINER_ENGINES
 from .core.utils import JsonObject
 
@@ -322,6 +322,20 @@ def dispatch_operation(role: str, purpose: str) -> str | None:
     return "qa" if role == "qa" else None
 
 
+def _legacy_plan() -> JsonObject:
+    """The historical inherit plan of a launch that no access_policy layer names."""
+    plan: JsonObject = {
+        "mode": "inherit",
+        "network": {"hosts": []},
+        "filesystem": [],
+        "sources": {key: "legacy" for key in ("mode", "network", "filesystem")},
+        "requirements": [],
+        "runtime_extension": "none",
+    }
+    plan["plan_digest"] = _digest(plan)
+    return plan
+
+
 def resolve_plan(
     repo: Path,
     worktree: Path,
@@ -333,8 +347,9 @@ def resolve_plan(
 ) -> JsonObject:
     """Replace specified components, resolve real roots and retain mandatory artifacts.
 
-    A plan without authored access preserves historical inherit behavior. An authored policy
-    also exposes operational requirements that an empty filesystem override cannot remove.
+    A plan without authored access preserves historical inherit behavior, and so does a worker
+    role that neither ``defaults`` nor its own ``roles`` override names. An authored policy also
+    exposes operational requirements that an empty filesystem override cannot remove.
 
     An ``operation`` is executed by the coordinator itself, never by a role adapter: it takes the
     defaults and its own override only, so a role override cannot replace its choice, and the
@@ -347,16 +362,7 @@ def resolve_plan(
         )
     policy = config.get("access_policy")
     if "access_policy" not in config:
-        plan: JsonObject = {
-            "mode": "inherit",
-            "network": {"hosts": []},
-            "filesystem": [],
-            "sources": {key: "legacy" for key in ("mode", "network", "filesystem")},
-            "requirements": [],
-            "runtime_extension": "none",
-        }
-        plan["plan_digest"] = _digest(plan)
-        return plan
+        return _legacy_plan()
     problems = access_policy_problems(policy, {role} if role else set())
     # Other role overrides are validated by the config contract, not this selected-role view.
     problems = [
@@ -374,6 +380,11 @@ def resolve_plan(
             "access_policy passed validation without being an object",
             remedy=INTERNAL_INVARIANT_REMEDY,
         )
+    if operation is None and not role_access_authored(policy, role):
+        # A worker role that neither defaults nor its own override names keeps the launch it
+        # had without access_policy (#1014, ADR 0025): a container that only operations.qa
+        # authors never reaches an in-process role.
+        return _legacy_plan()
     selected: JsonObject = {
         "mode": "inherit",
         "network": {"hosts": []},

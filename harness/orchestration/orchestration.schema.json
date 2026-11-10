@@ -54,8 +54,22 @@
       "then": {
         "properties": {
           "access_policy": {
-            "properties": {"defaults": {"required": ["container"]}},
-            "required": ["defaults"]
+            "anyOf": [
+              {
+                "required": ["defaults"],
+                "properties": {"defaults": {"required": ["container"]}}
+              },
+              {
+                "not": {"required": ["defaults"]},
+                "required": ["operations"],
+                "properties": {
+                  "operations": {
+                    "required": ["qa"],
+                    "properties": {"qa": {"required": ["container"]}}
+                  }
+                }
+              }
+            ]
           }
         },
         "required": ["access_policy"]
@@ -501,7 +515,7 @@
       "type": "object",
       "propertyNames": {"enum": ["transport_health", "verification_environment_health", "retry_reason_classifier", "context_telemetry_provider", "human_notifier", "runtime_access"]},
       "additionalProperties": {"type": "string", "pattern": "^(none|[A-Za-z_][A-Za-z0-9_.-]*(:[A-Za-z_][A-Za-z0-9_]*)?)$"},
-      "description": "Цель: подключение внешней инфраструктуры. За что отвечает: модули уведомления, телеметрии, проверки здоровья и подтверждения доступа среды запуска. Варианты ключей: 'transport_health', 'verification_environment_health', 'retry_reason_classifier', 'context_telemetry_provider', 'human_notifier', 'runtime_access'. Варианты значений: 'none' (по умолчанию), имя зарегистрированного модуля или 'module:factory'. Для 'runtime_access' встроено имя 'docker' — контейнерный исполнитель; он требует access_policy.defaults.container."
+      "description": "Цель: подключение внешней инфраструктуры. За что отвечает: модули уведомления, телеметрии, проверки здоровья и подтверждения доступа среды запуска. Варианты ключей: 'transport_health', 'verification_environment_health', 'retry_reason_classifier', 'context_telemetry_provider', 'human_notifier', 'runtime_access'. Варианты значений: 'none' (по умолчанию), имя зарегистрированного модуля или 'module:factory'. Для 'runtime_access' встроено имя 'docker' — контейнерный исполнитель; он требует access_policy.defaults.container, а без defaults — access_policy.operations.qa.container. In-process роль, которую называют defaults или roles.<роль>, называется предупреждением при загрузке, а dispatch preflight её блокирует."
     },
     "preflight_policy": {
       "type": "object",

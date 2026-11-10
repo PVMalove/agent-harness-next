@@ -5,7 +5,8 @@
 //! is set in the runtime's environment, the engine answers in a supported mode and the images
 //! are the pinned ones. The intent records the planned objects; a failed staged launch removes
 //! them newest first and the execution is `lost`, never relaunched. Reconcile inspects the
-//! container with the engine of the row: an exit saves the logs and records the exit with its
+//! container with the engine of the row: a running worker gets a fresh snapshot of its logs, so
+//! the coordinator follows its event stream (#1014); an exit saves the logs and records the exit with its
 //! evidence, and only then removes the objects of the execution; a worker past its deadline is
 //! stopped with its grace, then killed. The result of the removal is `teardown.json` next to the
 //! logs; reconcile repeats the removal of an exited execution until that record is complete, so
@@ -482,6 +483,31 @@ impl Supervisor {
         }
     }
 
+    /// Replace the snapshot of the logs of a running worker, so a reader follows its stream while
+    /// it works (#1014, ADR 0025). The engine answers the whole stream, so each snapshot is
+    /// written beside the log and renamed over it: a reader sees the previous snapshot or the new
+    /// one, never a truncated file. A failed snapshot changes nothing; the exit saves the logs
+    /// again.
+    fn refresh_logs(&self, engine: &dyn Engine, execution: &Execution, worker: &str) {
+        let paths = self.log_paths(&execution.id);
+        let [stdout, stderr] = paths.as_slice() else {
+            return;
+        };
+        let partial = |path: &Path| path.with_extension("log.partial");
+        let refreshed = stdout
+            .parent()
+            .map_or(Ok(()), crate::launch::log_directory)
+            .and_then(|()| ops::logs(engine, worker, &partial(stdout), &partial(stderr)))
+            .and_then(|()| fs::rename(partial(stdout), stdout))
+            .and_then(|()| fs::rename(partial(stderr), stderr));
+        if let Err(err) = refreshed {
+            eprintln!(
+                "harness-runtime: the logs of the running execution {} were not refreshed: {err}",
+                execution.id
+            );
+        }
+    }
+
     /// Remove the objects of the execution. The removal is `complete` when the engine listed
     /// them and every one is removed or already absent; a repeat is safe.
     fn remove_objects(&self, engine: &dyn Engine, execution: &Execution) -> Value {
@@ -659,6 +685,7 @@ impl Supervisor {
                     self.stop_container(execution, engine, worker);
                     return Ok(());
                 }
+                self.refresh_logs(engine.as_ref(), execution, &worker);
                 Self::move_from(
                     connection,
                     execution,

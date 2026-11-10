@@ -12,7 +12,7 @@ import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 import pytest
 
@@ -287,3 +287,192 @@ def test_the_executor_has_no_engine_boundary_of_its_own() -> None:
     assert "run_engine" not in source
     assert "subprocess" not in source
     assert not hasattr(container_executor.DockerExecutor, "handoff")
+
+
+def _stream(*records: JsonObject) -> str:
+    return "".join(json.dumps(record) + "\n" for record in records)
+
+
+def _script_stream(engine: ScriptedEngine, stream: str) -> None:
+    engine.update(lambda state: state.update(worker_stdout=stream))
+
+
+def test_a_running_container_streams_its_events_to_dispatch_observe(
+    podman: Podman,
+) -> None:
+    """#1014, criterion 4: the runtime keeps a snapshot of the running worker's stdout, and
+    ``dispatch observe`` reads its stream-json events from it."""
+    repo, engine = podman()
+    _script_stream(
+        engine,
+        _stream(
+            {"type": "system", "subtype": "init", "model": "sonnet"},
+            {"type": "result", "subtype": "success", "result": "done"},
+        ),
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+
+    observed = answer(repo.run("dispatch", "observe", "--dispatch", repo.dispatch))
+
+    assert observed["stream_state"] == "connected", observed
+    texts = json.dumps(observed["events"])
+    assert "Runtime session connected" in texts
+
+
+def test_a_running_container_writer_is_attested_on_the_host_and_its_report_accepted(
+    podman: Podman,
+) -> None:
+    """#1014, criterion 2: no runtime socket in the container, yet the host records the
+    self-report from the init event and the plan's checkout, so ``report submit`` passes."""
+    from tests.orchestration.runtime_store_support import architect_report_file
+
+    repo, engine = podman()
+    _script_stream(
+        engine, _stream({"type": "system", "subtype": "init", "model": "sonnet"})
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+
+    status = repo.status()
+    assert status["state"] == "working", status
+    assert dig(status, "model_self_report", "match") is True
+    assert dig(status, "model_self_report", "source") == "container-host"
+    attestation = status["worktree_attestation"]
+    assert isinstance(attestation, dict)
+    assert attestation["match"] is True
+    assert attestation["source"] == "container-host"
+    evidence = attestation["container"]
+    assert evidence == {
+        "container_id": WORKER_CONTAINER,
+        "images": {"worker": WORKER_ID, "proxy": None},
+        "checkout": next(
+            dig(item, "path")
+            for item in cast(
+                list[object], dig(repo.brief, "runtime_access", "requirements")
+            )
+            if dig(item, "resource") == "checkout"
+        ),
+        "executor": "docker",
+    }
+    # A repeat records nothing new.
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    assert dig(repo.status(), "model_self_report", "reported_at") == dig(
+        status, "model_self_report", "reported_at"
+    )
+
+    report = architect_report_file(repo.repo, repo.dispatch, repo.brief)
+    submitted = answer(repo.run("report", "submit", "--file", str(report)))
+    assert submitted["awaiting"] == "execution-exit"
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    assert repo.status()["state"] == "reported"
+
+
+def test_a_container_init_event_of_another_model_blocks_the_dispatch(
+    podman: Podman,
+) -> None:
+    repo, engine = podman()
+    _script_stream(
+        engine, _stream({"type": "system", "subtype": "init", "model": "opus"})
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+
+    waited = answer(
+        repo.run("dispatch", "wait", "--dispatch", repo.dispatch, "--timeout", "5")
+    )
+
+    assert waited["event"] == "model_mismatch", waited
+    status = repo.status()
+    assert dig(status, "model_self_report", "source") == "container-host"
+    assert dig(status, "model_self_report", "match") is False
+    # The store refuses ``blocked`` while the execution runs; its exit blocks the dispatch.
+    assert status["state"] == "dispatched"
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    assert repo.status()["state"] == "blocked"
+
+
+def test_a_container_without_an_init_event_gets_heartbeats_but_no_self_report(
+    podman: Podman,
+) -> None:
+    repo, engine = podman()
+    answer(repo.send())
+    repo.wait_execution("running")
+    before = repo.status()["heartbeat_at"]
+
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+
+    status = repo.status()
+    assert "model_self_report" not in status
+    assert status["state"] == "dispatched"
+    assert status["heartbeat_at"] != before
+    assert status["heartbeat_note"] == "container running"
+
+
+def test_a_container_writer_that_exits_before_report_submit_keeps_its_staged_report(
+    podman: Podman,
+) -> None:
+    """#1014, criterion 2: the worker stages its report and exits before the coordinator submits
+    it. The exit does not block the dispatch: dispatch wait names the staged report, and report
+    submit records it."""
+    from tests.orchestration.runtime_store_support import architect_report_file
+
+    repo, engine = podman()
+    _script_stream(
+        engine, _stream({"type": "system", "subtype": "init", "model": "sonnet"})
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    staged = Path(str(repo.brief["report_staging_path"]))
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_bytes(
+        architect_report_file(repo.repo, repo.dispatch, repo.brief).read_bytes()
+    )
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+
+    waited = answer(
+        repo.run("dispatch", "wait", "--dispatch", repo.dispatch, "--timeout", "5")
+    )
+
+    assert waited["event"] == "report_staged", waited
+    assert waited["report_staging_path"] == str(staged)
+    assert repo.status()["state"] == "working"
+    answer(repo.run("report", "submit", "--file", str(staged)))
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    assert repo.status()["state"] == "reported"
+
+
+def test_a_container_that_exits_without_a_staged_report_is_blocked(
+    podman: Podman,
+) -> None:
+    repo, engine = podman()
+    _script_stream(
+        engine, _stream({"type": "system", "subtype": "init", "model": "sonnet"})
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+
+    status = repo.status()
+    assert status["state"] == "blocked"
+    assert dig(status, "runtime_failure", "kind") == "worker-exited-without-report"

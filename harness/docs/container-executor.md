@@ -46,8 +46,11 @@ These environments are not supported. `dispatch preflight` reports each one as a
   `PATH` of `harness-runtime serve`, and the user who runs it must be allowed to use the engine.
 - The runtime store epoch. Cut the ledger over once with `harness-runtime migrate --repo <repo>`,
   then keep `harness-runtime serve --repo <repo>` running while you work.
-- A transport of `external` in `assignment_plans` for every role that `dispatch send` sends. An
-  `in-process` role is a blocker: the executor wraps the command of an external adapter.
+- A transport of `external` in `assignment_plans` for every role that `access_policy.defaults` or
+  its own `access_policy.roles.<role>` names: the executor wraps the command of an external
+  adapter. Config load names such an `in-process` role in a warning, and `dispatch preflight`
+  blocks it. A role that neither names keeps its legacy in-process launch (see
+  [Container QA with in-process roles](#container-qa-with-in-process-roles)).
 - The worker image, and the proxy image when `network.hosts` is not empty, present in the engine
   under the tags that the configuration names.
 - A project-owned agent adapter that can run inside the worker image (see the example below).
@@ -96,8 +99,9 @@ Select the executor in `.harness/orchestration.json` and name the images in `acc
 
 - `container.worker_image` is required. `engine` is `docker` (the default) or `podman`.
   `proxy_image` is required when `network.hosts` is not empty.
-- `access_policy.defaults.container` is required when the executor is selected; `harness health`
-  and the schema reject a configuration without it.
+- `access_policy.defaults.container` is required when the executor is selected and `defaults` is
+  set. Without `defaults`, `access_policy.operations.qa.container` is required. `harness health`
+  and the schema reject a configuration without either.
 - `mode` must be `sandbox` or `inherit`. The executor refuses `unsandboxed`.
 - A `roles.<role>` or `operations.qa` override replaces each component that it names as a whole,
   for example the complete `container` object or the complete `environment` list. The components
@@ -109,6 +113,35 @@ Select the executor in `.harness/orchestration.json` and name the images in `acc
   the container with `stop_grace_seconds` of grace, then kills it.
 - The approval pins the resolved plan. A configuration change after `dispatch propose` does not
   change that dispatch: cancel it and propose again to apply the change.
+
+## Container QA with in-process roles
+
+`access_policy` applies to a worker role only through `defaults` or the role's own
+`roles.<role>` override. A role that neither names gets the plan it had without `access_policy`
+and launches as before, `in-process` included. So QA can run in containers while the worker roles
+stay in-process: name the container in `operations.qa` only.
+
+```json
+{
+  "extensions": {"runtime_access": "docker"},
+  "access_policy": {
+    "operations": {
+      "qa": {
+        "mode": "sandbox",
+        "container": {"engine": "podman", "worker_image": "harness-worker:local"},
+        "network": {"hosts": []}
+      }
+    }
+  }
+}
+```
+
+Without `defaults`, a `roles.<role>` override puts that role under the executor too, so it needs
+its own `container`; config load names an override without one in a warning. With `defaults`
+set, every role gets the authored plan. Then each `in-process` role is named in a
+config-load warning, for example `orchestration extensions.runtime_access 'docker' blocks
+in-process role 'developer': set its transport to external, or remove access_policy.defaults and
+access_policy.roles.developer`, and `dispatch preflight` blocks it.
 
 ## Worker image compatibility
 
@@ -193,8 +226,10 @@ reaches the configuration, the brief, a digest, an argv, evidence or a log.
   `GIT_CONFIG_KEY_0`, `GIT_CONFIG_VALUE_0` and `HARNESS_EXECUTOR`. With a non-empty
   `network.hosts`, the executor also sets `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`,
   `https_proxy`, `NO_PROXY` and `no_proxy`.
-- Agent authentication files are not mounted. An agent must authenticate through a variable, for
-  example an API key.
+- Agent authentication files are not mounted. An agent must authenticate through a variable.
+  For Claude Code, list `ANTHROPIC_API_KEY` for an API key, or `CLAUDE_CODE_OAUTH_TOKEN` for a
+  subscription: create that token on the host with `claude setup-token` and set it in the
+  environment of `harness-runtime serve`.
 
 ## Network allowlist
 
@@ -208,8 +243,9 @@ reaches the configuration, the brief, a digest, an argv, evidence or a log.
   allows no wildcard and no subdomain. An IP literal is refused even when it is listed.
 - The proxy resolves the host once and refuses it when any answer is a loopback, link-local,
   unspecified or multicast address. Everything else gets `403`.
-- List the host of the model API explicitly. Git remotes over ssh and other non-HTTP protocols do
-  not work. A tool that ignores the proxy variables has no network.
+- List the host of the model API explicitly, for Claude Code `api.anthropic.com`, and every other
+  host that the agent CLI contacts: an unlisted host gets `403`. Git remotes over ssh and other
+  non-HTTP protocols do not work. A tool that ignores the proxy variables has no network.
 
 ## Blockers
 
@@ -217,7 +253,7 @@ reaches the configuration, the brief, a digest, an argv, evidence or a log.
 
 | Blocker | Remedy |
 | --- | --- |
-| The role transport is not `external` | Set the role's `assignment_plans` transport to `external`. |
+| The role transport is not `external` | Set the role's `assignment_plans` transport to `external`, or remove `access_policy.defaults` and `access_policy.roles.<role>` so the role keeps its legacy in-process launch. |
 | The plan has no `container` component | Set `access_policy.defaults.container.worker_image`. |
 | `network.hosts` is not empty and no `proxy_image` is set | Build the proxy image and set `container.proxy_image`, or set `network.hosts` to `[]`. |
 | `mode` is `unsandboxed` | Set the mode to `sandbox` or `inherit`. |
@@ -237,9 +273,10 @@ reaches the configuration, the brief, a digest, an argv, evidence or a log.
   `harness.operation` and `harness.execution`. A worker container is named
   `harness-<dispatch_id>`, its proxy `harness-<dispatch_id>-proxy` and its network
   `harness-<dispatch_id>-net`.
-- When a worker exits, the runtime saves its streams (`executions/<id>/stdout.log` and
-  `stderr.log`), records the exit code, then removes the worker, the proxy and the network in that
-  order. Reconcile repeats an incomplete removal.
+- While a worker runs, every reconcile of the runtime replaces a snapshot of its streams
+  (`executions/<id>/stdout.log` and `stderr.log`) under the runtime store. When it exits, the
+  runtime saves its streams there, records the exit code, then removes the worker, the proxy and
+  the network in that order. Reconcile repeats an incomplete removal.
 - A failed launch removes the objects that it created, newest first. The execution becomes `lost`,
   the dispatch becomes `blocked`, and the runtime never launches it again.
 - Each QA command runs with `--rm --init`. The proxy and the network of a QA run live for the
@@ -254,10 +291,37 @@ reaches the configuration, the brief, a digest, an argv, evidence or a log.
 
 A worker in a container cannot change the ledger. Worker roles mount `shared_storage` read-only,
 and the runtime socket is not mounted. So `dispatch self-report`, `dispatch heartbeat` and
-`report submit` do not run inside the container. The worker writes its completion report to the
-brief's `report_staging_path`, which is inside the writable artifacts root
-`.harness/.sandboxes/scratch`. After the worker exits, the coordinator or a human records that
-report on the host with `report submit --file <path>`.
+`report submit` do not run inside the container. The coordinator on the host does the first two
+for the worker:
+
+- **Self-report.** The architect, developer and code-review roles need a model self-report and a
+  worktree attestation before their report is accepted. While the container runs, `dispatch
+  wait`, `dispatch status --dispatch` and `report submit` read the snapshot of the worker's stdout.
+  The model comes from the first stream-json event `{"type": "system", "subtype": "init",
+  "model": ...}`, and the checkout from the `checkout` resource of the approved plan, never from
+  the worker. The coordinator records them through the same checks as `dispatch self-report`,
+  with `source: container-host` and the evidence of the launch: the container id, the pinned image
+  digests, the checkout and the executor `docker`. So the adapter must print stream-json.
+- **Mismatch.** A model or checkout that differs from the brief is recorded with `match: false`,
+  and `dispatch wait` returns `model_mismatch` or `worktree_mismatch`. The dispatch stays in its
+  state while the container runs, because the store refuses `blocked` before the exit; the exit
+  blocks it. Stop the worker yourself if it must not finish.
+- **Heartbeat.** Each observation of the running container is the heartbeat of the dispatch
+  (`heartbeat_note: container running`). A container without an `init` event still ends in
+  `startup_timeout` with `model-self-report-missing`.
+- **Events.** `dispatch observe` and the web console read the same snapshot, so the steps of the
+  worker appear in its progress view.
+
+The worker writes its completion report to the brief's `report_staging_path`, which is inside the
+writable artifacts root `.harness/.sandboxes/scratch`, and may exit right after. The coordinator
+or a human records that report on the host with `report submit --file <path>`:
+
+- Submitted while the container runs, the report waits for the exit and is recorded then.
+- If the worker exits first, and its host-side self-report matched, the dispatch stays live with
+  `staged_report`, and `dispatch wait` returns the event `report_staged` with
+  `report_staging_path`. The coordinator then runs `report submit --file` with that path.
+- If the worker exits with no staged report, the dispatch becomes `blocked` with
+  `worker-exited-without-report`.
 
 ## Example project-owned agent adapter
 
@@ -295,12 +359,42 @@ fi
 tools=$(jq -r '.allowed_tools | join(",")' "$brief")
 model=$(jq -r '.resolved_model' "$brief")
 staging=$(jq -r '.report_staging_path' "$brief")
-exec claude --print --model "$model" --allowedTools "$tools" \
+exec claude --print --output-format stream-json --verbose --model "$model" --allowedTools "$tools" \
     "Work on the brief $brief. You cannot run coordinator commands in this container. \
 Write the completion report JSON to $staging and stop."
 ```
 
-The configuration of this example lists `ANTHROPIC_API_KEY` in `environment` and
-`api.anthropic.com` in `network.hosts`, and the worker image contains `jq` and the agent CLI.
-An action that needs approval and is outside the brief's `allowed_tools` is denied, because a
-non-interactive session cannot ask a human.
+The configuration of this example lists `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) in
+`environment` and `api.anthropic.com` in `network.hosts`, and the worker image contains `jq` and
+the agent CLI. `--output-format stream-json --verbose` prints the `init` event and the steps that
+the host-side self-report and `dispatch observe` read. An action that needs approval and is
+outside the brief's `allowed_tools` is denied, because a non-interactive session cannot ask a
+human.
+
+## Running inside distrobox
+
+Run `harness-runtime serve` and the coordinator on the host, not inside a distrobox container.
+The executor reads the engine, SELinux and cgroups of the machine where `harness-runtime serve`
+runs, and it mounts every plan root at the same absolute path, so the runtime needs the host's
+engine and the host's paths.
+
+When the agent itself works inside distrobox, the runtime still runs on the host. Then every plan
+root must have the same absolute path in the distrobox container and on the host, which holds for
+the home directory that distrobox shares.
+
+A runtime started inside distrobox, with a `podman` on its `PATH` that calls
+`distrobox-host-exec`, has failed with this message. The likely cause, not verified further, is that
+the runtime starts the engine CLI with its own environment, and the shim does not detect the
+distrobox container there. The fix is the same: start the runtime on the host.
+
+```text
+the podman engine is unavailable: You must run distrobox-host-exec inside a container!
+```
+
+The Podman smoke checks SELinux by reading `/sys/fs/selinux/enforce`. Run inside a container on
+a host with SELinux enforcing, the smoke has failed with the message below. Run the smoke
+on the host.
+
+```text
+HARNESS_REQUIRE_PODMAN_SMOKE=1, but the smoke needs SELinux in enforcing mode
+```

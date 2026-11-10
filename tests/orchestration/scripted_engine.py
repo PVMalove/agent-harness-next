@@ -236,7 +236,8 @@ def _answer(state: State, argv: list[str]) -> tuple[int, str, str]:
     if kind == "network-connect":
         return 0, "", ""
     if verb == "logs":
-        return 0, "worker stdout\n", "worker stderr\n"
+        # A test may script the worker's stream, for example its stream-json events (#1014).
+        return 0, state.get("worker_stdout", "worker stdout\n"), "worker stderr\n"
     if verb == "rm" or kind == "network-rm":
         item = _find(state, "network" if verb == "network" else "container", argv[-1])
         if item is None:

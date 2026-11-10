@@ -75,6 +75,7 @@
 
 ### Fixed
 
+- **[Контейнерный воркер]:** Architect, developer и code-review в контейнере исполнителя `docker` проходят `report submit` без ручного обхода: coordinator на хосте сам подтверждает воркера, а веб-консоль показывает его шаги. Контейнерный QA больше не требует переводить все роли на `external` (#1014).
 - **[Approval старого store]:** Команда `harness-runtime repair-import-approval` восстанавливает отсутствующее human approval в store, мигрированном до #826, сохраняет данные после cutover и продолжает прерванную операцию по intent и backup. `--check` и полный validate объясняют необходимость repair; проверка исторических writer handoff принимает неизменные blocked-отчёты по правилу #850 (#970).
 
 - **[Исполнитель тест-автора из настроек]:** Полный `/implement` наследует runtime/model/effort утверждённого developer, короткий `/fast-implement` использует явный профиль `project.json.test_author`. Общий selector обслуживает запуск, preflight и Health; нативный Agent наследует модель родителя вместо фиксированного `haiku`. Неподдержанный защищённый адаптер даёт `runtime_unsupported`, без подмены выбранного CLI. Live-проба также использует настройки developer (#993).

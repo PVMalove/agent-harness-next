@@ -69,6 +69,52 @@ class ContainerGuideTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertNotIn(token, text)
 
+    def test_the_example_adapter_streams_the_events_the_host_attests_from(self) -> None:
+        """#1014: the host reads the model from the stream-json init event of the worker."""
+        example = SOURCE.read_text(encoding="utf-8").split(
+            "## Example project-owned agent adapter", 1
+        )[1]
+
+        self.assertIn("--output-format stream-json --verbose", example)
+
+    def test_reports_from_a_container_name_the_host_side_self_report(self) -> None:
+        section = _section(
+            SOURCE.read_text(encoding="utf-8"), "Reports from a container"
+        )
+
+        for expected in (
+            "container-host",
+            "init",
+            "report submit --file",
+            "model_mismatch",
+            "heartbeat",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, section)
+
+    def test_the_guide_names_the_subscription_token_and_distrobox(self) -> None:
+        text = SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("CLAUDE_CODE_OAUTH_TOKEN", text)
+        self.assertIn("claude setup-token", text)
+        distrobox = _section(text, "Running inside distrobox")
+        self.assertIn("You must run distrobox-host-exec inside a container", distrobox)
+        self.assertIn("/sys/fs/selinux/enforce", distrobox)
+
+    def test_the_guide_shows_container_qa_with_in_process_roles(self) -> None:
+        section = _section(
+            SOURCE.read_text(encoding="utf-8"), "Container QA with in-process roles"
+        )
+
+        self.assertIn('"operations"', section)
+        self.assertNotIn('"defaults"', section)
+        self.assertIn("in-process", section)
+
+
+def _section(text: str, title: str) -> str:
+    """The body of the ``##`` section ``title``, up to the next ``##`` heading."""
+    return text.split(f"## {title}\n", 1)[1].split("\n## ", 1)[0]
+
 
 if __name__ == "__main__":
     unittest.main()
