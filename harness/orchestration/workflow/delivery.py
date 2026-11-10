@@ -827,20 +827,7 @@ def observe_dispatch(args: argparse.Namespace) -> JsonObject:
     with _ledger_lock(LifecycleLedger(root)):
         dispatch = _load_dispatch(root, args.dispatch)
         status = _load_dispatch_status(root, args.dispatch)
-        checkpoints = [
-            {
-                "checkpoint_id": record["checkpoint_id"],
-                "commit_sha": record.get("commit_sha"),
-                "created_at": record.get("created_at"),
-            }
-            for record in (
-                _load_checkpoint(root, item["checkpoint_id"])
-                for item in _load_batch(root, dispatch["batch_id"]).get(
-                    "checkpoints", []
-                )
-                if item.get("dispatch_id") == dispatch["dispatch_id"]
-            )
-        ]
+        checkpoints = _dispatch_checkpoints(root, dispatch)
     startup = assess_startup(dispatch, status, repo=repo)
     receipt = status.get("adapter_receipt")
     if (
@@ -884,6 +871,23 @@ def observe_dispatch(args: argparse.Namespace) -> JsonObject:
         "checkpoints": checkpoints,
         **_events(repo, root, dispatch, receipt, offset),
     }
+
+
+def _dispatch_checkpoints(root: Path, dispatch: JsonObject) -> list[JsonObject]:
+    """The checkpoints this dispatch recorded, oldest first, as observe shows them."""
+    found: list[JsonObject] = []
+    for item in _load_batch(root, dispatch["batch_id"]).get("checkpoints", []):
+        if item.get("dispatch_id") != dispatch["dispatch_id"]:
+            continue
+        record = _load_checkpoint(root, item["checkpoint_id"])
+        found.append(
+            {
+                "checkpoint_id": record["checkpoint_id"],
+                "commit_sha": record.get("commit_sha"),
+                "created_at": record.get("created_at"),
+            }
+        )
+    return found
 
 
 def _events(

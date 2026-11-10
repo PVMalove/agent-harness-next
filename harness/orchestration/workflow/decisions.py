@@ -1161,35 +1161,40 @@ def _pinned_commit_plan(
     passed beside it must hold the same plan (issue #1015).
     """
     plan_file = getattr(args, "commit_plan_file", None)
-    reported = reported_commit_plan(batch, report)
     if plan_file is None:
-        return reported if args.decision == "accept" else None
+        return (
+            accepted_commit_plan(batch, report, None)
+            if args.decision == "accept"
+            else None
+        )
     if args.decision != "accept" or report.get("role") != "architect":
         raise CoordinatorError(
             "--commit-plan-file is only valid when accepting an architect report",
             remedy="drop --commit-plan-file, or pass it with --decision accept on the pending architect report",
         )
-    plan = _read_commit_plan(repo, batch, plan_file)
-    if reported is not None and plan != reported:
-        raise plan_differs_error()
-    return plan
+    return accepted_commit_plan(batch, report, _commit_plan_document(repo, plan_file))
 
 
-def reported_commit_plan(
-    batch: JsonObject, report: JsonObject
+def accepted_commit_plan(
+    batch: JsonObject, report: JsonObject, document: JsonObject | None
 ) -> list[JsonObject] | None:
-    """The ``commit_plan`` an architect report carries, validated; ``None`` without one."""
-    if report.get("role") != "architect" or "commit_plan" not in report:
-        return None
-    return _pin_commit_plan(batch, {"commit_plan": report["commit_plan"]})
-
-
-def plan_differs_error() -> CoordinatorError:
-    return CoordinatorError(
-        "the --commit-plan-file plan differs from the commit_plan of the architect report",
-        remedy="drop --commit-plan-file to pin the reported plan, or ask the architect to "
-        "resubmit the report with the intended commit_plan",
+    """The validated plan an architect accept pins: the plan file's ``document`` or the report's
+    own ``commit_plan``; when both are given they must agree. ``None`` when neither is."""
+    reported = (
+        _pin_commit_plan(batch, {"commit_plan": report["commit_plan"]})
+        if report.get("role") == "architect" and "commit_plan" in report
+        else None
     )
+    if document is None:
+        return reported
+    plan = _pin_commit_plan(batch, document)
+    if reported is not None and plan != reported:
+        raise CoordinatorError(
+            "the --commit-plan-file plan differs from the commit_plan of the architect report",
+            remedy="drop --commit-plan-file to pin the reported plan, or ask the architect to "
+            "resubmit the report with the intended commit_plan",
+        )
+    return plan
 
 
 def _read_commit_plan(

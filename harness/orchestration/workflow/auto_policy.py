@@ -806,8 +806,7 @@ def resolve(
         "commit_plan_file": inputs.commit_plan_file,
     }
     if choice.decision == "accept":
-        has_file = inputs.commit_plan_file is not None
-        if report.get("role") == "architect" and (has_file or "commit_plan" in report):
+        if report.get("role") == "architect":
             # A plan file that cannot be read is a session input error: the command refuses and
             # records nothing. The plan in the file or in the report goes through the gate.
             document = (
@@ -816,15 +815,7 @@ def resolve(
                 else None
             )
             try:
-                reported = decisions.reported_commit_plan(batch, report)
-                plan = (
-                    decisions._pin_commit_plan(batch, document)
-                    if document is not None
-                    else reported
-                )
-                if reported is not None and plan != reported:
-                    raise decisions.plan_differs_error()
-                assert plan is not None
+                plan = decisions.accepted_commit_plan(batch, report, document)
             except CoordinatorError as exc:
                 return Resolution(
                     stop=Stop(
@@ -833,7 +824,9 @@ def resolve(
                         {"gate": "commit-plan", "refused": exc.message},
                     )
                 )
-            outside = plan_rules.paths_outside_scope(plan, batch.get("allowed_paths"))
+            outside = plan_rules.paths_outside_scope(
+                plan or [], batch.get("allowed_paths")
+            )
             if outside:
                 return Resolution(
                     stop=Stop(

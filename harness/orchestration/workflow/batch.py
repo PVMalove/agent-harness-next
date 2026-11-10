@@ -617,7 +617,7 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
                 continue
             if args.open and terminal(batch):
                 continue
-            refusal = batch.get("abandoned")
+            closed = batch.get("abandoned")
             batches.append(
                 {
                     "batch_id": batch.get("batch_id"),
@@ -632,7 +632,7 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
                     "open_dispatches": open_dispatches,
                     "next_action": batch.get("next_action"),
                     "abandoned": {
-                        key: refusal.get(key)
+                        key: closed.get(key)
                         for key in (
                             "approved_by",
                             "approved_at",
@@ -640,7 +640,7 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
                             "reason",
                         )
                     }
-                    if isinstance(refusal, dict)
+                    if isinstance(closed, dict)
                     else None,
                 }
             )
