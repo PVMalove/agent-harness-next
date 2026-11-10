@@ -54,6 +54,9 @@ These environments are not supported. `dispatch preflight` reports each one as a
 - The worker image, and the proxy image when `network.hosts` is not empty, present in the engine
   under the tags that the configuration names.
 - A project-owned agent adapter that can run inside the worker image (see the example below).
+- A C linker (`cc`) in the QA environment when the gate builds Rust with `cargo`, and a runtime
+  socket path of at most 100 bytes: set a short absolute `XDG_RUNTIME_DIR` (or `TMPDIR`). Without
+  either, the gate stops as `qa-environment-failure` instead of a developer retry.
 
 ## Configuration and overrides
 

@@ -341,7 +341,9 @@ and operator decisions are never copied: they stay with the abandoned batch and 
 Every `retry` and `abandon` decision of `batch decide` records its recovery route as
 `routing.route`, one value of the closed set `RECOVERY_ROUTES`. The route is set in the same step
 that sets `next_action`, from the same structured evidence, and never from free text. `batch abandon`
-(a batch that will never have a report) and `batch resume` record no route. `report-completion` is
+(a batch that will never have a report) and `batch resume` record no route. The audit record of the
+`batch abandon` transition names the approver, the time, the reason and the open dispatches, and
+`batch list` and `batch auto-report` show the batch's `abandoned` record. `report-completion` is
 not recorded by `batch decide`: `report submit` names it in its `completion` object when the policy
 chain after a recorded report stops, and the coordinator completes that chain with
 `report complete --dispatch <dispatch-id>`. `supersede` is not recorded by `batch decide` either:
@@ -491,7 +493,7 @@ the inputs that need judgement:
 
 | Input | Use |
 | --- | --- |
-| `--commit-plan-file <path>` | An architect report that the policy accepts. The policy pins the plan if its `expected_paths` lie inside `allowed_paths` and it covers every Definition of Done item. Otherwise the path stops with `deterministic-gate-failed`. If the command cannot read the file as a JSON object, it refuses and records nothing. |
+| `--commit-plan-file <path>` | An architect report that the policy accepts. A `commit_plan` the report carries is pinned without the file, and a file passed beside it must hold the same plan. The policy pins the plan if its `expected_paths` lie inside `allowed_paths` and it covers every Definition of Done item. Otherwise, or when the file and the reported plan differ, the path stops with `deterministic-gate-failed`. If the command cannot read the file as a JSON object, it refuses and records nothing. The file lies under `.harness/.sandboxes/scratch/inbox/` or the project session scratchpad; a path outside the repository and its worktrees is refused. |
 | `--findings-file <path>` | A developer work report that the policy accepts: the coordinator findings go to code-review as carried items. |
 | `--bug-ticket <ticket>` | A `tooling-retry`. Before the command, the session creates or reuses a bug ticket for the blocking tool through the tracker CLI. Without it, the command refuses and records nothing. |
 | `--block-bypass --note <text>` | The role worked around a hook or tool block. The note names the violation. |
@@ -546,7 +548,7 @@ detect them in this order: integrity, budget, route.
 | `no-automatic-route` | `unknown-reason` | The route has reason category `unknown`, or is a developer-retry whose failure domain is `unknown`, or the coordinator refuses a developer retry because no code defect is proven (the stop keeps the `failure`), or attention `unknown-reason` |
 | `no-automatic-route` | `abandon-dead-end` | The coordinator refuses the retry route, or the batch is `blocked` or `failed` |
 | `no-automatic-route` | `supersede-dead-end` | The batch is `abandoned`; only a human continues with `batch create --supersedes` |
-| `no-automatic-route` | `qa-environment-failure` | The QA gate failed on its environment (a read-only file system, or permission denied outside the repository) with no code-defect sign; the evidence names the remedy: a writable temporary directory, then `batch rewind --to qa` |
+| `no-automatic-route` | `qa-environment-failure` | The QA gate failed on its environment (a read-only file system, or permission denied outside the repository) with no code-defect sign, or on an exact environment signature that wins over cargo's `could not compile`: no linker for cargo (`missing-linker`) or a runtime socket path over the Unix limit (`socket-path-too-long`); the evidence names the remedy: a writable temporary directory, a C toolchain (`cc`) or a short `XDG_RUNTIME_DIR`/`TMPDIR`, then `batch rewind --to qa` |
 
 The coordinator records the stop once as the hashed `batch.auto_stop` (`category`, `reason`,
 `detected_at`, `detected_by`, `evidence`). A stop records no decision and weakens no validation.
@@ -885,6 +887,8 @@ repository map policy. The file and token limits still apply; the command refuse
 inputs instead of silently dropping them. A package with the same snapshot is reused only when
 it already contains every requested starting file. The next role shares the enriched package;
 previous packages and briefs remain immutable. Adding read inputs does not widen write scope.
+`dispatch create` registers the package of a dispatch; before that, `dispatch preflight` reports
+its `starting_files` as `{"status": "not-registered", "registered_by": "dispatch create"}`.
 
 ## Read-only retry idempotency
 
@@ -1100,6 +1104,9 @@ and changes no persistent permissions or batch approval. Secret values and think
 excluded before event storage as well as from display; the example bounds its event file to 10 MiB
 and the UI retains 500 lines. Native input is kept only in supervisor memory; the local pending
 record contains a redacted preview and digest. A stream gap is visible; a missing stream is not a dead worker.
+An in-process worker has no event stream: `observe` reports `stream_state: unavailable` with a
+`stream_reason` that says so; follow it through self-report, heartbeat and the `checkpoints` list
+(`checkpoint_id`, `commit_sha`, `created_at`) that `observe` returns for every dispatch.
 Process/exit, ledger lifecycle, staged report and report acceptance remain separate facts.
 The shared theme, TopBar, Footer, section menu, RU/EN and F1/F2 belong to the existing console;
 container/recovery navigation reuses that shell rather than defining another lifecycle controller.
@@ -1216,8 +1223,10 @@ It must contain, at minimum:
   `context_budget` is `adaptive_continuation_policy.context_limit`. The tool list is the role's
   working set, never a deny-list: a brief does not disable the runtime's global tools. A brief
   without these fields is valid;
-- `allowed paths`: the explicit scope the role may write, pinned from the batch and never wider than
-  the role's write ceiling; a change outside it is rejected;
+- `allowed paths`: the explicit scope the role may write (`write_paths`), pinned from the batch and
+  never wider than the role's write ceiling; a change outside it is rejected. Every brief also names
+  the batch scope itself in `allowed_paths`, so a read-only architect, whose `write_paths` is empty,
+  plans inside it. A brief created before this field existed has no `allowed_paths`;
 - `branch/worktree`: issue branch and isolated worktree; protected branches and `integration/*`
   are never write targets;
 - `Definition of Done`: observable acceptance criteria and the expected role output;
@@ -1256,7 +1265,11 @@ It must contain, at minimum:
 - `coordinator approval`: approving person, timestamp, and the approved concurrency decision;
 - `commit plan` (developer work): ordered entries `{id, summary, expected_paths, covers}`, where
   `covers` names the Definition of Done items an entry implements. It is one entry per item unless
-  the operator pinned the architect's plan with `batch decide --decision accept --commit-plan-file`;
+  the architect accept pinned a plan: the `commit_plan` of the architect report, or a
+  `--commit-plan-file` passed when the report carries none;
+- `accepted design` (developer work): `accepted_design`, the accepted architect report the developer
+  takes its seam from, as `{dispatch_id, report_sha256, output}`; `null` for other briefs and for a
+  batch without an accepted architect report of its own;
 - `commit plan divergence` (code-review): how the last accepted initial or rebase developer report
   diverged from its plan, or `null`;
 - `carried items`: one shared channel keyed by the kind of source,
@@ -1483,9 +1496,10 @@ developer report whose `changed_files` lie outside the brief's `write_paths` is 
 auto-accepted, plain `accept` is refused, and it is accepted only by `override-warning` with a note
 other than `none` and an explicit `--approved-by`. The decision records `scope_warnings`, and the
 override attaches a coordinator finding, so the next code-review brief carries the paths as an item
-to settle. An architect `accept` with `--commit-plan-file` passes when the plan's `expected_paths`
-lie outside the batch `allowed_paths`; the packet (with `--commit-plan-file`) and the decision record
-the same `scope_warnings`. The worker's own ban on writing outside `write_paths`, the checkpoint
+to settle. An architect report's own `commit_plan` never lies outside the batch `allowed_paths`:
+`report submit` refuses it. An architect `accept` with `--commit-plan-file` passes when the plan's
+`expected_paths` lie outside the batch `allowed_paths`; the packet (with `--commit-plan-file`) and the
+decision record the same `scope_warnings`. The worker's own ban on writing outside `write_paths`, the checkpoint
 `changed_files` check and non-developer write roles stay strict.
 
 The coordinator does not rewrite a report to make it pass. A missing commit SHA, changed-file

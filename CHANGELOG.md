@@ -75,6 +75,14 @@
 
 ### Fixed
 
+- **[Аудит закрытия batch]:** `batch abandon` пишет в аудит перехода approver, время, причину и открытые dispatch, а `batch list` и `batch auto-report` показывают запись `abandoned` (#1015).
+- **[Batch в hard cleanup]:** План и результат `harness cleanup --mode hard` называют `batch_id` и состояние batch у каждого worktree; worktree нетерминального batch по-прежнему защищён (#1015).
+- **[Scope и план архитектора]:** Brief каждой роли содержит `allowed_paths` batch. Отчёт architect несёт необязательное поле `commit_plan`: `report submit` проверяет его правилами `--commit-plan-file` и отказывает при путях вне `allowed_paths`, а accept и `batch auto-decide` закрепляют его без файла плана (#1015).
+- **[Дизайн архитектора в brief developer]:** Brief developer содержит `accepted_design` с id dispatch архитектора, `report_sha256` и `output` принятого отчёта (#1015).
+- **[Context Package в preflight]:** `dispatch preflight` до регистрации Context Package отдаёт статус `not-registered` вместо пустого указателя (#1015).
+- **[Окружение QA]:** Классификатор QA считает отсутствие C-компоновщика и слишком длинный путь сокета сбоем окружения (`qa-environment-failure`), а не дефектом кода (#1015).
+- **[Test-author в health]:** Строка health называет поддержанный runtime и где его задать, уточняет, что preflight проверяет основной checkout, а in-process developer идёт обычным TDD (#1015).
+- **[Наблюдение in-process]:** `dispatch observe` объясняет отсутствие потока событий у in-process воркера и показывает его чекпоинты; консоль выводит `stream_reason` (#1015).
 - **[Контейнерный воркер]:** Architect, developer и code-review в контейнере исполнителя `docker` проходят `report submit` без ручного обхода: coordinator на хосте сам подтверждает воркера, а веб-консоль показывает его шаги. Контейнерный QA больше не требует переводить все роли на `external` (#1014).
 - **[Approval старого store]:** Команда `harness-runtime repair-import-approval` восстанавливает отсутствующее human approval в store, мигрированном до #826, сохраняет данные после cutover и продолжает прерванную операцию по intent и backup. `--check` и полный validate объясняют необходимость repair; проверка исторических writer handoff принимает неизменные blocked-отчёты по правилу #850 (#970).
 

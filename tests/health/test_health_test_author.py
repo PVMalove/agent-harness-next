@@ -134,3 +134,28 @@ def test_health_reports_the_configured_runtime_without_running_another_adapter(
     assert "runtime_unsupported" in result.message
     assert result.status == "warn"
     assert not sentinel.exists()
+
+
+def test_health_names_the_supported_runtime_and_where_to_select_it(
+    project: Path,
+) -> None:
+    path = project / ".harness/project.json"
+    config = json.loads(path.read_text())
+    config["test_author"] = {"runtime": "codex", "model": "m", "effort": "high"}
+    path.write_text(json.dumps(config))
+
+    result = hooks.check_test_author(HealthContext(repo=project, lock={}, online=False))
+
+    assert "runtime_unsupported" in result.message
+    assert "поддержан runtime: claude" in result.message
+    assert "assignment_plans.developer.runtimes" in result.message
+    assert "assignment_plans.developer.default_runtime" in result.message
+
+
+def test_health_scopes_preflight_to_the_main_checkout_and_names_in_process_tdd(
+    project: Path,
+) -> None:
+    result = hooks.check_test_author(HealthContext(repo=project, lock={}, online=False))
+
+    assert "preflight: ok (основной checkout)" in result.message
+    assert "in-process developer в worker worktree — обычный TDD" in result.message

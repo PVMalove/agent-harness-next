@@ -60,7 +60,11 @@ Launcher повторно проверяет защищённый адаптер
 и отдаёт текст задания через stdin. Он нужен и когда модель текущей сессии отличается от
 профиля проекта. Настроенный runtime без защищённого адаптера даёт `runtime_unsupported`;
 другой CLI вместо него не запускается. Сейчас защищённый адаптер реализован для Claude Code;
-упоминания `.claude` ниже относятся к его guard и runner, а не к выбору исполнителя.
+упоминания `.claude` ниже относятся к его guard и runner, а не к выбору исполнителя. Чтобы
+переключить автора на Claude Code, добавьте `claude` с `model` и `effort` в
+`assignment_plans.developer.runtimes` файла `.harness/orchestration.json`. Если runtime в плане
+несколько, выберите `claude` в `assignment_plans.developer.default_runtime`. Без плана developer
+runtime задаёт `test_author.runtime` файла `.harness/project.json`.
 
 ## 3. Защита
 
@@ -237,6 +241,8 @@ In-process developer по-прежнему запускает preflight осно
 preflight и недоступность инструмента вызова автора также сохраняют обычный TDD в worker,
 с указанной причиной, без blocker и новых записей ledger. Выбор runtime берётся из developer;
 отсутствие защищённого адаптера для него сохраняет обычный TDD, без подмены исполнителя.
+Для /implement с in-process developer test-author не используется, и это штатно: health
+показывает доступность автора только для основного checkout.
 
 В этой поставке проверены Python-тесты через unittest и pytest. Rust-тесты
 `native/harness-runtime/crates/*/tests` этим решением не поддержаны: для них не добавлены
@@ -252,6 +258,8 @@ preflight и недоступность инструмента вызова ав
 плана — short-профиль проекта. Плановая готовность не заменяет выбор из утверждённого brief.
 Для поддержанного Claude-адаптера Health отдельно проверяет точное решение доверия. Без opt-in проверка пропускается с причиной,
 недоступный необязательный автор даёт предупреждение и оставляет обычный маршрут рабочим.
+Результат preflight относится к основному checkout. Для /implement с in-process developer
+test-author не используется, и это штатно: developer в worker worktree работает обычным TDD.
 
 Health не запускает Claude, выбранный тест, сборку или БД и не меняет доверие. Probe изоляции
 создаёт и удаляет временную песочницу в общем `runs/`. Статический `preflight: ok` не доказывает,

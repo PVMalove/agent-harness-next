@@ -73,6 +73,7 @@ from harness.orchestration.ledger.ledger_ops import (
     _ledger_errors,
     _ledger_lock,
     _load_batch,
+    _load_checkpoint,
     _load_dispatch,
     _load_dispatch_status,
     _records_root,
@@ -800,6 +801,12 @@ def wait_dispatch(args: argparse.Namespace) -> JsonObject:
         time.sleep(min(interval, max(1, int(remaining))))
 
 
+IN_PROCESS_STREAM_REASON = (
+    "an in-process worker runs inside the coordinator session and has no event stream; "
+    "follow its progress through self-report, heartbeat and checkpoints"
+)
+
+
 def observe_dispatch(args: argparse.Namespace) -> JsonObject:
     """Read process/status/event facts locally, without running or prompting any model."""
     from harness.orchestration.worker_observation import (
@@ -820,6 +827,7 @@ def observe_dispatch(args: argparse.Namespace) -> JsonObject:
     with _ledger_lock(LifecycleLedger(root)):
         dispatch = _load_dispatch(root, args.dispatch)
         status = _load_dispatch_status(root, args.dispatch)
+        checkpoints = _dispatch_checkpoints(root, dispatch)
     startup = assess_startup(dispatch, status, repo=repo)
     receipt = status.get("adapter_receipt")
     if (
@@ -860,15 +868,34 @@ def observe_dispatch(args: argparse.Namespace) -> JsonObject:
         "runtime_session_id": receipt.get("runtime_session_id")
         if isinstance(receipt, dict)
         else None,
+        "checkpoints": checkpoints,
         **_events(repo, root, dispatch, receipt, offset),
     }
+
+
+def _dispatch_checkpoints(root: Path, dispatch: JsonObject) -> list[JsonObject]:
+    """The checkpoints this dispatch recorded, oldest first, as observe shows them."""
+    found: list[JsonObject] = []
+    for item in _load_batch(root, dispatch["batch_id"]).get("checkpoints", []):
+        if item.get("dispatch_id") != dispatch["dispatch_id"]:
+            continue
+        record = _load_checkpoint(root, item["checkpoint_id"])
+        found.append(
+            {
+                "checkpoint_id": record["checkpoint_id"],
+                "commit_sha": record.get("commit_sha"),
+                "created_at": record.get("created_at"),
+            }
+        )
+    return found
 
 
 def _events(
     repo: Path, root: Path, dispatch: JsonObject, receipt: object, offset: int
 ) -> JsonObject:
     """The worker's events: its adapter's log, or the stream snapshot the runtime keeps of a
-    running container worker (#1014)."""
+    running container worker (#1014). An in-process worker has no stream; its reason names
+    where its progress is seen instead."""
     from harness.orchestration import container_attestation
     from harness.orchestration.runtime_client import RuntimeClientError
     from harness.orchestration.worker_observation import read_events
@@ -892,7 +919,13 @@ def _events(
                 offset,
                 (container_attestation.stream_root(root),),
             )
-    return read_events(repo, receipt, offset)
+    events = read_events(repo, receipt, offset)
+    if (
+        dispatch.get("resolved_transport") == "in-process"
+        and events["stream_state"] == "unavailable"
+    ):
+        events["stream_reason"] = IN_PROCESS_STREAM_REASON
+    return events
 
 
 def respond_native_permission(

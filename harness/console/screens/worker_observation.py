@@ -458,9 +458,11 @@ class WorkerObservationScreen(ConsoleShell):
                 ]
         glyph = {"live": "●", "stopped": "■", "absent": "○"}.get(worker, "?")
         age = snapshot.get("last_event_age_seconds")
+        reason = snapshot.get("stream_reason")
+        stream = f"{snapshot.get('stream_state')}" + (f" ({reason})" if reason else "")
         lines = [
             f"{snapshot.get('batch_id')} / {dispatch} · {snapshot.get('role')}",
-            f"{glyph} {t('Процесс')}: {worker} · ledger: {snapshot.get('state')} · {t('Поток')}: {snapshot.get('stream_state')}",
+            f"{glyph} {t('Процесс')}: {worker} · ledger: {snapshot.get('state')} · {t('Поток')}: {stream}",
             f"heartbeat: {snapshot.get('heartbeat_at') or t('не наблюдался')} · {t('Событие')}: {str(age) + 's' if age is not None else '—'}",
             f"{t('Операция')}: {self._last_operation}",
         ]

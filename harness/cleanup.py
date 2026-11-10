@@ -42,6 +42,8 @@ class CleanupItem(TypedDict):
     kind: str
     path: str
     branch: NotRequired[str | None]
+    batch_id: NotRequired[str]
+    state: NotRequired[str]
     dispatch: NotRequired[str]
     engine: NotRequired[str]
     engine_id: NotRequired[str]
@@ -61,6 +63,7 @@ class CleanupResult(TypedDict):
     """Результат выполнения очистки с перечнем удалённых, ошибочных и пропущенных элементов."""
 
     removed: list[str]
+    worktrees: list[CleanupItem]
     failed: list[dict[str, str]]
     skipped: list[dict[str, str]]
 
@@ -273,9 +276,38 @@ def _registered_worktrees(repo: Path) -> dict[Path, str | None] | None:
 
 def _active_worktrees(root: Path) -> set[Path] | None:
     """Получить множество путей worktree, занятых активными батчами оркестрации."""
+    return _active_paths(_worktree_batches(root))
+
+
+def _active_paths(batches: dict[Path, tuple[str, str]] | None) -> set[Path] | None:
+    """Оставить worktree нетерминальных batch; None сохраняет «ledger не прочитан»."""
+    if batches is None:
+        return None
+    return {
+        path
+        for path, (_, state) in batches.items()
+        if state not in TERMINAL_BATCH_STATES
+    }
+
+
+def _remember_batch(
+    batches: dict[Path, tuple[str, str]], path: Path, batch_id: str, state: str
+) -> None:
+    """Запомнить batch его worktree; терминальный batch не затирает нетерминальный."""
+    known = batches.get(path)
+    if (
+        known is None
+        or known[1] in TERMINAL_BATCH_STATES
+        or state not in TERMINAL_BATCH_STATES
+    ):
+        batches[path] = (batch_id, state)
+
+
+def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
+    """Сопоставить worktree с id и состоянием batch; None, если ledger не прочитан."""
     state = root / "orchestration" / "state"
     if not state.exists():
-        return set()
+        return {}
     if store_is_authority(state):
         try:
             reply = RuntimeClient(root.parent).call(
@@ -287,21 +319,25 @@ def _active_worktrees(root: Path) -> set[Path] | None:
             records = reply.result.get("records")
             if not isinstance(records, dict):
                 return None
-            active_store: set[Path] = set()
-            for batch in records.values():
+            store_batches: dict[Path, tuple[str, str]] = {}
+            for key, batch in records.items():
                 if not isinstance(batch, dict) or not isinstance(
                     batch.get("state"), str
                 ):
                     return None
-                if batch["state"] not in TERMINAL_BATCH_STATES:
-                    value = batch.get("worktree")
-                    if not isinstance(value, str) or not value:
-                        return None
-                    path = Path(value)
-                    active_store.add(
-                        (path if path.is_absolute() else root.parent / path).resolve()
-                    )
-            return active_store
+                value = batch.get("worktree")
+                if not isinstance(value, str) or not value:
+                    if batch["state"] in TERMINAL_BATCH_STATES:
+                        continue
+                    return None
+                path = Path(value)
+                _remember_batch(
+                    store_batches,
+                    (path if path.is_absolute() else root.parent / path).resolve(),
+                    str(batch.get("batch_id", Path(str(key)).stem)),
+                    batch["state"],
+                )
+            return store_batches
         except (RuntimeClientError, OSError, ValueError):
             return None
     pointer = state / "ledger.json"
@@ -316,18 +352,24 @@ def _active_worktrees(root: Path) -> set[Path] | None:
         else:
             records = state / "batches"
         if not records.exists():
-            return None if pointer.exists() else set()
-        active: set[Path] = set()
+            return None if pointer.exists() else {}
+        batches: dict[Path, tuple[str, str]] = {}
         for record in records.glob("batch-*.json"):
             batch = json.loads(record.read_text(encoding="utf-8"))
-            if batch["state"] not in TERMINAL_BATCH_STATES:
-                worktree = Path(batch["worktree"])
-                active.add(
-                    (
-                        worktree if worktree.is_absolute() else root.parent / worktree
-                    ).resolve()
-                )
-        return active
+            if batch["state"] in TERMINAL_BATCH_STATES and not isinstance(
+                batch.get("worktree"), str
+            ):
+                continue
+            worktree = Path(batch["worktree"])
+            _remember_batch(
+                batches,
+                (
+                    worktree if worktree.is_absolute() else root.parent / worktree
+                ).resolve(),
+                str(batch.get("batch_id", record.stem)),
+                batch["state"],
+            )
+        return batches
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -725,7 +767,8 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
         if (root / "worktrees").resolve() != (sandboxes / "worktrees").resolve():
             worktree_roots.append(root / "worktrees")
 
-        active = _active_worktrees(root)
+        batches = _worktree_batches(root)
+        active = _active_paths(batches)
         for worktrees in worktree_roots:
             if not worktrees.is_dir() or worktrees.is_symlink():
                 continue
@@ -743,12 +786,21 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                     reason = _worktree_fact(
                         checkout, root, path, branch, active, min_age_hours
                     ).reason
+                    batch = None if batches is None else batches.get(path)
                     if reason:
-                        skipped.append({"path": str(path), "reason": reason})
+                        kept = {"path": str(path), "reason": reason}
+                        if batch is not None:
+                            kept.update(batch_id=batch[0], state=batch[1])
+                        skipped.append(kept)
                     else:
-                        remove.append(
-                            {"kind": "worktree", "path": str(path), "branch": branch}
-                        )
+                        item: CleanupItem = {
+                            "kind": "worktree",
+                            "path": str(path),
+                            "branch": branch,
+                        }
+                        if batch is not None:
+                            item["batch_id"], item["state"] = batch
+                        remove.append(item)
     _plan_containers(checkout, root, remove, skipped)
     return {
         "mode": mode,
@@ -782,6 +834,7 @@ def apply_cleanup(
         raise ValueError("cleanup plan changed; preview again before applying")
     root = Path(fresh["root"])
     removed: list[str] = []
+    worktrees: list[CleanupItem] = []
     failed: list[dict[str, str]] = []
     containers: list[CleanupItem] = []
     for item in fresh["remove"]:
@@ -808,6 +861,7 @@ def apply_cleanup(
                         raise OSError(
                             result.stderr.strip() or "local branch removal failed"
                         )
+                worktrees.append(item)
             elif item["kind"] == "directory":
                 # Windows needs an extended-length path for nested test fixtures.
                 target = (
@@ -825,4 +879,9 @@ def apply_cleanup(
         container_removed, container_failed = _remove_containers(checkout, containers)
         removed.extend(container_removed)
         failed.extend(container_failed)
-    return {"removed": removed, "failed": failed, "skipped": fresh["skipped"]}
+    return {
+        "removed": removed,
+        "worktrees": worktrees,
+        "failed": failed,
+        "skipped": fresh["skipped"],
+    }

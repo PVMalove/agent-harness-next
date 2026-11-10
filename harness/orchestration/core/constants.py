@@ -389,6 +389,7 @@ DISPATCH_FIELDS = {
     "access",
     "zone",
     "write_paths",
+    "allowed_paths",
     "branch",
     "worktree",
     "definition_of_done",
@@ -429,6 +430,7 @@ DISPATCH_FIELDS = {
     "commit_plan",
     "commit_plan_divergence",
     "carried_items",
+    "accepted_design",
     "rebase_target_commit",
     "runtime_access",
     "delta_review_scope",
@@ -514,6 +516,7 @@ REPORT_OPTIONAL_FIELDS = {
     "incomplete_items",
     "carried_item_closure",
     "qa_stages",
+    "commit_plan",
 }
 # Per-stage evidence of a clean-room QA run (issue #618): the preparation commands, then the gate, in
 # one checkout. ``qa_stages`` is present only when the project declares ``qa_preparation``; a report
