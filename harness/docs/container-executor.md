@@ -136,7 +136,9 @@ stay in-process: name the container in `operations.qa` only.
 }
 ```
 
-With `defaults` set, every role gets the authored plan. Then each `in-process` role is named in a
+Without `defaults`, a `roles.<role>` override puts that role under the executor too, so it needs
+its own `container`; config load names an override without one in a warning. With `defaults`
+set, every role gets the authored plan. Then each `in-process` role is named in a
 config-load warning, for example `orchestration extensions.runtime_access 'docker' blocks
 in-process role 'developer': set its transport to external, or remove access_policy.defaults and
 access_policy.roles.developer`, and `dispatch preflight` blocks it.
@@ -311,11 +313,15 @@ for the worker:
   worker appear in its progress view.
 
 The worker writes its completion report to the brief's `report_staging_path`, which is inside the
-writable artifacts root `.harness/.sandboxes/scratch`. The coordinator or a human records that
-report on the host with `report submit --file <path>` while the container still runs: the report
-waits for the exit and is recorded then. An exit that the coordinator observes before any report
-blocks the dispatch with `worker-exited-without-report`, so keep the worker running until its
-report is submitted, or decide the blocked dispatch after reading the staged report.
+writable artifacts root `.harness/.sandboxes/scratch`, and may exit right after. The coordinator
+or a human records that report on the host with `report submit --file <path>`:
+
+- Submitted while the container runs, the report waits for the exit and is recorded then.
+- If the worker exits first, and its host-side self-report matched, the dispatch stays live with
+  `staged_report`, and `dispatch wait` returns the event `report_staged` with
+  `report_staging_path`. The coordinator then runs `report submit --file` with that path.
+- If the worker exits with no staged report, the dispatch becomes `blocked` with
+  `worker-exited-without-report`.
 
 ## Example project-owned agent adapter
 
@@ -367,24 +373,27 @@ human.
 
 ## Running inside distrobox
 
-The executor reads the engine, SELinux and cgroups of the host where `harness-runtime serve`
-runs, and it mounts every plan root at the same absolute path. Run `harness-runtime serve` and the
-coordinator on the host, not inside a distrobox container.
+Run `harness-runtime serve` and the coordinator on the host, not inside a distrobox container.
+The executor reads the engine, SELinux and cgroups of the machine where `harness-runtime serve`
+runs, and it mounts every plan root at the same absolute path, so the runtime needs the host's
+engine and the host's paths.
 
-If the agent and `harness-runtime serve` run inside distrobox, the `podman` on the runtime's
-`PATH` must reach the host engine, and every plan root must have the same path on the host and in
-the distrobox container. This answer means that the `podman` the runtime found is a
-`distrobox-host-exec` shim that did not run inside the distrobox container:
+When the agent itself works inside distrobox, the runtime still runs on the host. Then every plan
+root must have the same absolute path in the distrobox container and on the host, which holds for
+the home directory that distrobox shares.
+
+A runtime started inside distrobox, with a `podman` on its `PATH` that calls
+`distrobox-host-exec`, has failed with this message. The likely cause, not verified further, is that
+the runtime starts the engine CLI with its own environment, and the shim does not detect the
+distrobox container there. The fix is the same: start the runtime on the host.
 
 ```text
 the podman engine is unavailable: You must run distrobox-host-exec inside a container!
 ```
 
-Start the runtime on the host instead.
-
-The Podman smoke reads `/sys/fs/selinux/enforce`. Inside a container that file does not show the
-host's enforcing mode, and the smoke with `HARNESS_REQUIRE_PODMAN_SMOKE=1` fails with this
-message. Run the smoke on the host.
+The Podman smoke checks SELinux by reading `/sys/fs/selinux/enforce`. Run inside a container on
+a host with SELinux enforcing, the smoke has failed with the message below. Run the smoke
+on the host.
 
 ```text
 HARNESS_REQUIRE_PODMAN_SMOKE=1, but the smoke needs SELinux in enforcing mode

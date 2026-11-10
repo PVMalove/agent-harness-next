@@ -134,7 +134,8 @@ code-review написал отчёт, но `dispatch wait` закончился
 | Несовпадение модели или checkout | Записывается с `match: false` без перевода в `blocked`; `dispatch wait` отвечает `model_mismatch` или `worktree_mismatch`, а `blocked` dispatch получает после выхода контейнера | Store запрещает `blocked`, пока execution может работать (ADR 0021). Остановку воркера харнесс без явной команды не выполняет. |
 | Вариант 3: `runtime_access: docker` действует только на роли и операции с контейнером | Роль, которую не называют ни `access_policy.defaults`, ни `access_policy.roles.<роль>`, получает прежний legacy-inherit план (`runtime_extension: none`, тот же digest) для любого расширения | Такая роль ничего не просила; без этого правила любая `access_policy` блокировала in-process роли. |
 | Контракт `docker` требует `defaults.container` | Требуется `defaults.container`, если задан `defaults`; без `defaults` — `operations.qa.container`. Схема и `harness health` проверяют одно и то же | Контейнерный QA можно включить одним `operations.qa`. |
-| Критерий 3: запрет схемой с сообщением при загрузке | In-process роль, которую называют `defaults` или `roles.<роль>`, даёт предупреждение при загрузке конфигурации, а не ошибку; `dispatch preflight` по-прежнему её блокирует | Ошибка загрузки остановила бы и external роли, и контейнерный QA, и команды уже созданных dispatch той же конфигурации. |
+| Критерий 3: запрет схемой с сообщением при загрузке | In-process роль, которую называют `defaults` или `roles.<роль>`, даёт предупреждение при загрузке конфигурации, а не ошибку; `dispatch preflight` по-прежнему её блокирует. Без `defaults` предупреждение получает и override роли без `container` | Ошибка загрузки остановила бы и external роли, и контейнерный QA, и команды уже созданных dispatch той же конфигурации. |
+| Отчёт воркера, который вышел до `report submit` | Если self-report на хосте совпал, а отчёт лежит в `report_staging_path`, выход не переводит dispatch в `blocked`: статус получает `staged_report`, а `dispatch wait` отвечает `report_staged`. Без staged-отчёта выход, как и раньше, даёт `worker-exited-without-report` | Воркер в контейнере не может сам выполнить `report submit`, поэтому его выход сразу после записи отчёта — обычный путь, а не сбой (критерий 2). Решение принято при реализации после ревью и ждёт подтверждения оператора. |
 
 Как работает реализация:
 
@@ -155,10 +156,19 @@ code-review написал отчёт, но `dispatch wait` закончился
 - **События.** `dispatch observe` для контейнерного dispatch читает тот же снимок;
   `read_events` принимает журнал из shared logs или из каталога `executions` runtime store.
 - **Отчёт.** Отчёт из `report_staging_path` записывается на хосте командой
-  `report submit --file`, пока контейнер работает: отчёт ждёт выхода (`pending_report`). Выход,
-  который coordinator наблюдает раньше отчёта, переводит dispatch в `blocked` с
-  `worker-exited-without-report` (ADR 0021); это поведение #1014 не меняет.
+  `report submit --file`. Пока контейнер работает, отчёт ждёт выхода (`pending_report`). Если
+  контейнер вышел раньше, `execution_reaction.react` проверяет `container_attestation.staged_report`:
+  docker-план, self-report с `source: container-host` и `match: true` и файл отчёта. Тогда dispatch
+  остаётся живым со `staged_report`, а `dispatch wait` отвечает `report_staged`. Иначе выход даёт
+  `blocked` с `worker-exited-without-report` (ADR 0021).
+- **Граница доверия.** Модель в событии `init` печатает процесс в контейнере, движок её не
+  проверяет. Доказательство так же сильно, как `dispatch self-report` воркера: оно ловит ошибку
+  конфигурации адаптера, но не злонамеренный воркер. Checkout, образы и контейнер берутся из плана и
+  execution, а не из вывода воркера.
 - **Граница проверки.** Шов с настоящим `harness-runtime` и scripted Podman
   (`tests/orchestration/test_container_runtime.py`) проверяет self-report, несовпадение модели,
-  heartbeat, события и приём отчёта. Smoke с настоящим движком проверяет полный цикл для
-  architect, developer и code-review (`test_podman_smoke.py`, `test_docker_smoke.py`).
+  heartbeat, события, приём отчёта до выхода и после него. Smoke с настоящим движком
+  (`test_podman_smoke.py`, `test_docker_smoke.py`) проходит полный цикл для architect. Developer и
+  code-review идут тем же путём (`requires_attestation`, `attest_runtime_worktree`), но отдельным
+  smoke не проверены. Совпадение имени модели в событии `init` настоящего агента с `resolved_model`
+  проверено только адаптером smoke, который печатает имя из brief.
