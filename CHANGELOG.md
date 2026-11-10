@@ -75,6 +75,7 @@
 
 ### Fixed
 
+- **[Контейнерный воркер и in-process роли]:** Coordinator на хосте сам записывает self-report и heartbeat воркера в контейнере: модель берётся из события `init` потока stream-json, checkout — из утверждённого плана. Поэтому architect, developer и code-review под `runtime_access: docker` проходят `report submit` без ручного обхода, а `dispatch observe` и веб-консоль показывают шаги контейнерного воркера. Контейнерный QA через `access_policy.operations.qa` больше не требует переводить все роли на `external`: роль без своего слоя `access_policy` запускается in-process, как раньше (#1014).
 - **[Approval старого store]:** Команда `harness-runtime repair-import-approval` восстанавливает отсутствующее human approval в store, мигрированном до #826, сохраняет данные после cutover и продолжает прерванную операцию по intent и backup. `--check` и полный validate объясняют необходимость repair; проверка исторических writer handoff принимает неизменные blocked-отчёты по правилу #850 (#970).
 
 - **[Исполнитель тест-автора из настроек]:** Полный `/implement` наследует runtime/model/effort утверждённого developer, короткий `/fast-implement` использует явный профиль `project.json.test_author`. Общий selector обслуживает запуск, preflight и Health; нативный Agent наследует модель родителя вместо фиксированного `haiku`. Неподдержанный защищённый адаптер даёт `runtime_unsupported`, без подмены выбранного CLI. Live-проба также использует настройки developer (#993).
