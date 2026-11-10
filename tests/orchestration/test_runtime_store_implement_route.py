@@ -207,6 +207,9 @@ def test_an_accept_pins_the_commit_plan_of_the_architect_report(
     dispatches = cast(list[JsonObject], batch["dispatches"])
     decision = cast(JsonObject, dispatches[0]["decision"])
     assert isinstance(decision["commit_plan_sha256"], str)
+    developer = _developer_brief(scoped)
+    assert developer["commit_plan"] == plan
+    assert developer["allowed_paths"] == developer["write_paths"] == ["services/**"]
 
 
 DEVELOPER = (
