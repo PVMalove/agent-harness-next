@@ -361,6 +361,7 @@ def write_coordinator_state(
     report: bool = True,
     ticket: str = "#797",
     state_from: Path | None = None,
+    allowed_paths: tuple[str, ...] = ("**",),
 ) -> tuple[Path, dict[str, str]]:
     """The state of a real batch: planned, approved, one architect dispatch created and, unless
     ``report`` is false, sent, self-reported and reported (with ``report`` false it stays approved,
@@ -387,7 +388,9 @@ def write_coordinator_state(
             ),
             encoding="utf-8",
         )
-    ids, brief = add_coordinator_batch(repo, tmp / "worktree", ticket=ticket)
+    ids, brief = add_coordinator_batch(
+        repo, tmp / "worktree", ticket=ticket, allowed_paths=allowed_paths
+    )
     dispatch_id = ids["dispatch_id"]
 
     def args(**values: object) -> argparse.Namespace:
@@ -408,7 +411,12 @@ def write_coordinator_state(
 
 
 def add_coordinator_batch(
-    repo: Path, worktree: Path, *, ticket: str, dispatch: bool = True
+    repo: Path,
+    worktree: Path,
+    *,
+    ticket: str,
+    dispatch: bool = True,
+    allowed_paths: tuple[str, ...] = ("**",),
 ) -> tuple[dict[str, str], JsonObject]:
     """A planned and approved batch of the file ledger of ``repo`` with one approved architect
     dispatch, in its own issue branch and ``worktree``: the ids and the brief. Without
@@ -429,7 +437,7 @@ def add_coordinator_batch(
             goal=None,
             branch=branch,
             worktree=str(worktree),
-            allowed_path=["**"],
+            allowed_path=list(allowed_paths),
             integration_ref="master",
             definition_of_done=["read from the store"],
             prohibited_change=["secrets"],
@@ -704,8 +712,10 @@ def store_revisions(repo: Path, runtime: ServingRuntime, *paths: str) -> dict[st
 class Store:
     """A cut-over repository with a working dispatch and the runtime that serves it."""
 
-    def __init__(self, tmp: Path) -> None:
-        self.repo, ids = write_coordinator_state(tmp, report=False)
+    def __init__(self, tmp: Path, *, allowed_paths: tuple[str, ...] = ("**",)) -> None:
+        self.repo, ids = write_coordinator_state(
+            tmp, report=False, allowed_paths=allowed_paths
+        )
         self.batch = ids["batch_id"]
         self.dispatch = ids["dispatch_id"]
         result = migrate(self.repo)

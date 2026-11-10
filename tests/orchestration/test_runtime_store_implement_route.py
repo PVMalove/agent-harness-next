@@ -12,6 +12,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -113,3 +114,96 @@ def test_the_architect_brief_names_the_scope_of_its_batch(store: Store) -> None:
     assert brief["write_paths"] == []
     assert brief["allowed_paths"] == batch["allowed_paths"]
     assert _ok(store.run("ledger", "validate"))["valid"] is True
+
+
+def _plan_entry(paths: list[str], covers: list[int]) -> JsonObject:
+    return {
+        "id": "first",
+        "summary": "read the store",
+        "expected_paths": paths,
+        "covers": covers,
+    }
+
+
+def _report_with_plan(store: Store, plan: list[JsonObject]) -> str:
+    """The architect's completion report, carrying ``plan`` as its commit_plan."""
+    path = store.report_file()
+    report = json.loads(path.read_text(encoding="utf-8"))
+    report["commit_plan"] = plan
+    path.write_text(json.dumps(report), encoding="utf-8")
+    return str(path)
+
+
+def _dispatch_state(store: Store) -> str:
+    path = f"dispatch-status/{store.dispatch}.json"
+    state = store_records(store.repo, store.runtime, path)[path]["state"]
+    assert isinstance(state, str)
+    return state
+
+
+@pytest.fixture
+def scoped(tmp_path: Path) -> Iterator[Store]:
+    found = Store(tmp_path, allowed_paths=("services/**",))
+    try:
+        yield found
+    finally:
+        found.stop_runtime()
+
+
+def test_report_submit_refuses_a_commit_plan_outside_the_batch_scope(
+    scoped: Store,
+) -> None:
+    refused = scoped.run(
+        "report",
+        "submit",
+        "--file",
+        _report_with_plan(scoped, [_plan_entry(["docs/x.md"], [1])]),
+    )
+
+    assert refused.returncode != 0
+    assert "docs/x.md" in refused.stderr
+    assert "services/**" in refused.stderr
+    assert "risks" in refused.stderr
+    assert _dispatch_state(scoped) == "working"
+
+
+def test_report_submit_refuses_a_commit_plan_that_names_an_unknown_item(
+    scoped: Store,
+) -> None:
+    refused = scoped.run(
+        "report",
+        "submit",
+        "--file",
+        _report_with_plan(scoped, [_plan_entry(["services/x.py"], [2])]),
+    )
+
+    assert refused.returncode != 0
+    assert "covers unknown definition-of-done items [2]" in refused.stderr
+    assert _dispatch_state(scoped) == "working"
+
+
+def test_an_accept_pins_the_commit_plan_of_the_architect_report(
+    scoped: Store,
+) -> None:
+    plan = [_plan_entry(["services/x.py"], [1])]
+    _ok(scoped.run("report", "submit", "--file", _report_with_plan(scoped, plan)))
+
+    _ok(
+        scoped.run(
+            "batch",
+            "decide",
+            "--batch",
+            scoped.batch,
+            "--decision",
+            "accept",
+            *APPROVED,
+        )
+    )
+
+    batch = store_records(scoped.repo, scoped.runtime, scoped.batch_path)[
+        scoped.batch_path
+    ]
+    assert batch["commit_plan"] == plan
+    dispatches = cast(list[JsonObject], batch["dispatches"])
+    decision = cast(JsonObject, dispatches[0]["decision"])
+    assert isinstance(decision["commit_plan_sha256"], str)

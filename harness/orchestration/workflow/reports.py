@@ -1607,6 +1607,42 @@ def _resolve_report_commit(repo: Path, commit_sha: str) -> str:
         ) from exc
 
 
+def _validate_reported_commit_plan(report: JsonObject, dispatch: JsonObject) -> None:
+    """An architect's ``commit_plan`` is checked at submit, not later at the accept (#1015).
+
+    It must pass the same rules as a ``--commit-plan-file`` and stay inside the batch scope the
+    brief names; a path beyond that scope is a risk the architect reports, not a plan entry.
+    """
+    if "commit_plan" not in report:
+        return
+    from harness.orchestration.workflow import commit_plan as plan_rules
+
+    if dispatch.get("role") != "architect":
+        raise CoordinatorError(
+            "only an architect completion report carries commit_plan",
+            remedy="drop commit_plan from the completion report",
+        )
+    try:
+        plan = plan_rules.pinned_plan(
+            {"commit_plan": report["commit_plan"]}, dispatch["definition_of_done"]
+        )
+    except CoordinatorError as exc:
+        raise CoordinatorError(
+            "completion report commit_plan is invalid: "
+            + exc.message.removeprefix("commit plan file is invalid: "),
+            remedy=exc.remedy,
+        ) from exc
+    allowed = dispatch.get("allowed_paths")
+    outside = plan_rules.paths_outside_scope(plan, allowed)
+    if outside:
+        raise CoordinatorError(
+            f"completion report commit_plan names paths outside the batch allowed_paths: "
+            f"{', '.join(outside)} (allowed_paths: {', '.join(cast(list[str], allowed))})",
+            remedy="keep only paths inside allowed_paths in commit_plan expected_paths, "
+            "describe a path the plan needs beyond them in risks, and resubmit the report",
+        )
+
+
 def _validate_report(
     report: JsonObject,
     dispatch: JsonObject,
@@ -1659,6 +1695,7 @@ def _validate_report(
         )
     _validate_tooling_blocker(report, dispatch)
     _validate_incomplete_items(report, role)
+    _validate_reported_commit_plan(report, dispatch)
     for field in ("output", "next_coordinator_action"):
         if not _non_empty(report[field]):
             raise CoordinatorError(

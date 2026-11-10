@@ -14861,6 +14861,60 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             self._auto_dispatch("developer")
         self.assertIn("--approved-by", refused.exception.remedy)
 
+    def test_auto_decide_pins_the_commit_plan_of_the_architect_report(self) -> None:
+        self._auto_batch(definition_of_done=["one", "two"])
+        architect = self._auto_dispatch("architect")
+        self._start(architect["dispatch_id"])
+        plan = [self._plan_entry("first", [1]), self._plan_entry("second", [2])]
+        self._submit(
+            architect["dispatch_id"],
+            {
+                **self._base_report(
+                    architect,
+                    "architect",
+                    risks={"status": "present", "details": "an own plan"},
+                ),
+                "commit_plan": plan,
+            },
+        )
+
+        decided = self._auto_decide()
+
+        stored = self._batch_record(self.batch_id)
+        self.assertEqual(decided["decision"], "accept")
+        self.assertEqual(
+            [entry["id"] for entry in stored["commit_plan"]], ["first", "second"]
+        )
+
+    def test_a_plan_file_that_differs_from_the_reported_plan_stops_on_its_gate(
+        self,
+    ) -> None:
+        self._auto_batch(definition_of_done=["one", "two"])
+        architect = self._auto_dispatch("architect")
+        self._start(architect["dispatch_id"])
+        self._submit(
+            architect["dispatch_id"],
+            {
+                **self._base_report(
+                    architect,
+                    "architect",
+                    risks={"status": "present", "details": "an own plan"},
+                ),
+                "commit_plan": [self._plan_entry("first", [1, 2])],
+            },
+        )
+        other = self._plan_file(
+            [self._plan_entry("first", [1]), self._plan_entry("second", [2])]
+        )
+
+        result = self._auto_decide(commit_plan_file=other)
+
+        self._assert_stopped(result, "integrity-failure", "deterministic-gate-failed")
+        self.assertIn(
+            "differs",
+            self._batch_record(self.batch_id)["auto_stop"]["evidence"]["refused"],
+        )
+
     def test_an_unreadable_commit_plan_file_is_refused_without_a_stop(self) -> None:
         """A missing or invalid plan file is a session input error, not a failed gate."""
         self._auto_batch(allowed_path=["services/**"])
