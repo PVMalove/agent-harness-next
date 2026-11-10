@@ -11,7 +11,11 @@ from harness.configuration import parse_object, reject_secrets
 from harness.diagnostics import Diagnostic
 from harness.json_types import JsonObject
 from harness.configuration_schema import schema_diagnostics
-from harness.orchestration.contract import configuration_problems, fallback_cycles
+from harness.orchestration.contract import (
+    configuration_problems,
+    docker_in_process_warnings,
+    fallback_cycles,
+)
 from harness.orchestration.core.system_fields import SystemFieldsError, load_registry
 
 NORMALIZATION_VERSION = "normalization.v1"
@@ -311,5 +315,15 @@ def inspect_configuration(
     diagnostics.extend(
         Diagnostic("config-contract", "orchestration.json", (), problem)
         for problem in problems
+    )
+    diagnostics.extend(
+        Diagnostic(
+            "config-contract",
+            "orchestration.json",
+            ("assignment_plans",),
+            warning,
+            severity="warning",
+        )
+        for warning in docker_in_process_warnings(effective)
     )
     return ConfigurationResult(document, tuple(diagnostics), digest)

@@ -202,6 +202,8 @@ class DockerPlanSupportTests(unittest.TestCase):
             self.assertIn(expected, reason)
         for remedy in (
             "transport to external",
+            # #1014: the role may instead keep its legacy in-process launch.
+            "keeps the legacy in-process launch",
             "network.hosts to []",
             "mode to sandbox or inherit",
             "remove these names from the access_policy environment",
