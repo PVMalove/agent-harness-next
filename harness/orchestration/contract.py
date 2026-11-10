@@ -44,24 +44,12 @@ ROLE_TRANSPORTS = {"in-process", "external"}
 CONTAINER_IMAGE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}")
 # A variable name only, never ``NAME=value``: the engine reads the value from its own environment.
 ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-# Without a container default the built-in executor would leave a role plan without an image.
 DOCKER_PROBLEM_PREFIX = "orchestration extensions.runtime_access 'docker'"
+# Without a container the built-in executor would leave a role or QA plan without an image.
 DOCKER_CONTAINER_PROBLEM = (
     f"{DOCKER_PROBLEM_PREFIX} requires access_policy.defaults.container with a worker_image, "
     "or, without defaults, access_policy.operations.qa.container"
 )
-
-
-def docker_in_process_problem(role: str) -> str:
-    """The executor launches only an external dispatch (ADR 0025), so an in-process role that
-    access_policy names would be blocked at every dispatch preflight: a warning at load (#1014)."""
-    # A diagnostic message stays within the 256 characters that safe_value shows.
-    return (
-        f"{DOCKER_PROBLEM_PREFIX} blocks in-process role {role!r}: set its transport to external, "
-        f"or remove access_policy.defaults and access_policy.roles.{role}"
-    )
-
-
 ROLE_FIELDS = frozenset({"name", "mode", "required_capabilities", "risk_triggers"})
 CONFIG_REQUIRED_FIELDS = (
     "provider_profiles",
@@ -1296,38 +1284,71 @@ def _operational_policy_problems(config: Mapping[str, object]) -> list[str]:
     return problems
 
 
-def _docker_container_named(policy: object, defaults: object) -> bool:
+def _docker_container_named(policy: object) -> bool:
     """Whether the built-in container executor has a container to run: the defaults name it,
     or, without defaults, ``operations.qa`` does (#1014)."""
-    operations = policy.get("operations") if isinstance(policy, dict) else None
-    qa = operations.get("qa") if isinstance(operations, dict) else None
-    if isinstance(policy, dict) and "defaults" in policy:
+    if not isinstance(policy, dict):
+        return False
+    if "defaults" in policy:
+        defaults = policy["defaults"]
         return isinstance(defaults, dict) and "container" in defaults
+    operations = policy.get("operations")
+    qa = operations.get("qa") if isinstance(operations, dict) else None
     return isinstance(qa, dict) and "container" in qa
 
 
-def docker_in_process_warnings(config: Mapping[str, object]) -> list[str]:
-    """The in-process roles the built-in container executor would block at every dispatch
-    preflight, named when the config loads (#1014). A warning, not an error: the config still
-    serves its external roles, its container QA and the commands of past dispatches."""
+# Diagnostic messages stay within the 256 characters that ``safe_value`` shows.
+def docker_in_process_warning(role: str) -> str:
+    """The executor launches only an external dispatch (ADR 0025), so an in-process role that
+    access_policy names is blocked at every dispatch preflight (#1014)."""
+    return (
+        f"{DOCKER_PROBLEM_PREFIX} blocks in-process role {role!r}: set its transport to external, "
+        f"or remove access_policy.defaults and access_policy.roles.{role}"
+    )
+
+
+def docker_role_container_warning(role: str) -> str:
+    """Without defaults, a ``roles`` override puts its role under the executor with no
+    container, so its dispatch preflight is blocked (#1014)."""
+    return (
+        f"{DOCKER_PROBLEM_PREFIX} has no container for role {role!r}: access_policy has no "
+        f"defaults, so set access_policy.roles.{role}.container"
+    )
+
+
+def docker_role_warnings(config: Mapping[str, object]) -> list[str]:
+    """The roles the built-in container executor would block at every dispatch preflight, named
+    when the config loads (#1014): an in-process role that access_policy names, and, without
+    defaults, a role override without a container. Warnings, not errors: the config still serves
+    its other roles, its container QA and the commands of past dispatches."""
     extensions = config.get("extensions")
-    assignments = config.get("assignment_plans")
+    policy = config.get("access_policy")
     if not (
         isinstance(extensions, dict)
         and extensions.get("runtime_access") == "docker"
-        and isinstance(assignments, dict)
+        and isinstance(policy, dict)
     ):
         return []
-    policy = config.get("access_policy")
-    return [
-        docker_in_process_problem(role)
-        for role, plan in sorted(assignments.items())
+    assignments = config.get("assignment_plans")
+    warnings = [
+        docker_in_process_warning(role)
+        for role, plan in sorted(
+            assignments.items() if isinstance(assignments, dict) else ()
+        )
         # QA runs as the coordinator's own operation, never through its role transport.
         if role != "qa"
         and isinstance(plan, dict)
         and plan.get("transport", "in-process") == "in-process"
         and role_access_authored(policy, role)
     ]
+    roles = policy.get("roles")
+    if "defaults" not in policy and isinstance(roles, dict):
+        warnings.extend(
+            docker_role_container_warning(role)
+            for role, layer in sorted(roles.items())
+            if isinstance(layer, dict) and "container" not in layer
+        )
+    return warnings
 
 
 def role_access_authored(policy: object, role: str | None) -> bool:
@@ -1617,12 +1638,10 @@ def configuration_problems(
     if "access_policy" in config:
         problems.extend(access_policy_problems(config["access_policy"], set(roles)))
     selected_extensions = config.get("extensions")
-    policy = config.get("access_policy")
-    defaults = policy.get("defaults") if isinstance(policy, dict) else None
     if (
         isinstance(selected_extensions, dict)
         and selected_extensions.get("runtime_access") == "docker"
-        and not _docker_container_named(policy, defaults)
+        and not _docker_container_named(config.get("access_policy"))
     ):
         problems.append(DOCKER_CONTAINER_PROBLEM)
     profiles = config.get("provider_profiles")

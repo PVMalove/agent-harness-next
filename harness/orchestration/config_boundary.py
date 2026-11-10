@@ -13,7 +13,7 @@ from harness.json_types import JsonObject
 from harness.configuration_schema import schema_diagnostics
 from harness.orchestration.contract import (
     configuration_problems,
-    docker_in_process_warnings,
+    docker_role_warnings,
     fallback_cycles,
 )
 from harness.orchestration.core.system_fields import SystemFieldsError, load_registry
@@ -324,6 +324,6 @@ def inspect_configuration(
             warning,
             severity="warning",
         )
-        for warning in docker_in_process_warnings(effective)
+        for warning in docker_role_warnings(effective)
     )
     return ConfigurationResult(document, tuple(diagnostics), digest)

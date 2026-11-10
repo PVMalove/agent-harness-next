@@ -1266,13 +1266,49 @@ class ContainerComponentContractTests(unittest.TestCase):
                 ]
                 self.assertEqual(
                     warnings,
-                    [contract.docker_in_process_problem(role) for role in named],
+                    [contract.docker_in_process_warning(role) for role in named],
                 )
                 self.assertEqual(self._docker_problems(policy, transports), [])
                 for role, message in zip(named, warnings):
                     self.assertIn(f"role {role!r}", message)
                     self.assertIn("transport to external", message)
                     self.assertIn(f"access_policy.roles.{role}", message)
+
+    def test_a_role_override_without_a_container_and_without_defaults_is_named_at_load(
+        self,
+    ) -> None:
+        """#1014: without defaults, a roles.<role> override puts the role under the executor
+        with no container to run; config load names it instead of dispatch preflight only."""
+        from harness.orchestration.config_boundary import inspect_configuration
+
+        document = {
+            "access_policy": {
+                "operations": {"qa": {"container": {"worker_image": "w"}}},
+                "roles": {
+                    "developer": {"mode": "sandbox"},
+                    "architect": {"container": {"worker_image": "w"}},
+                },
+            },
+            "extensions": {"runtime_access": "docker"},
+            "assignment_plans": {
+                "developer": {"transport": "external"},
+                "architect": {"transport": "external"},
+            },
+        }
+
+        result = inspect_configuration(
+            ROOT,
+            json.dumps(document).encode(),
+            roles_root=ROOT / "harness/orchestration/roles",
+        )
+
+        warnings = [
+            item.message for item in result.diagnostics if item.severity == "warning"
+        ]
+        self.assertEqual(
+            warnings, [contract.docker_role_container_warning("developer")]
+        )
+        self.assertIn("access_policy.roles.developer.container", warnings[0])
 
     def test_the_schema_requires_the_default_container_for_docker(self) -> None:
         schema = _schema()
