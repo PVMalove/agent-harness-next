@@ -1,8 +1,8 @@
 """The commit plan a developer brief carries, and how a developer report is checked against it.
 
 Without an operator decision the coordinator derives one plan entry per definition-of-done item.
-When the operator accepts an architect report with ``--commit-plan-file``, the architect's plan is
-validated here and pinned on the batch instead; every later developer brief of the batch carries it.
+The architect's plan — the ``commit_plan`` of its report, or a ``--commit-plan-file`` passed on the
+accept — is validated here and pinned on the batch instead; every later developer brief carries it.
 
 An initial or rebase developer report maps its created commits to plan entries as a relation: one
 commit may close several entries (merged), one entry may be closed by several commits (split), and
@@ -48,8 +48,9 @@ COVERAGE_REMEDY = (
 )
 PLAN_ENTRY_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 PLAN_FILE_REMEDY = (
-    'write the plan file as {"commit_plan": [{"id": ..., "summary": ..., '
-    '"expected_paths": [...], "covers": [1, ...]}, ...]} and pass it again with --commit-plan-file'
+    'write the plan as {"commit_plan": [{"id": ..., "summary": ..., '
+    '"expected_paths": [...], "covers": [1, ...]}, ...]} and pass it again: the commit_plan '
+    "field of the architect report, or a --commit-plan-file"
 )
 REBASE_MAP_REMEDY = (
     "map every commit after rebase_target_commit once: a rebased copy as "
@@ -60,7 +61,7 @@ REBASE_MAP_REMEDY = (
 
 
 def _plan_error(message: str, remedy: str = PLAN_FILE_REMEDY) -> CoordinatorError:
-    return CoordinatorError(f"commit plan file is invalid: {message}", remedy=remedy)
+    return CoordinatorError(f"commit plan is invalid: {message}", remedy=remedy)
 
 
 def _is_item_number(value: object, count: int) -> bool:

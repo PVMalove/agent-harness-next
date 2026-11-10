@@ -1607,7 +1607,9 @@ def _resolve_report_commit(repo: Path, commit_sha: str) -> str:
         ) from exc
 
 
-def _validate_reported_commit_plan(report: JsonObject, dispatch: JsonObject) -> None:
+def _validate_reported_commit_plan(
+    report: JsonObject, dispatch: JsonObject, allowed_paths: object
+) -> None:
     """An architect's ``commit_plan`` is checked at submit, not later at the accept (#1015).
 
     It must pass the same rules as a ``--commit-plan-file`` and stay inside the batch scope the
@@ -1622,17 +1624,10 @@ def _validate_reported_commit_plan(report: JsonObject, dispatch: JsonObject) -> 
             "only an architect completion report carries commit_plan",
             remedy="drop commit_plan from the completion report",
         )
-    try:
-        plan = plan_rules.pinned_plan(
-            {"commit_plan": report["commit_plan"]}, dispatch["definition_of_done"]
-        )
-    except CoordinatorError as exc:
-        raise CoordinatorError(
-            "completion report commit_plan is invalid: "
-            + exc.message.removeprefix("commit plan file is invalid: "),
-            remedy=exc.remedy,
-        ) from exc
-    allowed = dispatch.get("allowed_paths")
+    plan = plan_rules.pinned_plan(
+        {"commit_plan": report["commit_plan"]}, dispatch["definition_of_done"]
+    )
+    allowed = dispatch.get("allowed_paths", allowed_paths)
     outside = plan_rules.paths_outside_scope(plan, allowed)
     if outside:
         raise CoordinatorError(
@@ -1651,8 +1646,11 @@ def _validate_report(
     base_commit: str | None = None,
     *,
     history: FixForwardHistory | None = None,
+    allowed_paths: object = None,
 ) -> None:
-    """Validate report shape and its proof through the candidate's history module."""
+    """Validate report shape and its proof through the candidate's history module.
+
+    ``allowed_paths`` is the batch scope, for a brief recorded before briefs named it."""
     _reject_sensitive(report, "completion report")
     if (
         not REPORT_FIELDS <= set(report)
@@ -1695,7 +1693,7 @@ def _validate_report(
         )
     _validate_tooling_blocker(report, dispatch)
     _validate_incomplete_items(report, role)
-    _validate_reported_commit_plan(report, dispatch)
+    _validate_reported_commit_plan(report, dispatch, allowed_paths)
     for field in ("output", "next_coordinator_action"):
         if not _non_empty(report[field]):
             raise CoordinatorError(
@@ -1853,6 +1851,7 @@ def _validate_report_in_batch(
         role,
         repo,
         history=FixForwardHistory(repo, root, batch),
+        allowed_paths=batch.get("allowed_paths"),
     )
     resolver_state.validate_report(repo, root, batch, dispatch, report)
 
