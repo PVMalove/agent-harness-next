@@ -207,3 +207,62 @@ def test_an_accept_pins_the_commit_plan_of_the_architect_report(
     dispatches = cast(list[JsonObject], batch["dispatches"])
     decision = cast(JsonObject, dispatches[0]["decision"])
     assert isinstance(decision["commit_plan_sha256"], str)
+
+
+DEVELOPER = (
+    "--role",
+    "developer",
+    "--runtime",
+    "claude",
+    "--purpose",
+    "work",
+    "--model",
+    "sonnet",
+    "--effort",
+    "high",
+)
+
+
+def _developer_brief(store: Store) -> JsonObject:
+    proposal = _ok(store.run("dispatch", "propose", "--batch", store.batch, *DEVELOPER))
+    created = _ok(
+        store.run(
+            "dispatch",
+            "create",
+            "--batch",
+            store.batch,
+            *DEVELOPER,
+            "--transition-digest",
+            str(proposal["transition_digest"]),
+            *APPROVED,
+        )
+    )
+    return cast(JsonObject, created["brief"])
+
+
+def test_the_developer_brief_carries_the_accepted_architect_design(
+    store: Store,
+) -> None:
+    report = store.report_file()
+    output = json.loads(report.read_text(encoding="utf-8"))["output"]
+    _ok(store.run("report", "submit", "--file", str(report)))
+    _ok(
+        store.run(
+            "batch", "decide", "--batch", store.batch, "--decision", "accept", *APPROVED
+        )
+    )
+    batch = store_records(store.repo, store.runtime, store.batch_path)[store.batch_path]
+    (architect,) = cast(list[JsonObject], batch["dispatches"])
+
+    brief = _developer_brief(store)
+
+    assert brief["accepted_design"] == {
+        "dispatch_id": store.dispatch,
+        "report_sha256": architect["report_sha256"],
+        "output": output,
+    }
+    path = f"dispatches/{store.dispatch}.json"
+    assert (
+        store_records(store.repo, store.runtime, path)[path]["accepted_design"] is None
+    )
+    assert _ok(store.run("ledger", "validate"))["valid"] is True

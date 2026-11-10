@@ -430,6 +430,7 @@ DISPATCH_FIELDS = {
     "commit_plan",
     "commit_plan_divergence",
     "carried_items",
+    "accepted_design",
     "rebase_target_commit",
     "runtime_access",
     "delta_review_scope",

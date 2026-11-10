@@ -1350,8 +1350,9 @@ def _validate_dispatch(
     accepted |= {fields - {"runtime_access"} for fields in set(accepted)}
     # The delta-review scope of a code-review after a fix-forward (issue #625) came after that.
     accepted |= {fields - {"delta_review_scope"} for fields in set(accepted)}
-    # The batch scope every role sees (issue #1015) came after that.
+    # The batch scope every role sees and the accepted design of a developer (issue #1015).
     accepted |= {fields - {"allowed_paths"} for fields in set(accepted)}
+    accepted |= {fields - {"accepted_design"} for fields in set(accepted)}
     # The conflict-resolver brief's resolver section (issue #534) is one field added on top.
     accepted |= {fields | {"resolver"} for fields in set(accepted)}
     # The image digests a docker brief pins (issue #704) only ever accompany its access plan.
@@ -1610,6 +1611,17 @@ def _validate_dispatch(
     expected_paths = (
         batch.get("allowed_paths", ceiling) if dispatch["access"] == "write" else []
     )
+    design = dispatch.get("accepted_design")
+    if design is not None and (
+        not isinstance(design, dict)
+        or set(design) != {"dispatch_id", "report_sha256", "output"}
+        or not all(isinstance(value, str) and value for value in design.values())
+    ):
+        raise CoordinatorError(
+            "dispatch record accepted_design is malformed",
+            remedy="the dispatch record accepted_design is malformed -- "
+            + INTERNAL_INVARIANT_REMEDY,
+        )
     if "allowed_paths" in dispatch and dispatch["allowed_paths"] != batch.get(
         "allowed_paths"
     ):

@@ -237,6 +237,22 @@ def _developer_commit_plan(
     return [dict(entry) for entry in pinned]
 
 
+def _accepted_design(root: Path, batch: JsonObject) -> JsonObject | None:
+    """The accepted architect report a developer works from, pinned by its integrity hash.
+
+    The developer takes its seam from this design instead of a coordinator retelling (#1015).
+    A batch without an accepted architect report of its own carries none.
+    """
+    for item in plan_rules.decided_entries(batch, "architect", ACCEPTED_DECISIONS):
+        report = _pending_report(root, batch, item)
+        return {
+            "dispatch_id": item["dispatch_id"],
+            "report_sha256": item["report_sha256"],
+            "output": report["output"],
+        }
+    return None
+
+
 def _accepted_divergence(
     repo: Path, root: Path, batch: JsonObject
 ) -> JsonObject | None:
@@ -1603,6 +1619,9 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             if is_review_work
             else None,
             "carried_items": carried,
+            "accepted_design": _accepted_design(root, batch)
+            if role_name == "developer" and purpose == "work"
+            else None,
             # The human-approved target a rebase-fix-forward developer-retry rebases onto.
             "rebase_target_commit": transition.get("rebase_target_sha"),
             "runtime_access": access_plan,
