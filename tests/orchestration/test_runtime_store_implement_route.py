@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from harness.json_types import JsonObject
-from tests.orchestration.runtime_store_support import APPROVAL, Store
+from tests.orchestration.runtime_store_support import APPROVAL, Store, store_records
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32",
@@ -102,3 +102,14 @@ def test_an_open_batch_lists_no_abandonment(store: Store) -> None:
     assert isinstance(listed, list)
     (entry,) = [item for item in listed if item["batch_id"] == store.batch]
     assert entry["abandoned"] is None
+
+
+def test_the_architect_brief_names_the_scope_of_its_batch(store: Store) -> None:
+    path = f"dispatches/{store.dispatch}.json"
+    brief = store_records(store.repo, store.runtime, path)[path]
+    batch = store_records(store.repo, store.runtime, store.batch_path)[store.batch_path]
+
+    assert brief["role"] == "architect"
+    assert brief["write_paths"] == []
+    assert brief["allowed_paths"] == batch["allowed_paths"]
+    assert _ok(store.run("ledger", "validate"))["valid"] is True

@@ -1350,6 +1350,8 @@ def _validate_dispatch(
     accepted |= {fields - {"runtime_access"} for fields in set(accepted)}
     # The delta-review scope of a code-review after a fix-forward (issue #625) came after that.
     accepted |= {fields - {"delta_review_scope"} for fields in set(accepted)}
+    # The batch scope every role sees (issue #1015) came after that.
+    accepted |= {fields - {"allowed_paths"} for fields in set(accepted)}
     # The conflict-resolver brief's resolver section (issue #534) is one field added on top.
     accepted |= {fields | {"resolver"} for fields in set(accepted)}
     # The image digests a docker brief pins (issue #704) only ever accompany its access plan.
@@ -1608,6 +1610,14 @@ def _validate_dispatch(
     expected_paths = (
         batch.get("allowed_paths", ceiling) if dispatch["access"] == "write" else []
     )
+    if "allowed_paths" in dispatch and dispatch["allowed_paths"] != batch.get(
+        "allowed_paths"
+    ):
+        raise CoordinatorError(
+            "dispatch record allowed paths do not match the batch scope",
+            remedy="the dispatch record allowed_paths do not match the batch scope -- "
+            + INTERNAL_INVARIANT_REMEDY,
+        )
     if dispatch["write_paths"] != expected_paths:
         raise CoordinatorError(
             "dispatch record write paths do not match the batch scope",

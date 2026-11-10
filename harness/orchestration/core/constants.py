@@ -389,6 +389,7 @@ DISPATCH_FIELDS = {
     "access",
     "zone",
     "write_paths",
+    "allowed_paths",
     "branch",
     "worktree",
     "definition_of_done",

@@ -1540,6 +1540,8 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             "access": role["mode"],
             "zone": batch.get("zone"),
             "write_paths": write_paths,
+            # The batch scope every role sees, so a read-only architect plans inside it (#1015).
+            "allowed_paths": batch.get("allowed_paths"),
             "branch": batch["branch"],
             "worktree": batch["worktree"],
             "definition_of_done": batch["definition_of_done"],
