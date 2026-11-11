@@ -5,11 +5,8 @@
    count the served ledger lists, as the TUI does. tests/web/fixtures/orch-snapshot-facts.json
    pins every text to the one the TUI shows for the same snapshot. */
 import type { Language } from "../i18n";
-import { durationText, pyRound } from "../reports/format";
-import type { Tile } from "../reports/format";
-import type { Analytics, AnalyticsSection, BatchSummary, Figure, Figures, Ledger, StageHead } from "../ws/ledger";
-
-type Translate = (text: string) => string;
+import { durationText } from "../reports/format";
+import type { BatchSummary, Figure, Ledger, StageHead } from "../ws/ledger";
 
 /** The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state. */
 export const BATCH_STATES = [
@@ -40,138 +37,15 @@ const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export const shortTime = (value: string): string =>
   value.length >= 16 && value[10] === "T" ? value.slice(0, 16).replace("T", " ") : value;
 
-/* -- KPI tiles -------------------------------------------------------------------------------- */
-
-/** `kpi_tiles`: a figure that needs attention starts with its status symbol. */
-export function kpiTiles(kpi: Figures, t: Translate, language: Language): Tile[] {
-  const value = (key: string) => kpi[key] ?? 0;
-  const flagged = (count: number): [string, Tile["tone"]] => (count ? [`⚠ ${count}`, "warning"] : [String(count), ""]);
-  const duration = (key: string) => durationText(kpi[key], language);
-  const [stale, staleTone] = flagged(value("stale"));
-  const [blocked, blockedTone] = flagged(value("blocked"));
-  const tickets = value("qa_tickets");
-  const firstPass = tickets
-    ? `${value("qa_first_pass")} / ${tickets}  (${pyRound((100 * value("qa_first_pass")) / tickets)}%)`
-    : "—";
-  return [
-    { label: t("В работе (WIP)"), figure: String(value("wip")), hint: `${t("старейший")} ${duration("oldest_wip_seconds")}`, tone: "" },
-    {
-      label: t("Ждёт подтверждения"),
-      figure: String(value("awaiting_approval")),
-      hint: `${t("старейший")} ${duration("oldest_approval_seconds")}`,
-      tone: "",
-    },
-    { label: t("Заблокировано"), figure: blocked, hint: "", tone: blockedTone },
-    { label: t("Без движения"), figure: stale, hint: t("активные > 6 ч"), tone: staleTone },
-    { label: t("QA с первого раза"), figure: firstPass, hint: t("по тикетам"), tone: "" },
-    { label: t("Доработки"), figure: String(value("rework")), hint: t("повторные диспатчи"), tone: "" },
-    { label: t("Цикл до PR"), figure: `${duration("cycle_p50_seconds")} / ${duration("cycle_p95_seconds")}`, hint: "p50 / p95", tone: "" },
-    {
-      label: t("PR за 7 дней"),
-      figure: String(value("throughput_7d")),
-      hint: value("failed") ? `✖ ${t("провалено")} ${value("failed")}` : "",
-      tone: "",
-    },
-  ];
-}
-
 /* -- analytics -------------------------------------------------------------------------------- */
-
-export const ANALYTICS_TABS: readonly [AnalyticsSection, string][] = [
-  ["flow", "Поток работ"],
-  ["quality", "Качество"],
-  ["runtime", "Runtime"],
-  ["gates", "Гейты"],
-];
 
 export const AGING_BUCKETS = ["lt_1d", "d1_3", "d3_7", "gt_7d"] as const;
 export const AGING: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
   ru: { lt_1d: "< 1 дн", d1_3: "1–3 дн", d3_7: "3–7 дн", gt_7d: "> 7 дн" },
   en: { lt_1d: "< 1 d", d1_3: "1–3 d", d3_7: "3–7 d", gt_7d: "> 7 d" },
 };
-const SPARK = "▁▂▃▄▅▆▇█";
-
-const isCounts = (value: Figure | undefined): value is Record<string, number> =>
-  value !== null && value !== undefined && typeof value === "object" && !Array.isArray(value);
-
-/** `name 3 · other 1`, the largest first; `—` for none. */
-function countText(counts: Figure | undefined, labels: Readonly<Record<string, string>> = {}): string {
-  if (!isCounts(counts) || !Object.keys(counts).length) return "—";
-  return Object.entries(counts)
-    .sort(([a, x], [b, y]) => y - x || byText(a, b))
-    .map(([name, count]) => `${labels[name] ?? name} ${count}`)
-    .join(" · ");
-}
-
-/** The seven daily counts as bars and numbers; `—` without any. */
-function spark(figure: Figure | undefined): string {
-  if (!Array.isArray(figure) || !figure.some(Boolean)) return "—";
-  const values = figure.map((value) => value ?? 0);
-  const peak = Math.max(...values);
-  const bars = values.map((value) => (value ? SPARK[pyRound(((SPARK.length - 1) * value) / peak)] : " ")).join("");
-  return `${bars}  (${values.join(" ")})`;
-}
-
 export const seconds = (value: Figure | undefined, language: Language) =>
   durationText(typeof value === "number" ? value : null, language);
-const number = (value: Figure | undefined) => String(typeof value === "number" ? value : 0);
-
-/** `analytics_rows`: (label, value) rows of one analytics tab; an empty section says so. */
-export function analyticsRows(
-  section: AnalyticsSection,
-  analytics: Analytics,
-  t: Translate,
-  language: Language,
-): [string, string][] {
-  const figures = analytics[section];
-  if (!Object.keys(figures).length) return [[t("Данные"), t("в ledger нет данных")]];
-  if (section === "flow") {
-    const buckets = figures.aging;
-    const states = Object.fromEntries(Object.entries(STATE_LABELS).map(([key, label]) => [key, t(label)]));
-    return [
-      [t("Батчи по состояниям"), countText(figures.by_state, states)],
-      [
-        t("Возраст незавершённых"),
-        isCounts(buckets) || buckets === undefined
-          ? AGING_BUCKETS.map((name) => `${AGING[language][name]} ${(isCounts(buckets) ? buckets[name] : 0) ?? 0}`).join(" · ")
-          : "—",
-      ],
-      [t("PR по дням, 7 дней"), spark(figures.pr_per_day)],
-      [
-        t("Цикл до PR p50 / p95"),
-        `${seconds(figures.cycle_p50_seconds, language)} / ${seconds(figures.cycle_p95_seconds, language)}`,
-      ],
-    ];
-  }
-  if (section === "quality") {
-    const passed = typeof figures.qa_first_pass === "number" ? figures.qa_first_pass : 0;
-    const total = typeof figures.qa_tickets === "number" ? figures.qa_tickets : 0;
-    return [
-      [t("Доработки по ролям"), countText(figures.rework_by_role)],
-      [t("Отчёты по ролям"), countText(figures.reports_by_role)],
-      [t("Итоги отчётов"), countText(figures.outcomes)],
-      [t("Неудачные попытки QA"), number(figures.qa_attempts_failed)],
-      [t("QA с первого раза"), total ? `${passed} / ${total}` : "—"],
-    ];
-  }
-  if (section === "runtime") {
-    return [
-      [t("Состояния стадий"), countText(figures.stage_states)],
-      [t("Не завершено"), number(figures.unfinished)],
-      [t("Старейшая не завершённая"), seconds(figures.oldest_unfinished_seconds, language)],
-      [t("Без движения"), number(figures.stale)],
-    ];
-  }
-  return [
-    [t("Ждут подтверждения"), number(figures.awaiting)],
-    [
-      t("Ожидание p50 / p95"),
-      `${seconds(figures.approval_p50_seconds, language)} / ${seconds(figures.approval_p95_seconds, language)}`,
-    ],
-    [t("Старейшее ожидание"), seconds(figures.approval_oldest_seconds, language)],
-    [t("PR по состояниям"), countText(figures.pr_states)],
-  ];
-}
 
 /* -- state and statistics --------------------------------------------------------------------- */
 

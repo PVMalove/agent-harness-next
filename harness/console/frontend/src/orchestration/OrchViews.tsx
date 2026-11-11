@@ -3,6 +3,7 @@
    and the ticket list. Figures are the server's; a mockup figure without a source says so. */
 import { TabList, TabPanels } from "../views/Tabs";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { Icon } from "../icons";
@@ -188,7 +189,7 @@ export function GateTrend({ gates }: { gates: Record<string, Figure> }) {
 
 export type OrchTab = "map" | AnalyticsSection;
 
-export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
+export function OrchTabs({ data, extras = {} }: { data: OrchestrationSnapshot; extras?: Partial<Record<OrchTab, ReactNode>> }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<OrchTab>("map");
   const tabs: [OrchTab, string][] = [
@@ -213,6 +214,7 @@ export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
       ) : (
         <GatesTab data={data} />
       )}
+      {extras[tab]}
       </TabPanels>
     </>
   );

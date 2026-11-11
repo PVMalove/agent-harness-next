@@ -93,7 +93,7 @@ const PAGES: PageSpec[] = [
   {
     route: "orchestration",
     title: "Оркестрация",
-    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-scheme", "#orch-batch-cards", "#orch-dispatch", "#qa-lane", "#orch-tickets", "#ledger-lock"],
+    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-scheme", "#orch-batch-cards", "#orch-dispatch", "#qa-lane", "#orch-tickets", "#batch-history"],
     tabs: ["Схема", "Поток", "Качество", "Runtime", "Гейты"],
   },
   {
@@ -197,7 +197,7 @@ for (const width of [1440, 390]) {
 
     await open(page, "reports", width);
     await page.getByRole("tab", { name: "Evidence" }).click();
-    await expect(page.locator("#reports-evidence .report-evidence-row")).toHaveCount(2);
+    await expect(page.locator("#reports-evidence .report-evidence-row")).toHaveCount(3);
     await page.getByRole("tab", { name: "Готовность" }).click();
     await expect(page.locator("#reports-readiness [data-verdict]")).toHaveText("Заблокировано");
     expect(await noOverflow(page)).toBe(true);

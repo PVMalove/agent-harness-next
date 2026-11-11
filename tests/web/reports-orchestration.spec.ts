@@ -119,9 +119,12 @@ for (const width of [1440, 390]) {
 
   test(`orchestration at ${width} px`, async ({ page }) => {
     await mockSocket(page);
-    await open(page, "orchestration", width, "#orch-kpi");
-    await expect(page.locator("#ledger-lock")).toContainText("Lock ledger занят: report submit");
+    await open(page, "orchestration", width, "#orch-mockup-kpis");
+    await expect(page.locator("main [role=tablist]")).toHaveCount(1);
+    await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
     await expect(page.getByRole("heading", { name: "Ожидающие решения" })).toBeVisible();
+    await page.locator("#orch-tabs").getByRole("tab", { name: "Runtime" }).click();
+    await expect(page.locator("#ledger-lock")).toContainText("Lock ledger занят: report submit");
     await page.locator('#batch-history [data-batch="b-887"]').click();
     await expect(page.locator("#open-recovery")).toHaveAttribute("href", "#/recovery?batch=b-887");
     expect(await noOverflow(page)).toBe(true);
@@ -136,7 +139,7 @@ for (const width of [1440, 390]) {
 
   test(`orchestration at ${width} px: only the live step moves, and never under reduced motion`, async ({ page }) => {
     await mockSocket(page);
-    await open(page, "orchestration", width, "#orch-kpi");
+    await open(page, "orchestration", width, "#orch-mockup-kpis");
     const animations = () =>
       page.locator("#orch-scheme").evaluate((map) => ({
         edges: [...map.querySelectorAll(".orch-map-edge.active")].map((edge) => getComputedStyle(edge).animationName),

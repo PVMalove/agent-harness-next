@@ -2735,6 +2735,15 @@ EN.update(
         "обновлён": "updated",
         "с последнего heartbeat или события": "since the last heartbeat or event",
         "стадия / роль": "stage / role",
+        "Evidence по стадиям": "Evidence by stage",
+        "batch {batch} выбран в истории": "batch {batch} chosen in the history",
+        "{count} batch": "{count} batches",
+        "Завершено": "Completed",
+        "Неудачных попыток QA нет": "No failed QA attempts",
+        "Самый старый": "Oldest",
+        "в ledger нет batch": "no batch in the ledger",
+        "выберите batch в истории ниже": "choose a batch in the history below",
+        "проверки восстановления в снимке не собираются": "the snapshot does not collect recovery checks",
     }
 )
 

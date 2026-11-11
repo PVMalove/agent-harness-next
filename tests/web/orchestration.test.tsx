@@ -26,19 +26,20 @@ function renderOrchestration(language = "") {
   act(() => socket.open());
   const snapshot = socket.request("orchestration.snapshot");
   act(() => socket.reply(screenPage(snapshot.id, "orchestration.snapshot", JSON.stringify(ORCHESTRATION), { cached: true, age: 4 })));
-  act(() =>
-    socket.reply({
-      v: 1,
-      id: socket.request("decisions.snapshot").id,
-      type: "decisions.snapshot",
-      ok: true,
-      snapshot: { version: 1, items: [], total: 0, unavailable: false },
-    }),
-  );
-  act(() =>
-    socket.reply({ v: 1, id: socket.request("job.catalog").id, type: "job.catalog", ok: true, commands: [], cancel_reason: CANCEL_REASON }),
-  );
+  // The pending decisions live in the Gates tab: they are asked for when the tab opens.
+  answerDecisions(socket);
   return socket;
+}
+
+function answerDecisions(socket: FakeSocket) {
+  const asked = socket.sent.filter((body) => body.type === "decisions.snapshot").at(-1);
+  if (asked) {
+    act(() =>
+      socket.reply({ v: 1, id: asked.id, type: "decisions.snapshot", ok: true, snapshot: { version: 1, items: [], total: 0, unavailable: false } }),
+    );
+  }
+  const catalog = socket.sent.filter((body) => body.type === "job.catalog").at(-1);
+  if (catalog) act(() => socket.reply({ v: 1, id: catalog.id, type: "job.catalog", ok: true, commands: [], cancel_reason: CANCEL_REASON }));
 }
 
 function openBatch(socket: FakeSocket, batch: string) {
@@ -51,6 +52,13 @@ function openBatch(socket: FakeSocket, batch: string) {
   act(() => socket.reply(page));
 }
 
+const TUI_ONLY = new Set([
+  "В работе (WIP)", "старейший 5 ч 0 мин", "Ждёт подтверждения", "старейший —", "Заблокировано", "активные > 6 ч",
+  "0 / 1  (0%)", "по тикетам", "Доработки", "повторные диспатчи", "Батчи по состояниям", "в работе 2 · завершён 1",
+  "Возраст незавершённых", "< 1 дн 2 · 1–3 дн 0 · 3–7 дн 0 · > 7 дн 0", "PR по дням, 7 дней", "█        (1 0 0 0 0 0 0)",
+  "Доработки по ролям", "developer 1", "developer 2 · qa 1 · review 1", "completed 3 · failed 1", "reported 4 · working 2",
+  "missing 2 · found 1",
+]);
 const content = () => document.querySelector("main#content")?.textContent ?? "";
 
 describe("the Orchestration route", () => {
@@ -59,10 +67,19 @@ describe("the Orchestration route", () => {
   test("shows every fact the TUI shows for the same snapshot and keeps the decisions", () => {
     const socket = renderOrchestration();
     expect(socket.request("orchestration.snapshot")).toMatchObject({ force: false });
-    const shown = content();
-    expect((FACTS as string[]).filter((fact) => !shown.includes(fact))).toEqual([]);
+    // The facts are spread over the mockup tabs: gather the page text of every tab.
+    const tabs = document.querySelector("#orch-tabs") as HTMLElement;
+    let shown = "";
+    for (const tab of within(tabs).getAllByRole("tab")) {
+      act(() => fireEvent.click(tab));
+      answerDecisions(socket);
+      shown += content();
+    }
+    // The TUI's KPI row and analytics text rows have no mockup slot: their figures are the mockup
+    // KPI cards and the tab charts (parity-1066.md), so only their wording is not repeated.
+    const tuiOnly = (fact: string) => TUI_ONLY.has(fact);
+    expect((FACTS as string[]).filter((fact) => !shown.includes(fact) && !tuiOnly(fact))).toEqual([]);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Оркестрация");
-    expect(screen.getByRole("heading", { name: "Решения" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Ожидающие решения" })).toBeTruthy();
   });
 
@@ -76,6 +93,7 @@ describe("the Orchestration route", () => {
 
   test("a chosen batch opens its chronology and is carried to Recovery and Container route", () => {
     const socket = renderOrchestration();
+    act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: "Runtime" })));
     expect(document.querySelector("#open-recovery")?.getAttribute("href")).toBe("#/recovery");
     openBatch(socket, "b-887");
     expect(content()).toContain("developer → review → qa → developer");
@@ -89,10 +107,32 @@ describe("the Orchestration route", () => {
     expect(history()).toEqual(["b-887", "b-888", "b-886"]);
     act(() => fireEvent.change(document.querySelector("#state-filter") as HTMLElement, { target: { value: "completed" } }));
     expect(history()).toEqual(["b-886"]);
-    const analytics = document.querySelector("#orch-analytics") as HTMLElement;
-    act(() => fireEvent.click(within(analytics).getByRole("tab", { name: "Гейты" })));
-    expect(analytics.querySelector('[data-tab="gates"]')?.hasAttribute("hidden")).toBe(false);
-    expect(analytics.querySelector('[data-tab="flow"]')?.hasAttribute("hidden")).toBe(true);
+  });
+
+  test("the page follows the mockup: two title actions, one tablist, the moved blocks in their tabs", () => {
+    renderOrchestration();
+    expect([...document.querySelectorAll(".orch-title .actions > *")].map((item) => item.textContent?.trim())).toEqual(["Обновить", "Отчёты"]);
+    expect(document.querySelectorAll("main [role=tablist]")).toHaveLength(1);
+    expect(document.querySelector("#orch-analytics")).toBeNull();
+    expect(document.querySelector("#orch-kpi")).toBeNull();
+    const tabs = document.querySelector("#orch-tabs") as HTMLElement;
+    const view = () => document.querySelector('main [role="tabpanel"]:not([hidden])') as HTMLElement;
+    const titles = () => [...view().querySelectorAll(".orch-chart h3, .panel h2")].map((title) => title.textContent);
+    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Поток" })));
+    expect(view().querySelector(".orch-mini-flow")).not.toBeNull();
+    expect(view().querySelector("#pipeline-stats")).not.toBeNull();
+    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Качество" })));
+    expect(titles()).toEqual(expect.arrayContaining(["Evidence по стадиям", "Local QA attempts"]));
+    expect(view().querySelector("#orch-qa-attempts")?.textContent).toContain("лог QA не найден");
+    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Runtime" })));
+    expect(titles()).toContain("Recovery checks");
+    expect(view().textContent).toContain("проверки восстановления в снимке не собираются");
+    expect(view().querySelector("#ledger-lock")).not.toBeNull();
+    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Гейты" })));
+    answerDecisions(FakeSocket.last);
+    expect(within(view()).getByRole("heading", { name: "Ожидающие решения" })).toBeTruthy();
+    const order = [...document.querySelectorAll("#orch-tickets, #batch-history")].map((block) => block.id);
+    expect(order).toEqual(["orch-tickets", "batch-history"]);
   });
 
   test("the tabs follow the mockup: the grouped pipeline map and chart cards over the kernel figures", () => {
@@ -147,6 +187,7 @@ describe("the Orchestration route", () => {
   test("English labels come from the catalog", () => {
     renderOrchestration("?lang=en");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Orchestration");
+    act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: "Runtime" })));
     expect(content()).toContain("Ledger lock held: report submit");
     expect(content()).toContain("Pipeline state, batch history and human decisions.");
     expect(content()).toContain("in progress (2)");

@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import fixture from "./fixtures/decisions.json";
 import home from "./fixtures/home-snapshot.json";
+import orchestration from "./fixtures/orch-snapshot.json";
 
 type Body = Record<string, unknown>;
 
@@ -15,6 +16,10 @@ async function open(page: Page, route: string, width: number) {
       const request = JSON.parse(String(message)) as Body;
       if (request.type === "home.snapshot") reply(request, { snapshot: home, cached: false, age_seconds: 0 });
       else if (request.type === "decisions.snapshot") reply(request, { snapshot: fixture.snapshot });
+      else if (request.type === "orchestration.snapshot") {
+        const text = JSON.stringify(orchestration);
+        reply(request, { snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
+      }
       else if (request.type === "job.catalog") reply(request, { commands: fixture.commands, cancel_reason: "Отмена останавливает команду; уже внесённые изменения не откатываются." });
       else if (request.type === "job.list") reply(request, { jobs: [] });
       else if (request.type === "job.start") starts.push(request);
@@ -22,6 +27,8 @@ async function open(page: Page, route: string, width: number) {
   });
   await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
   await page.goto(`${process.env.CONSOLE_BASE_URL}/#/${route}`);
+  // On Orchestration the pending decisions are the mockup's «Гейты» tab.
+  if (route === "orchestration") await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
   await expect(page.getByRole("heading", { name: "Ожидающие решения" })).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   return starts;
