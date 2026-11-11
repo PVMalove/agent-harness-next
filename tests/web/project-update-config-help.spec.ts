@@ -151,10 +151,20 @@ for (const width of [1440, 390]) {
   test(`help at ${width} px`, async ({ page }, info) => {
     await mockSocket(page);
     await open(page, "help", width, "#help-intro");
-    await expect(page.getByRole("tab")).toHaveCount(6);
-    await page.getByRole("tab", { name: "Разделы" }).click();
-    await expect(page.locator("#help-section table")).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveCount(5);
+    await expect(page.locator(".help-kpis")).toBeVisible();
+    // The section text is not squeezed into a narrow column (the reviewed 1440x900 defect).
+    const width_ = await page.locator("#help-intro").evaluate((element) => element.getBoundingClientRect().width);
+    expect(width_).toBeGreaterThan(width > 600 ? 600 : 300);
     expect(await noOverflow(page)).toBe(true);
+    for (const name of ["Экраны", "Команды", "Горячие клавиши", "Границы"]) {
+      await page.getByRole("tab", { name, exact: true }).click();
+      expect(await noOverflow(page)).toBe(true);
+    }
+    await page.getByRole("tab", { name: "Экраны", exact: true }).click();
+    await expect(page.locator(".help-section table")).toBeVisible();
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    expect(height).toBeLessThan(6000);
     await shot(page, info, `help-${width}`);
   });
 }

@@ -2594,6 +2594,40 @@ EN.update(
     }
 )
 
+# Web console #1066: Help tabs after the mockup (Start, Screens, Commands, Hotkeys, Boundaries).
+EN.update(
+    {
+        "Экраны, команды, горячие клавиши и границы наблюдения.": "Screens, commands, hotkeys and the limits of observation.",
+        "Экранов": "Screens",
+        "в меню консоли": "in the console menu",
+        "Команд": "Commands",
+        "после подтверждения": "after confirmation",
+        "Горячих клавиш": "Hotkeys",
+        "вне полей ввода": "outside input fields",
+        "Разделов справки": "Guide sections",
+        "Экраны": "Screens",
+        "{count} разделов": "{count} sections",
+        "запуск только после подтверждения": "run only after confirmation",
+        "раздел заданий": "job section",
+        "назначение": "purpose",
+        "страница": "page",
+        "Команды выполняются как job сервера; каждая открывает подтверждение, отмена ничего не запускает.": "Commands run as server jobs; each opens a confirmation, and cancelling starts nothing.",
+        "Горячие клавиши": "Hotkeys",
+        "работают вне полей ввода": "work outside input fields",
+        "01 · Наблюдай": "01 · Observe",
+        "02 · Проверяй": "02 · Verify",
+        "03 · Решай": "03 · Decide",
+        "Сессии, dispatch, heartbeat и события.": "Sessions, dispatches, heartbeats and events.",
+        "Health, QA evidence, Release Gate.": "Health, QA evidence, Release Gate.",
+        "Подтверждения, повторы, передача человеку.": "Confirmations, retries, handoff to a human.",
+        "Установка Harness в проект": "Installing Harness into the project",
+        "Обновление управляемых файлов": "Updating the managed files",
+        "Очистка и обслуживание .harness": "Cleanup and maintenance of .harness",
+        "Черновик и запись конфигурации": "Configuration draft and write",
+        "Построение Repo Map для HEAD": "Building the Repo Map for HEAD",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {
