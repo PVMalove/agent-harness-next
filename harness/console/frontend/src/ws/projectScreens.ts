@@ -3,10 +3,11 @@
    kernel/open_project_snapshot.py, kernel/update_harness_snapshot.py,
    kernel/configuration_snapshot.py and kernel/help_text.py (`to_payload`). The parsers only check
    shapes; a configuration document arrives with every secret already masked by the server. */
-import { exact, flag, isObject, list, nullable, string } from "./ledger";
+import { count, exact, flag, isObject, list, nullable, string } from "./ledger";
 import type { Check } from "./ledger";
 import { harnessState } from "./screens";
 import type { HarnessOverview } from "./screens";
+import type { StoreFacts } from "./types";
 
 export type SetupAction = "init" | "adopt" | "update";
 export const SETUP_ACTIONS: readonly SetupAction[] = ["init", "adopt", "update"];
@@ -40,6 +41,10 @@ export interface UpdateHarnessFacts {
   package_version: string;
   /** The `harness diff --json` report, or null when the harness is not installed. */
   drift: Record<string, unknown> | null;
+  /** The runtime-store authority of the project; null when unread. */
+  store: StoreFacts | null;
+  /** The ledger schema an update migrates the store to; null when unknown. */
+  store_target_schema: number | null;
 }
 
 export interface UpdateDiff {
@@ -124,7 +129,21 @@ const openProject = exact({
   blockers: (value) => isObject(value) && Object.values(value).every(strings),
   candidates: list(exact({ path: string, installed: flag, current: flag, command: string })),
 });
-const updateHarness = exact({ state: harnessState, package_version: string, drift: nullable(isObject) });
+const storeFacts = exact({
+  authority: string,
+  schema: nullable(count),
+  generation: nullable(string),
+  audit_records: nullable(count),
+  cutover_at: nullable(string),
+  reason: string,
+});
+const updateHarness = exact({
+  state: harnessState,
+  package_version: string,
+  drift: nullable(isObject),
+  store: nullable(storeFacts),
+  store_target_schema: nullable(count),
+});
 const updateDiff = exact({ path: string, text: string });
 const configFile = exact({ exists: flag, digest: string, document: isObject, error: string });
 const preview = exact({

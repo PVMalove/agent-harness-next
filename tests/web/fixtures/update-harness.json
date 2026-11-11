@@ -34,5 +34,14 @@
     "orchestration": true,
     "skills": 32,
     "updated_at": "2026-11-05 10:00 UTC"
-  }
+  },
+  "store": {
+    "audit_records": 128,
+    "authority": "file-ledger",
+    "cutover_at": null,
+    "generation": "generation-0007",
+    "reason": "",
+    "schema": 3
+  },
+  "store_target_schema": 4
 }

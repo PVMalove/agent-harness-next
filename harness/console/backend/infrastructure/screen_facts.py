@@ -45,6 +45,7 @@ from ...kernel.reports import LedgerView, load_ledger_view
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.update_harness_snapshot import UpdateHarnessFacts
 from ....health.project_tracker import ProjectTracker, resolve_project_tracker
+from ....orchestration.ledger.lifecycle import STORE_LEDGER_VERSION
 from ....orchestration.runtime_client import RuntimeClient, RuntimeClientError
 from .home_facts import RUNTIME_DOWN, RUNTIME_TIMEOUT_SECONDS, runtime_reason, store_facts
 
@@ -342,11 +343,16 @@ def open_project_facts(repo: Path) -> dict[str, object]:
 def update_harness_facts(repo: Path) -> dict[str, object]:
     """The installed harness, the package version and the `harness diff --json` report (in a
     subprocess); a project without the harness is never diffed, and an unreadable report is
-    null."""
+    null. The runtime-store facts and the ledger schema an update migrates to fill the
+    migration panel; reading them never migrates anything."""
     state = harness_state(repo)
     drift = console_data.drift_report(repo) if state.installed else None
     return UpdateHarnessFacts(
-        state, console_data.harness_version(), drift
+        state,
+        console_data.harness_version(),
+        drift,
+        store=store_facts(repo),
+        store_target_schema=STORE_LEDGER_VERSION,
     ).to_payload()
 
 

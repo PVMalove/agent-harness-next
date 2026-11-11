@@ -59,8 +59,12 @@ describe("the Open Project, Update Harness, Configuration and Help parsers", () 
 
   test("Update Harness keeps the drift report as the server sent it; a diff is a path and its text", () => {
     const drift = { state: "drift", conflict: ["AGENTS.md"], seed_differing: [".harness/project.json"], added: 2 };
-    const facts = { state: STATE, package_version: "2.0.1", drift };
+    const store = { authority: "file-ledger", schema: 3, generation: "g-1", audit_records: 4, cutover_at: null, reason: "" };
+    const facts = { state: STATE, package_version: "2.0.1", drift, store, store_target_schema: 4 };
     expect(parseUpdateHarness(facts)).toEqual(facts);
+    expect(parseUpdateHarness({ ...facts, store: null, store_target_schema: null })).toMatchObject({ store: null });
+    expect(parseUpdateHarness({ ...facts, store: { ...store, schema: "3" } })).toBeNull();
+    expect(parseUpdateHarness({ state: STATE, package_version: "2.0.1", drift })).toBeNull();
     expect(parseUpdateHarness({ ...facts, drift: null })).toMatchObject({ drift: null });
     expect(parseUpdateHarness({ ...facts, drift: [] })).toBeNull();
     expect(parseUpdateHarness({ ...facts, state: { ...STATE, skills: -1 } })).toBeNull();

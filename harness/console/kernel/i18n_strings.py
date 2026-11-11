@@ -2664,6 +2664,31 @@ EN.update(
 
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
+# The web console's mockup parity pass after the owner's review: page labels.
+EN.update(
+    {
+        "факт резервной копии в указателе не хранится": "the pointer keeps no backup fact",
+        "схема runtime-store": "runtime-store schema",
+        "время cutover не записано": "cutover time not recorded",
+        "harness health после миграции": "harness health after the migration",
+        "копия runtime.db до записи": "a runtime.db copy before writing",
+        "ожидает": "pending",
+        "выполнено": "done",
+        "после миграции": "after the migration",
+        "Миграция runtime-store": "Runtime-store migration",
+        "Миграцию выполняет координатор (ledger migrate); консоль только показывает план и не мигрирует store.": "The coordinator runs the migration (ledger migrate); the console only shows the plan and never migrates the store.",
+        "завершено": "completed",
+        "отменено": "cancelled",
+        "выполняется": "running",
+        "Результат последнего запуска": "Last run result",
+        "ещё не запускалось": "not run yet",
+        "код": "code",
+        "Ещё не запускалось в этой консоли · запуски harness update вне консоли не записываются.": "Not run in this console yet · harness update runs outside the console are not recorded.",
+        "выбор файла": "file choice",
+    }
+)
+
+
 STATE_LABELS: dict[str, tuple[str, str]] = {
     "abandoned": ("Брошен", "Abandoned"),
     "active": ("Активен", "Active"),

@@ -6,10 +6,11 @@ off the schema is a `ValueError`. `diff_paths` names the only files `update_harn
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import cast
 
 from .harness_facts import HarnessState
+from .home_snapshot import StoreFacts, store_from_payload
 
 # The drift report fields that list files the update touches or the screen shows a diff of.
 DIFF_FIELDS = (
@@ -21,16 +22,22 @@ DIFF_FIELDS = (
     "local_changed",
     "seed_differing",
 )
-_FIELDS = frozenset({"state", "package_version", "drift"})
+_FIELDS = frozenset(
+    {"state", "package_version", "drift", "store", "store_target_schema"}
+)
 
 
 @dataclass(frozen=True)
 class UpdateHarnessFacts:
-    """The installed harness, the available package version and the drift report."""
+    """The installed harness, the available package version and the drift report; `store` is
+    the runtime-store authority of the project (`StoreFacts`, None when unread) and
+    `store_target_schema` the ledger schema an update migrates the store to."""
 
     state: HarnessState
     package_version: str
     drift: dict[str, object] | None
+    store: StoreFacts | None = None
+    store_target_schema: int | None = None
 
     def to_payload(self) -> dict[str, object]:
         """The JSON object of an `update_harness.snapshot` reply."""
@@ -38,6 +45,8 @@ class UpdateHarnessFacts:
             "state": self.state.to_payload(),
             "package_version": self.package_version,
             "drift": self.drift,
+            "store": asdict(self.store) if self.store is not None else None,
+            "store_target_schema": self.store_target_schema,
         }
 
     @classmethod
@@ -52,10 +61,16 @@ class UpdateHarnessFacts:
             raise ValueError("update harness package version")
         if drift is not None and not isinstance(drift, dict):
             raise ValueError("update harness drift")
+        target = found["store_target_schema"]
+        if target is not None and (isinstance(target, bool) or not isinstance(target, int)):
+            raise ValueError("update harness store target schema")
+        store = found["store"]
         return cls(
             HarnessState.from_payload(found["state"]),
             version,
             cast("dict[str, object] | None", drift),
+            store_from_payload(store) if store is not None else None,
+            target,
         )
 
 

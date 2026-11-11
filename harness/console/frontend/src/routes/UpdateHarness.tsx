@@ -3,16 +3,17 @@
    update_harness.snapshot. A file's diff is read (update_harness.diff) only once the file is
    clicked. «Обновить» runs only through the CommandPanel of the job section `update`, and every
    run opens the confirmation first: cancelling it starts nothing. */
-import { useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
 import { plural, useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";
 import { useServedRepo } from "../project/format";
+import { useConsole } from "../useConsole";
+import type { JobSummary } from "../ws/jobs";
 import { useScreen } from "../screens/useScreen";
 import {
-  ICONS,
   MODES,
   MODE_CARDS,
   MODE_CONSEQUENCES,
@@ -20,16 +21,19 @@ import {
   diffFiles,
   diffText,
   filesText,
+  migrationSteps,
   planReason,
   renderDrift,
   renderVersions,
   seedFiles,
+  snapshotClock,
   stopWarning,
   TONE_CLASS,
   TONE_ICONS,
   updateCommand,
 } from "../update/format";
-import type { DiffFile, UpdateMode } from "../update/format";
+import type { DiffFile, MigrationState, UpdateMode } from "../update/format";
+import type { UpdateHarnessFacts } from "../ws/projectScreens";
 import { parseUpdateDiff, parseUpdateHarness } from "../ws/projectScreens";
 
 const lineClass = (line: string) =>
@@ -41,9 +45,13 @@ function DiffPane({ file }: { file: DiffFile }) {
   const screen = useScreen({ type: "update_harness.diff", params: { path: file.path } }, parseUpdateDiff);
   const text = screen.data ? diffText(screen.data.text, language) : "";
   return (
-    <div className="diff-detail" id="update-diff-view">
+    <>
       <div className="diff-detail-head">
+        <span className={`diff-status ${TONE_CLASS[file.tone]}`}>
+          <Icon name={TONE_ICONS[file.tone]} />
+        </span>
         <code>{file.path}</code>
+        <span className={`update-pill ${TONE_CLASS[file.tone]}`}>{t(file.tag)}</span>
       </div>
       <p className="diff-explain">{t(file.meaning)}</p>
       {screen.error ? (
@@ -64,7 +72,115 @@ function DiffPane({ file }: { file: DiffFile }) {
       ) : (
         <p className="harness-note ok">{t("Файл уже совпадает с тем, что запишет обновление.")}</p>
       )}
-    </div>
+    </>
+  );
+}
+
+const STEP_CLASS: Readonly<Record<MigrationState, string>> = { pending: "pending", done: "ready", nodata: "after", after: "after" };
+const STEP_LABEL: Readonly<Record<MigrationState, string>> = { pending: "ожидает", done: "выполнено", nodata: "нет данных", after: "после миграции" };
+
+/** «Миграция runtime-store»: the plan read from the project's store facts. The console never
+    runs a migration; the coordinator command is shown as text only. */
+function MigrationPanel({ facts }: { facts: UpdateHarnessFacts }) {
+  const { t } = useI18n();
+  const store = facts.store;
+  const target = facts.store_target_schema;
+  const steps = migrationSteps(store, target, t);
+  const none = t("нет данных");
+  const cells: [string, string][] = [
+    ["authority", store?.authority ?? none],
+    ["generation", store?.generation ?? none],
+    ["audit", store?.audit_records === null || store?.audit_records === undefined ? none : String(store.audit_records)],
+    ["cutover", store?.cutover_at ? store.cutover_at.slice(0, 10) : none],
+  ];
+  return (
+    <section className="panel migration-panel" id="update-migration">
+      <div className="panel-head">
+        <h2>{t("Миграция runtime-store")}</h2>
+        <span className="small muted">{`schema ${store?.schema ?? "?"} → ${target ?? "?"}`}</span>
+      </div>
+      <div className="body">
+        <div className="migration-track">
+          {steps.map((step, index) => (
+            <Fragment key={step.num}>
+              {index > 0 && <span className="migration-arrow" aria-hidden="true">→</span>}
+              <div className={`migration-step ${STEP_CLASS[step.state]}`}>
+                <span className="migration-num">{step.num}</span>
+                <b>{step.title}</b>
+                <small>{step.caption}</small>
+                {step.num === "04" ? (
+                  <a className="migration-state" href={href("diagnostics")}>{t(STEP_LABEL[step.state])}</a>
+                ) : (
+                  <span className="migration-state">{t(STEP_LABEL[step.state])}</span>
+                )}
+              </div>
+            </Fragment>
+          ))}
+        </div>
+        <div className="migration-facts">
+          {cells.map(([label, value]) => (
+            <div key={label}>
+              <span>{label}</span>
+              <b>{value}</b>
+            </div>
+          ))}
+        </div>
+        <p className="migration-note">
+          {store?.reason ? `${t("нет данных")} · ${store.reason}. ` : ""}
+          {t("Миграцию выполняет координатор (ledger migrate); консоль только показывает план и не мигрирует store.")}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** The update jobs of this console server: the list the server keeps for its own jobs. */
+function useUpdateJobs(): JobSummary[] {
+  const { client } = useConsole();
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
+  useEffect(() => {
+    const ids = new Set<string>(MODES.map(([key]) => key));
+    const stop = client.subscribeJobs((event) => {
+      if (event.type === "jobs") setJobs(event.jobs.filter((job) => ids.has(job.command_id)));
+      else if (event.type === "job" && ids.has(event.job.command_id)) {
+        const { output: _output, ...summary } = event.job;
+        setJobs((known) => [...known.filter((item) => item.id !== summary.id), summary]);
+      }
+    });
+    client.listJobs();
+    return stop;
+  }, [client]);
+  return jobs;
+}
+
+const PHASE_TONE: Readonly<Record<string, string>> = { completed: "ok", failed: "err", cancelled: "warn", running: "active" };
+const PHASE_LABEL: Readonly<Record<string, string>> = { completed: "завершено", failed: "ошибка", cancelled: "отменено", running: "выполняется" };
+
+/** «Результат последнего запуска»: the newest update job of this console, or why there is none. */
+function ResultPanel() {
+  const { t } = useI18n();
+  const jobs = useUpdateJobs();
+  const last = jobs.at(-1) ?? null;
+  return (
+    <section className="panel result-panel" id="update-result">
+      <div className="panel-head">
+        <h2>{t("Результат последнего запуска")}</h2>
+        <span className="small muted">{last ? last.command_id : t("ещё не запускалось")}</span>
+      </div>
+      {last ? (
+        <div className={`result-row ${PHASE_TONE[last.phase] ?? ""}`}>
+          <Icon name={last.phase === "completed" ? "check" : last.phase === "running" ? "play" : "x"} />
+          <b>{last.command_id}</b>
+          <span>{t(PHASE_LABEL[last.phase] ?? last.phase)}</span>
+          <span>{last.returncode === null ? "" : `${t("код")} ${last.returncode}`}</span>
+          {last.error && <small>{last.error}</small>}
+        </div>
+      ) : (
+        <div className="result-empty">
+          <Icon name="terminal" /> {t("Ещё не запускалось в этой консоли · запуски harness update вне консоли не записываются.")}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -82,7 +198,8 @@ export function UpdateHarness() {
   const seeds = seedFiles(drift);
   const selected = seeds.filter((path) => ticked.includes(path));
   const files = diffFiles(drift);
-  const file = files.find((item) => item.path === opened) ?? null;
+  const file = files.find((item) => item.path === opened) ?? files[0] ?? null;
+  const clock = useMemo(() => snapshotClock(screen.ageSeconds, language), [screen.data, screen.ageSeconds, language]);
   const command = updateCommand(mode, repo ?? "<repo>", mode === SEED_MODE ? selected : []);
   const reason = facts ? planReason(facts, mode, selected) : null;
   const warning = stopWarning(drift, mode, t, language);
@@ -115,10 +232,11 @@ export function UpdateHarness() {
                   <span>{`${facts.state.installed_version} → ${facts.package_version}`}</span>
                   <span>{plural(language, facts.state.managed_files, ["управляемый файл", "управляемых файла", "управляемых файлов"], ["managed file", "managed files"])}</span>
                   <span>{plural(language, facts.state.skills, ["навык", "навыка", "навыков"], ["skill", "skills"])}</span>
+                  <span>{`schema ${facts.store?.schema ?? "?"} → ${facts.store_target_schema ?? "?"}`}</span>
                 </>
               )}
-              <span id="update-cache">
-                {screen.cached ? t("Кэш") : t("Новый снимок")} · {screen.ageSeconds ?? 0} s
+              <span id="update-cache" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+                {clock}
               </span>
             </div>
           )}
@@ -147,9 +265,9 @@ export function UpdateHarness() {
               {versions.verdict && <span className={`update-pill ${versions.verdict.tone === "ok" ? "ok" : "warn"}`}>{versions.verdict.tone === "ok" ? t("актуально") : t("доступно")}</span>}
             </div>
             <div className="versions-body">
-              {versions.missing.map((line) => (
-                <p key={line} className="harness-note">
-                  {line}
+              {versions.missing.map((line, index) => (
+                <p key={line} className={`harness-note${index === 0 ? " err" : ""}`}>
+                  {index === 0 && <Icon name="x" />} {line}
                 </p>
               ))}
               <div className="version-pair">
@@ -172,6 +290,10 @@ export function UpdateHarness() {
                     <dd>{value}</dd>
                   </div>
                 ))}
+                <div>
+                  <dt>Schema</dt>
+                  <dd>{`${facts.store?.schema ?? "?"} → ${facts.store_target_schema ?? "?"}`}</dd>
+                </div>
               </dl>
             </div>
             <div className="versions-changes" id="update-changes">
@@ -189,11 +311,18 @@ export function UpdateHarness() {
                     <span className="count-label">{row.label}</span>
                   </div>
                 ))}
-                {changes.line && <div className={`update-count-row ${changes.line.tone ?? ""}`}>{changes.line.text}</div>}
+                {changes.line && (
+                  <div className={`update-count-row ${changes.line.tone ? TONE_CLASS[changes.line.tone] : ""}`}>
+                    {changes.line.tone && <Icon name={TONE_ICONS[changes.line.tone]} />} {changes.line.text}
+                  </div>
+                )}
               </div>
             </div>
             <div className="changes-foot">
               <span>{mode === SEED_MODE ? t("Seed-режим: отметьте файлы в панели Seed-файлы.") : t("Обычный режим сохранит локальные правки.")}</span>
+              <button className="btn" type="button" onClick={() => screen.refresh(true)}>
+                <Icon name="refresh" /> {t("Проверить заново")}
+              </button>
             </div>
           </section>
 
@@ -284,10 +413,10 @@ export function UpdateHarness() {
       )}
 
       {facts && (
-        <section className="panel update-diff-panel" id="update-diff">
+        <section className="panel diff-panel update-diff-panel" id="update-diff">
           <div className="panel-head">
             <h2>{t("Diff — что изменится в файлах")}</h2>
-            <span className="small muted">{filesText(files.length, language)}</span>
+            <span className="small muted">{`${t("выбор файла")} · ${filesText(files.length, language)} · ${clock}`}</span>
           </div>
           {files.length === 0 ? (
             <p className="harness-note">{t("Расхождений нет: показывать нечего.")}</p>
@@ -299,8 +428,8 @@ export function UpdateHarness() {
                     key={item.path}
                     type="button"
                     role="option"
-                    aria-selected={item.path === opened}
-                    className={`diff-file${item.path === opened ? " on" : ""}`}
+                    aria-selected={item.path === file?.path}
+                    className={`diff-file${item.path === file?.path ? " on" : ""}`}
                     data-path={item.path}
                     onClick={() => setOpened(item.path)}
                   >
@@ -308,15 +437,20 @@ export function UpdateHarness() {
                       <Icon name={TONE_ICONS[item.tone]} />
                     </span>
                     <span className="diff-path">{item.path}</span>
-                    <span className={`diff-kind ${item.tone}`}>{`${ICONS[item.tone]} ${t(item.tag)}`}</span>
+                    <span className={`diff-kind ${TONE_CLASS[item.tone]}`}>{t(item.tag)}</span>
                   </button>
                 ))}
               </div>
-              <div className="diff-panel">{file ? <DiffPane key={file.path} file={file} /> : <p className="harness-note">{t("Выберите файл, чтобы увидеть его изменения.")}</p>}</div>
+              <div className="diff-detail" id="update-diff-view">
+                {file ? <DiffPane key={file.path} file={file} /> : <p className="harness-note">{t("Выберите файл, чтобы увидеть его изменения.")}</p>}
+              </div>
             </div>
           )}
         </section>
       )}
+
+      {facts && <MigrationPanel facts={facts} />}
+      {facts && <ResultPanel />}
 
       <CommandPanel section="update" confirmAll listed={false} request={request} onJobDone={() => screen.refresh(true)} />
     </div>

@@ -21,6 +21,7 @@ from harness.console.kernel.harness_facts import HarnessState
 from harness.console.kernel.help_text import HelpSections, help_sections
 from harness.console.kernel.open_project_snapshot import Candidate, OpenProjectFacts
 from harness.console.kernel.project_target import ProjectTarget, installation_entry
+from harness.console.kernel.home_snapshot import StoreFacts
 from harness.console.kernel.update_harness_snapshot import (
     UpdateHarnessFacts,
     diff_paths,
@@ -84,7 +85,9 @@ DIFF_TEXT = (
 
 
 def update() -> UpdateHarnessFacts:
-    return UpdateHarnessFacts(STATE, "2.0.0", DRIFT)
+    """A file-ledger project (schema 3) the update migrates to the runtime-store schema."""
+    store = StoreFacts("file-ledger", 3, "generation-0007", 128)
+    return UpdateHarnessFacts(STATE, "2.0.0", DRIFT, store=store, store_target_schema=4)
 
 
 def configuration() -> ConfigurationFacts:

@@ -350,6 +350,11 @@ def _harness_from(value: object) -> HarnessInstall:
     )
 
 
+def store_from_payload(value: object) -> StoreFacts:
+    """The `StoreFacts` of their JSON object; anything off the schema is a `ValueError`."""
+    return _store_from(value)
+
+
 def _store_from(value: object) -> StoreFacts:
     found = _fields(value, StoreFacts)
     return StoreFacts(

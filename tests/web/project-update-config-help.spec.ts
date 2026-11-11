@@ -22,7 +22,9 @@
    - [ ] «Что изменится» counts; «Версии» + «Что изменится» one block, «Режим» + «План» the second.
    - [ ] The plan changes command, warning and counters with the mode and the seed selection.
    - [ ] «Обновить» opens the confirmation; «Проверить заново» re-reads the snapshot.
-   - Deviations: no runtime-store migration strip (no TUI facts).
+   - [ ] Diff rows are one line each (status, path with ellipsis, kind word), the first file is open.
+   - [ ] «Миграция runtime-store» from the store facts and «Результат последнего запуска» from this
+     console's update jobs, with an in-panel honest «нет данных».
    #configuration (README «Настройки · шаг 11»)
    - [ ] KPI: project.json, orchestration.json validity, schema/orchestration installed, pending write.
    - [ ] Tabs Обзор / project.json / orchestration.json / История.
@@ -126,7 +128,21 @@ for (const width of [1440, 390]) {
     const sent = await mockSocket(page);
     await open(page, "update-harness", width, "#update-versions");
     await expect(page.locator("#update-changes .update-count-row.err")).toContainText("в конфликте (нужна перезапись)");
-    await expect(page.locator("#update-warning")).toContainText("⚠ Обычное обновление остановится: 1 конфликт");
+    await expect(page.locator("#update-warning")).toContainText("Обычное обновление остановится: 1 конфликт");
+    // One compact line per diff entry (44 px); on a phone the mockup moves the kind under the path.
+    const rows = await page.locator("#update-diff .diff-file").evaluateAll(
+      (items, wide) =>
+        items.map((row) => {
+          const path = row.querySelector(".diff-path")!.getBoundingClientRect();
+          const kind = row.querySelector(".diff-kind")!.getBoundingClientRect();
+          return { height: row.getBoundingClientRect().height, sameLine: wide ? Math.abs(path.top - kind.top) < 4 : true };
+        }),
+      width > 720,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((row) => row.height > (width > 720 ? 44 : 72) || !row.sameLine)).toEqual([]);
+    await expect(page.locator("#update-migration .migration-step")).toHaveCount(4);
+    await expect(page.locator("#update-result .result-empty")).toContainText("Ещё не запускалось");
     await page.locator('#update-diff [data-path="AGENTS.md"]').click();
     await expect(page.locator("#update-diff-view")).toContainText("+Package rule.");
     expect(await noOverflow(page)).toBe(true);
