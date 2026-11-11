@@ -9,7 +9,7 @@
 
 В управляемом `.harness/orchestration.example.json` нет `access_policy`, а все шесть extensions
 равны `none`. Пример не выбирает за проект образы, сеть и пути хоста. Без явной политики brief
-сохраняет историческое поведение `inherit`; оно не является доказательством sandbox-изоляции.
+сохраняет историческое поведение `inherit`; оно не доказывает sandbox-изоляцию.
 
 Если добавить **любой** `access_policy`, даже `{}` или `mode: inherit`, `dispatch send`
 потребует выбранную реализацию `extensions.runtime_access`. `none` не подтверждает доступ,
@@ -25,7 +25,7 @@
 
 | Поле | Контракт |
 | --- | --- |
-| `access_policy.defaults.mode` | `inherit`, `sandbox`, `unsandboxed`. Если компонент не задан, resolver выбирает `inherit`. Встроенный контейнерный исполнитель отказывает `unsandboxed`; допустимость схемы не доказывает поддержку средой. |
+| `access_policy.defaults.mode` | `inherit`, `sandbox`, `unsandboxed`. Если компонент не задан, resolver выбирает `inherit`. Встроенный контейнерный исполнитель отклоняет `unsandboxed`; допустимость схемы не доказывает поддержку средой. |
 | `access_policy.defaults.container.engine` | `docker` или `podman`; default внутри заданного `container` — `docker`. Сам контейнерный компонент не добавляется автоматически. |
 | `access_policy.defaults.container.worker_image` | Обязателен внутри `container`: строка — ссылка на образ, например `harness-worker:local`. От 1 до 255 символов, начинается с буквы/цифры, без пробелов и ведущего `-`. |
 | `access_policy.defaults.container.proxy_image` | Необязательная ссылка на образ в том же формате. Исполнитель требует её при непустом `network.hosts`; если тег задан, образ должен существовать локально. |
@@ -70,8 +70,8 @@ coordinator, поэтому resolver использует defaults и override �
 - `access_policy.operations.<ключ>.network.hosts`.
 - `access_policy.operations.<ключ>.filesystem[].resource`, `access_policy.operations.<ключ>.filesystem[].path`, `access_policy.operations.<ключ>.filesystem[].access`.
 
-Так, read-only роль QA не означает, что операция coordinator не пишет clean-room checkout,
-Git metadata или общее хранилище. Операционные требования проверяются отдельно.
+Поэтому операция coordinator может писать clean-room checkout, Git metadata или общее хранилище,
+даже если роль QA read-only. Операционные требования проверяются отдельно.
 `qa run` и publish используют закреплённый план; интеграционные команды local QA/refresh/resolve
 читают план операции из текущей конфигурации. Подробности — в
 [backend-руководстве](../../../backend-orchestration.md).
@@ -96,14 +96,14 @@ Git metadata или общее хранилище. Операционные тр
 
 В поставке есть встроенное имя `docker` для `runtime_access`; оно работает с обоими движками.
 При его выборе схема и валидатор требуют `access_policy.defaults.container` с `worker_image`.
-Произвольный другой provider должен быть реально реализован и проверен проектом.
+Любой другой provider проект должен сам реализовать и проверить.
 
 ## Контейнерный план {#container}
 
 Встроенный исполнитель требует Linux, runtime store и доступный локальный движок.
 Отправляемые через него роли должны использовать `transport: external`. Харнесс не собирает
 и не скачивает образы: пользователь готовит их отдельно, `dispatch propose` закрепляет digest,
-а изменение образа после approval требует нового согласованного плана.
+а если образ изменился после approval, нужен новый согласованный план.
 
 - Для непустого `network.hosts` нужен локальный `proxy_image`. Выход идёт через отдельный
   egress proxy только по HTTP(S), порты 80/443, к точным разрешённым хостам. Поддомены, wildcard,
@@ -192,7 +192,7 @@ Git metadata или общее хранилище. Операционные тр
 QA заменяет container, environment и network: его контейнер использует `docker`, не получает
 `LLM_API_KEY`, не наследует proxy и работает без сети. Это не настройка доступа git/publish.
 
-Полная подготовка образов, среды, сети и устранение блокеров описаны на странице
+Как подготовить образы, среду и сеть и устранить блокеры, описано на странице
 [«Контейнер»](../container.md) и в установленном `.harness/docs/container-executor.md`.
 Имена и значения секретов разобраны в [«Секреты и токены»](../secrets.md).
 
@@ -292,5 +292,5 @@ QA заменяет container, environment и network: его контейнер
 Начните с [проверки конфигурации](index.md#config-validation). Затем `dispatch preflight`
 проверяет среду конкретного запуска без создания контейнера. Используйте параметры из help
 установленного coordinator, а не выдуманный ID dispatch. Наличие engine, образов, переменных
-и доказательств доступа проверяется отдельно от JSON. Отказ должен быть устранён до send;
+и доказательств доступа проверяется отдельно от JSON. Устраните отказ до send;
 не снимайте ограничения ради обхода блокера. Команды QA — в [верификации](verification.md).

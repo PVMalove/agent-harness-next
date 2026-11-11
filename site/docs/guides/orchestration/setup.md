@@ -1,6 +1,6 @@
 # Включение и конфигурация
 
-Включи capability, проверь конфигурацию и оцени границы задачи до создания batch. Справочник полей находится в разделе [Настройки](../../getting-started/settings/orchestration/index.md).
+Включи capability, проверь конфигурацию и оцени границы задачи до создания batch. Справочник полей — в разделе [Настройки](../../getting-started/settings/orchestration/index.md).
 
 [Обзор оркестрации](../../backend-orchestration.md)
 
@@ -41,19 +41,19 @@ python3 harness/bin/harness.py health /path/to/repository
 
 ## Настройка `.harness/orchestration.json` {#2-harnessorchestrationjson}
 
-Выбирай назначения ролей, команды проверок и политики по [справочнику полей](../../getting-started/settings/orchestration/index.md). Отсутствующий или пустой seed-конфиг использует дефолты для `in-process`. Настройки отдельных политик объединяются с дефолтами и без `assignment_plans`. Проверь конфигурацию перед dispatch.
+Выбирай назначения ролей, команды проверок и политики по [справочнику полей](../../getting-started/settings/orchestration/index.md). Если seed-конфига нет или он пуст, coordinator берёт дефолты для `in-process`. Заданные политики coordinator объединяет с дефолтами, даже если `assignment_plans` нет. Проверь конфигурацию перед dispatch.
 
 ### Нормализация и проверка конфига {#_3}
 
 При загрузке coordinator нормализует конфиг только в памяти (`normalization.v1`): для перечисленных
 enum-полей он убирает пробелы по краям, приводит регистр и применяет документированные алиасы
-(`in_process` → `in-process`, `manual-all` → `manual_all`, `low-risk` → `low_risk`). Каждое
-исправление даёт предупреждение (WARN) с ID поля, а файл не меняется. ID, модели, пути и команды
-не нормализуются. Битый JSON, дубликат ключа, секрет и неоднозначное значение — ошибки; дубликат
-никогда не разрешается по последнему значению.
+(`in_process` → `in-process`, `manual-all` → `manual_all`, `low-risk` → `low_risk`). На каждое
+исправление он выдаёт предупреждение (WARN) с ID поля, а файл не меняет. ID, модели, пути и команды
+он не нормализует. Битый JSON, дубликат ключа, секрет и неоднозначное значение — ошибки; при дубликате
+coordinator никогда не берёт последнее значение.
 
 - `config validate --json` печатает диагностику: файл, JSON pointer, код, допустимые значения и
-  безопасное полученное значение. Невалидный конфиг даёт код 2.
+  безопасное полученное значение. Для невалидного конфига команда завершается с кодом 2.
 - `config validate --canonical --json` дополнительно отклоняет написание, которое требует
   нормализации (код `config-noncanonical`).
 - `config validate --fix --dry-run --json` показывает diff безопасной нормализации, а
@@ -61,10 +61,10 @@ enum-полей он убирает пробелы по краям, привод
 
 ### Бюджет контекста и preflight {#preflight}
 
-Новый batch не создаётся, пока `batch preflight` не подтвердит ограниченный scope. `batch create`
+Coordinator не создаёт новый batch, пока `batch preflight` не подтвердит ограниченный scope. `batch create`
 вызывает его автоматически. Укажите ожидаемые changed paths, один bounded context/service и
-консервативный размер diff. Значения выше project policy сначала разделите через `/to-tickets`, а
-не передавайте в architect как discovery-задачу:
+консервативный размер diff. Если значения выше project policy, сначала разделите задачу через `/to-tickets`;
+не передавайте её architect как discovery-задачу:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . batch preflight \
@@ -84,13 +84,13 @@ Context Package. Это касается и пакетов, которые coord
 architect/developer/code-review, а не только ручного `context-package register`.
 `--max-package-tokens` на `context-package register` — только более строгий потолок для одного
 пакета. Значение выше сконфигурированного `context_package_policy.max_tokens` coordinator отклоняет
-с ошибкой, а не применяет молча. Лимит поднимает только правка `context_package_policy.max_tokens`
-в конфиге проекта, осознанно и с прохождением `harness health`. `max_related_tests` (по умолчанию 25)
+с ошибкой, а не применяет молча. Поднять лимит можно только правкой `context_package_policy.max_tokens`
+в конфиге проекта, после которой `harness health` должен пройти. `max_related_tests` (по умолчанию 25)
 — отдельный fail-loud предохранитель. Если import-граф стартовых файлов задевает больше
-related_tests, чем этот предел, сборка пакета завершается `ContextPackageError`. Она не утаскивает
+related_tests, чем этот предел, сборка пакета завершается `ContextPackageError`. Она не добавляет
 молча в оценку токенов половину test suite. `--max-related-tests` переопределяет предел для
 одного ручного `context-package register`. Все role sessions на том же base/candidate
-переиспользуют один immutable shared Context Package. Новый пакет строится только при новом
+переиспользуют один immutable shared Context Package. Новый пакет coordinator строит только для нового
 candidate. `continuation_policy` (2 continuations, из них максимум один automatic 429 resume) и
 `retry_policy` (один developer retry) делают циклы конечными. `harness health` проверяет все поля.
 Effort допускает только документированные уровни (`none`…`ultra`).
@@ -100,15 +100,15 @@ Effort допускает только документированные уро
 Кроме model/effort и `verification_commands`, каждый immutable brief явно записывает два значения,
 выбранных из `.harness/orchestration.json`, а не из чата:
 
-- `allowed_tools` — рабочий набор инструментов именно этой роли. Без `tool_policy` берётся дефолт по
-  режиму manifest: `read-only` (architect, code-review, qa) — `Read`, `Grep`, `Glob`, `Bash`, без
+- `allowed_tools` — рабочий набор инструментов именно этой роли. Без `tool_policy` действует дефолт
+  режима из manifest: `read-only` (architect, code-review, qa) — `Read`, `Grep`, `Glob`, `Bash`, без
   `Edit`/`Write`; `write` — те же плюс `Edit` и `Write`. Read-only роль работает по Context Package,
   не сканирует весь репозиторий и не подгружает нерелевантные инструменты. Список — рабочий набор
   роли, а не deny-list: brief не отключает глобальные инструменты runtime.
 - `context_budget` — токены из `adaptive_continuation_policy.context_limit` (по умолчанию 150000):
   тот же порог, от которого считается `context_advisory`. `dispatch create` (и `--propose`)
-  отклоняет автоматический Context Package, если его `estimated_tokens` больше этого бюджета. Это
-  верно, даже если оценка укладывается в `context_package_policy.max_tokens`. Потолок пакета может
+  отклоняет автоматический Context Package, если его `estimated_tokens` больше этого бюджета. Так
+  происходит, даже если оценка укладывается в `context_package_policy.max_tokens`. Потолок пакета может
   быть выше бюджета роли, но роль должна получить пакет, который помещается в её контекст.
 
 Проект переопределяет набор необязательным `tool_policy`. Запись роли важнее записи режима, а запись
@@ -143,7 +143,7 @@ dispatch не меняет условия, под которыми dispatch бы
                "runtime_access": "none"}
 ```
 
-- `attention_policy` — пороги флага `needs_attention` (см. ниже): сколько принятый retry может ждать
+- `attention_policy` — пороги флага `needs_attention` (см. [Attention state](decisions.md#attention-state)): сколько принятый retry может ждать
   своего dispatch, сколько operational retry (`verification-infrastructure`, `transport`,
   `context-pressure`) допустимо на один candidate (`0` — ни одного) и после какого молчания живой
   dispatch считается stale.
@@ -156,4 +156,4 @@ dispatch не меняет условия, под которыми dispatch бы
   хост-процессом, или `module:factory` (вызываемая без аргументов фабрика в импортируемом модуле).
   Неизвестное имя — fail-closed. Ни один extension не добавляет model tool и не меняет system prompt.
 
-`harness health` проверяет форму всех трёх разделов. Coordinator читает заданные политики и без `assignment_plans`, объединяя их с дефолтами.
+`harness health` проверяет форму всех трёх разделов. Coordinator читает заданные политики, даже если `assignment_plans` нет, и объединяет их с дефолтами.

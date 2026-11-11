@@ -6,7 +6,7 @@
 
 ## Ручное восстановление и повтор этапа {#_8}
 
-`batch auto-report` только читает состояние. Обнаруженная причина находится в `observed_stop`.
+`batch auto-report` только читает состояние. Найденную причину он возвращает в `observed_stop`.
 Чтобы записать остановку, явно вызовите `batch auto-decide`: batch перейдёт в `paused`, даже если
 воркер не успел отправить report. Повторный вызов в paused не изменит ledger.
 
@@ -29,7 +29,7 @@ python .harness/orchestration/coordinator.py --repo . batch rewind \
 report и в ошибке runtime. Признак проблемы с тестами, линтером, типами, конфликтом, scope или
 требованиями перевешивает; неизвестный текст остаётся неизвестным. Совпадение записывается в
 событие как `classification` с `method: heuristic`; оно лишь предлагает причину, а решает
-человеческий approval. Он сохраняет роль, scope, candidate и fix-forward findings. Повтор получает новый dispatch ID,
+человеческий approval. Повтор сохраняет роль, scope, candidate и fix-forward findings, но получает новый dispatch ID,
 context и approval. Операционная попытка не расходует второй developer retry. При паузе из-за
 бюджета или неизвестной причины можно вернуть pending report для ручного решения. Когда бюджет
 инфраструктурных повторов исчерпан, `resume-stop` отказывает, а batch остаётся в состоянии остановки
@@ -41,7 +41,7 @@ checks и новые code findings требуют обычного маршру�
 и `auto_report` остаются историей. Новый отчёт показывает текущий прогресс и `historical_report`.
 `blocked` и `failed` удерживают ticket/branch/worktree; повторный batch до их закрытия запрещён.
 Оба abandon-пути записывают `abandoned` и `last_accepted`. Старый `failed` можно supersede только
-при доказанном человеческом abandon; обычный failed не является отказом от работы.
+при доказанном человеческом abandon; обычный failed — не отказ от работы.
 
 Rewind выбирает достигнутую стадию `architect`, `developer`, `code-review`, `qa` или `publish`.
 `verification` требует зарегистрированного candidate, `resolve-conflict` — resolver boundary.
@@ -67,7 +67,7 @@ qa. Пока условие открыто, publish и завершение от
 поэтому publish всё равно требует реального QA. Условный publish принимается, только если remote
 branch уже указывает на candidate. Report должен быть `blocked` без failed checks, остальные
 проверки обычного `accept` (план коммитов, scope, DoD) сохраняются. Rewind снимает условия
-отменённых dispatch. Если стадию можно просто перезапустить, предпочтительнее `resume-stop`.
+отменённых dispatch. Если стадию можно просто перезапустить, лучше подходит `resume-stop`.
 
 Живой worker нужно сначала остановить средствами runtime. Затем оператор записывает
 `dispatch cancel --runtime-stopped` с approved_by/approved_at/reason. Timeout не доказывает остановку.
@@ -159,7 +159,7 @@ expected и received, подсказку и remedy. Секреты в докум
   отказы; следующий переход требует approval с актуальным digest.
 - `fix` показывает безопасную нормализацию конфигурации, а `fix --apply` применяет её транзакцией
   конфигурации и ничего не возобновляет.
-- `abort` записывает выход из recovery: ничего не делает abandon, не останавливает и не очищает.
+- `abort` записывает выход из recovery: не делает abandon, ничего не останавливает и не очищает.
 
 `reload`, `resume`, `fix` и `abort` сначала записывают durable intent
 `recovery/intent/<batch_id>.json` (`recoveryIntent.v1`). После cancel, EOF или SIGINT intent

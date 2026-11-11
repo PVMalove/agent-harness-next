@@ -23,7 +23,7 @@ user choice, **not defaults**. See [project.json](project.md) for the overall co
 | Field | Contract |
 | --- | --- |
 | `test_paths` | Non-empty array of unique relative globs without `..`. Author activation accepts only existing literal `<directory>/**` zones; further restrictions are below. |
-| `test_runner.command` | Shell-free argv with at least two non-empty string arguments. Exactly one separate `{test_id}`, not first: the runner replaces it with one selected test ID. The runtime validator rejects two placeholders, though the draft-07 schema cannot fully express that constraint. |
+| `test_runner.command` | Shell-free argv with at least two non-empty string arguments. Exactly one separate `{test_id}`, not first: the runner replaces it with one selected test ID. `harness health` rejects two placeholders, though the draft-07 schema cannot fully express that constraint. |
 | `test_runner.build.command` | Required inside authored `build`: non-empty argv without `{test_id}` or NUL. Runs the protected build phase. |
 | `test_runner.build.artifact_paths` | Required inside `build`: non-empty array of unique literal `<directory>/**` entries. Directories must already exist and be empty; the build gets fresh writable backing directories, tests read them without write access. The runner does not clear a non-empty directory for you. |
 | `test_runner.database.engine` | Required inside `database`: production-engine ID matching `[a-z][a-z0-9_-]{0,63}`. Does not install a DBMS automatically. |

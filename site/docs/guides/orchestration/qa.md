@@ -7,7 +7,7 @@ QA проверяет закреплённый candidate в чистой сре�
 ## Clean-room QA lane {#clean-room-qa-lane}
 
 Coordinator сам выполняет одобренный `qa` dispatch в отдельном temporary Git worktree,
-отсоединённом ровно на `candidate_commit`. Команды берутся буквально из `verification_commands`
+отсоединённом ровно на `candidate_commit`. Команды он берёт буквально из `verification_commands`
 immutable brief, а несовпадение HEAD или грязный worktree останавливает проверку. Запуск не
 передают runtime adapter:
 
@@ -16,7 +16,7 @@ python .harness/orchestration/coordinator.py --repo . qa run \
   --dispatch <qa-dispatch-id> --lease-seconds 1800
 ```
 
-В репозитории существует одна FIFO-полоса тяжёлых проверок. Если она занята, команда сохраняет
+В репозитории есть одна FIFO-полоса тяжёлых проверок. Если она занята, команда сохраняет
 запрос и возвращает `state: queued` с позицией, а повторный вызов для того же dispatch запустит его,
 только когда он станет первым. Состояние и текущий owner видны без запуска gate:
 
@@ -79,7 +79,7 @@ exit code и санитизированная диагностика упавш�
 теми же командами и границами. Прежние brief, report, артефакт и approval сохраняются как audit
 evidence. Сбой подготовки или записи report не оставляет lease, запись очереди или состояние
 `working`: тот же approved dispatch можно запустить заново без правки ledger и без нового batch.
-Исключение — ledger, занятый другой операцией дольше 30 секунд (см. «Занятый ledger»).
+Исключение — ledger, занятый другой операцией дольше 30 секунд (см. [«Занятый ledger»](operations.md#ledger-report-complete-ledger-release-lock)).
 
 ### Ограниченные инфраструктурные повторы
 
@@ -103,7 +103,7 @@ Developer retry budget не расходуется. Opt-in, бюджет и ко
 После QA preparation failure policy продолжает только маршрут `same-candidate-rerun` с
 подтверждённым `infrastructure`, `code_checks_started: not_started` и неизменным SHA. Перед
 решением coordinator проверяет доступ и заново выполняет закреплённые независимые пробы окружения и
-проверки файлов проекта в чистом checkout; если среда ещё не готова, нового dispatch нет. После
+проверки файлов проекта в чистом checkout; если среда ещё не готова, новый dispatch он не создаёт. После
 устранения причины в прежних границах выполните:
 
 ```bash
@@ -124,7 +124,7 @@ python .harness/orchestration/coordinator.py --repo . dispatch retry-infrastruct
 ```
 
 Этот путь разрешён только для отказа, подтверждённого probe (`denied`), при свежем подтверждении
-готовности. Старый unsent brief отменяется с audit причины, а новый сохраняет этап, SHA, команды,
+готовности. Coordinator отменяет старый неотправленный brief и записывает причину в audit, а новый brief сохраняет этап, SHA, команды,
 runtime/model/effort, scope и доступ; повтор команды возвращает прежний результат. Publish remote
 тоже должен остаться тем же. Затем запускайте `qa run` или `dispatch publish` с новым ID.
 Неподтверждённый сетевой отказ (`unverified`), неподдержанный режим (`unsupported`), отказ самим
@@ -211,7 +211,7 @@ Architect не меняет код и не запускает full gate. Пос�
 нужен ли review, и требуемый review пропустить нельзя; его send использует checkout точного SHA.
 
 Для нового qa proposal/create добавьте `--candidate-commit "$SHA"` и используйте `qa run`,
-не `dispatch send`. Устройте отказ записи только в созданном cache (в POSIX fixture —
+не `dispatch send`. Вызовите отказ записи только в созданном cache (в POSIX fixture —
 `chmod u-w "$SMOKE_CACHE"`). Сохраните `qa_stages` и отказ `report complete` до готовности.
 Восстановите `chmod u+w "$SMOKE_CACHE"`. `report complete` должен вернуть новый ID на тот же SHA,
 а replay — тот же ID. Запустите `qa run` нового ID и вручную примите только успешный report.
@@ -242,9 +242,9 @@ budget, attention, metadata refusal и локальный publish. Это кон
 скачанными зависимостями, после чего был опубликован в local bare remote. Отказ cache и отказ записи
 `.git` остановили продолжение до readiness. Восстановление израсходовало два общих infrastructure
 retry, replay сохранил successor IDs, а прежние records сохранили checksum. Batch завершён через
-публичный CLI. Это подтверждает только следующие границы:
+публичный CLI. Это подтверждает только границы из таблицы ниже.
 
-Следующая таблица фиксирует исторический smoke-прогон указанных версий. Она не подтверждает совместимость установленного сейчас CLI.
+Таблица фиксирует исторический smoke-прогон указанных версий и не подтверждает совместимость установленного сейчас CLI.
 
 | Runtime / transport / режим | Результат native smoke | Граница evidence |
 | --- | --- | --- |
@@ -256,7 +256,7 @@ retry, replay сохранил successor IDs, а прежние records сохр
 CLI flags, host execution coordinator и POSIX `chmod` fixture не доказывают всю permission-матрицу.
 Для другого runtime, transport или authored режима поддержки требуют собственного native evidence.
 
-После выполнения создаётся immutable completion report с командами, exit codes и кратким
+После выполнения coordinator создаёт immutable completion report с командами, exit codes и кратким
 санитизированным evidence. Полный санитизированный stdout/stderr сохраняется вне Git в
 `.harness/orchestration/state/qa-artifacts/<sha256>.log`. Report ссылается на этот путь и checksum.
 Провал gate остаётся QA finding и требует нового одобренного developer dispatch. Runner не правит
@@ -272,9 +272,9 @@ candidate SHA. Этот SHA отправляет только developer publish,
 
 Обычная точка входа — `/implement <ticket>`. Эта сессия сама становится coordinator-ом и ведёт
 описанный цикл. Она останавливается на пяти approval-гейтах (architect, developer, code-review, qa,
-publish) и наблюдает за heartbeat каждого dispatch. Один тикет доводится до терминального состояния
-batch до старта следующего. Ручной запуск по этому руководству остаётся полностью валидным. Для
-него готовый запрос управляющей сессии можно сформулировать так:
+publish) и наблюдает за heartbeat каждого dispatch. Сессия доводит batch одного тикета до терминального
+состояния и только потом берёт следующий. Ручной запуск по этому руководству тоже работает. Запрос
+для управляющей сессии в этом случае может выглядеть так:
 
 ```text
 Выступи coordinator-ом backend batch для issue #123. Прочитай .harness/orchestration/roles/

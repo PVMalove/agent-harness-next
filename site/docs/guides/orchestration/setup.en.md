@@ -141,7 +141,7 @@ dispatch does not change the conditions under which the dispatch was approved:
                "runtime_access": "none"}
 ```
 
-- `attention_policy` — the thresholds of the `needs_attention` flag (see below): how long an accepted retry may wait
+- `attention_policy` — the thresholds of the `needs_attention` flag (see [Attention state](decisions.md#attention-state)): how long an accepted retry may wait
   for its dispatch, how many operational retries (`verification-infrastructure`, `transport`,
   `context-pressure`) are allowed per candidate (`0` means none), and after how much silence a live
   dispatch counts as stale.

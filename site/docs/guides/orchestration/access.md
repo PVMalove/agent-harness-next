@@ -256,7 +256,7 @@ runtime останавливает контейнер (`stop --time <stop_grace_
 сохраняются. Следующий запуск после исправления среды проходит без ручной очистки. Любой сбой
 `qa run` уже после взятия lease (создание checkout, смена состояния, запись evidence, неожиданное
 исключение) снимает lease, запись очереди и состояние dispatch. Если ledger в этот момент занят,
-откат ждёт lock до 30 секунд (см. «Занятый ledger, `report complete` и `ledger release-lock`»). Отказ перед `refresh`, `resolve` и
+откат ждёт lock до 30 секунд (см. [«Занятый ledger, `report complete` и `ledger release-lock`»](operations.md#ledger-report-complete-ledger-release-lock)). Отказ перед `refresh`, `resolve` и
 `publish` происходит до fetch, rebase, создания batch и push. Откат отказавшего rebase возвращает
 worktree на issue-ветку. Отказ записи метаданных или remote при rebase и push coordinator
 классифицирует как ошибку доступа (`metadata-write-denied`, `remote-access-denied`,

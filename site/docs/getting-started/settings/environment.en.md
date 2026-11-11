@@ -133,7 +133,7 @@ service or container can see it.
 | `uv` | Available on `PATH` and executable; required for the console environment and local harness checks. `environment.uv`: `fail` if unavailable. |
 | Git | Installed; the project is a Git repository. Configure a name and email for commits. Checks: `environment.git`, `environment.git_identity`. |
 | Agent CLI | The runtime selected in the role profile is installed and authenticated. General health does not replace checking authentication in the selected CLI. |
-| `glab` | 1.117.0 or newer for a GitLab tracker. `environment.glab`: `warn` if missing or outdated, `skipped` for other trackers. The check is local, with no GitLab request. |
+| `glab` | 1.117.0 or newer for a GitLab tracker. `environment.glab`: `warn` if `glab` is missing or its version cannot be parsed, `fail` for a version below the minimum, `skipped` for other trackers. The check is local, with no GitLab request. |
 
 With the CLI installed, run the check from the project directory:
 

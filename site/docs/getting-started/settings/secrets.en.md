@@ -205,5 +205,4 @@ rotate it. See the [quick start](../index.md) for launch instructions.
 
 - [Dependencies and environment](environment.md) — host, service, and image environments.
 - [Hook installation and update](../../hooks/install-and-update.md) — managed native config entries.
-
 - [Container](container.md) — complete executor setup.

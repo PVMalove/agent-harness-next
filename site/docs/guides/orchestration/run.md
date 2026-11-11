@@ -33,7 +33,7 @@ authorization/security и concurrency/retry completion невозможен, п�
 files и developer-reported triggers. Оценка решает, когда composite read-only `code-review`
 **обязателен**, но не когда он *разрешён*. Review можно создать для любого candidate, и конвейер
 `/implement` делает это всегда. Оси Standards и Spec остаются отдельными evidence. Отдельный QA
-dispatch создаётся только после принятого review (если он обязателен): обязательный полный QA gate
+dispatch coordinator создаёт только после принятого review (если он обязателен): обязательный полный QA gate
 в clean-room нельзя заменить локальной проверкой developer-а. Любой новый candidate commit после
 finding или failed QA снова проходит оценку риска.
 
@@ -41,8 +41,8 @@ finding или failed QA снова проходит оценку риска.
 
 Runtime-neutral режим не имеет команды «запустить всех». Coordinator CLI ведёт записи по
 `planned → awaiting-approval ↔ active → completed`, с восстановимыми состояниями `paused`,
-`blocked`, `failed` и окончательным отказом `abandoned`. После ручного восстановления применяется
-эффективная `manual_all`. При `manual_all` каждый
+`blocked`, `failed` и окончательным отказом `abandoned`. После ручного восстановления эффективной политикой
+становится `manual_all`. При `manual_all` каждый
 report оставляет dispatch в `reported` до решения человека. При `low_risk` coordinator
 автоматически принимает чистый завершённый report batch, если scope batch целиком лежит в
 `low_risk_paths`. Решение он записывает в ledger. Blockers, failed checks, раскрытые risks, risk
@@ -50,8 +50,8 @@ triggers и findings любой оси review сохраняют ручной ga
 approval. При `milestone` coordinator также автоматически принимает чистый отчёт обычной роли. Но
 QA, publish и рискованные переходы остаются ручными вехами. При `auto` coordinator проходит путь
 от `batch approve` до принятого publish без человека. Политика согласует каждый шаг, а
-`batch auto-decide` принимает решения по отчётам (см. «Автоматический путь `approval_policy: auto`»
-ниже). Ручными остаются открытие PR и merge.
+`batch auto-decide` принимает решения по отчётам (см. [«Автоматический путь `approval_policy: auto`»](decisions.md#approval_policy-auto)
+в главе «Решения и повторы»). Ручными остаются открытие PR и merge.
 
 1. Создать planned batch и затем отдельно утвердить его:
 
@@ -77,8 +77,8 @@ QA, publish и рискованные переходы остаются ручн
    `--required-gate` можно опустить (по умолчанию `["none"]`). Дальше review, QA и publish проверяют
    закреплённый candidate, даже если `origin/<ref>` ушёл вперёд: обязательной проверки свежести базы
    и принудительного developer-перезапуска нет, и другие batch это не останавливает. Финальное
-   обновление базы выполняет `integration refresh` при подготовке PR (раздел «Integration accounting
-   после publish»).
+   обновление базы выполняет `integration refresh` при подготовке PR (раздел [«Integration accounting
+   после publish»](publish.md#integration-accounting-publish)).
 2. Сверить активные batch, `concurrency_budget`, writer и quality-gate lane. Пересечение файлов
    другого batch не повод откладывать запуск, а занятая serialized quality-gate lane не мешает
    параллельной реализации. Если batch упёрся в бюджет, дождитесь завершения активного batch или
@@ -103,7 +103,7 @@ QA, publish и рискованные переходы остаются ручн
 
    Для роли с `transport: "in-process"` adapter не передаётся вовсе. `dispatch send --dispatch <id>`
    возвращает путь к brief. После этого coordinator **немедленно** запускает роль как субагента
-   текущей сессии. Между этими действиями нет никаких чтений предыдущих dispatch/report/template. Без
+   текущей сессии. Между этими действиями coordinator не читает предыдущие dispatch, report и template. Без
    `.harness/orchestration.json` к `dispatch create` добавляются `--model` и `--effort` вызывающей
    сессии. Для coordinator и architect выбирайте `medium`, если разработчик явно не одобрил иное.
 
@@ -140,7 +140,7 @@ QA, publish и рискованные переходы остаются ручн
 
    `dispatch send` для роли code-review — единственный случай, когда нужен ещё один обязательный флаг:
    `--checkout <путь>`. Он указывает на worktree, реально зачекаученный на `candidate_commit`
-   dispatch-а (см. clean-room QA lane ниже: та же изоляция нужна и для review). Все остальные роли
+   dispatch-а (см. [Clean-room QA lane](qa.md#clean-room-qa-lane): та же изоляция нужна и для review). Все остальные роли
    не передают `--checkout`. Без него coordinator отклоняет `dispatch send` и показывает точный текст
    ожидаемого флага.
 4. Принять один schema-validated completion report с evidence. Coordinator сохраняет его как
@@ -160,7 +160,7 @@ QA, publish и рискованные переходы остаются ручн
    staging-файл по evidence и повторите отправку для того же dispatch: `pass` означает
    успешную команду, `fail` — неуспешную, `not_run` — незапущенную. Автоматическое принятие
    одинаково учитывает `pass` и `passed`.
-   Допустимость результата как evidence не означает автоматического принятия отчёта.
+   Если результат допустим как evidence, это ещё не значит, что отчёт примут автоматически.
    Перед решением coordinator снова проверяет report, поэтому старый записанный отчёт
    с неизвестным результатом также получит отказ. Immutable report не редактируют;
    для уже записанного отчёта или остановленного batch оператор отдельно выбирает
@@ -208,7 +208,7 @@ QA, publish и рискованные переходы остаются ручн
    `{commit_sha, plan_entry_id}` для каждого коммита после `snapshot_commit` (у rebase — после
    `rebase_target`). В initial и rebase отчёте это отношение. Коммит, закрывающий несколько
    entries, даёт по паре на каждую entry. Entry, закрытая несколькими коммитами, даёт по паре на
-   каждый коммит. Отображение не one-to-one (объединённый коммит, разделённая или незакрытая entry) —
+   каждый коммит. Если отображение не one-to-one (объединённый коммит, разделённая или незакрытая entry),
    это расхождение. Тогда отчёт обязан нести `dod_coverage` — ровно по записи на каждый пункт DoD:
    `{"dod_item": <n>, "commits": [<sha>, ...]}` из коммитов этого dispatch или
    `{"dod_item": <n>, "not_covered": "<причина>"}`. Также отчёт обязан нести непустой
@@ -238,7 +238,7 @@ QA, publish и рискованные переходы остаются ручн
    `--note`, отличным от `none` (решение получает `dod_not_covered` с причинами). Иначе отчёт можно
    вернуть через `retry`. Выход за scope — предупреждение, а не отказ. Completed-отчёт
    developer с `changed_files` вне `write_paths` `report submit` записывает. `batch decision-packet`
-   показывает эти пути в `scope_warnings`. Такой отчёт не принимается автоматически ни при одной
+   показывает эти пути в `scope_warnings`. Такой отчёт coordinator не принимает автоматически ни при одной
    policy, а `--decision accept` отклоняется. Принять его можно только через
    `--decision override-warning` с `--note`, отличным от `none`, и явным `--approved-by`. Решение
    получает `scope_warnings`, а override добавляет coordinator finding. Следующий brief code-review
@@ -254,7 +254,7 @@ QA, publish и рискованные переходы остаются ручн
 
    Дефект, который coordinator нашёл в чистом developer report, не тратит developer-retry до review
    (маршрут `carry-over`). Retry developer report без accept — исключение только для невыполненного
-   пункта DoD или изменения вне scope. В остальных случаях report принимается с находками:
+   пункта DoD или изменения вне scope. В остальных случаях report принимают с находками:
 
    ```bash
    python .harness/orchestration/coordinator.py --repo . batch decide \
@@ -266,7 +266,7 @@ QA, publish и рискованные переходы остаются ручн
    `{"findings": [...]}`. Каждая находка содержит ровно три поля: непустой `summary`, `files` —
    непустой список уникальных путей от корня репозитория в POSIX-форме (без ведущего `/`, обратной
    косой черты и сегмента `..`) — и непустой `expected_evidence`: чем review подтвердит закрытие.
-   Текст находки передаётся роли, поэтому он на английском. Флаг допустим только с `accept` или
+   Coordinator передаёт текст находки роли, поэтому пишите его на английском. Флаг допустим только с `accept` или
    `override-warning` на completed developer work report. Иначе решение отклоняется с remedy, и
    batch не меняется. Coordinator записывает каждую находку в batch append-only как запись
    `carried_items`: `item_id` `coordinator-finding-<n>` (порядковый номер в batch), `source` (`kind`,
@@ -389,23 +389,24 @@ candidate он не регистрирует. Для read-only роли вмес
 ## Наблюдение запуска и готовый несданный отчёт {#_4}
 
 Поставляемый пример — `.harness/orchestration/adapters/claude_code.py`; `claude` или `codex`
-сами по себе адаптерами не являются. Из консоли Harness сначала открывается выбранная сессия,
-затем выполняется подтверждённая отправка. Для намеренно скрытого запуска передают
+сами по себе не адаптеры. Консоль Harness сначала открывает выбранную сессию,
+затем выполняет подтверждённую отправку. Для намеренно скрытого запуска передают
 `--adapter-arg=--visibility=background`. Пример сохраняет native permissions и hooks.
 Проверка родителя не подтверждает доступ Bash-инструментов внутри worker: native probe должен
-пройти до реализации. Постоянный отказ доступа требует подготовки среды, а не одинаковых retry.
+пройти до реализации. Если доступ отказывает постоянно, подготовьте среду: одинаковые retry не помогут.
 Смена sandbox-профиля делается до propose/approval; глобальные настройки не отключаются.
 
 `dispatch observe --dispatch <id> --offset <next_offset>` читает существующие события локально.
 Открытие панели, обновление и reconnect не вызывают модель; окно можно закрыть без остановки
 worker. Запрос native-разрешения подтверждает человек; он не даёт dispatch approval.
-Первый self-report по умолчанию ждут 120 секунд независимо от heartbeat stale. Для доказанного
-раннего завершения: auto-report → auto-decide → человеческий resume-stop --restart. Повторный
-запуск сохраняет исходный контракт; при drift нужно новое предложение.
+Первый self-report coordinator по умолчанию ждёт 120 секунд, независимо от порога stale для heartbeat.
+Если ранний выход worker доказан, порядок такой: auto-report → auto-decide → resume-stop --restart,
+который выполняет человек. Повторный
+запуск сохраняет исходный контракт; при drift нужен новый propose.
 
 Для готового отчёта, который worker не смог сдать, coordinator использует исходный staging-файл:
 `report submit --file <path> --relayed-by <sender> --relay-reason <exact-error>
---source-sha256 <hash-original-bytes>`. JSON worker не редактируется, provenance пишется отдельно.
+--source-sha256 <hash-original-bytes>`. Coordinator не редактирует JSON worker и записывает provenance отдельно.
 Fail/not_run остаются такими; make lint не заменяет make verify. При уже записанном отчёте
 используют report complete, когда результат submit указывает этот маршрут. Сравнение падения
 с базовым SHA — отдельное evidence, не исправление исходного отчёта задним числом.
@@ -425,8 +426,8 @@ python /path/to/project/.harness/orchestration/coordinator.py --repo /path/to/pr
 ```
 
 Для Codex замените путь адаптера на `/path/to/project/.harness/adapters/codex_worker.py`.
-Coordinator запускает `.py` через свой Python в checkout worker. Параметры модели и effort
-берутся из immutable brief, lifecycle-промпт передаётся через stdin. Claude ограничивает
+Coordinator запускает `.py` через свой Python в checkout worker. Модель и effort адаптер
+берёт из immutable brief, а lifecycle-промпт передаёт через stdin. Claude ограничивает
 дополнительный доступ каталогом входящих отчётов и использует нативный `allowed_tools`;
 Codex передаёт этот список в промпте, а sandbox выбирает по `access`: `read-only` или
 `workspace-write`. Это не нативный фильтр инструментов Codex.
@@ -440,7 +441,7 @@ Codex передаёт этот список в промпте, а sandbox вы�
 `--brief`.
 Adapter отвечает за запуск worker в выбранной среде. Он не выбирает scope, не принимает report,
 не планирует следующий dispatch и не мержит PR. После запуска worker возвращает completion report
-по общим правилам раздела 4. Проверки доступа и среды запуска принадлежат проектному adapter.
+по общим правилам раздела [«Coordinator CLI и lifecycle»](#4-coordinator-cli-lifecycle). Доступ и среду запуска проверяет проектный adapter.
 
 ## Первый pilot и источник правил {#6-pilot}
 

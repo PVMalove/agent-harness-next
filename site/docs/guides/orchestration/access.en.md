@@ -255,7 +255,7 @@ queue entry are not created, the dispatch stays `approved`, and the previous evi
 are kept. The next run after the environment is fixed goes through without manual cleanup. Any failure of
 `qa run` after the lease is taken (checkout creation, state change, evidence write, unexpected
 exception) releases the lease, the queue entry, and the dispatch state. If the ledger is busy at that moment,
-the rollback waits for the lock for up to 30 seconds (see "Busy ledger, `report complete`, and `ledger release-lock`"). A denial before `refresh`, `resolve`, and
+the rollback waits for the lock for up to 30 seconds (see ["Busy ledger, `report complete`, and `ledger release-lock`"](operations.md#busy-ledger-report-complete-and-ledger-release-lock)). A denial before `refresh`, `resolve`, and
 `publish` happens before fetch, rebase, batch creation, and push. The rollback of a denied rebase returns the
 worktree to the issue branch. The coordinator classifies a metadata or remote write denial during rebase and push
 as an access error (`metadata-write-denied`, `remote-access-denied`,

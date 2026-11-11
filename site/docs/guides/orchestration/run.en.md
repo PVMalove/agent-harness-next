@@ -49,8 +49,8 @@ triggers, and findings from any review axis keep the manual gate. Publish also n
 approval. Under `milestone`, the coordinator also automatically accepts a clean report of an ordinary role. But
 QA, publish, and risky transitions remain manual milestones. Under `auto`, the coordinator walks the path
 from `batch approve` to an accepted publish without a human. The policy approves each step, and
-`batch auto-decide` decides on the reports (see "Automatic path `approval_policy: auto`"
-below). Opening a PR and the merge remain manual.
+`batch auto-decide` decides on the reports (see ["Automatic path `approval_policy: auto`"](decisions.md#automatic-path-approval_policy-auto)
+in "Decisions and retries"). Opening a PR and the merge remain manual.
 
 1. Create a planned batch, then approve it separately:
 
@@ -76,8 +76,8 @@ below). Opening a PR and the merge remain manual.
    you may omit `--required-gate` (the default is `["none"]`). After that, review, QA, and publish check the
    pinned candidate even if `origin/<ref>` has moved forward. There is no mandatory base freshness check
    and no forced developer restart, and other batches do not stop on this. The final
-   base update is done by `integration refresh` when the PR is prepared (section "Integration accounting
-   after publish").
+   base update is done by `integration refresh` when the PR is prepared (section ["Integration accounting
+   after publish"](publish.md#integration-accounting-after-publish)).
 2. Check the active batches, `concurrency_budget`, the writer lane, and the quality-gate lane. An overlap of files
    with another batch is no reason to delay the start, and a busy serialized quality-gate lane does not block
    parallel implementation. If a batch hits the budget, wait for an active batch to finish or
@@ -139,7 +139,7 @@ below). Opening a PR and the merge remain manual.
 
    `dispatch send --role code-review` is the only case that needs one more mandatory flag:
    `--checkout <path>`. It points to a worktree that is actually checked out at the `candidate_commit` of the
-   dispatch (see the clean-room QA lane below: review needs the same isolation). All other roles
+   dispatch (see [Clean-room QA lane](qa.md#clean-room-qa-lane): review needs the same isolation). All other roles
    do not pass `--checkout`. Without it, the coordinator rejects `dispatch send` and shows the exact text of the
    expected flag.
 4. Accept one schema-validated completion report with evidence. The coordinator saves it as
@@ -439,7 +439,7 @@ boundary. The coordinator passes the approved immutable brief to this executable
 `--brief`.
 The adapter is responsible for starting the worker in the chosen environment. It does not choose a scope, does not accept a report,
 does not plan the next dispatch, and does not merge a PR. After starting, the worker returns a completion report
-under the general rules of section 4. The access and launch environment checks belong to the project adapter.
+under the general rules of the section ["Coordinator CLI and lifecycle"](#4-coordinator-cli-and-lifecycle). The access and launch environment checks belong to the project adapter.
 
 ## First pilot and the source of rules {#6-first-pilot-and-the-source-of-rules}
 

@@ -380,20 +380,20 @@ Every `retry` and `abandon` decision in `batch decide` records the selected reco
 conditions or does not record them at all:
 
 - `batch decide` does not record `report-completion`. It is named by `completion` in `report submit`
-  when the policy chain stopped after the recorded report (see step 4 above and "Busy ledger"
-  below).
+  when the policy chain stopped after the recorded report (see [step 4](run.md#4-coordinator-cli-and-lifecycle) in "Run and report" and
+  ["Busy ledger"](operations.md#busy-ledger-report-complete-and-ledger-release-lock)).
 - `carry-over` is recorded by `accept` or `override-warning` with `--findings-file` and by `batch carry-over`
-  (see step 4). This is a routing record with `previous_role: developer`, `next_role` and `next_action`
+  (see [step 4](run.md#4-coordinator-cli-and-lifecycle)). This is a routing record with `previous_role: developer`, `next_role` and `next_action`
   `code-review`, `candidate_commit`, `carried_item_ids`, and `rationale`, without `reason_category` and
   `decided_at`; it does not apply to `next_action`, and the next step goes through the risk assessment, as with
   any developer accept. The same route is recorded by `accept` or `override-warning` of a read-only
-  report with `--carry-incomplete` (see step 4): then `previous_role` is the stage of the report, and `next_role` and
+  report with `--carry-incomplete` (see [step 4](run.md#4-coordinator-cli-and-lifecycle)): then `previous_role` is the stage of the report, and `next_role` and
   `next_action` are the ordinary next step of its accept.
 - `tooling-retry` is recorded by `retry` with the category `tooling` (see above), and also by `retry --narrowed`
   if an item carries a `tooling_blocker`.
 - `bypass-rerun` is recorded by `retry` with the category `block-bypass` (see above).
 - `narrowed-retry` is recorded by `retry --narrowed` for the unfinished items of a read-only report (see
-  step 4); its routing record additionally names `carried_item_ids`.
+  [step 4](run.md#4-coordinator-cli-and-lifecycle)); its routing record additionally names `carried_item_ids`.
 - `fix-forward` is recorded by a `retry` that leads to `developer-retry` with a non-empty closed list
   of carried items (see above).
 - `rebase-fix-forward` is recorded by a `retry` that leads to `developer-retry` while the integration base
@@ -472,7 +472,7 @@ The closed list of stops:
 The coordinator writes the stop once in `batch.auto_stop`, together with the final report.
 The command only prints `ledger-validation-failed`: the ledger is untrustworthy. The policy writes the
 `operational-hold` stop when the runtime store holds the batch: the policy does not decide the report and does not
-abandon, and only `recovery resume` releases the hold (section "Batch hold and the `recovery` commands").
+abandon, and only `recovery resume` releases the hold (section ["Batch hold and the `recovery` commands"](recovery.md#batch-hold-and-the-recovery-commands)).
 A stop creates no decision and does not weaken validation. After a stop, every batch step requires `--approved-by`,
 and the batch cannot return to `auto`.
 

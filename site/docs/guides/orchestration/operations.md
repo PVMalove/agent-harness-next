@@ -1,6 +1,6 @@
 # Диагностика и состояние
 
-Начни с чтения статуса и диагностики. Записи меняй только через coordinator CLI. Снятие блокировки, миграция и продолжение после остановки имеют разные условия и подтверждения.
+Начни с чтения статуса и диагностики. Записи меняй только через coordinator CLI. У снятия блокировки, миграции и продолжения после остановки разные условия и подтверждения.
 
 [Обзор оркестрации](../../backend-orchestration.md)
 
@@ -40,7 +40,7 @@ code-review без раздела сохраняет прежний digest. Сс
 
 ## Инвентарь и закрытие тупикового batch {#batch}
 
-Посмотреть, что вообще заведено и что не закрыто:
+Список заведённых и незакрытых batch:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . batch list --open
@@ -74,7 +74,7 @@ python .harness/orchestration/coordinator.py --repo . batch resume-stop \
 Команда сохраняет принятые отчёты, исходный stop и `next_action`, помечает сорванный dispatch как
 `abandoned` и переводит batch в `awaiting-approval`. Следующий `dispatch create` требует нового
 approval и сохраняет контракт прерванной роли. Подробные ограничения описаны в разделе
-«Ручное восстановление и повтор этапа». Для неизвестной причины или возврата к прежнему gate используется
+[«Ручное восстановление и повтор этапа»](recovery.md#_8). Для неизвестной причины или возврата к прежнему gate используйте
 `batch rewind`. `completed` и `abandoned` окончательны.
 
 Перед отправкой `dispatch send` сверяет флаги `--adapter-arg` с `dispatch --help` adapter и
@@ -218,8 +218,8 @@ coordinator выносит человеку, а сам по таймауту с�
 
 `dispatch heartbeat` принимает необязательную пару `--context-tokens <N> --context-source probe`.
 Это число токенов, измеренное coordinator-ом в live-пробе контекста (см. «Отчётность и мониторинг
-токенов» ниже), а не self-report роли. Так сохраняется правило из начала документа («Токены — только
-наблюдаемая provider- или runtime-telemetry», строки 27-29): сама роль это значение не поставляет.
+токенов» ниже), а не self-report роли. Так сохраняется [правило учёта токенов](../../backend-orchestration.md#language-evidence): токены берутся только
+из наблюдаемой telemetry provider или runtime, и сама роль это значение не поставляет.
 Значение попадает в открытое поле `extra` статуса dispatch-а. Схема ledger не меняется, новое
 событие в `dispatch wait` не вводится.
 
@@ -453,7 +453,7 @@ Python не открывает `runtime.db` и не имеет запасног�
 а не `invariant_violation`: отправлять оператора к восстановлению снимка нужно только при
 несошедшейся цепочке.
 
-`coordinator.py ledger validate --full` не использует checkpoint. Оно пересчитывает цепочку от
+`coordinator.py ledger validate --full` не использует checkpoint. Команда пересчитывает цепочку от
 genesis (последовательность `seq`, хеши записей и связей, закрытый словарь действий), сверяет
 запись 1 с `store_meta` и `AUTHORITY.json`, пересчитывает манифест импорта и хеши legacy audit и
 поколений, запускает `PRAGMA integrity_check` и `foreign_key_check` и сверяет каждую строку,
@@ -476,7 +476,7 @@ python .harness/orchestration/coordinator.py --repo . dispatch telemetry --file 
 Команда записывает source-observed метрики (worker- или coordinator-сессии) в audit trail batch-а:
 `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `max_context_tokens`,
 `tool_calls`, `tool_output_bytes`, `poll_turns`, `restart_reason`, `recorded_at`. Недостающее
-provider-поле остаётся `null`, а не оценочным нулём. Команда **intentionally data-only**: она только
+provider-поле остаётся `null`, а не оценочным нулём. Команда намеренно работает только с данными: она лишь
 пишет запись телеметрии и не может изменить состояние роли, планирование, approvals или model
 routing.
 
@@ -489,7 +489,7 @@ advisory-оценка `max_context_tokens` против порога `adaptive_c
 отсутствие) ниже `warn_at`; `"warn"` — в диапазоне `[warn_at, context_limit)`; `"over"` — на
 `context_limit` и выше. Это чистая оценка: она не триггерит checkpoint автоматически. Решение о
 checkpoint остаётся за coordinator-ом, как и для любого другого сигнала, кроме auto-resume по 429
-(см. the continuation section above). Baseline из `playbook.md` («Baseline metrics») тем же образом
+(см. [«Checkpoint и новая worker session»](#checkpoint-worker-session) ниже). Baseline из `playbook.md` («Baseline metrics») тем же образом
 остаётся ориентиром, а не скрытым лимитом.
 
 ## Checkpoint и новая worker session {#checkpoint-worker-session}
@@ -533,8 +533,8 @@ python .harness/orchestration/coordinator.py --repo . dispatch resume --dispatch
 
 `--termination-reason`, распознанный как rate limit (`rate_limit`/`rate-limit`/`429`), авторизует
 новую сессию автоматически. Новое решение человека/coordinator-а не требуется. Любая другая
-причина, включая отсутствующую или нераспознанную, трактуется как planned trigger. Это safe default
-в сторону approval, а не от него:
+причина, включая отсутствующую или нераспознанную, трактуется как planned trigger. Так по умолчанию
+coordinator требует approval, а не пропускает его:
 
 - `--trigger` обязателен и должен быть одним из `context-limit`, `tdd-cycles`, `failure-log`,
   `vertical-slice`.
@@ -548,13 +548,13 @@ python .harness/orchestration/coordinator.py --repo . dispatch resume --dispatch
   (`dependencies`). `blockers` в сравнение не входит: их формулировка может измениться между
   сессиями без реального дрейфа scope/DoD/risks/dependencies. Расхождение — сигнал, что они реально
   изменились. Тогда coordinator обязан закрыть текущий dispatch и открыть новый через обычный
-  approval, а не резюмировать этот.
+  approval, а не продолжать этот.
 - авторизация записывается тем же `coordinator_decisions`, что accept/retry/block/fail/abandon/
   cancel — новый тип записи не вводится.
 
 `resume` принимает только `checkpointed` dispatch, возвращает его в `dispatched` и отбрасывает
 предыдущий model self-report. Это значит, что новая сессия обязана заново пройти `dispatch
-self-report` и `dispatch heartbeat` — ровно так же, как при первом contact, — прежде чем следующий
+self-report` и `dispatch heartbeat` — ровно так же, как при первом контакте, — прежде чем следующий
 checkpoint или completion report будет принят. Круг замыкается тем же dispatch ID: checkpoint →
 `dispatch resume` → новая self-report/heartbeat → в итоге один completion report.
 

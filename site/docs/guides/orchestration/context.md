@@ -10,7 +10,7 @@ Discovery Pipeline переносит проверенный контекст о
 `Live Artifact` с кандидатными путями, но добавляет путь только после явного согласия пользователя.
 `/to-spec` сохраняет утверждённый список в эпике под `## Relevant Files (Discovery Context)`.
 `/to-tickets` назначает каждый путь подходящему tracer-bullet тикету и строит Path inventory. Один
-cheap advisory-вызов может добавить только точные зависимости из этого Path inventory. Его вывод —
+дешёвый advisory-вызов может добавить только точные зависимости из этого Path inventory. Его вывод —
 не evidence и не authority.
 
 Перед первым dispatch coordinator может зарегистрировать детерминированный Context Package в
@@ -23,7 +23,7 @@ python .harness/orchestration/coordinator.py --repo . context-package register \
   --max-package-tokens 60000
 ```
 
-`context_builder.py` не вызывает LLM и работает по pinned base/candidate commits. Package содержит
+`context_builder.py` не вызывает LLM и работает по pinned base/candidate commits. Пакет содержит
 точный diff, 5–10 стартовых файлов с причинами, bounded symbol/dependency graph, связанные тесты,
 краткие карточки ADR/precedent, SHA-256 каждого включённого файла, byte size и консервативную token
 estimate. Побайтно идентичные файлы (например, зеркало `docs/agents/*` ↔
@@ -49,14 +49,14 @@ Python-файл при том же пороге входит как индекс
 в token limit, сборка завершается ошибкой и не обрезает пакет молча. Legacy `--max-package-size-bytes` можно задать как дополнительную диагностику,
 но он не заменяет token limit.
 
-Запись package immutable, versioned и hash-проверяема. Она shared внутри batch. Один и тот же
-base/candidate переиспользует один package ID между architect, developer и continuation sessions.
-Новый package создаётся только после нового candidate. Coordinator не переиспользует package, если
+Запись пакета неизменяема, версионирована и проверяется по хэшу. Пакет общий для всего batch: для
+одного и того же base/candidate architect, developer и continuation sessions получают один ID пакета.
+Новый пакет появляется только после нового candidate. Coordinator не переиспользует пакет, если
 его frozen источник из `memory.pointers` после регистрации изменился, стал недоступен или отозван.
-Тогда следующий dispatch регистрирует новый package с актуальными указателями. Старый package
-остаётся неизменным для уже выданных brief. Coordinator проверяет freshness до handoff и не создаёт
-brief со stale package. Если и новый package не свежий по памяти, ошибка называет путь, ожидаемый и
-фактический `source_hash`. Remedy предлагает `harness memory rebuild .` из основного checkout или
+Тогда следующий dispatch регистрирует новый пакет с актуальными указателями. Старый пакет
+остаётся неизменным для уже выданных brief. Coordinator проверяет свежесть пакета до handoff и не создаёт
+brief с устаревшим пакетом. Если и новый пакет устарел по памяти, ошибка называет путь, ожидаемый и
+фактический `source_hash` и предлагает `harness memory rebuild .` из основного checkout или
 `--no-memory`. Brief передаёт compact summary (starting files, related tests, precedents и pinned
-commits). Полный diff остаётся в package один раз. Package не заменяет immutable brief и не
+commits). Полный diff хранится в пакете один раз. Пакет не заменяет immutable brief и не
 отменяет обязательные self-report, heartbeat, review или QA.

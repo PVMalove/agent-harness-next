@@ -71,8 +71,8 @@ python .harness/orchestration/coordinator.py --repo . batch resume-stop \
 
 The command keeps the accepted reports, the original stop, and `next_action`, marks the failed dispatch as
 `abandoned`, and moves the batch to `awaiting-approval`. The next `dispatch create` requires a new approval and keeps
-the contract of the interrupted role. The detailed limits are described in the section "Manual recovery and stage
-retry". For an unknown reason, or to return to an earlier gate, use `batch rewind`. `completed` and `abandoned` are
+the contract of the interrupted role. The detailed limits are described in the section ["Manual recovery and stage
+repeat"](recovery.md#manual-recovery-and-stage-repeat). For an unknown reason, or to return to an earlier gate, use `batch rewind`. `completed` and `abandoned` are
 final.
 
 Before sending, `dispatch send` checks the `--adapter-arg` flags against the adapter's `dispatch --help` and rejects
@@ -210,8 +210,8 @@ the state on timeout by itself.
 
 `dispatch heartbeat` takes an optional pair `--context-tokens <N> --context-source probe`. This is the number of
 tokens that the coordinator measured in a live context probe (see "Reporting and token monitoring" below), not a
-role self-report. This keeps the rule from the beginning of the document ("Tokens are only observable provider or
-runtime telemetry", lines 27-29): the role itself does not supply this value. The value goes into the open `extra`
+role self-report. This keeps the [token accounting rule](../../backend-orchestration.md#language-and-evidence) ("Tokens are only observable provider or
+runtime telemetry"): the role itself does not supply this value. The value goes into the open `extra`
 field of the dispatch status. The ledger schema does not change, and no new event is introduced in `dispatch wait`.
 
 For each dispatch, `dispatch status` additionally returns the last `telemetry` record (`dispatch telemetry`, see
@@ -467,7 +467,7 @@ for the warning (a share of `context_limit`, `0.8` by default;
 `warn_at = round(context_limit * context_warn_ratio)`). `level` is `"ok"` while `observed` (or its absence) is
 below `warn_at`; `"warn"` in the range `[warn_at, context_limit)`; `"over"` at `context_limit` and above. This is a
 pure estimate: it does not trigger a checkpoint automatically. The decision about a checkpoint stays with the
-coordinator, as for any other signal, except the auto-resume on 429 (see the continuation section above). The
+coordinator, as for any other signal, except the auto-resume on 429 (see ["Checkpoint and a new worker session"](#checkpoint-and-a-new-worker-session) below). The
 baseline from `playbook.md` ("Baseline metrics") stays, in the same way, a guideline and not a hidden limit.
 
 ## Checkpoint and a new worker session {#checkpoint-and-a-new-worker-session}

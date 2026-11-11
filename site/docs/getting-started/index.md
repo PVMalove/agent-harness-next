@@ -1,7 +1,7 @@
 # Быстрый старт
 
 Agent Harness Next разворачивает в проект скиллы, hooks и контекстные документы как проверяемый
-snapshot. После установки проект живёт автономно: skills и hooks работают через нативные механизмы
+snapshot. После установки проект живёт автономно: скиллы и hooks работают через нативные механизмы
 Claude Code и Codex, а оркестрация использует Rust runtime и локальный runtime-store.
 
 !!! note "Ранний доступ"
@@ -91,9 +91,9 @@ Claude Code и Codex, а оркестрация использует Rust runtim
 | --- | --- |
 | Python | 3.12 или новее |
 | Git | Каталог проекта уже инициализирован как Git-репозиторий |
-| Runtime | Claude Code или Codex: skills и hooks подключаются нативно |
+| Runtime | Claude Code или Codex: скиллы и hooks подключаются нативно |
 | ОС | Linux; на Windows — поддерживаемый runtime и named pipe |
-| `uv` | Обязателен для окружения консоли и локальных проверок harness; отсутствие даёт `environment.uv: fail` |
+| `uv` | Обязателен для окружения консоли и локальных проверок harness; без него health показывает `environment.uv: fail` |
 | `harness-runtime` | Для backend-оркестрации; сборка из исходников требует Rust 1.89+ |
 | Опционально | Docker или rootless Podman для контейнерного worker и QA |
 
@@ -102,7 +102,7 @@ Claude Code и Codex, а оркестрация использует Rust runtim
 
 ## 1. Установите глобальный слой
 
-Глобальный слой ставится однократно на машину: минимальный профиль инструкций и скиллы
+Глобальный слой ставится один раз на машину: минимальный профиль инструкций и скиллы
 `start-project` и `integrate-project`. Параметр `--runtime` повторяемый.
 
 ```bash {.ah-code-wrap}
@@ -110,8 +110,8 @@ python3 bin/install-global.py --target-home "$HOME" \
   --runtime claude --runtime codex
 ```
 
-`--check` показывает статус без записи, `--replace-conflicts` заменяет конфликтующие файлы,
-предварительно сохраняя их backup. MCP, модели, плагины, credentials и permissions установщик
+`--check` показывает статус без записи, `--replace-conflicts` сохраняет backup конфликтующих
+файлов и заменяет их. MCP, модели, плагины, credentials и permissions установщик
 не трогает.
 
 ??? quote ah-skill-text "Промпт для агента: глобальный слой"

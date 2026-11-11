@@ -26,7 +26,7 @@ python .harness/orchestration/coordinator.py --repo . integration link-evidence 
 завершённый batch с accepted publish для пары ticket+branch. Опубликованный SHA он сверяет двумя
 независимыми способами: по принятому отчёту publish (digest отчёта и brief) и по `ls-remote`
 (ветка на remote — ровно candidate, integration ref — ровно закреплённый target). Evidence
-берётся из accepted green QA того же SHA. Ответ содержит `integration_record_id`, пару
+он берёт из accepted green QA того же SHA. Ответ содержит `integration_record_id`, пару
 `candidate_sha`/`target_sha` и ссылки на исходное QA и publish по digest. Повторный `prepare` не
 создаёт вторую запись и не теряет первую (`created: false`). Отказ всегда содержит remedy. Случаи
 отказа: не найден batch для тикета и ветки; `--batch` чужой пары; batch не завершён или не
@@ -56,13 +56,13 @@ python .harness/orchestration/coordinator.py --repo . integration refresh \
   --ticket '#123' --branch feature/issue-123-short-name
 ```
 
-Команда читает текущий SHA integration ref. Если он равен target пары, rebase не запускается
-(`state: unchanged`, ничего не пишется). Иначе она перебазирует issue-ветку в worktree своего batch
+Команда читает текущий SHA integration ref. Если он равен target пары, команда не запускает rebase
+и ничего не пишет (`state: unchanged`). Иначе она перебазирует issue-ветку в worktree своего batch
 на этот точный SHA и публикует ветку через `--force-with-lease` с ожидаемым старым SHA, так что
 чужой коммит на remote не теряется. Команда отказывает с remedy, если worktree не на issue-ветке
 на записанном candidate, если в worktree есть незакоммиченные изменения или операция в процессе или
-если remote-ветка уже не равна записанному candidate. Stash, reset и обход не применяются, protected
-и `integration/*` ветки целью записи не бывают, а чужие worktree не затрагиваются.
+если remote-ветка уже не равна записанному candidate. Команда не делает stash и reset, ничего не обходит,
+не пишет в protected и `integration/*` ветки и не трогает чужие worktree.
 
 Чистый rebase возвращает `state: rebased`, `new_candidate_sha` и `verification_required: true`, не
 вызывает resolver и не тратит его два цикла. Текстовый конфликт возвращает `state: conflict` и
@@ -74,7 +74,7 @@ rebase при этом отменяется, а ветка и worktree оста�
 которой нужен developer, ведёт маршрут rebase из ADR 0012, и `refresh` от него не зависит.
 
 `resolve` — маршрут текстового конфликта (роль `conflict-resolver`, ADR 0015). Он ничего не пишет в
-Git и отклоняет чистый rebase, потому что это работа `refresh`. Конфликт превращается в новый batch
+Git и отклоняет чистый rebase, потому что это работа `refresh`. Для конфликта команда создаёт новый batch
 вида `resolver` рядом с завершённым batch тикета, при этом его brief, отчёты и история не меняются:
 
 ```bash
@@ -94,7 +94,7 @@ batch; `sides.target` — plan-записи тикетов `(#N)` из subject �
 Бюджет — два автоматических target SHA, а третий требует решения человека. Цикл тратит только
 зафиксированный отчёт resolver-а по новому target SHA, тогда как чистый rebase, ответ человека и
 правка на том же target цикл не тратят. Правки на одном target ограничены
-`retry_policy.max_developer_retries`. Бюджет выводится из append-only событий
+`retry_policy.max_developer_retries`. Coordinator считает бюджет по append-only событиям
 `reports/resolver-events/` (`cycle-spent`, `same-target-fix`, `human-decision`, `scope-change`,
 `exhausted`), поэтому потеря сессии или resume его не сбрасывают.
 
@@ -139,7 +139,7 @@ python .harness/orchestration/coordinator.py --repo . integration collect-ci \
 ```
 
 Команда работает только с трекером `github` и списком `ci_required_checks` из
-`.harness/project.json`. CI принимается, если выполнены оба условия: проверки шли на merge commit
+`.harness/project.json`. Команда принимает CI, если выполнены оба условия: проверки шли на merge commit
 PR, родители которого — ровно текущие candidate и target; все обязательные проверки прошли. Тогда
 команда пишет immutable запись с `verification: collector-accepted`. `integration status`
 показывает блок `qa_replacement` (источник, репозиторий, PR, SHA пары, merge commit, id check run).
@@ -147,7 +147,7 @@ PR, родители которого — ровно текущие candidate и
 `re_refresh_required` — `true`: нужен новый refresh и новый сбор. Запасной путь — полный локальный
 QA. Он нужен при `fallback` с причиной `unsupported_tracker`, `not_configured`, `unavailable`,
 `unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`,
-`inconclusive_check` или `light_check`. В этом случае ничего не записывается. Причина `light_check`
+`inconclusive_check` или `light_check`. В этом случае команда ничего не записывает. Причина `light_check`
 означает, что в `ci_required_checks` стоит проверка с именем на `-light` (задание `verify-light`
 для PR в `integration/**`), а пара требует полного QA: сохранённый выбор пары не `ticket-diff`,
 записи пары нет, она старого контракта или повреждена. Такая проверка пару не подтверждает, поэтому
@@ -167,7 +167,7 @@ python .harness/orchestration/coordinator.py --repo . integration local-qa \
 Команда закрепляет immutable запрос (пара candidate/target, причина, полный список
 `verification_commands`) и запускает существующий gate runner в изолированном clean-room checkout
 точного candidate. Ветка задачи, terminal source batch и принятые отчёты при этом не меняются, и
-код не чинится. Запуск идёт через общую FIFO-очередь QA (`qa status`): два тяжёлых QA не работают
+код команда не чинит. Запуск идёт через общую FIFO-очередь QA (`qa status`): два тяжёлых QA не работают
 одновременно, а остальные batch продолжают реализацию. Результат команда пишет отдельной immutable
 записью с командами, санитизированным артефактом и checksum и привязывает его как evidence
 `kind: local-qa` с `verification: verified`, но только если пара и remote-ветка не сдвинулись:
@@ -228,10 +228,10 @@ target записи (`identity.target_sha..tip`). Scope остаётся соб�
 
 `/to-pull-requests` ведёт этот процесс. До PR нужно отдельное подтверждение человека, привязанное
 к точной паре `candidate_sha`/`target_sha`. Смена пары перед открытием делает его недействительным.
-После открытия или обновления PR идёт ожидание CI, при непригодном CI — запасной `local-qa`, затем
-`handoff` для ручного merge. Перед merge показываются проверенные пары SHA и источник QA. Handoff
+После открытия или обновления PR скилл ждёт CI, при непригодном CI запускает запасной `local-qa`, затем
+делает `handoff` для ручного merge. Перед merge он показывает проверенные пары SHA и источник QA. Handoff
 не обещает неизменность до merge, а новый target повторяет актуализацию и проверку. Server branch
-protection и merge queue автоматически не включаются. Merge остаётся ручным, тикет закрывается
+protection и merge queue скилл не включает. Merge остаётся ручным, тикет закрывается
 только после подтверждённого merge.
 
 `link-evidence` — единственный публичный способ привязать к записи будущие результаты CI, local-QA
@@ -245,10 +245,10 @@ protection и merge queue автоматически не включаются. 
 ## Advisory tool call {#advisory-tool-call}
 
 `.harness/orchestration/advisory.py` — дешёвый non-role CLI для чисто утилитарных подзадач:
-ранжирование файлов по keyword, сводка лога и грубая риск-подсказка. Он выполняется вне
-brief/report/self-report/heartbeat контракта. Это не dispatch: он не пишет ledger-запись и не
-импортирует `ledger/`/`contract.py`/`coordinator.py`. Вывод эфемерен. Он печатается в stdout и
-пересчитывается заново при каждом вызове. Он нигде не сохраняется как ground truth для другого
+ранжирование файлов по keyword, сводка лога и грубая риск-подсказка. Он работает вне
+контракта brief/report/self-report/heartbeat. Это не dispatch: он не пишет ledger-запись и не
+импортирует `ledger/`/`contract.py`/`coordinator.py`. Вывод эфемерен: CLI печатает его в stdout,
+пересчитывает при каждом вызове и нигде не сохраняет как ground truth для другого
 dispatch:
 
 ```bash
@@ -257,6 +257,6 @@ python .harness/orchestration/advisory.py summarize-log --file qa-output.log
 python .harness/orchestration/advisory.py classify-risk --text "data migration for payments" --known-trigger data-migration
 ```
 
-Вывод advisory не является авторизацией: coordinator/contract validation path не принимает его как
+Вывод advisory — не авторизация: coordinator/contract validation path не принимает его как
 основание создать dispatch, понизить риск, принять QA или изменить scope. Единственным
 авторитетным источником риска остаётся `coordinator.py risk assess`.

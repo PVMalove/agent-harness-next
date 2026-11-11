@@ -79,7 +79,7 @@ A failure of the gate itself remains an ordinary code-check failure and follows 
 the same commands and limits. The earlier brief, report, artifact, and approval stay as audit
 evidence. A failure of preparation or of the report write leaves no lease, queue entry, or `working`
 state: the same approved dispatch can be run again without editing the ledger and without a new batch.
-The exception is a ledger held by another operation for more than 30 seconds (see "Busy ledger").
+The exception is a ledger held by another operation for more than 30 seconds (see ["Busy ledger"](operations.md#busy-ledger-report-complete-and-ledger-release-lock)).
 
 ### Bounded infrastructure retries
 

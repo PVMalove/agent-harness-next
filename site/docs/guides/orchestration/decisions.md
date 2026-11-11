@@ -10,7 +10,7 @@
 решении routing record: `route`, `previous_role`, `reason_category`, `next_role`, `next_action`,
 `rationale` и `candidate_commit` (пока он не изменился). Coordinator определяет причину только по
 структурированным данным report: outcome, findings, severity осей Standards/Spec, failed checks и
-тому, изменился ли candidate. Свободный текст `blockers`/`output` не классифицируется. Явную причину
+тому, изменился ли candidate. Свободный текст `blockers`/`output` coordinator не классифицирует. Явную причину
 можно передать через `--reason-category` (`code`, `requirements`, `candidate-change`,
 `verification-infrastructure`, `transport`, `context-pressure`, `tooling`, `block-bypass`,
 `unknown`). Но она не отменяет найденный finding. Rate limit, недоступный Bash/WSL wrapper и
@@ -40,8 +40,8 @@ code finding. Context limit даёт `context-pressure`, только если �
 
 Только retry с доменом `code_test` расходует `retry_policy.max_developer_retries`.
 `infrastructure`, `environment_preparation`, `policy`, `tooling`, `timeout`, `cancelled` и `unknown`
-не расходуют его никогда. При подсчёте developer retry для остановки `budget-exhausted`
-учитываются только такие записи.
+не расходуют его никогда. Для остановки `budget-exhausted` coordinator тоже считает только developer retry
+с доменом `code_test`.
 
 Coordinator отказывает developer retry по отчёту code-review, qa, verification или publish, если
 домен не `code_test`. Отказ типизирован как `UnprovenFailureError` и несёт `failure`; `batch decide
@@ -297,7 +297,7 @@ python .harness/orchestration/coordinator.py --repo . batch decide \
 ```
 
 `abandon` не удаляет worktree, candidate, brief, report, Context Package и audit evidence, не
-закрывает issue и не создаёт PR. Убирается только то, что не относится к evidence: staged-копии
+закрывает issue и не создаёт PR. Команда убирает только то, что не относится к evidence: staged-копии
 report в agent inbox и записи QA-очереди dispatch, которые уже не запустятся (живой QA lease
 по-прежнему снимает только `qa clear-stale-lease`). Batch записывает `abandoned.last_accepted` —
 последний принятый этап и его candidate. От него можно создать свежий batch на той же ветке и том
@@ -380,20 +380,20 @@ ledger.
 условиях, либо не записывает вовсе:
 
 - `report-completion` `batch decide` не записывает. Его называет `completion` у `report submit`,
-  когда policy-цепочка после записанного report остановилась (см. шаг 4 выше и «Занятый ledger»
-  ниже).
+  когда policy-цепочка после записанного report остановилась (см. [шаг 4](run.md#4-coordinator-cli-lifecycle) в главе «Запуск и отчёты» и
+  [«Занятый ledger»](operations.md#ledger-report-complete-ledger-release-lock)).
 - `carry-over` записывают `accept` или `override-warning` с `--findings-file` и `batch carry-over`
-  (см. шаг 4). Это routing record с `previous_role: developer`, `next_role` и `next_action`
+  (см. [шаг 4](run.md#4-coordinator-cli-lifecycle)). Это routing record с `previous_role: developer`, `next_role` и `next_action`
   `code-review`, `candidate_commit`, `carried_item_ids` и `rationale`, без `reason_category` и
   `decided_at`; к `next_action` он не применяется, а следующий шаг идёт через risk assessment, как
   при любом accept developer. Тот же маршрут записывает `accept` или `override-warning` read-only
-  отчёта с `--carry-incomplete` (см. шаг 4): тогда `previous_role` — стадия отчёта, а `next_role` и
+  отчёта с `--carry-incomplete` (см. [шаг 4](run.md#4-coordinator-cli-lifecycle)): тогда `previous_role` — стадия отчёта, а `next_role` и
   `next_action` — обычный следующий шаг её accept.
 - `tooling-retry` записывает `retry` с категорией `tooling` (см. выше), а также `retry --narrowed`,
   если пункт несёт `tooling_blocker`.
 - `bypass-rerun` записывает `retry` с категорией `block-bypass` (см. выше).
 - `narrowed-retry` записывает `retry --narrowed` по невыполненным пунктам read-only отчёта (см.
-  шаг 4); его routing record дополнительно называет `carried_item_ids`.
+  [шаг 4](run.md#4-coordinator-cli-lifecycle)); его routing record дополнительно называет `carried_item_ids`.
 - `fix-forward` записывает `retry`, который ведёт в `developer-retry` с непустым закрытым списком
   перенесённых пунктов (см. выше).
 - `rebase-fix-forward` записывает `retry`, который ведёт в `developer-retry`, пока integration base
@@ -501,7 +501,7 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 Coordinator пишет остановку один раз в `batch.auto_stop` вместе с итоговым отчётом.
 `ledger-validation-failed` команда только выводит: ledger недостоверен. Остановку `operational-hold`
 политика записывает, когда runtime store удерживает batch: она не решает отчёт и не делает abandon,
-а удержание снимает только `recovery resume` (раздел «Удержание batch и команды `recovery`»).
+а удержание снимает только `recovery resume` (раздел [«Удержание batch и команды `recovery`»](recovery.md#batch-recovery)).
 Остановка не создаёт решения и не ослабляет валидацию. После остановки каждый шаг batch требует `--approved-by`, а вернуться в
 `auto` batch не может.
 
@@ -595,8 +595,8 @@ candidate и evidence, но запрещает создание следующе
 | `stale-dispatch` | живой dispatch молчит дольше `stale_dispatch_seconds` |
 
 Флаг ставят `batch decide --decision retry`, `dispatch wait` (событие `stale`) и
-`batch attention check --batch <id>`. Последняя команда просто оценивает batch сейчас. Снимает флаг
+`batch attention check --batch <id>`. Последняя команда только оценивает текущее состояние batch. Снимает флаг
 только человек: `batch attention resolve --batch <id> --note '…' --approved-by … --approved-at …`
 подтверждает открытые findings (то же событие повторно не поднимается) и пишет событие в
-`attention_events`. Если настроен `human_notifier`, он вызывается при постановке флага. Сбой
+`attention_events`. Если настроен `human_notifier`, coordinator вызывает его, когда ставит флаг. Сбой
 адаптера записывается как `failed` и не отменяет флаг.
