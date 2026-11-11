@@ -181,14 +181,14 @@ export function Links({ map, select }: { map: MapData; select: (path: string) =>
   const paths = [...new Set(map.edges.flatMap((e) => [e.source, e.target]))].slice(0, 10);
   return <><Panel title="Связи" className="repo-links">
     <p className="repo-note">{t("Граф файлов: показано {shown} из {total}", { shown: paths.length, total: new Set(map.edges.flatMap((e) => [e.source, e.target])).size })}</p>
-    {paths.length > 0 && <div className="repo-graph-scroll"><svg className="repo-graph" viewBox={`0 0 800 ${paths.length * 42}`} role="img" aria-label={t("Связи файлов")}>
+    {paths.length > 0 && <div className="repo-graph-scroll"><svg className="repo-graph" viewBox={`0 0 800 ${paths.length * 42}`} role="group" aria-label={t("Связи файлов")}>
       {map.edges.filter((e) => paths.includes(e.source) && paths.includes(e.target)).map((e, i) =>
         <path key={i} className="repo-edge" d={`M 370 ${paths.indexOf(e.source) * 42 + 18} Q 750 ${(paths.indexOf(e.source) + paths.indexOf(e.target)) * 21 + 18} 370 ${paths.indexOf(e.target) * 42 + 18}`} />)}
       {paths.map((path, i) => <g key={path} className="repo-node" role="button" tabIndex={0} aria-label={path}
         onClick={() => select(path)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(path); } }}>
         <rect x="0" y={i * 42} width="370" height="34" rx="5" /><text className="repo-node-title" x="10" y={i * 42 + 21}>{path}</text></g>)}
     </svg></div>}
-    <div className="repo-link-table"><div className="repo-link-head"><span>from</span><span>to</span><span>type</span><span>{t("Достоверность")}</span></div>
+    <div className="repo-link-table" role="region" tabIndex={0} aria-label={t("Связи")}><div className="repo-link-head"><span>from</span><span>to</span><span>type</span><span>{t("Достоверность")}</span></div>
       {map.edges.map((e, i) => <div className="repo-link-row" key={i}><b>{e.source}</b><span>{e.target}</span><span>{e.kind}</span><span>{e.confidence}</span></div>)}</div>
     {!map.edges.length && <p className="repo-empty">{t("связей нет")}</p>}</Panel>
     <Panel title="Хабы"><Fields rows={hubs} /></Panel></>;

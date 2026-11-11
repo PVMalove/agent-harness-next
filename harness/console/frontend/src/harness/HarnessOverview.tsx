@@ -132,7 +132,7 @@ const FLOW: [string, string, string][] = [
 function Flow({ overview, compact }: { overview: HarnessOverview | null; compact: boolean }) {
   const store = overview?.store ?? null;
   return (
-    <div className={`harness-flow${compact ? " compact" : ""}`}>
+    <div className={`harness-flow${compact ? " compact" : ""}`} role="region" tabIndex={0} aria-label="Runtime flow">
       {FLOW.map(([icon, label, tone], index) => (
         <span key={label} style={{ display: "contents" }}>
           <div className={`harness-flow-node ${tone}`}>

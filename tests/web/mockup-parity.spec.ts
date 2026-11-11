@@ -1,4 +1,4 @@
-/* Mockup parity of the shell and the ten implemented pages: the DOM structure of each page (the
+/* Mockup parity of the shell and the implemented pages: the DOM structure of each page (the
    mockup's blocks, tabs, filters and tiles in its order) at 1440 and 390 px without horizontal
    overflow, and the connection states on every page. DOM assertions only; no screenshot
    comparison (ADR 0029). The owner accepts the look by hand against the mockup. */
@@ -23,7 +23,9 @@ const PAGED: Readonly<Record<string, Body>> = {
   "diagnostics.snapshot": read("diagnostics-report.json"),
   "harness.maintenance": read("harness-maintenance.json"),
   "repo_map.snapshot": read("repo-map.json"),
+  "configuration.snapshot": read("configuration.json"),
 };
+const HELP = read("help-ru.json");
 const OVERVIEW = read("harness-overview.json");
 
 const send = (ws: WebSocketRoute, body: Body) => ws.send(JSON.stringify({ v: 1, ok: true, ...body }));
@@ -37,7 +39,10 @@ async function mockSocket(page: Page, home: (ws: WebSocketRoute, id: unknown) =>
       const id = request.id;
       const type = String(request.type);
       if (type === "home.snapshot") home(ws, id);
-      else if (type in PAGED) {
+      else if (type === "help.snapshot") {
+        const text = JSON.stringify(HELP);
+        send(ws, { id, type, snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
+      } else if (type in PAGED) {
         const text = JSON.stringify(PAGED[type]);
         send(ws, { id, type, snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
       } else if (type === "harness.overview") send(ws, { id, type, cached: false, age_seconds: 0, ...OVERVIEW });
@@ -83,7 +88,24 @@ const PAGES: PageSpec[] = [
     blocks: ["#harness-kpis", "#harness-install", "#harness-runtime", "#harness-adapters", "#harness-maintenance"],
     tabs: ["Обзор", "Runtime", "Адаптеры", "Контейнеры", "Команды"],
   },
-  { route: "repo-map", title: "Repo Map", blocks: [".repo-kpis"], tabs: ["Обзор", "Символы", "Связи", "Настройки"] },
+  {
+    route: "repo-map",
+    title: "Repo Map",
+    blocks: [".repo-kpis", ".repo-tabbar", ".repo-index", ".repo-coverage", ".repo-files-panel"],
+    tabs: ["Обзор", "Символы", "Связи", "Настройки"],
+  },
+  {
+    route: "configuration",
+    title: "Настройки",
+    blocks: ["#configuration-kpi", ".settings-tabbar", "#configuration-files", "#configuration-policy", ".settings-note", "#configuration-adapters"],
+    tabs: ["Обзор", "Настройки", "project.json", "orchestration.json", "История"],
+  },
+  {
+    route: "help",
+    title: "Справка",
+    blocks: [".help-kpis", ".help-tabbar", "#help-intro", ".help-quick", "#help-faq"],
+    tabs: ["Начало", "Экраны", "Команды", "Горячие клавиши", "Границы"],
+  },
   {
     route: "agent-activity",
     title: "Ход работы",

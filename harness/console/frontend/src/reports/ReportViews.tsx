@@ -136,7 +136,7 @@ export function EvidenceTab({ rows }: { rows: readonly EvidenceRow[] }) {
           {rows.length === 0 ? (
             <p className="orch-note">{t("Batch в ledger нет")}</p>
           ) : (
-            <div className="report-evidence-matrix">
+            <div className="report-evidence-matrix" role="region" tabIndex={0} aria-label="Evidence matrix">
               <div className="report-evidence-head">
                 <span>batch</span>
                 {EVIDENCE_COLUMNS.map(([field, column]) => (
@@ -346,7 +346,7 @@ export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
           {ledger.publish.length === 0 ? (
             <p className="orch-note">{t("Batch для публикации нет")}</p>
           ) : (
-            <div className="report-ready-table">
+            <div className="report-ready-table" role="region" tabIndex={0} aria-label="Readiness">
               <div className="report-ready-head">
                 <span>candidate</span>
                 <span>target</span>

@@ -150,7 +150,7 @@ export function GateTrend({ gates }: { gates: Record<string, Figure> }) {
       ) : known.length === 0 ? (
         <p className="orch-note">{t("За сутки решений координатора не было")}</p>
       ) : (
-        <div className="orch-line-chart">
+        <div className="orch-line-chart" role="region" tabIndex={0} aria-label={t("Тренд latency за сутки")}>
           <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("Тренд latency за сутки")}>
             {ticks.map((value) => (
               <g key={value}>

@@ -1,5 +1,6 @@
 /* The page sweep of the real build: every menu section at 1440 and 390 px over the recorded
-   fixtures has no horizontal overflow and no WCAG 2.1 AA violation found by axe-core, and under
+   fixtures has no horizontal overflow and no WCAG 2.1 AA violation found by axe-core, on every tab
+   of the page no panel leaves its frame, and under
    prefers-reduced-motion nothing on the live pages animates. DOM assertions only; no screenshot
    comparison (ADR 0029). */
 import { readFileSync } from "node:fs";
@@ -95,6 +96,42 @@ for (const width of [1440, 390]) {
       await open(page, route, width);
       expect(await overflow(page)).toBeLessThanOrEqual(0);
       expect(await axeViolations(page)).toEqual([]);
+    });
+  }
+}
+
+/** Panels whose content is wider than the panel itself while the panel does not scroll: a block
+    that leaves its frame. A scrolling region (overflow-x auto/scroll) is an intended scroll. */
+const leaking = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("main .panel, main [class*='-kpis']")]
+      .filter((element) => {
+        const box = element as HTMLElement;
+        if (box.offsetParent === null) return false;
+        const style = getComputedStyle(box);
+        if (style.overflowX === "auto" || style.overflowX === "scroll") return false;
+        return box.scrollWidth > box.clientWidth + 1;
+      })
+      .map((element) => `${element.tagName.toLowerCase()}.${[...element.classList].join(".")}#${element.id} ${element.scrollWidth}>${element.clientWidth}`),
+  );
+
+for (const width of [1440, 390]) {
+  for (const route of ROUTES) {
+    test(`#/${route} at ${width} px: every tab keeps its panels in their frames, axe-clean`, async ({ page }) => {
+      await mockSocket(page);
+      await open(page, route, width);
+      const tabs = page.locator("main [role=tablist]").first().getByRole("tab");
+      const count = await tabs.count();
+      for (let index = 0; index < Math.max(count, 1); index++) {
+        if (count > 0) {
+          await tabs.nth(index).click();
+          await expect(tabs.nth(index)).toHaveAttribute("aria-selected", "true");
+        }
+        const label = count > 0 ? await tabs.nth(index).textContent() : "page";
+        expect(await leaking(page), `${route} · ${label}`).toEqual([]);
+        expect(await overflow(page), `${route} · ${label}`).toBeLessThanOrEqual(0);
+        expect(await axeViolations(page), `${route} · ${label}`).toEqual([]);
+      }
     });
   }
 }

@@ -364,7 +364,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 #harness-tab-commands .harness-maintenance { margin-top: 16px; }
 /* Repo Map: «medium» needs more than the mockup's 34px weight column (it touches the path there
    too), and the localized confidence header is wider than the mockup's 60px column. */
-.repo-rel-item { grid-template-columns: 48px minmax(0, 1fr) 64px; gap: 6px; }
+.repo-rel-item { grid-template-columns: 48px minmax(0, 1fr) 64px; gap: 8px; }
 .repo-link-head, .repo-link-row { grid-template-columns: 1fr 1fr 1fr 96px; }
 /* Settings: the adapter plan text and the per-file change list sit inside mockup panels; the
    type scale is the mockup's (the page used to inherit a larger body font). */
@@ -385,3 +385,9 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .help-hero-head .help-markdown { padding: 0; }
 .help-hero-head .help-markdown h1, .help-hero-head .help-markdown h2 { margin: 4px 0; font-size: var(--fs-4); }
 .help-hero-head .help-markdown p { margin: 0; max-width: 72ch; color: var(--muted); }
+/* Sweep fixes: the selected symbol's caption keeps AA contrast on the selection background; the
+   JSON editor and its file line fit a 390 px panel. */
+.repo-symbol-row.on .repo-symbol-main small { color: var(--fg); }
+.settings-editor .field { display: block; min-width: 0; }
+.settings-editor .settings-textarea { max-width: 100%; }
+.settings-file-line { flex-wrap: wrap; min-width: 0; }
