@@ -124,6 +124,8 @@ impl Session {
                 false,
             );
         }
+        #[cfg(debug_assertions)]
+        state::hooks::trace(&format!("request:{}", request.operation));
         match request.operation.as_str() {
             "status" => Reply {
                 response: Response::ok(

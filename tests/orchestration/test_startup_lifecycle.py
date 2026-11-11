@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -13,6 +14,7 @@ import pytest
 from harness.orchestration.core.utils import JsonObject
 
 from tests.orchestration import test_recovery as recovery_tests
+from tests.orchestration.fake_clock import FakeClock
 from tests.orchestration.test_coordinator import ORCHESTRATION_ROOT
 
 
@@ -31,7 +33,11 @@ def launch() -> Iterator[recovery_tests.RecoveryTests]:
         fixture.tearDown()
 
 
-def cli(launch: recovery_tests.RecoveryTests, *arguments: str) -> JsonObject:
+def cli(
+    launch: recovery_tests.RecoveryTests,
+    *arguments: str,
+    clock: FakeClock | None = None,
+) -> JsonObject:
     result = subprocess.run(
         [
             sys.executable,
@@ -46,6 +52,7 @@ def cli(launch: recovery_tests.RecoveryTests, *arguments: str) -> JsonObject:
         text=True,
         timeout=30,
         check=False,
+        env={**os.environ, **clock.env} if clock else None,
     )
     assert result.returncode == 0, result.stderr or result.stdout
     payload = json.loads(result.stdout)
@@ -294,8 +301,6 @@ def test_dead_worker_is_observed_before_the_heartbeat_stale_deadline(
 def test_startup_timeout_never_proves_termination_for_legacy_adapter(
     launch: recovery_tests.RecoveryTests,
 ) -> None:
-    import time
-
     config_path = launch.repo / ".harness/orchestration.json"
     config = json.loads(config_path.read_text())
     config["execution_policy"] = {"worker_startup_timeout_seconds": 1}
@@ -304,6 +309,7 @@ def test_startup_timeout_never_proves_termination_for_legacy_adapter(
     brief = launch._dispatch(batch["batch_id"], "architect")["brief"]
     adapter = launch.tmp / "legacy-adapter.py"
     adapter.write_text("pass\n")
+    clock = FakeClock(launch.tmp)
     cli(
         launch,
         "dispatch",
@@ -314,16 +320,24 @@ def test_startup_timeout_never_proves_termination_for_legacy_adapter(
         str(adapter),
         "--worktree",
         str(launch.worktree),
+        clock=clock,
     )
-    time.sleep(1.05)
-    status = cli(launch, "dispatch", "status", "--dispatch", brief["dispatch_id"])[
-        "dispatches"
-    ][0]
+    clock.advance(1.05)
+    status = cli(
+        launch, "dispatch", "status", "--dispatch", brief["dispatch_id"], clock=clock
+    )["dispatches"][0]
     assert status["startup"]["deadline_exceeded"] is True
     assert status["startup"]["restart_allowed"] is False
     assert status["state"] == "dispatched"
     event = cli(
-        launch, "dispatch", "wait", "--dispatch", brief["dispatch_id"], "--timeout", "1"
+        launch,
+        "dispatch",
+        "wait",
+        "--dispatch",
+        brief["dispatch_id"],
+        "--timeout",
+        "1",
+        clock=clock,
     )
     assert event["event"] == "startup_timeout"
     assert event["startup"]["restart_allowed"] is False

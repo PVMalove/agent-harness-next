@@ -7,7 +7,7 @@ use std::fmt;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use contracts::{
     ErrorBody, ErrorCode, FailureDomain, FrameError, Response, encode, read_frame, write_frame,
@@ -233,11 +233,7 @@ pub(crate) fn secure_directory(dir: &std::path::Path, _owner: u32) -> Result<(),
 }
 
 pub(crate) fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
-        })
+    state::time::now_millis()
 }
 
 fn send(stream: &mut impl Write, response: &Response) -> Result<(), FrameError> {

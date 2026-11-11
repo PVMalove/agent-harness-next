@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use contracts::{ErrorBody, ErrorCode, ExecutionState, FailureDomain, Request};
 use rusqlite::{Connection, OptionalExtension};
@@ -82,11 +82,7 @@ pub(crate) fn guard<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
-        })
+    state::time::now_millis()
 }
 
 pub(crate) fn sql<T>(result: rusqlite::Result<T>) -> Result<T, ErrorBody> {
@@ -880,6 +876,7 @@ impl Supervisor {
                     thread::sleep(Duration::from_millis(50));
                 }
                 interval = supervisor.reconcile().unwrap_or(DEFAULT_POLL_SECONDS);
+                hooks::trace("reconciled");
             }
         });
     }
@@ -896,6 +893,7 @@ pub(crate) fn owner() -> Value {
 
 /// Take the mutex of an operation, waiting until the deadline of the request.
 pub(crate) fn acquire(lock: &Mutex<()>, deadline_ms: u64) -> Result<MutexGuard<'_, ()>, ErrorBody> {
+    let mut waiting = false;
     loop {
         match lock.try_lock() {
             Ok(held) => return Ok(held),
@@ -903,7 +901,13 @@ pub(crate) fn acquire(lock: &Mutex<()>, deadline_ms: u64) -> Result<MutexGuard<'
             Err(TryLockError::WouldBlock) if now_ms() >= deadline_ms => {
                 return Err(store_busy("another request of the same operation runs"));
             }
-            Err(TryLockError::WouldBlock) => thread::sleep(Duration::from_millis(20)),
+            Err(TryLockError::WouldBlock) => {
+                if !waiting {
+                    waiting = true;
+                    hooks::trace("waiting");
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
         }
     }
 }

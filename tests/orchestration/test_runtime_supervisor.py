@@ -17,6 +17,7 @@ from typing import Protocol, cast
 
 import pytest
 
+from tests.orchestration.fake_clock import FakeClock
 from tests.orchestration.runtime_store_support import (
     APPROVAL,
     Supervised,
@@ -45,8 +46,10 @@ def supervised(tmp_path: Path) -> Iterator[Factory]:
     def make(
         *, timeout: int = 600, grace: int = 1, env: dict[str, str] | None = None
     ) -> Supervised:
+        tmp = tmp_path / f"s{len(made)}"
+        tmp.mkdir()
         repo = Supervised(
-            tmp_path / f"s{len(made)}", timeout=timeout, grace=grace, env=env
+            tmp, timeout=timeout, grace=grace, env=env, clock=FakeClock(tmp)
         )
         made.append(repo)
         return repo
@@ -54,6 +57,31 @@ def supervised(tmp_path: Path) -> Iterator[Factory]:
     yield make
     for repo in made:
         repo.close()
+
+
+# The deadline and the grace of a supervised dispatch: far longer than a test runs, so only
+# ``past`` moves an execution across them, never a slow machine.
+DEADLINE = 300
+GRACE = 120
+
+
+def past(repo: Supervised, seconds: float) -> None:
+    """Move the clock of the runtime and its CLI processes ``seconds`` forward: a deadline or a
+    grace passes without the test waiting for it."""
+    clock = repo.runtime.clock
+    assert clock is not None
+    clock.advance(seconds)
+
+
+def reconciled(repo: Supervised, passes: int = 1) -> None:
+    """Move the clock past the periodic reconcile ``passes`` times and wait for each pass: the
+    point where anything the runtime does on its own, such as a second launch, would be done."""
+    clock = repo.runtime.clock
+    assert clock is not None
+    for _ in range(passes):
+        done = repo.runtime.traced("reconciled")
+        clock.advance(1)
+        repo.runtime.wait_trace("reconciled", done + 1)
 
 
 def alive(pid: int) -> bool:
@@ -91,7 +119,7 @@ def test_dispatch_send_launches_once_from_the_runtime_and_a_repeat_returns_the_s
     assert launch.ppid == repo.runtime.process.pid
     assert launch.pgid == launch.pid
     assert launch.operation_id == dig(repo.execution(), "execution_id")
-    time.sleep(0.5)
+    reconciled(repo)
     assert len(repo.launches()) == 1
     assert repo.status()["state"] == "dispatched"
 
@@ -130,7 +158,7 @@ def test_the_receipt_names_the_boot_the_pid_namespace_the_pid_and_the_start_time
 def test_an_execution_seen_from_another_boot_or_pid_namespace_stays_unknown_and_is_never_stopped(
     supervised: Factory, variable: str
 ) -> None:
-    repo = supervised(timeout=2)
+    repo = supervised(timeout=DEADLINE)
     sent(repo.send())
     (launch,) = repo.wait_launches(1)
 
@@ -138,7 +166,8 @@ def test_an_execution_seen_from_another_boot_or_pid_namespace_stays_unknown_and_
 
     execution = repo.wait_execution("unknown")
     assert dig(execution, "lease", "released_at") is None
-    time.sleep(3)  # past the deadline: an unknown execution is never stopped
+    past(repo, DEADLINE + 1)  # past the deadline: an unknown execution is never stopped
+    reconciled(repo, 2)
     assert repo.wait_execution("unknown")["exit"] is None
     assert alive(launch.pid)
     assert repo.execution_actions()[-1] == "execution-unknown"
@@ -167,10 +196,12 @@ def test_a_reused_pid_is_lost_and_the_live_process_is_never_signalled(
 def test_the_execution_moves_from_launching_through_running_and_stopping_to_exited(
     supervised: Factory,
 ) -> None:
-    repo = supervised(timeout=2, grace=1)
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
     sent(repo.send())
+    repo.wait_launches(1)
 
-    repo.wait_execution("exited", timeout=20)
+    past(repo, DEADLINE + 1)
+    repo.wait_execution("exited")
 
     assert repo.execution_actions() == [
         "execution-launching",
@@ -187,17 +218,19 @@ def test_the_execution_moves_from_launching_through_running_and_stopping_to_exit
 def test_a_deadline_stop_signals_the_group_and_releases_the_lease_only_after_the_exit(
     supervised: Factory, ignores_term: bool
 ) -> None:
-    repo = supervised(timeout=2, grace=2)
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
     if ignores_term:
         repo.ignore_term()
     sent(repo.send())
     (launch,) = repo.wait_launches(1)
 
+    past(repo, DEADLINE + 1)
     if ignores_term:
-        stopping = repo.wait_execution("stopping", timeout=10)
+        stopping = repo.wait_execution("stopping")
         assert dig(stopping, "lease", "released_at") is None
         assert alive(launch.pid)
-    exited = repo.wait_execution("exited", timeout=20)
+        past(repo, GRACE)
+    exited = repo.wait_execution("exited")
 
     assert dig(exited, "exit", "stopped_by") == "deadline"
     assert dig(exited, "exit", "signal") == (9 if ignores_term else 15)
@@ -209,16 +242,18 @@ def test_a_deadline_stop_signals_the_group_and_releases_the_lease_only_after_the
 def test_a_stop_begun_before_a_runtime_restart_is_driven_to_its_proof_by_reconcile(
     supervised: Factory,
 ) -> None:
-    repo = supervised(timeout=2, grace=4)
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
     repo.ignore_term()
     sent(repo.send())
     (launch,) = repo.wait_launches(1)
-    stopping = repo.wait_execution("stopping", timeout=10)
+    past(repo, DEADLINE + 1)
+    stopping = repo.wait_execution("stopping")
 
     # The runtime dies after SIGTERM and before SIGKILL; the worker ignores SIGTERM.
     repo.restart_runtime()
 
-    exited = repo.wait_execution("exited", timeout=30)
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
     assert dig(exited, "exit", "stopped_by") == "deadline"
     assert dig(exited, "exit", "source") == "stop-observed"
     assert dig(exited, "exit", "term_sent_at") == dig(
@@ -239,7 +274,7 @@ def test_a_stop_begun_before_a_runtime_restart_is_driven_to_its_proof_by_reconci
 def test_an_orphan_worker_of_a_killed_runtime_is_supervised_by_its_successor_until_the_deadline(
     supervised: Factory,
 ) -> None:
-    repo = supervised(timeout=6, grace=2)
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
     repo.ignore_term()
     sent(repo.send())
     (launch,) = repo.wait_launches(1)
@@ -254,10 +289,12 @@ def test_an_orphan_worker_of_a_killed_runtime_is_supervised_by_its_successor_unt
     ) == [("running",)]
     repo.restart_runtime()
 
-    stopping = repo.wait_execution("stopping", timeout=20)
+    past(repo, DEADLINE + 1)
+    stopping = repo.wait_execution("stopping")
     assert dig(stopping, "lease", "released_at") is None
     assert alive(launch.pid)
-    exited = repo.wait_execution("exited", timeout=20)
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
     assert dig(exited, "exit", "stopped_by") == "deadline"
     assert dig(exited, "lease", "released_at") is not None
     assert not alive(launch.pid)
@@ -273,17 +310,19 @@ def test_an_orphan_worker_of_a_killed_runtime_is_supervised_by_its_successor_unt
 def test_a_stop_resumed_within_its_grace_sends_sigterm_again(
     supervised: Factory,
 ) -> None:
-    repo = supervised(timeout=2, grace=8)
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
     repo.count_term()
     sent(repo.send())
     (launch,) = repo.wait_launches(1)
-    repo.wait_execution("stopping", timeout=10)
-    assert repo.wait_terms(1, timeout=5) == 1
+    past(repo, DEADLINE + 1)
+    repo.wait_execution("stopping")
+    assert repo.wait_terms(1) == 1
 
     repo.restart_runtime()
 
-    assert repo.wait_terms(2, timeout=6) == 2
-    exited = repo.wait_execution("exited", timeout=30)
+    assert repo.wait_terms(2) == 2
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
     assert dig(exited, "exit", "kill_sent_at") is not None
     assert not alive(launch.pid)
 
@@ -292,15 +331,16 @@ def test_a_runtime_killed_after_the_sigterm_and_before_its_record_stops_the_exec
     supervised: Factory,
 ) -> None:
     repo = supervised(
-        timeout=2,
-        grace=2,
+        timeout=DEADLINE,
+        grace=GRACE,
         env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.stop:signalled"},
     )
     repo.count_term()
     sent(repo.send())
     (launch,) = repo.wait_launches(1)
-    repo.runtime.wait_paused("execution.stop:signalled", timeout=15)
-    assert repo.wait_terms(1, timeout=5) == 1
+    past(repo, DEADLINE + 1)
+    repo.runtime.wait_paused("execution.stop:signalled")
+    assert repo.wait_terms(1) == 1
 
     # The SIGTERM went out, its record did not: the row still says running.
     assert repo.rows(
@@ -308,7 +348,9 @@ def test_a_runtime_killed_after_the_sigterm_and_before_its_record_stops_the_exec
     ) == [("running",)]
     repo.restart_runtime()
 
-    exited = repo.wait_execution("exited", timeout=30)
+    assert repo.wait_terms(2) == 2
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
     assert repo.terms() == 2
     assert dig(exited, "exit", "stopped_by") == "deadline"
     assert not alive(launch.pid)
@@ -320,7 +362,7 @@ def test_a_runtime_killed_after_the_sigterm_and_before_its_record_stops_the_exec
     ]
 
 
-def wait_zombie(pid: int, timeout: float = 10.0) -> None:
+def wait_zombie(pid: int, timeout: float = 30.0) -> None:
     deadline = time.monotonic() + timeout
     state = ""
     while time.monotonic() < deadline:
@@ -345,8 +387,8 @@ def test_a_refused_stopping_record_after_the_sigterm_is_retried_and_the_child_is
 ) -> None:
     step = "execution.stop:stopping"
     repo = supervised(
-        timeout=2,
-        grace=10,
+        timeout=DEADLINE,
+        grace=GRACE,
         env={
             "HARNESS_RUNTIME_TEST_PAUSE_AT": step,
             "HARNESS_RUNTIME_TEST_FAIL_AT": step,
@@ -354,7 +396,8 @@ def test_a_refused_stopping_record_after_the_sigterm_is_retried_and_the_child_is
     )
     sent(repo.send())
     (launch,) = repo.wait_launches(1)
-    repo.runtime.wait_paused(step, timeout=15)
+    past(repo, DEADLINE + 1)
+    repo.runtime.wait_paused(step)
 
     # The SIGTERM ended the leader; its record is not written, and nothing reaped the leader.
     wait_zombie(launch.pid)
@@ -365,7 +408,7 @@ def test_a_refused_stopping_record_after_the_sigterm_is_retried_and_the_child_is
     # The first record of the stop gets a repeatable refusal; the stop repeats it.
     repo.runtime.resume()
 
-    exited = repo.wait_execution("exited", timeout=20)
+    exited = repo.wait_execution("exited")
     assert dig(exited, "exit", "source") == "wait-status"
     assert dig(exited, "exit", "signal") == 15
     assert dig(exited, "exit", "kill_sent_at") is None
@@ -390,12 +433,12 @@ def test_an_adopted_leader_that_exits_before_its_group_keeps_the_lease_until_the
     repo.restart_runtime()
 
     repo.release(0)
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 30
     while alive(launch.pid) and time.monotonic() < deadline:
         time.sleep(0.05)
     assert not alive(launch.pid)
-    # Reconcile observes the adopted execution every second.
-    time.sleep(2.5)
+    # Reconcile observes the adopted execution every second: a whole pass after the exit.
+    reconciled(repo, 2)
 
     running = repo.execution()
     assert running is not None and running["state"] == "running", running
@@ -426,7 +469,7 @@ def test_a_lost_response_after_the_receipt_is_answered_from_the_stored_receipt_w
         "SELECT state FROM operations WHERE operation = 'execution.launch'"
     ) == [("committed",)]
     assert len(repo.wait_launches(1)) == 1
-    time.sleep(0.5)
+    reconciled(repo)
     assert len(repo.launches()) == 1
 
 
@@ -545,7 +588,7 @@ def test_a_coordinator_killed_after_the_launch_intent_gets_the_same_receipt_on_r
     assert repo.rows(
         "SELECT operation_id, state FROM operations WHERE operation = 'execution.launch'"
     ) == [(execution_id, "committed")]
-    time.sleep(0.5)
+    reconciled(repo)
     assert len(repo.launches()) == 1
     assert repo.status()["state"] == "dispatched"
 
@@ -596,7 +639,8 @@ def test_a_second_send_during_a_launch_returns_the_same_receipt(
     first = repo.start_send()
     repo.runtime.wait_paused("execution.launch:launched")
     second = repo.start_send()
-    time.sleep(1.0)
+    # The second send waits for the mutex of the launch the first one holds.
+    repo.runtime.wait_trace("waiting", 1)
 
     repo.runtime.resume()
     answers = [process.communicate(timeout=60) for process in (first, second)]
@@ -827,9 +871,10 @@ def test_a_report_submitted_while_the_execution_runs_is_accepted_after_it_exits(
 def test_an_execution_that_exits_without_a_report_blocks_the_dispatch_with_its_domain(
     supervised: Factory,
 ) -> None:
-    repo = supervised(timeout=2, grace=1)
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
     _working(repo)
-    repo.wait_execution("exited", timeout=20)
+    past(repo, DEADLINE + 1)
+    repo.wait_execution("exited")
 
     (entry,) = cast(list[object], _status_of(repo))
 
