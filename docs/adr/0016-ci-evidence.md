@@ -26,7 +26,8 @@
   нужной пары, репозитория и PR. `failed` — завершённый `failure` обязательной проверки на уже
   подтверждённой паре. Остальное — `fallback` с причиной (`not_configured`, `unavailable`,
   `wrong_repository`, `wrong_pull_request`, `wrong_base`, `stale_candidate`, `stale_target`,
-  `unknown_checkout`, `head_only`, `missing_check`, `pending_check`, `inconclusive_check`).
+  `unknown_checkout`, `head_only`, `missing_check`, `pending_check`, `inconclusive_check`,
+  `light_check`).
   Отмена, таймаут, пропуск и сбой инфраструктуры не считаются ни находкой в коде, ни успехом.
 - **Команда.** `integration collect-ci --record <id> --pull-request <n>` проверяет трекер (только
   `github`; иначе `unsupported_tracker`), берёт репозиторий из поля `tracker`, текущую пару из
@@ -43,6 +44,33 @@
   QA-отчёты не меняются и CI их не заменяет.
 - **Границы.** Ни collector, ни валидатор не открывают и не сливают PR и не меняют правила веток.
   GitLab не поддерживается: контракт `CiObservation` переносим, адаптера нет.
+
+## Дополнение (#937): лёгкий и полный путь CI
+
+`.github/workflows/verify.yml` содержит два пути. Pull request в ветку `integration/**` запускает
+одно задание `verify-light`: `make lint`, `cargo fmt --check`, `cargo clippy`, тесты diff самого PR
+(`scripts/ci_light_tests.py`, выбор `ticket_diff_selection` из ADR 0023, раздел 7) и проверку
+публичных метаданных. Задания с тестами (`verify`, `diff-coverage`, `rust`, `repo-map-bundle`,
+`runtime-ipc-windows`, `docker-smoke`, `fault-injection`) на этом пути пропускаются. Pull request
+в `master` и любую другую ветку, push в `master` и вызов из другого workflow запускают полные задания.
+`private-terms` и `parser-bundle` тестов не запускают и условия не меняют. Задания `console-spa`
+(typecheck, сборка, Vitest и Playwright SPA консоли, ADR 0029) и `docs` (строгая сборка сайта)
+идут на обоих путях без условия (#1060).
+
+Имя проверки `verify-light` заканчивается на `-light`. `evaluate(..., allow_light=False)` по
+умолчанию отвечает `fallback` с причиной `light_check` на любой обязательный check с таким
+суффиксом: он не подтверждает пару, которой нужен выбор `full`. `integration collect-ci` разрешает
+`-light` проверку, только если сохранённая запись пары (`release_gate.pair_selection`) хранит
+`ticket-diff`. Отсутствующая, старого контракта или повреждённая запись даёт `full`, то есть отказ
+закрывается в безопасную сторону. Чтение идёт внутри первой блокировки леджера, поэтому в эпохе
+runtime store запись пары читается из store. Контракт обоих путей закреплён тестом
+`tests/scripts/test_ci_workflow_contract.py`.
+
+Список `ci_required_checks` в локальном `.harness/project.json` задаёт оператор, и он называет полные
+проверки, например `verify` и `rust`, но не `-light` имена. Файл в репозиторий не коммитится.
+
+Политика в целом — поправки от 2026-11-07 в ADR 0023 (раздел 7) и ADR 0026 (раздел 4): полный CI
+нужен паре в `master`, а лёгкий `verify-light` подтверждает только пару с выбором `ticket-diff`.
 
 ## Операционные последствия
 

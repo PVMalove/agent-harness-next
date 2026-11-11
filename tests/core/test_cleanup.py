@@ -327,9 +327,60 @@ class CleanupTests(unittest.TestCase):
             json.dumps({"generation": "generation-test"}), encoding="utf-8"
         )
         (records / "batch-test.json").write_text(
-            json.dumps({"state": state, "worktree": str(tree.relative_to(self.repo))}),
+            json.dumps(
+                {
+                    "batch_id": "batch-test",
+                    "state": state,
+                    "worktree": str(tree.relative_to(self.repo)),
+                }
+            ),
             encoding="utf-8",
         )
+
+    def test_hard_keeps_a_non_terminal_batch_worktree_and_names_the_batch(
+        self,
+    ) -> None:
+        """Проверить, что worktree нетерминального batch остаётся и план называет batch и состояние."""
+        self._add_origin()
+        tree = self._worktrees_dir() / "issue-2-two"
+        branch = "feature/issue-2-two"
+        git(self.repo, "worktree", "add", "-b", branch, str(tree), "HEAD")
+        git(self.repo, "push", "-u", "origin", branch)
+        for state in ("planned", "awaiting-approval"):
+            with self.subTest(state=state):
+                self._write_batch(tree, state)
+                plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+                self.assertNotIn(str(tree), {item["path"] for item in plan["remove"]})
+                self.assertIn(
+                    {
+                        "path": str(tree),
+                        "reason": "referenced by an active batch",
+                        "batch_id": "batch-test",
+                        "state": state,
+                    },
+                    plan["skipped"],
+                )
+
+    def test_hard_reports_the_batch_of_a_removed_worktree(self) -> None:
+        """Проверить, что план и результат hard cleanup называют batch удалённого worktree."""
+        self._add_origin()
+        tree = self._worktrees_dir() / "issue-3-three"
+        branch = "feature/issue-3-three"
+        git(self.repo, "worktree", "add", "-b", branch, str(tree), "HEAD")
+        git(self.repo, "push", "-u", "origin", branch)
+        self._write_batch(tree, "completed")
+        expected = {
+            "kind": "worktree",
+            "path": str(tree),
+            "branch": branch,
+            "batch_id": "batch-test",
+            "state": "completed",
+        }
+        plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+        self.assertIn(expected, plan["remove"])
+        result = apply_cleanup(self.repo, plan, confirm="HARD")
+        self.assertFalse(result["failed"])
+        self.assertEqual(result["worktrees"], [expected])
 
     def test_hard_removes_clean_integration_worktree_only_when_pushed(self) -> None:
         """Проверить, что worktree с `integration/*` удаляется только после push на origin."""

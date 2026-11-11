@@ -25,15 +25,15 @@ repository and requirement evidence sufficient for the coordinator to make the d
 required only for a substantial irreversible trade-off. The completion report links to this brief and
 does not repeat its narrative.
 
-Propose the commit plan in `output` as ordered entries `{id, summary, expected_paths, covers}`, one
-entry per independently reviewable commit, where `covers` lists the Definition of Done item numbers
-(counted from one) the entry implements and every item is covered at least once. The coordinator's
-default plan is one entry per item. When the proposed plan differs from it, set `risks.status: present` and say so in `risks.details`: the
-report then waits for a manual accept, where the operator can pin the plan with
-`batch decide --decision accept --commit-plan-file`. Under `approval_policy: auto`, the policy
-pins the plan through `batch auto-decide --commit-plan-file` if every `expected_paths` entry lies
-inside the batch `allowed_paths` and the plan covers every Definition of Done item; otherwise the
-automatic path stops. Keep the plan as one exact JSON object so the coordinator can copy it.
+Propose the commit plan in the report field `commit_plan` as ordered entries
+`{id, summary, expected_paths, covers}`, one entry per independently reviewable commit, where
+`covers` lists the Definition of Done item numbers (counted from one) the entry implements and every
+item is covered at least once. Every `expected_paths` entry lies inside the brief's `allowed_paths`:
+a path the plan needs beyond them is a risk in `risks`, not a plan entry. `report submit` refuses a
+plan that breaks these rules and names the reason. The coordinator's default plan is one entry per
+item. When the proposed plan differs from it, set `risks.status: present` and say so in
+`risks.details`: the report then waits for a manual accept. An accept, manual or by
+`batch auto-decide` under `approval_policy: auto`, pins the reported plan without a plan file.
 
 Escalate a blocker naming the missing ADR or precedent card when the Context Package lacks one the
 decision needs, rather than reading the repository at large to reconstruct it.

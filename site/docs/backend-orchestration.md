@@ -468,9 +468,9 @@ Podman, а при заданном `access_policy.operations.qa.container` — �
 - Компонент `container` содержит `worker_image` (обязателен), необязательный `proxy_image` и
   необязательный `engine` (`docker` по умолчанию или `podman`). Тег — одна ссылка на образ без
   пробелов и без ведущего `-`. Override роли или операции заменяет компонент целиком. Resolver
-  берёт теги только из конфига и не опрашивает движок, сеть и образы. `harness health` и схема
-  требуют `access_policy.defaults.container`, если выбран `docker`: без него роль осталась бы без
-  образа.
+  берёт теги только из конфига и не опрашивает движок, сеть и образы. Если выбран `docker`,
+  `harness health` и схема требуют `access_policy.defaults.container`, а без `defaults` —
+  `access_policy.operations.qa.container`: иначе исполнителю нечего запускать (#1014).
 - Компонент `environment` — список уникальных имён переменных окружения (`[A-Za-z_][A-Za-z0-9_]*`),
   никогда не значений. Override роли или операции заменяет список целиком. План хранит имена в
   отсортированном виде, поэтому они входят в `plan_digest` и закрепляются в brief при approval:
@@ -478,9 +478,16 @@ Podman, а при заданном `access_policy.operations.qa.container` — �
   берёт из окружения `harness-runtime serve`, поэтому после их смены runtime нужно перезапустить.
   Значения не попадают в конфиг, brief, digest, argv, evidence, логи, тексты ошибок и слои образа.
   Auth-файлы агента не монтируются.
-- Каждая роль, которую отправляет `dispatch send`, должна иметь `transport: external` в
-  `assignment_plans`. Исполнитель оборачивает команду external-адаптера и не знает конкретного
-  агента.
+- Роль, которую называет `access_policy.defaults` или её собственный `access_policy.roles.<роль>`,
+  должна иметь `transport: external` в `assignment_plans`: исполнитель оборачивает команду
+  external-адаптера и не знает конкретного агента. Такую in-process роль загрузка конфигурации
+  называет предупреждением, а `dispatch preflight` блокирует. Роль, которую `access_policy` не
+  называет, получает прежний legacy-inherit план и запускается in-process как раньше, поэтому
+  контейнерный QA можно включить одним `operations.qa` (#1014). Без `defaults` override роли
+  должен сам нести `container`, иначе загрузка называет и его.
+- Воркер в контейнере не может выполнить `dispatch self-report` и `dispatch heartbeat`: их
+  записывает coordinator на хосте по снимку stdout контейнера и утверждённому плану (ADR 0025,
+  «Решения реализации #1014»).
 - Исполнитель работает только в эпохе runtime store и только на Linux: на файловом ledger и вне
   Linux `dispatch preflight` блокирует его с remedy (`harness-runtime migrate`, затем
   `harness-runtime serve`).
@@ -832,7 +839,11 @@ QA, publish и рискованные переходы остаются ручн
    `.harness/orchestration.json` к `dispatch create` добавляются `--model` и `--effort` вызывающей
    сессии. Для coordinator и architect выбирайте `medium`, если разработчик явно не одобрил иное.
 
-   Accept отчёта architect может закрепить предложенный им commit plan вместо плана по умолчанию:
+   Architect кладёт предложенный commit plan в поле `commit_plan` отчёта. `report submit` проверяет
+   его теми же правилами, что файл плана ниже, и отказывает, если путь плана лежит вне
+   `allowed_paths` batch: brief каждой роли называет их в поле `allowed_paths`. Accept такого
+   отчёта закрепляет план без файла. Если отчёт плана не несёт, accept может закрепить план из
+   файла:
 
    ```bash
    python .harness/orchestration/coordinator.py --repo . batch decide \
@@ -840,7 +851,9 @@ QA, publish и рискованные переходы остаются ручн
      --approved-at 2026-09-09T12:00:30Z --commit-plan-file .harness/.sandboxes/scratch/commit-plan.json
    ```
 
-   Файл лежит в репозитории или одном из его worktree и содержит ровно один ключ
+   Файл лежит в репозитории или одном из его worktree, например в
+   `.harness/.sandboxes/scratch/inbox/`; внешний `/tmp` отклоняется. Файл рядом с планом из отчёта
+   должен содержать тот же план. Файл содержит ровно один ключ
    `{"commit_plan": [...]}`. Каждая entry содержит ровно четыре поля: уникальный `id`
    (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`), непустой `summary`, непустой список `expected_paths`
    (относительные пути или glob без ведущего `/` и сегмента `..`) и `covers` — номера пунктов DoD
@@ -850,7 +863,9 @@ QA, publish и рискованные переходы остаются ручн
    решения, а batch не меняется. Coordinator сохраняет проверенный план в batch как `commit_plan`.
    Решение architect получает `commit_plan_sha256`. Этот план становится `commit_plan` каждого
    developer brief batch-а, включая `developer-retry`. Если план в batch не совпадает с digest
-   принятого решения, developer brief не создаётся. Без файла brief содержит по одной entry `step-N`
+   принятого решения, developer brief не создаётся. Brief developer также несёт `accepted_design`:
+   id dispatch architect-а, `report_sha256` и `output` принятого отчёта, поэтому coordinator не
+   пересказывает дизайн в промпте. Без файла brief содержит по одной entry `step-N`
    на пункт DoD с `covers: [N]`. При `low_risk` и `milestone` coordinator автоматически принимает
    чистый architect report с планом по умолчанию. Поэтому architect, который предлагает другой план,
    указывает это в `risks`, и report ждёт ручного решения.
@@ -1573,8 +1588,10 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 `policy:auto` с маршрутом, причиной и evidence. Сессия передаёт только входы, которые требуют
 суждения:
 
-- `--commit-plan-file` — план architect-а. Политика закрепляет план, если он лежит внутри
-  `allowed_paths` и покрывает все пункты DoD. Иначе путь останавливается. Если команда не может
+- `--commit-plan-file` — план architect-а, если отчёт не несёт поле `commit_plan`; план из отчёта
+  политика закрепляет без файла. Политика закрепляет план, если он лежит внутри `allowed_paths` и
+  покрывает все пункты DoD. Иначе, а также при расхождении файла и плана из отчёта, путь
+  останавливается. Если команда не может
   прочитать файл как JSON-объект, она отказывает и ничего не пишет.
 - `--findings-file` — находки координатора для принятого отчёта developer-а.
 - `--bug-ticket` — bug-тикет на инструмент для `tooling-retry`. Без него команда отказывает и
@@ -2673,8 +2690,12 @@ PR, родители которого — ровно текущие candidate и
 Если integration ref ушёл вперёд, `qa_replacement.applies` становится `false`, а
 `re_refresh_required` — `true`: нужен новый refresh и новый сбор. Запасной путь — полный локальный
 QA. Он нужен при `fallback` с причиной `unsupported_tracker`, `not_configured`, `unavailable`,
-`unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`
-или `inconclusive_check`. В этом случае ничего не записывается. Недоступность CI не считается ни
+`unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`,
+`inconclusive_check` или `light_check`. В этом случае ничего не записывается. Причина `light_check`
+означает, что в `ci_required_checks` стоит проверка с именем на `-light` (задание `verify-light`
+для PR в `integration/**`), а пара требует полного QA: сохранённый выбор пары не `ticket-diff`,
+записи пары нет, она старого контракта или повреждена. Такая проверка пару не подтверждает, поэтому
+нужен полный локальный QA или полный CI. Недоступность CI не считается ни
 находкой в коде, ни успехом. Завершённый `failure` на подтверждённой паре записывается как
 `collector-failed`. Вручную привязанный через `link-evidence` CI остаётся `unverified` и проверку
 пары не закрывает. CI не заменяет исходные QA-отчёты.

@@ -46,6 +46,8 @@ _CATEGORY_DOMAINS: dict[str, FailureDomain] = {
     "runtime-unavailable": FailureDomain.INFRASTRUCTURE,
     "read-only-filesystem": FailureDomain.ENVIRONMENT_PREPARATION,
     "permission-denied": FailureDomain.ENVIRONMENT_PREPARATION,
+    "missing-linker": FailureDomain.ENVIRONMENT_PREPARATION,
+    "socket-path-too-long": FailureDomain.ENVIRONMENT_PREPARATION,
 }
 _STARTUP_ENVIRONMENT = frozenset({"worktree-mismatch", "model-mismatch"})
 

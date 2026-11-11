@@ -158,6 +158,86 @@ def labelled() -> Iterator[list[str]]:
             _docker("network", "rm", *networks)
 
 
+# The worker of the attested round trip (#1014): it prints the stream-json init event of the
+# brief's model, stages the report the host prepared, and runs until the host releases it, so the
+# host observes it running. It never reaches the ledger: the host records its self-report.
+ATTESTED_ADAPTER = """#!/bin/sh
+set -eu
+dir=$(dirname "$0")
+brief=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --brief) brief=$2; shift 2 ;;
+        *) shift ;;
+    esac
+done
+field() { python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$brief" "$1"; }
+printf '{"type": "system", "subtype": "init", "model": "%s"}\\n' "$(field resolved_model)"
+cp "$dir/smoke-report.json" "$(field report_staging_path)"
+waited=0
+while [ ! -e "$dir/smoke-release" ] && [ "$waited" -lt 240 ]; do
+    sleep 1
+    waited=$((waited + 1))
+done
+"""
+
+OFFLINE: JsonObject = {"mode": "sandbox", "network": {"hosts": []}}
+
+
+def attested_round_trip(repo: Supervised, engine: str) -> None:
+    """For the created dispatch of ``repo``: ``dispatch send`` → the host-side self-report → ``report submit`` of the staged report →
+    ``reported``, with a real engine and no runtime socket in the container (#1014)."""
+    from tests.orchestration.runtime_store_support import architect_report_file
+
+    scratch = repo.repo / ".harness/.sandboxes/scratch"
+    adapter = scratch / "attested-adapter.sh"
+    adapter.write_text(ATTESTED_ADAPTER, encoding="utf-8")
+    adapter.chmod(0o755)
+    prepared = architect_report_file(repo.repo, repo.dispatch, repo.brief)
+    (scratch / "smoke-report.json").write_bytes(prepared.read_bytes())
+
+    sent = repo.run(
+        "dispatch", "send", "--dispatch", repo.dispatch, "--adapter", str(adapter)
+    )
+
+    assert sent.returncode == 0, sent.stderr
+    assert json.loads(sent.stdout)["execution"]["engine"] == engine
+    deadline = time.monotonic() + ENGINE_TIMEOUT_SECONDS
+    status: JsonObject = {}
+    while time.monotonic() < deadline:
+        viewed = repo.run("dispatch", "status", "--dispatch", repo.dispatch)
+        assert viewed.returncode == 0, viewed.stderr
+        status = repo.status()
+        if status.get("model_self_report"):
+            break
+        time.sleep(1)
+    reported = status.get("model_self_report")
+    attestation = status.get("worktree_attestation")
+    assert isinstance(reported, dict) and isinstance(attestation, dict), status
+    assert (reported["match"], reported["source"]) == (True, "container-host"), status
+    assert (attestation["match"], attestation["source"]) == (True, "container-host")
+    assert attestation["container"]["executor"] == "docker"
+    observed = repo.run("dispatch", "observe", "--dispatch", repo.dispatch)
+    assert observed.returncode == 0, observed.stderr
+    assert json.loads(observed.stdout)["stream_state"] == "connected", observed.stdout
+    staged = Path(str(repo.brief["report_staging_path"]))
+    deadline = time.monotonic() + ENGINE_TIMEOUT_SECONDS
+    while not staged.is_file() and time.monotonic() < deadline:
+        time.sleep(1)
+    # While the container runs, the report waits for its exit.
+    submitted = repo.run("report", "submit", "--file", str(staged))
+    assert submitted.returncode == 0, submitted.stderr
+    (scratch / "smoke-release").write_text("", encoding="utf-8")
+    ended = repo.wait_execution("exited", timeout=300)
+    exit_record = ended.get("exit")
+    assert isinstance(exit_record, dict) and exit_record.get("exit_code") == 0, _logs(
+        ended
+    )
+    viewed = repo.run("dispatch", "status", "--dispatch", repo.dispatch)
+    assert viewed.returncode == 0, viewed.stderr
+    assert repo.status()["state"] == "reported", repo.status()
+
+
 def _logs(execution: JsonObject) -> str:
     """The saved worker streams of an ended execution, for an assertion message."""
     receipt = execution.get("receipt")
@@ -261,6 +341,27 @@ def test_a_container_qa_run_reports_the_real_exit_code_of_a_failing_gate(
             ("gate-1", "pass", 0),
             ("gate-2", "fail", 3),
         ]
+        assert wait_removed(repo.dispatch) == ([], [])
+    finally:
+        repo.close()
+
+
+def test_a_container_worker_is_attested_on_the_host_and_its_report_accepted(
+    tmp_path: Path, labelled: list[str]
+) -> None:
+    """#1014: the full route of a writer role under rootful Docker without a manual bypass."""
+    require_engine()
+    policy: JsonObject = {
+        "defaults": {
+            **OFFLINE,
+            "container": {"engine": "docker", "worker_image": WORKER_TAG},
+        }
+    }
+    repo = Supervised(tmp_path / "attested", access_policy=policy, create=False)
+    try:
+        repo.create()
+        labelled.append(repo.dispatch)
+        attested_round_trip(repo, "docker")
         assert wait_removed(repo.dispatch) == ([], [])
     finally:
         repo.close()

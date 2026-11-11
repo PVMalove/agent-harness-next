@@ -489,7 +489,9 @@ class IntegrationPairRecord:
     ``{candidate_sha, target_sha}`` with the tree of its candidate (ADR 0026, section 4).
 
     The content is deterministic (no recording time) and the id derives from the pair, so writing
-    the pair again finds the same record; the runtime store checks its exact fields."""
+    the pair again finds the same record; the runtime store checks its exact fields. Contract 2
+    adds ``selection`` (``full`` or ``ticket-diff``), the QA selection the pair requires; a
+    contract-1 record has none and requires ``full``."""
 
     directory: ClassVar[str] = "reports/integration-pair"
     ID_MEMBERS: ClassVar[tuple[str, ...]] = ("candidate_sha", "target_sha")

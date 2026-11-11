@@ -2,8 +2,11 @@
 """protect-hook-policy: критичный guard политики hooks и конфигурации hooks (issue #794).
 
 `python protect_hook_policy.py < payload.json` печатает `allow` и завершается с кодом 0 либо пишет
-причину в stderr с префиксом `[reason_code]` и завершается с кодом 2. Решение не зависит ни от
-профиля, ни от роли, ни от окружения: guard блокирует во всех профилях.
+причину в stderr с префиксом `[reason_code]` и завершается с кодом 2. Единственное исключение —
+запись в `.harness/project.json` через shell: отказ `project-json-shell-write` завершается кодом 3,
+а конверт `hook_response.py` превращает его в вердикт `ask` (ручное подтверждение человека) там, где
+runtime это понимает, и в блок в остальных случаях; жёсткий отказ той же команды всегда сильнее.
+Решение не зависит ни от профиля, ни от роли: guard защищает во всех профилях.
 
 Инструменты файлов (Write, Edit, MultiEdit, NotebookEdit):
 - `.claude/settings*.json`, `.codex/hooks.json` и всё внутри каталогов `.claude/hooks` и
@@ -195,10 +198,12 @@ RAW_ASSIGNMENT = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*=\S*project\.json", re.IGN
 class Refusal(Exception):
     """Отказ с зарегистрированным reason_code и сообщением для агента."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, ask: bool = False) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
+        # Отказ, который человек может снять ручным подтверждением (код возврата 3).
+        self.ask = ask
 
 
 def classify(real: str) -> Optional[str]:
@@ -437,8 +442,10 @@ def check_bash(command: str, cwd: str, root: str) -> None:
     refusal = Refusal(
         "project-json-shell-write",
         "запись в .harness/project.json через shell (перенаправление, tee, sed -i, cp, mv, dd, "
-        "git checkout и подобные) запрещена: результат нельзя вычислить до исполнения. "
-        "Правь файл инструментом Edit/Write без изменения ключа hook_policy.",
+        "git checkout и подобные) требует ручного подтверждения человека: результат нельзя "
+        "вычислить до исполнения. Укажи в description команды, что именно и зачем меняется. "
+        "Без подтверждения правь файл инструментом Edit/Write без изменения ключа hook_policy.",
+        ask=True,
     )
     if steps is not None and redirects is not None:
         argvs = [argv for _, argv in steps]
@@ -604,8 +611,17 @@ def decide(payload: object, root: str) -> None:
         return
     command = tool_input.get("command")
     if isinstance(command, str):
-        check_bash(command, cwd, root)
+        # A refusal a person may lift never hides a hard one: the patch check runs first.
+        asked: Optional[Refusal] = None
+        try:
+            check_bash(command, cwd, root)
+        except Refusal as refusal:
+            if not refusal.ask:
+                raise
+            asked = refusal
         check_bash_patch(payload, command, cwd, root)
+        if asked is not None:
+            raise asked
     elif any(isinstance(tool_input.get(field), str) for field in PATH_FIELDS):
         tool = payload.get("tool_name") if isinstance(payload, dict) else None
         check_file_tool(tool if isinstance(tool, str) else "Write", tool_input, cwd)
@@ -629,7 +645,7 @@ def main() -> int:
         print(
             f"[{refusal.code}] protect-hook-policy: {refusal.message}", file=sys.stderr
         )
-        return 2
+        return 3 if refusal.ask else 2
     print("allow")
     return 0
 

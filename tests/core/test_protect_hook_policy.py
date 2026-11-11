@@ -588,7 +588,10 @@ def test_the_hook_blocks_in_every_profile_and_answers_with_a_registered_verdict(
     tmp_path: Path, policy: object
 ) -> None:
     project = _installed(tmp_path, policy)
-    env = {**os.environ, "HOOK_PROFILE": "minimal"}
+    env = {
+        **{k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"},
+        "HOOK_PROFILE": "minimal",
+    }
     cases = {
         "project-json-shell-write": {
             "tool_name": "Bash",
@@ -633,6 +636,73 @@ def test_the_hook_blocks_in_every_profile_and_answers_with_a_registered_verdict(
             reason,
         )
         assert f"[{reason}]" in done.stderr.splitlines()[0]
+
+
+@needs_bash
+def test_a_shell_write_asks_a_person_in_claude_code(tmp_path: Path) -> None:
+    project = _installed(tmp_path)
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(project)}
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "sed -i s/a/b/ .harness/project.json"},
+    }
+
+    done = _run(project, payload, env)
+
+    assert done.returncode == 0
+    verdict = parse_hook_response(done.stderr)
+    assert (verdict["hook_id"], verdict["decision"], verdict["reason_code"]) == (
+        "protect-hook-policy",
+        "ask",
+        "project-json-shell-write",
+    )
+    answer = json.loads(done.stdout)["hookSpecificOutput"]
+    assert answer["hookEventName"] == "PreToolUse"
+    assert answer["permissionDecision"] == "ask"
+    assert "description" in answer["permissionDecisionReason"]
+
+
+def test_a_hard_refusal_in_the_same_command_wins_over_a_question(project: Path) -> None:
+    patch = (
+        "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: .claude/settings.json\n"
+        "@@\n-a\n+b\n*** End Patch\nEOF"
+    )
+
+    assert _bash(project, "sed -i s/a/b/ .harness/project.json") == (
+        "project-json-shell-write"
+    )
+    assert (
+        _bash(project, f"sed -i s/a/b/ .harness/project.json && {patch}")
+        == "agent-config-edit"
+    )
+
+
+@needs_bash
+def test_the_other_protections_never_ask(tmp_path: Path) -> None:
+    project = _installed(tmp_path)
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(project)}
+    refused = [
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": str(project / ".claude/settings.json"),
+                "content": "{}",
+            },
+        },
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": str(project / ".harness/project.json"),
+                "content": json.dumps({"hook_policy": {"profile": "minimal"}}),
+            },
+        },
+    ]
+
+    for payload in refused:
+        done = _run(project, payload, env)
+        assert done.returncode == 2
+        assert done.stdout == ""
+        assert parse_hook_response(done.stderr)["decision"] == "block"
 
 
 @needs_bash
