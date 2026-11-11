@@ -294,3 +294,25 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .cap-copy .cap-blocked { display: inline-flex; align-items: center; gap: 4px; color: var(--err); }
 .cap-copy .cap-blocked .hi { width: 12px; height: 12px; }
 .project-path-info #open-project-path-status:empty { display: none; }
+/* Agent activity: the grid aligned to its start, compact one-line event and step rows inside an
+   in-block scroll, the sessions toggle and a timeline whose axis stays on top while it scrolls. */
+.work-grid { align-items: start; }
+.work-status .hi { margin-right: 4px; }
+.work-events-panel .work-events { max-height: 330px; overflow-y: auto; }
+.work-events-panel .work-event { align-items: center; padding: 4px 16px; }
+.work-events-panel .work-event-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.work-events-panel .work-event-main b, .work-events-panel .work-event-main small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-events-panel .work-event-main b { flex: 0 1 auto; }
+.work-events-panel .work-event-main small { flex: 1 1 0; margin: 0; }
+.work-events-panel .work-event-main .orch-pill { flex: none; margin: 0 0 0 auto; padding: 0 4px; line-height: 16px; align-self: center; }
+.work-events-panel .work-event-role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-more { display: block; width: 100%; padding: 8px 16px; border: 0; border-top: 1px solid var(--rule); background: transparent; color: var(--primary); font: var(--fs-1) var(--mono); text-align: left; cursor: pointer; }
+.work-more:hover { background: var(--row); }
+.work-analytics .work-gantt { max-height: calc(100vh - 280px); min-height: 160px; overflow-y: auto; }
+.work-gantt-axis { position: sticky; top: 0; z-index: 1; padding: 4px 0; background: var(--surface); }
+.work-gantt-ticks span:last-child { transform: translateX(-100%); }
+.work-analytics > .orch-legend { margin: 0; padding: 8px 16px 12px; }
+.work-filters select + select { margin-left: 0; }
+.work-gantt-track { height: 20px; }
+.work-gantt-row { padding: 4px 0; }
+.work-gantt-name small, .work-gantt-last { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

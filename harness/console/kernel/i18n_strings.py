@@ -2721,6 +2721,11 @@ EN.update(
         "в проекте нет состояния оркестрации": "the project has no orchestration state",
         "снимок Home ещё не получен": "the Home snapshot has not arrived yet",
         "путь не является Git-репозиторием": "the path is not a Git repository",
+        "Открыть задачу": "Open task",
+        "Показать {count} последних": "Show the {count} latest",
+        "Показать все {count}": "Show all {count}",
+        "ожидание": "waiting",
+        "последнее": "last",
     }
 )
 

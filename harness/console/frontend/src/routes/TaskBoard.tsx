@@ -3,6 +3,7 @@
    or by the status select of its modal, after a confirmation, through the server's mutating job.
    The frame of the five columns is drawn at once; the mascot jumps over it while a snapshot loads. */
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import type { FormEvent } from "react";
 import {
   BoardBanner,
@@ -150,7 +151,9 @@ function SpecBoard({
 }) {
   const { board: screen, refreshing, updating, refresh, reload } = useBoard(spec);
   const [filters, setFilters] = useState<BoardFilters>(NO_FILTERS);
-  const [selected, setSelected] = useState<string | null>(null);
+  // «Открыть задачу» of the session route opens the board on its ticket card (#/board?ticket=…).
+  const [params] = useSearchParams();
+  const [selected, setSelected] = useState<string | null>(() => params.get("ticket"));
   const board = screen.data;
   const open = board?.tickets.find((card) => card.id === selected) ?? null;
   const refreshAll = () => {

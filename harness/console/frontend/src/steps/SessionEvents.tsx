@@ -5,7 +5,7 @@ import { useI18n } from "../i18n";
 import { useScreen } from "../screens/useScreen";
 import { parseTimeline } from "../ws/ledger";
 import type { RosterDispatch } from "../ws/steps";
-import { roleIcon, roleName } from "./ActivityViews";
+import { EVENT_LIMIT, roleIcon, roleName } from "./ActivityViews";
 
 const KINDS: Record<string, string> = {
   state: "состояние",
@@ -26,7 +26,7 @@ function BatchEvents({ batchId }: { batchId: string }) {
     );
   }
   if (!screen.data) return <div className="work-empty">{screen.loading ? t("Загрузка…") : t("нет данных")}</div>;
-  const events = [...screen.data.events].reverse();
+  const events = [...screen.data.events].reverse().slice(0, EVENT_LIMIT);
   if (!events.length) return <div className="work-empty">{t("Событий нет.")}</div>;
   return (
     <>
@@ -64,7 +64,7 @@ export function SessionEvents({ session }: { session: RosterDispatch | null }) {
         </h2>
         <span className="small muted">{t("наблюдаемые факты")}</span>
       </div>
-      <div className="work-events" id="work-events">
+      <div className="work-events" id="work-events" tabIndex={0} role="region" aria-label={t("События сессии")}>
         {session ? <BatchEvents key={session.batch_id} batchId={session.batch_id} /> : <div className="work-empty">{t("Событий нет.")}</div>}
       </div>
     </section>

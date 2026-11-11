@@ -1,10 +1,12 @@
 /* The sessions panel: every dispatch of the roster is a dispatch filter, the selects a ticket and
    a role filter. Only observed facts: a quiet dispatch is not reported as stopped. */
+import { useState } from "react";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { rosterRoles } from "../ws/steps";
 import type { HeldStep, RosterDispatch, StepFilter } from "../ws/steps";
 import {
+  SESSION_LIMIT,
   STATUS_ICON,
   STATUS_LABEL,
   STATUS_TONE,
@@ -46,10 +48,14 @@ export function StepFilters({
 }) {
   const { t, language, state: stateText } = useI18n();
   const counts = statusCounts(dispatches);
-  const shown = dispatches.filter(
-    (entry) =>
-      (filter.role === null || entry.role === filter.role) && (status === "all" || sessionStatus(entry) === status),
-  );
+  const [all, setAll] = useState(false);
+  const matching = dispatches
+    .filter((entry) => (filter.role === null || entry.role === filter.role) && (status === "all" || sessionStatus(entry) === status))
+    .map((entry, index) => ({ entry, index, at: entry.last_event_at || entry.started_at }))
+    // Newest activity first; equal times keep the roster order.
+    .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at < b.at ? 1 : -1))
+    .map(({ entry }) => entry);
+  const shown = all ? matching : matching.slice(0, SESSION_LIMIT);
   const chips: ["all" | SessionStatus, string][] = [
     ["all", t("Все")],
     ["running", t("Выполняется")],
@@ -64,7 +70,7 @@ export function StepFilters({
     <section className="panel work-sessions">
       <div className="panel-head">
         <h2>{t("Сессии")}</h2>
-        <span className="small muted">{t("{shown} из {total}", { shown: shown.length, total: dispatches.length })}</span>
+        <span className="small muted">{t("{shown} из {total}", { shown: shown.length, total: matching.length })}</span>
       </div>
       <div className="work-filters">
         <div className="chips" id="work-status-chips">
@@ -82,14 +88,6 @@ export function StepFilters({
                 </button>
               ))
             : null}
-          <button
-            className={`chip ${filter.dispatch === null ? "on" : ""}`}
-            type="button"
-            aria-pressed={filter.dispatch === null}
-            onClick={() => onChange({ ...filter, dispatch: null })}
-          >
-            {t("Все сессии")}
-          </button>
         </div>
         {onTicket ? (
           <select
@@ -157,6 +155,11 @@ export function StepFilters({
           );
         })}
       </div>
+      {matching.length > SESSION_LIMIT && (
+        <button className="work-more" type="button" onClick={() => setAll(!all)}>
+          {all ? t("Показать {count} последних", { count: SESSION_LIMIT }) : t("Показать все {count}", { count: matching.length })}
+        </button>
+      )}
       <div className="work-note">{t("Только наблюдаемые события; отсутствие события не доказывает остановку.")}</div>
     </section>
   );

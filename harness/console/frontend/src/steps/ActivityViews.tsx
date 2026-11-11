@@ -54,6 +54,11 @@ export function statusCounts(dispatches: readonly RosterDispatch[]): Record<"all
   return counts;
 }
 
+/** The mockup's list limits: the latest sessions, session events and steps shown at once. */
+export const SESSION_LIMIT = 5;
+export const EVENT_LIMIT = 10;
+export const STEP_LIMIT = 10;
+
 /** Whole minutes between an ISO time and `now`; null for an unknown time. */
 export function ageMinutes(iso: string, now: number): number | null {
   const at = Date.parse(iso);
@@ -249,6 +254,11 @@ export function SessionRoute({
           <small>{current ? current.label : t("нет живого шага")}</small>
         </div>
         <div className="work-route-actions">
+          {session.ticket && (
+            <a className="btn" href={`${href("board")}?ticket=${encodeURIComponent(session.ticket)}`}>
+              <Icon name="board" /> {t("Открыть задачу")}
+            </a>
+          )}
           <a className="btn" href={href("orchestration")}>
             {section("Orchestration")} <Icon name="chevron" />
           </a>
@@ -265,8 +275,24 @@ interface Segment {
   tone: string;
 }
 
+/** The ledger states that wait for a start or a decision (the mockup's blue «ожидание»). */
+const WAITING = new Set(["approved", "awaiting_approval", "queued"]);
+/** A live stage whose worker has not sent a heartbeat for this long is shown as silent. */
+const SILENT_MINUTES = 15;
+
+export interface TimelineRow {
+  batch: string;
+  ticket: string;
+  /** Minutes from the batch's first stage to its last end (or now). */
+  total: number;
+  segments: Segment[];
+  /** Minutes since the last recorded event or heartbeat; null when none is known. */
+  last: number | null;
+  silent: boolean;
+}
+
 /** The timeline rows of the ledger stages, one row per batch, minutes from its first stage. */
-export function timelineRows(stages: readonly StageHead[], now: number): { batch: string; ticket: string; total: number; segments: Segment[] }[] {
+export function timelineRows(stages: readonly StageHead[], now: number): TimelineRow[] {
   const byBatch = new Map<string, StageHead[]>();
   for (const stage of stages) {
     if (!stage.started_at) continue;
@@ -282,17 +308,38 @@ export function timelineRows(stages: readonly StageHead[], now: number): { batch
         role: item.role,
         from,
         to: Math.max(from + 1, Math.round((end - start) / 60000)),
-        tone: open ? "cyan" : item.state === "failed" || item.state === "blocked" ? "violet" : "mint",
+        tone: open ? "cyan" : item.state === "failed" || item.state === "blocked" ? "violet" : WAITING.has(item.state) ? "blue" : "mint",
       };
     });
-    return { batch, ticket: items[0]!.ticket, total: Math.max(...segments.map((segment) => segment.to)), segments };
+    const times = items.flatMap((item) => [Date.parse(item.at), Date.parse(item.heartbeat_at)]).filter((time) => !Number.isNaN(time));
+    const last = times.length ? Math.max(0, Math.round((now - Math.max(...times)) / 60000)) : null;
+    const live = items.filter((item) => item.state === "working" || item.state === "dispatched");
+    const silent = live.some((item) => {
+      const beat = Date.parse(item.heartbeat_at || item.started_at);
+      return !Number.isNaN(beat) && now - beat > SILENT_MINUTES * 60000;
+    });
+    return { batch, ticket: items[0]!.ticket, total: Math.max(...segments.map((segment) => segment.to)), segments, last, silent };
   });
+}
+
+const AXIS_STEPS = [5, 10, 15, 30, 60, 120, 240, 480, 720, 1440, 2880, 10080];
+
+/** The time axis of the timeline: a tick step from 5 minutes to a week so that at most six steps
+    cover the longest row, and its labels in minutes or hours. */
+export function timelineAxis(longest: number, language: Language): { span: number; ticks: { at: number; label: string }[] } {
+  const step = AXIS_STEPS.find((candidate) => longest / candidate <= 6) ?? AXIS_STEPS.at(-1)!;
+  const span = Math.max(step, Math.ceil(longest / step) * step);
+  const [minute, hour] = language === "ru" ? ["м", "ч"] : ["m", "h"];
+  const ticks = [];
+  for (let at = 0; at <= span; at += step) ticks.push({ at, label: step < 60 ? `${at}${minute}` : `${at / 60}${hour}` });
+  return { span, ticks };
 }
 
 export function ActivityTimeline({ ledger, now }: { ledger: Ledger | null; now: number }) {
   const { t, language } = useI18n();
   const rows = ledger ? timelineRows(ledger.stages, now) : [];
-  const max = Math.max(1, ...rows.map((row) => row.total));
+  const axis = timelineAxis(Math.max(1, ...rows.map((row) => row.total)), language);
+  const max = axis.span;
   return (
     <section className="panel work-analytics" id="work-timeline">
       <div className="panel-head">
@@ -302,7 +349,18 @@ export function ActivityTimeline({ ledger, now }: { ledger: Ledger | null; now: 
       {rows.length === 0 ? (
         <div className="work-empty">{ledger ? t("Этапов с временем начала нет") : t("нет данных")}</div>
       ) : (
-        <div className="work-gantt">
+        <div className="work-gantt" tabIndex={0} role="region" aria-label={t("Таймлайн")}>
+          <div className="work-gantt-axis">
+            <span />
+            <div className="work-gantt-ticks">
+              {axis.ticks.map((tick) => (
+                <span key={tick.at} style={{ left: `${(tick.at / max) * 100}%` }}>
+                  {tick.label}
+                </span>
+              ))}
+            </div>
+            <span>{t("последнее")}</span>
+          </div>
           {rows.map((row) => (
             <div className="work-gantt-row" key={row.batch}>
               <div className="work-gantt-name">
@@ -315,13 +373,15 @@ export function ActivityTimeline({ ledger, now }: { ledger: Ledger | null; now: 
                     key={index}
                     className={`work-gantt-seg ${segment.tone}`}
                     style={{ left: `${(segment.from / max) * 100}%`, width: `${((segment.to - segment.from) / max) * 100}%` }}
-                    title={`${segment.role} · ${segment.from}–${segment.to} min`}
+                    title={`${segment.role} · ${segment.from}–${segment.to} ${t("мин")}`}
                   >
                     <span>{segment.role}</span>
                   </div>
                 ))}
               </div>
-              <div className="work-gantt-last" />
+              <div className={`work-gantt-last${row.silent ? " silent" : ""}`} title={row.last === null ? undefined : `${row.silent ? `${t("тишина")} ` : ""}${formatMinutes(row.last, language)}`}>
+                {row.last === null ? "—" : `${row.silent ? `${t("тишина")} ` : ""}${formatMinutes(row.last, language)}`}
+              </div>
             </div>
           ))}
         </div>
@@ -334,6 +394,10 @@ export function ActivityTimeline({ ledger, now }: { ledger: Ledger | null; now: 
         <span>
           <i className="cyan" />
           {t("активно")}
+        </span>
+        <span>
+          <i className="blue" />
+          {t("ожидание")}
         </span>
         <span>
           <i className="violet" />
@@ -397,7 +461,7 @@ const EVENT_TYPES: Record<string, string> = {
 
 /** The mockup's events-per-minute line over the last hour; a flat chart when nothing was seen. */
 function RateChart({ rate }: { rate: readonly number[] }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const W = 760;
   const H = 170;
   const L = 28;
@@ -420,8 +484,8 @@ function RateChart({ rate }: { rate: readonly number[] }) {
           </g>
         ))}
         {[0, 15, 30, 45, 60].map((m) => (
-          <text key={m} x={L + (m / 60) * (W - L - R)} y={H - 7} textAnchor="middle" className="work-rate-axis">
-            {t("−{n} мин", { n: 60 - m })}
+          <text key={m} x={L + (m / 60) * (W - L - R)} y={H - 7} textAnchor={m === 0 ? "start" : m === 60 ? "end" : "middle"} className="work-rate-axis">
+            {`${m}${language === "ru" ? "м" : "m"}`}
           </text>
         ))}
         <polyline points={points} className="work-rate-line" />
