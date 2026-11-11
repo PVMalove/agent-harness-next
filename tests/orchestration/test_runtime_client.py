@@ -36,6 +36,8 @@ from harness.orchestration.core.utils import JsonObject
 from harness.orchestration.ledger import ledger_ops
 from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
 
+from tests.orchestration.fake_clock import FakeClock
+
 if sys.platform == "win32":
     import _winapi
 
@@ -1727,6 +1729,8 @@ def test_a_killed_runtime_is_replaced_and_its_stale_socket_removed(
 
 
 def test_a_request_repeats_until_the_runtime_starts(dirs: Directories) -> None:
+    clock = FakeClock(dirs.base)
+    pauses = dirs.base / "pauses.log"
     waiting = subprocess.Popen(
         [
             sys.executable,
@@ -1741,9 +1745,19 @@ def test_a_request_repeats_until_the_runtime_starts(dirs: Directories) -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={**os.environ, "XDG_RUNTIME_DIR": str(dirs.xdg)},
+        env={
+            **os.environ,
+            **clock.env,
+            "HARNESS_TEST_SLEEP_LOG": str(pauses),
+            "XDG_RUNTIME_DIR": str(dirs.xdg),
+        },
     )
-    time.sleep(1.0)
+    # The first attempt found no runtime: the client pauses before it repeats the request.
+    deadline = time.monotonic() + 30
+    while not (pauses.exists() and pauses.read_text(encoding="utf-8")):
+        assert waiting.poll() is None, waiting.communicate()
+        assert time.monotonic() < deadline, "the client never paused to repeat its request"
+        time.sleep(0.01)
     assert waiting.poll() is None
     runtime = RuntimeProcess(dirs)
     try:

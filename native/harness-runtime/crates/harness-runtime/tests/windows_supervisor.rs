@@ -284,8 +284,14 @@ impl Drop for Repo {
         if let Ok(Some(job)) = Job::open(&self.job_name(), JobAccess::Control) {
             let _ = job.terminate(1);
         }
-        std::thread::sleep(Duration::from_millis(300));
-        let _ = fs::remove_dir_all(&self.root);
+        // The terminated processes release their files soon after: repeat the removal until then.
+        let until = std::time::Instant::now() + Duration::from_secs(30);
+        while fs::remove_dir_all(&self.root).is_err()
+            && self.root.exists()
+            && std::time::Instant::now() < until
+        {
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 }
 

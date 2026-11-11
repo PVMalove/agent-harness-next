@@ -14,7 +14,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,6 +30,7 @@ from harness.orchestration.ledger.lifecycle import BatchRecord, LifecycleLedger
 from harness.orchestration.runtime_client import RuntimeClientError
 from harness.orchestration.workflow import attention, reports
 
+from .fake_clock import FakeClock
 from .runtime_store_support import (
     ROOT,
     STATE_REL,
@@ -576,23 +576,52 @@ def _wait(store: Store, *options: str) -> subprocess.Popen[str]:
     )
 
 
-def test_a_dispatch_wait_poll_sees_the_report_written_while_it_waits(store: Store) -> None:
+@pytest.fixture
+def timed_store(tmp_path: Path) -> Iterator[Store]:
+    """A ``store`` whose runtime and CLI processes share a clock the test moves forward."""
+    store = Store(tmp_path, clock=FakeClock(tmp_path))
+    try:
+        yield store
+    finally:
+        store.runtime.stop()
+
+
+def _clock(store: Store) -> FakeClock:
+    clock = store.runtime.clock
+    assert clock is not None
+    return clock
+
+
+def test_a_dispatch_wait_poll_sees_the_report_written_while_it_waits(
+    timed_store: Store,
+) -> None:
+    store, reads = timed_store, "request:state.read"
+    before = store.runtime.traced(reads)
     waiting = _wait(store, "--timeout", "40", "--stale-after", "3600")
-    time.sleep(3)
+    # The wait reads the store: it polls, and the report does not exist yet.
+    store.runtime.wait_trace(reads, before + 1)
+    _clock(store).advance(3)
     assert waiting.poll() is None, "the wait ends before any report exists"
 
     assert store.submit_report().returncode == 0
+    _clock(store).advance(1)
     stdout, stderr = waiting.communicate(timeout=60)
 
     assert waiting.returncode == 0, stderr
     assert json.loads(stdout)["event"] == "reported"
 
 
-def test_a_dispatch_wait_poll_sees_the_heartbeats_written_while_it_waits(store: Store) -> None:
+def test_a_dispatch_wait_poll_sees_the_heartbeats_written_while_it_waits(
+    timed_store: Store,
+) -> None:
+    store = timed_store
     waiting = _wait(store, "--timeout", "14", "--stale-after", "6")
+    # Each heartbeat comes 2 seconds after the last, well inside the 6 seconds of staleness;
+    # the wait ends at its 14-second timeout with the dispatch live.
     for _ in range(5):
-        time.sleep(2)
+        _clock(store).advance(2)
         assert store.heartbeat().returncode == 0
+    _clock(store).advance(4.5)
     stdout, stderr = waiting.communicate(timeout=60)
 
     assert waiting.returncode == 0, stderr

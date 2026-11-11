@@ -13,6 +13,7 @@ import signal
 import sys
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +29,19 @@ pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
     reason="container QA runs only on Linux",
 )
+
+
+def _signal_mask(pid: int, field: str) -> int:
+    """The signal mask ``field`` of ``/proc/<pid>/status``, such as ``SigCgt`` or ``SigPnd``."""
+    for line in Path(f"/proc/{pid}/status").read_text(encoding="utf-8").splitlines():
+        name, _, value = line.partition(":")
+        if name == field:
+            return int(value.strip(), 16)
+    raise AssertionError(f"/proc/{pid}/status has no {field}")
+
+
+def _has(mask: int, signum: int) -> bool:
+    return bool(mask >> (signum - 1) & 1)
 
 
 def _wait_for(condition: Callable[[], bool], timeout: float = 60.0) -> None:
@@ -96,11 +110,17 @@ def test_a_signal_before_the_receipt_stops_the_run_once_it_is_launched(
     )
     process = coordinator_popen(repo.repo, repo.runtime, "qa", "run", "--dispatch", repo.dispatch)
     repo.runtime.wait_paused(pause)
+    # The coordinator catches the signal instead of the default action, which ends it at once.
+    assert _has(_signal_mask(process.pid, "SigCgt"), signum)
 
     process.send_signal(signum)
     # The coordinator must not leave qa.run before its receipt: the runtime would go on with a
-    # run nobody stops.
-    time.sleep(1)
+    # run nobody stops. The signal is delivered, and the coordinator holds it and stays.
+    _wait_for(
+        lambda: not any(
+            _has(_signal_mask(process.pid, field), signum) for field in ("SigPnd", "ShdPnd")
+        )
+    )
     assert process.poll() is None
     repo.runtime.resume()
     _, stderr = process.communicate(timeout=120)
@@ -124,13 +144,16 @@ def test_a_signal_before_the_receipt_stops_the_run_once_it_is_launched(
 def test_a_reaped_lane_owner_has_its_live_run_stopped_before_the_next_attempt(
     qa: Make,  # noqa: F811
 ) -> None:
-    repo = qa(lease_ttl=2)
+    repo = qa(lease_ttl=2, clocked=True)
     repo.engine.script("gate-2", hang=True)
     process = coordinator_popen(repo.repo, repo.runtime, "qa", "run", "--dispatch", repo.dispatch)
     _wait_for(lambda: len(repo.engine.runs()) == 2)
     process.kill()
     process.communicate(timeout=30)
-    _wait_for(lambda: bool(repo.lane()["lease_stale"]))
+    clock = repo.runtime.clock
+    assert clock is not None
+    clock.advance(2)  # the lifetime of the lease without a heartbeat
+    assert repo.lane()["lease_stale"]
     repo.engine.script("gate-2", exit_code=0)
 
     code, result, err = repo.qa_run()
