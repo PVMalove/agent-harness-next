@@ -2769,6 +2769,16 @@ EN.update(
         "Сети не входят в инвентарь движка; для томов известно только число.": "Networks are not in the engine inventory; only the volume count is known.",
         "Очистка": "Cleanup",
         "в плане {count}": "{count} in the plan",
+        "{count} символов": "{count} symbols",
+        "бюджет {budget}": "budget {budget}",
+        "{percent}% включено": "{percent}% included",
+        "excluded — файлы коммита, которые не попали в карту.": "excluded are the commit's files that are not in the map.",
+        "В provenance парсера нет python_tag и platform_tag": "The parser provenance has no python_tag or platform_tag",
+        "В provenance парсера нет max_tokens": "The parser provenance has no max_tokens",
+        "Кэш Repo Map не хранит generation": "The Repo Map cache does not keep a generation",
+        "Кэш Repo Map не хранит время построения": "The Repo Map cache does not keep the build time",
+        "Токены": "Tokens",
+        "Кэш": "Cache",
     }
 )
 

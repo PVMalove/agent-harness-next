@@ -33,7 +33,7 @@ test("Repo Map shows the TUI snapshot, selected file signatures, settings and me
   const { socket } = open();
   facts(socket);
   expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Repo Map");
-  expect(screen.getByText("512")).toBeTruthy();
+  expect(screen.getByText("≈512")).toBeTruthy();
   act(() => fireEvent.click(screen.getByRole("button", { name: "pkg/core.py" })));
   expect(screen.getByText("def load_config(path)")).toBeTruthy();
   act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
@@ -46,8 +46,10 @@ test("coverage and symbol kinds are the kernel's; a kind the map cannot give say
   const { socket } = open();
   facts(socket);
   const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
-  const row = (label: string) => within(coverage).getByText(label).nextElementSibling!.textContent;
+  const row = (label: string) => coverage.querySelector(`.orch-legend [data-kind='${label}'] b`)!.textContent;
   expect([row("source"), row("docs"), row("tests"), row("excluded")]).toEqual(["3", "1", "0", "2"]);
+  expect(coverage.querySelectorAll(".orch-stack > i")).toHaveLength(3);
+  expect(within(coverage).getByText("67% включено")).toBeTruthy();
   act(() => fireEvent.click(screen.getByRole("tab", { name: "Символы" })));
   const chips = [...document.querySelectorAll("#repo-kind-chips .chip")].map((chip) => chip.textContent);
   expect(chips).toEqual(["Все 3", "Functions 2", "Modules 1"]);
@@ -61,7 +63,7 @@ test("an unknown excluded count and a map without kinds stay explicit no-data st
   const { socket } = open();
   facts(socket, { ...FACTS, coverage: { ...FACTS.coverage, excluded: null } });
   const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
-  expect(within(coverage).getByText("excluded").nextElementSibling!.textContent).toBe("нет данных");
+  expect(coverage.querySelector(".orch-legend [data-kind='excluded'] b")!.textContent).toBe("нет данных");
 });
 
 test("building requires confirmation, pins the displayed HEAD and displays an uncached degraded result", () => {
@@ -243,4 +245,36 @@ test("the empty state names the reason and offers Rebuild in place", () => {
   expect(empty.textContent).toContain("Кэша карты для HEAD нет");
   act(() => fireEvent.click(within(empty).getByRole("button", { name: /Перестроить/ })));
   expect(screen.getByRole("dialog")).toBeTruthy();
+});
+
+test("the overview follows the mockup: header actions, KPI captions, index rows with a freshness pill", () => {
+  const { socket } = open();
+  facts(socket);
+  const actions = [...document.querySelectorAll(".repo-title .actions > button")];
+  expect(actions.map((button) => button.textContent?.trim())).toEqual(["", "Перестроить", "Экспорт"]);
+  expect(actions[0]?.getAttribute("aria-label")).toBe("Обновить");
+  expect(actions[2]?.querySelector("svg")).toBeTruthy();
+  expect(document.querySelector("#repo-facts")?.textContent).toMatch(/^tier full4 файлов3 символов4 связей\d\d:\d\d:\d\d$/);
+  const captions = [...document.querySelectorAll(".repo-kpis > div")].map((card) =>
+    [card.querySelector("span")?.textContent, card.querySelector("b")?.textContent, card.querySelector("small")?.textContent]);
+  expect(captions).toEqual([
+    ["Уровень", "full", "Python 3.14 · linux_x86_64"],
+    ["Файлы", "4", "3 символов"],
+    ["Связи", "4", "import / unique-name-ref / ambiguous-name-ref"],
+    ["Токены", "≈512", "бюджет 4000"],
+  ]);
+  const index = screen.getByRole("heading", { name: "Индекс" }).closest("section")!;
+  expect(index.querySelector(".panel-head .orch-pill.mint")?.textContent).toBe("fresh");
+  expect([...index.querySelectorAll(".repo-index-row > span")].map((label) => label.textContent))
+    .toEqual(["Уровень", "Generation", "Построен", "Объём"]);
+  expect(index.querySelector(".repo-index-row b")?.textContent).toBe("full · bundle · Python 3.14 · linux_x86_64");
+  expect(within(index).getByText("4 files · 4 edges · ≈512 tokens")).toBeTruthy();
+  expect([...index.querySelectorAll(".repo-index-actions button")].map((button) => button.textContent?.trim()))
+    .toEqual(["Перестроить", "Экспорт"]);
+  expect(screen.queryByRole("heading", { name: "Provenance парсера" })).toBeNull();
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
+  const provenance = screen.getByRole("heading", { name: "Provenance парсера" }).closest("section")!;
+  expect(within(provenance).getByText("aaaaaaaaaaaa")).toBeTruthy();
+  expect(within(provenance).getByText("parser bundle applied")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Диагностики" })).toBeTruthy();
 });

@@ -20,7 +20,7 @@ export function Fields({ rows }: { rows: [string, ReactNode][] }) {
     <span>{t(label)}</span><b>{value ?? "—"}</b></div>)}</>;
 }
 
-export function Settings({ facts }: { facts: RepoMapFacts }) {
+export function Settings({ facts, map }: { facts: RepoMapFacts; map: MapData | null }) {
   const { t } = useI18n();
   const { memory: m, parsers: p, tier } = facts;
   const parserState = p === null ? t("Состояние парсеров не прочитано") :
@@ -39,6 +39,11 @@ export function Settings({ facts }: { facts: RepoMapFacts }) {
     <Panel title="Парсеры"><Fields rows={[["Состояние", parserState],
       ["Пара", p?.pair], ["Источник", p?.source], ["Каталог", p?.registry], ["Грамматики", p?.grammars.join(", ")]]} /></Panel>
     <Panel title="Языки проекта"><Fields rows={Object.entries(facts.language_files)} /></Panel>
+    {map && <Panel title="Provenance парсера"><Fields rows={[["Коммит", map.commit.slice(0, 12)], ["Парсер", map.parser],
+      ["Причина", t(map.degradation_reason)],
+      ...Object.entries(map.parser_provenance).map(([key, value]): [string, ReactNode] =>
+        [key, typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "—")])]} /></Panel>}
+    {map && <Panel title="Диагностики">{map.diagnostics.length ? map.diagnostics.map((d, i) => <p key={i}>{d.code}: {d.path}</p>) : t("диагностик нет")}</Panel>}
   </div>;
 }
 

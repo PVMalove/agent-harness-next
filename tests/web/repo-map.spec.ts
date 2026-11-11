@@ -41,7 +41,9 @@ for (const width of [1440, 390]) {
     page.on("pageerror", (error) => errors.push(error.message));
     const starts = await open(page, width);
     expect(await page.locator("#content").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    await page.getByRole("heading", { name: "Диагностики", exact: true }).scrollIntoViewIfNeeded();
+    await page.locator(".repo-coverage .orch-stack").scrollIntoViewIfNeeded();
+    for (const panel of await page.locator(".repo-page .panel").all())
+      expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await page.getByRole("tab", { name: "Символы", exact: true }).click();
     await page.getByRole("searchbox", { name: "Поиск символа" }).fill("main");
     await expect(page.locator(".repo-symbol-row")).toHaveCount(1);
@@ -49,7 +51,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".repo-link-row")).toHaveCount(4);
     await page.getByRole("tab", { name: "Настройки", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Память", exact: true })).toBeVisible();
-    await page.getByRole("heading", { name: "Языки проекта", exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole("heading", { name: "Диагностики", exact: true }).scrollIntoViewIfNeeded();
     await page.getByRole("button", { name: "Перестроить", exact: true }).first().click();
     await expect(page.getByRole("dialog")).toContainText("offline parser bundle");
     await page.getByRole("button", { name: "Отмена", exact: true }).click();
@@ -71,7 +73,7 @@ test("Repo Map switches ru/en in place and exports the actual map", async ({ pag
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Memory", exact: true })).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByRole("button", { name: "Export", exact: true }).first().click();
   const file = await download;
   expect(file.suggestedFilename()).toBe("repo-map-aaaaaaaaaaaa.json");
   const stream = await file.createReadStream();

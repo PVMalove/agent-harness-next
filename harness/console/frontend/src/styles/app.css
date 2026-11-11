@@ -364,3 +364,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .harness-component > b { white-space: nowrap; }
 .harness-kpis small { display: block; overflow-wrap: anywhere; }
 #harness-tab-commands .harness-maintenance { margin-top: 16px; }
+/* Repo Map: «medium» needs more than the mockup's 34px weight column (it touches the path there
+   too), and the localized confidence header is wider than the mockup's 60px column. */
+.repo-rel-item { grid-template-columns: 48px minmax(0, 1fr) 64px; gap: 6px; }
+.repo-link-head, .repo-link-row { grid-template-columns: 1fr 1fr 1fr 96px; }

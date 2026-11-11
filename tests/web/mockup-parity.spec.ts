@@ -183,8 +183,8 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "repo-map", width);
-    const coverage = page.locator(".repo-index", { has: page.getByRole("heading", { name: "Покрытие" }) });
-    await expect(coverage.locator(".repo-index-row", { hasText: "excluded" }).locator("b")).toHaveText("2");
+    const coverage = page.locator(".repo-coverage");
+    await expect(coverage.locator(".orch-legend [data-kind='excluded'] b")).toHaveText("2");
     await page.getByRole("tab", { name: "Символы" }).click();
     await expect(page.locator("#repo-kind-chips .chip")).toHaveText(["Все 3", "Functions 2", "Modules 1"]);
     await expect(page.locator(".repo-symbol-row .repo-kind").first()).toHaveText("function");

@@ -9,6 +9,7 @@ export function useRepoMap() {
   const { client, state } = useConsole();
   const jobs = useJobs("repo-map");
   const [facts, setFacts] = useState<RepoMapFacts | null>(null);
+  const [ageSeconds, setAgeSeconds] = useState<number | null>(null);
   const [built, setBuilt] = useState<RepoMap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export function useRepoMap() {
   const finished = useRef(new Set<string>());
   useEffect(() => {
     const stopMap = client.subscribeRepoMap((event) => {
-      if (event.type === "facts") { setFacts(event.facts); setError(null); }
+      if (event.type === "facts") { setFacts(event.facts); setAgeSeconds(event.ageSeconds); setError(null); }
       else setError(event.code);
     });
     const stopOpen = client.subscribe((event) => {
@@ -49,5 +50,5 @@ export function useRepoMap() {
     jobs.start({ command_id: "repo-map-build", values: { commit } });
   };
   const map = facts?.map ?? (built?.commit === facts?.head ? built : null);
-  return { client, state, jobs, facts, map, error: error ?? buildError, start, starting };
+  return { client, state, jobs, facts, ageSeconds, map, error: error ?? buildError, start, starting };
 }
