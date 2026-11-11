@@ -95,6 +95,26 @@ describe("the Orchestration route", () => {
     expect(analytics.querySelector('[data-tab="flow"]')?.hasAttribute("hidden")).toBe(true);
   });
 
+  test("the tabs follow the mockup: the grouped pipeline map and chart cards over the kernel figures", () => {
+    renderOrchestration();
+    const map = document.querySelector("#orch-scheme") as HTMLElement;
+    expect(map.querySelectorAll(".orch-group")).toHaveLength(3);
+    const developer = map.querySelector('[data-node="Разработчик"]') as Element;
+    expect(developer.getAttribute("class")).toContain("active");
+    expect(developer.querySelector(".orch-map-count text")?.textContent).toBe("1");
+    expect(map.querySelectorAll(".orch-map-edge.active")).toHaveLength(1);
+    const tabs = document.querySelector("#orch-tabs") as HTMLElement;
+    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Поток" })));
+    const flow = document.querySelector('#orch-tab-view[data-tab="flow"]') as HTMLElement;
+    expect([...flow.querySelectorAll(".orch-chart h3")].map((h) => h.textContent)).toContain("Время цикла p50 / p95");
+    expect(flow.textContent).toContain("Developer");
+    expect(flow.textContent).not.toMatch(/\bcompleted\b/);
+    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Качество" })));
+    expect(document.querySelector('#orch-tab-view[data-tab="quality"]')?.textContent).toContain("QA с первого раза");
+    // A batch card and a ticket row never print a title placeholder.
+    expect(content()).not.toContain("название: нет данных");
+  });
+
   test("the Gates tab draws the kernel's hourly latency trend of the last day", () => {
     renderOrchestration();
     const gates = ORCHESTRATION.analytics.gates.latency_p50_by_hour;

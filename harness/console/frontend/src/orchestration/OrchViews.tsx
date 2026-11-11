@@ -5,9 +5,9 @@ import { TabList, TabPanels } from "../views/Tabs";
 import { useState } from "react";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
-import { NoData } from "../steps/ActivityViews";
+import { NoData, roleName } from "../steps/ActivityViews";
 import type { AnalyticsSection, Figure, OrchestrationSnapshot, StageHead } from "../ws/ledger";
-import { analyticsRows } from "./format";
+import { FlowTab, GatesTab, PipelineMap, QualityTab, RuntimeTab } from "./Charts";
 
 const ACTIVE = new Set(["working", "dispatched", "approved"]);
 const ATTENTION = new Set(["failed", "blocked", "auto_stop"]);
@@ -102,13 +102,6 @@ export function OrchKpis({ data }: { data: OrchestrationSnapshot }) {
 }
 
 /** Mockup figures each analytics tab has no source for. */
-const NO_SOURCE: Record<AnalyticsSection, string[]> = {
-  flow: ["PR handoff"],
-  quality: ["Defect escape", "Verification mix", "Причины повторов", "Release Gate"],
-  runtime: ["Fencing", "Holds", "MTTR", "Operations"],
-  gates: [],
-};
-
 const TREND = { width: 1000, height: 250, left: 54, right: 18, top: 16, bottom: 34 };
 
 /** The hourly gate latency of the last day (`latency_p50_by_hour`, `latency_p95_by_hour`), in
@@ -194,53 +187,10 @@ export function GateTrend({ gates }: { gates: Record<string, Figure> }) {
   );
 }
 
-const ROLE_NODES: [string, string, number][] = [
-  ["coordinator", "coordinator", 10],
-  ["architect", "architect", 130],
-  ["developer", "developer", 250],
-  ["review", "code-review", 370],
-  ["qa", "QA", 490],
-];
-
-/** The static topology of the mockup with the open stages per role from the ledger. */
-function Scheme({ data }: { data: OrchestrationSnapshot }) {
-  const { t } = useI18n();
-  const open = new Map<string, number>();
-  for (const stage of data.ledger.stages) {
-    if (!ACTIVE.has(stage.state)) continue;
-    const role = stage.role === "code-review" ? "review" : stage.role;
-    open.set(role, (open.get(role) ?? 0) + 1);
-  }
-  return (
-    <section className="panel orch-scheme" id="orch-scheme">
-      <div className="panel-head">
-        <h2>{t("Схема")}</h2>
-        <span className="small muted">{t("незавершённые этапы по ролям")}</span>
-      </div>
-      <div className="body">
-        <svg className="diagram" viewBox="0 0 610 120" role="img" aria-label={t("Схема ролей оркестрации")}>
-          <path className="edge" d="M110 50H130M230 50H250M350 50H370M470 50H490M420 70V100H300V70" />
-          {ROLE_NODES.map(([key, label, x]) => (
-            <g key={key} data-role={key}>
-              <rect className="node" x={x} y="30" width="100" height="40" />
-              <text className="node-label" x={x + 10} y="54">
-                {label} · {open.get(key) ?? 0}
-              </text>
-            </g>
-          ))}
-          <text className="node-label" x="310" y="115">
-            ↶ {t("доработка")}
-          </text>
-        </svg>
-      </div>
-    </section>
-  );
-}
-
 export type OrchTab = "map" | AnalyticsSection;
 
 export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const [tab, setTab] = useState<OrchTab>("map");
   const tabs: [OrchTab, string][] = [
     ["map", t("Схема")],
@@ -254,27 +204,15 @@ export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
       <TabList id="orch" label={t("Оркестрация")} tabs={tabs} value={tab} onChange={(id) => setTab(id as OrchTab)} />
       <TabPanels id="orch" tabs={tabs} value={tab}>
       {tab === "map" ? (
-        <Scheme data={data} />
+        <PipelineMap data={data} />
+      ) : tab === "flow" ? (
+        <FlowTab data={data} />
+      ) : tab === "quality" ? (
+        <QualityTab data={data} />
+      ) : tab === "runtime" ? (
+        <RuntimeTab data={data} />
       ) : (
-        <section className="panel orch-analytics" id="orch-tab-view" data-tab={tab}>
-          <dl className="orch-analytics-rows">
-            {analyticsRows(tab, data.analytics, t, language).map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-            {NO_SOURCE[tab].map((label) => (
-              <div key={label}>
-                <dt>{t(label)}</dt>
-                <dd>
-                  <NoData />
-                </dd>
-              </div>
-            ))}
-          </dl>
-          {tab === "gates" && <GateTrend gates={data.analytics.gates} />}
-        </section>
+        <GatesTab data={data} />
       )}
       </TabPanels>
     </>
@@ -292,11 +230,11 @@ export function BatchCards({ data }: { data: OrchestrationSnapshot }) {
         <article className="panel orch-batch" key={batch.batch_id}>
           <div className="orch-batch-head">
             <span className="orch-batch-id">{batch.batch_id}</span>
-            <span className={`orch-status ${tone(batch.state)}`}>{batch.state}</span>
+            <span className={`orch-status ${tone(batch.state)}`} data-state={batch.state}>
+              {stateText(batch.state)}
+            </span>
           </div>
-          <h3>
-            {batch.ticket || "—"} · <span className="muted">{t("название")}: {t("нет данных")}</span>
-          </h3>
+          <h3 title={t("Названия тикета в ledger нет: показан номер и ветка")}>{batch.ticket || batch.batch_id}</h3>
           <div className="orch-batch-meta">
             {batch.branch || "—"}
             {batch.pr_url ? ` · PR ${stateText(batch.pr_state)}` : ""}
@@ -331,7 +269,7 @@ export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
           <option value="all">{t("Все роли")}</option>
           {roles.map((name) => (
             <option key={name} value={name}>
-              {name}
+              {roleName(name)}
             </option>
           ))}
         </select>
@@ -351,7 +289,7 @@ export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
             <div className="orch-dispatch-row row" key={stage.dispatch_id}>
               <div>
                 <b>
-                  {stage.ticket} · {stage.role}
+                  {stage.ticket} · {roleName(stage.role)}
                 </b>
                 <small>
                   {stage.dispatch_id} · {stage.at || "—"}
@@ -384,9 +322,7 @@ export function TicketList({ data }: { data: OrchestrationSnapshot }) {
           <div className="row" key={batch.batch_id}>
             <div>
               <b>{batch.ticket || batch.batch_id}</b>
-              <small title={t("Названия тикетов в снимке нет")}>
-                {t("название")}: {t("нет данных")} · {batch.branch || "—"}
-              </small>
+              <small title={t("Названия тикета в ledger нет: показан номер и ветка")}>{batch.branch || batch.batch_id}</small>
             </div>
             <a className="status" href={`${href("recovery")}?batch=${encodeURIComponent(batch.batch_id)}`}>
               {stateText(batch.state)}

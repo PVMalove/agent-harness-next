@@ -2433,6 +2433,63 @@ EN.update(
     }
 )
 
+# Web console #1066: Orchestration tabs after the mockup (pipeline map and chart cards).
+EN.update(
+    {
+        "01 · План и approve": "01 · Plan and approve",
+        "02 · Сборка и review с находками": "02 · Build and review with findings",
+        "03 · Evidence и публикация": "03 · Evidence and publish",
+        "Approve плана": "Plan approval",
+        "{count} dispatch": "{count} dispatches",
+        "{count} возвратов": "{count} returns",
+        "{count} задач в конвейере": "{count} tickets in the pipeline",
+        "evidence + решение": "evidence + decision",
+        "heartbeat · lease · восстановление": "heartbeat · lease · recovery",
+        "Heartbeat p95": "Heartbeat p95",
+        "p50 / p95, минуты": "p50 / p95, minutes",
+        "p50, минуты": "p50, minutes",
+        "Активное время роли не отделено от ожидания в ledger": "The ledger does not separate a role's active time from waiting",
+        "Архитектор": "Architect",
+        "возврат в Developer": "return to Developer",
+        "Возвраты и first-pass": "Returns and first pass",
+        "Возраст открытых этапов": "Age of open stages",
+        "В работе по состояниям": "Work by state",
+        "Время цикла p50 / p95": "Cycle time p50 / p95",
+        "гейт человека": "human gate",
+        "доля": "share",
+        "ждёт": "waiting",
+        "закреплённый SHA": "pinned SHA",
+        "Источника в ledger нет": "The ledger has no source for this",
+        "Итоговый отчёт": "Final report",
+        "контекст + TDD": "context + TDD",
+        "Наблюдаемые факты": "Observed facts",
+        "Названия тикета в ledger нет: показан номер и ветка": "The ledger holds no ticket title: the number and branch are shown",
+        "Находки QA": "QA findings",
+        "находки review": "review findings",
+        "Находки review": "Review findings",
+        "незавершённые batch": "unfinished batches",
+        "Ожидание": "Waiting",
+        "Ожидание по гейтам": "Waiting by gate",
+        "ожидание решения человека": "waiting for a human decision",
+        "Очередь гейтов": "Gate queue",
+        "передача человеку": "handoff to a human",
+        "переработки и evidence": "rework and evidence",
+        "повтор или дефект": "retry or defect",
+        "Повторы по ролям": "Retries by role",
+        "принятый SHA": "accepted SHA",
+        "разбор задачи": "task analysis",
+        "Разработчик": "Developer",
+        "Решения по вердиктам": "Decisions by verdict",
+        "свежесть базы": "base freshness",
+        "сгруппированный поток · текущие задачи в узлах": "grouped flow · current tickets in the nodes",
+        "срез, не тренд": "a snapshot, not a trend",
+        "Старение работы": "Work aging",
+        "Типы проверок": "Check types",
+        "Удержания восстановления": "Recovery holds",
+        "заблокировано": "blocked",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

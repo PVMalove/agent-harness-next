@@ -84,8 +84,8 @@ export const ANALYTICS_TABS: readonly [AnalyticsSection, string][] = [
   ["gates", "Гейты"],
 ];
 
-const AGING_BUCKETS = ["lt_1d", "d1_3", "d3_7", "gt_7d"] as const;
-const AGING: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
+export const AGING_BUCKETS = ["lt_1d", "d1_3", "d3_7", "gt_7d"] as const;
+export const AGING: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
   ru: { lt_1d: "< 1 дн", d1_3: "1–3 дн", d3_7: "3–7 дн", gt_7d: "> 7 дн" },
   en: { lt_1d: "< 1 d", d1_3: "1–3 d", d3_7: "3–7 d", gt_7d: "> 7 d" },
 };
@@ -112,7 +112,7 @@ function spark(figure: Figure | undefined): string {
   return `${bars}  (${values.join(" ")})`;
 }
 
-const seconds = (value: Figure | undefined, language: Language) =>
+export const seconds = (value: Figure | undefined, language: Language) =>
   durationText(typeof value === "number" ? value : null, language);
 const number = (value: Figure | undefined) => String(typeof value === "number" ? value : 0);
 

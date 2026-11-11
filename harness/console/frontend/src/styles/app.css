@@ -270,3 +270,6 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 @media (prefers-reduced-motion: reduce) {
   .work-flow-node.current, .work-flow-node.current .work-flow-icon, .work-flow-edge.active::after { animation: none; }
 }
+/* Orchestration (#1066): long lists scroll inside their block; chart rows fit long role names. */
+#orch-dispatch-list, .orch-tickets { max-height: min(480px, calc(100dvh - 240px)); overflow-y: auto; }
+.orch-analytics .orch-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 40px; }
