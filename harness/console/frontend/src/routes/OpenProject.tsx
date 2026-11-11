@@ -4,7 +4,7 @@
    the page only shows and copies. A typed path is turned into that command in the browser and is
    sent nowhere. The only change the page can start is the installation into the served project,
    through the CommandPanel of the job section `setup`, and every run opens the confirmation first. */
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
 import { useI18n } from "../i18n";
@@ -30,6 +30,45 @@ function firstCapability(facts: OpenProjectFacts): string {
   const known = Object.keys(facts.blockers);
   const installed = facts.target?.capabilities.find((name) => known.includes(name));
   return installed ?? (known.includes(DEFAULT_CAPABILITY) ? DEFAULT_CAPABILITY : (known[0] ?? DEFAULT_CAPABILITY));
+}
+
+interface FlowNode {
+  icon: string;
+  label: string;
+  value: string;
+  sub: string;
+  tone: "ok" | "warn" | "active" | "pending" | "after";
+}
+
+/** The mockup «Схема внедрения»: project → harness → capability → runtime → health. The open
+    project snapshot reads neither the runtime store nor the health checks: those two nodes say so. */
+function flowNodes(facts: OpenProjectFacts, chosen: string, blocked: number, t: (text: string, values?: Record<string, string | number>) => string): FlowNode[] {
+  const target = facts.target;
+  return [
+    {
+      icon: "folder",
+      label: "Проект",
+      value: projectName(facts.repo),
+      sub: target ? t("Git-проект найден") : t(facts.error.split("\n")[0] || "нет данных"),
+      tone: target ? "ok" : "warn",
+    },
+    {
+      icon: "harness",
+      label: "Harness",
+      value: target ? t(ACTION_WORDS[target.action]) : "—",
+      sub: target?.capabilities.join(", ") || t("не установлен"),
+      tone: target?.action === "update" ? "ok" : "warn",
+    },
+    {
+      icon: "settings",
+      label: "Capability",
+      value: chosen,
+      sub: blocked ? t("✖ заблокировано: {n}", { n: blocked }) : t("готово к установке"),
+      tone: blocked ? "warn" : "active",
+    },
+    { icon: "store", label: "Runtime", value: t("нет данных"), sub: t("снимок проекта не читает runtime store"), tone: "pending" },
+    { icon: "pulse", label: "Health", value: t("после установки"), sub: t("проверки — на странице «Диагностика»"), tone: "after" },
+  ];
 }
 
 function Stepper({ stage }: { stage: number }) {
@@ -151,6 +190,9 @@ export function OpenProject() {
           <button id="open-project-refresh" className="btn" type="button" onClick={() => screen.refresh(true)}>
             <Icon name="refresh" /> {t("Обновить")}
           </button>
+          <a className="btn" href={href("diagnostics")}>
+            <Icon name="pulse" /> {section("Diagnostics")}
+          </a>
         </div>
       </div>
 
@@ -164,6 +206,9 @@ export function OpenProject() {
 
       {facts && (
         <section className="panel current-project" id="open-project-current">
+          <div className="current-project-icon">
+            <Icon name="folder" />
+          </div>
           <div className="current-project-main">
             <span className="eyebrow">{t("Текущий проект")}</span>
             <h2>{projectName(facts.repo)}</h2>
@@ -177,7 +222,7 @@ export function OpenProject() {
               <p className="command-refusal err">{t(facts.error)}</p>
             )}
           </div>
-          <div className="report-kpis" id="open-project-kpi">
+          <div className="current-project-stats" id="open-project-kpi">
             <div>
               <span>{t("Действие")}</span>
               <b>{target ? t(ACTION_WORDS[target.action]) : "—"}</b>
@@ -218,6 +263,9 @@ export function OpenProject() {
                     data-path={item.path}
                     onClick={() => setSelected(item.path)}
                   >
+                    <span className="project-row-icon">
+                      <Icon name="folder" />
+                    </span>
                     <span className="project-row-main">
                       <b>{projectName(item.path)}</b>
                       <small>{item.path}</small>
@@ -264,35 +312,34 @@ export function OpenProject() {
       )}
 
       {facts && (
-        <div className="project-grid">
-          <section className="panel" id="open-project-capability">
-            <div className="panel-head">
-              <h2>{t("Состав Harness")}</h2>
-            </div>
-            <div className="modes" role="radiogroup" aria-label={t("Состав Harness")}>
-              {Object.entries(facts.blockers).map(([name, paths]) => (
-                <label key={name} className={`mode-card${name === chosen ? " on" : ""}`}>
-                  <input type="radio" name="open-project-capability" checked={name === chosen} onChange={() => setCapability(name)} />
-                  <span className="mode-copy">
-                    <b>{name}</b>
-                    {paths.length > 0 && <small className="warn">{t("✖ заблокировано: {n}", { n: paths.length })}</small>}
+        <section className="panel install-flow-panel" id="open-project-flow">
+          <div className="panel-head">
+            <h2>{t("Схема внедрения")}</h2>
+            <span className="small muted">{t("путь проекта → harness → capability → runtime → health")}</span>
+          </div>
+          <div className="install-flow">
+            {flowNodes(facts, chosen, blocked.length, t).map((node, index, nodes) => (
+              <Fragment key={node.label}>
+                <div className={`install-flow-node ${node.tone}`}>
+                  <span className="install-flow-num">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="install-flow-icon">
+                    <Icon name={node.icon} />
                   </span>
-                </label>
-              ))}
-            </div>
-            {blocked.length > 0 && (
-              <div className="plan-warning" id="open-project-blockers">
-                <p>{t("Установка заблокирована; проверьте собственные/изменённые пути:")}</p>
-                <ul>
-                  {blocked.map((item) => (
-                    <li key={item}>
-                      <code>{item}</code>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
+                  <b>{node.label}</b>
+                  <span className="install-flow-value" data-flow-cap={node.label === "Capability" ? "" : undefined}>
+                    {node.value}
+                  </span>
+                  <small>{node.sub}</small>
+                </div>
+                {index < nodes.length - 1 && <span className="install-flow-arrow">→</span>}
+              </Fragment>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {facts && (
+        <div className="install-bottom-grid">
           <section className="panel install-plan" id="open-project-plan">
             <div className="panel-head">
               <h2>{t("План установки")}</h2>
@@ -332,23 +379,53 @@ export function OpenProject() {
               </div>
             </div>
           </section>
+          <section className="panel install-capabilities" id="open-project-capability">
+            <div className="panel-head">
+              <h2>{t("Состав Harness")}</h2>
+              <span className="small muted">{t("что будет установлено")}</span>
+            </div>
+            <div className="cap-list" role="radiogroup" aria-label={t("Состав Harness")}>
+              {Object.entries(facts.blockers).map(([name, paths]) => (
+                <label key={name} className={`cap-row${name === chosen ? " on" : ""}`}>
+                  <input type="radio" name="open-project-capability" checked={name === chosen} onChange={() => setCapability(name)} />
+                  <span className="cap-copy">
+                    <b>{name}</b>
+                    {target?.capabilities.includes(name) && <span className="cap-status">{t("установлено")}</span>}
+                    {paths.length > 0 && <small className="warn">{t("✖ заблокировано: {n}", { n: paths.length })}</small>}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {blocked.length > 0 && (
+              <div className="plan-warning" id="open-project-blockers">
+                <p>{t("Установка заблокирована; проверьте собственные/изменённые пути:")}</p>
+                <ul>
+                  {blocked.map((item) => (
+                    <li key={item}>
+                      <code>{item}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+          <section className="panel install-checks" id="open-project-checks">
+            <div className="panel-head">
+              <h2>{t("Проверки")}</h2>
+            </div>
+            <div className="install-checks-body">
+              <div className="install-check-actions">
+                <a className="btn" href={href("diagnostics")}>
+                  <Icon name="pulse" /> {section("Diagnostics")}
+                </a>
+                <a className="btn" href={href("configuration")}>
+                  <Icon name="settings" /> {section("Configuration")}
+                </a>
+              </div>
+              <p className="install-checks-note">{t("Проверки здоровья проекта собирает страница «Диагностика»; этот снимок их не запускает.")}</p>
+            </div>
+          </section>
         </div>
-      )}
-
-      {facts && (
-        <section className="panel" id="open-project-checks">
-          <div className="panel-head">
-            <h2>{t("Проверки")}</h2>
-          </div>
-          <div className="actions">
-            <a className="btn" href={href("diagnostics")}>
-              <Icon name="pulse" /> {section("Diagnostics")}
-            </a>
-            <a className="btn" href={href("configuration")}>
-              {section("Configuration")}
-            </a>
-          </div>
-        </section>
       )}
 
       <CommandPanel section="setup" confirmAll listed={false} request={request} onJobDone={onJobDone} />

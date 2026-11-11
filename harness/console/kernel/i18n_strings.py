@@ -2490,6 +2490,30 @@ EN.update(
     }
 )
 
+# Web console #1066: Update and Project pages after the mockup (rollout scheme, mode cards).
+EN.update(
+    {
+        "Git-проект найден": "Git project found",
+        "готово к установке": "ready to install",
+        "снимок проекта не читает runtime store": "the project snapshot does not read the runtime store",
+        "после установки": "after installation",
+        "проверки — на странице «Диагностика»": "checks are on the Diagnostics page",
+        "Схема внедрения": "Rollout scheme",
+        "путь проекта → harness → capability → runtime → health": "project path → harness → capability → runtime → health",
+        "Проверки здоровья проекта собирает страница «Диагностика»; этот снимок их не запускает.": "The Diagnostics page collects the project health checks; this snapshot does not run them.",
+        "актуально": "up to date",
+        "доступно": "available",
+        "Seed-режим: отметьте файлы в панели Seed-файлы.": "Seed mode: tick the files in the Seed files panel.",
+        "Обычный режим сохранит локальные правки.": "The normal mode keeps local edits.",
+        "Локальные правки сохраняются; стоп на конфликтах.": "Local edits are kept; stops on conflicts.",
+        "Заменит управляемые и конфликтные файлы; правки пропадут.": "Replaces managed and conflicting files; edits are lost.",
+        "Только отмеченные seed-файлы.": "Only the ticked seed files.",
+        "рекомендуется": "recommended",
+        "опасно": "dangerous",
+        "выборочно": "selective",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

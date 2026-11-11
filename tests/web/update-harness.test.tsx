@@ -42,6 +42,12 @@ function renderPage() {
 const content = () => document.querySelector("main#content")?.textContent ?? "";
 const starts = (socket: FakeSocket) => socket.sent.filter((body) => body.type === "job.start");
 const run = () => document.querySelector("#update-run") as HTMLButtonElement;
+const countRows = () =>
+  [...document.querySelectorAll("#update-changes .update-count-row")].map((row) => [
+    row.querySelector(".count-value")?.textContent,
+    row.querySelector(".count-label")?.textContent,
+    row.querySelector(".count-icon svg") !== null,
+  ]);
 const mode = (name: string) => act(() => fireEvent.click(screen.getByRole("radio", { name })));
 
 describe("the Update Harness route", () => {
@@ -50,7 +56,12 @@ describe("the Update Harness route", () => {
   test("shows every fact the TUI shows; a diff is read only for the clicked file", () => {
     const { socket, request } = renderPage();
     expect(request).toMatchObject({ force: false });
-    expect(FACTS.page.filter((fact) => !content().includes(fact))).toEqual([]);
+    // The TUI draws a drift counter as one line «2 ✔ обновятся»; the page draws value, icon and
+    // label in the mockup grid, and the seed counter lives in the seed panel of the seed mode.
+    const drift = /^(\d+) [✔⚠✖] (.+)$/;
+    const counted = FACTS.page.filter((fact) => drift.test(fact)).map((fact) => fact.match(drift)!.slice(1));
+    expect(FACTS.page.filter((fact) => !drift.test(fact) && !fact.startsWith("отмечено") && !content().includes(fact))).toEqual([]);
+    expect(countRows()).toEqual(counted.map(([value, label]) => [value, label, true]));
     expect(socket.sent.filter((body) => body.type === "update_harness.diff")).toEqual([]);
     act(() => fireEvent.click(document.querySelector('#update-diff [data-path="AGENTS.md"]') as HTMLElement));
     const diff = answer(socket, "update_harness.diff", DIFF);
@@ -60,13 +71,37 @@ describe("the Update Harness route", () => {
     expect(document.querySelector(".diff-line.del")?.textContent).toBe("-Local rule.\n");
   });
 
+  test("lays out the mockup blocks: versions with changes, modes with the plan, seeds only in the seed mode", () => {
+    renderPage();
+    const grid = document.querySelector(".update-top-grid") as HTMLElement;
+    expect([...grid.children].map((child) => child.id)).toEqual(["update-versions", "update-modes-card"]);
+    expect(grid.querySelector("#update-versions #update-changes")).not.toBeNull();
+    expect(grid.querySelector("#update-modes-card #update-plan-command")).not.toBeNull();
+    expect([...document.querySelectorAll(".update-title .home-facts span")].map((item) => item.textContent)).toEqual([
+      "1.5.1 → 2.0.0",
+      "259 управляемых файлов",
+      "32 навыка",
+      "Новый снимок · 0 s",
+    ]);
+    expect(document.querySelector("#update-versions .update-pill")?.textContent).toBe("доступно");
+    expect([...document.querySelectorAll(".update-mode-card")].map((card) => [card.querySelector("b")?.textContent, card.querySelector(".mode-tag")?.textContent])).toEqual([
+      ["Обычное", "рекомендуется"],
+      ["С перезаписью управляемых файлов", "опасно"],
+      ["С перезаписью выбранных seed-файлов", "выборочно"],
+    ]);
+    expect(document.querySelector("#update-seeds")).toBeNull();
+    expect(document.querySelector('.update-title a[href="#/diagnostics"]')).not.toBeNull();
+    mode("С перезаписью выбранных seed-файлов");
+    expect(document.querySelector("#update-seeds")).not.toBeNull();
+  });
+
   test("the plan follows the mode: command, warning and the seed selection", () => {
     renderPage();
     const plan = () => document.querySelector("#update-plan-command")?.textContent;
-    expect(plan()).toBe("$ harness update /work/project");
+    expect(plan()).toBe("harness update /work/project");
     expect(document.querySelector("#update-warning")).not.toBeNull();
     mode("С перезаписью управляемых файлов");
-    expect(plan()).toBe("$ harness update /work/project --force-managed-files");
+    expect(plan()).toBe("harness update /work/project --force-managed-files");
     expect(document.querySelector("#update-warning")).toBeNull();
     mode("С перезаписью выбранных seed-файлов");
     expect(run().disabled).toBe(true);
@@ -74,7 +109,7 @@ describe("the Update Harness route", () => {
     act(() => fireEvent.click(screen.getByRole("button", { name: "Выбрать все" })));
     expect(document.querySelector("#update-seed-count")?.textContent).toBe("отмечено 2 из 2");
     expect(plan()).toBe(
-      "$ harness update /work/project --force-seed-file .harness/project.json --force-seed-file docs/agents/git-workflow.md",
+      "harness update /work/project --force-seed-file .harness/project.json --force-seed-file docs/agents/git-workflow.md",
     );
     act(() => fireEvent.click(screen.getByRole("button", { name: "Снять выбор" })));
     expect(document.querySelector("#update-seed-count")?.textContent).toBe("отмечено 0 из 2");

@@ -64,6 +64,27 @@ describe("the Open Project route", () => {
     expect(current?.getAttribute("href")).toBe("#/open-project");
   });
 
+  test("lays out the mockup blocks: folder rows, the rollout scheme and the install plan under it", () => {
+    renderPage();
+    const rows = [...document.querySelectorAll("#open-project-list .project-row")];
+    expect(rows.map((row) => [row.querySelector(".project-row-icon svg")?.getAttribute("data-icon"), row.querySelector(".project-row-main b")?.textContent, row.querySelector(".project-pill")?.textContent])).toEqual([
+      ["folder", "project", "Открыт"],
+      ["folder", "billing", "Не открыт"],
+      ["folder", "new service", "Не открыт"],
+    ]);
+    expect(document.querySelector("#open-project-current .current-project-icon svg")?.getAttribute("data-icon")).toBe("folder");
+    const flow = document.querySelector("#open-project-flow") as HTMLElement;
+    expect(flow.querySelector("h2")?.textContent).toBe("Схема внедрения");
+    expect([...flow.querySelectorAll(".install-flow-node b")].map((node) => node.textContent)).toEqual(["Проект", "Harness", "Capability", "Runtime", "Health"]);
+    const capability = () => flow.querySelector("[data-flow-cap]")?.textContent;
+    expect(capability()).toBe("engineering-suite");
+    act(() => fireEvent.click(screen.getByRole("radio", { name: /backend-orchestration/ })));
+    expect(capability()).toBe("backend-orchestration");
+    const bottom = document.querySelector(".install-bottom-grid") as HTMLElement;
+    expect([...bottom.children].map((child) => child.id)).toEqual(["open-project-plan", "open-project-capability", "open-project-checks"]);
+    expect(flow.compareDocumentPosition(bottom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   test("another path becomes a copyable command in the browser; nothing is sent", () => {
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });

@@ -23,6 +23,15 @@ export const MODE_CONSEQUENCES: Readonly<Record<UpdateMode, readonly [string, To
   "update-force-managed": ["⚠ Заменит и конфликтные файлы версией пакета: ваши правки в них пропадут.", "warn"],
   [SEED_MODE]: ["Только отмеченные seed-файлы; остальное не меняется.", null],
 };
+/** The mockup mode cards: (mode, short description, tag, tag tone). */
+export const MODE_CARDS: Readonly<Record<UpdateMode, readonly [string, string, "ok" | "err" | "active"]>> = {
+  update: ["Локальные правки сохраняются; стоп на конфликтах.", "рекомендуется", "ok"],
+  "update-force-managed": ["Заменит управляемые и конфликтные файлы; правки пропадут.", "опасно", "err"],
+  [SEED_MODE]: ["Только отмеченные seed-файлы.", "выборочно", "active"],
+};
+/** The mockup icon of a drift tone (count rows and diff list). */
+export const TONE_ICONS: Readonly<Record<Tone, string>> = { ok: "check", warn: "warning", fail: "x", skipped: "info" };
+export const TONE_CLASS: Readonly<Record<Tone, string>> = { ok: "ok", warn: "warn", fail: "err", skipped: "muted" };
 const DRIFT_ROWS: readonly (readonly [string, string, Tone])[] = [
   ["package_changed", "обновятся", "ok"],
   ["added", "добавятся", "ok"],

@@ -6,13 +6,15 @@
 import { useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
-import { useI18n } from "../i18n";
+import { plural, useI18n } from "../i18n";
 import { Icon } from "../icons";
+import { href } from "../navigation";
 import { useServedRepo } from "../project/format";
 import { useScreen } from "../screens/useScreen";
 import {
   ICONS,
   MODES,
+  MODE_CARDS,
   MODE_CONSEQUENCES,
   SEED_MODE,
   diffFiles,
@@ -23,6 +25,8 @@ import {
   renderVersions,
   seedFiles,
   stopWarning,
+  TONE_CLASS,
+  TONE_ICONS,
   updateCommand,
 } from "../update/format";
 import type { DiffFile, UpdateMode } from "../update/format";
@@ -103,9 +107,16 @@ export function UpdateHarness() {
       <div className="page-title update-title">
         <div>
           <h1>{t("Обновление")}</h1>
-          <p>{t("Обновление управляемых файлов Harness в проекте сервера; перед запуском — подтверждение.")}</p>
+          <p>{t("Сначала показываем, что изменится в управляемых файлах. Запуск — только после вашего подтверждения.")}</p>
           {facts && (
             <div className="home-facts">
+              {facts.state.installed && (
+                <>
+                  <span>{`${facts.state.installed_version} → ${facts.package_version}`}</span>
+                  <span>{plural(language, facts.state.managed_files, ["управляемый файл", "управляемых файла", "управляемых файлов"], ["managed file", "managed files"])}</span>
+                  <span>{plural(language, facts.state.skills, ["навык", "навыка", "навыков"], ["skill", "skills"])}</span>
+                </>
+              )}
               <span id="update-cache">
                 {screen.cached ? t("Кэш") : t("Новый снимок")} · {screen.ageSeconds ?? 0} s
               </span>
@@ -116,6 +127,9 @@ export function UpdateHarness() {
           <button id="update-recheck" className="btn" type="button" onClick={() => screen.refresh(true)}>
             <Icon name="refresh" /> {t("Проверить заново")}
           </button>
+          <a className="btn" href={href("diagnostics")}>
+            <Icon name="pulse" /> {t("Диагностика")}
+          </a>
         </div>
       </div>
 
@@ -126,12 +140,13 @@ export function UpdateHarness() {
       )}
 
       {facts && versions && (
-        <section className="panel update-section versions-card" id="update-versions">
-          <div className="update-top-grid">
+        <div className="update-top-grid">
+          <section className="panel versions-card" id="update-versions">
+            <div className="panel-head">
+              <h2>{t("Версии")}</h2>
+              {versions.verdict && <span className={`update-pill ${versions.verdict.tone === "ok" ? "ok" : "warn"}`}>{versions.verdict.tone === "ok" ? t("актуально") : t("доступно")}</span>}
+            </div>
             <div className="versions-body">
-              <div className="panel-head">
-                <h2>{t("Версии")}</h2>
-              </div>
               {versions.missing.map((line) => (
                 <p key={line} className="harness-note">
                   {line}
@@ -139,14 +154,18 @@ export function UpdateHarness() {
               ))}
               <div className="version-pair">
                 {versions.pairs.map(([label, value]) => (
-                  <div className="version-block" key={label}>
+                  <div key={label}>
                     <span>{label}</span>
-                    <b className="version">{value}</b>
+                    <b>{value}</b>
                   </div>
                 ))}
               </div>
-              {versions.verdict && <p className={`version-status ${versions.verdict.tone}`}>{versions.verdict.text}</p>}
-              <dl className="version-facts">
+              {versions.verdict && (
+                <div className={`version-status ${versions.verdict.tone}`}>
+                  <Icon name={versions.verdict.tone === "ok" ? "check" : "warning"} /> {versions.verdict.text}
+                </div>
+              )}
+              <dl className="kv version-facts">
                 {versions.rows.map(([label, value]) => (
                   <div key={label}>
                     <dt>{label}</dt>
@@ -156,70 +175,85 @@ export function UpdateHarness() {
               </dl>
             </div>
             <div className="versions-changes" id="update-changes">
-              <div className="panel-head">
-                <h2>{t("Что изменится в управляемых файлах")}</h2>
+              <div className="integrated-head">
+                <h3>{t("Что изменится в управляемых файлах")}</h3>
+                <span>harness diff</span>
               </div>
               <div className="update-counts">
                 {changes.rows.map((row) => (
-                  <div className={`update-count-row ${row.tone}`} key={row.label}>
-                    {`${row.count} ${ICONS[row.tone]} ${row.label}`}
+                  <div className={`update-count-row ${TONE_CLASS[row.tone]}`} key={row.label}>
+                    <span className="count-value">{row.count}</span>
+                    <span className={`count-icon ${TONE_CLASS[row.tone]}`}>
+                      <Icon name={TONE_ICONS[row.tone]} />
+                    </span>
+                    <span className="count-label">{row.label}</span>
                   </div>
                 ))}
                 {changes.line && <div className={`update-count-row ${changes.line.tone ?? ""}`}>{changes.line.text}</div>}
               </div>
             </div>
-          </div>
-        </section>
-      )}
+            <div className="changes-foot">
+              <span>{mode === SEED_MODE ? t("Seed-режим: отметьте файлы в панели Seed-файлы.") : t("Обычный режим сохранит локальные правки.")}</span>
+            </div>
+          </section>
 
-      {facts && (
-        <section className="panel update-section" id="update-plan-block">
-          <div className="update-mid-grid">
-            <div className="modes-card">
-              <div className="panel-head">
-                <h2>{t("Режим обновления")}</h2>
-                <span className="small muted">{t(modeName)}</span>
-              </div>
-              <div className="modes" role="radiogroup" aria-label={t("Режим обновления")}>
-                {MODES.map(([key, label]) => (
-                  <label key={key} className={`mode-card${key === mode ? " on" : ""}`}>
-                    <input type="radio" name="update-mode" checked={key === mode} onChange={() => setMode(key)} />
-                    <span className="mode-copy">{t(label)}</span>
+          <section className="panel modes-card" id="update-modes-card">
+            <div className="panel-head">
+              <h2>{t("Режим обновления")}</h2>
+            </div>
+            <div className="update-modes" role="radiogroup" aria-label={t("Режим обновления")}>
+              {MODES.map(([key, label]) => {
+                const [description, tag, tagTone] = MODE_CARDS[key];
+                return (
+                  <label key={key} className={`update-mode-card${key === mode ? " on" : ""}`}>
+                    <input type="radio" name="update-mode" checked={key === mode} onChange={() => setMode(key)} aria-label={t(label)} />
+                    <span className="mode-copy">
+                      <b>{t(label)}</b>
+                      <small>{t(description)}</small>
+                    </span>
+                    <span className={`mode-tag ${tagTone}`}>{t(tag)}</span>
                   </label>
-                ))}
-              </div>
-              <p className={`modes-foot${tone === "warn" ? " warn" : ""}`} id="update-mode-caption">
-                {t(consequence)}
-              </p>
+                );
+              })}
             </div>
-            <div className="plan-card">
-              <div className="panel-head">
-                <h2>{t("План")}</h2>
+            <div className="modes-plan">
+              <div className="integrated-head">
+                <h3>{t("План")}</h3>
+                <span>{t(modeName)}</span>
               </div>
-              <pre className="plan-command" id="update-plan-command">
-                $ {command}
-              </pre>
-              {warning && (
-                <div className="plan-warning" id="update-warning">
-                  <p>{warning[0]}</p>
-                  <p className="muted">{warning[1]}</p>
+              <div className="update-plan-body">
+                <div className="plan-command">
+                  <span>$</span>
+                  <code id="update-plan-command">{command}</code>
                 </div>
-              )}
-              <p className="plan-note">{t("Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.")}</p>
-              <p className="plan-note">{t("Перед запуском будет запрошено подтверждение.")}</p>
-              <div className="actions">
-                <button id="update-run" className="btn primary" type="button" disabled={reason !== null} title={reason ? t(reason) : undefined} onClick={run}>
-                  <Icon name="refresh" /> {t("Обновить")}
+                <p className={`modes-foot${tone === "warn" ? " warn" : ""}`} id="update-mode-caption">
+                  {t(consequence)}
+                </p>
+                {warning && (
+                  <div className="plan-warning warn" id="update-warning">
+                    <Icon name="warning" />
+                    <div>
+                      <b>{warning[0]}</b>
+                      <p>{warning[1]}</p>
+                    </div>
+                  </div>
+                )}
+                <p className="plan-explain">
+                  {t("Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.")}{" "}
+                  {t("Перед запуском будет запрошено подтверждение.")}
+                </p>
+                <button id="update-run" className="btn primary update-apply" type="button" disabled={reason !== null} title={reason ? t(reason) : undefined} onClick={run}>
+                  <Icon name="download" /> {t("Обновить")}
                 </button>
-                {reason && <span className="muted">{t(reason)}</span>}
+                {reason && <p className="plan-note">{t(reason)}</p>}
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       )}
 
-      {facts && (
-        <section className={`panel seed-panel${mode === SEED_MODE ? "" : " seed-off"}`} id="update-seeds">
+      {facts && mode === SEED_MODE && (
+        <section className="panel seed-panel" id="update-seeds">
           <div className="panel-head">
             <h2>{t("Seed-файлы")}</h2>
             <span className="small muted" id="update-seed-count">
@@ -229,20 +263,19 @@ export function UpdateHarness() {
           <div className="seed-body">
             {seeds.map((path) => (
               <label key={path} className="seed-file">
-                <input type="checkbox" checked={selected.includes(path)} disabled={mode !== SEED_MODE} onChange={() => toggle(path)} />
+                <input type="checkbox" checked={selected.includes(path)} onChange={() => toggle(path)} />
                 <code>{path}</code>
               </label>
             ))}
             <p className={`seed-warning${seeds.length ? " warn" : " ok"}`}>
-              {seeds.length
-                ? `${ICONS.warn} ${t("Отмечены файлы, которые будут перезаписаны эталоном; их правки пропадут.")}`
-                : `${ICONS.ok} ${t("Seed-файлы совпадают с шаблоном — перезаписывать нечего.")}`}
+              <Icon name={seeds.length ? "warning" : "check"} />{" "}
+              {seeds.length ? t("Отмечены файлы, которые будут перезаписаны эталоном; их правки пропадут.") : t("Seed-файлы совпадают с шаблоном — перезаписывать нечего.")}
             </p>
             <div className="seed-actions">
-              <button className="btn small" type="button" disabled={mode !== SEED_MODE} onClick={() => setTicked(seeds)}>
+              <button className="btn small" type="button" onClick={() => setTicked(seeds)}>
                 {t("Выбрать все")}
               </button>
-              <button className="btn small" type="button" disabled={mode !== SEED_MODE} onClick={() => setTicked([])}>
+              <button className="btn small" type="button" onClick={() => setTicked([])}>
                 {t("Снять выбор")}
               </button>
             </div>
@@ -271,6 +304,9 @@ export function UpdateHarness() {
                     data-path={item.path}
                     onClick={() => setOpened(item.path)}
                   >
+                    <span className={`diff-status ${TONE_CLASS[item.tone]}`}>
+                      <Icon name={TONE_ICONS[item.tone]} />
+                    </span>
                     <span className="diff-path">{item.path}</span>
                     <span className={`diff-kind ${item.tone}`}>{`${ICONS[item.tone]} ${t(item.tag)}`}</span>
                   </button>

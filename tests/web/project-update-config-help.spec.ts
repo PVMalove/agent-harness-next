@@ -121,7 +121,7 @@ for (const width of [1440, 390]) {
   test(`update harness at ${width} px: a cancelled confirmation starts nothing`, async ({ page }, info) => {
     const sent = await mockSocket(page);
     await open(page, "update-harness", width, "#update-versions");
-    await expect(page.locator("#update-changes")).toContainText("1 ✖ в конфликте (нужна перезапись)");
+    await expect(page.locator("#update-changes .update-count-row.err")).toContainText("в конфликте (нужна перезапись)");
     await expect(page.locator("#update-warning")).toContainText("⚠ Обычное обновление остановится: 1 конфликт");
     await page.locator('#update-diff [data-path="AGENTS.md"]').click();
     await expect(page.locator("#update-diff-view")).toContainText("+Package rule.");
