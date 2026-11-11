@@ -565,3 +565,18 @@ def test_a_runtime_killed_between_container_launch_and_receipt_adopts_the_runnin
     sent = killed_at_launch(repo, engine)
 
     assert_adopted(repo, engine, sent, binary=binary)
+
+
+@pytest.mark.fault_injection
+@pytest.mark.parametrize("status", ["paused", "restarting"])
+def test_a_runtime_killed_at_container_launch_adopts_a_paused_or_restarting_worker(
+    podman: Podman, status: str
+) -> None:
+    repo, engine = podman(env=PAUSE_AT_LAUNCHED)
+
+    def worker_status(state: JsonObject) -> None:
+        state["objects"][WORKER_CONTAINER].update(status=status)
+
+    sent = killed_at_launch(repo, engine, worker_status)
+
+    assert_adopted(repo, engine, sent)

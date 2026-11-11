@@ -35,6 +35,7 @@ EXPECTED_LABELS = [
     "SIGKILL of the coordinator",
     "SIGKILL of the runtime",
     "SIGKILL of the runtime: running container adopted",
+    "SIGKILL of the runtime: paused or restarting container adopted",
     "lost IPC reply",
     "orphan worker",
     "double start",

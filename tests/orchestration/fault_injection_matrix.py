@@ -46,6 +46,10 @@ SCENARIOS: Sequence[Scenario] = (
         f"{_CONTAINER}::test_a_runtime_killed_between_container_launch_and_receipt_adopts_the_running_worker_without_a_second_create",
     ),
     Scenario(
+        "SIGKILL of the runtime: paused or restarting container adopted",
+        f"{_CONTAINER}::test_a_runtime_killed_at_container_launch_adopts_a_paused_or_restarting_worker",
+    ),
+    Scenario(
         "lost IPC reply",
         f"{_SUPERVISOR}::test_a_lost_response_after_the_receipt_is_answered_from_the_stored_receipt_with_one_launch",
     ),
