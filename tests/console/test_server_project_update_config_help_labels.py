@@ -20,6 +20,7 @@ from harness.console.backend.application.decisions import DecisionService
 from harness.console.backend.application.events import OrchestrationEvents
 from harness.console.backend.application.snapshots import SnapshotService
 from harness.console.kernel import web_catalog
+from harness.console.kernel.configuration_wizard import wizard_parameters
 
 from ._asgi_ws import AsgiWebSocket
 from ._screen_facts import Facts, service
@@ -28,6 +29,7 @@ from .test_web_fixture_project_update_config_help import (
     DIFF_PATH,
     DIFF_TEXT,
     FIXTURES,
+    REPO,
     configuration,
     open_project,
     update,
@@ -117,7 +119,8 @@ class _Facts(Facts):
 
     def configuration(self, repo: Path, /) -> dict[str, object]:
         self._count("configuration")
-        return configuration().to_payload()
+        # The real facts add the wizard catalog of the schemas (screen_facts.configuration).
+        return {**configuration().to_payload(), "wizard": wizard_parameters(Path(REPO))}
 
     def update_diff(self, repo: Path, relative: str, /) -> str:
         self.diffs.append(relative)

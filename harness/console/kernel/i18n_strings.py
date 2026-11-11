@@ -2796,6 +2796,18 @@ EN.update(
         "Изменения уходят на сервер командой configuration: проверка устаревания, резервная копия и подтверждение человека.": "Changes go to the server as a configuration command: a staleness check, a backup and a human confirmation.",
         "Проверить в Диагностике": "Check in Diagnostics",
         "схема не установлена": "schema not installed",
+        "Проверить здоровье": "Check health",
+        "Открыть обновление": "Open the update",
+        "Изучить Repo Map": "Explore Repo Map",
+        "Настроить Harness": "Configure Harness",
+        "{count} проверок": "{count} checks",
+        "{count} изменений пакета": "{count} package changes",
+        "карты для HEAD нет": "no map for HEAD",
+        "{count} экранов": "{count} screens",
+        "Документация консоли": "Console documentation",
+        "в справке консоли": "in the console guide",
+        "СПРАВКА": "HELP",
+        "коротко о главном": "the essentials",
     }
 )
 

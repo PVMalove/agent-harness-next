@@ -168,7 +168,8 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
         ) : null}
         {project?.branch ? (
           <span id="branch" className="where mono muted">
-            ⑂ {project.branch}
+            <Icon name="branch" />
+            {project.branch}
           </span>
         ) : null}
         <div className="top-actions">

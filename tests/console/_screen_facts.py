@@ -205,6 +205,8 @@ class Facts:
             "state": HARNESS_STATE.to_payload(),
             "package_version": "1.0.1",
             "drift": UPDATE_DRIFT,
+            "store": None,
+            "store_target_schema": None,
         }
 
     def configuration(self, repo: Path, /) -> dict[str, object]:

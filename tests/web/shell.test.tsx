@@ -57,6 +57,18 @@ describe("the shell", () => {
     window.location.hash = "#/";
   });
 
+  test("the header branch carries the branch icon, not a text glyph", () => {
+    FakeSocket.reset();
+    renderApp();
+    const socket = FakeSocket.last;
+    act(() => socket.open());
+    act(() => socket.reply({ v: 1, id: socket.request("home.snapshot").id, type: "home.snapshot", ok: true,
+      cached: false, age_seconds: 0, snapshot: fixture }));
+    const branch = document.querySelector("#branch") as HTMLElement;
+    expect(branch.querySelector("svg")?.getAttribute("data-icon")).toBe("branch");
+    expect(branch.textContent).toBe("feature/issue-7");
+  });
+
   test("lists 13 sections in three groups and marks the current one", () => {
     renderApp();
     const nav = navigation();

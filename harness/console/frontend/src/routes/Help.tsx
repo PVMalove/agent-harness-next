@@ -12,6 +12,9 @@ import { Icon } from "../icons";
 import { NAV_ITEMS, SHORTCUTS, href, navItemOf } from "../navigation";
 import { TabList, TabPanels } from "../views/Tabs";
 import { useScreen } from "../screens/useScreen";
+import { NoData } from "../steps/ActivityViews";
+import { useConsole } from "../useConsole";
+import { preRelease } from "../AppShell";
 import { parseHelp } from "../ws/projectScreens";
 
 type Tab = "start" | "screens" | "commands" | "keys" | "limits";
@@ -27,12 +30,31 @@ const TABS: readonly (readonly [Tab, string, string])[] = [
 /** The guide sections of each tab, by their place in kernel/help_text.py (the same in ru and en):
     console window and documentation, sections, keys, statuses and safety. */
 const SECTIONS: Readonly<Record<Tab, readonly number[]>> = { start: [0, 5], screens: [1], commands: [], keys: [2], limits: [3, 4] };
+/** The FAQ section (the guide's last one): `### question` blocks, each followed by its answer. */
+const FAQ_SECTION = 6;
+const DOCS_SECTION = 5;
+
+function faqItems(markdown: string): [string, string][] {
+  return markdown
+    .split("\n### ")
+    .slice(1)
+    .map((block) => {
+      const [question = "", ...answer] = block.split("\n");
+      return [question.trim(), answer.join("\n").trim()];
+    });
+}
 const PILLARS: readonly (readonly [string, string])[] = [
   ["01 · Наблюдай", "Сессии, dispatch, heartbeat и события."],
   ["02 · Проверяй", "Health, QA evidence, Release Gate."],
   ["03 · Решай", "Подтверждения, повторы, передача человеку."],
 ];
-const QUICK = ["diagnostics", "board", "agent-activity", "publish"];
+/** The mockup quick links: route, icon and title. */
+const QUICK: readonly (readonly [string, string, string])[] = [
+  ["diagnostics", "pulse", "Проверить здоровье"],
+  ["update-harness", "refresh", "Открыть обновление"],
+  ["repo-map", "map", "Изучить Repo Map"],
+  ["configuration", "settings", "Настроить Harness"],
+];
 /** The job sections that run commands, the page that offers them and what they do. */
 const COMMANDS: readonly (readonly [string, string, string])[] = [
   ["setup", "open-project", "Установка Harness в проект"],
@@ -46,6 +68,7 @@ const KEY_ROUTES = Object.entries(SHORTCUTS);
 
 export function Help() {
   const { t, section, language } = useI18n();
+  const { snapshot } = useConsole();
   const tabs = TABS.map(([key, ru, en]) => [key, language === "en" ? en : ru] as const);
   const screen = useScreen({ type: "help.snapshot", params: { language } }, parseHelp);
   const guide = screen.data;
@@ -57,13 +80,31 @@ export function Help() {
   };
   const guideSections = (which: Tab) =>
     SECTIONS[which]
-      .map((at) => sections[at])
-      .filter((item) => item !== undefined)
-      .map((item) => (
-        <section className="panel help-section" key={item.title}>
-          <Markdown text={item.markdown} />
+      .map((at) => [at, sections[at]] as const)
+      .filter((pair) => pair[1] !== undefined)
+      .map(([at, item]) => (
+        <section className="panel help-section" key={item!.title} id={`help-section-${at}`}>
+          <Markdown text={item!.markdown} />
         </section>
       ));
+  const version = snapshot?.harness_version ?? null;
+  const health = snapshot ? snapshot.health.ok + snapshot.health.warn + snapshot.health.fail + snapshot.health.skipped : null;
+  const quickCaption = (route: string) => {
+    const none = <NoData why={t("Снимок Главной ещё не получен")} />;
+    if (route === "diagnostics") return health === null ? none : t("{count} проверок", { count: health });
+    if (route === "update-harness")
+      return snapshot?.drift_counts ? t("{count} изменений пакета", { count: snapshot.drift_counts.total }) : none;
+    if (route === "repo-map") {
+      const map = snapshot?.repo_map.head_map ?? null;
+      return map ? t("{count} файлов", { count: map.files }) : snapshot ? t("карты для HEAD нет") : none;
+    }
+    return "project.json";
+  };
+  const faq = sections[FAQ_SECTION];
+  const openReadme = () => {
+    setTab("start");
+    window.setTimeout(() => document.getElementById(`help-section-${DOCS_SECTION}`)?.scrollIntoView({ block: "start" }), 0);
+  };
 
   return (
     <div className="help-page work-page" data-section="Help">
@@ -71,13 +112,16 @@ export function Help() {
         <div>
           <h1>{section("Help")}</h1>
           <p>{t("Экраны, команды, горячие клавиши и границы наблюдения.")}</p>
-          {guide && (
-            <div className="home-facts">
-              <span id="help-count">{t("Разделов справки: {n}", { n: sections.length })}</span>
-            </div>
-          )}
+          <div className="home-facts">
+            {version && <span>Harness {version}</span>}
+            {version && preRelease(version) && <span>pre-release</span>}
+            <span>{t("{count} экранов", { count: NAV_ITEMS.length })}</span>
+          </div>
         </div>
         <div className="actions">
+          <button className="btn" type="button" title={t("Документация консоли")} onClick={openReadme}>
+            <Icon name="reports" /> README
+          </button>
           <a className="btn" href={href("diagnostics")}>
             <Icon name="pulse" /> {section("Diagnostics")}
           </a>
@@ -109,7 +153,7 @@ export function Help() {
         <div>
           <span>{t("Разделов справки")}</span>
           <b>{guide ? sections.length : "—"}</b>
-          <small>help.snapshot</small>
+          <small>{t("в справке консоли")}</small>
         </div>
       </div>
 
@@ -125,7 +169,10 @@ export function Help() {
         {tab === "start" && (
           <>
             <section className="panel help-hero" id="help-intro">
-              {guide && <Markdown text={guide.intro} />}
+              <div className="help-hero-head">
+                <span>{`${t("СПРАВКА")}${version ? ` · ${version}` : ""}`}</span>
+                {guide && <Markdown text={guide.intro} />}
+              </div>
               <div className="help-pillars">
                 {PILLARS.map(([head, text]) => (
                   <div key={head}>
@@ -136,15 +183,32 @@ export function Help() {
               </div>
             </section>
             <div className="help-quick">
-              {QUICK.map((route) => (
-                <a key={route} href={href(route)}>
+              {QUICK.map(([route, icon, label]) => (
+                <a key={route} className="help-quick-card" href={href(route)}>
                   <span>
-                    <Icon name={navItemOf(route).icon} />
+                    <Icon name={icon} />
                   </span>
-                  <b>{title(route)}</b>
+                  <b>{t(label)}</b>
+                  <small>{quickCaption(route)}</small>
                 </a>
               ))}
             </div>
+            {faq && (
+              <section className="panel help-faq" id="help-faq">
+                <div className="panel-head">
+                  <h2>{faq.title}</h2>
+                  <span className="small muted">{t("коротко о главном")}</span>
+                </div>
+                <div className="help-faq-list">
+                  {faqItems(faq.markdown).map(([question, answer]) => (
+                    <details key={question}>
+                      <summary>{question}</summary>
+                      <p>{answer}</p>
+                    </details>
+                  ))}
+                </div>
+              </section>
+            )}
             {guideSections("start")}
           </>
         )}

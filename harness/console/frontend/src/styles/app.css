@@ -378,3 +378,10 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .settings-grid, .settings-editor-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
   .settings-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Shell: the branch icon sits on the branch line. Help: the guide intro inside the mockup hero
+   takes the hero's own type (eyebrow, h2 at --fs-4, muted paragraph) without the section padding. */
+#branch { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#branch .hi { width: 13px; height: 13px; }
+.help-hero-head .help-markdown { padding: 0; }
+.help-hero-head .help-markdown h1, .help-hero-head .help-markdown h2 { margin: 4px 0; font-size: var(--fs-4); }
+.help-hero-head .help-markdown p { margin: 0; max-width: 72ch; color: var(--muted); }
