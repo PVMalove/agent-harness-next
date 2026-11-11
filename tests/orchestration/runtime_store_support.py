@@ -3,6 +3,7 @@ and the real ``harness-runtime`` binary."""
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import hashlib
 import json
@@ -34,6 +35,8 @@ from harness.orchestration.ledger.lifecycle import (
     PlanRecord,
     _canonical,
 )
+
+from .fake_clock import SITE, FakeClock
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE_REL = Path(".harness/orchestration/state")
@@ -572,8 +575,12 @@ class ServingRuntime:
         env: dict[str, str] | None = None,
         xdg: Path | None = None,
         host_runtime_dir: Path | None = None,
+        clock: FakeClock | None = None,
     ) -> None:
         """``env`` sets debug hooks; ``xdg`` takes over an earlier fixture-owned directory.
+
+        ``clock`` moves the time of the runtime and of every CLI process started with
+        ``environ``; the runtime then prints the ``TRACE:`` events ``wait_trace`` counts.
 
         ``host_runtime_dir`` borrows the real engine's directory without removing it on stop.
         Rootless Podman needs the same XDG_RUNTIME_DIR as its existing network namespace.
@@ -586,14 +593,16 @@ class ServingRuntime:
             if host_runtime_dir is not None
             else xdg or Path(tempfile.mkdtemp(prefix="hr", dir=SHORT_TMP)).resolve()
         )
-        self.environ = {"XDG_RUNTIME_DIR": str(self.xdg)}
+        self.clock = clock
+        self.environ = {"XDG_RUNTIME_DIR": str(self.xdg), **(clock.env if clock else {})}
+        traced = {"HARNESS_RUNTIME_TEST_TRACE": "1"} if clock else {}
         self.process = subprocess.Popen(
             [str(runtime_binary()), "serve", "--repo", str(repo)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            env={**os.environ, **self.environ, **(env or {})},
+            env={**os.environ, **self.environ, **traced, **(env or {})},
         )
         stdout = self.process.stdout
         assert stdout is not None
@@ -601,6 +610,8 @@ class ServingRuntime:
         threading.Thread(target=lambda: lines.put(stdout.readline()), daemon=True).start()
         self._paused: queue.Queue[str] = queue.Queue()
         self._injected: queue.Queue[str] = queue.Queue()
+        self._traced: collections.Counter[str] = collections.Counter()
+        self._trace_changed = threading.Condition()
         threading.Thread(target=self._read_stderr, daemon=True).start()
         try:
             text = lines.get(timeout=30)
@@ -617,6 +628,28 @@ class ServingRuntime:
                 self._paused.put(line.strip().removeprefix("PAUSED:"))
             elif line.startswith("INJECTED:"):
                 self._injected.put(line.strip().removeprefix("INJECTED:"))
+            elif line.startswith("TRACE:"):
+                with self._trace_changed:
+                    self._traced[line.strip().removeprefix("TRACE:")] += 1
+                    self._trace_changed.notify_all()
+
+    def traced(self, event: str) -> int:
+        """How many times the runtime printed ``TRACE:<event>`` so far (a ``clock`` runtime)."""
+        with self._trace_changed:
+            return self._traced[event]
+
+    def wait_trace(self, event: str, count: int, timeout: float = 30.0) -> None:
+        """Wait until the runtime printed ``TRACE:<event>`` ``count`` times in all: the event a
+        test waits for instead of sleeping; ``timeout`` only bounds a runtime that never gets
+        there."""
+        with self._trace_changed:
+            if not self._trace_changed.wait_for(
+                lambda: self._traced[event] >= count, timeout=timeout
+            ):
+                pytest.fail(
+                    f"the runtime traced {event!r} {self._traced[event]} of {count} times"
+                    f" within {timeout} seconds"
+                )
 
     def wait_injected(self, step: str, timeout: float = 30.0) -> None:
         """Wait until the runtime reports that the debug failure ``step`` fired
@@ -679,7 +712,10 @@ def store_call(
 
     from harness.orchestration.runtime_client import RuntimeClient
 
-    reply = RuntimeClient(repo, environ=runtime.environ).call(
+    clock = runtime.clock
+    reply = RuntimeClient(
+        repo, environ=runtime.environ, clock=clock.time if clock else time.time
+    ).call(
         operation,
         operation_id=operation_id or f"{operation}-{uuid.uuid4().hex}",
         payload=payload,
@@ -712,7 +748,13 @@ def store_revisions(repo: Path, runtime: ServingRuntime, *paths: str) -> dict[st
 class Store:
     """A cut-over repository with a working dispatch and the runtime that serves it."""
 
-    def __init__(self, tmp: Path, *, allowed_paths: tuple[str, ...] = ("**",)) -> None:
+    def __init__(
+        self,
+        tmp: Path,
+        *,
+        allowed_paths: tuple[str, ...] = ("**",),
+        clock: FakeClock | None = None,
+    ) -> None:
         self.repo, ids = write_coordinator_state(
             tmp, report=False, allowed_paths=allowed_paths
         )
@@ -720,7 +762,7 @@ class Store:
         self.dispatch = ids["dispatch_id"]
         result = migrate(self.repo)
         assert result.returncode == 0, result.stderr
-        self.runtime = ServingRuntime(self.repo)
+        self.runtime = ServingRuntime(self.repo, clock=clock)
         # Both commands write through the runtime: the dispatch becomes dispatched, then working.
         sent = self.run("dispatch", "send", "--dispatch", self.dispatch)
         assert sent.returncode == 0, sent.stderr
@@ -784,7 +826,7 @@ class Store:
         ``env``: the hooks fire once for each process, so a setup that wrote already is past them."""
         xdg = self.runtime.xdg
         self.runtime.kill()
-        self.runtime = ServingRuntime(self.repo, env=env, xdg=xdg)
+        self.runtime = ServingRuntime(self.repo, env=env, xdg=xdg, clock=self.runtime.clock)
 
     def start(self, *command: str) -> subprocess.Popen[str]:
         """A coordinator command that runs while the test goes on."""
@@ -806,15 +848,22 @@ def coordinator_popen(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={**os.environ, "PYTHONPATH": str(ROOT), **runtime.environ},
+        env=cli_environ(runtime),
     )
+
+
+def cli_environ(runtime: ServingRuntime | None) -> dict[str, str]:
+    """The environment of a coordinator CLI process that reaches ``runtime`` and shares its clock."""
+    environ = {**os.environ, **(runtime.environ if runtime else {})}
+    site = [str(SITE)] if runtime is not None and runtime.clock is not None else []
+    environ["PYTHONPATH"] = os.pathsep.join([*site, str(ROOT)])
+    return environ
 
 
 def coordinator_with(
     repo: Path, runtime: ServingRuntime | None, *args: str, python: str | None = None
 ) -> subprocess.CompletedProcess[str]:
     """The coordinator CLI against ``repo``, reaching the runtime of ``runtime``."""
-    environ = {"XDG_RUNTIME_DIR": str(runtime.xdg)} if runtime else {}
     command = (
         [sys.executable, "-c", python]
         if python
@@ -825,7 +874,7 @@ def coordinator_with(
         capture_output=True,
         text=True,
         check=False,
-        env={**os.environ, "PYTHONPATH": str(ROOT), **environ},
+        env=cli_environ(runtime),
     )
 
 
@@ -938,6 +987,7 @@ class Supervised:
         access_policy: JsonObject | None = None,
         create: bool = True,
         host_runtime_dir: Path | None = None,
+        clock: FakeClock | None = None,
     ) -> None:
         repo = coordinator_repository(tmp)
         role = repo / ".harness" / "orchestration" / "roles" / "code-review.md"
@@ -976,7 +1026,9 @@ class Supervised:
         self.adapter.write_text(
             FAKE_ADAPTER.format(control=str(self.control)), encoding="utf-8"
         )
-        self.runtime = ServingRuntime(repo, env=env, host_runtime_dir=host_runtime_dir)
+        self.runtime = ServingRuntime(
+            repo, env=env, host_runtime_dir=host_runtime_dir, clock=clock
+        )
         self.dispatch = ""
         self.brief: JsonObject = {}
         if create:
@@ -1140,6 +1192,7 @@ class Supervised:
             env=env,
             xdg=xdg if host_runtime_dir is None else None,
             host_runtime_dir=host_runtime_dir,
+            clock=self.runtime.clock,
         )
 
     def close(self) -> None:

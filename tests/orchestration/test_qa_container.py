@@ -23,6 +23,7 @@ import pytest
 
 from harness.json_types import JsonObject
 from tests.orchestration import test_coordinator as coordinator_tests
+from tests.orchestration.fake_clock import FakeClock
 from tests.orchestration.runtime_store_support import (
     STATE_REL,
     ServingRuntime,
@@ -77,6 +78,7 @@ class ContainerQa:
         scripted_engine: bool = True,
         host_runtime_dir: Path | None = None,
         selinux: bool = False,
+        clock: FakeClock | None = None,
     ) -> None:
         gate = GATE if gate is None else gate
         self.fx = coordinator_tests.CoordinatorRetryRoutingTests()
@@ -142,7 +144,7 @@ class ContainerQa:
         engine_path = {"PATH": str(self.engine.bin)} if scripted_engine else {}
         self.environ = {**engine_path, SECRET_NAME: SECRET}
         self.runtime = ServingRuntime(
-            repo, env=self.environ, host_runtime_dir=host_runtime_dir
+            repo, env=self.environ, host_runtime_dir=host_runtime_dir, clock=clock
         )
         self.dispatch = self.create()
 
@@ -222,6 +224,7 @@ class Make(Protocol):
         cache: Path | None = ...,
         lease_ttl: int | None = ...,
         selinux: bool = ...,
+        clocked: bool = ...,
     ) -> ContainerQa: ...
 
 
@@ -237,8 +240,11 @@ def qa(tmp_path: Path) -> Iterator[Make]:
         cache: Path | None = None,
         lease_ttl: int | None = None,
         selinux: bool = False,
+        clocked: bool = False,
     ) -> ContainerQa:
         root = tmp_path / f"q{len(made)}"
+        clock_dir = tmp_path / f"clock{len(made)}"
+        clock_dir.mkdir()
         options = {
             "timeout": timeout,
             "hosts": hosts,
@@ -246,7 +252,14 @@ def qa(tmp_path: Path) -> Iterator[Make]:
             "lease_ttl": lease_ttl,
             "selinux": selinux,
         }
-        made.append(ContainerQa(root, preparation=preparation, **options))  # type: ignore[arg-type]
+        made.append(
+            ContainerQa(
+                root,
+                preparation=preparation,
+                clock=FakeClock(clock_dir) if clocked else None,
+                **options,  # type: ignore[arg-type]
+            )
+        )
         return made[-1]
 
     yield make

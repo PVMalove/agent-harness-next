@@ -116,7 +116,31 @@ pub fn now_micros() -> i64 {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
-    i64::try_from(elapsed.as_micros()).unwrap_or(i64::MAX)
+    i64::try_from(elapsed.as_micros())
+        .unwrap_or(i64::MAX)
+        .saturating_add(test_offset_micros())
+}
+
+/// Now, in milliseconds since the Unix epoch.
+pub fn now_millis() -> u64 {
+    u64::try_from(now_micros() / 1_000).unwrap_or(0)
+}
+
+/// Test hook of a debug build: `HARNESS_RUNTIME_TEST_CLOCK_FILE=<path>` moves every clock of the
+/// runtime forward by the whole number of milliseconds the file holds, so a test advances time
+/// instead of waiting for it. A missing or unreadable file moves nothing. A release build compiles
+/// the hook away: the environment variable has no effect there.
+#[cfg(debug_assertions)]
+fn test_offset_micros() -> i64 {
+    std::env::var_os("HARNESS_RUNTIME_TEST_CLOCK_FILE")
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| text.trim().parse::<i64>().ok())
+        .map_or(0, |millis| millis.saturating_mul(1_000))
+}
+
+#[cfg(not(debug_assertions))]
+const fn test_offset_micros() -> i64 {
+    0
 }
 
 /// The proleptic Gregorian date of a day count since 1970-01-01 (Howard Hinnant's algorithm).

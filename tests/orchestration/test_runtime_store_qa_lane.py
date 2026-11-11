@@ -16,8 +16,8 @@ import signal
 import sqlite3
 import subprocess
 import sys
-import time
 import uuid
+from datetime import datetime
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,7 +25,8 @@ import pytest
 
 from harness.json_types import JsonObject
 
-from .runtime_store_support import ROOT, STATE_REL, Store, store_call
+from .fake_clock import FakeClock
+from .runtime_store_support import STATE_REL, Store, cli_environ, store_call
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32",
@@ -86,7 +87,7 @@ class Holder:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            env={**os.environ, "PYTHONPATH": str(ROOT), **store.runtime.environ},
+            env=cli_environ(store.runtime),
         )
 
     def admission(self) -> JsonObject:
@@ -118,7 +119,8 @@ class Holder:
 
 @pytest.fixture
 def store(tmp_path: Path) -> Iterator[Store]:
-    store = Store(tmp_path)
+    """A store whose runtime and holder processes share a clock the test moves forward."""
+    store = Store(tmp_path, clock=FakeClock(tmp_path))
     try:
         yield store
     finally:
@@ -153,14 +155,26 @@ def _audit(store: Store, lease_op: str) -> list[JsonObject]:
     return found
 
 
-def _wait_expired(admission: JsonObject) -> None:
+def _clock(store: Store) -> FakeClock:
+    clock = store.runtime.clock
+    assert clock is not None
+    return clock
+
+
+def _expire(store: Store, admission: JsonObject) -> None:
+    """Move the clock just past the end of the lease of ``admission``."""
     lease = admission["lease"]
     assert isinstance(lease, dict)
-    from datetime import UTC, datetime
+    clock = _clock(store)
+    left = datetime.fromisoformat(str(lease["expires_at"])) - clock.now()
+    clock.advance(max(left.total_seconds(), 0) + 0.001)
 
-    expires = datetime.fromisoformat(str(lease["expires_at"]))
-    while datetime.now(UTC) <= expires:
-        time.sleep(0.1)
+
+def _beat_after(store: Store, seconds: float) -> None:
+    """Move the clock by ``seconds`` and wait until a heartbeat wrote to the store."""
+    writes = store.runtime.traced("request:state.write")
+    _clock(store).advance(seconds)
+    store.runtime.wait_trace("request:state.write", writes + 1)
 
 
 def test_a_holder_killed_by_sigkill_is_reaped_by_the_next_admission_without_force(
@@ -173,7 +187,7 @@ def test_a_holder_killed_by_sigkill_is_reaped_by_the_next_admission_without_forc
     assert isinstance(lease, dict)
     assert lease["pid"] == killed.process.pid
     killed.kill()
-    _wait_expired(held)
+    _expire(store, held)
     assert _qa_status(store)["stale_heartbeat"] is True
 
     following = Holder(store, _owner(), 60)
@@ -207,7 +221,7 @@ def test_a_stopped_owner_keeps_its_expired_lease_and_the_next_admission_is_lease
     assert held["state"] == "acquired"
     stopped.signal(signal.SIGSTOP)
     try:
-        _wait_expired(held)
+        _expire(store, held)
 
         refused = Holder(store, _owner(), 60)
         _, stderr = refused.finish()
@@ -238,7 +252,7 @@ def test_a_lease_cleared_by_an_operator_makes_the_old_owner_release_a_fencing_mi
 ) -> None:
     owner = Holder(store, _owner(), 1)
     held = owner.admission()
-    _wait_expired(held)
+    _expire(store, held)
     lease = held["lease"]
     assert isinstance(lease, dict)
 
@@ -306,7 +320,7 @@ def test_a_release_by_another_holder_is_fencing_mismatch_and_the_owner_keeps_the
         capture_output=True,
         text=True,
         check=False,
-        env={**os.environ, "PYTHONPATH": str(ROOT), **store.runtime.environ},
+        env=cli_environ(store.runtime),
     )
     status = _qa_status(store)
     removals = {op: _audit(store, op) for op in ("release", "clear", "reap")}
@@ -328,7 +342,9 @@ def test_a_heartbeating_owner_never_shows_a_stale_heartbeat_past_its_lifetime(
     owner = Holder(store, _owner(), 2, heartbeat=True)
     held = owner.admission()
     assert held["state"] == "acquired"
-    time.sleep(3.5)
+    # 3.5 seconds pass, longer than the 2-second lifetime; the holder beats every third of it.
+    for _ in range(5):
+        _beat_after(store, 0.7)
 
     status = _qa_status(store)
     stdout, stderr = owner.finish()
@@ -372,7 +388,8 @@ def test_a_lease_cleared_under_a_heartbeat_stops_it_and_marks_it_lost(
             ]
         },
     )
-    time.sleep(2.5)
+    # The next heartbeat, a third of the 3-second lifetime later, finds the lease cleared.
+    _beat_after(store, 1)
 
     stdout, stderr = owner.finish()
 
@@ -398,7 +415,7 @@ def test_a_live_owner_is_released_neither_automatically_nor_by_release_lock_with
     held = stopped.admission()
     stopped.signal(signal.SIGSTOP)
     try:
-        _wait_expired(held)
+        _expire(store, held)
         status = _lock_status(store)
         refused = store.run("ledger", "release-lock")
         still = _qa_status(store)
@@ -442,7 +459,7 @@ def test_lock_status_shows_owner_dead_for_a_killed_owner_and_release_lock_reaps_
     killed = Holder(store, _owner(), 1)
     held = killed.admission()
     killed.kill()
-    _wait_expired(held)
+    _expire(store, held)
 
     status = _lock_status(store)
     released = store.run("ledger", "release-lock")

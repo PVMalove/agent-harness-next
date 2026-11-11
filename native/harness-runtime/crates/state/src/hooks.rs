@@ -128,6 +128,21 @@ pub fn reach_once(_step: &str) -> Result<()> {
     Ok(())
 }
 
+/// Test hook of a debug build: with `HARNESS_RUNTIME_TEST_TRACE` set, the serving runtime prints
+/// `TRACE:<event>` to stderr where a test waits for an event instead of sleeping:
+/// `request:<operation>` when a request of a negotiated session arrives, `reconciled` after each
+/// pass of the periodic reconcile, and `waiting` when a request first waits for the mutex of its
+/// operation. A release build compiles it away.
+#[cfg(debug_assertions)]
+pub fn trace(event: &str) {
+    if std::env::var_os("HARNESS_RUNTIME_TEST_TRACE").is_some() {
+        eprintln!("TRACE:{event}");
+    }
+}
+
+#[cfg(not(debug_assertions))]
+pub fn trace(_event: &str) {}
+
 /// Whether a test asked, once, for the failure at `step` that has no error to return: the
 /// response of an operation is dropped after it succeeded (`state.write:respond`,
 /// `execution.launch:respond`). When it fires, the process prints `INJECTED:<step>` to stderr,

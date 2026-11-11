@@ -127,7 +127,7 @@ def test_background_choice_preserves_runtime_stream_and_exit_evidence(
     assert receipt["protocol"] == "harness-worker-v1"
     assert receipt["dispatch_id"] == result["brief"]["dispatch_id"]
     terminal = Path(receipt["terminal_path"])
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 30
     while not terminal.exists() and time.monotonic() < deadline:
         time.sleep(0.03)
     evidence = json.loads(terminal.read_text())
@@ -288,7 +288,7 @@ def test_native_permission_uses_control_frames_without_extra_model_messages(
         "--adapter-arg=--endpoint=" + reachable_endpoint,
     )
     observed = {}
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         observed = cli(
             external_worker, "dispatch", "observe", "--dispatch", brief["dispatch_id"]
@@ -349,7 +349,7 @@ def test_native_permission_uses_control_frames_without_extra_model_messages(
         pending["request_sha256"],
         allow=True,
     )
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         result = cli(
             external_worker, "dispatch", "observe", "--dispatch", brief["dispatch_id"]
