@@ -105,7 +105,7 @@ export const SNAPSHOT = {
   harness_version: "2.0.0",
   drift: "clean",
   active_batches: null,
-  repo_map: { tier: null, message: "no cache", head_map: null },
+  repo_map: { tier: null, message: "no cache", head_map: null, stale_map: null },
   memory: { state: null, policy: null },
   project: null,
   harness: null,

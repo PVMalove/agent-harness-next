@@ -34,8 +34,12 @@ def test_the_facts_survive_the_json_round_trip_with_and_without_optional_values(
         memory=MemoryStatus(False, False, (), None, "нет Git"),
         language_files={},
     )
-    for facts in (full, empty):
+    stale = replace(empty, head="c" * 40, stale=full.view)
+    for facts in (full, empty, stale):
         assert RepoMapFacts.from_payload(_wire(facts)) == facts
+    assert _wire(stale)["map"] is None
+    assert _wire(stale)["stale_map"] == full.view.payload  # type: ignore[union-attr]
+    assert _wire(full)["stale_map"] is None
 
 
 def _set(payload: dict[str, object], path: tuple[str, ...], value: object) -> None:

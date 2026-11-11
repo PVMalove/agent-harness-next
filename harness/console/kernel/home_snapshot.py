@@ -40,6 +40,8 @@ class HomeContext:
     harness: HarnessInstall | None = None
     store: StoreFacts | None = None
     recent_sessions: tuple[RecentSession, ...] = ()
+    # The latest cached map of another commit when HEAD has none ("stale for HEAD").
+    stale_map: RepoMapView | None = None
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,8 @@ class RepoMapCard:
     tier: str | None
     message: str
     head_map: HeadMap | None  # None: there is no map for HEAD
+    # The latest cached map of another commit, shown as stale for HEAD; None with a HEAD map.
+    stale_map: HeadMap | None = None
 
 
 @dataclass(frozen=True)
@@ -427,6 +431,7 @@ def _repo_map_from(value: object) -> RepoMapCard:
         tier=_optional(found["tier"], _str),
         message=_str(found["message"]),
         head_map=_optional(found["head_map"], _head_map_from),
+        stale_map=_optional(found["stale_map"], _head_map_from),
     )
 
 
@@ -457,21 +462,29 @@ def _memory_from(value: object) -> MemoryCard:
     )
 
 
-def _repo_map_card(data: DashboardData, view: RepoMapView | None) -> RepoMapCard:
+def _head_map(view: RepoMapView | None) -> HeadMap | None:
+    if view is None:
+        return None
+    return HeadMap(
+        origin=_clip(view.origin, ID_BYTES),
+        commit=_clip(view.commit, ID_BYTES),
+        files=len(view.files),
+        edges=len(view.edges),
+        estimated_tokens=view.estimated_tokens,
+    )
+
+
+def _repo_map_card(
+    data: DashboardData, view: RepoMapView | None, stale: RepoMapView | None = None
+) -> RepoMapCard:
     found = _TIER.search(data.repo_map_tier)
     tier = found.group(1) if found else (view.tier if view is not None else None)
-    head_map = (
-        HeadMap(
-            origin=_clip(view.origin, ID_BYTES),
-            commit=_clip(view.commit, ID_BYTES),
-            files=len(view.files),
-            edges=len(view.edges),
-            estimated_tokens=view.estimated_tokens,
-        )
-        if view is not None
-        else None
+    return RepoMapCard(
+        tier,
+        _clip(data.repo_map_tier, MESSAGE_BYTES),
+        _head_map(view),
+        _head_map(stale) if view is None else None,
     )
-    return RepoMapCard(tier, _clip(data.repo_map_tier, MESSAGE_BYTES), head_map)
 
 
 def _memory_card(data: DashboardData, status: MemoryStatus | None) -> MemoryCard:
@@ -573,7 +586,7 @@ def build_home_snapshot(data: DashboardData, context: HomeContext) -> HomeSnapsh
         harness_version=_clip(data.harness_version, ID_BYTES),
         drift=_clip(data.drift_state, ID_BYTES),
         active_batches=data.active_batches,
-        repo_map=_repo_map_card(data, context.repo_map),
+        repo_map=_repo_map_card(data, context.repo_map, context.stale_map),
         memory=_memory_card(data, context.memory),
         project=ProjectFacts(
             _clip(project.name, ID_BYTES),

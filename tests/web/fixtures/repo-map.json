@@ -138,5 +138,6 @@
     "docs": 1,
     "tests": 0,
     "excluded": 2
-  }
+  },
+  "stale_map": null
 }

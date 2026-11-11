@@ -94,6 +94,8 @@ export interface RepoMapCard {
   message: string;
   /** null: there is no map for HEAD. */
   head_map: HeadMap | null;
+  /** The latest cached map of another commit when HEAD has none ("stale for HEAD"). */
+  stale_map: HeadMap | null;
 }
 
 export interface MemoryState {
@@ -175,6 +177,9 @@ const SNAPSHOT = fields({
     tier: nullable(string),
     message: string,
     head_map: nullable(
+      fields({ origin: string, commit: string, files: count, edges: count, estimated_tokens: count }),
+    ),
+    stale_map: nullable(
       fields({ origin: string, commit: string, files: count, edges: count, estimated_tokens: count }),
     ),
   }),

@@ -33,7 +33,7 @@ from ...kernel.project_target import (
     installation_blockers,
 )
 from ...kernel.pr_timings import load_reports_view
-from ...kernel.repo_map import cached_map, head_commit
+from ...kernel.repo_map import cached_map, head_commit, latest_cached_map
 from ...kernel.repo_map_coverage import excluded_files
 from ...kernel.repo_map_settings import language_files, memory_status, tier_setting
 from ...kernel.repo_map_snapshot import RepoMapFacts
@@ -163,6 +163,7 @@ def maintenance_facts(repo: Path) -> dict[str, object]:
 
 def repo_map_facts(repo: Path) -> dict[str, object]:
     """HEAD, the map cached for it, the tier, the parser bundle (null when it cannot be read),
+    the latest cached map of another commit when HEAD has none (stale for HEAD),
     the project languages, the memory status and the tracked files the map leaves out
     (`git ls-tree`, read-only); never runs the Repo Map CLI."""
     head = head_commit(repo)
@@ -179,6 +180,7 @@ def repo_map_facts(repo: Path) -> dict[str, object]:
         parsers=parsers,
         language_files=language_files(repo),
         excluded=excluded_files(repo, view) if view is not None else None,
+        stale=latest_cached_map(repo, exclude=head) if head is not None and view is None else None,
     ).to_payload()
 
 

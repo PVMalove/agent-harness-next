@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...errors import INTERNAL_INVARIANT_REMEDY, HarnessError
-from ...repo_map.cache import read_cache
+from ...repo_map.cache import read_cache, read_cache_any_commit
 from ...repo_map.contract import validation_error
 from ...storage import storage_path
 from .export import MarkdownDocument, MarkdownSection
@@ -175,27 +175,56 @@ def cache_directory(repo: Path) -> Path | None:
         return None
 
 
-def cached_map(repo: Path, commit: str) -> RepoMapView | None:
-    """Возвращает наиболее актуальную проверенную запись кэша карты для указанного коммита (tier=full в приоритете)."""
+def _budget(view: RepoMapView) -> int:
+    value = view.provenance.get("max_tokens")
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _cached_views(repo: Path, commit: str | None) -> list[tuple[float, RepoMapView]]:
+    """Every verified cache entry with its mtime: for `commit` only, or for any commit (None)."""
     directory = cache_directory(repo)
     if directory is None or not directory.is_dir():
-        return None
-    best: tuple[tuple[bool, float], RepoMapView] | None = None
+        return []
+    found: list[tuple[float, RepoMapView]] = []
     for path in directory.glob("*.json"):
-        payload = read_cache(directory, path.stem, commit)
+        payload = (
+            read_cache_any_commit(directory, path.stem)
+            if commit is None
+            else read_cache(directory, path.stem, commit)
+        )
         if payload is None:
             continue
         view = parse_map(json.loads(payload), origin="кэш")
         if isinstance(view, str):
             continue
         try:
-            mtime = path.stat().st_mtime
+            found.append((path.stat().st_mtime, view))
         except OSError:
             continue
-        rank = (view.tier == "full", mtime)
-        if best is None or rank > best[0]:
-            best = (rank, view)
-    return best[1] if best is not None else None
+    return found
+
+
+def _best(views: list[tuple[float, RepoMapView]]) -> RepoMapView | None:
+    """tier=full first, then the widest token budget (the cache is shared with the coordinator's
+    Context Package maps, whose budget and seeds differ), then the newest entry."""
+    ranked = sorted(views, key=lambda item: (item[1].tier == "full", _budget(item[1]), item[0]))
+    return ranked[-1][1] if ranked else None
+
+
+def cached_map(repo: Path, commit: str) -> RepoMapView | None:
+    """Возвращает лучшую проверенную запись кэша карты для указанного коммита: tier=full, затем
+    наибольший бюджет токенов, затем самая свежая."""
+    return _best(_cached_views(repo, commit))
+
+
+def latest_cached_map(repo: Path, *, exclude: str) -> RepoMapView | None:
+    """The best cached map of the newest commit other than `exclude` (HEAD): the console shows it
+    marked "stale for HEAD" with a Rebuild action; None when the cache holds no other commit."""
+    others = [item for item in _cached_views(repo, None) if item[1].commit != exclude]
+    if not others:
+        return None
+    newest = max(others, key=lambda item: item[0])[1].commit
+    return _best([item for item in others if item[1].commit == newest])
 
 
 def read_build(

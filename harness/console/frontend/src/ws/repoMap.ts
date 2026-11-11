@@ -10,6 +10,8 @@ export interface RepoMap {
 }
 export interface RepoMapFacts {
   head: string | null; map: RepoMap | null;
+  /** The latest cached map of another commit when HEAD has none: shown "stale for HEAD". */
+  stale_map: RepoMap | null;
   tier: { tier: string; editable: boolean; reason: string };
   memory: { enabled: boolean; active: boolean; source_types: string[]; indexed: number | null;
     problem: string; inactive: string; top_k: number | null; max_tokens: number | null };
@@ -50,6 +52,7 @@ export function parseRepoMap(v: unknown): RepoMap | null {
 
 export function parseRepoMapFacts(v: unknown): RepoMapFacts | null {
   if (!object(v) || !optionalString(v.head) || (v.map !== null && !parseRepoMap(v.map)) ||
+      (v.stale_map !== null && !parseRepoMap(v.stale_map)) ||
       !object(v.tier) || typeof v.tier.tier !== "string" || typeof v.tier.editable !== "boolean" ||
       typeof v.tier.reason !== "string" || !object(v.memory)) return null;
   const m = v.memory;

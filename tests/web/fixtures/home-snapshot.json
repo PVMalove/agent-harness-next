@@ -39,7 +39,8 @@
       "files": 1204,
       "edges": 5310,
       "estimated_tokens": 48000
-    }
+    },
+    "stale_map": null
   },
   "memory": {
     "state": {

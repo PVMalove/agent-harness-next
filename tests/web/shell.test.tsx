@@ -40,7 +40,7 @@ describe("the shell header and menu counters", () => {
       ...(fixture as unknown as HomeSnapshot),
       health: { ok: 1, warn: 1, fail: 2, skipped: 0 },
       drift_counts: { total: 3, added: 1, missing: 0, package_changed: 2, local_changed: 0, conflict: 0, retired: 0 },
-      repo_map: { tier: "full", message: "", head_map: null },
+      repo_map: { tier: "full", message: "", head_map: null, stale_map: null },
     };
     expect(menuCounter("diagnostics", snapshot)).toEqual({ text: "2", css: "err" });
     expect(menuCounter("update-harness", snapshot)).toEqual({ text: "3", css: "warn" });

@@ -34,7 +34,7 @@ from ...kernel.home_snapshot import (
     build_home_snapshot,
 )
 from ...kernel.reports import LedgerView, load_ledger_view
-from ...kernel.repo_map import cached_map, head_commit
+from ...kernel.repo_map import cached_map, head_commit, latest_cached_map
 from ...kernel.repo_map_settings import memory_status
 
 
@@ -172,15 +172,18 @@ def recent_sessions(view: LedgerView) -> tuple[RecentSession, ...]:
 
 
 def collect_context(repo: Path) -> HomeContext:
-    """Read the Repo Map cached for the project's HEAD, the memory status, the project, harness
+    """Read the Repo Map cached for the project's HEAD (else the latest cached map of another
+    commit, shown as stale), the memory status, the project, harness
     and store facts and the recent ledger sessions; builds and writes nothing."""
     head = head_commit(repo)
     try:
         sessions = recent_sessions(load_ledger_view(repo))
     except Exception:  # an unreadable ledger shows no sessions, never stale ones
         sessions = ()
+    repo_map = cached_map(repo, head) if head else None
     return HomeContext(
-        repo_map=cached_map(repo, head) if head else None,
+        repo_map=repo_map,
+        stale_map=latest_cached_map(repo, exclude=head) if head and repo_map is None else None,
         memory=memory_status(repo),
         project=project_facts(repo),
         harness=harness_install(repo),
