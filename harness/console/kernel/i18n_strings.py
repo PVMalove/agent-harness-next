@@ -2763,6 +2763,12 @@ EN.update(
         "последний результат": "last result",
         "результат запуска виден в панели команд": "a run's result shows in the command panel",
         "Показать": "Show",
+        "В плане очистки нет контейнеров": "The cleanup plan has no containers",
+        "В плане очистки нет образов": "The cleanup plan has no images",
+        "Инвентарь движка содержит только число образов: список, теги и размер не читаются.": "The engine inventory holds only the image count: the list, tags and sizes are not read.",
+        "Сети не входят в инвентарь движка; для томов известно только число.": "Networks are not in the engine inventory; only the volume count is known.",
+        "Очистка": "Cleanup",
+        "в плане {count}": "{count} in the plan",
     }
 )
 

@@ -252,6 +252,11 @@ describe("the Harness route", () => {
     const engine = document.querySelector("#harness-engine")?.textContent ?? "";
     expect(engine).toContain("daemon отвечает");
     expect(engine).toContain("SELinux включён");
+    const blocks = [...document.querySelectorAll(".harness-container-grid > .harness-container-block")];
+    expect(blocks.map((block) => block.querySelector("h3")?.textContent)).toEqual(["Images", "Networks / volumes"]);
+    expect(blocks[0]?.querySelector(".harness-block-head > span")?.textContent).toBe("3");
+    expect(blocks[1]?.querySelector(".harness-block-head > span")?.textContent).toContain("2");
+    expect(blocks[1]?.querySelector(".harness-cleanup")).toBeTruthy();
   });
 
   test("in English the overview tab reads Overview, apart from folder browsing", () => {

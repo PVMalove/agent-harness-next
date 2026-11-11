@@ -268,6 +268,21 @@ export function AuditPanel({ overview }: { overview: HarnessOverview | null }) {
 
 const CONTAINER_KINDS = /container|network|volume|image/;
 
+type PlannedItem = MaintenanceView["soft"]["plan"]["remove"][number];
+
+function planRows(planned: PlannedItem[] | null, keep: (kind: string) => boolean, empty: string) {
+  if (planned === null) return null;
+  const rows = planned.filter((item) => keep(item.kind));
+  if (rows.length === 0) return <p className="harness-note">{empty}</p>;
+  return rows.map((item) => (
+    <div className="harness-container-row" key={`${item.kind}-${item.path}`}>
+      <b>{item.path}</b>
+      <span>{item.kind}</span>
+      <em className="orch-pill lavender">cleanup</em>
+    </div>
+  ));
+}
+
 export function ContainersPanel({
   overview,
   maintenance,
@@ -351,17 +366,40 @@ export function ContainersPanel({
         </div>
         {planned === null ? (
           <p className="harness-note">{t("План обслуживания загружается…")}</p>
-        ) : planned.length === 0 ? (
-          <p className="harness-note">{t("В плане очистки нет контейнеров и сетей")}</p>
         ) : (
-          planned.map((item) => (
-            <div className="harness-container-row" key={`${item.kind}-${item.path}`}>
-              <b>{item.path}</b>
-              <span>{item.kind}</span>
-              <em className="orch-pill lavender">cleanup</em>
-            </div>
-          ))
+          planRows(planned, (kind) => kind === "container", t("В плане очистки нет контейнеров"))
         )}
+      </div>
+      <div className="harness-container-grid" id="harness-container-grid">
+        <section className="harness-container-block" aria-label="Images">
+          <div className="harness-block-head">
+            <h3>Images</h3>
+            <span>{inventory?.images ?? "—"}</span>
+          </div>
+          <p className="harness-note">
+            {inventory?.images_problem ?? t("Инвентарь движка содержит только число образов: список, теги и размер не читаются.")}
+          </p>
+          {planRows(planned, (kind) => kind === "image", t("В плане очистки нет образов"))}
+        </section>
+        <section className="harness-container-block" aria-label="Networks / volumes">
+          <div className="harness-block-head">
+            <h3>Networks / volumes</h3>
+            <span>— / {inventory?.volumes ?? "—"}</span>
+          </div>
+          <p className="harness-note">
+            {inventory?.volumes_problem ?? t("Сети не входят в инвентарь движка; для томов известно только число.")}
+          </p>
+          <div className="harness-cleanup">
+            <span>{t("Очистка")}</span>
+            {planned === null ? (
+              <b className="muted">{t("План обслуживания загружается…")}</b>
+            ) : (
+              <b className={planned.some((item) => /network|volume/.test(item.kind)) ? "amber" : "muted"}>
+                {t("в плане {count}", { count: planned.filter((item) => /network|volume/.test(item.kind)).length })}
+              </b>
+            )}
+          </div>
+        </section>
       </div>
       <p className="harness-note">
         {t("Удаление выполняется только командами очистки с подтверждением на вкладке «Команды».")}
