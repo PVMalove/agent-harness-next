@@ -230,6 +230,8 @@ def test_rootless_containers_get_the_delegated_cgroup_limits() -> None:
 def test_a_worker_reaches_only_its_allowed_host_and_writes_as_the_host_user(
     tmp_path: Path, labelled: list[str], host_runtime_dir: Path
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getxattr, os.getuid and os.getgid are POSIX-only")
     require_engine()
     repo = Supervised(
         tmp_path / "worker",
@@ -322,6 +324,8 @@ def test_a_container_worker_is_attested_on_the_host_and_its_report_accepted(
 def test_a_container_qa_run_reports_the_real_exit_code_of_a_failing_gate(
     tmp_path: Path, labelled: list[str], host_runtime_dir: Path
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getuid and os.getgid are POSIX-only")
     require_engine()
     identity = f"{os.getuid()}:{os.getgid()}"
     gate = [f'test "$(id -u):$(id -g)" = "{identity}"', "exit 3"]

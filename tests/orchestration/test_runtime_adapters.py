@@ -570,6 +570,8 @@ def test_codex_reports_early_exit_with_log_tail(
 def test_codex_starts_detached_in_worker_with_stdin(
     dispatch: tuple[Path, Path, dict[str, object]],
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getsid is POSIX-only")
     repo, worker, _ = dispatch
     evidence = repo / "native-session.json"
     binary = fake_app_server(repo, worker)

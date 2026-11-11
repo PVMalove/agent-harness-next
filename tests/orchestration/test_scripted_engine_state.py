@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
@@ -10,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.orchestration.scripted_engine import ScriptedEngine
+from tests.orchestration.scripted_engine import ScriptedEngine, lock
 
 
 def test_a_reader_waits_for_the_cli_to_finish_writing_its_state(tmp_path: Path) -> None:
@@ -25,7 +24,7 @@ def test_a_reader_waits_for_the_cli_to_finish_writing_its_state(tmp_path: Path) 
 
     with ThreadPoolExecutor(max_workers=1) as pool:
         with engine.state_file.open("r+", encoding="utf-8") as writer:
-            fcntl.flock(writer, fcntl.LOCK_EX)
+            lock(writer, exclusive=True)
             writer.truncate()
             writer.flush()
             pending = pool.submit(read)

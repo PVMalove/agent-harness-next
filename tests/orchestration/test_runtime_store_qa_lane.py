@@ -200,6 +200,8 @@ def test_a_holder_killed_by_sigkill_is_reaped_by_the_next_admission_without_forc
 def test_a_stopped_owner_keeps_its_expired_lease_and_the_next_admission_is_lease_held(
     store: Store,
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("signal.SIGSTOP and signal.SIGCONT are POSIX-only")
     stopped = Holder(store, _owner(), 1)
     held = stopped.admission()
     assert held["state"] == "acquired"
@@ -390,6 +392,8 @@ def _lock_status(store: Store) -> JsonObject:
 def test_a_live_owner_is_released_neither_automatically_nor_by_release_lock_without_force(
     store: Store,
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("signal.SIGSTOP and signal.SIGCONT are POSIX-only")
     stopped = Holder(store, _owner(), 1)
     held = stopped.admission()
     stopped.signal(signal.SIGSTOP)

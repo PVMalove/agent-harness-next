@@ -431,6 +431,8 @@ def test_the_socket_and_the_token_sit_in_the_xdg_runtime_directory(
 def test_without_xdg_the_runtime_directory_lies_outside_the_repository(
     dirs: Directories,
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getuid is POSIX-only")
     for environ in ({}, {"XDG_RUNTIME_DIR": ""}, {"XDG_RUNTIME_DIR": "relative/run"}):
         paths = runtime_client.runtime_paths(dirs.repo, environ)
 
@@ -1653,6 +1655,8 @@ def test_without_xdg_the_runtime_and_the_client_meet_outside_the_repository(
     dirs: Directories,
 ) -> None:
     """The real fallback ``/tmp/harness-<uid>``: the test removes only its own lock file."""
+    if sys.platform == "win32":
+        pytest.skip("os.getuid is POSIX-only")
     environ = {
         key: value for key, value in os.environ.items() if key != "XDG_RUNTIME_DIR"
     }

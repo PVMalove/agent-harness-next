@@ -9,7 +9,6 @@ and removed by the calls that make them, so a test scripts a worker's exit inste
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -17,11 +16,20 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import IO, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     # The script runs outside the package too: only the type checker reads this import.
     from harness.json_types import JsonObject as State
+
+def lock(handle: IO[str], *, exclusive: bool) -> None:
+    """Lock the state file; ``fcntl`` is POSIX-only, so it is imported only after the platform check."""
+    if sys.platform == "win32":
+        raise OSError("the scripted engine locks its state with fcntl.flock, which needs POSIX")
+    import fcntl
+
+    fcntl.flock(handle, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+
 
 STATE_ENV = "HARNESS_SCRIPTED_ENGINE_STATE"
 JUNIT_ENV = "HARNESS_STAGE_JUNIT_XML"
@@ -88,7 +96,7 @@ class ScriptedEngine:
 
     def state(self) -> State:
         with self.state_file.open(encoding="utf-8") as handle:
-            fcntl.flock(handle, fcntl.LOCK_SH)
+            lock(handle, exclusive=False)
             return cast("State", json.load(handle))
 
     def calls(self) -> list[list[str]]:
@@ -138,7 +146,7 @@ class _locked:
 
     def __enter__(self) -> State:
         self.handle = self.path.open("r+", encoding="utf-8")
-        fcntl.flock(self.handle, fcntl.LOCK_EX)
+        lock(self.handle, exclusive=True)
         self.state = cast("State", json.load(self.handle))
         return self.state
 

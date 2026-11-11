@@ -524,6 +524,8 @@ def test_a_runtime_killed_before_the_launch_leaves_a_lost_execution_and_no_proce
 def test_a_coordinator_killed_after_the_launch_intent_gets_the_same_receipt_on_repeat_with_one_launch(
     supervised: Factory,
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("signal.SIGKILL is POSIX-only")
     repo = supervised(env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:intent"})
     send = repo.start_send()
     repo.runtime.wait_paused("execution.launch:intent")
