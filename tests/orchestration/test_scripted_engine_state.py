@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pathlib import Path
@@ -12,6 +13,10 @@ import pytest
 from tests.orchestration.scripted_engine import ScriptedEngine, lock
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the scripted engine locks its state with fcntl.flock, which is POSIX-only",
+)
 def test_a_reader_waits_for_the_cli_to_finish_writing_its_state(tmp_path: Path) -> None:
     engine = ScriptedEngine(tmp_path / "engine")
     state = engine.state()
