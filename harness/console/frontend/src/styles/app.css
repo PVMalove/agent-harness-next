@@ -222,3 +222,27 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 main:focus { outline: none; }
 main input:focus-visible, main select:focus-visible, main textarea:focus-visible, header input:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
 .chip, .orch-tab, [role="tab"], .lang-switch button { min-height: 24px; }
+
+/* Home after the owner's review (#1066): task search, stale Repo Map, session route across the
+   panel with an animated running step, spaced area counters. */
+.task-search { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 4px; }
+.task-search input { width: 112px; min-height: 24px; border: 0; background: transparent; color: var(--fg); }
+.tasks-panel .panel-head { gap: 8px; }
+.task-row { grid-template-columns: 56px 24px minmax(0, 1fr) minmax(0, max-content) 56px; }
+.task-time, .task-status { white-space: nowrap; }
+.task-status { display: inline-flex; align-items: center; gap: 4px; }
+.stale-map { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--warn); }
+.health-count { display: inline-flex; gap: 8px; }
+.health-count .ok { color: var(--ok); } .health-count .warn { color: var(--warn); }
+.health-count .fail { color: var(--err); } .health-count .skip { color: var(--muted); }
+.route-steps-fill { display: flex; width: 100%; }
+.route-steps-fill .route-step { flex: 1 1 0; min-width: 96px; }
+.route-steps-fill .route-dot { display: inline-grid; place-items: center; width: 20px; height: 20px; }
+.route-steps-fill .route-dot .hi { width: 12px; height: 12px; }
+.route-steps-fill .route-step { animation: route-step-in 0.24s ease-out both; }
+.route-steps-fill .route-step.current .route-dot { animation: route-current 1.6s ease-in-out infinite; }
+@keyframes route-step-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+@keyframes route-current { 50% { box-shadow: 0 0 0 4px rgba(111, 168, 220, 0.25); } }
+@media (prefers-reduced-motion: reduce) {
+  .route-steps-fill .route-step, .route-steps-fill .route-step.current .route-dot { animation: none; }
+}

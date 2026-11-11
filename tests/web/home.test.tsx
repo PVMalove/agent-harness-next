@@ -39,7 +39,7 @@ describe("Home", () => {
   test("shows the mockup blocks in order with the snapshot facts in Russian", () => {
     renderHome();
     expect(headings(1)).toEqual(["Состояние харнесса"]);
-    expect(headings(2).map((text) => text!.replace(/\s*\d+$/, ""))).toEqual([
+    expect(headings(2).map((text) => text!.replace(/\s+\d+$/, ""))).toEqual([
       "Требует внимания",
       "Контекст",
       "Последние задачи",
@@ -47,7 +47,7 @@ describe("Home", () => {
       "Контур Harness",
     ]);
     expect(headings(3).map((text) => text!.trim())).toEqual([
-      "Проектgithub",
+      "Проект",
       "Harness",
       "Runtime store",
       "Repo Map",
@@ -108,11 +108,11 @@ describe("Home", () => {
     expect(document.getElementById("problems-limit")!.textContent).toBe(
       "Показано 3 из 5 · Полный каталог проверок недоступен",
     );
-    expect(document.getElementById("problem-count")!.textContent).toBe("2 ошибки · 1 предупреждения · 3 / 5");
+    expect(document.getElementById("problem-count")!.textContent).toBe("2 ошибки · 1 предупреждение · 3 / 5");
   });
 
   test("facts without a source show an explicit no-data state, never a demo value", () => {
-    renderHome({ ...fixture, project: null, recent_sessions: [] });
+    renderHome({ ...fixture, project: null, recent_sessions: [], store: { ...fixture.store, authority: "runtime-store", cutover_at: null } });
     const tasks = document.getElementById("home-tasks")!;
     expect(within(tasks).getByText("Сессий в ledger нет")).toBeTruthy();
     const context = document.getElementById("home-context")!;
@@ -129,7 +129,7 @@ describe("Home", () => {
   test("switches to English in place", () => {
     renderHome();
     act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
-    expect(headings(2).map((text) => text!.replace(/\s*\d+$/, ""))).toEqual([
+    expect(headings(2).map((text) => text!.replace(/\s+\d+$/, ""))).toEqual([
       "Requires attention",
       "Context",
       "Recent tasks",
@@ -174,5 +174,84 @@ describe("Home", () => {
     const changed = { ...fixture, health: { ...fixture.health, ok: 43 } };
     act(() => socket.reply(snapshotReply(requests[1]!.id, changed)));
     expect(document.getElementById("health-ok")!.textContent).toBe("43");
+  });
+});
+
+describe("Home after the owner's review", () => {
+  beforeEach(() => {
+    FakeSocket.reset();
+    window.location.hash = "#/";
+  });
+
+  const icons = (root: Element) => [...root.querySelectorAll("svg[data-icon]")].map((svg) => svg.getAttribute("data-icon"));
+
+  test("health areas carry their own icons and spaced counters", () => {
+    renderHome();
+    const rows = [...document.querySelectorAll("#home-health .health-row")];
+    expect(rows.map((row) => icons(row.querySelector(".health-name")!)[0])).toEqual(["github", "skills", "shield", "harness"]);
+    const counts = rows[0].querySelector(".health-count")!;
+    expect(counts.querySelectorAll("span").length).toBe(4);
+    expect(counts.textContent).toContain("5 ✓");
+  });
+
+  test("attention and checks show the localized check title, the id only as a hint", () => {
+    renderHome({
+      ...fixture,
+      problems: [{ status: "fail", id: "files.skill_snapshot", message: "differs", group: "files" }],
+      problems_total: 1,
+    });
+    const attention = document.getElementById("attention-list")!;
+    expect(within(attention).getByText("Снимок навыков")).toBeTruthy();
+    expect(attention.querySelector("b")!.textContent).not.toContain("files.skill_snapshot");
+    expect(document.getElementById("problem-count")!.textContent).toContain("1 ошибка");
+  });
+
+  test("the project card shows the hosting icon without a tracker capsule and capability names", () => {
+    renderHome();
+    const context = document.getElementById("home-context")!;
+    const project = context.querySelector(".context-section h3")!;
+    expect(icons(project)).toEqual(["github-mark"]);
+    expect(context.querySelector(".provider")).toBeNull();
+    expect(within(context).getByText("backend-orchestration · engineering-suite")).toBeTruthy();
+    expect(within(context).getByText("не выполнен")).toBeTruthy();
+  });
+
+  test("a map of another commit is shown as stale for HEAD with a Rebuild action", () => {
+    renderHome({
+      ...fixture,
+      repo_map: {
+        ...fixture.repo_map,
+        head_map: null,
+        stale_map: { origin: "кэш", commit: "7ff379f", files: 35, edges: 80, estimated_tokens: 16000 },
+      },
+    });
+    const context = document.getElementById("home-context")!;
+    expect(within(context).getByText(/устарела для HEAD/)).toBeTruthy();
+    expect(within(context).getByRole("link", { name: /Перестроить/ }).getAttribute("href")).toBe("#/repo-map");
+  });
+
+  test("recent tasks: number search, role and status icons, localized status and duration", () => {
+    renderHome();
+    const tasks = document.getElementById("home-tasks")!;
+    const rows = () => [...tasks.querySelectorAll(".task-row")];
+    expect(icons(rows()[0].querySelector(".task-role")!)).toEqual(["developer"]);
+    expect(icons(rows()[1].querySelector(".task-role")!)).toEqual(["qa"]);
+    expect(rows()[0].querySelector(".task-status")!.textContent).toContain("Активен");
+    expect(icons(rows()[0].querySelector(".task-status")!)).toEqual(["play"]);
+    expect(rows()[0].querySelector(".task-time")!.textContent).toBe("2 мин");
+    expect(rows()[1].querySelector(".task-time")!.textContent).toBe("31 мин");
+    act(() => fireEvent.change(within(tasks).getByRole("searchbox"), { target: { value: "6" } }));
+    expect(rows().map((row) => row.querySelector(".task-id")!.textContent)).toEqual(["#6"]);
+    act(() => fireEvent.change(within(tasks).getByRole("searchbox"), { target: { value: "#99" } }));
+    expect(rows()).toEqual([]);
+    expect(within(tasks).getByText(/не найдена/)).toBeTruthy();
+  });
+
+  test("the session route spans the panel with localized steps and marks the running step", () => {
+    renderHome();
+    const steps = [...document.querySelectorAll("#home-tasks .route-step")];
+    expect(steps.map((step) => step.querySelector("small")!.textContent)).toEqual(["Отчёт сдан", "Выполняется"]);
+    expect(steps[1].className).toContain("current");
+    expect(icons(steps[0])).toEqual(["architect"]);
   });
 });

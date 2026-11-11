@@ -168,6 +168,7 @@ export function Icon({ name, className = "" }: { name: IconName | string; classN
   return (
     <svg
       className={`hi ${className}`.trim()}
+      data-icon={name}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

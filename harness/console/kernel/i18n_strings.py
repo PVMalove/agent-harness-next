@@ -706,6 +706,15 @@ EN: dict[str, str] = {
     "Тренд latency за сутки": "Latency trend over a day",
     "Перейти к содержимому": "Skip to content",
     "Карточка тикета": "Ticket card",
+    "не установлены": "not installed",
+    "вне каталога": "outside the catalog",
+    "не выполнен": "not done",
+    "Карта {commit} устарела для HEAD: {files} файлов, ≈{tokens} токенов": "Map {commit} is stale for HEAD: {files} files, ≈{tokens} tokens",
+    "Номер тикета": "Ticket number",
+    "Поиск задачи по номеру": "Find a task by number",
+    "Задача #{number} не найдена среди последних сессий": "Task #{number} is not among the recent sessions",
+    "Схема показывает устройство контура, а не поток конкретного batch. Python решает; Rust пишет состояние и исполняет.": "The diagram shows how the contour is built, not the flow of a batch. Python decides; Rust writes the state and executes.",
+    "runtime не отвечает (runtime_unavailable)": "the runtime does not answer (runtime_unavailable)",
 }
 
 # Labels of the facts in the home screen's context cards. Kept apart from `EN`: a label such as

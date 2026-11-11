@@ -70,3 +70,21 @@ test("a wrong token answers 401 and sets no cookie", async ({ page, context }) =
   expect(response?.status()).toBe(401);
   expect(await context.cookies(base())).toEqual([]);
 });
+
+for (const width of [1440, 390]) {
+  test(`Home and its recent tasks fit ${width} px without horizontal overflow`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${base()}/?token=${token()}`);
+    await expect(blocks(page)).toHaveCount(5);
+    const overflow = await page.evaluate(() => {
+      const main = document.querySelector("main") as HTMLElement;
+      const rows = [...document.querySelectorAll<HTMLElement>("#home-tasks .task-row")];
+      return {
+        page: document.documentElement.scrollWidth - window.innerWidth,
+        main: main.scrollWidth - main.clientWidth,
+        rows: rows.filter((row) => row.scrollWidth > row.clientWidth + 1).length,
+      };
+    });
+    expect(overflow).toEqual({ page: 0, main: 0, rows: 0 });
+  });
+}
