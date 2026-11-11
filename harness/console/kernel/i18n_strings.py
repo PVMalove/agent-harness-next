@@ -2514,6 +2514,20 @@ EN.update(
     }
 )
 
+# Web console #1066: Publication and Reports — worded statuses and the Release Gate tree check.
+EN.update(
+    {
+        "Отказов гейта нет": "No gate refusals",
+        "только человек": "human only",
+        "{passed} / {total} пройдено": "{passed} / {total} passed",
+        "{count} пройдено": "{count} passed",
+        "{count} внимание": "{count} attention",
+        "совпадает": "matches",
+        "расходится": "differs",
+        "Неизвестно": "Unknown",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

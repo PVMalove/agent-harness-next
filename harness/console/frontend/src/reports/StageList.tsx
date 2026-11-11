@@ -1,6 +1,8 @@
 /* The filtered stage list of the Reports page: date, ticket, role and short id, then the stage
    status as a symbol and its words. Every field is untrusted ledger text, rendered as text. */
 import { useI18n } from "../i18n";
+import { Icon } from "../icons";
+import { roleIcon } from "../steps/ActivityViews";
 import type { ReportHead, StageHead } from "../ws/ledger";
 import { renderStatus, shortId, stageStatus, timestamp } from "./format";
 import type { StageFilters } from "./format";
@@ -99,6 +101,9 @@ export function StageList({
             aria-pressed={stage.dispatch_id === selected}
             onClick={() => onSelect(stage.dispatch_id)}
           >
+            <span className="report-type-icon">
+              <Icon name={roleIcon(stage.role)} />
+            </span>
             <span className="report-row-main">
               <b>
                 {stage.ticket} · {stage.role}

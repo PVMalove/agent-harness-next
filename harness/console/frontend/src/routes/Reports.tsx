@@ -72,9 +72,9 @@ export function Reports() {
           {ledger && counts && (
             <div className="home-facts">
               <span>{t("{count} отчётов", { count: counts.all })}</span>
-              <span>{counts.passed} passed</span>
-              <span>{counts.attention} attention</span>
-              <span>{counts.blocked} blocked</span>
+              <span>{t("{count} пройдено", { count: counts.passed })}</span>
+              <span>{t("{count} внимание", { count: counts.attention })}</span>
+              <span>{t("{count} заблокировано", { count: counts.blocked })}</span>
               <span id="reports-cache">
                 {screen.cached ? t("Кэш") : t("Новый снимок")} · {screen.ageSeconds ?? 0} s
               </span>

@@ -9,7 +9,7 @@ import { Icon } from "../icons";
 import { TabList, TabPanels } from "../views/Tabs";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
-import { VERDICT_TONE } from "../reports/ReportViews";
+import { VERDICT_TONE, tree } from "../reports/ReportViews";
 import { Timeline } from "../reports/Timeline";
 import { useScreen } from "../screens/useScreen";
 import { NoData } from "../steps/ActivityViews";
@@ -66,12 +66,13 @@ export function preflightRows(entry: PublishEntry): Check[] {
 }
 
 function Preflight({ entry, compact }: { entry: PublishEntry; compact: boolean }) {
+  const { state } = useI18n();
   const rows = preflightRows(entry);
   return (
     <div className="publish-preflight">
       {(compact ? rows.slice(0, 3) : rows).map((row) => (
         <div className="publish-check" key={row.label}>
-          <span className={`orch-pill ${row.tone}`}>{row.status}</span>
+          <span className={`orch-pill ${row.tone}`}>{state(row.status)}</span>
           <div>
             <b>{row.label}</b>
             <small>{row.detail}</small>
@@ -108,7 +109,8 @@ export function Publish() {
             <div className="home-facts" id="publish-facts">
               <span>{short(entry.candidate)}</span>
               <span>target {short(entry.target)}</span>
-              <span>QA {entry.qa ? entry.qa.outcome : "—"}</span>
+              <span>QA {entry.qa ? stateText(entry.qa.outcome) : "—"}</span>
+              <span>Release Gate · {stateText(entry.verdict)}</span>
             </div>
           )}
         </div>
@@ -152,18 +154,18 @@ export function Publish() {
         <div>
           <span>Release Gate</span>
           <b className={entry ? VERDICT_TONE[entry.verdict] : undefined} id="publish-verdict">
-            {entry ? entry.verdict : <NoData />}
+            {entry ? stateText(entry.verdict) : <NoData />}
           </b>
           <small>{entry?.refusals[0] ?? "—"}</small>
         </div>
         <div>
           <span>QA source</span>
-          <b className="mint">{entry?.qa ? entry.qa.outcome : <NoData />}</b>
+          <b className="mint">{entry?.qa ? stateText(entry.qa.outcome) : <NoData />}</b>
           <small>candidate / target pair</small>
         </div>
         <div>
           <span>PR receipt</span>
-          <b className="lavender">{entry?.pr_url ? entry.pr_state || "found" : "missing"}</b>
+          <b className="lavender">{stateText(entry?.pr_url ? entry.pr_state || "found" : "missing")}</b>
           <small>{entry?.pr_url || t("создание не выполнялось")}</small>
         </div>
       </div>
@@ -182,30 +184,40 @@ export function Publish() {
                 </div>
                 <div className="publish-candidate-body">
                   <code className="publish-sha">{entry.candidate ?? "—"}</code>
-                  <h3>
-                    {t("название")}: <NoData />
-                  </h3>
+                  <h3>{entry.ticket || entry.batch_id}</h3>
                   <div className="publish-meta">
                     <span>{entry.branch || "—"}</span>
                     <span>target {short(entry.target)}</span>
-                    <span>QA {entry.qa ? entry.qa.outcome : "—"}</span>
+                    <span>QA {entry.qa ? stateText(entry.qa.outcome) : "—"}</span>
+                  </div>
+                  <div className="publish-candidate-actions">
+                    <a className="btn" href={href("orchestration")}>
+                      <Icon name="orchestration" /> {section("Orchestration")}
+                    </a>
+                    <a className="btn" href={href("reports")}>
+                      <Icon name="reports" /> {section("Reports")}
+                    </a>
                   </div>
                 </div>
               </section>
               <section className="panel publish-gate">
                 <div className="panel-head">
                   <h2>Release Gate</h2>
-                  <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{entry.verdict}</span>
+                  <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{stateText(entry.verdict)}</span>
                 </div>
                 <div className="publish-gate-body">
+                  <div className="publish-gate-verdict">
+                    <b>{stateText(entry.verdict)}</b>
+                    <span>{entry.refusals[0] ?? t("Отказов гейта нет")}</span>
+                  </div>
                   <div className="publish-gate-facts">
                     <div>
                       <span>tree</span>
-                      <b>{entry.head_matches === null ? "unknown" : entry.head_matches ? "match" : "mismatch"}</b>
+                      <b>{t(tree(entry.head_matches)[0])}</b>
                     </div>
                     <div>
                       <span>QA</span>
-                      <b>{entry.qa ? entry.qa.outcome : "—"}</b>
+                      <b>{entry.qa ? stateText(entry.qa.outcome) : "—"}</b>
                     </div>
                     <div>
                       <span>reason</span>
@@ -213,7 +225,7 @@ export function Publish() {
                     </div>
                     <div>
                       <span>merge</span>
-                      <b>human only</b>
+                      <b>{t("только человек")}</b>
                     </div>
                   </div>
                 </div>
@@ -228,6 +240,9 @@ export function Publish() {
             <section className="panel publish-preflight-panel">
               <div className="panel-head">
                 <h2>Preflight</h2>
+                <span className="small muted">
+                  {t("{passed} / {total} пройдено", { passed: preflightRows(entry).filter((row) => row.status === "ok").length, total: preflightRows(entry).length })}
+                </span>
               </div>
               <Preflight entry={entry} compact />
             </section>
@@ -235,7 +250,7 @@ export function Publish() {
           <section className="panel publish-decision" id="publish-decision">
             <div className="panel-head">
               <h2>{t("Решение человека")}</h2>
-              <span className={`orch-pill ${blocked ? "violet" : "mint"}`}>{blocked ? "blocked" : "ready"}</span>
+              <span className={`orch-pill ${blocked ? "violet" : "mint"}`}>{stateText(blocked ? "blocked" : "ready")}</span>
             </div>
             <div className="publish-decision-body">
               <div className="publish-decision-actions">
@@ -262,6 +277,7 @@ export function Publish() {
         <section className="panel publish-preflight-panel" id="publish-preflight">
           <div className="panel-head">
             <h2>Preflight</h2>
+            <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{stateText(entry.verdict)}</span>
           </div>
           <Preflight entry={entry} compact={false} />
           <div className="publish-preflight-foot">
@@ -334,7 +350,7 @@ export function Publish() {
                 .map((row) => (
                   <div className="publish-evidence-row" key={row.label}>
                     <b>{row.label}</b>
-                    <span className={`orch-pill ${row.tone}`}>{row.status}</span>
+                    <span className={`orch-pill ${row.tone}`}>{stateText(row.status)}</span>
                     <small>{row.detail}</small>
                   </div>
                 ))}

@@ -199,11 +199,11 @@ for (const width of [1440, 390]) {
     await page.getByRole("tab", { name: "Evidence" }).click();
     await expect(page.locator("#reports-evidence .report-evidence-row")).toHaveCount(2);
     await page.getByRole("tab", { name: "Готовность" }).click();
-    await expect(page.locator("#reports-readiness [data-verdict]")).toHaveText("blocked");
+    await expect(page.locator("#reports-readiness [data-verdict]")).toHaveText("Заблокировано");
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "publish", width);
-    await expect(page.locator("#publish-verdict")).toHaveText("blocked");
+    await expect(page.locator("#publish-verdict")).toHaveText("Заблокировано");
     expect(await noOverflow(page)).toBe(true);
   });
 }

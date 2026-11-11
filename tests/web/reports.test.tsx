@@ -110,7 +110,39 @@ describe("the Reports route", () => {
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Готовность" })));
     expect(document.querySelector("#reports-readiness")!.textContent).toContain("Release Gate");
     // The QA report of #887 records a blocker: the kernel's verdict is "blocked".
-    expect(document.querySelector("#reports-readiness [data-verdict]")!.textContent).toBe("blocked");
+    expect(document.querySelector("#reports-readiness [data-verdict]")!.textContent).toBe("Заблокировано");
+    expect(document.querySelector("#reports-readiness .report-ready-row")!.textContent).not.toMatch(/\b(match|failed|blocked)\b/);
+  });
+
+  test("the title facts are words, and every report row carries its role icon", () => {
+    renderReports();
+    const facts = [...document.querySelectorAll(".reports-title .home-facts span")].map((item) => item.textContent);
+    expect(facts.slice(1, 4).join(" ")).not.toMatch(/passed|attention|blocked/);
+    expect(facts.slice(1, 4).every((fact) => /^\d+ \S/.test(fact ?? ""))).toBe(true);
+    const rows = [...document.querySelectorAll("#report-list .report-row")];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.querySelector(".report-type-icon svg") !== null)).toBe(true);
+    expect(document.querySelector("#qa-lane .qa-attempt-state")?.textContent).not.toMatch(/^(pass|fail)$/);
+  });
+
+  test("the Publication page words every status and shows no title placeholder", () => {
+    window.location.hash = "#/publish";
+    const client = createConsoleClient({ url: "ws://127.0.0.1:1/ws", WebSocket: FakeSocket, timers: new ManualClock(), probeHealth: async () => false });
+    render(
+      <LanguageProvider>
+        <App client={client} />
+      </LanguageProvider>,
+    );
+    const socket = FakeSocket.last;
+    act(() => socket.open());
+    answer(socket, "reports.snapshot", REPORTS);
+    const main = () => document.querySelector("main#content")?.textContent ?? "";
+    expect(document.querySelector("#publish-verdict")?.textContent).toBe("Заблокировано");
+    expect(main()).not.toContain("название");
+    expect(main()).not.toMatch(/\b(unknown|missing|blocked|human only|match)\b/);
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Preflight" })));
+    const pills = [...document.querySelectorAll("#publish-preflight .publish-check .orch-pill")].map((pill) => pill.textContent);
+    expect(pills).toEqual(["Заблокировано", "Норма", "Заблокировано", "Норма", "Неизвестно"]);
   });
 
   test("the evidence matrix shows the kernel's cells", () => {
