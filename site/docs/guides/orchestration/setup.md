@@ -1,6 +1,6 @@
 # Включение и конфигурация
 
-Включи capability, проверь конфигурацию и оцени границы задачи до создания batch. Справочник полей — в разделе [Настройки](../../getting-started/settings/orchestration/index.md).
+Включите capability, проверьте конфигурацию и оцените границы задачи до создания batch. Справочник полей — в разделе [Настройки](../../getting-started/settings/orchestration/index.md).
 
 [Обзор оркестрации](../../backend-orchestration.md)
 
@@ -41,7 +41,7 @@ python3 harness/bin/harness.py health /path/to/repository
 
 ## Настройка `.harness/orchestration.json` {#2-harnessorchestrationjson}
 
-Выбирай назначения ролей, команды проверок и политики по [справочнику полей](../../getting-started/settings/orchestration/index.md). Если seed-конфига нет или он пуст, coordinator берёт дефолты для `in-process`. Заданные политики coordinator объединяет с дефолтами, даже если `assignment_plans` нет. Проверь конфигурацию перед dispatch.
+Выбирайте назначения ролей, команды проверок и политики по [справочнику полей](../../getting-started/settings/orchestration/index.md). Если seed-конфига нет или он пуст, coordinator берёт дефолты для `in-process`. Заданные политики coordinator объединяет с дефолтами, даже если `assignment_plans` нет. Проверьте конфигурацию перед dispatch.
 
 ### Нормализация и проверка конфига {#_3}
 

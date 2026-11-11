@@ -1,8 +1,8 @@
 # Backend-оркестрация {#backend-}
 
-Используй `backend-orchestration`, когда задаче нужны независимые роли или отдельная проверка. Capability расширяет `engineering-suite`. Управляющая сессия coordinator планирует работу и ведёт её по выбранной политике согласования. Роли не выбирают себе модель и не мержат PR.
+Используйте `backend-orchestration`, когда задаче нужны независимые роли или отдельная проверка. Capability расширяет `engineering-suite`. Управляющая сессия coordinator планирует работу и ведёт её по выбранной политике согласования. Роли не выбирают себе модель и не мержат PR.
 
-## Выбери задачу {#choose-task}
+## Выберите задачу {#choose-task}
 
 - <span id="1"></span><span id="2-harnessorchestrationjson"></span><span id="_3"></span><span id="preflight"></span><span id="tool-policy-context-budget-brief"></span><span id="attention-approval-ttl-extensions"></span>[Включить и настроить](guides/orchestration/setup.md).
 - <span id="access_policy-runtime_access"></span><span id="docker"></span><span id="worker"></span><span id="qa-git-publish"></span>[Подготовить доступ и контейнер](guides/orchestration/access.md).
@@ -34,12 +34,12 @@ Manifest-файлы в `roles/` задают границы ролей. Прое
 
 После миграции Rust хранит рабочие записи в `.harness/orchestration/state/runtime.db`.
 Python читает и меняет их через протокол runtime. Пути вида `reports/<id>.json` обозначают
-логические записи, а не JSON-файлы для ручной правки. Используй CLI для чтения и изменений.
+логические записи, а не JSON-файлы для ручной правки. Используйте CLI для чтения и изменений.
 Локальное состояние не публикуется в Git; очистка требует отдельного решения coordinator.
 
 ## Язык и доказательства {#language-evidence}
 
-Перед первым английским handoff прочитай [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/technical-english.md).
+Перед первым английским handoff прочитайте [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/technical-english.md).
 Передача между ролями, checkpoint и state evidence пишутся на английском; completion report для
 coordinator пишется на русском с `"report_language": "ru"`. Команды, пути и SHA не переводятся.
 
@@ -48,5 +48,5 @@ coordinator пишется на русском с `"report_language": "ru"`. К�
 
 ## С чего начать {#start-here}
 
-Для первого запуска открой [включение и конфигурацию](guides/orchestration/setup.md).
-Если нужно выбрать значения с агентом, используй [стартовый промпт настройки](getting-started/settings/orchestration/index.md#agent-setup).
+Для первого запуска откройте [включение и конфигурацию](guides/orchestration/setup.md).
+Если нужно выбрать значения с агентом, используйте [стартовый промпт настройки](getting-started/settings/orchestration/index.md#agent-setup).

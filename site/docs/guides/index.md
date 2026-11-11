@@ -1,6 +1,6 @@
 # Руководства
 
-Выбери маршрут для задачи или найди главу по названию. Установка и настройки проекта — в разделе [Начало](../getting-started/index.md), переводы скиллов, hooks и агентов — в [Справочнике](../reference/index.md).
+Выберите маршрут для задачи или найдите главу по названию. Установка и настройки проекта — в разделе [Начало](../getting-started/index.md), переводы скиллов, hooks и агентов — в [Справочнике](../reference/index.md).
 
 <div data-ah-directory>
   <div class="ah-ref-glossary">
@@ -96,7 +96,7 @@
   </section>
 
   <div data-ah-directory-art>
-    <p class="ah-core-hint">Полный маршрут от идеи к PR. Выбери этап для пояснения.</p>
+    <p class="ah-core-hint">Полный маршрут от идеи к PR. Выберите этап для пояснения.</p>
     <div class="ah-flow" id="ah-guide-diagram"><div class="ah-core-flow" id="ah-guide-flow"></div><div class="ah-flow-note" id="ah-guide-note" aria-live="polite"></div></div>
   </div>
 </div>
