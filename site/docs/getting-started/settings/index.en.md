@@ -7,13 +7,47 @@ approval, access, and verification; it appears with the `backend-orchestration` 
 live the integrations inventory, generated hook policy, native runtime configs, secrets, and
 environment.
 
+## Where to start configuring {#agent-setup}
 
-## The two core files
+??? quote ah-skill-text "Agent prompt: getting started"
 
-| File | When it appears | Who writes it | Who reads it |
-| --- | --- | --- | --- |
-| `.harness/project.json` | `harness init`, `adopt`, or `update` when the file does not exist yet | the project after creation; the installer writes the file from a template | qa-gate, pr-composer, code-review, to-guide, test-author, and hooks |
-| `.harness/orchestration.json` | installation of the `backend-orchestration` capability | the project; when absent it is copied from `.harness/orchestration.example.json` | the coordinator, `harness-runtime`, and the console setup wizard |
+    ```text
+    Help me choose where to begin configuring this installed harness.
+
+    Follow repository instructions. Keep questions, choices and user-facing summaries in Russian.
+    Read existing configuration and installed documentation before proposing changes; missing files
+    are not permission to initialize or overwrite anything. Ask only for unresolved facts, one question
+    at a time. Offer 2-4 concrete choices plus «Другое», with one consequence each. Put an evidence-based
+    recommendation first and mark it «Рекомендуется»; otherwise ask for the missing fact.
+    Never read authentication files or request, print, copy or store token/key values.
+
+    Read .harness/project.json, orchestration.json, integrations.json and harness.lock only if present,
+    plus installed schemas/examples and settings documentation. Inspect available health diagnostics.
+    Explain which settings are already valid, missing or blocked. Ask what the user wants to achieve:
+    basic project workflow, role orchestration, external/container execution or integration inventory.
+    Start with project metadata, branches and actual QA commands. Add orchestration only when required
+    and installed; ask about providers, models and transports instead of selecting them silently.
+    Keep approval, access, verification, context and environment decisions separate. Use the relevant
+    page's focused prompt for the next group. Ask about environment-variable names only; credentials
+    are entered by the user privately. Agree on one small configuration step before editing.
+
+    Preserve unrelated configuration. Show the exact proposed diff, assumptions and remaining
+    prerequisites. Wait for approval, then apply only the approved diff with Edit/Write.
+    Run harness health and, when orchestration is installed, config validate --canonical --json.
+    Distinguish skipped from passed checks.
+    Report results and the next smallest step. Do not install tools, change credentials/trust,
+    start or restart services, migrate state, send workers, change Git, commit or open a PR.
+    Give any such commands for separate review instead of executing them automatically.
+    ```
+
+## The two core contracts
+
+Both files live in `.harness/`.
+
+| Contract | Creation, ownership, and checks |
+| --- | --- |
+| [project.json](project.md) | Created from a template during `harness init`, `adopt`, or `update` if absent; maintained by the project afterward. Read by qa-gate, pr-composer, code-review, to-guide, test-author, and hooks. Health: `files.project_json`. |
+| [orchestration.json](orchestration/index.md) | Appears with the `backend-orchestration` capability: an absent file is copied from `.harness/orchestration.example.json`; maintained by the project afterward. Read by the coordinator, `harness-runtime`, and the console setup wizard. Health: `files.orchestration_config`. |
 
 The installer does not overwrite existing values: `project.json` is created once, and
 `orchestration.json` only when it is absent. `harness update` refreshes the managed
@@ -30,11 +64,15 @@ Besides the two contracts, a project has surfaces configured separately:
   reports drift and `harness update` fixes it. The format and the check are described in the
   [hooks installation guide](../../hooks/install-and-update.md).
 - Native configs `.claude/settings.json`, `.claude/settings.local.json`, `.codex/hooks.json`,
-  `.mcp.json` belong to the runtimes; the harness only records them and never overwrites them.
-- Secrets — files hold variable names only; values live in the environment, and for the container in
-  the environment of `harness-runtime serve`.
-- Dependencies — Python 3.12+, `uv`, Git, Rust and `harness-runtime`, and Docker or Podman for the
-  container; the harness does not install the project's own dependencies.
+  `.mcp.json`, `.kimi/mcp.json`, `opencode.json`, and `opencode.jsonc` are read by their runtimes.
+  Harness records them in the inventory; hook installation merges managed entries while preserving
+  other settings. Forcing a complete file replacement is a separate explicit action.
+- Secrets — `secret_refs` and `access_policy.*.environment` contain names only. Values belong to
+  CLI authentication, the environment, or an integration's native config; containers receive them
+  from the environment of `harness-runtime serve`. IPC and console tokens are generated separately.
+- Dependencies — Python 3.12+, `uv`, and Git; backend orchestration needs `harness-runtime`
+  (building requires Rust 1.89+), and containers need Docker or Podman. Environment checks use
+  the `environment.*` prefix; harness does not install the project's own dependencies.
 
 These surfaces are described on the [Integrations](integrations.md),
 [Secrets and tokens](secrets.md), and [Dependencies and environment](environment.md) pages.
@@ -64,7 +102,7 @@ source of truth, not the example.
 
 ## Validating the configuration
 
-```bash
+```bash {.ah-code-wrap}
 python3 .harness/orchestration/coordinator.py --repo . config validate --json
 python3 .harness/orchestration/coordinator.py --repo . config validate --canonical --json
 python3 .harness/orchestration/coordinator.py --repo . config validate --fix --dry-run --json

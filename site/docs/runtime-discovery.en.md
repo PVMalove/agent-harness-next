@@ -1,8 +1,8 @@
 # Skill discovery in Claude Code and Codex
 
-Harness next v1.0.0 is intended for Claude Code and Codex. The installed set is physically
-stored in `.harness/skills/`; the links in the project point to the same files. The verified
-compatibility and the install instructions cover the two runtimes below.
+This page describes skill discovery in Claude Code and Codex. The installed set is physically
+stored in `.harness/skills/`; the links in the project point to the same files. The paths
+and hook wiring for these two runtimes are described below.
 
 | Runtime | Project path | Global `start-project` |
 | --- | --- | --- |
@@ -33,4 +33,4 @@ in `harness health` shows the connected and missing hooks of each runtime;
 for details, see [install-and-update](hooks/install-and-update.md).
 
 The CLI and the sources may contain routes for other runtimes. They are not part of the declared
-v1.0.0 compatibility, because their operation was not verified in this project.
+compatibility described on this page, because their operation was not verified in this project.

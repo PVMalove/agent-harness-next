@@ -16,7 +16,7 @@ developer continues the usual route.
 
 Both optional settings go in `.harness/project.json`:
 
-```json
+```json {.ah-code-wrap}
 "test_paths": ["tests/**"],
 "test_runner": {"command": ["python3", "-m", "pytest", "{test_id}"]}
 ```
@@ -30,6 +30,36 @@ preflight answers `write_zone_rejected`, for example for `tests/*.py`.
 `test_runner.command` is an argv without a shell, with exactly one `{test_id}` argument, which is not
 the first one. The schema, the validator, and `harness health` use one contract. Missing fields are not
 an error, but they turn the test author off.
+
+The full `/implement` route inherits `resolved_runtime`, `resolved_model` and `resolved_effort`
+from the approved developer brief. Pass `--brief <path>` to general preflight. Later orchestration
+changes and the project short profile do not alter that approved choice. The native
+`Agent(test-author)` template uses `model: inherit` with no effort override; the developer calls
+it without model/effort overrides. A stale local fixed model or effort yields
+`test_author_config_invalid`. Review the template diff before replacing the seed with
+`harness update . --force-seed-file .claude/agents/test-author.md`.
+
+The short `/fast-implement` route uses a separate explicit profile in `.harness/project.json`:
+
+```json {.ah-code-wrap}
+"test_author": {"runtime": "claude", "model": "sonnet", "effort": "high"}
+```
+
+This is an example user choice, not defaults. All three fields are required inside the profile.
+Without it, the short route returns `test_author_missing`. Invalid developer brief fields give
+`test_author_config_invalid` on the full route, without falling back to the project profile.
+`resolve --repo . [--brief <path>]` shows the selected fields and source.
+
+The short route saves the requirement and one scenario in a local prompt file, then calls:
+
+```sh {.ah-code-wrap}
+python3 -I -B .harness/health/test_author.py run --repo . --prompt-file '<prompt-file>'
+```
+
+The launcher rechecks the protected adapter, passes exact model/effort and sends the task through
+stdin, including when the current session uses a different model. A runtime without a protected
+adapter returns `runtime_unsupported`; it is never replaced by another CLI. Currently only Claude
+Code has that adapter; `.claude` paths below refer to its guard and runner, not an implied executor.
 
 ## 3. Protection
 
@@ -175,19 +205,58 @@ outcome adds no coordinator, architect, or QA steps and does not change the ledg
 
 ## 7. The full `/implement` route
 
-Preflight serves only the checkout where it lives. The developer in-process worker works in
-a separate worktree from the brief, and `CLAUDE_PROJECT_DIR` points to the main checkout, so a call
-without arguments would check the wrong directory. Such a developer runs
-`"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <worktree from the brief>`.
-The answer `{"status":"ok"}` is possible only if the canonical path of the argument matches the checkout of the
-script. For a separate worker checkout the answer is `checkout_mismatch`. The author does not write or
-run tests in the main checkout: the guard and the runner serve only the checkout of the script.
+The author works beside an external developer in its worker worktree, using runtime/model/effort
+from the developer brief. The supported adapter starts the developer in that checkout, so the
+runtime, scoped hook and runner refer to the same code. Install the harness in the worker checkout
+and enable `test_paths` and `test_runner` there; do not copy main-checkout orchestration state.
+Open that exact path in Claude Code and accept trust yourself. Neither the installer, developer
+nor a headless launch makes that trust decision for you.
 
-The external transport (`harness/adapters/claude_worker.py`, headless `claude -p` in a worktree) does not
-enable the author and does not run preflight: the native `--print` mode skips the trust dialog, and the
-worktree path has no trust entry, so the reason is `transport_unsupported`. This is a developer decision, not an
-answer from preflight.
+The external developer runs general preflight with `--repo <worker_worktree> --brief <brief path>`.
+For the protected Claude adapter this is `.claude/hooks/test-author-preflight.sh --worktree
+<worker_worktree> --brief <brief path>`. Only exact `{"status":"ok"}` enables the next step.
+The approved brief must also allow `Agent(test-author)` or `Agent`; otherwise the developer's
+reason is `agent_tool_unavailable`. The new orchestration template grants the named permission
+only to developer. Existing projects with a tool policy enable it explicitly in
+`tool_policy.roles.developer`, retaining other tools. Explicit restrictions are never widened
+automatically; the tool list is digest-bound before approval under ADR 0024.
 
-Any answer other than `{"status":"ok"}` leaves the usual TDD in the worker checkout: the developer writes
-the failing test, then makes it green, and names the reason in the output. This is not a blocker, and the ledger does
-not change.
+The author writes within the worker's `test_paths` and uses its runner. The developer passes one
+specific test path within brief scope and the log root from the adapter prompt:
+`<main>/.harness/.sandboxes/runs/`. These logs are shared in linked worktrees; `run_id` points to
+`isolated-test-<run_id>/log.txt` under that root. The adapter grants access to evidence while the
+scoped guard retains its write and Bash limits. Main-checkout code, tests and Git status stay
+unchanged; shared runtime logs remain in its ignored sandbox.
+
+An in-process developer still runs main-checkout preflight with the brief's `--worktree`.
+A separate worker gives `checkout_mismatch` and uses ordinary TDD. Any preflight refusal or
+unavailable author-calling tool likewise leaves ordinary TDD in the worker, with its reason and
+without a blocker or new ledger record. Runtime selection comes from the developer; lack of a
+protected adapter retains ordinary TDD, without substituting an executor.
+
+This release verifies Python tests through unittest and pytest. Rust tests in
+`native/harness-runtime/crates/*/tests` are not supported by this solution: no write zones and
+separate runner were added for them. Configurable argv is not itself restricted to Python, but
+it does not establish another stack's support. Ordinary Rust QA remains required for Rust changes.
+
+## 8. Diagnostics and live check
+
+`harness health` reports `hooks.test_author`: preflight readiness or a sanitized refusal, selected
+runtime/model/effort and source. Health uses the orchestration developer plan, marked `planned`,
+and otherwise the project short profile. Planned readiness does not replace an approved brief.
+For the supported Claude adapter, Health also checks exact-path trust. Without opt-in the check
+is skipped with a reason; an unavailable optional author warns while ordinary development works.
+
+Health runs no Claude process, selected test, build or database and changes no trust. The isolation
+probe creates and removes a temporary sandbox under shared `runs/`. Static `preflight: ok` does
+not prove the scoped hook fires live. `make test-author-probe` checks that: it needs Claude Code
+login and quota. It uses runtime/model/effort from the source project's developer plan, not a
+separate cheap model. An unsupported runtime adapter fails explicitly. The supported probe
+confirms the guard, behavioral Red and an external developer calling the author in a worker
+worktree; a fixture developer then proves Green of the unchanged test.
+
+Each CLI call leaves a sanitized `test-author-probe-*.json` in shared
+`.harness/.sandboxes/reports/`: checkout, stage, exit code, time, runtime-reported usage/cost and a
+separate limit. Unknown metrics stay `null`; a limit is not usage. Reports survive clean-room
+project removal, without full transcripts or credentials. Subscription quota share may be absent
+from runtime data and is never calculated from USD.

@@ -30,13 +30,13 @@
 
 ## Гейты
 
-| Гейт | Что происходит | Кто утверждает | Артефакт |
+| Гейт | Что происходит | Решение | Артефакт |
 | --- | --- | --- | --- |
-| architect | План: шов, границы, порядок правок | человек | принятый architect-отчёт |
-| developer | Реализация по плану, тесты до кода | человек | candidate commit |
-| code-review | Две оси, Standards и Spec, независимо | человек | отчёт review по обеим осям |
-| qa | Полный прогон на закреплённом кандидате, Release Gate | человек | QA evidence для SHA |
-| publish | Принятый SHA объявляется опубликованным | человек | запись публикации |
+| architect | План: шов, границы, порядок правок | по `approval_policy` | принятый architect-отчёт |
+| developer | Реализация по плану, тесты до кода | по `approval_policy` | candidate commit |
+| code-review | Две оси, Standards и Spec, независимо | по `approval_policy` | отчёт review по обеим осям |
+| qa | Полный прогон на закреплённом кандидате, Release Gate | по `approval_policy` | QA evidence для SHA |
+| publish | Принятый SHA объявляется опубликованным | по `approval_policy` | запись публикации |
 
 Порядок жёсткий: coordinator отклоняет `dispatch create --role developer`, пока у batch нет принятого
 architect-отчёта. Политика approval задаётся в конфигурации оркестрации: гейты можно проходить
@@ -46,7 +46,7 @@ architect-отчёта. Политика approval задаётся в конфи
 
 <figure class="ah-diagram">
   <div class="ah-diagram-bar">
-    <figcaption>Пять гейтов конвейера и решение человека после каждого из них.</figcaption>
+    <figcaption>Пять гейтов конвейера. Схема показывает ручной вариант согласования.</figcaption>
     <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Развернуть</button>
     <a class="ah-diagram-open" href="../../assets/diagrams/implement-gates.html" target="_blank" rel="noopener">Открыть отдельно ↗</a>
   </div>
@@ -57,8 +57,8 @@ architect-отчёта. Политика approval задаётся в конфи
 
 Это строго opt-in маршрут: он включается только выбранной capability, и никакая другая сборка его
 не активирует. Developer создаёт candidate commit; отчёт о работе остаётся `reported` до решения
-человека. Принятый SHA публикует только developer через publish, после чего PR открывает человек
-по `/to-pull-requests`. Команда `integration next` называет следующий шаг по записи интеграции.
+по `approval_policy`. Принятый SHA публикует только developer через publish, после чего человек отдельно вызывает
+`/to-pull-requests`. Агент открывает PR только после явного подтверждения. Команда `integration next` называет следующий шаг по записи интеграции.
 Adapter лишь транспортирует уже утверждённое: он не решает, что публиковать, и не открывает PR.
 
 ## Живость и восстановление

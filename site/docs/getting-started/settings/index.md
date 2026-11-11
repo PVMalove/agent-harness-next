@@ -6,13 +6,47 @@ policy и память. `orchestration.json` описывает, как coordina
 доступ и проверки; он появляется вместе с capability `backend-orchestration`. Рядом лежат инвентарь
 интеграций, сгенерированная hook policy, native-конфиги рантаймов, секреты и окружение.
 
+## С чего начать настройку {#agent-setup}
 
-## Два основных файла
+??? quote ah-skill-text "Промпт для агента: с чего начать"
 
-| Файл | Когда появляется | Кто пишет | Кто читает |
-| --- | --- | --- | --- |
-| `.harness/project.json` | `harness init`, `adopt` или `update`, если файла ещё нет | проект после создания; установщик пишет файл из шаблона | qa-gate, pr-composer, code-review, to-guide, test-author и hooks |
-| `.harness/orchestration.json` | установка capability `backend-orchestration` | проект; при отсутствии копируется из `.harness/orchestration.example.json` | coordinator, `harness-runtime` и мастер настройки консоли |
+    ```text
+    Help me choose where to begin configuring this installed harness.
+
+    Follow repository instructions. Keep questions, choices and user-facing summaries in Russian.
+    Read existing configuration and installed documentation before proposing changes; missing files
+    are not permission to initialize or overwrite anything. Ask only for unresolved facts, one question
+    at a time. Offer 2-4 concrete choices plus «Другое», with one consequence each. Put an evidence-based
+    recommendation first and mark it «Рекомендуется»; otherwise ask for the missing fact.
+    Never read authentication files or request, print, copy or store token/key values.
+
+    Read .harness/project.json, orchestration.json, integrations.json and harness.lock only if present,
+    plus installed schemas/examples and settings documentation. Inspect available health diagnostics.
+    Explain which settings are already valid, missing or blocked. Ask what the user wants to achieve:
+    basic project workflow, role orchestration, external/container execution or integration inventory.
+    Start with project metadata, branches and actual QA commands. Add orchestration only when required
+    and installed; ask about providers, models and transports instead of selecting them silently.
+    Keep approval, access, verification, context and environment decisions separate. Use the relevant
+    page's focused prompt for the next group. Ask about environment-variable names only; credentials
+    are entered by the user privately. Agree on one small configuration step before editing.
+
+    Preserve unrelated configuration. Show the exact proposed diff, assumptions and remaining
+    prerequisites. Wait for approval, then apply only the approved diff with Edit/Write.
+    Run harness health and, when orchestration is installed, config validate --canonical --json.
+    Distinguish skipped from passed checks.
+    Report results and the next smallest step. Do not install tools, change credentials/trust,
+    start or restart services, migrate state, send workers, change Git, commit or open a PR.
+    Give any such commands for separate review instead of executing them automatically.
+    ```
+
+## Два основных контракта
+
+Оба файла находятся в `.harness/`.
+
+| Контракт | Создание, владельцы и проверка |
+| --- | --- |
+| [project.json](project.md) | Создаётся из шаблона при `harness init`, `adopt` или `update`, если файла ещё нет; затем его ведёт проект. Читают qa-gate, pr-composer, code-review, to-guide, test-author и hooks. Health: `files.project_json`. |
+| [orchestration.json](orchestration/index.md) | Появляется с capability `backend-orchestration`: отсутствующий файл копируется из `.harness/orchestration.example.json`; затем его ведёт проект. Читают coordinator, `harness-runtime` и мастер настройки консоли. Health: `files.orchestration_config`. |
 
 Установщик не перезаписывает существующие значения: `project.json` создаётся один раз, а
 `orchestration.json` — только если его нет. `harness update` обновляет управляемый пример
@@ -29,11 +63,15 @@ policy и память. `orchestration.json` описывает, как coordina
   `hooks.policy`, исправляет `harness update`. Формат и проверка описаны в
   [установке hooks](../../hooks/install-and-update.md).
 - Native-конфиги `.claude/settings.json`, `.claude/settings.local.json`, `.codex/hooks.json`,
-  `.mcp.json` — принадлежат рантаймам; harness их только учитывает, а не перезаписывает.
-- Секреты — в файлах лежат только имена переменных; значения живут в окружении, а для контейнера —
-  в окружении `harness-runtime serve`.
-- Зависимости — Python 3.12+, `uv`, Git, Rust и `harness-runtime`, Docker или Podman для контейнера;
-  зависимости самого проекта harness не устанавливает.
+  `.mcp.json`, `.kimi/mcp.json`, `opencode.json`, `opencode.jsonc` — читаются своими runtime. Harness
+  учитывает их в инвентаре; при установке hooks сливает управляемые записи, сохраняя остальные
+  настройки. Принудительная замена файла — отдельное явное действие.
+- Секреты — `secret_refs` и `access_policy.*.environment` содержат только имена. Значения
+  принадлежат авторизации CLI, окружению или native-конфигу интеграции; для контейнера берутся
+  из окружения `harness-runtime serve`. Токены IPC и консоли создаются отдельно.
+- Зависимости — Python 3.12+, `uv` и Git; для backend-оркестрации — `harness-runtime`
+  (сборка требует Rust 1.89+), для контейнера — Docker или Podman. Проверки окружения имеют
+  префикс `environment.*`; зависимости самого проекта harness не устанавливает.
 
 Эти поверхности описаны на страницах [«Интеграции»](integrations.md),
 [«Секреты и токены»](secrets.md) и [«Зависимости и окружение»](environment.md).
@@ -63,7 +101,7 @@ policy и память. `orchestration.json` описывает, как coordina
 
 ## Проверка конфигурации
 
-```bash
+```bash {.ah-code-wrap}
 python3 .harness/orchestration/coordinator.py --repo . config validate --json
 python3 .harness/orchestration/coordinator.py --repo . config validate --canonical --json
 python3 .harness/orchestration/coordinator.py --repo . config validate --fix --dry-run --json

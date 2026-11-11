@@ -9,12 +9,75 @@ Claude Code и Codex, а оркестрация использует Rust runtim
     Сайт описывает текущую версию, но поведение и флаги ещё меняются. Перед установкой в рабочий
     проект сделайте backup и проверьте требования.
 
+## Начать с агентом {#agent-setup}
+
+[Новый проект](../skills/start-project.md) · [Существующий проект](../skills/integrate-project.md) · [Уточнение идеи](../skills/grilling.md) · [Термины и ADR](../skills/vendor/domain-modeling.md).
+
+??? quote ah-skill-text "Промпт для агента: начать новый проект"
+
+    ```text
+    Follow repository instructions. Read current files before asking: project instructions,
+    .harness/project.json, .harness/orchestration.json and installed schema/examples if present.
+    Inspect git status and available read-only harness health diagnostics; distinguish missing,
+    skipped and failed checks. Do not assume a new directory already has a harness installed.
+    Keep questions, choices and user-facing summaries in Russian. Ask only unresolved questions,
+    one at a time. Offer 2-4 concrete choices plus «Другое», one consequence per choice.
+    Put an evidence-based recommendation first and mark it «Рекомендуется»; do not invent facts.
+    Never request, read, print or store credential values or authentication-file contents.
+
+    Read and invoke the installed start-project skill; do not duplicate or bypass its phases.
+    If it cannot be located, report the missing skill instead of simulating it.
+    Start with the idea: goal, users, recurring work, project type and stack constraints.
+    Follow Shape to decide whether to stay in conversation, write a brief, seed a repository or
+    assemble a harness. Ask before creating a repository; do not assume software or choose a stack.
+    For an approved seed, agree on structure, CONTEXT.md terminology and first ADRs for stack,
+    branching and QA. Record only confirmed decisions with sources; leave open choices explicit.
+    For approved harness assembly, choose capability, language, branch pattern, actual QA commands
+    and project.json from evidence and answers. Keep phases independently reviewable.
+
+    Before any durable change, show the exact proposed diff or command and its effects, then wait
+    for approval of that phase. Edit configuration with Edit/Write and preserve unrelated settings.
+    After approved changes, run harness health and, if orchestration is installed, config validate
+    --canonical --json. Summarize results and unverified behavior. Do not create commits/PRs, change
+    credentials/trust, migrate state or send workers without separate explicit authorization.
+    ```
+
+??? quote ah-skill-text "Промпт для агента: подключить существующий проект"
+
+    ```text
+    Follow repository instructions. Read current files before asking: project instructions,
+    .harness/project.json, .harness/orchestration.json and installed schema/examples if present.
+    Inspect git status and available read-only harness health diagnostics; distinguish missing,
+    skipped and failed checks. Do not assume a new directory already has a harness installed.
+    Keep questions, choices and user-facing summaries in Russian. Ask only unresolved questions,
+    one at a time. Offer 2-4 concrete choices plus «Другое», one consequence per choice.
+    Put an evidence-based recommendation first and mark it «Рекомендуется»; do not invent facts.
+    Never request, read, print or store credential values or authentication-file contents.
+
+    Read and invoke the installed integrate-project skill; do not duplicate its workflow.
+    If unavailable, report the missing skill instead of pretending to invoke it.
+    Audit read-only first: manifests, actual build/test commands, CI, branches, domain, existing
+    AI instructions/configuration, ADR conventions and installed harness state. Preserve live work.
+    Present findings, conflicts and the proposed installation manifest; wait for confirmation.
+    Offer optional decision-history reconstruction separately when useful. Read that skill's
+    RECONSTRUCT-HISTORY.md only for the approved investigation; do not invent reasons from code.
+    Each proposed ADR needs evidence/source links; label uncertainty and obtain consent before
+    writing inferred decisions. Create or extend the existing ADR convention and CONTEXT.md.
+    Only after the approved audit/manifest, install the selected capability without replacing
+    unrelated native settings. Configure project.json with discovered QA commands, not guesses.
+
+    Before any durable change, show the exact proposed diff or command and its effects, then wait
+    for approval of that phase. Edit configuration with Edit/Write and preserve unrelated settings.
+    After approved changes, run harness health and, if orchestration is installed, config validate
+    --canonical --json. Summarize results and unverified behavior. Do not create commits/PRs, change
+    credentials/trust, migrate state or send workers without separate explicit authorization.
+    ```
+
 ## Путь установки
 
 Выберите сборку: схема покажет, какой snapshot окажется в проекте. Узлы кликабельны.
 
 <div class="ah-flow" id="ah-install-flow">
-  <button class="ah-diagram-expand ah-core-expand" id="ah-install-expand" type="button" aria-haspopup="dialog">Развернуть</button>
   <div class="ah-core-scroll"><div class="ah-core is-fit" id="ah-install-map"></div></div>
   <div class="ah-flow-note" id="ah-install-note" aria-live="polite">
     <b>Выберите сборку</b>
@@ -30,15 +93,19 @@ Claude Code и Codex, а оркестрация использует Rust runtim
 | Git | Каталог проекта уже инициализирован как Git-репозиторий |
 | Runtime | Claude Code или Codex: skills и hooks подключаются нативно |
 | ОС | Linux; на Windows — поддерживаемый runtime и named pipe |
-| `uv` | Для веб-консоли и локальных проверок harness |
+| `uv` | Обязателен для окружения консоли и локальных проверок harness; отсутствие даёт `environment.uv: fail` |
+| `harness-runtime` | Для backend-оркестрации; сборка из исходников требует Rust 1.89+ |
 | Опционально | Docker или rootless Podman для контейнерного worker и QA |
+
+Зависимости самого проекта harness не устанавливает. Подготовьте их отдельно по
+[руководству по окружению](settings/environment.md).
 
 ## 1. Установите глобальный слой
 
 Глобальный слой ставится однократно на машину: минимальный профиль инструкций и скиллы
 `start-project` и `integrate-project`. Параметр `--runtime` повторяемый.
 
-```bash
+```bash {.ah-code-wrap}
 python3 bin/install-global.py --target-home "$HOME" \
   --runtime claude --runtime codex
 ```
@@ -47,6 +114,32 @@ python3 bin/install-global.py --target-home "$HOME" \
 предварительно сохраняя их backup. MCP, модели, плагины, credentials и permissions установщик
 не трогает.
 
+??? quote ah-skill-text "Промпт для агента: глобальный слой"
+
+    ```text
+    Follow repository instructions. Read current files before asking: project instructions,
+    .harness/project.json, .harness/orchestration.json and installed schema/examples if present.
+    Inspect git status and available read-only harness health diagnostics; distinguish missing,
+    skipped and failed checks. Do not assume a new directory already has a harness installed.
+    Keep questions, choices and user-facing summaries in Russian. Ask only unresolved questions,
+    one at a time. Offer 2-4 concrete choices plus «Другое», one consequence per choice.
+    Put an evidence-based recommendation first and mark it «Рекомендуется»; do not invent facts.
+    Never request, read, print or store credential values or authentication-file contents.
+
+    Locate bin/install-global.py in the actual harness source and inspect --help.
+    Inspect --check before proposing installation. Ask which runtime(s) and target home are needed;
+    --runtime is repeatable. Show the exact command and global-file effects, then obtain approval.
+    After approval run that installation and check status again. Do not replace conflicts without
+    separate approval; explain the documented backup behavior. Do not configure credentials/MCP.
+
+    Before any durable change, show the exact proposed diff or command and its effects, then wait
+    for approval of that phase. Edit configuration with Edit/Write and preserve unrelated settings.
+    After approved changes, run harness health and, if orchestration is installed, config validate
+    --canonical --json. Summarize results and unverified behavior. Do not create commits/PRs, change
+    credentials/trust, migrate state or send workers without separate explicit authorization.
+    ```
+
+
 ## 2. Подключите harness к проекту
 
 Новый проект удобнее начинать через скилл `start-project`, существующий — через `integrate-project`:
@@ -54,7 +147,7 @@ python3 bin/install-global.py --target-home "$HOME" \
 
 Прямая установка в Git-репозиторий:
 
-```bash
+```bash {.ah-code-wrap}
 python3 harness/bin/harness.py init /path/to/repository \
   --capability engineering-suite \
   --project-type software --stack python --base-branch main --language ru \
@@ -65,7 +158,7 @@ python3 harness/bin/harness.py init /path/to/repository \
 не входит в выбранную capability, и падает со списком конфликтов. `--replace-conflicts` заменяет
 конфликтующие каталоги без backup, поэтому сначала проверьте список.
 
-```bash
+```bash {.ah-code-wrap}
 python3 harness/bin/harness.py adopt /path/to/repository \
   --capability engineering-suite --replace-conflicts
 ```
@@ -79,12 +172,38 @@ Capability задаёт состав snapshot; сборки взаимоискл
 | `engineering-suite` | Инженерный workflow: эпики и тикеты, триаж, двухосевое review, `qa-gate`, подготовка PR. |
 | `backend-orchestration` | Поверх `engineering-suite`: coordinator, роли, briefs, worktrees, ledger и QA lane. |
 
+??? quote ah-skill-text "Промпт для агента: подключить harness"
+
+    ```text
+    Follow repository instructions. Read current files before asking: project instructions,
+    .harness/project.json, .harness/orchestration.json and installed schema/examples if present.
+    Inspect git status and available read-only harness health diagnostics; distinguish missing,
+    skipped and failed checks. Do not assume a new directory already has a harness installed.
+    Keep questions, choices and user-facing summaries in Russian. Ask only unresolved questions,
+    one at a time. Offer 2-4 concrete choices plus «Другое», one consequence per choice.
+    Put an evidence-based recommendation first and mark it «Рекомендуется»; do not invent facts.
+    Never request, read, print or store credential values or authentication-file contents.
+
+    Determine whether the repository is new, established or already harnessed. Recommend the
+    installed start-project, integrate-project or an explicit CLI installation based on that state.
+    Inspect harness --help; ask unresolved capability, project type, stack, base branch, language
+    and QA commands. Show install/adopt effects and conflicts. Execute only the approved command;
+    do not silently use --replace-conflicts or overwrite project configuration.
+
+    Before any durable change, show the exact proposed diff or command and its effects, then wait
+    for approval of that phase. Edit configuration with Edit/Write and preserve unrelated settings.
+    After approved changes, run harness health and, if orchestration is installed, config validate
+    --canonical --json. Summarize results and unverified behavior. Do not create commits/PRs, change
+    credentials/trust, migrate state or send workers without separate explicit authorization.
+    ```
+
+
 ## 3. Проверьте установку: health
 
 `health` проверяет установку и окружение и без флагов ничего не меняет. Запускайте его после
 `init`, `adopt` или `update`, после клонирования проекта и когда агент не обнаруживает скиллы.
 
-```bash
+```bash {.ah-code-wrap}
 python3 harness/bin/harness.py health /path/to/repository
 python3 harness/bin/harness.py health /path/to/repository --fix
 python3 harness/bin/harness.py health /path/to/repository --online
@@ -102,9 +221,35 @@ python3 harness/bin/harness.py health /path/to/repository --json
 причину и команду исправления. Группа «Оркестрация» появляется только при `backend-orchestration`:
 там видно ledger, незавершённые batch, dispatch без активности и неучтённые worktree.
 
+??? quote ah-skill-text "Промпт для агента: проверить health"
+
+    ```text
+    Follow repository instructions. Read current files before asking: project instructions,
+    .harness/project.json, .harness/orchestration.json and installed schema/examples if present.
+    Inspect git status and available read-only harness health diagnostics; distinguish missing,
+    skipped and failed checks. Do not assume a new directory already has a harness installed.
+    Keep questions, choices and user-facing summaries in Russian. Ask only unresolved questions,
+    one at a time. Offer 2-4 concrete choices plus «Другое», one consequence per choice.
+    Put an evidence-based recommendation first and mark it «Рекомендуется»; do not invent facts.
+    Never request, read, print or store credential values or authentication-file contents.
+
+    Run the installed local harness health for the exact repository; this does not require online
+    checks. Explain ok/warn/fail/skipped and their concrete consequences, without copying secrets.
+    Propose fixes one group at a time. Ask before --fix, inspect its effects, then run only approved
+    repairs and recheck. Do not use --online without consent; tracker login and permission changes
+    remain the user's actions. A skipped check is not a passed check.
+
+    Before any durable change, show the exact proposed diff or command and its effects, then wait
+    for approval of that phase. Edit configuration with Edit/Write and preserve unrelated settings.
+    After approved changes, run harness health and, if orchestration is installed, config validate
+    --canonical --json. Summarize results and unverified behavior. Do not create commits/PRs, change
+    credentials/trust, migrate state or send workers without separate explicit authorization.
+    ```
+
+
 ## 4. Первые команды
 
-```bash
+```bash {.ah-code-wrap}
 python3 harness/bin/harness.py list /path/to/repository
 python3 harness/bin/harness.py diff /path/to/repository
 python3 harness/bin/harness.py update /path/to/repository
@@ -124,10 +269,37 @@ python3 harness/bin/harness.py update /path/to/repository
 
 Если установлена `backend-orchestration`, добавьте проверку состояния:
 
-```bash
-python3 .harness/orchestration/coordinator.py --repo . dispatch preflight
+```bash {.ah-code-wrap}
+python3 .harness/orchestration/coordinator.py --repo . dispatch preflight \
+  --batch '<batch-id>' --role developer
 python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
 ```
+
+??? quote ah-skill-text "Промпт для агента: первые команды"
+
+    ```text
+    Follow repository instructions. Read current files before asking: project instructions,
+    .harness/project.json, .harness/orchestration.json and installed schema/examples if present.
+    Inspect git status and available read-only harness health diagnostics; distinguish missing,
+    skipped and failed checks. Do not assume a new directory already has a harness installed.
+    Keep questions, choices and user-facing summaries in Russian. Ask only unresolved questions,
+    one at a time. Offer 2-4 concrete choices plus «Другое», one consequence per choice.
+    Put an evidence-based recommendation first and mark it «Рекомендуется»; do not invent facts.
+    Never request, read, print or store credential values or authentication-file contents.
+
+    Explain list and diff from the installed CLI and use them to show current state.
+    Ask which next operation is wanted: update, cleanup preview or console. Preview update changes
+    and cleanup's deletion set; update and cleanup --apply need explicit confirmation.
+    Explain console first-run uv downloads and that its bootstrap URL contains a credential;
+    do not print that URL in reports. Do not start services or perform cleanup just to demonstrate.
+
+    Before any durable change, show the exact proposed diff or command and its effects, then wait
+    for approval of that phase. Edit configuration with Edit/Write and preserve unrelated settings.
+    After approved changes, run harness health and, if orchestration is installed, config validate
+    --canonical --json. Summarize results and unverified behavior. Do not create commits/PRs, change
+    credentials/trust, migrate state or send workers without separate explicit authorization.
+    ```
+
 
 ## Дальше
 

@@ -32,13 +32,13 @@ path between review and QA; the shortened path is called `/fast-implement`.
 
 ## Gates
 
-| Gate | What happens | Who approves | Artifact |
+| Gate | What happens | Decision | Artifact |
 | --- | --- | --- | --- |
-| architect | The plan: seam, boundaries, order of edits | a human | the accepted architect report |
-| developer | Implementation by the plan, tests before code | a human | candidate commit |
-| code-review | Two axes, Standards and Spec, independently | a human | the review report on both axes |
-| qa | A full run on the pinned candidate, Release Gate | a human | QA evidence for the SHA |
-| publish | The accepted SHA is declared published | a human | the publication record |
+| architect | The plan: seam, boundaries, order of edits | by `approval_policy` | the accepted architect report |
+| developer | Implementation by the plan, tests before code | by `approval_policy` | candidate commit |
+| code-review | Two axes, Standards and Spec, independently | by `approval_policy` | the review report on both axes |
+| qa | A full run on the pinned candidate, Release Gate | by `approval_policy` | QA evidence for the SHA |
+| publish | The accepted SHA is declared published | by `approval_policy` | the publication record |
 
 The order is strict: the coordinator rejects `dispatch create --role developer` until the batch has
 an accepted architect report. The approval policy is set in the orchestration configuration: gates can
@@ -48,7 +48,7 @@ bypasses it.
 
 <figure class="ah-diagram">
   <div class="ah-diagram-bar">
-    <figcaption>The five pipeline gates and the human decision after each of them.</figcaption>
+    <figcaption>The five pipeline gates. The diagram shows manual approval.</figcaption>
     <button class="ah-diagram-expand" type="button" aria-haspopup="dialog">Expand</button>
     <a class="ah-diagram-open" href="../../assets/diagrams/implement-gates.html" target="_blank" rel="noopener">Open separately ↗</a>
   </div>
@@ -58,9 +58,9 @@ bypasses it.
 ## Hybrid publication contract
 
 This is a strictly opt-in route: only the selected capability enables it, and no other build
-activates it. The developer creates a candidate commit; the work report stays `reported` until a
-human decides. Only the developer publishes the accepted SHA through publish, and after that a human
-opens the PR with `/to-pull-requests`. The `integration next` command names the next step from the
+activates it. The developer creates a candidate commit; the work report stays `reported` until a decision
+under `approval_policy`. Only the developer publishes the accepted SHA through publish, and a person then separately invokes
+`/to-pull-requests`. The agent opens the PR only after explicit confirmation. The `integration next` command names the next step from the
 integration record. The adapter only transports what is already approved: it does not decide what to
 publish, and it does not open a PR.
 

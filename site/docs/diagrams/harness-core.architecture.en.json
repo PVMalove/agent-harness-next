@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Context and execution: Python / Rust",
+    "output": "site/docs/diagrams/harness-core.architecture.en.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "repository": {
+      "url": "https://github.com/PVMalove/agent-harness-next.git",
+      "revision": "f1dc6e60ec07248afe08df3ec7d3d94fcfd54ef0"
+    }
+  },
+  "components": [
+    {
+      "id": "clients",
+      "type": "frontend",
+      "label": "CLI / Console",
+      "sublabel": "TUI · Web",
+      "pos": [
+        30,
+        270
+      ],
+      "size": [
+        150,
+        70
+      ],
+      "sources": [
+        {
+          "path": "site/docs/reference/cli.md",
+          "line": 155,
+          "end_line": 163
+        },
+        {
+          "path": "harness/console/backend/api/protocol/snapshots.py",
+          "line": 58,
+          "end_line": 95
+        },
+        {
+          "path": "harness/console/backend/api/request_router.py",
+          "line": 90,
+          "end_line": 115
+        }
+      ]
+    },
+    {
+      "id": "approval",
+      "type": "security",
+      "label": "Human / auto",
+      "sublabel": "approval policy",
+      "pos": [
+        400,
+        50
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "harness/orchestration/workflow/approval.py",
+          "line": 35,
+          "end_line": 62
+        },
+        {
+          "path": "site/docs/backend-orchestration.md",
+          "line": 1549,
+          "end_line": 1563
+        }
+      ]
+    },
+    {
+      "id": "python",
+      "type": "backend",
+      "label": "Python",
+      "sublabel": "coordinator · policy",
+      "pos": [
+        400,
+        270
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "harness/orchestration/runtime_client.py",
+          "line": 630,
+          "end_line": 682
+        },
+        {
+          "path": "site/docs/architecture/overview.md",
+          "line": 33,
+          "end_line": 42
+        }
+      ]
+    },
+    {
+      "id": "rust",
+      "type": "backend",
+      "label": "Rust runtime",
+      "sublabel": "supervisor · reconcile",
+      "pos": [
+        860,
+        270
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "native/harness-runtime/crates/supervisor/src/launch.rs",
+          "line": 439,
+          "end_line": 465
+        },
+        {
+          "path": "native/harness-runtime/crates/supervisor/src/launch.rs",
+          "line": 500,
+          "end_line": 540
+        }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "external",
+      "label": "Worker / QA",
+      "sublabel": "container / process",
+      "pos": [
+        860,
+        50
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "site/docs/architecture/runtime.md",
+          "line": 48,
+          "end_line": 66
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "SQLite WAL",
+      "sublabel": "state · audit · leases",
+      "pos": [
+        860,
+        490
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "site/docs/architecture/runtime.md",
+          "line": 28,
+          "end_line": 41
+        },
+        {
+          "path": "native/harness-runtime/crates/supervisor/src/launch.rs",
+          "line": 500,
+          "end_line": 540
+        }
+      ]
+    },
+    {
+      "id": "repomap",
+      "type": "backend",
+      "label": "Repo Map",
+      "sublabel": "symbols · imports",
+      "pos": [
+        30,
+        50
+      ],
+      "size": [
+        180,
+        70
+      ],
+      "sources": [
+        {
+          "path": "harness/repo_map/README.md",
+          "line": 1,
+          "end_line": 24
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "type": "database",
+      "label": "RAG · memory",
+      "sublabel": "ADR · CONTEXT.md",
+      "pos": [
+        400,
+        490
+      ],
+      "size": [
+        190,
+        70
+      ],
+      "sources": [
+        {
+          "path": "harness/docs/project-memory.md",
+          "line": 1,
+          "end_line": 35
+        },
+        {
+          "path": "harness/orchestration/workflow/context_package.py",
+          "line": 150,
+          "end_line": 195
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "command",
+      "from": "clients",
+      "to": "python",
+      "label": "command / response"
+    },
+    {
+      "id": "approved",
+      "from": "python",
+      "to": "approval",
+      "label": "approval"
+    },
+    {
+      "id": "request",
+      "from": "python",
+      "to": "rust",
+      "label": "IPC · request / reply",
+      "variant": "emphasis"
+    },
+    {
+      "id": "write",
+      "from": "rust",
+      "to": "store",
+      "label": "persist intent"
+    },
+    {
+      "id": "launch",
+      "from": "rust",
+      "to": "worker",
+      "label": "approved launch / status"
+    },
+    {
+      "id": "map",
+      "from": "python",
+      "to": "repomap",
+      "label": "code context"
+    },
+    {
+      "id": "memory",
+      "from": "python",
+      "to": "memory",
+      "label": "retrieval · opt-in"
+    }
+  ]
+}
