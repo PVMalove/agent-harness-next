@@ -617,6 +617,7 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
                 continue
             if args.open and terminal(batch):
                 continue
+            closed = batch.get("abandoned")
             batches.append(
                 {
                     "batch_id": batch.get("batch_id"),
@@ -630,6 +631,17 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
                     "dispatches": len(dispatches),
                     "open_dispatches": open_dispatches,
                     "next_action": batch.get("next_action"),
+                    "abandoned": {
+                        key: closed.get(key)
+                        for key in (
+                            "approved_by",
+                            "approved_at",
+                            "abandoned_at",
+                            "reason",
+                        )
+                    }
+                    if isinstance(closed, dict)
+                    else None,
                 }
             )
     return {"batches": batches}
@@ -814,7 +826,18 @@ def abandon_batch(args: argparse.Namespace) -> JsonObject:
             }
         )
         _safe_id(batch["batch_id"], "batch")
-        _replace_record(ledger, BatchRecord.from_dict(batch))
+        # The transition audit names who closed the batch and why, like `batch decide` does.
+        _replace_record(
+            ledger,
+            BatchRecord.from_dict(batch),
+            decision={
+                "decision": "abandon",
+                "approver": {"kind": "human", "name": approval["approved_by"]},
+                "approved_at": approval["approved_at"],
+                "reason": reason,
+                "open_dispatches": open_dispatches,
+            },
+        )
         _discard_batch_leftovers(repo, ledger, batch, open_dispatches)
     return {
         "batch_id": batch["batch_id"],

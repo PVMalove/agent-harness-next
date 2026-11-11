@@ -192,8 +192,13 @@ def visible_events(record: object) -> list[JsonObject]:
     return []
 
 
-def read_events(repo: Path, receipt: object, offset: int = 0) -> JsonObject:
-    """Bounded incremental local log reader; never interprets output as executable commands."""
+def read_events(
+    repo: Path, receipt: object, offset: int = 0, extra_roots: tuple[Path, ...] = ()
+) -> JsonObject:
+    """Bounded incremental local log reader; never interprets output as executable commands.
+
+    The log must be under shared logs storage or one of ``extra_roots``, such as the runtime's
+    executions directory that holds a container worker's stream (#1014)."""
     import json
     from harness.storage import storage_path
 
@@ -206,8 +211,11 @@ def read_events(repo: Path, receipt: object, offset: int = 0) -> JsonObject:
     if not isinstance(receipt, dict) or not isinstance(receipt.get("log_path"), str):
         return {**empty, "stream_reason": "adapter supplied no structured event log"}
     path = Path(receipt["log_path"]).resolve()
-    allowed = storage_path(repo, "logs").resolve()
-    if not path.is_relative_to(allowed):
+    allowed = (
+        storage_path(repo, "logs").resolve(),
+        *(r.resolve() for r in extra_roots),
+    )
+    if not any(path.is_relative_to(root) for root in allowed):
         return {**empty, "stream_reason": "event log is outside shared logs storage"}
     try:
         with path.open("rb") as stream:

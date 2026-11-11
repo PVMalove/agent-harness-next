@@ -669,7 +669,7 @@
       "values": {
         "pair_not_recorded": "The store holds no Release Gate pair record with a candidate_tree_sha for the pair.",
         "no_full_qa": "No accepted QA run, verified local-QA run or collected CI check of exactly the pair is stored; developer and review checks and the qa-gate marker never confirm a pair.",
-        "selection_not_full": "A stage of the run selected only some tests (focused, failed-only or ticket-diff).",
+        "selection_not_full": "A stage of the run selected only some tests (focused or failed-only, or ticket-diff for a pair whose record does not require the ticket-diff selection).",
         "stage_not_passed": "A stage failed or did not run, or an approved command has no stage.",
         "stage_candidate_mismatch": "A stage names another candidate than the pair.",
         "plan_mismatch": "A stage names another verification plan or image than the QA brief pinned, or the stages name different environments.",
@@ -741,7 +741,8 @@
         "missing_check": "A required check has no run.",
         "pending_check": "A required check is not finished.",
         "inconclusive_check": "A required check ended without a verdict on the code.",
-        "failed_check": "A required check failed on the combined result."
+        "failed_check": "A required check failed on the combined result.",
+        "light_check": "A required check is a light check, which never confirms a pair that requires a full QA run."
       },
       "sentinels": [
         "unavailable"
@@ -1141,7 +1142,7 @@
         "full": "The stage runs the whole suite; the conservative widening an unknown impact falls back to.",
         "focused": "The stage runs only the node ids the impact analysis selected.",
         "failed-only": "The stage reruns the exact node ids that failed before; a diagnostic inside a developer session, never evidence.",
-        "ticket-diff": "The stage runs exactly the tests of the ticket's own base..candidate diff for an integration/* target (the ticket_diff_selection policy flag); never widened to full, and never Release Gate evidence."
+        "ticket-diff": "The stage runs exactly the tests of the ticket's own base..candidate diff for an integration/* target (the ticket_diff_selection policy flag); never widened to full; Release Gate evidence only for a pair whose stored record requires the ticket-diff selection."
       }
     },
     "verification_plan.stage_kind": {
@@ -1261,7 +1262,7 @@
         "block-pr-merge": "Critical: blocks an agent merging a pull or merge request.",
         "block-public-attribution": "Critical: blocks automated-agent attribution in commit messages and public text.",
         "require-qa-gate": "Critical: blocks opening a pull or merge request without QA evidence of the published checkout.",
-        "protect-hook-policy": "Critical: blocks an agent change of hook_policy, of the hook configuration files and directories, and any shell write to the project config.",
+        "protect-hook-policy": "Critical: blocks an agent change of hook_policy, of the hook configuration files and directories, and asks a person before any shell write to the project config.",
         "check-branch-name": "Critical: checks a new branch name against branch_pattern and the tracker issue.",
         "check-worktree-branch-name": "Critical: checks a native worktree name against the branch convention.",
         "require-bounded-check": "Behavioral: blocks an unbounded full test or quality-gate run; the minimal profile downgrades it to a warning.",
@@ -1291,6 +1292,7 @@
       "values": {
         "allow": "The action may proceed; exit code 0.",
         "warn": "The action may proceed and the finding is reported; exit code 0.",
+        "ask": "A person confirms the action by hand before it runs; exit code 0 with the runtime's permission prompt.",
         "block": "The action is refused; exit code 2."
       }
     },

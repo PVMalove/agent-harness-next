@@ -81,7 +81,7 @@ EXTRA_REASONS: Dict[str, Tuple[str, ...]] = {
 PROFILES = ("minimal", "standard", "strict")
 DEFAULT_PROFILE = "standard"
 STRICT_PROFILE = "strict"
-DECISIONS = ("allow", "warn", "block")
+DECISIONS = ("allow", "warn", "ask", "block")
 REASON_OK = "ok"
 REASON_INTERNAL_ERROR = "internal-error"
 REASON_CODES = tuple(
@@ -103,7 +103,14 @@ ENVELOPE_FIELDS = (
     "remedy",
     "evidence_ref",
 )
-EXIT_CODES = {"allow": 0, "warn": 0, "block": 2}
+EXIT_CODES = {"allow": 0, "warn": 0, "ask": 0, "block": 2}
+# Отказы, которые человек снимает ручным подтверждением: сценарий завершается кодом 3 с префиксом
+# ``[reason_code] ``. Вердикт ``ask`` выдаётся только там, где runtime понимает протокол stdout
+# (Claude Code задаёт CLAUDE_PROJECT_DIR); иначе тот же отказ остаётся ``block``.
+ASK_EXIT_CODE = 3
+ASK_REASONS: Dict[str, Tuple[str, ...]] = {
+    "protect-hook-policy": ("project-json-shell-write",),
+}
 # Маркер повторного запуска: исходный сценарий видит его и не оборачивает себя второй раз.
 ENVELOPE_MARKER = "HARNESS_HOOK_ENVELOPE"
 REMEDY_LIMIT = 1000
@@ -236,6 +243,9 @@ def decide(
     evidence = f".claude/hooks/{hook_id}.sh"
     if code == 0:
         return build_response(hook_id, profile, "allow", REASON_OK)
+    if code == ASK_EXIT_CODE and named and named.group(1) in ASK_REASONS.get(hook_id, ()):
+        decision = "ask" if os.environ.get("CLAUDE_PROJECT_DIR") else "block"
+        return build_response(hook_id, profile, decision, named.group(1), remedy, evidence)
     if code == 2 and block_reason != REASON_OK:
         if not critical and profile == "minimal":
             note = "профиль minimal понижает блокировку до предупреждения"
@@ -279,6 +289,18 @@ def run_inner(
 
 def emit(stdout: bytes, stderr: bytes, response: Dict[str, object]) -> int:
     """Передать вывод исходного сценария и вердикт; вернуть код возврата по decision."""
+    if response["decision"] == "ask":
+        # PreToolUse в Claude Code: человеку задают вопрос, причина показывается вместе с запросом.
+        stdout = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "ask",
+                    "permissionDecisionReason": response["remedy"],
+                }
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
     if stdout:
         sys.stdout.buffer.write(stdout)
         sys.stdout.buffer.flush()

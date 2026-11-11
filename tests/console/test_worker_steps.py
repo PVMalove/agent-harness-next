@@ -26,6 +26,9 @@ from harness.console.backend.infrastructure.worker_steps import (
     read_worker_log,
 )
 from harness.console.kernel.protocol import MESSAGE_BYTES
+from harness.console.tui.client import WorkerSteps
+from harness.console.tui.screens.worker_observation import with_server_steps
+from harness.orchestration.workflow.delivery import IN_PROCESS_STREAM_REASON
 
 RECEIPT = {
     "protocol": "harness-worker-v1",
@@ -330,3 +333,37 @@ def test_external_text_log_without_codex_sections_keeps_its_typed_reason(
     assert page.steps == ()
     assert page.message
     assert "SECRET" not in json.dumps(page.to_wire())
+
+
+def test_server_steps_keep_the_in_process_reason_and_drop_the_observer_stream_reason() -> (
+    None
+):
+    snapshot = {
+        "dispatch_id": "dispatch-a",
+        "stream_state": "absent",
+        "stream_reason": IN_PROCESS_STREAM_REASON,
+        "checkpoints": [],
+    }
+    page = WorkerSteps(
+        source="none",
+        structure="unavailable",
+        state="unavailable",
+        reason="no_log",
+        message="",
+        offset=0,
+        reset=False,
+        more=False,
+        last_step_age_seconds=None,
+        steps=(),
+    )
+
+    for steps, failure in ((None, "no_server"), (page, "no_dispatch")):
+        shown = with_server_steps(snapshot, steps, failure)
+        assert shown["stream_reason"] == IN_PROCESS_STREAM_REASON
+        assert shown["checkpoints"] == []
+
+    observer = {
+        **snapshot,
+        "stream_reason": "event stream is missing or unreadable; worker outcome is independent",
+    }
+    assert "stream_reason" not in with_server_steps(observer, None, "no_server")

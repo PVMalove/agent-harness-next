@@ -42,6 +42,17 @@ def podman_info(*, rootless: bool = False, selinux: bool = False) -> State:
     }
 
 
+def docker_info(*, rootless: bool = False) -> State:
+    """The part of ``docker info`` the runtime reads: a rootless daemon names ``rootless`` among
+    its security options."""
+    return {
+        "ID": "SCRIPTED-DOCKER-DAEMON",
+        "ServerVersion": "27.3.1",
+        "SecurityOptions": ["name=seccomp,profile=builtin"]
+        + (["name=rootless"] if rootless else []),
+    }
+
+
 class ScriptedEngine:
     """The test side: the state file, its objects and the recorded calls."""
 
@@ -51,7 +62,9 @@ class ScriptedEngine:
         self.state_file = directory / f"{binary}.json"
         self.binary = binary
         self._write(
-            {"binary": binary, "info": podman_info(), "images": {}, "objects": {},
+            {"binary": binary,
+             "info": podman_info() if binary == "podman" else docker_info(),
+             "images": {}, "objects": {},
              "failures": {}, "calls": [], "runs": {}}
         )
         wrapper = self.bin / binary
@@ -236,7 +249,8 @@ def _answer(state: State, argv: list[str]) -> tuple[int, str, str]:
     if kind == "network-connect":
         return 0, "", ""
     if verb == "logs":
-        return 0, "worker stdout\n", "worker stderr\n"
+        # A test may script the worker's stream, for example its stream-json events (#1014).
+        return 0, state.get("worker_stdout", "worker stdout\n"), "worker stderr\n"
     if verb == "rm" or kind == "network-rm":
         item = _find(state, "network" if verb == "network" else "container", argv[-1])
         if item is None:

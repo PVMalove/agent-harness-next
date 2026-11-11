@@ -58,8 +58,8 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         self.assertNotRegex(workflow, r"(?<!uv )\bpip install|-m pip\b")
         self.assertNotIn("run: python scripts/verify.py", workflow)
-        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 8)
-        self.assertEqual(workflow.count("run: make bootstrap"), 7)
+        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 10)
+        self.assertEqual(workflow.count("run: make bootstrap"), 9)
         self.assertEqual(workflow.count("make verify"), 2)
 
     @staticmethod
@@ -95,7 +95,7 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
 
     def test_console_ci_runs_playwright_without_comparing_screenshots(self) -> None:
         _, blocks = self._jobs()
-        job = blocks["verify"]
+        job = blocks["console-spa"]
         self.assertIn("npm run typecheck", job)
         self.assertIn("npm run build", job)
         self.assertIn("run: npm test", job)
@@ -1164,6 +1164,15 @@ class ContainerComponentContractTests(unittest.TestCase):
                 {"defaults": {"mode": "sandbox", "container": {"worker_image": "w"}}},
                 [],
             ),
+            # #1014: without defaults, a container QA alone satisfies the executor.
+            (
+                {"operations": {"qa": {"container": {"worker_image": "w"}}}},
+                [],
+            ),
+            (
+                {"operations": {"qa": {"mode": "sandbox"}}},
+                [contract.DOCKER_CONTAINER_PROBLEM],
+            ),
         )
         for policy, expected in cases:
             with (
@@ -1187,6 +1196,138 @@ class ContainerComponentContractTests(unittest.TestCase):
                     expected,
                 )
 
+    def _docker_problems(
+        self, policy: dict[str, object], transports: dict[str, str]
+    ) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "orchestration.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "access_policy": policy,
+                        "extensions": {"runtime_access": "docker"},
+                        "assignment_plans": {
+                            role: {"transport": transport}
+                            for role, transport in transports.items()
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            # The minimal config omits unrelated required fields; only the executor verdicts count.
+            return [
+                problem
+                for problem in contract.health_problems(
+                    path, ROOT / "harness/orchestration/roles"
+                )
+                if problem.startswith(contract.DOCKER_PROBLEM_PREFIX)
+            ]
+
+    def test_a_container_qa_alone_keeps_in_process_roles_valid(self) -> None:
+        """#1014: container QA no longer forces every role to the external transport."""
+        problems = self._docker_problems(
+            {"operations": {"qa": {"container": {"worker_image": "w"}}}},
+            {
+                "developer": "in-process",
+                "code-review": "in-process",
+                "qa": "in-process",
+            },
+        )
+
+        self.assertEqual(problems, [])
+
+    def test_an_in_process_role_with_an_authored_plan_is_named_at_load(self) -> None:
+        """#1014: the docker executor cannot prove an in-process launch, so a role that defaults
+        or its own override puts under it is named when the config loads, before any preflight.
+        It stays a warning: the config still serves its external roles and container QA."""
+        from harness.orchestration.config_boundary import inspect_configuration
+
+        container = {"worker_image": "w"}
+        transports = {
+            "developer": "in-process",
+            "code-review": "in-process",
+            "architect": "external",
+            "qa": "in-process",
+        }
+        cases: tuple[tuple[dict[str, object], list[str]], ...] = (
+            ({"defaults": {"container": container}}, ["code-review", "developer"]),
+            (
+                {
+                    "operations": {"qa": {"container": container}},
+                    "roles": {"developer": {"container": container}},
+                },
+                ["developer"],
+            ),
+            ({"operations": {"qa": {"container": container}}}, []),
+        )
+        for policy, named in cases:
+            with self.subTest(policy=policy):
+                document = {
+                    "access_policy": policy,
+                    "extensions": {"runtime_access": "docker"},
+                    "assignment_plans": {
+                        role: {"transport": transport}
+                        for role, transport in transports.items()
+                    },
+                }
+
+                result = inspect_configuration(
+                    ROOT,
+                    json.dumps(document).encode(),
+                    roles_root=ROOT / "harness/orchestration/roles",
+                )
+
+                warnings = [
+                    item.message
+                    for item in result.diagnostics
+                    if item.severity == "warning"
+                ]
+                self.assertEqual(
+                    warnings,
+                    [contract.docker_in_process_warning(role) for role in named],
+                )
+                self.assertEqual(self._docker_problems(policy, transports), [])
+                for role, message in zip(named, warnings):
+                    self.assertIn(f"role {role!r}", message)
+                    self.assertIn("transport to external", message)
+                    self.assertIn(f"access_policy.roles.{role}", message)
+
+    def test_a_role_override_without_a_container_and_without_defaults_is_named_at_load(
+        self,
+    ) -> None:
+        """#1014: without defaults, a roles.<role> override puts the role under the executor
+        with no container to run; config load names it instead of dispatch preflight only."""
+        from harness.orchestration.config_boundary import inspect_configuration
+
+        document = {
+            "access_policy": {
+                "operations": {"qa": {"container": {"worker_image": "w"}}},
+                "roles": {
+                    "developer": {"mode": "sandbox"},
+                    "architect": {"container": {"worker_image": "w"}},
+                },
+            },
+            "extensions": {"runtime_access": "docker"},
+            "assignment_plans": {
+                "developer": {"transport": "external"},
+                "architect": {"transport": "external"},
+            },
+        }
+
+        result = inspect_configuration(
+            ROOT,
+            json.dumps(document).encode(),
+            roles_root=ROOT / "harness/orchestration/roles",
+        )
+
+        warnings = [
+            item.message for item in result.diagnostics if item.severity == "warning"
+        ]
+        self.assertEqual(
+            warnings, [contract.docker_role_container_warning("developer")]
+        )
+        self.assertIn("access_policy.roles.developer.container", warnings[0])
+
     def test_the_schema_requires_the_default_container_for_docker(self) -> None:
         schema = _schema()
         self.assertEqual(
@@ -1202,8 +1343,26 @@ class ContainerComponentContractTests(unittest.TestCase):
         )
         self.assertEqual(rule["then"]["required"], ["access_policy"])
         policy = rule["then"]["properties"]["access_policy"]
-        self.assertEqual(policy["required"], ["defaults"])
-        self.assertEqual(policy["properties"]["defaults"], {"required": ["container"]})
+        # #1014: defaults name the container, or, without defaults, operations.qa names it.
+        self.assertEqual(
+            policy["anyOf"],
+            [
+                {
+                    "required": ["defaults"],
+                    "properties": {"defaults": {"required": ["container"]}},
+                },
+                {
+                    "not": {"required": ["defaults"]},
+                    "required": ["operations"],
+                    "properties": {
+                        "operations": {
+                            "required": ["qa"],
+                            "properties": {"qa": {"required": ["container"]}},
+                        }
+                    },
+                },
+            ],
+        )
 
 
 class EnvironmentComponentContractTests(unittest.TestCase):

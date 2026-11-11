@@ -510,6 +510,52 @@ fn an_exited_worker_leaves_its_logs_and_exit_and_its_objects_are_removed() {
     repo.only_podman();
 }
 
+#[test]
+fn a_running_worker_has_a_fresh_snapshot_of_its_logs_at_every_reconcile() {
+    let repo = Repo::new("live-logs", 3600);
+    let supervisor = repo.supervisor(Vec::new());
+    repo.launch(&supervisor).unwrap();
+    let id = repo.execution().unwrap().id;
+    repo.engine.answer(
+        &["podman", "container", "inspect", "--format"],
+        inspected("running", &id, &repo.git_common),
+    );
+    let logs = repo.state().join("executions").join(&id);
+
+    supervisor.reconcile_all();
+
+    assert_eq!(repo.execution().unwrap().state, ExecutionState::Running);
+    assert_eq!(
+        fs::read_to_string(logs.join("stdout.log")).unwrap(),
+        "worker out\n"
+    );
+    // The next snapshot replaces the file: the engine answers the whole stream every time.
+    repo.engine.answer(
+        &["podman", "logs"],
+        engine::Answer {
+            answered: true,
+            code: Some(0),
+            stdout: "worker out\nmore\n".to_owned(),
+            stderr: String::new(),
+        },
+    );
+    supervisor.reconcile_all();
+
+    assert_eq!(
+        fs::read_to_string(logs.join("stdout.log")).unwrap(),
+        "worker out\nmore\n"
+    );
+    let names: Vec<String> = fs::read_dir(&logs)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        !names.iter().any(|name| name.ends_with(".partial")),
+        "{names:?}"
+    );
+    assert!(!repo.engine.calls().iter().any(|argv| argv[1] == "rm"));
+}
+
 /// A runtime that dies at its first `rm`; every `rm` first notes the execution as stored then.
 struct CrashAtRemoval {
     scripted: Arc<Scripted>,

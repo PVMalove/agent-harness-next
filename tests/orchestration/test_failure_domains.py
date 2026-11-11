@@ -303,9 +303,19 @@ def test_a_failed_gate_after_green_preparation_is_code_test() -> None:
     assert (failure.domain, failure.method) == (FailureDomain.CODE_TEST, "structured")
 
 
-def test_a_failed_gate_with_an_environment_sign_is_environment_preparation(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "diagnostics",
+    [
+        "OSError: [Errno 30] Read-only file system: '/tmp/x'",
+        "error: linker `cc` not found\nerror: could not compile `harness-runtime`",
+        "runtime_unavailable: the socket path /tmp/x.sock is longer than 100 bytes",
+    ],
+)
+def test_a_failed_gate_with_an_environment_sign_is_environment_preparation(
+    tmp_path: Path, diagnostics: str
+) -> None:
     stages = _stages(failed_stage="gate", started="started")
-    stages["stages"][-1]["diagnostics"] = "OSError: [Errno 30] Read-only file system: '/tmp/x'"  # type: ignore[index]
+    stages["stages"][-1]["diagnostics"] = diagnostics  # type: ignore[index]
 
     failure = failure_domains.of_qa_stages(stages, repo=tmp_path)
 

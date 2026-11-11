@@ -70,7 +70,8 @@ pre-flight, до `batch create` и до создания issue-ветки: пр�
 `--approved-at`: `batch approve`, `dispatch create` и плановый `dispatch resume --trigger`
 выполняются без них. Для каждого отчёта, который цепочка `report submit` или `qa run` не приняла,
 включая отчёт publish, сессия запускает `batch auto-decide --batch <id>`. Сессия передаёт только
-входы, которые требуют суждения: `--commit-plan-file` с точной копией плана architect-а,
+входы, которые требуют суждения: `--commit-plan-file` с точной копией плана architect-а, только
+если отчёт architect не несёт поле `commit_plan`,
 `--findings-file`, `--bug-ticket` после заведения bug-тикета через CLI трекера и
 `--block-bypass --note`. Само решение сессия не выбирает. После отказа любой команды и после
 исхода `stopped` сессия запускает `batch auto-report --batch <id>`. Остановка окончательна для

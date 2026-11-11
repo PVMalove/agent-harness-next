@@ -2270,6 +2270,42 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(proof["evidence"]["hosts"], ["github.com"])
         self.assertEqual(launches, [brief["dispatch_id"]])
 
+    def test_preflight_before_a_context_package_names_who_registers_it(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        preview = coordinator.preflight_dispatch(
+            self._args(
+                batch=batch["batch_id"],
+                role="architect",
+                purpose="work",
+                runtime="claude",
+                candidate_commit=None,
+            )
+        )
+        self.assertEqual(
+            preview["context_package"]["starting_files"],
+            {"status": "not-registered", "registered_by": "dispatch create"},
+        )
+
+        self._dispatch(batch["batch_id"], "architect")
+        registered = coordinator.preflight_dispatch(
+            self._args(
+                batch=batch["batch_id"],
+                role="architect",
+                purpose="work",
+                runtime="claude",
+                candidate_commit=None,
+            )
+        )
+        self.assertEqual(
+            set(registered["context_package"]["starting_files"]),
+            {"package_id", "sha256", "freshness"},
+        )
+
     def _start(self, dispatch_id: str, *, checkout: Path | None = None) -> None:
         launched = coordinator.send_dispatch(
             self._args(
@@ -14861,6 +14897,92 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             self._auto_dispatch("developer")
         self.assertIn("--approved-by", refused.exception.remedy)
 
+    def test_auto_decide_pins_the_commit_plan_of_the_architect_report(self) -> None:
+        self._auto_batch(definition_of_done=["one", "two"])
+        architect = self._auto_dispatch("architect")
+        self._start(architect["dispatch_id"])
+        plan = [self._plan_entry("first", [1]), self._plan_entry("second", [2])]
+        self._submit(
+            architect["dispatch_id"],
+            {
+                **self._base_report(
+                    architect,
+                    "architect",
+                    risks={"status": "present", "details": "an own plan"},
+                ),
+                "commit_plan": plan,
+            },
+        )
+
+        decided = self._auto_decide()
+
+        stored = self._batch_record(self.batch_id)
+        self.assertEqual(decided["decision"], "accept")
+        self.assertEqual(
+            [entry["id"] for entry in stored["commit_plan"]], ["first", "second"]
+        )
+
+    def test_a_plan_file_that_differs_from_the_reported_plan_stops_on_its_gate(
+        self,
+    ) -> None:
+        self._auto_batch(definition_of_done=["one", "two"])
+        architect = self._auto_dispatch("architect")
+        self._start(architect["dispatch_id"])
+        self._submit(
+            architect["dispatch_id"],
+            {
+                **self._base_report(
+                    architect,
+                    "architect",
+                    risks={"status": "present", "details": "an own plan"},
+                ),
+                "commit_plan": [self._plan_entry("first", [1, 2])],
+            },
+        )
+        other = self._plan_file(
+            [self._plan_entry("first", [1]), self._plan_entry("second", [2])]
+        )
+
+        result = self._auto_decide(commit_plan_file=other)
+
+        self._assert_stopped(result, "integrity-failure", "deterministic-gate-failed")
+        self.assertIn(
+            "differs",
+            self._batch_record(self.batch_id)["auto_stop"]["evidence"]["refused"],
+        )
+
+    def test_a_plan_file_outside_the_repository_names_the_staging_path(self) -> None:
+        self._auto_batch()
+        architect = self._auto_dispatch("architect")
+        self._start(architect["dispatch_id"])
+        self._submit(
+            architect["dispatch_id"],
+            self._base_report(
+                architect,
+                "architect",
+                risks={"status": "present", "details": "an own plan"},
+            ),
+        )
+        plan = {"commit_plan": [self._plan_entry("first", [1])]}
+        with tempfile.TemporaryDirectory() as outside:
+            path = Path(outside) / "plan.json"
+            path.write_text(json.dumps(plan), encoding="utf-8")
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                self._auto_decide(commit_plan_file=str(path))
+        inbox = ".harness/.sandboxes/scratch/inbox"
+        self.assertIn(inbox, refused.exception.message)
+        self.assertIn(inbox, refused.exception.remedy)
+        self.assertNotIn("decision", self._batch_record(self.batch_id)["dispatches"][-1])
+
+        session = (
+            self.repo / ".harness/.sandboxes/scratch/sessions/s-1/scratchpad/plan.json"
+        )
+        session.parent.mkdir(parents=True)
+        session.write_text(json.dumps(plan), encoding="utf-8")
+        self.assertEqual(
+            self._auto_decide(commit_plan_file=str(session))["decision"], "accept"
+        )
+
     def test_an_unreadable_commit_plan_file_is_refused_without_a_stop(self) -> None:
         """A missing or invalid plan file is a session input error, not a failed gate."""
         self._auto_batch(allowed_path=["services/**"])
@@ -15075,6 +15197,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertNotIn("auto_stop", before)
         self.assertEqual(rendered["state"], "abandoned")
         self.assertEqual(rendered["observed_stop"]["reason"], "supersede-dead-end")
+        self.assertEqual(rendered["abandoned"], before["abandoned"])
+        self.assertEqual(rendered["abandoned"]["reason"], "the plan is obsolete")
 
     def test_an_exhausted_developer_retry_budget_stops_the_automatic_path(
         self,

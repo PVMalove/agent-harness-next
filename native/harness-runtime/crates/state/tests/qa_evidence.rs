@@ -8,10 +8,10 @@ use std::collections::BTreeMap;
 
 use common::Repo;
 use common::qa_store::{
-    self, BATCH, CANDIDATE, COMMANDS, QA_DISPATCH, Run, TARGET, TREE, accepted_qa, passed_stage,
-    passed_stages,
+    self, BATCH, CANDIDATE, COMMANDS, QA_DISPATCH, Run, TARGET, TREE, accepted_qa,
+    accepted_qa_with, passed_stage, passed_stages,
 };
-use contracts::{StageEvidence, StageResult, StageSelection};
+use contracts::{StageEvidence, StageKind, StageResult, StageSelection};
 use serde_json::{Map, Value, json};
 use state::canonical::{canonical_json, sha256_hex};
 use state::qa_evidence::{self, Evidence, Pair};
@@ -457,7 +457,7 @@ fn a_pair_record_is_checked_field_by_field() {
         json!(format!("pair-{}", "0".repeat(32))),
     );
     let mut bad_contract = record.clone();
-    bad_contract.insert("contract".to_owned(), json!(2));
+    bad_contract.insert("contract".to_owned(), json!(3));
     for broken in [extra, bad_sha, bad_id, bad_contract] {
         assert!(
             qa_evidence::check_pair_record(&path, &broken).is_err(),
@@ -466,4 +466,307 @@ fn a_pair_record_is_checked_field_by_field() {
     }
     let elsewhere = "reports/integration-pair/pair-00000000000000000000000000000000.json";
     assert!(qa_evidence::check_pair_record(elsewhere, &record).is_err());
+}
+
+#[test]
+fn a_pair_record_is_checked_by_its_contract() {
+    let accepted = [
+        qa_store::legacy_pair_record(),
+        qa_store::pair_record(),
+        qa_store::diff_pair_record(),
+    ];
+    for (path, record) in &accepted {
+        let record = record.as_object().unwrap();
+
+        assert_eq!(
+            qa_evidence::check_pair_record(path, record),
+            Ok(()),
+            "{record:?}"
+        );
+    }
+    let (path, diff) = qa_store::diff_pair_record();
+    let with = |key: &str, value: Value| {
+        let mut record = diff.as_object().unwrap().clone();
+        record.insert(key.to_owned(), value);
+        record
+    };
+    let mut without = diff.as_object().unwrap().clone();
+    without.remove("selection");
+    let broken = [
+        without,
+        with("contract", json!(1)),
+        with("contract", json!(3)),
+        with("selection", json!("focused")),
+        with("selection", json!("failed-only")),
+        with("selection", json!("Full")),
+        with("selection", json!(null)),
+        with("requirement", json!("full")),
+    ];
+    for record in broken {
+        assert!(
+            qa_evidence::check_pair_record(&path, &record).is_err(),
+            "{record:?}"
+        );
+    }
+}
+
+// -- the selection a pair requires (ADR 0023, section 7; ADR 0026, section 4) --------------------
+
+/// The passed stages of a QA run whose second stage selected the tests of the ticket's diff.
+fn diff_stages() -> Vec<StageEvidence> {
+    let mut stages = passed_stages();
+    stages[1].selection = StageSelection::TicketDiff;
+    stages[1].nodeids = Some(vec!["tests/test_x.py".to_owned()]);
+    stages
+}
+
+/// The stage a pytest stage that selected no test of the diff is recorded as.
+fn no_tests_stage(stage_id: &str) -> StageEvidence {
+    let mut stage = passed_stage(stage_id, CANDIDATE);
+    stage.kind = StageKind::Pytest;
+    stage.selection = StageSelection::TicketDiff;
+    stage.result = StageResult::NotRun;
+    stage.exit_code = None;
+    stage.stdout = None;
+    stage.stderr = None;
+    stage.duration_ms = 0;
+    stage.nodeids = Some(Vec::new());
+    stage
+}
+
+fn judged_by(stages: Vec<StageEvidence>, pair: (String, Value)) -> Value {
+    judged(&Memory::of(&accepted_qa_with(stages, pair)))
+}
+
+#[test]
+fn the_required_selection_is_read_from_the_stored_pair_record_and_fails_closed() {
+    let required = |record: Option<&Value>| qa_evidence::required_selection(record);
+    let (_, diff) = qa_store::diff_pair_record();
+    let (_, full) = qa_store::pair_record();
+    let (_, legacy) = qa_store::legacy_pair_record();
+    let with = |key: &str, value: Value| {
+        let mut record = diff.clone();
+        record[key] = value;
+        record
+    };
+    let mut no_selection = diff.clone();
+    no_selection.as_object_mut().unwrap().remove("selection");
+
+    assert_eq!(required(Some(&diff)), StageSelection::TicketDiff);
+    assert_eq!(required(Some(&full)), StageSelection::Full);
+    for not_diff in [
+        None,
+        Some(&legacy),
+        Some(&no_selection),
+        Some(&with("selection", json!("focused"))),
+        Some(&with("selection", json!("Ticket-Diff"))),
+        Some(&with("selection", json!(null))),
+        Some(&with("contract", json!(1))),
+        Some(&with("contract", json!(3))),
+        Some(&with("contract", json!("2"))),
+    ] {
+        assert_eq!(required(not_diff), StageSelection::Full, "{not_diff:?}");
+    }
+}
+
+#[test]
+fn diff_stages_confirm_only_a_pair_that_requires_the_diff_selection() {
+    let accepted = judged_by(diff_stages(), qa_store::diff_pair_record());
+    assert_eq!(accepted["verdict"], "ok", "{accepted}");
+    assert_eq!(accepted["confirmed_by"]["source"], "original-qa");
+
+    for (name, pair) in [
+        ("full pair", qa_store::pair_record()),
+        ("pair of the first contract", qa_store::legacy_pair_record()),
+    ] {
+        let answer = judged_by(diff_stages(), pair);
+
+        refused_with(&answer, "selection_not_full");
+        assert!(answer["violations"][0]["detail"].is_string(), "{name}");
+    }
+}
+
+#[test]
+fn full_stages_confirm_every_pair() {
+    for pair in [
+        qa_store::diff_pair_record(),
+        qa_store::pair_record(),
+        qa_store::legacy_pair_record(),
+    ] {
+        let answer = judged_by(passed_stages(), pair);
+
+        assert_eq!(answer["verdict"], "ok", "{answer}");
+    }
+}
+
+#[test]
+fn focused_and_failed_only_stages_never_confirm_a_diff_pair() {
+    for selection in [StageSelection::Focused, StageSelection::FailedOnly] {
+        let mut stages = diff_stages();
+        stages[0].selection = selection;
+
+        refused_with(
+            &judged_by(stages, qa_store::diff_pair_record()),
+            "selection_not_full",
+        );
+    }
+}
+
+#[test]
+fn a_pytest_stage_without_tests_in_the_diff_is_accepted_only_for_a_diff_pair() {
+    for id in ["no-tests-in-diff", "no-tests-in-diff-2"] {
+        let mut stages = diff_stages();
+        stages.push(no_tests_stage(id));
+
+        let accepted = judged_by(stages.clone(), qa_store::diff_pair_record());
+        let refused = judged_by(stages, qa_store::pair_record());
+
+        assert_eq!(accepted["verdict"], "ok", "{id}: {accepted}");
+        refused_with(&refused, "selection_not_full");
+        assert!(codes(&refused).contains(&"stage_not_passed".to_owned()));
+    }
+}
+
+#[test]
+fn only_the_recorded_shape_of_a_stage_without_tests_is_accepted() {
+    let named = |id: &str| no_tests_stage(id);
+    let mut custom = named("no-tests-in-diff");
+    custom.kind = StageKind::Custom;
+    let mut full = named("no-tests-in-diff");
+    full.selection = StageSelection::Full;
+    // It has an exit code, so the schema also wants its output streams.
+    let mut ran = named("no-tests-in-diff");
+    ran.exit_code = Some(1);
+    ran.stdout = passed_stage("gate-1", CANDIDATE).stdout;
+    ran.stderr = passed_stage("gate-1", CANDIDATE).stderr;
+    let mut selected = named("no-tests-in-diff");
+    selected.nodeids = Some(vec!["tests/test_x.py".to_owned()]);
+    let mut failed = named("no-tests-in-diff");
+    failed.result = StageResult::Fail;
+    failed.exit_code = Some(1);
+    failed.stdout = passed_stage("gate-1", CANDIDATE).stdout;
+    failed.stderr = passed_stage("gate-1", CANDIDATE).stderr;
+    let unrelated = named("lint-later");
+    let near = named("no-test-in-diff");
+
+    for (name, stage) in [
+        ("custom kind", custom),
+        ("full selection", full),
+        ("exit code", ran),
+        ("node ids", selected),
+        ("failed", failed),
+        ("another id", unrelated),
+        ("near id", near),
+    ] {
+        let mut stages = diff_stages();
+        stages.push(stage);
+
+        let answer = judged_by(stages, qa_store::diff_pair_record());
+
+        assert_eq!(answer["verdict"], "refused", "{name}: {answer}");
+        assert!(
+            codes(&answer).contains(&"stage_not_passed".to_owned()),
+            "{name}: {answer}"
+        );
+    }
+}
+
+#[test]
+fn a_not_run_stage_of_a_command_stays_not_passed_for_a_diff_pair() {
+    let mut stages = diff_stages();
+    stages[0].result = StageResult::NotRun;
+    stages[0].exit_code = None;
+    stages[0].stdout = None;
+    stages[0].stderr = None;
+
+    let answer = judged_by(stages, qa_store::diff_pair_record());
+
+    refused_with(&answer, "stage_not_passed");
+}
+
+#[test]
+fn one_store_judges_each_target_by_the_pair_record_of_that_target() {
+    let other = "2".repeat(40);
+    let run = accepted_qa_with(diff_stages(), qa_store::diff_pair_record());
+    let mut memory = Memory::of(&run);
+    memory.records.insert(
+        "batches/batch-bbbbbbbb-0000-4000-8000-000000000002.json".to_owned(),
+        json!({"batch_id": "batch-bbbbbbbb-0000-4000-8000-000000000002",
+               "base_commit": other, "dispatches": [run.entry]}),
+    );
+    let (path, record) = qa_store::pair_record_of(&other, Some("full"));
+    memory.records.insert(path, record);
+
+    let into_integration = judged(&memory);
+    let into_default = qa_evidence::judge(
+        &memory,
+        &Pair {
+            candidate_sha: CANDIDATE.to_owned(),
+            target_sha: other,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(into_integration["verdict"], "ok", "{into_integration}");
+    refused_with(&into_default, "selection_not_full");
+}
+
+#[test]
+fn the_store_judges_the_selection_by_the_stored_pair_record() {
+    let payload = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET});
+    let diff = store_with(&accepted_qa_with(
+        diff_stages(),
+        qa_store::diff_pair_record(),
+    ));
+    let full = store_with(&accepted_qa_with(diff_stages(), qa_store::pair_record()));
+    let legacy = store_with(&accepted_qa_with(
+        diff_stages(),
+        qa_store::legacy_pair_record(),
+    ));
+
+    let accepted = qa_evidence::verify(&diff.state(), Some(&payload)).unwrap();
+    let into_default = qa_evidence::verify(&full.state(), Some(&payload)).unwrap();
+    let old_contract = qa_evidence::verify(&legacy.state(), Some(&payload)).unwrap();
+
+    assert_eq!(accepted["verdict"], "ok", "{accepted}");
+    refused_with(&into_default, "selection_not_full");
+    refused_with(&old_contract, "selection_not_full");
+}
+
+#[test]
+fn the_request_carries_exactly_the_pair_and_no_requirement() {
+    let valid = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET});
+    assert_eq!(Pair::parse(Some(&valid)), Ok(pair()));
+
+    for field in ["requirement", "selection", "required_selection", "fallback"] {
+        for value in [
+            json!("full"),
+            json!("ticket-diff"),
+            json!(null),
+            json!(true),
+        ] {
+            let mut payload = valid.clone();
+            payload[field] = value;
+
+            let parsed = Pair::parse(Some(&payload));
+
+            assert!(
+                parsed.as_ref().is_err_and(|reason| reason.contains(field)),
+                "{field}: {parsed:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_request_with_a_requirement_is_malformed_and_never_judged() {
+    let repo = store_with(&accepted_qa_with(diff_stages(), qa_store::pair_record()));
+    let before = revision(&repo);
+    let weaker = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET,
+                         "requirement": "ticket-diff"});
+
+    let answer = qa_evidence::verify(&repo.state(), Some(&weaker));
+
+    assert!(matches!(answer, Err(ReadError::Malformed(_))), "{answer:?}");
+    assert_eq!(revision(&repo), before);
 }

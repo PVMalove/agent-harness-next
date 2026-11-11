@@ -451,6 +451,7 @@ def auto_report(args: argparse.Namespace) -> JsonObject:
                 "next_action": batch["auto_report"]["next_human_action"],
                 "observed_stop": observed,
                 "state": batch["state"],
+                "abandoned": batch.get("abandoned"),
             }
         report = live(repo, root, config, batch, None)
     return {
@@ -461,4 +462,5 @@ def auto_report(args: argparse.Namespace) -> JsonObject:
         "observed_stop": observed,
         "historical_report": batch.get("auto_report"),
         "state": batch["state"],
+        "abandoned": batch.get("abandoned"),
     }

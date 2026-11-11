@@ -1157,17 +1157,44 @@ def _pinned_commit_plan(
 ) -> list[JsonObject] | None:
     """The operator-supplied commit plan an architect accept pins on the batch, validated.
 
-    The policy auto-accept builds its own namespace without ``commit_plan_file``, so it never pins.
+    An accepted architect report that carries its own ``commit_plan`` pins that plan; a plan file
+    passed beside it must hold the same plan (issue #1015).
     """
     plan_file = getattr(args, "commit_plan_file", None)
     if plan_file is None:
-        return None
+        return (
+            accepted_commit_plan(batch, report, None)
+            if args.decision == "accept"
+            else None
+        )
     if args.decision != "accept" or report.get("role") != "architect":
         raise CoordinatorError(
             "--commit-plan-file is only valid when accepting an architect report",
             remedy="drop --commit-plan-file, or pass it with --decision accept on the pending architect report",
         )
-    return _read_commit_plan(repo, batch, plan_file)
+    return accepted_commit_plan(batch, report, _commit_plan_document(repo, plan_file))
+
+
+def accepted_commit_plan(
+    batch: JsonObject, report: JsonObject, document: JsonObject | None
+) -> list[JsonObject] | None:
+    """The validated plan an architect accept pins: the plan file's ``document`` or the report's
+    own ``commit_plan``; when both are given they must agree. ``None`` when neither is."""
+    reported = (
+        _pin_commit_plan(batch, {"commit_plan": report["commit_plan"]})
+        if report.get("role") == "architect" and "commit_plan" in report
+        else None
+    )
+    if document is None:
+        return reported
+    plan = _pin_commit_plan(batch, document)
+    if reported is not None and plan != reported:
+        raise CoordinatorError(
+            "the --commit-plan-file plan differs from the commit_plan of the architect report",
+            remedy="drop --commit-plan-file to pin the reported plan, or ask the architect to "
+            "resubmit the report with the intended commit_plan",
+        )
+    return plan
 
 
 def _read_commit_plan(

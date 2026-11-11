@@ -79,6 +79,11 @@ def with_server_steps(
     facts: JsonObject = {
         key: value for key, value in snapshot.items() if key not in _OBSERVER_STREAM
     }
+    from harness.orchestration.workflow.delivery import IN_PROCESS_STREAM_REASON
+
+    # An in-process dispatch has no stream at all: its reason is a fact of the dispatch.
+    if snapshot.get("stream_reason") == IN_PROCESS_STREAM_REASON:
+        facts["stream_reason"] = IN_PROCESS_STREAM_REASON
     if steps is None:
         return {
             **facts,
@@ -527,9 +532,11 @@ class WorkerObservationScreen(ConsoleShell):
                 ]
         glyph = {"live": "●", "stopped": "■", "absent": "○"}.get(worker, "?")
         age = snapshot.get("last_event_age_seconds")
+        reason = snapshot.get("stream_reason")
+        stream = f"{snapshot.get('stream_state')}" + (f" ({reason})" if reason else "")
         lines = [
             f"{snapshot.get('batch_id')} / {dispatch} · {snapshot.get('role')}",
-            f"{glyph} {t('Процесс')}: {worker} · ledger: {snapshot.get('state')} · {t('Поток')}: {snapshot.get('stream_state')}",
+            f"{glyph} {t('Процесс')}: {worker} · ledger: {snapshot.get('state')} · {t('Поток')}: {stream}",
             f"heartbeat: {snapshot.get('heartbeat_at') or t('не наблюдался')} · {t('Событие')}: {str(age) + 's' if age is not None else '—'}",
             f"{t('Операция')}: {self._last_operation}",
         ]

@@ -694,3 +694,39 @@ def test_every_managed_event_hook_runs_through_the_envelope(hook_id: str) -> Non
     text = (HOOKS / f"{hook_id}.sh").read_text(encoding="utf-8")
 
     assert f'hook_response.py" run {hook_id} ' in text
+
+
+def test_a_shell_write_refusal_becomes_ask_only_where_the_runtime_understands_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stderr = "[project-json-shell-write] protect-hook-policy: confirm by hand"
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/work/project")
+    asked = hook_response.decide("protect-hook-policy", "strict", 3, stderr)
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR")
+    elsewhere = hook_response.decide("protect-hook-policy", "strict", 3, stderr)
+
+    assert (asked["decision"], asked["reason_code"]) == (
+        "ask",
+        "project-json-shell-write",
+    )
+    assert (elsewhere["decision"], elsewhere["reason_code"]) == (
+        "block",
+        "project-json-shell-write",
+    )
+
+
+def test_exit_code_three_asks_only_for_a_registered_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/work/project")
+
+    unregistered = hook_response.decide(
+        "protect-hook-policy", "strict", 3, "[agent-config-edit] x"
+    )
+    other_hook = hook_response.decide(
+        "block-pr-merge", "strict", 3, "[project-json-shell-write] x"
+    )
+
+    assert unregistered["decision"] == other_hook["decision"] == "block"
+    assert unregistered["reason_code"] == other_hook["reason_code"] == "internal-error"

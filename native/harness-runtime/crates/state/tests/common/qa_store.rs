@@ -79,21 +79,41 @@ fn object(value: &Value) -> &Map<String, Value> {
     value.as_object().unwrap()
 }
 
-/// The pair record of `{CANDIDATE, TARGET}`, as `release_gate.record_pair` writes it.
-pub fn pair_record() -> (String, Value) {
-    let members = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET});
+/// The pair record of `{CANDIDATE, target}`, as `release_gate.record_pair` writes it: contract 2
+/// with `selection`, or, for `None`, the record of the first contract (five fields).
+pub fn pair_record_of(target: &str, selection: Option<&str>) -> (String, Value) {
+    let members = json!({"candidate_sha": CANDIDATE, "target_sha": target});
     let id = format!(
         "pair-{}",
         &sha256_hex(canonical_json(&members).as_bytes())[..32]
     );
-    let record = json!({
+    let mut record = json!({
         "pair_id": id,
         "contract": 1,
         "candidate_sha": CANDIDATE,
-        "target_sha": TARGET,
+        "target_sha": target,
         "candidate_tree_sha": TREE,
     });
+    if let Some(selection) = selection {
+        record["contract"] = json!(2);
+        record["selection"] = json!(selection);
+    }
     (format!("reports/integration-pair/{id}.json"), record)
+}
+
+/// The pair record of `{CANDIDATE, TARGET}` that requires a full QA run (contract 2).
+pub fn pair_record() -> (String, Value) {
+    pair_record_of(TARGET, Some("full"))
+}
+
+/// The pair record of `{CANDIDATE, TARGET}` that accepts the selection of the ticket's diff.
+pub fn diff_pair_record() -> (String, Value) {
+    pair_record_of(TARGET, Some("ticket-diff"))
+}
+
+/// The pair record of `{CANDIDATE, TARGET}` under the first contract, which requires `full`.
+pub fn legacy_pair_record() -> (String, Value) {
+    pair_record_of(TARGET, None)
 }
 
 /// The files of a QA log with its trailer, its stage-evidence document and the streams; the
@@ -126,6 +146,11 @@ pub struct Run {
 
 /// The stored evidence of an accepted QA dispatch on `CANDIDATE` whose run has `stages`.
 pub fn accepted_qa(stages: Vec<StageEvidence>) -> Run {
+    accepted_qa_with(stages, pair_record())
+}
+
+/// The stored evidence of an accepted QA dispatch whose pair record is `pair` (path and record).
+pub fn accepted_qa_with(stages: Vec<StageEvidence>, pair: (String, Value)) -> Run {
     let mut files = Files::new();
     let log_sha = run_files(stages, &mut files);
     let dispatch = json!({
@@ -168,7 +193,7 @@ pub fn accepted_qa(stages: Vec<StageEvidence>) -> Run {
         record_text(&json!({"dispatch_id": QA_DISPATCH, "state": "reported"})),
     );
     files.insert(report_path, record_text(&report));
-    let (pair_path, pair) = pair_record();
+    let (pair_path, pair) = pair;
     files.insert(pair_path, record_text(&pair));
     Run { files, entry }
 }

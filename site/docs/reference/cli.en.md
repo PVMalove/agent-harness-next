@@ -73,6 +73,13 @@ only raise the profile for paths and roles; the validator rejects a downgrade.
 The `ci_required_checks` field is a list of unique non-empty names of CI checks whose evidence
 is accepted from the tracker.
 
+The names in `ci_required_checks` are full checks: `verify`, `rust` and the other jobs that
+`verify.yml` runs for a pull request into `master`. Do not list `-light` names there: the
+`verify-light` job runs only for a pull request into `integration/**`, and `collect-ci` answers such
+a check with the reason `light_check` when the pair requires full QA. The field lives in the local
+`.harness/project.json`, which is not committed. The operator sets it once when enabling CI
+evidence and describes that step in the pull request text (ADR 0016, addendum #937).
+
 ```bash
 python3 .harness/orchestration/coordinator.py --repo . integration collect-ci \
   --pull-request 42 --record <record-id>

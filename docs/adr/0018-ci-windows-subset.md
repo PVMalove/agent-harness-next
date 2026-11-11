@@ -1,12 +1,16 @@
-# Набор проверок CI на Windows в pull request (снят с CI)
+# Набор проверок CI на Windows в pull request
 
-**Статус: Windows-проверки сняты с CI (#753).** Задания `verify-windows (tests)` и
-`verify-windows (clean-room)` закомментированы в `verify.yml` и не входят в `needs` у `dashboard`;
-`windows-latest` закомментирован в матрице `memory-vector-probe.yml`. Чтобы вернуть проверки,
-раскомментируйте задание и добавьте `verify-windows` в `needs` у `dashboard`. Пункты ниже про
-Windows-задания, подмножество в pull request, полный
-прогон на `master`, Git на Windows и имена обязательных проверок больше не действуют и сохранены
-как история решения. Остальное (Linux, diff-coverage, быстрая обратная связь, сводка и дашборд)
+**Поправка 2026-11-07 (#938): Windows-проверки снова включены.** Задания `verify-windows (tests)` и
+`verify-windows (clean-room)` раскомментированы в `verify.yml`, входят в `needs` у `dashboard` и идут
+на полном пути CI: для PR в ветку, кроме `integration/**`, для публикации в `master` и для вызова из
+другого workflow. Лёгкий путь PR в `integration/**` (ADR 0023, поправка 2026-11-07) их пропускает.
+Статус ниже описывает состояние до этой поправки; решения про подмножество в PR и полный прогон на
+`master` действуют снова.
+
+**История статуса.** С #753 по 2026-11-07 Windows-проверки были сняты с CI; сейчас они включены (см.
+поправку выше). `windows-latest` в матрице `memory-vector-probe.yml` по-прежнему закомментирован.
+Пункты ниже про Windows-задания, подмножество в pull request, полный прогон на `master`, Git на
+Windows и имена обязательных проверок действуют снова. Остальное (Linux, diff-coverage, быстрая обратная связь, сводка и дашборд)
 действует. Ключ `--platform-subset` и список `WINDOWS_PR_IGNORED_TESTS` в `scripts/verify.py`
 остаются для локального запуска.
 

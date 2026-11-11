@@ -407,6 +407,62 @@ def test_observe_reads_incremental_runtime_output_without_exposing_thinking(
     assert second["dispatch_id"] == first["dispatch_id"]
 
 
+@pytest.fixture
+def in_process() -> Iterator[recovery_tests.RecoveryTests]:
+    fixture = recovery_tests.RecoveryTests()
+    fixture.setUp()
+    try:
+        yield fixture
+    finally:
+        fixture.tearDown()
+
+
+def test_observe_explains_in_process_stream_and_lists_checkpoints(
+    in_process: recovery_tests.RecoveryTests,
+) -> None:
+    from harness.orchestration import coordinator
+    from harness.orchestration.core import workspace
+
+    batch = in_process._create_batch()
+    in_process._accepted_architect(batch["batch_id"])
+    brief = in_process._dispatch(batch["batch_id"], "developer")["brief"]
+    assert brief["resolved_transport"] == "in-process"
+    in_process._start(brief["dispatch_id"])
+
+    before = cli(in_process, "dispatch", "observe", "--dispatch", brief["dispatch_id"])
+    assert before["stream_state"] == "unavailable"
+    assert before["events"] == []
+    for fact in ("in-process", "self-report", "heartbeat", "checkpoints"):
+        assert fact in before["stream_reason"]
+    assert before["checkpoints"] == []
+
+    candidate, changed = in_process._developer_commit("observed")
+    package = in_process._batch_record(batch["batch_id"])["context_packages"][-1]
+    path = workspace._prepare_agent_inbox(in_process.repo) / "checkpoint.json"
+    path.write_text(
+        json.dumps(
+            {
+                "dispatch_id": brief["dispatch_id"],
+                "commit_sha": candidate,
+                "changed_files": changed,
+                "remaining_definition_of_done": brief["definition_of_done"],
+                "passing_checks": in_process._checks(brief),
+                "risks": {"status": "none", "details": ""},
+                "blockers": {"status": "none", "details": ""},
+                "context_package_id": package["context_package_id"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    recorded = coordinator.checkpoint_dispatch(in_process._args(file=str(path)))
+
+    after = cli(in_process, "dispatch", "observe", "--dispatch", brief["dispatch_id"])
+    assert [
+        (item["checkpoint_id"], item["commit_sha"]) for item in after["checkpoints"]
+    ] == [(recorded["checkpoint_id"], candidate)]
+    assert isinstance(after["checkpoints"][0]["created_at"], str)
+
+
 def test_receipt_does_not_forward_unrelated_adapter_output(
     launch: recovery_tests.RecoveryTests,
 ) -> None:

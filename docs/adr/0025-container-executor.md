@@ -27,7 +27,8 @@ QA (#810) монтирует план суженно: каталог clean-room 
 - Исполнитель запускает только external dispatch: он оборачивает команду external-адаптера и не
   знает конкретного агента. Флаги агента (отключение внутреннего sandbox, allowlist из
   `brief.allowed_tools`) задаёт проектный адаптер. In-process транспорт с этим исполнителем даёт
-  блокер.
+  блокер. Роль, которую `access_policy` не называет, к исполнителю не попадает; см. раздел
+  «Решения реализации #1014».
 - Native approval сохраняется: исполнитель не включает auto-approve и не подтверждает действия за
   человека. Изоляция контейнера не заменяет dispatch approval.
 - Монтируются только ресурсы плана, по тем же абсолютным путям: `read` → read-only, `write` →
@@ -111,3 +112,63 @@ QA (#810) монтирует план суженно: каталог clean-room 
   rootless Podman на Fedora с SELinux enforcing (`podman-smoke`, #811). Rootful Podman,
   rootless Docker и Docker на хосте с SELinux enforcing остаются проверенными лишь argv-матрицей
   и scripted-движком.
+
+## Решения реализации #1014
+
+**Принято оператором (2026-11-10).** На #936 контейнерный воркер architect, developer и
+code-review написал отчёт, но `dispatch wait` закончился `startup_timeout` с
+`model-self-report-missing`. В контейнере нет runtime-сокета, поэтому воркер не может выполнить
+`dispatch self-report` и `dispatch heartbeat`, а без self-report отчёт этих ролей не принимается.
+Кроме того, любая authored `access_policy` переводила in-process роли под исполнитель, и
+контейнерный QA нельзя было включить, не переводя все роли на `external`. Оператор выбрал два
+варианта из #1014: подтверждение воркера на хосте (вариант 1) и действие контейнера только там, где
+его задаёт слой `access_policy` (вариант 3).
+
+| Текст ADR или тикета | Решение #1014 | Причина |
+|---|---|---|
+| Вариант 1: host-side обёртка выполняет self-report и heartbeat от имени контейнера | Self-report и heartbeat записывает coordinator на хосте в `execution_reaction.observe`, который вызывают `dispatch wait`, `dispatch status --dispatch` и `report submit`. Отдельной обёртки адаптера нет | Статус dispatch пишет только Python (ADR 0022), и все проверки self-report остаются в одном месте. |
+| Вариант 2: receipt исполнителя заменяет self-report | Отклонён | Receipt не доказывает модель, а гейты отчётов и классификация startup пришлось бы менять. |
+| Монтирование runtime-сокета в контейнер | Отклонено | Нарушает границу «Действующего контракта»: сокет и запись в ledger worker-у не даются. |
+| Структурные события контейнерного воркера | Runtime при каждом reconcile работающего контейнера заменяет снимок его stdout и stderr в `executions/<id>/` (запись во временный файл и `rename`). Долгоживущего `logs --follow` нет | Снимок не требует восстановления после рестарта runtime и использует ту же операцию движка, что и сохранение логов при выходе. Цена — полный поток при каждом опросе. |
+| Сравнение модели | Модель из события `init` сравнивается с `resolved_model` точно, как в `dispatch self-report` | Адаптер передаёт `--model` из brief, а brief хранит полное имя модели. Ослаблять сравнение без нового решения нельзя. |
+| Несовпадение модели или checkout | Записывается с `match: false` без перевода в `blocked`; `dispatch wait` отвечает `model_mismatch` или `worktree_mismatch`, а `blocked` dispatch получает после выхода контейнера | Store запрещает `blocked`, пока execution может работать (ADR 0021). Остановку воркера харнесс без явной команды не выполняет. |
+| Вариант 3: `runtime_access: docker` действует только на роли и операции с контейнером | Роль, которую не называют ни `access_policy.defaults`, ни `access_policy.roles.<роль>`, получает прежний legacy-inherit план (`runtime_extension: none`, тот же digest) для любого расширения | Такая роль ничего не просила; без этого правила любая `access_policy` блокировала in-process роли. |
+| Контракт `docker` требует `defaults.container` | Требуется `defaults.container`, если задан `defaults`; без `defaults` — `operations.qa.container`. Схема и `harness health` проверяют одно и то же | Контейнерный QA можно включить одним `operations.qa`. |
+| Критерий 3: запрет схемой с сообщением при загрузке | In-process роль, которую называют `defaults` или `roles.<роль>`, даёт предупреждение при загрузке конфигурации, а не ошибку; `dispatch preflight` по-прежнему её блокирует. Без `defaults` предупреждение получает и override роли без `container` | Ошибка загрузки остановила бы и external роли, и контейнерный QA, и команды уже созданных dispatch той же конфигурации. |
+| Отчёт воркера, который вышел до `report submit` | Если self-report на хосте совпал, а отчёт лежит в `report_staging_path`, выход не переводит dispatch в `blocked`: статус получает `staged_report`, а `dispatch wait` отвечает `report_staged`. Без staged-отчёта выход, как и раньше, даёт `worker-exited-without-report` | Воркер в контейнере не может сам выполнить `report submit`, поэтому его выход сразу после записи отчёта — обычный путь, а не сбой (критерий 2). Решение принято при реализации после ревью и ждёт подтверждения оператора. |
+
+Как работает реализация:
+
+- **Снимок потока.** `settle_container` для работающего контейнера своей execution выполняет
+  `<engine> logs <id>` в `stdout.log.partial` и `stderr.log.partial` и переименовывает их поверх
+  логов. Ошибка снимка не меняет состояние execution: выход сохраняет логи заново.
+- **Self-report на хосте.** `container_attestation.attest` работает только для `running`
+  execution docker-плана. Он читает первые 64 КиБ снимка, берёт первое событие
+  `{"type": "system", "subtype": "init"}` и вызывает `record_self_report`: ту же функцию, что и
+  `dispatch self-report`. Worktree — путь ресурса `checkout` закреплённого плана. Записи
+  `model_self_report` и `worktree_attestation` получают `source: container-host`, а attestation —
+  доказательство запуска `container`: id контейнера, digest образов из `runtime_images`, путь
+  checkout и `executor: docker`. Повторное наблюдение при записанном self-report ничего не
+  записывает, кроме heartbeat.
+- **Heartbeat.** Каждое наблюдение работающего контейнера обновляет `heartbeat_at` с
+  `heartbeat_note: container running`. Срок запуска не меняется: контейнер без события `init`
+  заканчивается `startup_timeout` с `model-self-report-missing`.
+- **События.** `dispatch observe` для контейнерного dispatch читает тот же снимок;
+  `read_events` принимает журнал из shared logs или из каталога `executions` runtime store.
+- **Отчёт.** Отчёт из `report_staging_path` записывается на хосте командой
+  `report submit --file`. Пока контейнер работает, отчёт ждёт выхода (`pending_report`). Если
+  контейнер вышел раньше, `execution_reaction.react` проверяет `container_attestation.staged_report`:
+  docker-план, self-report с `source: container-host` и `match: true` и файл отчёта. Тогда dispatch
+  остаётся живым со `staged_report`, а `dispatch wait` отвечает `report_staged`. Иначе выход даёт
+  `blocked` с `worker-exited-without-report` (ADR 0021).
+- **Граница доверия.** Модель в событии `init` печатает процесс в контейнере, движок её не
+  проверяет. Доказательство так же сильно, как `dispatch self-report` воркера: оно ловит ошибку
+  конфигурации адаптера, но не злонамеренный воркер. Checkout, образы и контейнер берутся из плана и
+  execution, а не из вывода воркера.
+- **Граница проверки.** Шов с настоящим `harness-runtime` и scripted Podman
+  (`tests/orchestration/test_container_runtime.py`) проверяет self-report, несовпадение модели,
+  heartbeat, события, приём отчёта до выхода и после него. Smoke с настоящим движком
+  (`test_podman_smoke.py`, `test_docker_smoke.py`) проходит полный цикл для architect. Developer и
+  code-review идут тем же путём (`requires_attestation`, `attest_runtime_worktree`), но отдельным
+  smoke не проверены. Совпадение имени модели в событии `init` настоящего агента с `resolved_model`
+  проверено только адаптером smoke, который печатает имя из brief.

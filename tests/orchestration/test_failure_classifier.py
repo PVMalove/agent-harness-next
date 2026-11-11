@@ -116,6 +116,14 @@ FAILED tests/health/test_isolated_runner_session.py::test_run_fails_on_os_error 
 4 failed, 3553 passed in 210.52s
 [verify] pytest: failed in 212.10s
 make: *** [Makefile:41: verify] Error 1"""
+MISSING_LINKER = """\
+   Compiling harness-runtime v0.1.0 (/work/repo/native/harness-runtime)
+error: linker `cc` not found
+  |
+  = note: No such file or directory (os error 2)
+
+error: could not compile `harness-runtime` (bin "harness-runtime") due to 1 previous error"""
+SOCKET_PATH = "/work/repo/.harness/.sandboxes/run/" + "x" * 80 + "/0123abcd.sock"
 
 
 @pytest.mark.parametrize(
@@ -125,6 +133,15 @@ make: *** [Makefile:41: verify] Error 1"""
         (
             "FAILED tests/x.py::t - PermissionError: [Errno 13] Permission denied: '/var/cache/x'",
             "permission-denied",
+        ),
+        (MISSING_LINKER, "missing-linker"),
+        (
+            f"runtime_unavailable: the socket path {SOCKET_PATH} is longer than 100 bytes",
+            "socket-path-too-long",
+        ),
+        (
+            f"the socket path {SOCKET_PATH} is 133 bytes long; the limit is 100",
+            "socket-path-too-long",
         ),
     ],
 )
@@ -149,6 +166,9 @@ def test_an_environment_refusal_is_classified(text: str, category: str) -> None:
             "ValueError: bad input",
         ),
         "1 failed, 10 passed in 2.00s",
+        # An ordinary compile error is the candidate's code.
+        "error[E0308]: mismatched types\n --> src/main.rs:3:5\n"
+        'error: could not compile `harness-runtime` (bin "harness-runtime") due to 1 previous error',
     ],
 )
 def test_a_possible_code_failure_is_not_an_environment_one(text: object) -> None:

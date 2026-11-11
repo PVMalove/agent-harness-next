@@ -73,6 +73,13 @@ Capability задаёт состав снимка, сборки взаимоис
 Поле `ci_required_checks` — список уникальных непустых имён CI-проверок, доказательство по которым
 принимается от трекера.
 
+Имена в `ci_required_checks` — это полные проверки: `verify`, `rust` и другие задания, которые
+`verify.yml` запускает для PR в `master`. Не записывайте туда `-light` имена: задание `verify-light`
+идёт только для PR в `integration/**`, и `collect-ci` отвечает на такую проверку причиной
+`light_check`, если пара требует полного QA. Поле живёт в локальном `.harness/project.json`, который
+не коммитится. Оператор задаёт его один раз при включении CI-доказательства, а в тексте PR
+описывает этот шаг (ADR 0016, дополнение #937).
+
 ```bash
 python3 .harness/orchestration/coordinator.py --repo . integration collect-ci \
   --pull-request 42 --record <record-id>
