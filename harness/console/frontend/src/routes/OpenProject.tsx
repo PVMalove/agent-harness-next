@@ -187,6 +187,18 @@ export function OpenProject() {
           )}
         </div>
         <div className="actions">
+          {facts && (
+            // The plan is drawn whenever the snapshot arrived, but below the project and the rollout
+            // scheme; this jump makes it reachable from the first screen.
+            <button
+              id="open-project-plan-jump"
+              className="btn"
+              type="button"
+              onClick={() => document.getElementById("open-project-plan")?.scrollIntoView?.({ block: "start" })}
+            >
+              <Icon name="download" /> {t("План установки")}
+            </button>
+          )}
           <button id="open-project-refresh" className="btn" type="button" onClick={() => screen.refresh(true)}>
             <Icon name="refresh" /> {t("Обновить")}
           </button>

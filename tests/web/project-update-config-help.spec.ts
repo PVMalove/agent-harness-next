@@ -109,6 +109,10 @@ for (const width of [1440, 390]) {
     await page.locator('[data-path="/work/billing"]').click();
     await expect(page.locator("#open-project-command")).toHaveText("harness console --web /work/billing");
     await expect(page.locator("#open-project-install-command")).toHaveText("harness update /work/project --capability engineering-suite");
+    // The plan is drawn whenever the snapshot arrived (a null target shows the server's reason) but
+    // starts below the first screen; the title's jump brings it into view.
+    await page.locator("#open-project-plan-jump").click();
+    await expect(page.locator("#open-project-plan")).toBeInViewport();
     const before = sent.length;
     await page.getByLabel("Путь к локальному Git-проекту").fill("/srv/other");
     await expect(page.locator("#open-project-path-command")).toHaveText("harness console --web /srv/other");

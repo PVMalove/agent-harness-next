@@ -136,6 +136,8 @@ describe("the Open Project route", () => {
   test("a project that cannot be installed into shows the server's reason", () => {
     renderPage({ ...OPEN, target: null, error: "Не Git-проект" });
     expect(content()).toContain("Не Git-проект");
+    expect(within(document.querySelector("#open-project-plan") as HTMLElement).getAllByText("Не Git-проект").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "План установки" })).toBeTruthy();
     expect((document.querySelector("#open-project-install") as HTMLButtonElement).disabled).toBe(true);
   });
 });
