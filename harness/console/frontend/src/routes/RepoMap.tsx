@@ -8,6 +8,9 @@ import { JOB_ERROR_LABELS } from "../ws/jobs";
 import type { RepoMapFacts } from "../ws/repoMap";
 import { useRepoMap } from "./useRepoMap";
 import { Fields, Files, Links, Panel, Settings, Symbols } from "./repoMapViews";
+import { TabList, TabPanels } from "../views/Tabs";
+
+const REPO_TABS = ["Обзор", "Символы", "Связи", "Настройки"];
 
 const ERROR_LABELS: Readonly<Record<string, string>> = {
   invalid: "Сервер вернул некорректный снимок Repo Map",
@@ -64,8 +67,8 @@ export function RepoMap() {
       <div className="repo-kpis">{[["Уровень", map?.tier], ["Файлы", map?.files.length],
         ["Связи", map?.edges.length], ["Оценка токенов", map?.estimated_tokens]].map(([label, value]) =>
         <div key={label}><span>{t(String(label))}</span><b className="cyan">{value ?? "—"}</b></div>)}</div>
-      <div className="orch-tabbar repo-tabbar" role="tablist">{["Обзор", "Символы", "Связи", "Настройки"].map((name) =>
-        <button className={`orch-tab ${name === tab ? "on" : ""}`} role="tab" aria-selected={name === tab} key={name} onClick={() => setTab(name)}>{t(name)}</button>)}</div>
+      <TabList id="repo" label="Repo Map" className="orch-tabbar repo-tabbar" tabs={REPO_TABS.map((name) => [name, t(name)] as const)} value={tab} onChange={setTab} />
+      <TabPanels id="repo" tabs={REPO_TABS.map((name) => [name, name] as const)} value={tab}>
       {tab === "Настройки" ? <Settings facts={facts} /> : !map ? <p className="repo-empty">{t(facts.head ? "Кэша карты для HEAD нет" : "HEAD не найден")}</p> :
         tab === "Символы" ? <Symbols map={map} kinds={facts.map ? facts.symbol_kinds : null} selectedPath={path} onClear={() => setPath(null)} /> :
         tab === "Связи" ? <Links map={map} select={(path) => { setPath(path); setTab("Символы"); }} /> : <>
@@ -79,6 +82,7 @@ export function RepoMap() {
             [key, typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "—")])} /></Panel>
           <Panel title="Диагностики">{map.diagnostics.length ? map.diagnostics.map((d, i) => <p key={i}>{d.code}: {d.path}</p>) : t("диагностик нет")}</Panel>
         </>}
+      </TabPanels>
     </>}
     {pending && <ConfirmDialog request={"head" in pending ? {
       title: t("Построить Repo Map для HEAD {commit}?", { commit: pending.head.slice(0, 12) }),

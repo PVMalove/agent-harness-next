@@ -1,6 +1,7 @@
 /* The mockup's Orchestration blocks over orchestration.snapshot: the summary, the KPI row, the
    Scheme/Flow/Quality/Runtime/Gates tabs, the batch cards, the dispatch table with its filters
    and the ticket list. Figures are the server's; a mockup figure without a source says so. */
+import { TabList, TabPanels } from "../views/Tabs";
 import { useState } from "react";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -250,20 +251,8 @@ export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
   ];
   return (
     <>
-      <div className="orch-tabbar" role="tablist" id="orch-tabs">
-        {tabs.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            className={`orch-tab${tab === id ? " on" : ""}`}
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <TabList id="orch" label={t("Оркестрация")} tabs={tabs} value={tab} onChange={(id) => setTab(id as OrchTab)} />
+      <TabPanels id="orch" tabs={tabs} value={tab}>
       {tab === "map" ? (
         <Scheme data={data} />
       ) : (
@@ -287,6 +276,7 @@ export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
           {tab === "gates" && <GateTrend gates={data.analytics.gates} />}
         </section>
       )}
+      </TabPanels>
     </>
   );
 }

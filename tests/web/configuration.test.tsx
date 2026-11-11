@@ -37,7 +37,7 @@ const tab = (name: string) => act(() => fireEvent.click(screen.getByRole("tab", 
 const button = (command: string) => document.querySelector(`[data-run="${command}"]`) as HTMLButtonElement;
 const confirm = () => act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Запустить" })));
 const edit = (name: string, document: unknown) =>
-  act(() => fireEvent.change(screen.getByLabelText(name), { target: { value: JSON.stringify(document, null, 2) } }));
+  act(() => fireEvent.change(screen.getByRole("textbox", { name }), { target: { value: JSON.stringify(document, null, 2) } }));
 const PROJECT = CONFIGURATION.files["project.json"].document;
 
 describe("the Configuration route", () => {
@@ -90,7 +90,7 @@ describe("the Configuration route", () => {
     edit("orchestration.json", { roles: { developer: { model: "••••••" } } });
     expect(content()).toContain("Скрытое значение нельзя записать: введите его заново");
     expect(button("configuration-save-draft").disabled).toBe(true);
-    act(() => fireEvent.change(screen.getByLabelText("orchestration.json"), { target: { value: "{" } }));
+    act(() => fireEvent.change(screen.getByRole("textbox", { name: "orchestration.json" }), { target: { value: "{" } }));
     expect(button("configuration-apply").disabled).toBe(true);
     expect(starts(socket)).toEqual([]);
   });

@@ -21,6 +21,7 @@ import { StepFilters } from "../steps/StepFilters";
 import { StepList } from "../steps/StepList";
 import { StepSources } from "../steps/StepSources";
 import { useLiveSteps } from "../steps/useLiveSteps";
+import { TabList, TabPanels } from "../views/Tabs";
 import { parseOrchestration } from "../ws/ledger";
 import { filterSteps } from "../ws/steps";
 import type { StepFilter } from "../ws/steps";
@@ -67,20 +68,8 @@ export function AgentActivity() {
       </div>
       <WorkSummary dispatches={live.dispatches} />
       <WorkKpis dispatches={live.dispatches} analytics={ledger.data?.analytics ?? null} now={now} />
-      <div className="orch-tabbar work-tabbar" role="tablist">
-        {tabs.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`orch-tab${tab === id ? " on" : ""}`}
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <TabList id="work" label={section("Ход работы")} className="orch-tabbar work-tabbar" tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
+      <TabPanels id="work" tabs={tabs} value={tab}>
       {tab === "overview" ? (
         <>
           <StepSources />
@@ -104,6 +93,7 @@ export function AgentActivity() {
       ) : (
         <ActivityStats analytics={ledger.data?.analytics ?? null} />
       )}
+      </TabPanels>
     </div>
   );
 }

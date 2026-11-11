@@ -16,6 +16,7 @@ import { StageFilterBar, StageList } from "../reports/StageList";
 import { BatchList, Timeline } from "../reports/Timeline";
 import { EvidenceTab, QaLane, QualityTab, ReadinessTab, ReportsSummary, reportCounts } from "../reports/ReportViews";
 import { useScreen } from "../screens/useScreen";
+import { TabList, TabPanels } from "../views/Tabs";
 import { parseOrchestration, parseReports } from "../ws/ledger";
 
 type Tab = "list" | "evidence" | "quality" | "readiness";
@@ -125,22 +126,18 @@ export function Reports() {
       )}
 
       {ledger && (
-        <div className="orch-tabbar report-tabbar" role="tablist">
-          {tabs.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={`orch-tab${tab === id ? " on" : ""}`}
-              role="tab"
-              aria-selected={tab === id}
-              onClick={() => setTab(id)}
-            >
-              {id === "list" ? tabLabel(label) : label}
-            </button>
-          ))}
-        </div>
+        <TabList
+          id="reports"
+          label={t("Отчёты")}
+          className="orch-tabbar report-tabbar"
+          tabs={tabs.map(([id, label]) => [id, id === "list" ? tabLabel(label) : label] as const)}
+          value={tab}
+          onChange={(id) => setTab(id as Tab)}
+        />
       )}
 
+      {ledger && (
+      <TabPanels id="reports" tabs={tabs} value={tab}>
       {ledger && tab === "evidence" && <EvidenceTab rows={ledger.evidence} />}
       {ledger && tab === "quality" && <QualityTab ledger={ledger} analytics={orchestration.data?.analytics ?? null} />}
       {ledger && tab === "readiness" && <ReadinessTab ledger={ledger} />}
@@ -215,6 +212,8 @@ export function Reports() {
             </section>
           )}
         </div>
+      )}
+      </TabPanels>
       )}
     </div>
   );

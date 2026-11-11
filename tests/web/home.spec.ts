@@ -51,7 +51,7 @@ test("the launch URL opens Home over the cookie and switches language in place",
   await page.evaluate(() => {
     (window as unknown as { __marker: number }).__marker = 1;
   });
-  await page.getByRole("button", { name: "Английский язык" }).click();
+  await page.getByRole("button", { name: "EN · Английский язык" }).click();
   await expect(blocks(page)).toHaveText(EN_BLOCKS);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("navigation", { name: "Console sections" })).toBeVisible();

@@ -66,7 +66,7 @@ for (const width of [1440, 390]) {
 
 test("Repo Map switches ru/en in place and exports the actual map", async ({ page }) => {
   await open(page, 1440);
-  await page.getByRole("button", { name: "Английский язык" }).click();
+  await page.getByRole("button", { name: "EN · Английский язык" }).click();
   await expect(page.getByRole("tab")).toHaveText(["Browse", "Symbols", "Relations", "Settings"]);
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Memory", exact: true })).toBeVisible();

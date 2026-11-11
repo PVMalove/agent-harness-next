@@ -128,7 +128,7 @@ describe("Home", () => {
 
   test("switches to English in place", () => {
     renderHome();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     expect(headings(2).map((text) => text!.replace(/\s*\d+$/, ""))).toEqual([
       "Requires attention",
       "Context",

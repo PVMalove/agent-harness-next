@@ -49,7 +49,7 @@ for (const width of [1440, 390]) {
 
 test("publication requests the human choice and translates its confirmation", async ({ page }) => {
   const starts = await open(page, "publish", 1440);
-  await page.getByRole("button", { name: "Английский язык" }).click();
+  await page.getByRole("button", { name: "EN · Английский язык" }).click();
   await expect(page.getByRole("heading", { name: "Pending decisions" })).toBeVisible();
   await page.getByLabel("batch-decide decision", { exact: true }).selectOption("fail");
   await page.getByLabel("batch-decide approved_by").fill("operator");

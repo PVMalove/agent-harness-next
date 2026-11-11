@@ -119,6 +119,16 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
 
   return (
     <div className="app" id="app">
+      <a
+        className="skip-link"
+        href="#content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("content")?.focus();
+        }}
+      >
+        {t("Перейти к содержимому")}
+      </a>
       <header className="top">
         <button
           id="menu-toggle"
@@ -171,7 +181,7 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
                 lang={option}
                 className={option === language ? "on" : ""}
                 aria-pressed={option === language}
-                aria-label={option === "ru" ? t("Русский язык") : t("Английский язык")}
+                aria-label={`${option.toUpperCase()} · ${option === "ru" ? t("Русский язык") : t("Английский язык")}`}
                 onClick={() => setLanguage(option)}
               >
                 {option.toUpperCase()}
@@ -216,7 +226,7 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
           ))}
         </nav>
         <div id="nav-scrim" className="nav-scrim" hidden={!open} onClick={() => setOpen(false)} />
-        <main id="content">{children}</main>
+        <main id="content" tabIndex={-1}>{children}</main>
       </div>
 
       <footer className="foot">

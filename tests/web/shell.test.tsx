@@ -194,11 +194,22 @@ describe("the shell", () => {
 
   test("the language switch translates the shell in place", () => {
     renderApp();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     const nav = screen.getByRole("navigation", { name: "Console sections" });
     expect(within(nav).getByRole("link", { name: "Home" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("button", { name: "English language" }).getAttribute("aria-pressed")).toBe(
+    expect(screen.getByRole("button", { name: "EN · English language" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
+  });
+
+  test("a skip link comes first and moves focus to the page without touching the route", async () => {
+    renderApp();
+    window.location.hash = "#/diagnostics";
+    const skip = screen.getByRole("link", { name: "Перейти к содержимому" });
+    const focusable = document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]");
+    expect(focusable[0]).toBe(skip);
+    await act(async () => fireEvent.click(skip));
+    expect(document.activeElement).toBe(document.getElementById("content"));
+    expect(window.location.hash).toBe("#/diagnostics");
   });
 });

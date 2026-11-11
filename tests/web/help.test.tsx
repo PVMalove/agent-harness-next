@@ -54,7 +54,7 @@ describe("the Help route", () => {
 
   test("follows the ru/en switch with a new request", () => {
     const { socket } = renderPage();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     const request = answer(socket, EN);
     expect(request).toMatchObject({ type: "help.snapshot", language: "en" });
     expect(tabs()).toEqual(FACTS.en);

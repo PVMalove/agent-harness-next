@@ -13,6 +13,7 @@ import { MASK_REFUSAL, draftRequest, holdsMask, leafChanges } from "../configura
 import type { Change } from "../configuration/changes";
 import { ADAPTER_STATUS, adapterName, shortDigest, writeBlock } from "../configuration/format";
 import { useI18n } from "../i18n";
+import { TabList, TabPanels } from "../views/Tabs";
 import { Icon } from "../icons";
 import { useScreen } from "../screens/useScreen";
 import { CONFIG_NAMES, parseConfiguration } from "../ws/projectScreens";
@@ -279,13 +280,16 @@ export function Configuration() {
 
       {facts && (
         <>
-          <div className="settings-tabbar tabs" role="tablist">
-            {TABS.map(([key, label]) => (
-              <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? "on" : ""} onClick={() => setTab(key)}>
-                {key === "overview" || key === "history" ? tabLabel(label) : label}
-              </button>
-            ))}
-          </div>
+          <TabList
+            id="settings"
+            label={section("Configuration")}
+            className="settings-tabbar tabs"
+            tabClass={(selected) => (selected ? "on" : "")}
+            tabs={TABS.map(([key, label]) => [key, key === "overview" || key === "history" ? tabLabel(label) : label] as const)}
+            value={tab}
+            onChange={(key) => setTab(key as Tab)}
+          />
+          <TabPanels id="settings" tabs={TABS} value={tab}>
           {tab === "overview" && <Overview facts={facts} onRun={run} />}
           {(tab === "project.json" || tab === "orchestration.json") && (
             <FileEditor
@@ -321,6 +325,7 @@ export function Configuration() {
               <p className="settings-note muted">{t("Список версий и восстановление доступны в TUI.")}</p>
             </section>
           )}
+          </TabPanels>
         </>
       )}
 

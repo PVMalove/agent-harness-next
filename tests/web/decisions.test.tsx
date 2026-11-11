@@ -141,7 +141,7 @@ test("the work view includes native requests and translates the decision context
   const { socket } = open("agent-activity");
   answer(socket, fixture.snapshot.items);
   expect(screen.queryByText("Approval dispatch")).toBeNull();
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+  act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
   expect(screen.getByRole("heading", { name: "Pending decisions" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Native permission request" })).toBeTruthy();
 });

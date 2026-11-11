@@ -1,6 +1,6 @@
 /* Only what docs/design/web-console-mockups/execution-console.css lacks; never overrides it. */
 .lang-switch button { min-width: 34px; padding: 4px 8px; font-size: var(--fs-1); }
-.lang-switch button:focus-visible { outline: 1px solid var(--primary); outline-offset: -1px; }
+.lang-switch button:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
 /* Harness · Commands: the run panel over the mockup's harness-command rows and board dialog. */
 .command-panel { display: flex; flex-direction: column; gap: 12px; }
 .command-busy { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-color: var(--warn); color: var(--warn); font: var(--fs-1) var(--mono); }
@@ -214,3 +214,11 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .board-mascot { width: 34px; height: 44px; animation: board-mascot-jump 0.9s ease-in-out infinite; }
 @keyframes board-mascot-jump { 0%, 100% { transform: translateY(0); } 45%, 55% { transform: translateY(-9px); } }
 @media (prefers-reduced-motion: reduce) { .board-mascot { animation: none; } }
+.board-modal-tablist { display: flex; align-items: center; gap: 4px; }
+
+/* WCAG 2.1 AA (#1066): skip link, a visible focus ring on every surface, 24px targets. */
+.skip-link { position: absolute; left: 8px; top: -48px; z-index: 100; padding: 4px 12px; border-radius: 4px; background: var(--sel); color: var(--selfg); }
+.skip-link:focus { top: 8px; }
+main:focus { outline: none; }
+main input:focus-visible, main select:focus-visible, main textarea:focus-visible, header input:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
+.chip, .orch-tab, [role="tab"], .lang-switch button { min-height: 24px; }

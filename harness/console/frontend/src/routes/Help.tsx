@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Markdown } from "../help/Markdown";
 import { useI18n } from "../i18n";
+import { TabList, tabId } from "../views/Tabs";
 import { useScreen } from "../screens/useScreen";
 import { parseHelp } from "../ws/projectScreens";
 
@@ -44,15 +45,18 @@ export function Help() {
 
       {guide && sections.length > 0 && (
         <>
-          <div className="help-tabbar tabs" role="tablist" aria-label={section("Help")}>
-            {sections.map((item, at) => (
-              <button key={item.title} type="button" role="tab" aria-selected={at === index} className={at === index ? "on" : ""} onClick={() => setChosen(at)}>
-                {item.title}
-              </button>
-            ))}
-          </div>
+          <TabList
+            id="help"
+            label={section("Help")}
+            className="help-tabbar tabs"
+            tabClass={(selected) => (selected ? "on" : "")}
+            tabs={sections.map((item, at) => [String(at), item.title] as const)}
+            value={String(index)}
+            sharedPanel="help-section"
+            onChange={(at) => setChosen(Number(at))}
+          />
           {current && (
-            <section className="panel help-section" id="help-section" role="tabpanel">
+            <section className="panel help-section" id="help-section" role="tabpanel" aria-labelledby={tabId("help", String(index))}>
               <Markdown text={current.markdown} />
             </section>
           )}

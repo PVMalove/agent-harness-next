@@ -704,6 +704,8 @@ EN: dict[str, str] = {
     "Построен": "Built",
     "Причины повторов": "Retry reasons",
     "Тренд latency за сутки": "Latency trend over a day",
+    "Перейти к содержимому": "Skip to content",
+    "Карточка тикета": "Ticket card",
 }
 
 # Labels of the facts in the home screen's context cards. Kept apart from `EN`: a label such as

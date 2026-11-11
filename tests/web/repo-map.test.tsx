@@ -201,7 +201,7 @@ test("English settings translate unavailable policy and inactive memory reasons"
     reason: "Режим хранится в orchestration.json: нужна capability backend-orchestration." },
     memory: { ...FACTS.memory, active: false, inactive: "не заданы allow_paths" } });
   act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+  act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
   expect(screen.getByText("allow_paths is empty")).toBeTruthy();
   expect(screen.getByText("The mode is kept in orchestration.json: the backend-orchestration capability is required.")).toBeTruthy();
 });

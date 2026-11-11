@@ -18,6 +18,7 @@ import {
 } from "../harness/HarnessOverview";
 import { Maintenance } from "../harness/Maintenance";
 import { driftLabel } from "../harness/format";
+import { TabList, TabPanel } from "../views/Tabs";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -136,23 +137,9 @@ export function Harness() {
         </div>
       </div>
 
-      <div className="orch-tabbar harness-tabbar" role="tablist">
-        {tabs.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`orch-tab${tab === id ? " on" : ""}`}
-            role="tab"
-            aria-selected={tab === id}
-            aria-controls={`harness-tab-${id}`}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <TabList id="harness" label={section("Harness")} className="orch-tabbar harness-tabbar" tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
 
-      <div id="harness-tab-overview" role="tabpanel" hidden={tab !== "overview"}>
+      <TabPanel id="harness" tab="overview" value={tab} keepMounted>
         <div className="harness-grid">
           <InstallPanel overview={data} />
           <RuntimePanel overview={data} compact />
@@ -166,26 +153,20 @@ export function Harness() {
           onRemove={(path) => ask("worktree-remove", { worktree: path })}
           onRefresh={() => maintenance.refresh(true)}
         />
-      </div>
-      {tab === "runtime" ? (
-        <div id="harness-tab-runtime" role="tabpanel" className="harness-runtime-tab">
+      </TabPanel>
+      <TabPanel id="harness" tab="runtime" value={tab} className="harness-runtime-tab">
           <RuntimePanel overview={data} compact={false} />
           <AuditPanel overview={data} />
-        </div>
-      ) : null}
-      {tab === "adapters" ? (
-        <div id="harness-tab-adapters" role="tabpanel">
+      </TabPanel>
+      <TabPanel id="harness" tab="adapters" value={tab}>
           <AdaptersPanel overview={data} compact={false} />
-        </div>
-      ) : null}
-      {tab === "containers" ? (
-        <div id="harness-tab-containers" role="tabpanel">
+      </TabPanel>
+      <TabPanel id="harness" tab="containers" value={tab}>
           <ContainersPanel overview={data} maintenance={view} />
-        </div>
-      ) : null}
-      <div id="harness-tab-commands" role="tabpanel" hidden={tab !== "commands"}>
+      </TabPanel>
+      <TabPanel id="harness" tab="commands" value={tab} keepMounted>
         <CommandPanel section="harness" planDigests={digests} request={request} onJobDone={refreshAll} />
-      </div>
+      </TabPanel>
     </div>
   );
 }

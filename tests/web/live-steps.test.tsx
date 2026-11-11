@@ -107,7 +107,7 @@ describe("the agent activity route", () => {
 
   test("a reset roster empties the list and the English labels translate it", () => {
     const { socket, id } = renderActivity();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     expect(rows()[0]).toBe("Dispatch dispatch-dev: dispatched to working");
     expect(within(list()).getByText("structure unavailable")).toBeTruthy();
     act(() => socket.reply(rosterReply(id, true)));

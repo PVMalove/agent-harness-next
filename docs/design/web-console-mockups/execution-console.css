@@ -130,7 +130,7 @@ nav {
 .nav-group + .nav-group { margin-top: 12px; }
 .nav-group-label {
   margin: 0 8px 4px;
-  color: #7f8996;
+  color: var(--muted);
   font-size: var(--fs-1);
 }
 nav a {

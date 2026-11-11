@@ -1,6 +1,7 @@
 /* The ticket modal of the #board mockup: labels, story points, issue / PR / branch, the current
    status with its status select (the same moves and refusals as drag and drop) and the Context,
    Acceptance and Prompt tabs; the Agent prompt button copies the prompt from any tab. Ticket text is untrusted: React text only, links only for http(s). */
+import { TabList, tabId } from "../views/Tabs";
 import { useEffect, useId, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
@@ -163,24 +164,22 @@ export function TicketModal({
           )}
         </div>
         <StatusNoticeLine notice={notice} running={running} id="board-modal-notice" />
-        <div className="board-modal-tabs" role="tablist">
-          {tabs.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              className={tab === id ? "on" : ""}
-              data-board-tab={id}
-              onClick={() => {
-                setTab(id);
-                setCopied(false);
-                setFallback(null);
-              }}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="board-modal-tabs">
+          <TabList
+            id="board-modal"
+            label={t("Карточка тикета")}
+            className="board-modal-tablist"
+            tabClass={(selected) => (selected ? "on" : "")}
+            tabs={tabs}
+            value={tab}
+            sharedPanel="board-modal-panel"
+            attrs={(id) => ({ "data-board-tab": id })}
+            onChange={(id) => {
+              setTab(id as typeof tab);
+              setCopied(false);
+              setFallback(null);
+            }}
+          />
           <button className="btn board-agent-prompt" type="button" id="board-copy" onClick={copy}>
             <Icon name="terminal" /> {t("Промпт агента")}
           </button>
@@ -190,7 +189,7 @@ export function TicketModal({
             {copied ? t("Промпт скопирован") : t("Скопируйте текст вручную")}
           </p>
         )}
-        <div className="board-modal-body" role="tabpanel">
+        <div className="board-modal-body" role="tabpanel" id="board-modal-panel" aria-labelledby={tabId("board-modal", tab)}>
           {fallback !== null && (
             <pre className="board-prompt" ref={manual} id="board-copy-text">
               {fallback}

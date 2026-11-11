@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { DecisionPanel } from "../decisions/DecisionPanel";
 import { Icon } from "../icons";
+import { TabList, TabPanels } from "../views/Tabs";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { VERDICT_TONE } from "../reports/ReportViews";
@@ -167,21 +168,9 @@ export function Publish() {
         </div>
       </div>
 
-      <div className="orch-tabbar publish-tabbar" role="tablist">
-        {tabs.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            className={`orch-tab${tab === id ? " on" : ""}`}
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <TabList id="publish" label={section("Публикация")} className="orch-tabbar publish-tabbar" tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
 
+      <TabPanels id="publish" tabs={tabs} value={tab}>
       {tab === "overview" && (
         <>
           {entry ? (
@@ -354,6 +343,7 @@ export function Publish() {
           <Timeline key={entry.batch_id} batchId={entry.batch_id} />
         </>
       )}
+      </TabPanels>
     </div>
   );
 }

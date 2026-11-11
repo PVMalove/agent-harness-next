@@ -142,7 +142,7 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
     await shot(page, info, `configuration-${width}`);
     await page.getByRole("tab", { name: "project.json" }).click();
-    await expect(page.getByLabel("project.json")).toHaveValue(/••••••/);
+    await expect(page.getByRole("textbox", { name: "project.json" })).toHaveValue(/••••••/);
     expect(await noOverflow(page)).toBe(true);
     await shot(page, info, `configuration-editor-${width}`);
     expect(starts(sent)).toEqual([]);

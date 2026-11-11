@@ -1,5 +1,6 @@
 /* The KPI row and the four analytics tabs of the Orchestration page. The figures are the
    server's (`pipeline_kpi`, `pipeline_analytics`); a tab only chooses which rows are drawn. */
+import { TabList, TabPanel } from "../views/Tabs";
 import { useState } from "react";
 import { useI18n } from "../i18n";
 import type { Tile } from "../reports/format";
@@ -27,23 +28,17 @@ export function Analytics({ analytics }: { analytics: AnalyticsFigures }) {
     <section className="panel orch-analytics" id="orch-analytics">
       <div className="panel-head orch-analytics-head">
         <h2>{t("Аналитика")}</h2>
-        <div className="orch-tabbar" role="tablist" aria-label={t("Аналитика")}>
-          {ANALYTICS_TABS.map(([key, title]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              className={`orch-tab${key === section ? " on" : ""}`}
-              aria-selected={key === section}
-              onClick={() => setSection(key)}
-            >
-              {t(title)}
-            </button>
-          ))}
-        </div>
+        <TabList
+          id="orch-analytics"
+          label={t("Аналитика")}
+          tabs={ANALYTICS_TABS.map(([key, title]) => [key, t(title)] as const)}
+          value={section}
+          onChange={(key) => setSection(key as AnalyticsSection)}
+        />
       </div>
       {ANALYTICS_TABS.map(([key]) => (
-        <dl key={key} className="orch-analytics-rows" data-tab={key} hidden={key !== section}>
+        <TabPanel key={key} id="orch-analytics" tab={key} value={section} keepMounted>
+        <dl className="orch-analytics-rows" data-tab={key} hidden={key !== section}>
           {analyticsRows(key, analytics, t, language).map(([label, value]) => (
             <div key={label}>
               <dt>{label}</dt>
@@ -51,6 +46,7 @@ export function Analytics({ analytics }: { analytics: AnalyticsFigures }) {
             </div>
           ))}
         </dl>
+        </TabPanel>
       ))}
     </section>
   );

@@ -129,7 +129,7 @@ describe("the Harness commands panel", () => {
 
   test("in English the server's label and reasons are translated", () => {
     const { socket, list } = renderHarness();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     expect(within(row("uninstall-apply")).getByText(catalog.en["✖ удаление"])).toBeTruthy();
     act(() => fireEvent.click(screen.getByRole("button", { name: "Run uninstall-apply" })));
     expect(
