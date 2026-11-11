@@ -185,6 +185,9 @@ export function CommandPanel({
     finished.current.add(shown.id);
     onJobDone?.(shown);
   }, [shown, onJobDone]);
+  // A section without commands and without anything running or refused shows no panel at all.
+  const idle = !busy && !refusal && !unavailable && !shown && !pending;
+  if (idle && (!listed || commands?.length === 0)) return null;
   return (
     <div className="command-panel" data-section={section}>
       {busy && (

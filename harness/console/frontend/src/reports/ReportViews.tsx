@@ -2,6 +2,7 @@
    lane, and the Evidence, Quality and Readiness tabs. The evidence matrix is the kernel's
    (`evidence` of the snapshot, pipeline_kpi.py `evidence_matrix`); a column without a source shows
    no data. */
+import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
 import { Bar, NoData } from "../steps/ActivityViews";
 import type {
@@ -59,9 +60,10 @@ export function ReportsSummary({ reports }: { reports: readonly ReportHead[] }) 
   );
 }
 
-/** The QA lane of the selected ticket: its failed attempts, then its QA runs, in time order. */
-export function QaLane({ ledger, ticket }: { ledger: Ledger; ticket: string }) {
-  const { t } = useI18n();
+/** The QA lane of the selected ticket, full width under the report grid: its failed attempts,
+    then its QA runs, in time order; `children` (the folded QA log) close the panel. */
+export function QaLane({ ledger, ticket, children }: { ledger: Ledger; ticket: string; children?: ReactNode }) {
+  const { t, state } = useI18n();
   const ticketDispatches = new Set(ledger.stages.filter((stage) => stage.ticket === ticket).map((stage) => stage.dispatch_id));
   const attempts = ledger.qa_attempts
     .filter((attempt) => ticketDispatches.has(attempt.dispatch_id))
@@ -91,13 +93,14 @@ export function QaLane({ ledger, ticket }: { ledger: Ledger; ticket: string }) {
                 <span className="qa-attempt-num">{String(index + 1).padStart(2, "0")}</span>
                 <b>{item.title}</b>
                 <small>{item.detail}</small>
-                <span className="qa-attempt-state">{item.state}</span>
+                <span className="qa-attempt-state">{state(item.state)}</span>
               </div>
               {index < lane.length - 1 ? <span className="qa-arrow">→</span> : null}
             </span>
           ))}
         </div>
       )}
+      {children}
     </section>
   );
 }
@@ -133,7 +136,7 @@ export function EvidenceTab({ rows }: { rows: readonly EvidenceRow[] }) {
           {rows.length === 0 ? (
             <p className="orch-note">{t("Batch в ledger нет")}</p>
           ) : (
-            <div className="report-evidence-matrix">
+            <div className="report-evidence-matrix" role="region" tabIndex={0} aria-label="Evidence matrix">
               <div className="report-evidence-head">
                 <span>batch</span>
                 {EVIDENCE_COLUMNS.map(([field, column]) => (
@@ -314,8 +317,9 @@ export function QualityTab({ ledger, analytics }: { ledger: ReportsSnapshot; ana
   );
 }
 
-const tree = (matches: boolean | null): [string, string] =>
-  matches === null ? ["unknown", "blue"] : matches ? ["match", "mint"] : ["mismatch", "violet"];
+/** The Release Gate tree check in words: the branch head equals the candidate, or not, or unknown. */
+export const tree = (matches: boolean | null): [string, string] =>
+  matches === null ? ["Неизвестно", "blue"] : matches ? ["совпадает", "mint"] : ["расходится", "violet"];
 
 /** The tone of a Release Gate verdict (kernel/publish_view.py `verdict`). */
 export const VERDICT_TONE: Record<PublishEntry["verdict"], "mint" | "violet" | "blue"> = {
@@ -325,7 +329,7 @@ export const VERDICT_TONE: Record<PublishEntry["verdict"], "mint" | "violet" | "
 };
 
 export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
-  const { t } = useI18n();
+  const { t, state } = useI18n();
   const blocked = ledger.publish.filter((entry) => entry.refusals.length > 0);
   return (
     <section className="panel report-analytics" id="reports-readiness">
@@ -342,7 +346,7 @@ export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
           {ledger.publish.length === 0 ? (
             <p className="orch-note">{t("Batch для публикации нет")}</p>
           ) : (
-            <div className="report-ready-table">
+            <div className="report-ready-table" role="region" tabIndex={0} aria-label="Readiness">
               <div className="report-ready-head">
                 <span>candidate</span>
                 <span>target</span>
@@ -357,10 +361,10 @@ export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
                   <div className="report-ready-row" key={entry.batch_id}>
                     <b>{entry.candidate ? entry.candidate.slice(0, 12) : "—"}</b>
                     <span>{entry.target ? entry.target.slice(0, 12) : "—"}</span>
-                    <span className={`orch-pill ${tone}`}>{label}</span>
-                    <span>{entry.qa ? entry.qa.outcome : "—"}</span>
+                    <span className={`orch-pill ${tone}`}>{t(label)}</span>
+                    <span>{entry.qa ? state(entry.qa.outcome) : "—"}</span>
                     <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`} data-verdict={entry.verdict}>
-                      {entry.verdict}
+                      {state(entry.verdict)}
                     </span>
                     <small>{entry.refusals.join(" · ") || "—"}</small>
                   </div>

@@ -4,6 +4,7 @@
 import { useI18n } from "../i18n";
 import { STRUCTURE_LABELS, eventText } from "../ws/steps";
 import type { HeldStep, Step } from "../ws/steps";
+import { STEP_LIMIT } from "./ActivityViews";
 
 /** hh:mm:ss of an ISO 8601 time, as the server observed it. */
 const clock = (observedAt: string): string => observedAt.slice(11, 19);
@@ -48,12 +49,15 @@ export function StepList({ steps, unavailable }: { steps: readonly HeldStep[]; u
     <section className="panel work-events-panel">
       <div className="panel-head">
         <h2>{t("Шаги и события")}</h2>
-        <span className="small muted">{t("наблюдаемые факты")}</span>
+        <span className="small muted">
+          {steps.length > STEP_LIMIT ? `${t("{shown} из {total}", { shown: STEP_LIMIT, total: steps.length })} · ` : ""}
+          {t("наблюдаемые факты")}
+        </span>
       </div>
       {unavailable ? <div className="work-empty">{t("Источник оркестрации недоступен")}</div> : null}
-      <div className="work-events" aria-live="polite">
+      <div className="work-events" id="work-steps" aria-live="polite" tabIndex={0} role="region" aria-label={t("Шаги и события")}>
         {steps.length === 0 ? <div className="work-empty">{t("Шагов пока нет")}</div> : null}
-        {steps.map((held) => (
+        {steps.slice(-STEP_LIMIT).map((held) => (
           <StepRow key={held.key} step={held.step} />
         ))}
       </div>

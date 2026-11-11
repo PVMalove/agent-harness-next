@@ -13,6 +13,7 @@
    again (`dispatch preflight` is read-only). Propose, approve, send, QA and cleanup run in the TUI
    through its local coordinator client; they are not server job catalog commands, so the page
    shows them disabled with that reason and starts no command. */
+import { TabList, tabId } from "../views/Tabs";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { useI18n } from "../i18n";
@@ -161,30 +162,26 @@ export function ContainerRoute() {
 
       {view && current && (
         <section className="panel route-view" id="route-view">
-          <div className="orch-tabbar route-tabs" role="tablist" aria-label={t("Контейнерный маршрут")}>
-            {view.tabs.map((item) => (
-              <button
-                key={item.stage}
-                type="button"
-                role="tab"
-                className={`orch-tab${item.stage === stage ? " on" : ""}`}
-                aria-selected={item.stage === stage}
-                data-stage={item.stage}
-                data-state={item.state}
-                title={item.reason ? t(item.reason) : undefined}
-                onClick={() => setStage(item.stage)}
-              >
-                {`${item.mark.split(" ")[0]} ${t(item.title)}`}
-              </button>
-            ))}
-          </div>
+          <TabList
+            id="route"
+            label={t("Контейнерный маршрут")}
+            className="orch-tabbar route-tabs"
+            tabs={view.tabs.map((item) => [item.stage, `${item.mark.split(" ")[0]} ${t(item.title)}`] as const)}
+            value={stage}
+            sharedPanel="route-panel"
+            attrs={(id) => {
+              const item = view.tabs.find((entry) => entry.stage === id);
+              return { "data-stage": id, "data-state": item?.state, title: item?.reason ? t(item.reason) : undefined };
+            }}
+            onChange={(id) => setStage(id as typeof stage)}
+          />
           {tab && (
             <p className="route-tab-state" id="route-tab-state">
               {t(tab.mark)}
               {tab.reason ? ` · ${t(tab.reason)}` : ""}
             </p>
           )}
-          <div role="tabpanel" data-stage={stage}>
+          <div role="tabpanel" id="route-panel" aria-labelledby={tabId("route", stage)} data-stage={stage}>
             <RowList rows={current.rows} blockers={current.blockers} notes={current.notes} actions={current.actions} />
             <ActionBar
               actions={pageActions(current.actions)}

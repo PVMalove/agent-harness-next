@@ -33,7 +33,7 @@ test("Repo Map shows the TUI snapshot, selected file signatures, settings and me
   const { socket } = open();
   facts(socket);
   expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Repo Map");
-  expect(screen.getByText("512")).toBeTruthy();
+  expect(screen.getByText("≈512")).toBeTruthy();
   act(() => fireEvent.click(screen.getByRole("button", { name: "pkg/core.py" })));
   expect(screen.getByText("def load_config(path)")).toBeTruthy();
   act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
@@ -46,8 +46,10 @@ test("coverage and symbol kinds are the kernel's; a kind the map cannot give say
   const { socket } = open();
   facts(socket);
   const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
-  const row = (label: string) => within(coverage).getByText(label).nextElementSibling!.textContent;
+  const row = (label: string) => coverage.querySelector(`.orch-legend [data-kind='${label}'] b`)!.textContent;
   expect([row("source"), row("docs"), row("tests"), row("excluded")]).toEqual(["3", "1", "0", "2"]);
+  expect(coverage.querySelectorAll(".orch-stack > i")).toHaveLength(3);
+  expect(within(coverage).getByText("67% включено")).toBeTruthy();
   act(() => fireEvent.click(screen.getByRole("tab", { name: "Символы" })));
   const chips = [...document.querySelectorAll("#repo-kind-chips .chip")].map((chip) => chip.textContent);
   expect(chips).toEqual(["Все 3", "Functions 2", "Modules 1"]);
@@ -61,17 +63,17 @@ test("an unknown excluded count and a map without kinds stay explicit no-data st
   const { socket } = open();
   facts(socket, { ...FACTS, coverage: { ...FACTS.coverage, excluded: null } });
   const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
-  expect(within(coverage).getByText("excluded").nextElementSibling!.textContent).toBe("нет данных");
+  expect(coverage.querySelector(".orch-legend [data-kind='excluded'] b")!.textContent).toBe("нет данных");
 });
 
 test("building requires confirmation, pins the displayed HEAD and displays an uncached degraded result", () => {
   const { socket } = open();
   facts(socket, NO_MAP);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Отмена" })));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   const request = socket.request("job.start");
   expect(request).toMatchObject({ command_id: "repo-map-build", values: { commit: "a".repeat(40) }, client: "browser" });
@@ -117,7 +119,7 @@ test("a changed HEAD invalidates an open build confirmation", () => {
   const { socket } = open();
   facts(socket);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Обновить" })));
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   facts(socket, { ...NO_MAP, head: "b".repeat(40) });
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
@@ -126,7 +128,7 @@ test("a changed HEAD invalidates an open build confirmation", () => {
 test("truncated build output cannot become a map and its failure survives a snapshot refresh", () => {
   const { socket } = open();
   facts(socket, NO_MAP);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   act(() => socket.reply(jobReply(socket.request("job.start").id, "job.start", {
     command_id: "repo-map-build", done: true, phase: "completed", returncode: 0, truncated: true,
@@ -161,7 +163,7 @@ test("parser availability respects the TUI source requirement", () => {
 test("a lost start acknowledgement reconciles the running job without replaying the command", () => {
   const { socket, clock } = open();
   facts(socket);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   act(() => socket.close());
   act(() => clock.advance(500));
@@ -179,13 +181,13 @@ test("a lost start acknowledgement reconciles the running job without replaying 
     command_id: "repo-map-build", done: true, phase: "completed", returncode: 0, cursor: 1,
     output: [{ channel: "stdout", text: JSON.stringify(FACTS.map) }],
   })));
-  expect((screen.getByRole("button", { name: "Перестроить" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((screen.getAllByRole("button", { name: "Перестроить" })[0] as HTMLButtonElement).disabled).toBe(false);
 });
 
 test("a nonzero CLI exit reports a build error and its diagnostic stderr", () => {
   const { socket } = open();
   facts(socket);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   act(() => socket.reply(jobReply(socket.request("job.start").id, "job.start", {
     command_id: "repo-map-build", done: true, phase: "completed", returncode: 2, cursor: 1,
@@ -201,7 +203,78 @@ test("English settings translate unavailable policy and inactive memory reasons"
     reason: "Режим хранится в orchestration.json: нужна capability backend-orchestration." },
     memory: { ...FACTS.memory, active: false, inactive: "не заданы allow_paths" } });
   act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+  act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
   expect(screen.getByText("allow_paths is empty")).toBeTruthy();
   expect(screen.getByText("The mode is kept in orchestration.json: the backend-orchestration capability is required.")).toBeTruthy();
+});
+
+test("the file tree is the mockup hierarchy: indented folder rows that fold, file rows with their status", () => {
+  const { socket } = open();
+  facts(socket);
+  const rows = () => [...document.querySelectorAll(".repo-tree .repo-dir, .repo-tree .repo-file")];
+  const shape = () => rows().map((row) => [row.className.split(" ")[0], row.querySelector("b")?.textContent, (row.querySelector(".repo-tree-indent") as HTMLElement).style.width]);
+  expect(shape()).toEqual([
+    ["repo-dir", "pkg/", "0px"],
+    ["repo-file", "core.py", "14px"],
+    ["repo-file", "cli.py", "14px"],
+    ["repo-file", "broken.py", "14px"],
+    ["repo-file", "README.md", "0px"],
+  ]);
+  expect(rows()[0].querySelector("svg[data-icon='folder']")).not.toBeNull();
+  expect(rows()[1].querySelector("em")?.textContent).toMatch(/^\[.+\]$/);
+  act(() => fireEvent.click(rows()[0]));
+  expect(rows()[0].getAttribute("aria-expanded")).toBe("false");
+  expect(shape().map(([, name]) => name)).toEqual(["pkg/", "README.md"]);
+});
+
+test("without a map for HEAD the latest cached map shows marked stale for HEAD, with Rebuild", () => {
+  const { socket } = open();
+  const stale = { ...FACTS.map, commit: "0123456789abcdef0123456789abcdef01234567" };
+  facts(socket, { ...NO_MAP, stale_map: stale });
+  const banner = document.querySelector("#repo-stale") as HTMLElement;
+  expect(banner.textContent).toContain("устарела для HEAD");
+  expect(banner.textContent).toContain("0123456789ab");
+  expect(within(banner).getByRole("button", { name: /Перестроить/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "pkg/core.py" })).toBeTruthy();
+});
+
+test("the empty state names the reason and offers Rebuild in place", () => {
+  const { socket } = open();
+  facts(socket, NO_MAP);
+  const empty = document.querySelector("#repo-empty") as HTMLElement;
+  expect(empty.textContent).toContain("Кэша карты для HEAD нет");
+  act(() => fireEvent.click(within(empty).getByRole("button", { name: /Перестроить/ })));
+  expect(screen.getByRole("dialog")).toBeTruthy();
+});
+
+test("the overview follows the mockup: header actions, KPI captions, index rows with a freshness pill", () => {
+  const { socket } = open();
+  facts(socket);
+  const actions = [...document.querySelectorAll(".repo-title .actions > button")];
+  expect(actions.map((button) => button.textContent?.trim())).toEqual(["", "Перестроить", "Экспорт"]);
+  expect(actions[0]?.getAttribute("aria-label")).toBe("Обновить");
+  expect(actions[2]?.querySelector("svg")).toBeTruthy();
+  expect(document.querySelector("#repo-facts")?.textContent).toMatch(/^tier full4 файлов3 символов4 связей\d\d:\d\d:\d\d$/);
+  const captions = [...document.querySelectorAll(".repo-kpis > div")].map((card) =>
+    [card.querySelector("span")?.textContent, card.querySelector("b")?.textContent, card.querySelector("small")?.textContent]);
+  expect(captions).toEqual([
+    ["Уровень", "full", "Python 3.14 · linux_x86_64"],
+    ["Файлы", "4", "3 символов"],
+    ["Связи", "4", "import / unique-name-ref / ambiguous-name-ref"],
+    ["Токены", "≈512", "бюджет 4000"],
+  ]);
+  const index = screen.getByRole("heading", { name: "Индекс" }).closest("section")!;
+  expect(index.querySelector(".panel-head .orch-pill.mint")?.textContent).toBe("fresh");
+  expect([...index.querySelectorAll(".repo-index-row > span")].map((label) => label.textContent))
+    .toEqual(["Уровень", "Generation", "Построен", "Объём"]);
+  expect(index.querySelector(".repo-index-row b")?.textContent).toBe("full · bundle · Python 3.14 · linux_x86_64");
+  expect(within(index).getByText("4 files · 4 edges · ≈512 tokens")).toBeTruthy();
+  expect([...index.querySelectorAll(".repo-index-actions button")].map((button) => button.textContent?.trim()))
+    .toEqual(["Перестроить", "Экспорт"]);
+  expect(screen.queryByRole("heading", { name: "Provenance парсера" })).toBeNull();
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
+  const provenance = screen.getByRole("heading", { name: "Provenance парсера" }).closest("section")!;
+  expect(within(provenance).getByText("aaaaaaaaaaaa")).toBeTruthy();
+  expect(within(provenance).getByText("parser bundle applied")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Диагностики" })).toBeTruthy();
 });

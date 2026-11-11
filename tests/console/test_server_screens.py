@@ -228,6 +228,8 @@ def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
                 "schema": 3,
                 "generation": "generation-1",
                 "audit_records": 4,
+                "cutover_at": None,
+                "reason": "",
             }
             assert overview["adapters"] == [
                 {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
@@ -590,5 +592,68 @@ def test_the_configuration_snapshot_round_trips_and_is_cached(tmp_path: Path) ->
                 error = refused["error"]
                 assert refused["ok"] is False and isinstance(error, dict)
                 assert error["code"] == "bad_request"
+
+    asyncio.run(scenario())
+
+
+def test_the_widest_cached_map_reaches_the_terminal_console_in_pages_below_the_message_limit(
+    tmp_path: Path,
+) -> None:
+    """`cached_map` ranks the widest token budget first for both consoles (the TUI Repo Map screen
+    reads the same `repo_map.snapshot`): however large that map is, every frame stays below
+    `MESSAGE_LIMIT`, the size the TUI client accepts, and the pages rebuild the whole map."""
+    from dataclasses import replace
+
+    from harness.console.kernel.protocol import MESSAGE_LIMIT
+    from harness.console.kernel.repo_map import parse_map
+
+    from ._console_repo_map_fixture import map_payload
+
+    small = repo_map_facts()
+    payload = map_payload(str(small.head))
+    files = cast(list[dict[str, object]], payload["files"])
+    payload["files"] = [
+        {**entry, "path": f"pkg/wide_{index}/{entry['path']}"}
+        for index in range(600)
+        for entry in files
+    ]
+    view = parse_map(payload, origin="кэш")
+    assert not isinstance(view, str), view
+    wide = replace(small, view=view)
+    assert len(json.dumps(wide.to_payload())) > 2 * MESSAGE_LIMIT
+
+    class WideFacts(Facts):
+        def repo_map(self, repo: Path, /) -> dict[str, object]:
+            self._count("repo_map")
+            return wide.to_payload()
+
+    runtime = _runtime(tmp_path, WideFacts())
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            await socket.send_text(json.dumps({"id": 1, "type": "repo_map.snapshot"}))
+            frame = await socket.receive_text()
+            sizes = [len(frame.encode("utf-8"))]
+            reply = json.loads(frame)
+            text, page, snapshot_id = reply["text"], 2, reply["snapshot_id"]
+            while not reply["done"]:
+                await socket.send_text(
+                    json.dumps(
+                        {
+                            "id": page,
+                            "type": "snapshot.page",
+                            "snapshot_id": snapshot_id,
+                            "offset": reply["next"],
+                        }
+                    )
+                )
+                frame = await socket.receive_text()
+                sizes.append(len(frame.encode("utf-8")))
+                reply = json.loads(frame)
+                text += reply["text"]
+                page += 1
+            assert len(sizes) > 2
+            assert max(sizes) < MESSAGE_LIMIT
+            assert RepoMapFacts.from_payload(json.loads(text)) == wide
 
     asyncio.run(scenario())

@@ -9,9 +9,13 @@ import {
   FakeSocket,
   ManualClock,
   ORCHESTRATION_STEP,
+  ROSTER,
   rosterReply,
+  screenPage,
   stepsReply,
 } from "./fake-socket";
+import TIMELINE from "./fixtures/reports-timeline.json";
+import ORCH from "./fixtures/orch-snapshot.json";
 
 function renderActivity() {
   window.location.hash = "#/agent-activity";
@@ -34,7 +38,7 @@ function renderActivity() {
   return { socket, id };
 }
 
-const list = () => document.querySelector(".work-events") as HTMLElement;
+const list = () => document.querySelector("#work-steps") as HTMLElement;
 const rows = () => [...list().querySelectorAll(".work-event")].map((row) => row.querySelector("b")?.textContent);
 
 describe("the agent activity route", () => {
@@ -77,6 +81,53 @@ describe("the agent activity route", () => {
     expect(document.querySelector("#work-timeline")).not.toBeNull();
   });
 
+  test("sessions show role icons and localized statuses; the ticket picker narrows them", () => {
+    const { socket, id } = renderActivity();
+    const other = { ...ROSTER[0], dispatch_id: "dispatch-qa-9", batch_id: "batch-901", ticket: "#901", role: "qa", state: "failed" };
+    act(() => socket.reply(rosterReply(id, true, [...ROSTER, other])));
+    const sessions = document.querySelector(".work-sessions") as HTMLElement;
+    const icons = [...sessions.querySelectorAll(".work-row .work-role [data-icon]")].map((icon) => icon.getAttribute("data-icon"));
+    // Newest activity first: the developer and the QA dispatch were last seen at 10:20, the reviewer at 10:06.
+    expect(icons).toEqual(["developer", "qa", "review"]);
+    const statuses = [...sessions.querySelectorAll(".work-row .work-status")].map((status) => status.textContent?.trim());
+    expect(statuses).toEqual(["Выполняется", "Заблокировано", "Выполняется · тишина"]);
+    expect(sessions.textContent).not.toContain("working");
+    const picker = screen.getByRole("combobox", { name: "Выбрать задачу" }) as HTMLSelectElement;
+    expect([...picker.options].map((option) => option.value)).toEqual(["", "#901", "#885"]);
+    act(() => fireEvent.change(picker, { target: { value: "#901" } }));
+    expect([...sessions.querySelectorAll(".work-row")].map((row) => row.getAttribute("data-dispatch"))).toEqual(["dispatch-qa-9"]);
+    expect(document.querySelector("#work-route")!.textContent).toContain("Маршрут сессии #901");
+  });
+
+  test("the session route carries role icons and localized step labels; session events come from the batch chronology", () => {
+    const { socket } = renderActivity();
+    const route = document.querySelector("#work-route")!;
+    expect([...route.querySelectorAll(".work-flow-icon [data-icon]")].map((icon) => icon.getAttribute("data-icon"))).toEqual([
+      "architect",
+      "developer",
+      "review",
+      "qa",
+      "pr",
+    ]);
+    expect(route.querySelector('[data-step="Developer"] small')!.textContent).toBe("Выполняется");
+    const ask = socket.request("reports.timeline");
+    expect(ask).toMatchObject({ batch_id: "batch-885" });
+    act(() => socket.reply(screenPage(ask.id, "reports.timeline", JSON.stringify(TIMELINE))));
+    const events = document.querySelector("#work-events-panel") as HTMLElement;
+    expect(events.textContent).toContain("События сессии #885");
+    const first = events.querySelector(".work-event") as HTMLElement;
+    expect(first.querySelector("b")!.textContent).toBe(TIMELINE.events.at(-1)!.text);
+    expect(events.querySelector('[data-kind="report"] small')!.textContent).toBe("отчёт");
+  });
+
+  test("statistics count the observed events of the last hour by type", () => {
+    renderActivity();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Статистика" })));
+    const types = document.querySelector("#work-event-types") as HTMLElement;
+    expect(types.textContent).toContain("за час");
+    expect(document.querySelector("#work-rate svg")).not.toBeNull();
+  });
+
   test("the rendered list never shows thinking, tool inputs or raw JSON", () => {
     const { socket, id } = renderActivity();
     act(() =>
@@ -97,7 +148,8 @@ describe("the agent activity route", () => {
     act(() => fireEvent.click(screen.getByRole("button", { name: /dispatch-rev/ })));
     expect(rows()).toEqual(["Проверяю тесты"]);
     expect(screen.getByRole("button", { name: /dispatch-rev/ }).getAttribute("aria-pressed")).toBe("true");
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Все сессии" })));
+    // A second click on the pressed row clears the session filter (no separate «Все сессии» chip).
+    act(() => fireEvent.click(screen.getByRole("button", { name: /dispatch-rev/ })));
     expect(rows()).toHaveLength(3);
     const select = screen.getByRole("combobox", { name: "Фильтр по роли" }) as HTMLSelectElement;
     expect([...select.options].map((option) => option.value)).toEqual(["", "developer", "review"]);
@@ -107,11 +159,83 @@ describe("the agent activity route", () => {
 
   test("a reset roster empties the list and the English labels translate it", () => {
     const { socket, id } = renderActivity();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     expect(rows()[0]).toBe("Dispatch dispatch-dev: dispatched to working");
     expect(within(list()).getByText("structure unavailable")).toBeTruthy();
     act(() => socket.reply(rosterReply(id, true)));
     expect(rows()).toEqual([]);
     expect(screen.getByText("No steps yet")).toBeTruthy();
+  });
+
+  test("sessions are one filter row and the 5 latest, with a toggle to show all", () => {
+    const { socket, id } = renderActivity();
+    const many = Array.from({ length: 7 }, (_, index) => ({
+      ...ROSTER[0],
+      dispatch_id: `dispatch-${index}`,
+      batch_id: `batch-${900 + index}`,
+      ticket: `#${900 + index}`,
+      last_event_at: `2026-11-05T10:${String(10 + index).padStart(2, "0")}:00+00:00`,
+    }));
+    act(() => socket.reply(rosterReply(id, true, many)));
+    const sessions = document.querySelector(".work-sessions") as HTMLElement;
+    const shown = () => [...sessions.querySelectorAll(".work-row")].map((row) => row.getAttribute("data-dispatch"));
+    expect(shown()).toEqual(["dispatch-6", "dispatch-5", "dispatch-4", "dispatch-3", "dispatch-2"]);
+    expect(sessions.querySelector(".panel-head .small")?.textContent).toBe("5 из 7");
+    expect(within(sessions).queryByRole("button", { name: "Все сессии" })).toBeNull();
+    const filters = sessions.querySelector(".work-filters") as HTMLElement;
+    expect(filters.querySelectorAll("select")).toHaveLength(2);
+    expect(filters.querySelector(".chips")).not.toBeNull();
+    act(() => fireEvent.click(within(sessions).getByRole("button", { name: "Показать все 7" })));
+    expect(shown()).toHaveLength(7);
+    expect(within(sessions).getByRole("button", { name: "Показать 5 последних" })).toBeTruthy();
+  });
+
+  test("the session route opens the task and the orchestration", () => {
+    renderActivity();
+    const actions = document.querySelector("#work-route .work-route-actions") as HTMLElement;
+    expect([...actions.querySelectorAll("a")].map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
+      ["Открыть задачу", "#/board?ticket=%23885"],
+      ["Оркестрация", "#/orchestration"],
+    ]);
+  });
+
+  test("steps and session events show the 10 latest in compact rows inside a scroll region", () => {
+    const { socket, id } = renderActivity();
+    const many = Array.from({ length: 14 }, (_, index) => ({ ...AGENT_STEP, text: `step ${index}`, observed_at: `2026-11-05T10:${String(30 + index)}:00+00:00` }));
+    act(() => socket.reply(stepsReply(id, many)));
+    expect(rows()).toEqual(Array.from({ length: 10 }, (_, index) => `step ${index + 4}`));
+    expect(list().getAttribute("role")).toBe("region");
+    expect(list().tabIndex).toBe(0);
+    const ask = socket.request("reports.timeline");
+    const events = Array.from({ length: 14 }, (_, index) => ({ at: `2026-11-08T09:${String(10 + index)}:00+00:00`, kind: "state", role: null, text: `event ${index}` }));
+    act(() => socket.reply(screenPage(ask.id, "reports.timeline", JSON.stringify({ ...TIMELINE, events }))));
+    const shown = [...document.querySelectorAll("#work-events .work-event b")].map((item) => item.textContent);
+    expect(shown).toEqual(Array.from({ length: 10 }, (_, index) => `event ${13 - index}`));
+    expect(document.querySelector("#work-events")?.getAttribute("role")).toBe("region");
+  });
+
+  test("the timeline has the time axis on top, the total and the last event at the side and the wait legend", () => {
+    const { socket } = renderActivity();
+    const ask = socket.request("orchestration.snapshot");
+    act(() => socket.reply(screenPage(ask.id, "orchestration.snapshot", JSON.stringify(ORCH))));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Таймлайн" })));
+    const gantt = document.querySelector("#work-timeline .work-gantt") as HTMLElement;
+    expect(gantt.firstElementChild?.classList.contains("work-gantt-axis")).toBe(true);
+    const ticks = [...gantt.querySelectorAll(".work-gantt-ticks span")].map((tick) => tick.textContent);
+    expect(ticks[0]).toMatch(/^0(м|ч)$/);
+    const row = gantt.querySelector(".work-gantt-row") as HTMLElement;
+    expect(row.querySelector(".work-gantt-name small")?.textContent).not.toMatch(/\d+[hm]\b/);
+    expect(row.querySelector(".work-gantt-last")?.textContent).not.toBe("");
+    expect(gantt.getAttribute("role")).toBe("region");
+    expect([...document.querySelectorAll("#work-timeline .orch-legend span")].map((item) => item.textContent)).toEqual(["готово", "активно", "ожидание", "блок"]);
+  });
+
+  test("the statistics axis reads 0м … 60м like the mockup, the last label anchored at the end", () => {
+    renderActivity();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Статистика" })));
+    const labels = [...document.querySelectorAll("#work-rate text.work-rate-axis")].filter((label) => label.getAttribute("text-anchor") !== "end" || /м$/.test(label.textContent ?? ""));
+    const minutes = labels.map((label) => label.textContent).filter((text) => /м$/.test(text ?? ""));
+    expect(minutes).toEqual(["0м", "15м", "30м", "45м", "60м"]);
+    expect(labels.find((label) => label.textContent === "60м")?.getAttribute("text-anchor")).toBe("end");
   });
 });

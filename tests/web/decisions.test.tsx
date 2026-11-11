@@ -3,7 +3,8 @@ import { beforeEach, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
-import { CANCEL_REASON, FakeSocket, ManualClock } from "./fake-socket";
+import { CANCEL_REASON, FakeSocket, ManualClock, screenPage } from "./fake-socket";
+import ORCHESTRATION from "./fixtures/orch-snapshot.json";
 import { jobReply } from "./fake-socket";
 import fixture from "./fixtures/decisions.json";
 
@@ -30,6 +31,12 @@ function open(route = "orchestration") {
   render(<LanguageProvider><App client={client} /></LanguageProvider>);
   const socket = FakeSocket.last;
   act(() => socket.open());
+  if (route === "orchestration") {
+    // The pending decisions are the «Гейты» tab of the mockup: open it over the snapshot.
+    const asked = socket.request("orchestration.snapshot");
+    act(() => socket.reply(screenPage(asked.id, "orchestration.snapshot", JSON.stringify(ORCHESTRATION))));
+    act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: "Гейты" })));
+  }
   return { socket, clock };
 }
 
@@ -118,7 +125,7 @@ test("closing the confirmation sends nothing and a changed request invalidates i
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Отмена" })));
   expect(screen.queryByRole("dialog")).toBeNull();
   act(() => fireEvent.click(allow()));
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Обновить" })));
+  act(() => fireEvent.click(within(document.querySelector(".decision-panel") as HTMLElement).getByRole("button", { name: "Обновить" })));
   answer(socket, [{ ...permission, values: { ...permission.values, request_sha256: "b".repeat(64) } }]);
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
@@ -141,7 +148,7 @@ test("the work view includes native requests and translates the decision context
   const { socket } = open("agent-activity");
   answer(socket, fixture.snapshot.items);
   expect(screen.queryByText("Approval dispatch")).toBeNull();
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+  act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
   expect(screen.getByRole("heading", { name: "Pending decisions" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Native permission request" })).toBeTruthy();
 });

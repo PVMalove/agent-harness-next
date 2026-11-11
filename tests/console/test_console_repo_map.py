@@ -7,6 +7,8 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from harness.console.kernel import repo_map as console_repo_map
 from harness.console.kernel.export import export_text, render_markdown
 from harness.console.kernel.repo_map import RepoMapView
@@ -195,3 +197,38 @@ def test_diagnostic_rows_pair_each_code_with_a_warning_status() -> None:
     [(status, code, path)] = console_repo_map.diagnostic_rows(view)
     assert status.render("ru") == "⚠ syntax_error"
     assert (code, path) == ("syntax_error", "pkg/broken.py")
+
+
+def _cache(repo: Path, key: str, commit: str, *, max_tokens: int = 4000, mtime: float) -> None:
+    import os
+
+    from harness.repo_map.cache import write_cache
+
+    payload = map_payload(commit)
+    provenance = dict(payload["parser_provenance"])  # type: ignore[call-overload]
+    provenance["max_tokens"] = max_tokens
+    payload["parser_provenance"] = provenance
+    directory = repo / "cache"
+    write_cache(directory, key, json.dumps(payload))
+    os.utime(directory / f"{key}.json", (mtime, mtime))
+
+
+def test_cached_map_prefers_the_widest_token_budget_of_the_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(console_repo_map, "cache_directory", lambda repo: repo / "cache")
+    _cache(tmp_path, "small", "a" * 40, max_tokens=4000, mtime=200)
+    _cache(tmp_path, "wide", "a" * 40, max_tokens=16000, mtime=100)
+    view = console_repo_map.cached_map(tmp_path, "a" * 40)
+    assert view is not None and view.provenance["max_tokens"] == 16000
+
+
+def test_latest_cached_map_is_the_newest_commit_other_than_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(console_repo_map, "cache_directory", lambda repo: repo / "cache")
+    _cache(tmp_path, "old", "a" * 40, mtime=100)
+    _cache(tmp_path, "new", "b" * 40, mtime=200)
+    stale = console_repo_map.latest_cached_map(tmp_path, exclude="c" * 40)
+    assert stale is not None and stale.commit == "b" * 40
+    assert console_repo_map.latest_cached_map(tmp_path, exclude="b" * 40).commit == "a" * 40  # type: ignore[union-attr]

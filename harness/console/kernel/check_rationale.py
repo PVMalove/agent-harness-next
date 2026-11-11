@@ -244,3 +244,71 @@ RATIONALES: dict[str, tuple[str, str]] = {
 def catalog() -> dict[str, dict[str, str]]:
     """The rationales as the SPA reads them: id -> {"ru": ..., "en": ...}."""
     return {check_id: {"ru": ru, "en": en} for check_id, (ru, en) in RATIONALES.items()}
+
+
+# The short title of each check (the Home and Diagnostics lists show it instead of the id).
+# check id -> (Russian title, English title)
+TITLES: dict[str, tuple[str, str]] = {
+    "files.lock": ("Файл harness.lock", "harness.lock file"),
+    "files.agents_md": ("Инструкция AGENTS.md", "AGENTS.md instructions"),
+    "files.discovery_links": ("Ссылки обнаружения навыков", "Skill discovery links"),
+    "files.project_json": ("Настройки project.json", "project.json settings"),
+    "files.sandboxes": ("Каталог песочниц", "Sandboxes directory"),
+    "files.orchestration_config": ("Настройки оркестрации", "Orchestration settings"),
+    "files.skill_snapshot": ("Снимок навыков", "Skill snapshot"),
+    "files.skill_registry": ("Реестр навыков", "Skill registry"),
+    "files.overlay_locks": ("Блокировки оверлеев", "Overlay locks"),
+    "files.integrations": ("Интеграции", "Integrations"),
+    "files.verification_routing": ("Маршрутизация проверок", "Verification routing"),
+    "directories.harness": ("Каталог .harness", "The .harness directory"),
+    "directories.sandboxes": ("Каталог .sandboxes", "The .sandboxes directory"),
+    "directories.cache": ("Каталог кэша", "Cache directory"),
+    "directories.logs": ("Каталог журналов", "Logs directory"),
+    "directories.scratch": ("Черновой каталог", "Scratch directory"),
+    "directories.pr_body": ("Каталог описаний PR", "PR body directory"),
+    "directories.runs": ("Каталог запусков", "Runs directory"),
+    "directories.reports": ("Каталог отчётов", "Reports directory"),
+    "directories.worktrees": ("Каталог рабочих копий", "Worktrees directory"),
+    "directories.orchestration_state": ("Каталог состояния оркестрации", "Orchestration state directory"),
+    "repo_map.tier": ("Уровень Repo Map", "Repo Map tier"),
+    "memory.index": ("Индекс памяти", "Memory index"),
+    "memory.model": ("Модель памяти", "Memory model"),
+    "environment.os": ("Операционная система", "Operating system"),
+    "environment.git": ("Программа Git", "Git binary"),
+    "environment.git_identity": ("Подпись коммитов Git", "Git commit identity"),
+    "environment.gitattributes": ("Файл .gitattributes", "The .gitattributes file"),
+    "environment.line_endings": ("Окончания строк", "Line endings"),
+    "environment.python": ("Интерпретатор Python", "Python interpreter"),
+    "environment.uv": ("Менеджер пакетов uv", "uv package manager"),
+    "environment.glab": ("Клиент glab", "glab client"),
+    "environment.dev_env": ("Окружение разработки", "Development environment"),
+    "environment.output_encoding": ("Кодировка вывода", "Output encoding"),
+    "environment.codex_sandbox": ("Песочница Codex", "Codex sandbox"),
+    "environment.claude_sandbox": ("Песочница Claude Code", "Claude Code sandbox"),
+    "environment.codex_uv_cache": ("Кэш uv для Codex", "uv cache for Codex"),
+    "environment.claude_uv_cache": ("Кэш uv для Claude Code", "uv cache for Claude Code"),
+    "environment.long_paths": ("Длинные пути", "Long paths"),
+    "environment.path_length": ("Длина путей", "Path length"),
+    "environment.pytest_temp": ("Временный каталог pytest", "pytest temporary directory"),
+    "environment.symlinks": ("Символические ссылки", "Symbolic links"),
+    "environment.hook_bash": ("Bash для хуков", "Bash for hooks"),
+    "hooks.policy": ("Политика хуков", "Hook policy"),
+    "hooks.test_author": ("Хук автора тестов", "Test author hook"),
+    "tracker.project": ("Проект в трекере", "Tracker project"),
+    "tracker.auth": ("Вход в трекер", "Tracker sign-in"),
+    "tracker.reachability": ("Доступность трекера", "Tracker reachability"),
+    "tracker.permissions": ("Права в трекере", "Tracker permissions"),
+    "tracker.labels": ("Метки трекера", "Tracker labels"),
+    "tracker.git_base": ("Базовая ветка Git", "Git base branch"),
+    "orchestration.ledger_summary": ("Сводка ledger", "Ledger summary"),
+    "orchestration.unfinished_batches": ("Незавершённые batch", "Unfinished batches"),
+    "orchestration.blocked_batches": ("Заблокированные batch", "Blocked batches"),
+    "orchestration.stale_dispatches": ("Зависшие dispatch", "Stale dispatches"),
+    "orchestration.orphaned_worktrees": ("Брошенные рабочие копии", "Orphaned worktrees"),
+    "orchestration.disposable_data": ("Временные данные", "Disposable data"),
+}
+
+
+def titles() -> dict[str, dict[str, str]]:
+    """The check titles as the SPA reads them: id -> {\"ru\": ..., \"en\": ...}."""
+    return {check_id: {"ru": ru, "en": en} for check_id, (ru, en) in TITLES.items()}

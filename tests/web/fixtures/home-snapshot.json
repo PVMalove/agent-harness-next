@@ -39,7 +39,8 @@
       "files": 1204,
       "edges": 5310,
       "estimated_tokens": 48000
-    }
+    },
+    "stale_map": null
   },
   "memory": {
     "state": {
@@ -59,13 +60,20 @@
     "installed_version": "1.5.1",
     "capabilities": 2,
     "skills": 32,
-    "managed_files": 232
+    "managed_files": 232,
+    "capability_names": [
+      "backend-orchestration",
+      "engineering-suite"
+    ],
+    "uncatalogued": []
   },
   "store": {
     "authority": "file-ledger",
     "schema": 3,
     "generation": "generation-1a2b3c4d",
-    "audit_records": 1240
+    "audit_records": 1240,
+    "cutover_at": null,
+    "reason": ""
   },
   "drift_counts": {
     "total": 3,
@@ -130,7 +138,8 @@
           "role": "developer",
           "state": "working"
         }
-      ]
+      ],
+      "updated_at": "2026-11-09T10:02:00+00:00"
     },
     {
       "batch_id": "batch-6",
@@ -151,7 +160,8 @@
           "role": "qa",
           "state": "reported"
         }
-      ]
+      ],
+      "updated_at": "2026-11-08T09:31:00+00:00"
     }
   ]
 }

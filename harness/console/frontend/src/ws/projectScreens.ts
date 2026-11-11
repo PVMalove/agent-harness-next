@@ -3,10 +3,11 @@
    kernel/open_project_snapshot.py, kernel/update_harness_snapshot.py,
    kernel/configuration_snapshot.py and kernel/help_text.py (`to_payload`). The parsers only check
    shapes; a configuration document arrives with every secret already masked by the server. */
-import { exact, flag, isObject, list, nullable, string } from "./ledger";
+import { count, exact, flag, isObject, list, nullable, string } from "./ledger";
 import type { Check } from "./ledger";
 import { harnessState } from "./screens";
 import type { HarnessOverview } from "./screens";
+import type { StoreFacts } from "./types";
 
 export type SetupAction = "init" | "adopt" | "update";
 export const SETUP_ACTIONS: readonly SetupAction[] = ["init", "adopt", "update"];
@@ -40,6 +41,10 @@ export interface UpdateHarnessFacts {
   package_version: string;
   /** The `harness diff --json` report, or null when the harness is not installed. */
   drift: Record<string, unknown> | null;
+  /** The runtime-store authority of the project; null when unread. */
+  store: StoreFacts | null;
+  /** The ledger schema an update migrates the store to; null when unknown. */
+  store_target_schema: number | null;
 }
 
 export interface UpdateDiff {
@@ -74,6 +79,19 @@ export interface AdapterPreview {
 export const CONFIG_NAMES = ["project.json", "orchestration.json"] as const;
 export type ConfigName = (typeof CONFIG_NAMES)[number];
 
+/** One parameter of the Settings wizard (kernel/configuration_wizard.py): a real schema path. */
+export interface WizardParam {
+  group: string;
+  file: ConfigName;
+  path: string[];
+  label: string;
+  type: string;
+  choices: (string | number | boolean)[];
+  default: unknown;
+  minimum: number | null;
+  description: string;
+}
+
 export interface ConfigurationFacts {
   schema_installed: boolean;
   orchestration_installed: boolean;
@@ -81,6 +99,8 @@ export interface ConfigurationFacts {
   store_root: string;
   files: Record<ConfigName, ConfigFile>;
   adapters: { preview: AdapterPreview | null; error: string };
+  /** The wizard parameter catalog; absent or null from a server without it. */
+  wizard?: WizardParam[] | null;
 }
 
 export interface HelpSection {
@@ -109,7 +129,21 @@ const openProject = exact({
   blockers: (value) => isObject(value) && Object.values(value).every(strings),
   candidates: list(exact({ path: string, installed: flag, current: flag, command: string })),
 });
-const updateHarness = exact({ state: harnessState, package_version: string, drift: nullable(isObject) });
+const storeFacts = exact({
+  authority: string,
+  schema: nullable(count),
+  generation: nullable(string),
+  audit_records: nullable(count),
+  cutover_at: nullable(string),
+  reason: string,
+});
+const updateHarness = exact({
+  state: harnessState,
+  package_version: string,
+  drift: nullable(isObject),
+  store: nullable(storeFacts),
+  store_target_schema: nullable(count),
+});
 const updateDiff = exact({ path: string, text: string });
 const configFile = exact({ exists: flag, digest: string, document: isObject, error: string });
 const preview = exact({
@@ -149,9 +183,25 @@ export function parseUpdateDiff(value: unknown): UpdateDiff | null {
   return updateDiff(value) ? (value as UpdateDiff) : null;
 }
 
+const wizardParam = exact({
+  group: string,
+  file: (value) => (CONFIG_NAMES as readonly unknown[]).includes(value),
+  path: list(string),
+  label: string,
+  type: string,
+  choices: list((value) => ["string", "number", "boolean"].includes(typeof value)),
+  default: () => true,
+  minimum: (value) => value === null || typeof value === "number",
+  description: string,
+});
+
 /** The facts of a configuration.snapshot reply, or null for any other shape. */
 export function parseConfiguration(value: unknown): ConfigurationFacts | null {
-  return configuration(value) ? (value as ConfigurationFacts) : null;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const { wizard, ...facts } = value as Record<string, unknown>;
+  if (!configuration(facts)) return null;
+  if (wizard !== undefined && wizard !== null && !list(wizardParam)(wizard)) return null;
+  return wizard === undefined ? (facts as unknown as ConfigurationFacts) : ({ ...facts, wizard } as unknown as ConfigurationFacts);
 }
 
 /** The guide of a help.snapshot reply, or null for any other shape. */

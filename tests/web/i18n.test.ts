@@ -6,7 +6,11 @@ import { describe, expect, test } from "vitest";
 import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
 import {
   LanguageProvider,
+  checkTitle,
+  compactDuration,
   factLabel,
+  plural,
+  stateLabel,
   groupLabel,
   initialLanguage,
   reasonText,
@@ -98,4 +102,42 @@ test("switching ru and en re-renders without a reload and is remembered", () => 
   act(() => fireEvent.click(screen.getByRole("button")));
   expect(screen.getByRole("button").textContent).toBe("Разделы консоли");
   expect((window as unknown as Record<symbol, boolean>)[marker]).toBe(true);
+});
+
+describe("states, check titles and plurals", () => {
+  test("a raw state is worded in both languages", () => {
+    expect(stateLabel("ru", "abandoned")).toBe("Брошен");
+    expect(stateLabel("ru", "working")).toBe("Выполняется");
+    expect(stateLabel("ru", "awaiting_approval")).toBe("Ждёт решения");
+    expect(stateLabel("en", "abandoned")).toBe("Abandoned");
+    expect(stateLabel("ru", "WARN")).toBe("Внимание");
+  });
+
+  test("a check shows its title, not its id", () => {
+    expect(checkTitle("ru", "files.skill_snapshot")).toBe("Снимок навыков");
+    expect(checkTitle("en", "files.skill_snapshot")).toBe("Skill snapshot");
+    expect(checkTitle("ru", "memory.index")).not.toContain("memory.");
+  });
+
+  test("Russian counters take the right plural form", () => {
+    const forms = ["ошибка", "ошибки", "ошибок"] as const;
+    const en = ["error", "errors"] as const;
+    expect([1, 2, 5, 11, 12, 21, 22, 25, 101, 111].map((n) => plural("ru", n, forms, en))).toEqual([
+      "1 ошибка", "2 ошибки", "5 ошибок", "11 ошибок", "12 ошибок", "21 ошибка", "22 ошибки", "25 ошибок",
+      "101 ошибка", "111 ошибок",
+    ]);
+    expect(plural("en", 1, forms, en)).toBe("1 error");
+    expect(plural("en", 3, forms, en)).toBe("3 errors");
+  });
+
+  test("a duration is worded with ru/en units, never the English h/m in Russian", () => {
+    expect(compactDuration(null, "ru")).toBe("—");
+    expect(compactDuration(42, "ru")).toBe("42 с");
+    expect(compactDuration(5 * 60 + 9, "ru")).toBe("5 мин");
+    expect(compactDuration(2 * 3600 + 7 * 60, "ru")).toBe("2 ч 7 мин");
+    expect(compactDuration(145 * 3600 + 27 * 60, "ru")).toBe("6 дн 1 ч");
+    expect(compactDuration(2 * 3600 + 7 * 60, "en")).toBe("2 h 7 min");
+    expect(compactDuration(42, "en")).toBe("42 s");
+    expect(compactDuration(-30, "ru")).toBe("0 с");
+  });
 });

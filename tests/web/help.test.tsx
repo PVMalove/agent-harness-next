@@ -40,24 +40,61 @@ const content = () => document.querySelector("main#content")?.textContent ?? "";
 describe("the Help route", () => {
   beforeEach(() => FakeSocket.reset());
 
-  test("asks for the guide in the UI language and shows its sections as tabs", () => {
+  test("asks for the guide in the UI language; the tabs are the mockup's Start, Screens, Commands, Hotkeys, Boundaries", () => {
     const { request } = renderPage();
     expect(request).toEqual({ id: request.id, type: "help.snapshot", language: "ru" });
-    expect(tabs()).toEqual(FACTS.ru);
+    expect(tabs()).toEqual(["Начало", "Экраны", "Команды", "Горячие клавиши", "Границы"]);
+    expect([...document.querySelectorAll(".help-kpis > div > span")].map((item) => item.textContent)).toEqual([
+      "Экранов",
+      "Команд",
+      "Горячих клавиш",
+      "Разделов справки",
+    ]);
+    expect(document.querySelectorAll(".help-pillars > div")).toHaveLength(3);
+    expect(document.querySelectorAll(".help-quick > a").length).toBeGreaterThan(0);
     expect(content()).toContain("Справка по пульту");
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Клавиши" })));
-    expect(document.querySelector("#help-section h2")?.textContent).toBe("Клавиши");
-    const sent = RU.sections.find((item) => item.title === "Клавиши")!.markdown;
-    expect(sent).toContain("|");
-    expect(document.querySelector("#help-section table")).not.toBeNull();
+    // Every guide section is shown in one of the tabs.
+    const seen = new Set<string>();
+    for (const name of tabs()) {
+      act(() => fireEvent.click(screen.getByRole("tab", { name: name! })));
+      for (const heading of document.querySelectorAll(".help-section h2, .help-faq > .panel-head h2")) seen.add(heading.textContent ?? "");
+    }
+    expect([...seen].sort()).toEqual([...FACTS.ru].sort());
+  });
+
+  test("Screens lists every menu section, Hotkeys the web shortcuts as keycaps with the TUI keys table", () => {
+    renderPage();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Экраны" })));
+    expect(document.querySelectorAll(".help-screen-grid > a")).toHaveLength(13);
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Горячие клавиши" })));
+    expect([...document.querySelectorAll(".help-key-grid kbd")].map((item) => item.textContent)).toEqual(["g", "d", "o", "?"]);
+    expect(document.querySelector(".help-section table")).not.toBeNull();
+  });
+
+  test("Start follows the mockup: README action, hero eyebrow, quick-link cards and the FAQ", () => {
+    renderPage();
+    const actions = [...document.querySelectorAll(".help-title .actions > *")].map((item) => item.textContent?.trim());
+    expect(actions).toEqual(["README", "Диагностика"]);
+    expect(document.querySelector(".help-title .home-facts")?.textContent).toContain("13 экранов");
+    const hero = document.querySelector("#help-intro .help-hero-head") as HTMLElement;
+    expect(hero.querySelector(":scope > span")?.textContent).toMatch(/^СПРАВКА/);
+    const cards = [...document.querySelectorAll(".help-quick > a.help-quick-card")];
+    expect(cards.map((card) => card.querySelector("b")?.textContent)).toEqual([
+      "Проверить здоровье", "Открыть обновление", "Изучить Repo Map", "Настроить Harness",
+    ]);
+    expect(cards.every((card) => card.querySelector("svg") && card.querySelector("small"))).toBe(true);
+    const faq = document.querySelectorAll(".help-faq details");
+    expect(faq).toHaveLength(4);
+    expect(faq[0]?.querySelector("summary")?.textContent).toBe("Почему «пропущено» не считается успехом?");
+    expect(document.querySelector(".help-kpis > div:last-child small")?.textContent).not.toBe("help.snapshot");
   });
 
   test("follows the ru/en switch with a new request", () => {
     const { socket } = renderPage();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     const request = answer(socket, EN);
     expect(request).toMatchObject({ type: "help.snapshot", language: "en" });
-    expect(tabs()).toEqual(FACTS.en);
+    expect(tabs()).toEqual(["Start", "Screens", "Commands", "Hotkeys", "Boundaries"]);
   });
 
   test("the renderer makes elements, never markup or an external link", () => {

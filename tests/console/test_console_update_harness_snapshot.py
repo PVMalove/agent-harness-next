@@ -11,6 +11,7 @@ from harness.console.backend import composition
 from harness.console.backend.infrastructure import screen_facts
 from harness.console.kernel import data as console_data
 from harness.console.kernel.harness_facts import HarnessState
+from harness.console.kernel.home_snapshot import StoreFacts
 from harness.console.kernel.update_harness_snapshot import (
     UpdateHarnessFacts,
     diff_paths,
@@ -32,6 +33,55 @@ def test_the_facts_round_trip_through_their_payload() -> None:
     assert UpdateHarnessFacts.from_payload(sut.to_payload()) == sut
     bare = UpdateHarnessFacts(HarnessState(False, "", (), 0, 0, "", False), "1.0.1", None)
     assert UpdateHarnessFacts.from_payload(bare.to_payload()) == bare
+
+
+STORE = StoreFacts("file-ledger", 3, "generation-1", 12)
+
+
+def test_the_store_facts_and_the_target_schema_round_trip_through_their_payload() -> None:
+    sut = UpdateHarnessFacts(STATE, "1.0.1", DRIFT, store=STORE, store_target_schema=4)
+
+    payload = sut.to_payload()
+
+    assert payload["store_target_schema"] == 4
+    assert payload["store"] == {
+        "authority": "file-ledger",
+        "schema": 3,
+        "generation": "generation-1",
+        "audit_records": 12,
+        "cutover_at": None,
+        "reason": "",
+    }
+    assert UpdateHarnessFacts.from_payload(payload) == sut
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"store": {}},
+        {"store": {"authority": "file-ledger"}},
+        {"store_target_schema": "4"},
+        {"store_target_schema": True},
+    ],
+)
+def test_store_fields_off_the_schema_are_a_value_error(change: dict[str, object]) -> None:
+    payload = {**UpdateHarnessFacts(STATE, "1", None, STORE, 4).to_payload(), **change}
+
+    with pytest.raises(ValueError):
+        UpdateHarnessFacts.from_payload(payload)
+
+
+def test_the_facts_carry_the_store_and_the_ledger_version_the_update_migrates_to(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.orchestration.ledger.lifecycle import STORE_LEDGER_VERSION
+
+    monkeypatch.setattr(screen_facts, "store_facts", lambda repo: STORE)
+
+    found = UpdateHarnessFacts.from_payload(screen_facts.update_harness_facts(tmp_path))
+
+    assert found.store == STORE
+    assert found.store_target_schema == STORE_LEDGER_VERSION
 
 
 @pytest.mark.parametrize(

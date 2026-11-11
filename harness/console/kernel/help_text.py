@@ -112,6 +112,24 @@ init/adopt/update. Установка требует подтверждения 
 - Команды и флаги: `harness --help`
 - Контракт оркестрации и роли: `.harness/orchestration/playbook.md`
 - Настройки `orchestration.json`: `.harness/orchestration/README.md`
+
+## Частые вопросы
+
+### Почему «пропущено» не считается успехом?
+
+Пропущенная проверка не выполнялась и ничего не доказала. Пульт показывает её отдельно и не засчитывает как пройденную.
+
+### Что такое stale?
+
+Факт старше своего срока: heartbeat воркера, аренда QA lane или кэш снимка. Stale означает «перепроверьте», а не «сломано».
+
+### Почему офлайн и онлайн проверки разные?
+
+Офлайн-проверки читают только локальные файлы. Онлайн-проверки обращаются к трекеру и GitHub и запускаются отдельно.
+
+### Что считается evidence?
+
+Записанный результат команды: отчёт воркера в ledger, прогон QA, проверка CI. Текст в чате evidence не является.
 """
 
 
@@ -221,6 +239,24 @@ Check statuses: ✔ ok — successful; ⚠ warn — warning; ✖ fail — error;
 - Commands and flags: `harness --help`
 - Orchestration contract and roles: `.harness/orchestration/playbook.md`
 - `orchestration.json` settings: `.harness/orchestration/README.md`
+
+## FAQ
+
+### Why is "skipped" not a success?
+
+A skipped check did not run and proved nothing. The console shows it apart and never counts it as passed.
+
+### What is stale?
+
+A fact older than its limit: a worker heartbeat, a QA lane lease or a snapshot cache. Stale means "check again", not "broken".
+
+### Why do offline and online checks differ?
+
+Offline checks read local files only. Online checks call the tracker and GitHub and run separately.
+
+### What counts as evidence?
+
+A recorded command result: a worker report in the ledger, a QA run, a CI check. Chat text is not evidence.
 """
 
 

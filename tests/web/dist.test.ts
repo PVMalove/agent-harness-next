@@ -126,6 +126,17 @@ describe("the build in harness/console/frontend/dist", () => {
     expect(source).not.toMatch(/unsafe-(inline|eval)/);
   });
 
+  test("scripts carry none of the mockup's demo data", () => {
+    // Values that exist only in the mockup's demo constants (execution-console.js): a runtime
+    // uptime, a Repo Map generation and parser, a lock date, demo outputs and the mockup notes.
+    const mockup = readFileSync(join(REPO, "docs/design/web-console-mockups/execution-console.js"), "utf-8");
+    const DEMO = ["4 ч 12 мин", "map-36", "Python 3.14 · Linux x86_64", "04.11.2026 · 21:00 UTC", "DEMO · ", "В макете ничего не запускается"];
+    for (const marker of DEMO) expect(mockup, marker).toContain(marker);
+    for (const path of ofType(".js")) {
+      expect(DEMO.filter((marker) => text(path).includes(marker)), path).toEqual([]);
+    }
+  });
+
   test("scripts contain no URL outside the not-loaded allowlist", () => {
     for (const path of ofType(".js")) {
       const foreign = (text(path).match(URL_PATTERN) ?? []).filter(

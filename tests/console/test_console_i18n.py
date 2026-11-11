@@ -343,3 +343,43 @@ def test_a_long_pointer_and_diagnostic_value_stay_fully_reachable_in_the_pane() 
             view.rows, view.blockers, view.notes, view.actions, "ru", narrow
         )
         assert pointer in text and "x" * 300 in text and "…" not in text
+
+
+def test_every_registered_check_has_a_title_in_both_languages() -> None:
+    from harness.console.kernel.check_rationale import TITLES
+    from harness.health.registry import REGISTRY
+
+    ids = [check_id for check_id, _ in REGISTRY]
+    assert set(TITLES) == set(ids)
+    for check_id in ids:
+        ru, en = TITLES[check_id]
+        assert ru.strip() and en.strip() and ru != en, check_id
+        assert check_id not in (ru, en), check_id
+        assert any("а" <= char <= "я" for char in ru.lower()), check_id
+        assert en.isascii(), check_id
+
+
+def test_state_labels_cover_the_ledger_and_screen_states_in_both_languages() -> None:
+    from harness.console.kernel.i18n_strings import STATE_LABELS
+
+    for state in (
+        "abandoned", "active", "approved", "awaiting_approval", "awaiting-approval", "blocked",
+        "cancelled", "completed", "current", "dispatched", "fail", "failed", "missing", "ok",
+        "outdated", "pass", "pending", "published", "reported", "running", "skipped", "unknown",
+        "warn", "working",
+    ):
+        ru, en = STATE_LABELS[state]
+        assert any("а" <= char <= "я" for char in ru.lower()), state
+        assert en.isascii() and en != state.upper(), state
+
+
+def test_the_web_catalog_ships_check_titles_and_state_labels() -> None:
+    import json
+
+    from harness.console.kernel import web_catalog
+    from harness.console.kernel.check_rationale import TITLES
+    from harness.console.kernel.i18n_strings import STATE_LABELS
+
+    shipped = json.loads(web_catalog.render())
+    assert shipped["titles"] == {key: {"ru": ru, "en": en} for key, (ru, en) in TITLES.items()}
+    assert shipped["states"] == {key: {"ru": ru, "en": en} for key, (ru, en) in STATE_LABELS.items()}

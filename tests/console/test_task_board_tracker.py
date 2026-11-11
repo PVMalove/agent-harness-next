@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -199,6 +200,24 @@ def test_github_board_reads_sub_issues_blockers_and_prs(tmp_path: Path) -> None:
     assert board.blocker_states == {"#913": False, "#882": False, "#880": True}
     pr_call = next(argv for argv, _, _ in runner.calls if argv[:2] == ["gh", "pr"])
     assert "--repo" in pr_call and "github.com/acme/app" in pr_call
+
+
+def test_github_board_reads_the_issue_and_the_pull_requests_concurrently(
+    tmp_path: Path,
+) -> None:
+    # Both reads wait on one barrier: a sequential reader would break it after its timeout.
+    meeting = threading.Barrier(2, timeout=5)
+
+    def handler(argv: list[str], env: Mapping[str, str] | None) -> tuple[int, str, str]:
+        meeting.wait()
+        return _github(argv, env)
+
+    reader, runner = _reader(GITHUB, handler)
+
+    board = reader.board(tmp_path, "#862")
+
+    assert {ticket.ref for ticket in board.tickets} == {"#913", "#882", "#880"}
+    assert sorted(argv[1] for argv, _, _ in runner.calls) == ["api", "pr"]
 
 
 def test_github_board_retries_without_blocked_by(tmp_path: Path) -> None:

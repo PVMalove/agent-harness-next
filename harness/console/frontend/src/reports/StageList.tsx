@@ -1,14 +1,18 @@
-/* The filtered stage list of the Reports page: date, ticket, role and short id, then the stage
-   status as a symbol and its words. Every field is untrusted ledger text, rendered as text. */
+/* The filtered stage list of the Reports page as the mockup's report rows: the role icon, the
+   role and ticket over the short id and outcome, the status words in their tone, and the time.
+   Every field is untrusted ledger text, rendered as text. */
 import { useI18n } from "../i18n";
+import { Icon } from "../icons";
+import { roleIcon } from "../steps/ActivityViews";
 import type { ReportHead, StageHead } from "../ws/ledger";
-import { renderStatus, shortId, stageStatus, timestamp } from "./format";
+import { kindTone, shortId, stageStatus, statusWords, timestamp } from "./format";
 import type { StageFilters } from "./format";
 
 const two = (value: number) => String(value).padStart(2, "0");
-const rowDate = (at: string) => {
+/** The mockup's report time: HH:MM of the stage, UTC as the ledger records it. */
+export const clockTime = (at: string) => {
   const date = timestamp(at);
-  return date ? `${two(date.getUTCMonth() + 1)}-${two(date.getUTCDate())} ${two(date.getUTCHours())}:${two(date.getUTCMinutes())}` : "?";
+  return date ? `${two(date.getUTCHours())}:${two(date.getUTCMinutes())}` : "—";
 };
 
 const TEXT_FILTERS: [keyof StageFilters, string][] = [
@@ -99,15 +103,19 @@ export function StageList({
             aria-pressed={stage.dispatch_id === selected}
             onClick={() => onSelect(stage.dispatch_id)}
           >
+            <span className="report-type-icon">
+              <Icon name={roleIcon(stage.role)} />
+            </span>
             <span className="report-row-main">
               <b>
-                {stage.ticket} · {stage.role}
+                {stage.role} · {stage.ticket || "—"}
               </b>
               <small>
-                {rowDate(stage.at)} · {shortId(stage.dispatch_id, "dispatch-")}
+                {shortId(stage.dispatch_id, "dispatch-")} · {stage.batch_id || "—"} · {report?.outcome || stage.state}
               </small>
             </span>
-            <span className={`report-status ${status.kind}`}>{renderStatus(status, language)}</span>
+            <span className={`report-status ${kindTone(status.kind)}`}>{statusWords(status, language)}</span>
+            <span className="report-time">{clockTime(stage.at)}</span>
           </button>
         );
       })}

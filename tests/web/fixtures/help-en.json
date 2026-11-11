@@ -25,6 +25,10 @@
     {
       "markdown": "## Documentation\n\n- Commands and flags: `harness --help`\n- Orchestration contract and roles: `.harness/orchestration/playbook.md`\n- `orchestration.json` settings: `.harness/orchestration/README.md`\n",
       "title": "Documentation"
+    },
+    {
+      "markdown": "## FAQ\n\n### Why is \"skipped\" not a success?\n\nA skipped check did not run and proved nothing. The console shows it apart and never counts it as passed.\n\n### What is stale?\n\nA fact older than its limit: a worker heartbeat, a QA lane lease or a snapshot cache. Stale means \"check again\", not \"broken\".\n\n### Why do offline and online checks differ?\n\nOffline checks read local files only. Online checks call the tracker and GitHub and run separately.\n\n### What counts as evidence?\n\nA recorded command result: a worker report in the ledger, a QA run, a CI check. Chat text is not evidence.\n",
+      "title": "FAQ"
     }
   ]
 }

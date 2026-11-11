@@ -22,6 +22,7 @@ from harness.console.kernel.home_snapshot import (
     AreaCounters,
     DriftCounts,
     HarnessInstall,
+    HeadMap,
     HomeContext,
     HomeSnapshot,
     Problem,
@@ -154,6 +155,7 @@ def test_snapshot_mirrors_the_home_facts_with_a_cached_map() -> None:
                 "edges": 7,
                 "estimated_tokens": 38400,
             },
+            "stale_map": None,
         },
         "memory": {
             "state": {"status": "ok", "message": "индекс валиден (FTS5)"},
@@ -197,8 +199,16 @@ def test_snapshot_without_map_memory_or_orchestration_keeps_nulls() -> None:
         "tier": None,
         "message": "не установлен",
         "head_map": None,
+        "stale_map": None,
     }
     assert payload["memory"] == {"state": None, "policy": None}
+
+
+def test_without_a_map_for_head_the_card_names_the_latest_cached_map_as_stale() -> None:
+    snapshot = build_home_snapshot(DATA, HomeContext(stale_map=VIEW))
+    assert snapshot.repo_map.head_map is None
+    assert snapshot.repo_map.stale_map == HeadMap("кэш", "a" * 40, 4, 7, 38400)
+    assert HomeSnapshot.from_payload(_wire(snapshot)).repo_map == snapshot.repo_map
 
 
 def test_map_tier_falls_back_to_the_cached_map_when_the_check_names_none() -> None:

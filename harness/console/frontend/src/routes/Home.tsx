@@ -6,7 +6,15 @@ import { groupLabel, useI18n } from "../i18n";
 import { href } from "../navigation";
 import { preRelease } from "../AppShell";
 import { useConsole } from "../useConsole";
-import type { AreaCounters, HealthCounters, HomeSnapshot, Problem, RecentSession } from "../ws/types";
+import type {
+  AreaCounters,
+  HarnessInstall,
+  HealthCounters,
+  HomeSnapshot,
+  Problem,
+  RecentSession,
+  StoreFacts,
+} from "../ws/types";
 import { healthTotal } from "../ws/types";
 
 /** Offline mode asks again this long after each reply. */
@@ -15,6 +23,26 @@ export const OFFLINE_REFRESH_MS = 15000;
 export const EVENTS_DEBOUNCE_MS = 1000;
 
 const STATUS_ICON: Record<string, string> = { ok: "check", warn: "warning", fail: "x", skipped: "clock" };
+
+/** The icon of the git hosting `resolve_project_tracker` resolved; local work has a folder. */
+const HOSTING_ICON: Record<string, string> = { github: "github-mark", gitlab: "gitlab-mark", local: "folder" };
+
+type Translate = (text: string, values?: Readonly<Record<string, string | number>>) => string;
+
+/** The installed capability names; a name outside the catalog is marked. */
+function capabilityText(install: HarnessInstall, t: Translate): string {
+  if (!install.capability_names.length) return t("не установлены");
+  return install.capability_names
+    .map((name) => (install.uncatalogued.includes(name) ? `${name} (${t("вне каталога")})` : name))
+    .join(" · ");
+}
+
+/** The cutover time of the runtime store; the file ledger has had none. */
+function cutoverText(store: StoreFacts | null, t: Translate): string | null {
+  if (!store || store.authority === "none") return null;
+  if (store.cutover_at) return store.cutover_at.slice(0, 16).replace("T", " ");
+  return store.authority === "file-ledger" ? t("не выполнен") : null;
+}
 
 /** The explicit no-data state of a field without a source. */
 function NoData() {
@@ -50,7 +78,7 @@ function useStatusLabel() {
 }
 
 function AttentionRows({ problems }: { problems: Problem[] }) {
-  const { t, language } = useI18n();
+  const { t, language, check } = useI18n();
   const statusLabel = useStatusLabel();
   if (!problems.length) {
     return <p className="empty">{t("В списке нет проблем; это не подтверждает полноту проверок")}</p>;
@@ -67,7 +95,7 @@ function AttentionRows({ problems }: { problems: Problem[] }) {
             <Icon name={STATUS_ICON[problem.status] ?? "info"} />
           </span>
           <div className="t">
-            <b>{problem.id}</b>
+            <b title={problem.id}>{check(problem.id)}</b>
             <small>
               {problem.message}
               {problem.group ? ` · ${groupLabel(language, problem.group)}` : ""}
@@ -81,7 +109,7 @@ function AttentionRows({ problems }: { problems: Problem[] }) {
 }
 
 function CheckRows({ rows }: { rows: Problem[] }) {
-  const { t, language } = useI18n();
+  const { t, language, check } = useI18n();
   const statusLabel = useStatusLabel();
   if (!rows.length) {
     return <div className="empty">{t("Нет проверок в этом фильтре. Это не доказывает отсутствие проблем вне списка.")}</div>;
@@ -94,7 +122,7 @@ function CheckRows({ rows }: { rows: Problem[] }) {
             <Icon name={STATUS_ICON[row.status] ?? "info"} />
           </span>
           <span className="check-main">
-            <b>{row.id}</b>
+            <b title={row.id}>{check(row.id)}</b>
             <small>{row.message}</small>
           </span>
           <span className="check-area">{row.group ? groupLabel(language, row.group) : "—"}</span>
@@ -103,6 +131,23 @@ function CheckRows({ rows }: { rows: Problem[] }) {
     </>
   );
 }
+
+/** The mockup's icon of each health area (docs/design/web-console-mockups, homeAreas). */
+const AREA_ICON: Record<string, string> = {
+  files: "harness",
+  skills: "skills",
+  directories: "folder",
+  repo_map: "map",
+  "repo-map": "map",
+  memory: "memory",
+  environment: "terminal",
+  hooks: "shield",
+  tracker: "github",
+  integration: "github",
+  orchestration: "orchestration",
+  runtime: "runtime",
+  store: "store",
+};
 
 function AreaRows({ areas }: { areas: AreaCounters[] }) {
   const { t, language } = useI18n();
@@ -121,20 +166,21 @@ function AreaRows({ areas }: { areas: AreaCounters[] }) {
         return (
           <div className="health-row" key={area.area}>
             <span className="health-name">
-              <Icon name="pulse" />
+              <Icon name={AREA_ICON[area.area] ?? "pulse"} />
               <span>{name}</span>
             </span>
             <span
               className="health-bar"
               role="img"
-              aria-label={`${name}: ok ${area.ok}, warn ${area.warn}, fail ${area.fail}, skip ${area.skipped}`}
+              aria-label={`${name}: ${t("пройдено")} ${area.ok}, ${t("внимание")} ${area.warn}, ${t("ошибки")} ${area.fail}, ${t("пропущено")} ${area.skipped}`}
             >
               {segments.map(([value, css]) =>
                 value ? <i key={css} className={css} style={{ width: `${(value / total) * 100}%` }} /> : null,
               )}
             </span>
             <span className="health-count">
-              {area.ok}✓ {area.warn}⚠ {area.fail}✖ {area.skipped}–
+              <span className="ok">{area.ok}✓</span> <span className="warn">{area.warn}⚠</span>{" "}
+              <span className="fail">{area.fail}✖</span> <span className="skip">{area.skipped}–</span>
             </span>
           </div>
         );
@@ -151,27 +197,63 @@ const ROLE_NAMES: Record<string, string> = {
   qa: "QA",
 };
 
+/** The mockup's role icons; a role without one keeps the activity glyph. */
+const ROLE_ICON: Record<string, string> = {
+  architect: "architect",
+  developer: "developer",
+  "code-review": "review",
+  review: "review",
+  qa: "qa",
+};
+
 function sessionTone(state: string): string {
   if (["blocked", "failed", "abandoned", "auto_stop"].includes(state)) return "err";
   if (["active", "working", "running"].includes(state)) return "ok";
   return "warn";
 }
 
+const TONE_ICON: Record<string, string> = { ok: "play", err: "blocked", warn: "awaiting" };
+const RUNNING = ["working", "running", "dispatched"];
+
+/** The run time of a session, from its creation to its latest dispatch, in whole units. */
+export function sessionDuration(created: string, updated: string, language: string): string {
+  const start = Date.parse(created);
+  const end = Date.parse(updated);
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return "—";
+  const minutes = Math.round((end - start) / 60000);
+  const ru = language !== "en";
+  if (minutes < 60) return ru ? `${minutes} мин` : `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return ru ? `${hours} ч` : `${hours} h`;
+  const days = Math.round(hours / 24);
+  return ru ? `${days} дн` : `${days} d`;
+}
+
 function RecentTasks({ sessions }: { sessions: RecentSession[] }) {
-  const { t, section, language } = useI18n();
-  const active = sessions.find((session) => sessionTone(session.state) === "ok") ?? sessions[0] ?? null;
-  const time = (iso: string) => {
-    const date = new Date(iso);
-    return Number.isNaN(date.getTime())
-      ? iso
-      : new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short" }).format(date);
-  };
+  const { t, section, language, state: stateText } = useI18n();
+  const [query, setQuery] = useState("");
+  const wanted = query.replace(/[^0-9]/g, "");
+  const shown = wanted ? sessions.filter((session) => session.ticket.replace(/[^0-9]/g, "") === wanted) : sessions;
+  const active =
+    shown.find((session) => sessionTone(session.state) === "ok") ?? shown[0] ?? null;
+  const lastRole = (session: RecentSession) => session.route[session.route.length - 1]?.role ?? "";
   return (
     <section id="home-tasks" className="panel tasks-panel">
       <div className="panel-head">
         <h2>
           {t("Последние задачи")} <span className="small muted">{sessions.length}</span>
         </h2>
+        <label className="task-search">
+          <Icon name="search" />
+          <input
+            type="search"
+            inputMode="numeric"
+            placeholder={t("Номер тикета")}
+            aria-label={t("Поиск задачи по номеру")}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
         <a className="small" href={href("orchestration")}>
           {section("Orchestration")} →
         </a>
@@ -186,19 +268,30 @@ function RecentTasks({ sessions }: { sessions: RecentSession[] }) {
             <span>{t("Время")}</span>
           </div>
           <div className="task-list">
-            {sessions.map((session) => (
-              <a className="task-row" key={session.batch_id} href={href("orchestration")}>
-                <span className="task-id">{session.ticket || "—"}</span>
-                <span className="task-role">
-                  <Icon name="activity" />
-                </span>
-                <span className="task-title" title={t("Название задачи недоступно; показана ветка")}>
-                  {session.branch || session.batch_id}
-                </span>
-                <span className={`task-status ${sessionTone(session.state)}`}>{session.state}</span>
-                <span className="task-time">{time(session.created_at)}</span>
-              </a>
-            ))}
+            {shown.map((session) => {
+              const tone = sessionTone(session.state);
+              const role = lastRole(session);
+              return (
+                <a className="task-row" key={session.batch_id} href={href("orchestration")}>
+                  <span className="task-id">{session.ticket || "—"}</span>
+                  <span className="task-role" title={ROLE_NAMES[role] ?? role}>
+                    <Icon name={ROLE_ICON[role] ?? "activity"} />
+                  </span>
+                  <span className="task-title" title={t("Название задачи недоступно; показана ветка")}>
+                    {session.branch || session.batch_id}
+                  </span>
+                  <span className={`task-status ${tone}`}>
+                    <Icon name={TONE_ICON[tone]} /> {stateText(session.state)}
+                  </span>
+                  <span className="task-time" title={session.created_at}>
+                    {sessionDuration(session.created_at, session.updated_at, language)}
+                  </span>
+                </a>
+              );
+            })}
+            {wanted && !shown.length ? (
+              <p className="empty">{t("Задача #{number} не найдена среди последних сессий", { number: wanted })}</p>
+            ) : null}
           </div>
         </>
       ) : (
@@ -210,22 +303,24 @@ function RecentTasks({ sessions }: { sessions: RecentSession[] }) {
         <div className="active-route">
           <div className="route-head">
             <h3>{t("Маршрут сессии {id}", { id: active.ticket || active.batch_id })}</h3>
-            <a href={href("agent-activity")} className="small">
+            <a href={href("agent-activity")} className="small route-link">
               {section("Ход работы")} →
             </a>
           </div>
-          <div className="route-scroll">
-            <div className="route-steps">
+          <div className="route-scroll" tabIndex={0} role="region" aria-label={t("Маршрут сессии")}>
+            <div className="route-steps route-steps-fill" key={active.batch_id}>
               {active.route.length ? (
                 active.route.map((step, index) => (
                   <div
-                    className={`route-step ${["working", "running", "dispatched"].includes(step.state) ? "current" : "done"}`}
+                    className={`route-step ${RUNNING.includes(step.state) ? "current" : "done"}`}
                     key={`${step.role}-${index}`}
                   >
-                    <span className="route-dot" />
+                    <span className="route-dot">
+                      <Icon name={ROLE_ICON[step.role] ?? "activity"} />
+                    </span>
                     <span className="route-copy">
                       <b>{ROLE_NAMES[step.role] ?? step.role}</b>
-                      <small>{step.state}</small>
+                      <small>{stateText(step.state)}</small>
                     </span>
                   </div>
                 ))
@@ -272,37 +367,90 @@ export function HealthStrip({ health }: { health: HealthCounters }) {
   );
 }
 
+/** The Harness 2.0.0 contour of the mockup (homeContour): the structure is fixed, every value
+    comes from the snapshot; the typed IPC edge moves only while a batch is active. */
 function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
   const { t } = useI18n();
   const store = snapshot?.store ?? null;
   const value = (text: string | number | null | undefined) =>
     text === null || text === undefined ? <b className="muted">{t("нет данных")}</b> : <b>{text}</b>;
+  const live = (snapshot?.active_batches ?? 0) > 0 ? " live" : "";
+  const fact = (text: string | number | null | undefined) => (text === null || text === undefined ? "—" : String(text));
   return (
     <section id="home-contour" className="panel contour-panel">
       <div className="panel-head">
         <h2>{t("Контур Harness")}</h2>
-        <span className="small muted">{store ? store.authority : t("нет данных")}</span>
+        <span className="contour-ready small">
+          {store ? (
+            <>
+              <Icon name={store.authority === "none" ? "warning" : "check"} /> {store.authority}
+            </>
+          ) : (
+            t("нет данных")
+          )}
+        </span>
       </div>
       <div className="body">
-        <div className="contour-scroll">
-          <svg className="contour-svg" viewBox="0 0 800 110" role="img" aria-label={t("Схема контура Harness")}>
-            <path className="edge" d="M160 50H210 M360 50H410 M560 50H610" />
-            <rect className="node" x="10" y="25" width="150" height="50" />
-            <text className="node-label" x="22" y="55">
-              Python policy
-            </text>
-            <rect className="node" x="210" y="25" width="150" height="50" />
-            <text className="node-label" x="224" y="55">
-              IPC
-            </text>
-            <rect className="node" x="410" y="25" width="150" height="50" />
-            <text className="node-label" x="422" y="55">
-              Rust runtime
-            </text>
-            <rect className="node" x="610" y="25" width="175" height="50" />
-            <text className="node-label" x="622" y="55">
-              SQLite WAL / audit
-            </text>
+        <div className="contour-scroll" tabIndex={0} role="region" aria-label={t("Схема контура Harness")}>
+          <svg className="contour-svg" viewBox="0 0 1000 400" role="img" aria-label={t("Схема контура Harness")}>
+            <defs>
+              <marker id="ct-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M0 0 8 4 0 8z" fill="#6b7787" />
+              </marker>
+            </defs>
+            <rect className="ct-lane" x="12" y="10" width="976" height="105" rx="6" />
+            <rect className="ct-lane" x="12" y="125" width="976" height="140" rx="6" />
+            <rect className="ct-lane" x="12" y="272" width="976" height="112" rx="6" />
+            <text className="ct-lane-label" x="24" y="31">01 · Policy</text>
+            <text className="ct-lane-label" x="24" y="146">02 · Runtime</text>
+            <text className="ct-lane-label" x="24" y="292">03 · Evidence</text>
+            <g className="ct-node">
+              <rect x="30" y="42" width="250" height="64" rx="7" />
+              <text className="ct-title" x="43" y="61">Python policy</text>
+              <text className="ct-sub" x="43" y="77">coordinator · approval</text>
+              <text className="ct-sub" x="43" y="89">verification plan</text>
+            </g>
+            <g className="ct-node">
+              <rect x="342" y="42" width="200" height="64" rx="7" />
+              <text className="ct-title" x="355" y="61">runtime_client · IPC</text>
+              <text className="ct-sub" x="355" y="77">typed request · revision CAS</text>
+            </g>
+            <g className="ct-node primary">
+              <rect x="342" y="145" width="250" height="70" rx="7" />
+              <text className="ct-title" x="355" y="165">Rust runtime</text>
+              <text className="ct-sub" x="355" y="181">single writer · schema {fact(store?.schema)}</text>
+            </g>
+            <g className="ct-node">
+              <rect x="680" y="140" width="296" height="54" rx="7" />
+              <text className="ct-title" x="693" y="160">SQLite WAL store</text>
+              <text className="ct-sub" x="693" y="176">generation {fact(store?.generation)}</text>
+            </g>
+            <g className="ct-node">
+              <rect x="680" y="204" width="296" height="54" rx="7" />
+              <text className="ct-title" x="693" y="224">Supervisor</text>
+              <text className="ct-sub" x="693" y="240">process · OCI · QA</text>
+            </g>
+            <g className="ct-node">
+              <rect x="342" y="292" width="250" height="54" rx="7" />
+              <text className="ct-title" x="355" y="311">Audit chain</text>
+              <text className="ct-sub" x="355" y="327">{t("{count} записей", { count: fact(store?.audit_records) })}</text>
+            </g>
+            <g className="ct-node">
+              <rect x="680" y="292" width="296" height="54" rx="7" />
+              <text className="ct-title" x="693" y="311">Execution receipts</text>
+              <text className="ct-sub" x="693" y="327">exit evidence · lost evidence</text>
+            </g>
+            <path className="ct-edge" d="M280 74H342" markerEnd="url(#ct-arrow)" />
+            <path className={`ct-edge blue${live}`} d="M542 74H600V112H465V145" markerEnd="url(#ct-arrow)" />
+            <path className="ct-edge" d="M592 167H680" markerEnd="url(#ct-arrow)" />
+            <path className="ct-edge" d="M592 200H646V231H680" markerEnd="url(#ct-arrow)" />
+            <path className="ct-edge" d="M465 215V292" markerEnd="url(#ct-arrow)" />
+            <path className="ct-edge" d="M828 258V292" markerEnd="url(#ct-arrow)" />
+            <text className="ct-edge-label" x="288" y="68">decision</text>
+            <text className="ct-edge-label" x="552" y="68">typed</text>
+            <text className="ct-edge-label" x="600" y="161">write</text>
+            <text className="ct-edge-label" x="600" y="194">launch</text>
+            <text className="ct-edge-label" x="472" y="284">audit</text>
           </svg>
         </div>
         <div className="contour-facts">
@@ -324,21 +472,24 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
           </div>
           <div>
             <span>cutover</span>
-            {value(null)}
+            {value(cutoverText(store, t))}
           </div>
           <div>
             <span>Repo Map</span>
             {value(snapshot?.repo_map.tier)}
           </div>
         </div>
-        <p className="contour-note">{t("Схема показывает устройство контура, а не поток конкретного batch.")}</p>
+        {store?.reason ? <p className="contour-note">{t(store.reason)}</p> : null}
+        <p className="contour-note">
+          {t("Схема показывает устройство контура, а не поток конкретного batch. Python решает; Rust пишет состояние и исполняет.")}
+        </p>
       </div>
     </section>
   );
 }
 
 export function Home() {
-  const { t, section, fact, language } = useI18n();
+  const { t, section, fact, language, state: stateText, plural } = useI18n();
   const { state, client, replies, events } = useConsole();
   const [online, setOnline] = useState(false);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
@@ -371,6 +522,7 @@ export function Home() {
   const health = snapshot?.health;
   const total = health ? healthTotal(health) : 0;
   const map = snapshot?.repo_map.head_map ?? null;
+  const stale = snapshot?.repo_map.stale_map ?? null;
   const memory = snapshot?.memory;
   const policy = memory?.policy ?? null;
   const shown = snapshot?.problems ?? [];
@@ -404,7 +556,7 @@ export function Home() {
                 {install?.installed ? <span>{t("установлено {version}", { version: install.installed_version })}</span> : null}
                 {store ? <span>{store.authority}</span> : null}
                 <span id="home-facts">
-                  {health ? `${health.ok} ok · ${health.warn} warn · ${health.fail} fail · ${health.skipped} skip` : unavailable}
+                  {health ? `${health.ok} ${t("пройдено")} · ${health.warn} ${t("внимание")} · ${health.fail} ${t("ошибки")} · ${health.skipped} ${t("пропущено")}` : unavailable}
                 </span>
                 {install ? <span>{t("{count} навыков", { count: install.skills })}</span> : null}
                 {snapshot.repo_map.tier ? <span>Repo Map {snapshot.repo_map.tier}</span> : null}
@@ -442,7 +594,7 @@ export function Home() {
             <h2>{t("Требует внимания")}</h2>
             <span id="problem-count" className="small muted">
               {snapshot
-                ? `${t("{fail} ошибки · {warn} предупреждения", { fail: fails, warn: warns })} · ${shown.length} / ${snapshot.problems_total}`
+                ? `${plural(fails, ["ошибка", "ошибки", "ошибок"], ["error", "errors"])} · ${plural(warns, ["предупреждение", "предупреждения", "предупреждений"], ["warning", "warnings"])} · ${shown.length} / ${snapshot.problems_total}`
                 : "—"}
             </span>
           </div>
@@ -457,8 +609,7 @@ export function Home() {
           <div className="context-grid">
             <div className="context-section">
               <h3>
-                <Icon name="github" /> {t("Проект")}
-                {project?.tracker ? <span className="provider">{project.tracker}</span> : null}
+                <Icon name={HOSTING_ICON[project?.tracker ?? ""] ?? "folder"} /> {t("Проект")}
               </h3>
               <dl className="kv">
                 <Fact label={fact("Имя")} value={project?.name ?? null} />
@@ -476,7 +627,7 @@ export function Home() {
                   label={fact("Установлено")}
                   value={install ? (install.installed ? install.installed_version : t("не установлен")) : null}
                 />
-                <Fact label="Capability" value={install ? String(install.capabilities) : null} />
+                <Fact label="Capability" value={install ? capabilityText(install, t) : null} />
                 <Fact
                   label={fact("Скиллы")}
                   value={install ? `${install.skills} · drift ${drift ? drift.total : "—"}` : null}
@@ -496,7 +647,7 @@ export function Home() {
                   label="Audit"
                   value={store?.audit_records != null ? t("{count} записей", { count: store.audit_records }) : null}
                 />
-                <Fact label="Cutover" value={null} />
+                <Fact label="Cutover" value={cutoverText(store, t)} />
               </dl>
             </div>
             <div className="context-section">
@@ -516,6 +667,19 @@ export function Home() {
                   value={snapshot ? (map ? `${map.origin} · ${map.commit}` : t("Нет карты для HEAD")) : null}
                 />
               </dl>
+              {snapshot && !map && stale ? (
+                <p className="stale-map small">
+                  <Icon name="warning" />{" "}
+                  {t("Карта {commit} устарела для HEAD: {files} файлов, ≈{tokens} токенов", {
+                    commit: stale.commit.slice(0, 7),
+                    files: number(stale.files),
+                    tokens: number(stale.estimated_tokens),
+                  })}{" "}
+                  <a href={href("repo-map")}>
+                    <Icon name="refresh" /> {t("Перестроить")}
+                  </a>
+                </p>
+              ) : null}
             </div>
             <div className="context-section">
               <h3>
@@ -524,7 +688,7 @@ export function Home() {
               <dl className="kv">
                 <Fact
                   label={fact("Состояние")}
-                  value={memory?.state ? `${memory.state.status}: ${memory.state.message}` : null}
+                  value={memory?.state ? `${stateText(memory.state.status)}: ${t(memory.state.message)}` : null}
                   tone={memory?.state && memory.state.status !== "ok" ? "warning" : ""}
                 />
                 <Fact label={t("Источники")} value={policy ? policy.source_types.join(" · ") || "—" : null} />

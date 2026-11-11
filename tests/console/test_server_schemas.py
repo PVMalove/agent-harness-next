@@ -215,23 +215,32 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
     usage = {"unavailable": None, "batches": 2, "tickets": 1, "dispatches": 5,
              "reports": 4}
     store = {"authority": "file-ledger", "schema": 3, "generation": "g-1",
-             "audit_records": 9}
+             "audit_records": 9, "cutover_at": None, "reason": ""}
     adapter = {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
     containers = {
         "engine": "docker", "version": "27.4.1", "cgroup_driver": "systemd",
         "cgroup_version": "v2", "selinux": False, "rootless": True, "info_problem": None,
         "images": 3, "images_problem": None, "volumes": None, "volumes_problem": "no volume",
     }
+    runtime = {"state": "online", "revision": 12, "reason": ""}
+    integration = {"name": "GitHub", "kind": "tracker", "status": "current", "cli": True,
+                   "detail": "github.com/o/r"}
     reply: dict[str, object] = {
         "v": 1, "id": 1, "type": "harness.overview", "ok": True, "state": state,
         "package_version": "1.0.1", "drift": "clean", "drift_files": 0,
-        "store": store, "adapters": [adapter], "containers": containers, "usage": usage,
+        "store": store, "adapters": [adapter], "integrations": [integration],
+        "runtime": runtime, "containers": containers, "usage": usage,
         "cached": False, "age_seconds": 0.0,
     }
     assert schemas.REPLIES.validate_python(reply).type == "harness.overview"
     assert schemas.REPLIES.validate_python(
         {**reply, "store": None, "adapters": None, "drift_files": None, "containers": None}
     ).type == "harness.overview"
+    # An older server sends neither the runtime probe nor the adapters: both stay optional.
+    older = {key: value for key, value in reply.items() if key not in {"runtime", "integrations"}}
+    assert schemas.REPLIES.validate_python(older).type == "harness.overview"
+    assert _fields(schemas.RuntimeStatusPayload) == set(runtime)
+    assert _fields(schemas.IntegrationPayload) == set(integration)
     assert {
         field.alias or name
         for name, field in schemas.StorePayload.model_fields.items()
@@ -248,6 +257,8 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
         {**reply, "usage": {**usage, "qa_runs": 0}},
         {**reply, "store": {**store, "authority": "sqlite"}},
         {**reply, "adapters": [{**adapter, "status": "fine"}]},
+        {**reply, "runtime": {**runtime, "state": "starting"}},
+        {**reply, "integrations": [{**integration, "kind": "cloud"}]},
         {**reply, "drift_files": -1},
         {**reply, "containers": {**containers, "images": -1}},
         {**reply, "containers": {**containers, "extra": 1}},

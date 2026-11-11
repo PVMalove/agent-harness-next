@@ -1,21 +1,21 @@
 /* Only what docs/design/web-console-mockups/execution-console.css lacks; never overrides it. */
-.lang-switch button { min-width: 34px; padding: 3px 8px; font-size: 10px; }
-.lang-switch button:focus-visible { outline: 1px solid var(--primary); outline-offset: -1px; }
+.lang-switch button { min-width: 34px; padding: 4px 8px; font-size: var(--fs-1); }
+.lang-switch button:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
 /* Harness · Commands: the run panel over the mockup's harness-command rows and board dialog. */
 .command-panel { display: flex; flex-direction: column; gap: 12px; }
-.command-busy { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 12px; border-color: var(--warn); color: var(--warn); font: 10px var(--mono); }
-.command-busy-actions { display: flex; gap: 6px; }
-.command-refusal { margin: 0; padding: 8px 12px; border: 1px solid var(--err); border-radius: var(--radius); color: var(--err); font-size: 11px; }
+.command-busy { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-color: var(--warn); color: var(--warn); font: var(--fs-1) var(--mono); }
+.command-busy-actions { display: flex; gap: 8px; }
+.command-refusal { margin: 0; padding: 8px 12px; border: 1px solid var(--err); border-radius: var(--radius); color: var(--err); font-size: var(--fs-1); }
 .command-inputs { display: flex; gap: 4px; min-width: 0; }
-.command-inputs input { flex: 1; min-width: 0; padding: 3px 6px; font: 9px var(--mono); }
-.command-output .panel-head h2 code { font-size: 11px; }
+.command-inputs input { flex: 1; min-width: 0; padding: 4px 8px; font: var(--fs-1) var(--mono); }
+.command-output .panel-head h2 code { font-size: var(--fs-1); }
 .command-output-state { display: flex; align-items: center; gap: 8px; }
-.command-output pre { margin: 10px 12px; }
-.command-confirm-body { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
-.command-confirm-body h2 { margin: 0; font-size: 13px; }
+.command-output pre { margin: 12px 12px; }
+.command-confirm-body { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.command-confirm-body h2 { margin: 0; font-size: var(--fs-2); }
 .command-confirm-body p { margin: 0; }
-.command-confirm-typed { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
-.command-confirm-typed input { padding: 5px 8px; font: 11px var(--mono); }
+.command-confirm-typed { display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-1); }
+.command-confirm-typed input { padding: 4px 8px; font: var(--fs-1) var(--mono); }
 .command-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 600px) {
   .command-inputs { flex-direction: column; }
@@ -27,23 +27,32 @@
 .repo-page .repo-index-row > b { min-width: 0; overflow-wrap: anywhere; }
 .repo-page .repo-index-row > span { flex-shrink: 0; }
 .repo-page .repo-index-body > p { overflow-wrap: anywhere; }
+/* Repo Map: the tree, the code and the symbol rows read at the body size of the type scale; the
+   stale-map banner and the empty state carry the Rebuild action. */
+.repo-page .repo-dir, .repo-page .repo-file, .repo-page .repo-code, .repo-page .repo-symbol-row,
+.repo-page .repo-index-row, .repo-page .repo-file-head b { font-size: var(--fs-2); }
+.repo-page .repo-dir .hi, .repo-page .repo-file .hi { width: 13px; height: 13px; }
+.repo-page .repo-stale { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.repo-page .repo-stale > div { flex: 1; min-width: 0; }
+.repo-page .repo-stale p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.repo-page .repo-empty-state { display: grid; gap: 8px; justify-items: start; padding: 16px; }
 /* Pending decisions reuse the mockup's work panels, pills, fields and confirmation dialog. */
 .decision-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.decision-panel > p { margin: 0; font-size: 11px; color: var(--muted); }
+.decision-panel > p { margin: 0; font-size: var(--fs-1); color: var(--muted); }
 .decision-card { padding: 12px; min-width: 0; }
-.decision-card .panel-head { padding: 0 0 10px; }
-.decision-context { margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 8px; font: 11px var(--mono); }
+.decision-card .panel-head { padding: 0 0 12px; }
+.decision-context { margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 8px; font: var(--fs-1) var(--mono); }
 .decision-context dt { color: var(--muted); }
 .decision-context dd { margin: 0; overflow-wrap: anywhere; }
 .decision-context > div { width: 100%; min-width: 0; }
-.decision-context pre, .decision-confirm-context { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px var(--mono); max-height: 220px; overflow: auto; }
-.decision-action { padding-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-.decision-fields { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
-.decision-field { display: flex; flex-direction: column; gap: 4px; font: 10px var(--mono); min-width: 0; }
-.decision-field input, .decision-field select, .decision-field textarea { max-width: 100%; padding: 6px 8px; font: 11px var(--mono); }
-.decision-action details { width: 100%; font-size: 11px; }
-.decision-action details[open] summary { margin-bottom: 10px; }
-.decision-card > p { font-size: 11px; }
+.decision-context pre, .decision-confirm-context { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-1) var(--mono); max-height: 220px; overflow: auto; }
+.decision-action { padding-top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.decision-fields { display: flex; flex-wrap: wrap; gap: 12px; width: 100%; }
+.decision-field { display: flex; flex-direction: column; gap: 4px; font: var(--fs-1) var(--mono); min-width: 0; }
+.decision-field input, .decision-field select, .decision-field textarea { max-width: 100%; padding: 8px 8px; font: var(--fs-1) var(--mono); }
+.decision-action details { width: 100%; font-size: var(--fs-1); }
+.decision-action details[open] summary { margin-bottom: 12px; }
+.decision-card > p { font-size: var(--fs-1); }
 @media (max-width: 600px) {
   .decision-fields, .decision-field { width: 100%; }
   .decision-action > .btn { width: 100%; white-space: normal; }
@@ -52,68 +61,89 @@
 /* Diagnostics: the applied fixes under the master-detail grid, the fix commands below them and
    the copy confirmation beside the command button. */
 .diag-page > .command-refusal { margin-bottom: 12px; }
-.diag-fixes { margin-top: 18px; }
+.diag-fixes { margin-top: 20px; }
 .diag-fixes .panel-head { padding: 12px 16px; }
-.diag-fixes-list { margin: 0; padding: 10px 16px 12px 32px; font-size: 11.5px; line-height: 1.6; }
-.diag-commands { margin-top: 18px; }
-.diag-action { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.diag-facts dd code { color: var(--selfg); font: 10.5px var(--mono); word-break: break-all; }
+.diag-fixes-list { margin: 0; padding: 12px 16px 12px 32px; font-size: var(--fs-1); line-height: 1.6; }
+.diag-commands { margin-top: 20px; }
+.diag-action { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.diag-facts dd code { color: var(--selfg); font: var(--fs-1) var(--mono); word-break: break-all; }
 /* Harness · Обзор: the maintenance panel under the installation and pipeline usage panels. */
 .harness-page > .command-refusal { margin-bottom: 12px; }
-.harness-maintenance .panel-head { padding: 10px 14px; }
-.harness-maintenance-actions { display: flex; gap: 6px; }
-.harness-maintenance-actions .btn { padding: 3px 8px; font-size: 10px; }
-.harness-maintenance-body { padding: 10px 14px 12px; font-size: 10.5px; }
-.harness-maintenance-body h3 { margin: 8px 0 4px; color: var(--muted); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.harness-maintenance .panel-head { padding: 12px 16px; }
+.harness-maintenance-actions { display: flex; gap: 8px; }
+.harness-maintenance-actions .btn { padding: 4px 8px; font-size: var(--fs-1); }
+.harness-maintenance-body { padding: 12px 16px 12px; font-size: var(--fs-1); }
+.harness-maintenance-body h3 { margin: 8px 0 4px; color: var(--muted); font-size: var(--fs-1); }
 .harness-maintenance-body h3:first-child { margin-top: 0; }
-.harness-maintenance-body p { margin: 0 0 6px; }
-.harness-maintenance-lines { margin: 0; padding: 0; list-style: none; font: 10px/1.7 var(--mono); }
+.harness-maintenance-body p { margin: 0 0 8px; }
+.harness-maintenance-lines { margin: 0; padding: 0; list-style: none; font: var(--fs-1)/1.7 var(--mono); }
 .harness-maintenance-error { color: var(--err); }
-.harness-plan { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: #1b222b; font: 9.5px/1.7 var(--mono); overflow-wrap: anywhere; }
-.worktree-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; border-top: 1px solid #2b3440; font: 10px var(--mono); }
+.harness-plan { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 6px; background: #1b222b; font: var(--fs-1)/1.7 var(--mono); overflow-wrap: anywhere; }
+.worktree-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px solid #2b3440; font: var(--fs-1) var(--mono); }
 .worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
-.worktree-row .btn { flex: none; padding: 3px 8px; font-size: 9.5px; }
+.worktree-row .btn { flex: none; padding: 4px 8px; font-size: var(--fs-1); }
 .harness-component > em:empty { display: none; }
-/* Reports: the stage rows carry no type icon, the report sections and the QA log keep the
-   untrusted text wrapped, and the batch history sits under the stage list. */
+/* Reports: the mockup's report rows and one status/search row; the TUI's text filters fold under
+   «Ещё фильтры», the report sections and the QA log keep the untrusted text wrapped. */
 .reports-page > .command-refusal { margin-bottom: 12px; }
-.reports-page .report-row { grid-template-columns: minmax(0, 1fr) auto; }
-.reports-page .report-row .report-time { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 .reports-page .report-row.on { background: #232c37; }
-.reports-page .report-filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.reports-page .report-filter-row > * { flex: 1 1 120px; min-width: 0; }
-.reports-detail-column { display: grid; gap: 18px; align-content: start; min-width: 0; }
-.report-section { margin-top: 10px; }
-.report-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; font-size: 11px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.report-more-filters { margin-top: 8px; font-size: var(--fs-1); }
+.report-more-filters > summary { color: var(--muted); cursor: pointer; }
+.report-more-filters .report-filters { display: grid; gap: 8px; padding: 8px 0 0; }
+.report-more-filters .report-filter-row { flex-wrap: wrap; align-items: start; margin-top: 0; }
+.report-more-filters .report-filter-row > * { flex: 1 1 120px; min-width: 0; }
+.report-section { margin-top: 12px; min-width: 0; }
+/* The matrix header rule of the mockup (min-width 560px) also matches the detail labels: a label
+   is a plain line, as in the mockup detail. */
+.report-detail-body .report-evidence-head { display: block; min-width: 0; padding: 0; border-top: 0; }
+.report-evidence { cursor: default; }
+.report-evidence-state.passed { color: var(--ok); }
+.report-evidence-state.attention { color: var(--warn); }
+.report-evidence-state.blocked { color: var(--err); }
+.report-conclusion > div { min-width: 0; }
+.report-conclusion .report-line { margin: 4px 0 0; }
+.report-line-title { color: var(--muted); }
+.qa-lane-panel .report-qa-log { border-top: 1px solid var(--rule); }
+.qa-lane-panel .report-qa-log > summary { padding: 8px 16px; color: var(--muted); font-size: var(--fs-1); cursor: pointer; }
+#reports-quality-kpi { margin-bottom: 12px; }
+.report-ready-row .orch-pill, #reports-readiness .orch-pill { white-space: nowrap; min-width: max-content; }
+/* Publication: the batch selector sits in the Release candidate head, a preflight pill column
+   fits its widest word, and the human decision words its reasons. */
+.publish-batch select { max-width: 220px; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 5px; background: #1a1e24; color: var(--fg); font: var(--fs-1) var(--mono); }
+.publish-meta > span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.publish-meta .hi { width: 12px; height: 12px; flex: none; }
+.publish-check { grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); }
+.publish-check .orch-pill { white-space: nowrap; }
+.publish-decision-text { min-width: 0; flex: 1 1 320px; }
+.publish-decision-text.ready b { color: var(--ok); }
+.publish-why { margin: 8px 0 0; padding-left: 16px; color: var(--muted); font-size: var(--fs-1); }
+.publish-decisions:empty { display: none; }
+.report-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; font-size: var(--fs-1); overflow-wrap: anywhere; white-space: pre-wrap; }
 .report-line-text { min-width: 0; }
-.report-log { margin: 0; padding: 10px 14px; max-height: 320px; overflow: auto; font: 10px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-.report-route { margin: 8px 14px; font-size: 11px; overflow-wrap: anywhere; }
-.report-timeline .timeline { margin: 0; padding: 6px 14px 12px 30px; font-size: 11px; }
+.report-log { margin: 0; padding: 12px 16px; max-height: 320px; overflow: auto; font: var(--fs-1)/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-route { margin: 8px 16px; font-size: var(--fs-1); overflow-wrap: anywhere; }
+.report-timeline .timeline { margin: 0; padding: 8px 16px 12px 32px; font-size: var(--fs-1); }
 .report-timeline .timeline li { margin: 4px 0; overflow-wrap: anywhere; }
-.report-timeline .timeline small { display: block; color: var(--muted); font: 9.5px var(--mono); }
-.report-timeline .report-meta { padding: 0 14px; }
+.report-timeline .timeline small { display: block; color: var(--muted); font: var(--fs-1) var(--mono); }
+.report-timeline .report-meta { padding: 0 16px; }
 @media (max-width: 760px) {
   .report-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* Orchestration: the analytics, statistics and lock panels side by side, the batch history with
    its chronology and the decisions section under them. Long values wrap, never overflow. */
 .orch-page > .command-refusal { margin-bottom: 12px; }
-.orch-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
-.orch-history-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; margin-bottom: 18px; }
-.orch-analytics-rows { margin: 0; padding: 8px 14px 12px; font-size: 11px; }
+.orch-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-bottom: 20px; }
+.orch-history-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 20px; margin-bottom: 20px; }
+.orch-analytics-rows { margin: 0; padding: 8px 16px 12px; font-size: var(--fs-1); }
 .orch-analytics-rows > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; padding: 4px 0; border-top: 1px solid #2b3440; }
 .orch-analytics-rows > div:first-child { border-top: 0; }
 .orch-analytics-rows dt { color: var(--muted); }
 .orch-analytics-rows dd { margin: 0; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .orch-analytics-head { flex-wrap: wrap; gap: 8px; }
-.orch-lock-body { padding: 8px 14px 12px; font-size: 11px; }
+.orch-lock-body { padding: 8px 16px 12px; font-size: var(--fs-1); }
 .orch-lock-body p { margin: 0 0 4px; overflow-wrap: anywhere; }
 .orch-history .panel-head select { max-width: 50%; }
-.orch-page .orch-batches { display: block; margin: 0; }
-.orch-page .orch-batch { display: grid; gap: 2px; width: 100%; padding: 8px 14px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
-.orch-page .orch-batch.on { background: #232c37; }
-.orch-page .orch-batch-id { color: var(--muted); font: 10px var(--mono); overflow-wrap: anywhere; }
-.orch-section-title { margin: 6px 0 10px; font-size: 13px; }
+.orch-section-title { margin: 8px 0 12px; font-size: var(--fs-2); }
 .orch-title .actions { flex-wrap: wrap; }
 @media (max-width: 1100px) {
   .orch-overview-grid { grid-template-columns: 1fr; }
@@ -125,61 +155,58 @@
 /* Recovery and Container route: the view body as the TUI draws it (blockers, grouped facts,
    unavailable actions, notes), the action buttons with their reasons and the inputs. */
 .recovery-page > .command-refusal, .route-page > .command-refusal { margin-bottom: 12px; }
-.recovery-history, .recovery-view, .route-view, .route-select { margin-bottom: 18px; }
-.recovery-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.view-body { padding: 8px 14px 4px; font-size: 11px; }
-.view-blockers { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--err); border-radius: 6px; }
-.view-blockers h3, .view-group h3 { margin: 0 0 4px; color: var(--muted); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.recovery-history, .recovery-view, .route-view, .route-select { margin-bottom: 20px; }
+.recovery-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; font-size: var(--fs-1); white-space: pre-wrap; overflow-wrap: anywhere; }
+.view-body { padding: 8px 16px 4px; font-size: var(--fs-1); }
+.view-blockers { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--err); border-radius: 6px; }
+.view-blockers h3, .view-group h3 { margin: 0 0 4px; color: var(--muted); font-size: var(--fs-1); }
 .view-blockers p { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.view-group { margin-bottom: 10px; }
+.view-group { margin-bottom: 12px; }
 .view-group dl { margin: 0; }
-.view-row { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 8px; padding: 3px 0; border-top: 1px solid #2b3440; }
-.view-row dt { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.view-row { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 8px; padding: 4px 0; border-top: 1px solid #2b3440; }
+.view-row dt { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .view-row dd { margin: 0; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .view-mark { flex: none; }
 .view-mark.ok { color: var(--ok); } .view-mark.warn { color: var(--warn); }
 .view-mark.blocked, .view-mark.failed { color: var(--err); }
-.view-unavailable { margin: 6px 0; padding-left: 18px; color: var(--muted); overflow-wrap: anywhere; }
-.view-note { margin: 6px 0; color: var(--muted); overflow-wrap: anywhere; }
-.view-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 14px; }
+.view-unavailable { margin: 8px 0; padding-left: 20px; color: var(--muted); overflow-wrap: anywhere; }
+.view-note { margin: 8px 0; color: var(--muted); overflow-wrap: anywhere; }
+.view-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
 .view-action { display: inline-flex; flex-direction: column; gap: 2px; max-width: 100%; }
-.view-action-reason { max-width: 260px; color: var(--muted); font-size: 9.5px; overflow-wrap: anywhere; }
-.recovery-inputs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px; }
+.view-action-reason { max-width: 260px; color: var(--muted); font-size: var(--fs-1); overflow-wrap: anywhere; }
+.recovery-inputs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
 .recovery-inputs input { flex: 1 1 160px; min-width: 0; }
 .command-confirm .board-confirm-note { white-space: pre-line; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .view-row { grid-template-columns: 1fr; }
 }
 /* Container route: the selection form and the stage tabs wrap on a phone. */
-.route-select { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; }
+.route-select { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
 .route-select input { flex: 1 1 140px; min-width: 0; }
-.route-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 0; }
-.route-tab-state { margin: 8px 14px 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.route-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px 16px 0; }
+.route-tab-state { margin: 8px 16px 0; color: var(--muted); font-size: var(--fs-1); overflow-wrap: anywhere; }
 #route-context { overflow-wrap: anywhere; }
 /* Help: the guide's Markdown (headings, lists, tables, code) inside the mockup's help panels. */
-.help-markdown { padding: 12px 16px; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.help-markdown { padding: 12px 16px; font-size: var(--fs-1); line-height: 1.55; overflow-wrap: anywhere; }
 .help-markdown h2, .help-markdown h3 { margin: 4px 0 8px; }
-.help-markdown ul { margin: 6px 0; padding-left: 18px; }
+.help-markdown ul { margin: 8px 0; padding-left: 20px; }
 .help-markdown .table-wrap { overflow-x: auto; max-width: 100%; }
-.help-markdown table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.help-markdown table { width: 100%; border-collapse: collapse; font-size: var(--fs-1); }
 .help-markdown th, .help-markdown td { padding: 4px 8px; border-top: 1px solid var(--rule); text-align: left; vertical-align: top; }
-.help-section { margin-top: 10px; }
+.help-section { margin-top: 12px; }
 /* Update Harness and Open Project: the diff rows and the option cards are buttons and labels here. */
-button.diff-file { grid-template-columns: minmax(0, 1fr) auto; width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: transparent; font: inherit; font-size: 11px; text-align: left; }
-.diff-path { min-width: 0; overflow-wrap: anywhere; }
+button.diff-file { width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: transparent; font: inherit; font-size: var(--fs-1); text-align: left; }
 .diff-kind.fail { color: var(--err); } .diff-kind.warn { color: var(--warn); }
-.update-page .modes, .project-page .modes { flex-direction: column; align-items: stretch; gap: 0; padding: 10px 14px; }
-.update-page .mode-card, .project-page .mode-card { margin-bottom: 7px; }
+.update-page .modes, .project-page .modes { flex-direction: column; align-items: stretch; gap: 0; padding: 12px 16px; }
+.update-page .mode-card, .project-page .mode-card { margin-bottom: 8px; }
 .update-page .plan-card, .update-page .modes-card { min-width: 0; }
 @media (max-width: 600px) {
   .diff-layout { grid-template-columns: 1fr; }
   .diff-list { border-right: 0; border-bottom: 1px solid var(--rule); }
 }
 /* Configuration: a file or adapter row wraps its facts instead of the mockup's fixed columns. */
-.settings-page .settings-config-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 8px 14px; overflow-wrap: anywhere; }
-.settings-page .settings-resolved { margin: 8px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.settings-page .settings-note, .settings-page .settings-config-foot, .settings-history > code, .settings-history > .field { margin: 6px 14px; }
-.settings-page .settings-textarea { width: 100%; min-height: 320px; box-sizing: border-box; font-family: var(--mono); }
+.settings-history > code, .settings-history > .field, .settings-history > .settings-history-foot, .settings-history > .settings-note { margin: 8px 16px; }
+.settings-page .settings-textarea { box-sizing: border-box; font-family: var(--mono); }
 /* Task Board: main#content takes the mockup's main.board-main layout; ticket text wraps in place. */
 main#content:has(> .board-page) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 12px; }
 @media (max-width: 980px) { main#content:has(> .board-page) { padding-bottom: 8px; } }
@@ -189,16 +216,16 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 /* Task Board status change: the move notice and the confirmation wrap ticket text in place; the
    status select fits a narrow modal. */
 .board-move-notice { margin: 4px 0; overflow-wrap: anywhere; }
-#board-modal-notice { margin: 6px 14px 0; }
+#board-modal-notice { margin: 8px 16px 0; }
 #board-confirm-body h2, #board-confirm-body p, .board-confirm-diff { overflow-wrap: anywhere; min-width: 0; }
 .board-confirm-diff { flex-wrap: wrap; }
 .board-modal-links select { max-width: 100%; }
 /* Mockup parity: a field without a data source shows an explicit no-data state in its place. */
-.no-data { font-style: italic; color: var(--muted); }
+.no-data { font-style: normal; color: var(--muted); }
 /* A multi-line kernel value renders as lines, not as a string with line breaks. */
 .view-line { display: block; overflow-wrap: anywhere; }
 /* The gate latency trend of Orchestration → Гейты: a lone hour of the mockup's line chart is a dot. */
-.gate-trend { margin: 0 14px 12px; }
+.gate-trend { margin: 0 16px 12px; }
 .orch-line-avg-dot { fill: var(--orch-cyan); }
 .orch-line-p95-dot { fill: var(--orch-lav); }
 /* Repo Map: the kind of a symbol the kernel derives from its signature. */
@@ -210,7 +237,157 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .board-agent-prompt .hi { width: 11px; height: 11px; }
 .board-page { position: relative; }
 .board-updating { position: absolute; inset: 0; z-index: 5; display: flex; justify-content: center; align-items: flex-start; padding-top: 96px; pointer-events: none; }
-.board-updating-card { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid #44786a; border-radius: 7px; background: #1d2927ee; color: var(--orch-mint); font: 11px var(--mono); box-shadow: 0 10px 30px #0008; }
+.board-updating-card { display: inline-flex; align-items: center; gap: 12px; padding: 8px 16px; border: 1px solid #44786a; border-radius: 7px; background: #1d2927ee; color: var(--orch-mint); font: var(--fs-1) var(--mono); box-shadow: 0 10px 30px #0008; }
 .board-mascot { width: 34px; height: 44px; animation: board-mascot-jump 0.9s ease-in-out infinite; }
 @keyframes board-mascot-jump { 0%, 100% { transform: translateY(0); } 45%, 55% { transform: translateY(-9px); } }
 @media (prefers-reduced-motion: reduce) { .board-mascot { animation: none; } }
+.board-modal-tablist { display: flex; align-items: center; gap: 4px; }
+
+/* WCAG 2.1 AA (#1066): skip link, a visible focus ring on every surface, 24px targets. */
+.skip-link { position: absolute; left: 8px; top: -48px; z-index: 100; padding: 4px 12px; border-radius: 4px; background: var(--sel); color: var(--selfg); }
+.skip-link:focus { top: 8px; }
+main:focus { outline: none; }
+main input:focus-visible, main select:focus-visible, main textarea:focus-visible, header input:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
+.chip, .orch-tab, [role="tab"], .lang-switch button { min-height: 24px; }
+
+/* Home after the owner's review (#1066): task search, stale Repo Map, session route across the
+   panel with an animated running step, spaced area counters. */
+.task-search { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 4px; }
+.task-search input { width: 112px; min-height: 24px; border: 0; background: transparent; color: var(--fg); }
+.tasks-panel .panel-head { gap: 8px; }
+.task-row { grid-template-columns: 56px 24px minmax(0, 1fr) minmax(0, max-content) 56px; }
+.task-time, .task-status { white-space: nowrap; }
+.task-status { display: inline-flex; align-items: center; gap: 4px; }
+.stale-map { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--warn); }
+/* Home health areas: the count column takes its own width so it never leaves the frame
+   (the mockup's 64px column overflows too), and the bar is short and thin. */
+.health-areas-grid .health-row { grid-template-columns: 118px minmax(0, 1fr) max-content; }
+.health-areas .health-bar { width: 100%; max-width: 240px; height: 6px; }
+.health-count { white-space: nowrap; }
+@media (max-width: 720px) {
+  .health-areas-grid .health-row { grid-template-columns: 94px minmax(0, 1fr) max-content; gap: 8px; }
+}
+.health-count .ok { color: var(--ok); } .health-count .warn { color: var(--warn); }
+.health-count .fail { color: var(--err); } .health-count .skip { color: var(--muted); }
+.route-steps-fill { display: flex; width: 100%; }
+.route-steps-fill .route-step { flex: 1 1 0; min-width: 96px; }
+.route-steps-fill .route-dot { display: inline-grid; place-items: center; width: 20px; height: 20px; }
+.route-steps-fill .route-dot .hi { width: 12px; height: 12px; }
+.route-steps-fill .route-step { animation: route-step-in 0.24s ease-out both; }
+.route-steps-fill .route-step.current .route-dot { animation: route-current 1.6s ease-in-out infinite; }
+@keyframes route-step-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+@keyframes route-current { 50% { box-shadow: 0 0 0 4px rgba(111, 168, 220, 0.25); } }
+@media (prefers-reduced-motion: reduce) {
+  .route-steps-fill .route-step, .route-steps-fill .route-step.current .route-dot { animation: none; }
+}
+
+/* Page fit (#1066): on a desktop window the long lists of Diagnostics, Reports and the Agent
+   activity sessions scroll inside their block, so the page itself fits the window. */
+@media (min-width: 981px) {
+  #diag-list { max-height: max(240px, calc(100dvh - 640px)); overflow-y: auto; }
+  /* The detail panel fits the window: its body scrolls, the command action stays in view. */
+  .diag-detail-panel { max-height: max(420px, calc(100dvh - 120px)); }
+  .diag-detail-body { min-height: 0; overflow-y: auto; }
+  .diag-detail-body .diag-action { position: sticky; bottom: -16px; padding: 8px 0; background: var(--surface); }
+  .work-sessions .work-list { max-height: max(240px, calc(100dvh - 460px)); overflow-y: auto; }
+  #report-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; }
+  .report-timeline { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }
+}
+/* Task Board spec row (#1066): the search by spec number beside the spec select. */
+.board-specbar .board-spec-search { flex: 0 1 200px; }
+.board-spec-missing { color: var(--warn); font: var(--fs-1) var(--mono); }
+/* Agent activity (#1066): wider step sources and the session route replays a step change. */
+.work-sources .work-source-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); padding: 12px 16px; }
+.work-sources .work-source { padding: 12px 16px; }
+.work-filters #work-ticket { max-width: 160px; }
+.work-analytics .work-stat-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 32px; }
+.work-status .hi { width: 12px; height: 12px; vertical-align: -2px; }
+.work-flow-node.current { animation: work-step-in 0.3s ease-out both; }
+@keyframes work-step-in { from { opacity: 0.4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .work-flow-node.current, .work-flow-node.current .work-flow-icon, .work-flow-edge.active::after { animation: none; }
+}
+/* Orchestration (#1066): long lists scroll inside their block; chart rows fit long role names. */
+#orch-dispatch-list, .orch-tickets { max-height: min(480px, calc(100dvh - 240px)); overflow-y: auto; }
+.orch-analytics .orch-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 40px; }
+/* axe sweep (#1066): muted text on a selected row is below 4.5:1 on --sel, and the mockup's
+   #7f8996 second project line is below it on --panel. */
+.diag-row[aria-pressed="true"] .diag-row-main small, .project-row.on .project-row-main small { color: var(--selfg); }
+.project-row-main small + small { color: var(--muted); }
+/* Project page: the plan summary in the type scale and a blocked capability as icon and word. */
+.install-plan-summary { margin: 0 0 12px; font-size: var(--fs-1); line-height: 1.5; }
+.install-plan-summary.ok b { color: var(--ok); } .install-plan-summary.warn b { color: var(--warn); }
+.cap-copy .cap-blocked { display: inline-flex; align-items: center; gap: 4px; color: var(--err); }
+.cap-copy .cap-blocked .hi { width: 12px; height: 12px; }
+.project-path-info #open-project-path-status:empty { display: none; }
+/* Agent activity: the grid aligned to its start, compact one-line event and step rows inside an
+   in-block scroll, the sessions toggle and a timeline whose axis stays on top while it scrolls. */
+.work-grid { align-items: start; }
+.work-status .hi { margin-right: 4px; }
+.work-events-panel .work-events { max-height: 330px; overflow-y: auto; }
+.work-events-panel .work-event { align-items: center; padding: 4px 16px; }
+.work-events-panel .work-event-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.work-events-panel .work-event-main b, .work-events-panel .work-event-main small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-events-panel .work-event-main b { flex: 0 1 auto; }
+.work-events-panel .work-event-main small { flex: 1 1 0; margin: 0; }
+.work-events-panel .work-event-main .orch-pill { flex: none; margin: 0 0 0 auto; padding: 0 4px; line-height: 16px; align-self: center; }
+.work-events-panel .work-event-role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-more { display: block; width: 100%; padding: 8px 16px; border: 0; border-top: 1px solid var(--rule); background: transparent; color: var(--primary); font: var(--fs-1) var(--mono); text-align: left; cursor: pointer; }
+.work-more:hover { background: var(--row); }
+.work-analytics .work-gantt { max-height: calc(100vh - 280px); min-height: 160px; overflow-y: auto; }
+.work-gantt-axis { position: sticky; top: 0; z-index: 1; padding: 4px 0; background: var(--surface); }
+.work-gantt-ticks span:last-child { transform: translateX(-100%); }
+.work-analytics > .orch-legend { margin: 0; padding: 8px 16px 12px; }
+.work-filters select + select { margin-left: 0; }
+.work-gantt-track { height: 20px; }
+.work-gantt-row { padding: 4px 0; }
+.work-gantt-name small, .work-gantt-last { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Orchestration: the live step of a coordinator or human gate pulses like a live role (the
+   mockup's global reduced-motion rule stops it), the statusbar names the live step, and long
+   dispatch lists scroll inside their panel. */
+.orch-map-node.live .orch-map-bg { stroke: #6fa8dc; stroke-width: 1.5; animation: orchMapPulse 2s ease-in-out infinite; }
+.orch-map-statusbar .orch-live { margin-left: auto; color: var(--primary); }
+.orch-dispatch-scroll { max-height: 448px; overflow-y: auto; }
+.orch-ticket-table .orch-pill { justify-self: start; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .orch-map-node.live .orch-map-bg { animation: none; }
+}
+.orch-heartbeat { white-space: nowrap; }
+.board-open { display: inline-flex; align-items: center; gap: 4px; }
+.board-open .hi { width: 12px; height: 12px; }
+/* Harness (#1066): the installation rows keep one line (a lock time or schema fits its value
+   column), the KPI captions wrap instead of cutting the generation id, and the maintenance panel
+   follows the command panel on the Commands tab. */
+.harness-component { grid-template-columns: minmax(100px, 1.2fr) minmax(70px, max-content) minmax(100px, 1.4fr) auto; }
+.harness-component > b { white-space: nowrap; }
+.harness-kpis small { display: block; overflow-wrap: anywhere; }
+#harness-tab-commands .harness-maintenance { margin-top: 16px; }
+/* Repo Map: «medium» needs more than the mockup's 34px weight column (it touches the path there
+   too), and the localized confidence header is wider than the mockup's 60px column. */
+.repo-rel-item { grid-template-columns: 48px minmax(0, 1fr) 64px; gap: 8px; }
+.repo-link-head, .repo-link-row { grid-template-columns: 1fr 1fr 1fr 96px; }
+/* Settings: the adapter plan text and the per-file change list sit inside mockup panels; the
+   type scale is the mockup's (the page used to inherit a larger body font). */
+.settings-page { font-size: var(--fs-1); }
+.settings-adapter-plan { margin: 8px 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.settings-editor-side .configuration-changes { padding: 8px 0; margin: 0; list-style: none; font: var(--fs-1) var(--mono); overflow-wrap: anywhere; }
+.settings-editor-side .field, .settings-editor-side .orch-note { margin-top: 8px; }
+.settings-config-foot > span { color: var(--muted); font-size: var(--fs-1); }
+.settings-config-row small.err, .settings-config-row small.warn { white-space: normal; }
+@media (max-width: 720px) {
+  .settings-grid, .settings-editor-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+  .settings-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Shell: the branch icon sits on the branch line. Help: the guide intro inside the mockup hero
+   takes the hero's own type (eyebrow, h2 at --fs-4, muted paragraph) without the section padding. */
+#branch { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#branch .hi { width: 13px; height: 13px; }
+.help-hero-head .help-markdown { padding: 0; }
+.help-hero-head .help-markdown h1, .help-hero-head .help-markdown h2 { margin: 4px 0; font-size: var(--fs-4); }
+.help-hero-head .help-markdown p { margin: 0; max-width: 72ch; color: var(--muted); }
+/* Sweep fixes: the selected symbol's caption keeps AA contrast on the selection background; the
+   JSON editor and its file line fit a 390 px panel. */
+.repo-symbol-row.on .repo-symbol-main small { color: var(--fg); }
+.settings-editor .field { display: block; min-width: 0; }
+.settings-editor .settings-textarea { max-width: 100%; }
+.settings-file-line { flex-wrap: wrap; min-width: 0; }

@@ -504,12 +504,16 @@ class PipelineUsage(_Strict):  # type: ignore[explicit-any]
 
 
 class StorePayload(_Strict):  # type: ignore[explicit-any]
-    """The state authority read without the ledger lock or a runtime call; unread facts are null."""
+    """The state authority read without the ledger lock; in the runtime-store epoch the audit count
+    comes from a bounded `state.validate` of the running runtime. Unread facts are null and
+    `reason` says why."""
 
     authority: Literal["file-ledger", "runtime-store", "none"]
     schema_: Annotated[int | None, Field(alias="schema")]
     generation: str | None
     audit_records: Annotated[int | None, Field(ge=0)]
+    cutover_at: str | None
+    reason: str
 
 
 class AdapterPayload(_Strict):  # type: ignore[explicit-any]
@@ -518,6 +522,27 @@ class AdapterPayload(_Strict):  # type: ignore[explicit-any]
     path: str
     status: Literal["current", "outdated", "missing"]
     problem: str | None
+
+
+class RuntimeStatusPayload(_Strict):  # type: ignore[explicit-any]
+    """Whether the project's runtime answered an empty `state.read` (2 s, never started), with its
+    store revision, or why it did not."""
+
+    state: Literal["online", "offline"]
+    revision: Annotated[int | None, Field(ge=0)]
+    reason: str
+
+
+class IntegrationPayload(_Strict):  # type: ignore[explicit-any]
+    """One adapter of the Harness page: Claude Code or Codex (`runtime`: adapter files of the
+    installed capabilities, CLI on PATH) or the project tracker (`tracker`: CLI on PATH, null for
+    local work); nothing is checked online."""
+
+    name: str
+    kind: Literal["runtime", "tracker"]
+    status: Literal["current", "outdated", "missing", "unknown"]
+    cli: bool | None
+    detail: str
 
 
 class ContainersPayload(_Strict):  # type: ignore[explicit-any]
@@ -539,8 +564,9 @@ class ContainersPayload(_Strict):  # type: ignore[explicit-any]
 
 class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     """The Harness state, the package version, the drift state and file count, the state store,
-    the runtime adapters (null: unreadable), the container engine inventory (null: not
-    collected) and the pipeline usage."""
+    the runtime adapters (null: unreadable), the Claude Code, Codex and tracker adapters and the
+    runtime status (null: not collected), the container engine inventory (null: not collected) and
+    the pipeline usage."""
 
     type: Literal["harness.overview"]
     ok: Literal[True]
@@ -550,6 +576,8 @@ class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     drift_files: Annotated[int | None, Field(ge=0)]
     store: StorePayload | None
     adapters: list[AdapterPayload] | None
+    integrations: list[IntegrationPayload] | None = None
+    runtime: RuntimeStatusPayload | None = None
     containers: ContainersPayload | None
     usage: PipelineUsage
     cached: bool

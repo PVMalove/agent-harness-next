@@ -1009,7 +1009,7 @@
     },
     "HarnessOverviewReply": {
       "additionalProperties": false,
-      "description": "The Harness state, the package version, the drift state and file count, the state store,\nthe runtime adapters (null: unreadable), the container engine inventory (null: not\ncollected) and the pipeline usage.",
+      "description": "The Harness state, the package version, the drift state and file count, the state store,\nthe runtime adapters (null: unreadable), the Claude Code, Codex and tracker adapters and the\nruntime status (null: not collected), the container engine inventory (null: not collected) and\nthe pipeline usage.",
       "properties": {
         "adapters": {
           "anyOf": [
@@ -1074,6 +1074,21 @@
           ],
           "title": "Id"
         },
+        "integrations": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/IntegrationPayload"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Integrations"
+        },
         "ok": {
           "const": true,
           "title": "Ok",
@@ -1082,6 +1097,17 @@
         "package_version": {
           "title": "Package Version",
           "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeStatusPayload"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "state": {
           "$ref": "#/$defs/HarnessStatePayload"
@@ -1503,6 +1529,58 @@
         "type"
       ],
       "title": "HomeSnapshotRequest",
+      "type": "object"
+    },
+    "IntegrationPayload": {
+      "additionalProperties": false,
+      "description": "One adapter of the Harness page: Claude Code or Codex (`runtime`: adapter files of the\ninstalled capabilities, CLI on PATH) or the project tracker (`tracker`: CLI on PATH, null for\nlocal work); nothing is checked online.",
+      "properties": {
+        "cli": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cli"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "runtime",
+            "tracker"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "current",
+            "outdated",
+            "missing",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "cli",
+        "detail"
+      ],
+      "title": "IntegrationPayload",
       "type": "object"
     },
     "JobCancelRequest": {
@@ -2937,6 +3015,43 @@
       "title": "RosterDispatch",
       "type": "object"
     },
+    "RuntimeStatusPayload": {
+      "additionalProperties": false,
+      "description": "Whether the project's runtime answered an empty `state.read` (2 s, never started), with its\nstore revision, or why it did not.",
+      "properties": {
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Revision"
+        },
+        "state": {
+          "enum": [
+            "online",
+            "offline"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "revision",
+        "reason"
+      ],
+      "title": "RuntimeStatusPayload",
+      "type": "object"
+    },
     "ScreenSnapshotReply": {
       "additionalProperties": false,
       "description": "The first page of a screen snapshot's JSON text; `snapshot.page` reads the rest.",
@@ -3305,7 +3420,7 @@
     },
     "StorePayload": {
       "additionalProperties": false,
-      "description": "The state authority read without the ledger lock or a runtime call; unread facts are null.",
+      "description": "The state authority read without the ledger lock; in the runtime-store epoch the audit count\ncomes from a bounded `state.validate` of the running runtime. Unread facts are null and\n`reason` says why.",
       "properties": {
         "audit_records": {
           "anyOf": [
@@ -3328,6 +3443,17 @@
           "title": "Authority",
           "type": "string"
         },
+        "cutover_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cutover At"
+        },
         "generation": {
           "anyOf": [
             {
@@ -3338,6 +3464,10 @@
             }
           ],
           "title": "Generation"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
         },
         "schema": {
           "anyOf": [
@@ -3355,7 +3485,9 @@
         "authority",
         "schema",
         "generation",
-        "audit_records"
+        "audit_records",
+        "cutover_at",
+        "reason"
       ],
       "title": "StorePayload",
       "type": "object"

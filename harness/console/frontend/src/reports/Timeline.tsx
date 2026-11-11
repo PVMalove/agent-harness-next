@@ -3,47 +3,7 @@
 import { useI18n } from "../i18n";
 import { useScreen } from "../screens/useScreen";
 import { parseTimeline } from "../ws/ledger";
-import type { BatchSummary } from "../ws/ledger";
 import { batchStartText, batchStatus, batchTimingText, renderStatus, roleFlowText } from "./format";
-
-export function BatchList({
-  batches,
-  selected,
-  onSelect,
-}: {
-  batches: readonly BatchSummary[];
-  selected: string | null;
-  onSelect: (batchId: string) => void;
-}) {
-  const { t, language } = useI18n();
-  if (!batches.length) return <p className="report-empty">{t("Ничего не найдено")}</p>;
-  return (
-    <div className="report-list" id="batch-list">
-      {batches.map((batch) => {
-        const status = batchStatus(batch);
-        return (
-          <button
-            key={batch.batch_id}
-            type="button"
-            className={`report-row${batch.batch_id === selected ? " on" : ""}`}
-            data-batch={batch.batch_id}
-            aria-pressed={batch.batch_id === selected}
-            onClick={() => onSelect(batch.batch_id)}
-          >
-            <span className="report-row-main">
-              <b>{t(batchStartText(batch))}</b>
-              <small>
-                {batch.ticket} · {batch.batch_id}
-              </small>
-            </span>
-            <span className={`report-status ${status.kind}`}>{renderStatus(status, language)}</span>
-            <span className="report-time">{batchTimingText(batch, language)}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 export function Timeline({ batchId }: { batchId: string }) {
   const { t, language } = useI18n();

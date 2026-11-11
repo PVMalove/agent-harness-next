@@ -40,6 +40,8 @@ class HomeContext:
     harness: HarnessInstall | None = None
     store: StoreFacts | None = None
     recent_sessions: tuple[RecentSession, ...] = ()
+    # The latest cached map of another commit when HEAD has none ("stale for HEAD").
+    stale_map: RepoMapView | None = None
 
 
 @dataclass(frozen=True)
@@ -79,17 +81,25 @@ class HarnessInstall:
     capabilities: int
     skills: int
     managed_files: int
+    # The installed capability names in lock order, and those `harness/CAPABILITIES.json` lacks.
+    capability_names: tuple[str, ...] = ()
+    uncatalogued: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class StoreFacts:
-    """The authority of the orchestration state and what can be read without the ledger lock or a
-    runtime call: `authority` is "file-ledger", "runtime-store" or "none"; an unread fact is None."""
+    """The authority of the orchestration state: `authority` is "file-ledger", "runtime-store" or
+    "none". The generation comes from the `ledger.json` pointer in both epochs; the audit count is
+    counted on disk in the file-ledger epoch and asked from the runtime (`state.validate`, never
+    starting it) in the runtime-store epoch; `cutover_at` comes from `AUTHORITY.json` and is None
+    before a cutover. An unread fact is None and `reason` says why (empty when all were read)."""
 
     authority: str
     schema: int | None
     generation: str | None
     audit_records: int | None
+    cutover_at: str | None = None
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,6 +144,9 @@ class RecentSession:
     branch: str
     created_at: str
     route: tuple[RouteStep, ...]
+    # The time of the batch's latest dispatch (its creation when it has none): the Home list shows
+    # the duration from `created_at` to it.
+    updated_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -152,6 +165,8 @@ class RepoMapCard:
     tier: str | None
     message: str
     head_map: HeadMap | None  # None: there is no map for HEAD
+    # The latest cached map of another commit, shown as stale for HEAD; None with a HEAD map.
+    stale_map: HeadMap | None = None
 
 
 @dataclass(frozen=True)
@@ -330,7 +345,14 @@ def _harness_from(value: object) -> HarnessInstall:
         capabilities=_int(found["capabilities"]),
         skills=_int(found["skills"]),
         managed_files=_int(found["managed_files"]),
+        capability_names=tuple(_str(item) for item in _list(found["capability_names"])),
+        uncatalogued=tuple(_str(item) for item in _list(found["uncatalogued"])),
     )
+
+
+def store_from_payload(value: object) -> StoreFacts:
+    """The `StoreFacts` of their JSON object; anything off the schema is a `ValueError`."""
+    return _store_from(value)
 
 
 def _store_from(value: object) -> StoreFacts:
@@ -340,6 +362,8 @@ def _store_from(value: object) -> StoreFacts:
         schema=_optional(found["schema"], _int),
         generation=_optional(found["generation"], _str),
         audit_records=_optional(found["audit_records"], _int),
+        cutover_at=_optional(found["cutover_at"], _str),
+        reason=_str(found["reason"]),
     )
 
 
@@ -373,6 +397,7 @@ def _session_from(value: object) -> RecentSession:
         branch=_str(found["branch"]),
         created_at=_str(found["created_at"]),
         route=tuple(_route_step_from(item) for item in _list(found["route"])),
+        updated_at=_str(found["updated_at"]),
     )
 
 
@@ -411,6 +436,7 @@ def _repo_map_from(value: object) -> RepoMapCard:
         tier=_optional(found["tier"], _str),
         message=_str(found["message"]),
         head_map=_optional(found["head_map"], _head_map_from),
+        stale_map=_optional(found["stale_map"], _head_map_from),
     )
 
 
@@ -441,21 +467,29 @@ def _memory_from(value: object) -> MemoryCard:
     )
 
 
-def _repo_map_card(data: DashboardData, view: RepoMapView | None) -> RepoMapCard:
+def _head_map(view: RepoMapView | None) -> HeadMap | None:
+    if view is None:
+        return None
+    return HeadMap(
+        origin=_clip(view.origin, ID_BYTES),
+        commit=_clip(view.commit, ID_BYTES),
+        files=len(view.files),
+        edges=len(view.edges),
+        estimated_tokens=view.estimated_tokens,
+    )
+
+
+def _repo_map_card(
+    data: DashboardData, view: RepoMapView | None, stale: RepoMapView | None = None
+) -> RepoMapCard:
     found = _TIER.search(data.repo_map_tier)
     tier = found.group(1) if found else (view.tier if view is not None else None)
-    head_map = (
-        HeadMap(
-            origin=_clip(view.origin, ID_BYTES),
-            commit=_clip(view.commit, ID_BYTES),
-            files=len(view.files),
-            edges=len(view.edges),
-            estimated_tokens=view.estimated_tokens,
-        )
-        if view is not None
-        else None
+    return RepoMapCard(
+        tier,
+        _clip(data.repo_map_tier, MESSAGE_BYTES),
+        _head_map(view),
+        _head_map(stale) if view is None else None,
     )
-    return RepoMapCard(tier, _clip(data.repo_map_tier, MESSAGE_BYTES), head_map)
 
 
 def _memory_card(data: DashboardData, status: MemoryStatus | None) -> MemoryCard:
@@ -557,7 +591,7 @@ def build_home_snapshot(data: DashboardData, context: HomeContext) -> HomeSnapsh
         harness_version=_clip(data.harness_version, ID_BYTES),
         drift=_clip(data.drift_state, ID_BYTES),
         active_batches=data.active_batches,
-        repo_map=_repo_map_card(data, context.repo_map),
+        repo_map=_repo_map_card(data, context.repo_map, context.stale_map),
         memory=_memory_card(data, context.memory),
         project=ProjectFacts(
             _clip(project.name, ID_BYTES),

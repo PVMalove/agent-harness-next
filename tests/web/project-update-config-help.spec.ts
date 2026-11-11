@@ -11,9 +11,11 @@
    - [ ] Selecting a project row updates the details; the copyable `harness console --web <path>` command.
    - [ ] «Путь к другому проекту» as a separate block under the list; checking it reads no Git or .harness.
    - [ ] «План установки» with the command and the confirmation; «Состав Harness» choice changes the plan.
-   - [ ] «Проверки» block (links to Diagnostics and Configuration).
-   - Deviations: the server never switches project (no «Открыть проект →»); the embedding scheme diagram
-     and the offline/online/fix check buttons are not reproduced (Diagnostics owns checks).
+   - [ ] «Детали проекта»: tracker line, name, path, branch · version, health counts, five check rows.
+   - [ ] «Схема внедрения» with Runtime and Health from the Home snapshot; «Состав Harness» with
+     descriptions and the footer; «Проверки» with counts, mode chips, fix links and the bar.
+   - Deviations: the server never switches project (no «Открыть проект →»); branch and version of
+     another candidate are not read; «Uncommitted files» is the local edits of managed files.
    #update-harness (README «Обновление · шаг 4»)
    - [ ] Versions installed → available with capabilities, skills, managed files.
    - [ ] Three modes: Обычное, С перезаписью управляемых файлов, С перезаписью выбранных seed-файлов.
@@ -22,7 +24,9 @@
    - [ ] «Что изменится» counts; «Версии» + «Что изменится» one block, «Режим» + «План» the second.
    - [ ] The plan changes command, warning and counters with the mode and the seed selection.
    - [ ] «Обновить» opens the confirmation; «Проверить заново» re-reads the snapshot.
-   - Deviations: no runtime-store migration strip (no TUI facts).
+   - [ ] Diff rows are one line each (status, path with ellipsis, kind word), the first file is open.
+   - [ ] «Миграция runtime-store» from the store facts and «Результат последнего запуска» from this
+     console's update jobs, with an in-panel honest «нет данных».
    #configuration (README «Настройки · шаг 11»)
    - [ ] KPI: project.json, orchestration.json validity, schema/orchestration installed, pending write.
    - [ ] Tabs Обзор / project.json / orchestration.json / История.
@@ -109,6 +113,11 @@ for (const width of [1440, 390]) {
     await page.locator('[data-path="/work/billing"]').click();
     await expect(page.locator("#open-project-command")).toHaveText("harness console --web /work/billing");
     await expect(page.locator("#open-project-install-command")).toHaveText("harness update /work/project --capability engineering-suite");
+    // As in the mockup the title carries only «Диагностика»; the plan is below the rollout scheme.
+    await expect(page.locator(".project-title .actions > *")).toHaveCount(1);
+    await page.locator("#open-project-plan").scrollIntoViewIfNeeded();
+    await expect(page.locator("#open-project-plan")).toBeInViewport();
+    await expect(page.locator("#open-project-detail .project-check")).toHaveCount(5);
     const before = sent.length;
     await page.getByLabel("Путь к локальному Git-проекту").fill("/srv/other");
     await expect(page.locator("#open-project-path-command")).toHaveText("harness console --web /srv/other");
@@ -121,8 +130,22 @@ for (const width of [1440, 390]) {
   test(`update harness at ${width} px: a cancelled confirmation starts nothing`, async ({ page }, info) => {
     const sent = await mockSocket(page);
     await open(page, "update-harness", width, "#update-versions");
-    await expect(page.locator("#update-changes")).toContainText("1 ✖ в конфликте (нужна перезапись)");
-    await expect(page.locator("#update-warning")).toContainText("⚠ Обычное обновление остановится: 1 конфликт");
+    await expect(page.locator("#update-changes .update-count-row.err")).toContainText("в конфликте (нужна перезапись)");
+    await expect(page.locator("#update-warning")).toContainText("Обычное обновление остановится: 1 конфликт");
+    // One compact line per diff entry (44 px); on a phone the mockup moves the kind under the path.
+    const rows = await page.locator("#update-diff .diff-file").evaluateAll(
+      (items, wide) =>
+        items.map((row) => {
+          const path = row.querySelector(".diff-path")!.getBoundingClientRect();
+          const kind = row.querySelector(".diff-kind")!.getBoundingClientRect();
+          return { height: row.getBoundingClientRect().height, sameLine: wide ? Math.abs(path.top - kind.top) < 4 : true };
+        }),
+      width > 720,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((row) => row.height > (width > 720 ? 44 : 72) || !row.sameLine)).toEqual([]);
+    await expect(page.locator("#update-migration .migration-step")).toHaveCount(4);
+    await expect(page.locator("#update-result .result-empty")).toContainText("Ещё не запускалось");
     await page.locator('#update-diff [data-path="AGENTS.md"]').click();
     await expect(page.locator("#update-diff-view")).toContainText("+Package rule.");
     expect(await noOverflow(page)).toBe(true);
@@ -142,7 +165,7 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
     await shot(page, info, `configuration-${width}`);
     await page.getByRole("tab", { name: "project.json" }).click();
-    await expect(page.getByLabel("project.json")).toHaveValue(/••••••/);
+    await expect(page.getByRole("textbox", { name: "project.json" })).toHaveValue(/••••••/);
     expect(await noOverflow(page)).toBe(true);
     await shot(page, info, `configuration-editor-${width}`);
     expect(starts(sent)).toEqual([]);
@@ -151,10 +174,20 @@ for (const width of [1440, 390]) {
   test(`help at ${width} px`, async ({ page }, info) => {
     await mockSocket(page);
     await open(page, "help", width, "#help-intro");
-    await expect(page.getByRole("tab")).toHaveCount(6);
-    await page.getByRole("tab", { name: "Разделы" }).click();
-    await expect(page.locator("#help-section table")).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveCount(5);
+    await expect(page.locator(".help-kpis")).toBeVisible();
+    // The section text is not squeezed into a narrow column (the reviewed 1440x900 defect).
+    const width_ = await page.locator("#help-intro").evaluate((element) => element.getBoundingClientRect().width);
+    expect(width_).toBeGreaterThan(width > 600 ? 600 : 300);
     expect(await noOverflow(page)).toBe(true);
+    for (const name of ["Экраны", "Команды", "Горячие клавиши", "Границы"]) {
+      await page.getByRole("tab", { name, exact: true }).click();
+      expect(await noOverflow(page)).toBe(true);
+    }
+    await page.getByRole("tab", { name: "Экраны", exact: true }).click();
+    await expect(page.locator(".help-section table")).toBeVisible();
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    expect(height).toBeLessThan(6000);
     await shot(page, info, `help-${width}`);
   });
 }

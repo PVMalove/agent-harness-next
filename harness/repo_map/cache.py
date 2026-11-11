@@ -67,6 +67,18 @@ def cache_key(
 
 def read_cache(cache_dir: Path, key: str, pinned: str) -> str | None:
     """Вернуть запись, соответствующую схеме, запрошенному ключу и коммиту."""
+    payload = read_cache_any_commit(cache_dir, key)
+    if payload is None:
+        return None
+    parsed: object = json.loads(payload)
+    if not isinstance(parsed, dict) or parsed.get("commit") != pinned:
+        return None
+    return payload
+
+
+def read_cache_any_commit(cache_dir: Path, key: str) -> str | None:
+    """Вернуть запись с проверенным конвертом (ключ, sha256) и схемой без сверки коммита: консоль
+    показывает такую карту как устаревшую для HEAD; авторитетным кэш от этого не становится."""
     try:
         envelope = json.loads((cache_dir / f"{key}.json").read_text(encoding="utf-8"))
         if not isinstance(envelope, dict):
@@ -82,9 +94,7 @@ def read_cache(cache_dir: Path, key: str, pinned: str) -> str | None:
         if hashlib.sha256(payload.encode("utf-8")).hexdigest() != digest:
             return None
         parsed: object = json.loads(payload)
-        if not isinstance(parsed, dict) or parsed.get("commit") != pinned:
-            return None
-        if validation_error(parsed) is not None:
+        if not isinstance(parsed, dict) or validation_error(parsed) is not None:
             return None
         return payload
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):

@@ -163,8 +163,9 @@ function Card({
       <div className="board-card-foot">
         <span>{t("критериев: {count}", { count: card.criteria.length })}</span>
         {link ? (
-          <a href={link} target="_blank" rel="noopener noreferrer">
+          <a className="board-open" href={link} target="_blank" rel="noopener noreferrer">
             {t("Открыть")}
+            <Icon name="external" />
           </a>
         ) : (
           <span>{t("нет данных")}</span>
@@ -241,27 +242,46 @@ export function BoardColumns({
   );
 }
 
-export type BoardStateKind = "nospecs" | "empty" | "loading" | "nosnapshot";
+/** The five columns without cards: the board's frame drawn at once, before its snapshot. */
+export function BoardFrame() {
+  const { t } = useI18n();
+  const labels = columnLabels(t);
+  return (
+    <div id="board-columns" data-board-frame="">
+      <div className="board-columns">
+        {BOARD_COLUMNS.map((id) => (
+          <section className="board-col" data-board-col={id} key={id}>
+            <header>
+              <div>
+                <b>{labels[id].name}</b>
+                <small>{labels[id].hint}</small>
+              </div>
+              <span className="board-col-count">—</span>
+            </header>
+            <div className="board-cards" />
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export type BoardStateKind = "nospecs" | "empty" | "nosnapshot";
 
 export function BoardStatePanel({ kind, onRefresh }: { kind: BoardStateKind; onRefresh: () => void }) {
   const { t, section } = useI18n();
   const [title, text] =
     kind === "nospecs"
       ? [t("Спек пока нет"), t("Спека появляется после /to-spec и /to-tickets. Доска покажет её после обновления.")]
-      : kind === "loading"
-        ? [
-            t("Обновление доски"),
-            t("Читаем трекер и статусы. Показан последний подтверждённый снимок; карточки временно недоступны."),
-          ]
-        : kind === "nosnapshot"
-          ? [t("Снимка доски ещё нет"), t("Доска появится, когда трекер снова ответит.")]
-          : [t("На доске нет задач"), t("В выбранной спеке пока нет тикетов. Разбейте спеку через /to-tickets.")];
+      : kind === "nosnapshot"
+        ? [t("Снимка доски ещё нет"), t("Доска появится, когда трекер снова ответит.")]
+        : [t("На доске нет задач"), t("В выбранной спеке пока нет тикетов. Разбейте спеку через /to-tickets.")];
   return (
     <section className="panel board-state" data-board-state={kind}>
       <div className="board-state-icon">
-        <Icon name={kind === "loading" ? "refresh" : "board"} />
+        <Icon name="board" />
       </div>
-      <span className="eyebrow">{kind === "loading" ? t("ДОСКА · LOADING") : t("ДОСКА · EMPTY")}</span>
+      <span className="eyebrow">{t("ДОСКА · EMPTY")}</span>
       <h2>{title}</h2>
       <p>{text}</p>
       <div className="actions">
@@ -276,8 +296,8 @@ export function BoardStatePanel({ kind, onRefresh }: { kind: BoardStateKind; onR
   );
 }
 
-/** Over the board while a status change runs and its new snapshot is read: the columns stay
-    readable under it, it never takes the focus, and reduced motion stops the mascot's jump. */
+/** Over the board while its snapshot is read (the first read, a refresh or a status change): the
+    frame stays readable under it, it never takes the focus, and reduced motion stops the jump. */
 export function BoardUpdating() {
   const { t } = useI18n();
   return (
@@ -289,3 +309,9 @@ export function BoardUpdating() {
     </div>
   );
 }
+
+/** The spec number typed into the spec row, without its `#`; null for anything else. */
+export const specNumber = (text: string): number | null => {
+  const match = /^#?\s*(\d+)$/.exec(text.trim());
+  return match ? Number(match[1]) : null;
+};

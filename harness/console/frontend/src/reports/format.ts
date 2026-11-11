@@ -28,6 +28,13 @@ export interface Status {
 export const renderStatus = (status: Status, language: Language): string =>
   `${SYMBOLS[status.kind]} ${language === "en" ? status.en : status.ru}`;
 
+/** The status words alone, as the mockup's report rows show them; the tone class carries the kind. */
+export const statusWords = (status: Status, language: Language): string => (language === "en" ? status.en : status.ru);
+
+/** The mockup's tone class of a status kind: passed, attention or blocked. */
+export const kindTone = (kind: StatusKind): "passed" | "attention" | "blocked" =>
+  kind === "accepted" ? "passed" : kind === "error" ? "blocked" : "attention";
+
 const OUTCOMES: Readonly<Record<string, [StatusKind, string, string]>> = {
   completed: ["accepted", "завершено", "completed"],
   blocked: ["warning", "заблокировано", "blocked"],

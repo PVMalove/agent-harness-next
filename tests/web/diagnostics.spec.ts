@@ -8,7 +8,7 @@
    - [x] «Сводка здоровья»: four counters and the health strip from the report summary, the
          Офлайн/Онлайн switch, the checked count and the CLI line.
    - [x] «Проверки»: chips Все/Проблемы/Пропущено/Пройдено with the summary counts, search, rows
-         sorted fail → warn → skip → ok with status icon, id, group · message and pill.
+         sorted fail → warn → skip → ok with status icon, check title, group · message and status word.
    - [x] Master-detail of equal height; the detail shows pill, group, id, message, «Как исправить:»,
          the manual command with «Копировать команду», the source line and the skip callout.
    - [x] «Экспорт» saves JSON of the visible checks with the filter (Blob, no CSP change).
@@ -172,5 +172,21 @@ for (const width of [1440, 390]) {
     await open(page, width);
     await expect(page.locator(".command-panel [data-command]")).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width > 600) {
+      // The check list runs down to the window's bottom edge (more than the former three rows),
+      // and the detail keeps its action in view while its body scrolls inside the panel.
+      const list = await page.locator("#diag-list").evaluate((box) => box.getBoundingClientRect());
+      expect(list.height).toBeGreaterThanOrEqual(240);
+      expect(list.bottom).toBeLessThanOrEqual(900);
+      const action = await page.locator("#diag-detail .diag-action").evaluate((box) => {
+        const panel = box.closest(".diag-detail-panel")!.getBoundingClientRect();
+        const own = box.getBoundingClientRect();
+        return own.bottom <= panel.bottom + 1 && own.top >= panel.top;
+      });
+      expect(action).toBe(true);
+      const body = page.locator("#diag-detail .diag-detail-body");
+      await expect(body).toHaveAttribute("role", "region");
+      await expect(body).toHaveAttribute("tabindex", "0");
+    }
   });
 }

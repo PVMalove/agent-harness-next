@@ -1,4 +1,4 @@
-/* Mockup parity of the shell and the ten implemented pages: the DOM structure of each page (the
+/* Mockup parity of the shell and the implemented pages: the DOM structure of each page (the
    mockup's blocks, tabs, filters and tiles in its order) at 1440 and 390 px without horizontal
    overflow, and the connection states on every page. DOM assertions only; no screenshot
    comparison (ADR 0029). The owner accepts the look by hand against the mockup. */
@@ -23,7 +23,9 @@ const PAGED: Readonly<Record<string, Body>> = {
   "diagnostics.snapshot": read("diagnostics-report.json"),
   "harness.maintenance": read("harness-maintenance.json"),
   "repo_map.snapshot": read("repo-map.json"),
+  "configuration.snapshot": read("configuration.json"),
 };
+const HELP = read("help-ru.json");
 const OVERVIEW = read("harness-overview.json");
 
 const send = (ws: WebSocketRoute, body: Body) => ws.send(JSON.stringify({ v: 1, ok: true, ...body }));
@@ -37,7 +39,10 @@ async function mockSocket(page: Page, home: (ws: WebSocketRoute, id: unknown) =>
       const id = request.id;
       const type = String(request.type);
       if (type === "home.snapshot") home(ws, id);
-      else if (type in PAGED) {
+      else if (type === "help.snapshot") {
+        const text = JSON.stringify(HELP);
+        send(ws, { id, type, snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
+      } else if (type in PAGED) {
         const text = JSON.stringify(PAGED[type]);
         send(ws, { id, type, snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
       } else if (type === "harness.overview") send(ws, { id, type, cached: false, age_seconds: 0, ...OVERVIEW });
@@ -83,17 +88,34 @@ const PAGES: PageSpec[] = [
     blocks: ["#harness-kpis", "#harness-install", "#harness-runtime", "#harness-adapters", "#harness-maintenance"],
     tabs: ["Обзор", "Runtime", "Адаптеры", "Контейнеры", "Команды"],
   },
-  { route: "repo-map", title: "Repo Map", blocks: [".repo-kpis"], tabs: ["Обзор", "Символы", "Связи", "Настройки"] },
+  {
+    route: "repo-map",
+    title: "Repo Map",
+    blocks: [".repo-kpis", ".repo-tabbar", ".repo-index", ".repo-coverage", ".repo-files-panel"],
+    tabs: ["Обзор", "Символы", "Связи", "Настройки"],
+  },
+  {
+    route: "configuration",
+    title: "Настройки",
+    blocks: ["#configuration-kpi", ".settings-tabbar", "#configuration-files", "#configuration-policy", ".settings-note", "#configuration-adapters"],
+    tabs: ["Обзор", "Настройки", "project.json", "orchestration.json", "История"],
+  },
+  {
+    route: "help",
+    title: "Справка",
+    blocks: [".help-kpis", ".help-tabbar", "#help-intro", ".help-quick", "#help-faq"],
+    tabs: ["Начало", "Экраны", "Команды", "Горячие клавиши", "Границы"],
+  },
   {
     route: "agent-activity",
     title: "Ход работы",
-    blocks: ["#work-summary", "#work-kpis", ".work-sources", ".work-sessions", "#work-route", ".work-events-panel"],
+    blocks: ["#work-summary", "#work-kpis", ".work-sources", ".work-sessions", "#work-route", "#work-events-panel"],
     tabs: ["Обзор", "Таймлайн", "Статистика"],
   },
   {
     route: "orchestration",
     title: "Оркестрация",
-    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-scheme", "#orch-batch-cards", "#orch-dispatch", "#qa-lane", "#orch-tickets", "#ledger-lock"],
+    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-scheme", "#orch-batch-cards", "#orch-dispatch", "#qa-lane", "#orch-tickets", "#batch-history"],
     tabs: ["Схема", "Поток", "Качество", "Runtime", "Гейты"],
   },
   {
@@ -105,7 +127,7 @@ const PAGES: PageSpec[] = [
   {
     route: "publish",
     title: "Публикация",
-    blocks: ["#publish-batch", "#publish-kpis", "#publish-decision"],
+    blocks: ["#publish-kpis", "#publish-candidate", "#publish-batch", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
     tabs: ["Обзор", "Preflight", "PR / MR", "Evidence"],
   },
   { route: "recovery?batch=b-887", title: "Восстановление", blocks: ["#recovery-note", "#recovery-summary", "#recovery-history"] },
@@ -173,7 +195,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".diag-detail-panel .diag-rationale")).toHaveText(/^Без записанной политики хуков/);
     // An id the kernel catalog does not describe keeps the no-data state.
     await page.locator('#diag-list [data-check="files.managed"]').click();
-    await expect(page.locator(".diag-detail-panel .diag-facts .no-data")).toHaveText("нет данных");
+    await expect(page.locator(".diag-detail-panel .diag-facts .no-data")).toHaveText("нет данных · обоснование для проверки не записано");
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "harness", width);
@@ -183,8 +205,8 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "repo-map", width);
-    const coverage = page.locator(".repo-index", { has: page.getByRole("heading", { name: "Покрытие" }) });
-    await expect(coverage.locator(".repo-index-row", { hasText: "excluded" }).locator("b")).toHaveText("2");
+    const coverage = page.locator(".repo-coverage");
+    await expect(coverage.locator(".orch-legend [data-kind='excluded'] b")).toHaveText("2");
     await page.getByRole("tab", { name: "Символы" }).click();
     await expect(page.locator("#repo-kind-chips .chip")).toHaveText(["Все 3", "Functions 2", "Modules 1"]);
     await expect(page.locator(".repo-symbol-row .repo-kind").first()).toHaveText("function");
@@ -197,13 +219,13 @@ for (const width of [1440, 390]) {
 
     await open(page, "reports", width);
     await page.getByRole("tab", { name: "Evidence" }).click();
-    await expect(page.locator("#reports-evidence .report-evidence-row")).toHaveCount(2);
+    await expect(page.locator("#reports-evidence .report-evidence-row")).toHaveCount(3);
     await page.getByRole("tab", { name: "Готовность" }).click();
-    await expect(page.locator("#reports-readiness [data-verdict]")).toHaveText("blocked");
+    await expect(page.locator("#reports-readiness [data-verdict]")).toHaveText("Заблокировано");
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "publish", width);
-    await expect(page.locator("#publish-verdict")).toHaveText("blocked");
+    await expect(page.locator("#publish-verdict")).toHaveText("Заблокировано");
     expect(await noOverflow(page)).toBe(true);
   });
 }

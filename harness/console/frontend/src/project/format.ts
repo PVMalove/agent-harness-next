@@ -21,6 +21,40 @@ export const ACTION_WORDS: Readonly<Record<SetupAction, string>> = {
   adopt: "внедрение",
 };
 
+/** Title, one-line description and footer of each catalog capability, as
+    kernel/project_target.py words them (`_LABELS` split at « — », `_DETAILS`); the Russian texts
+    are translation keys. A capability of harness/CAPABILITIES.json without an entry fails a test. */
+export const CAPABILITY_TEXT: Readonly<Record<string, readonly [string, string, string]>> = {
+  "project-foundation": [
+    "Основа",
+    "Небольшой набор инструкций и навыков",
+    "Добавляет инструкции и базовые навыки. Не создаёт project.json и orchestration.json; подходит, когда нужен только общий каркас.",
+  ],
+  "mattpocock-suite": [
+    "Upstream",
+    "Полный закреплённый набор навыков",
+    "Полный закреплённый upstream-набор навыков. Не содержит workflow project.json; подходит, когда нужны только навыки.",
+  ],
+  "engineering-suite": [
+    "Workflow",
+    "Задачи, QA и ручная настройка project.json",
+    "Workflow задач, QA и code-review; создаёт project.json. Нужен для мастера project.json; без ролей оркестрации.",
+  ],
+  "backend-orchestration": [
+    "Backend",
+    "Workflow и роли; добавляет orchestration.json",
+    "Всё из workflow плюс роли и координатор; добавляет orchestration.json. Выбирайте для backend-проекта с автоматизацией этапов.",
+  ],
+};
+
+/** The local check of a typed path: no Git, no .harness, nothing is sent. */
+export function pathStatus(path: string): string {
+  const typed = path.trim();
+  if (!typed) return "Введите путь к проекту";
+  if (!typed.startsWith("/") && !typed.startsWith("~")) return "Нужен абсолютный путь";
+  return "Путь выглядит корректно · откройте его своей командой";
+}
+
 /** The capability the TUI preselects. */
 export const DEFAULT_CAPABILITY = "engineering-suite";
 

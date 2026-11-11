@@ -112,8 +112,9 @@ LOCK: JsonObject = {
 
 
 def ledger() -> LedgerView:
-    """Two batches: an active one with a developer, a review and a failed QA report and a stage
-    still at work, and a completed one whose PR was opened."""
+    """Three batches: an active one with a developer, a review and a failed QA report and a stage
+    still at work, a second active one whose architect is at work, and a completed one whose PR
+    was opened."""
     reports = [
         ReportEntry(
             "d-qa",
@@ -166,13 +167,17 @@ def ledger() -> LedgerView:
         "d-qa": {"role": "qa", "created_at": "2026-11-08T11:15:00+00:00"},
         "d-wip": {"role": "developer", "created_at": "2026-11-08T11:30:00+00:00"},
         "d-old": {"role": "developer", "created_at": "2026-11-01T08:10:00+00:00"},
+        "d-arch-888": {"role": "architect", "created_at": "2026-11-08T08:05:00+00:00"},
     }
+    # The batch of a dispatch without a report; the reported ones take theirs from the report.
+    open_batches = {"d-wip": ("b-887", "#887"), "d-arch-888": ("b-888", "#888")}
     states = {
         "d-dev": "reported",
         "d-rev": "reported",
         "d-qa": "reported",
         "d-wip": "working",
         "d-old": "reported",
+        "d-arch-888": "working",
     }
     batches = [
         BatchSummary(
@@ -181,6 +186,14 @@ def ledger() -> LedgerView:
             "active",
             "2026-11-08T09:00:00+00:00",
             branch="feature/issue-887",
+            pr_state="missing",
+        ),
+        BatchSummary(
+            "b-888",
+            "#888",
+            "active",
+            "2026-11-08T08:00:00+00:00",
+            branch="feature/issue-888",
             pr_state="missing",
         ),
         BatchSummary(
@@ -215,6 +228,14 @@ def ledger() -> LedgerView:
                     "approved_at": "2026-11-08T12:10:00+00:00",
                     "note": "QA упал",
                 }
+            ],
+        },
+        "b-888": {
+            "batch_id": "b-888",
+            "ticket": "#888",
+            "state": "active",
+            "dispatches": [
+                {"dispatch_id": "d-arch-888", "role": "architect", "state": "working"}
             ],
         },
         "b-886": {
@@ -255,8 +276,8 @@ def ledger() -> LedgerView:
         view.stages.append(
             StageEntry(
                 dispatch_id,
-                report.batch_id if report else "b-887",
-                report.ticket if report else "#887",
+                report.batch_id if report else open_batches[dispatch_id][0],
+                report.ticket if report else open_batches[dispatch_id][1],
                 str(record["role"]),
                 states[dispatch_id],
                 report.reported_at if report else str(record["created_at"]),
@@ -549,6 +570,7 @@ def test_the_ledger_fixtures_decode_with_the_tui_decoders() -> None:
         "d-wip",
         "d-rev",
         "d-dev",
+        "d-arch-888",
         "d-old",
     ]
     assert reports.reports_kpi is not None
@@ -558,7 +580,7 @@ def test_the_ledger_fixtures_decode_with_the_tui_decoders() -> None:
     orchestration = _committed("orch-snapshot.json")
     assert isinstance(orchestration, dict)
     assert ledger_from_payload(orchestration["ledger"]).batches == reports.batches
-    assert pipeline_kpi_from_payload(orchestration["kpi"]).wip == 1
+    assert pipeline_kpi_from_payload(orchestration["kpi"]).wip == 2
     assert pipeline_analytics_from_payload(orchestration["analytics"]).flow
     assert lock_text(orchestration["lock"]["lock"]).startswith("Lock ledger занят")
 

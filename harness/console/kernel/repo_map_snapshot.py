@@ -23,6 +23,7 @@ _FIELDS = frozenset(
     {
         "head",
         "map",
+        "stale_map",
         "tier",
         "memory",
         "parsers",
@@ -62,6 +63,8 @@ class RepoMapFacts:
     parsers: ParserStatus | None
     language_files: dict[str, int]
     excluded: int | None = None
+    # The latest cached map of another commit when HEAD has none: shown "stale for HEAD".
+    stale: RepoMapView | None = None
 
     def to_payload(self) -> dict[str, object]:
         """The JSON object of a `repo_map.snapshot` reply."""
@@ -69,6 +72,7 @@ class RepoMapFacts:
         return {
             "head": self.head,
             "map": None if self.view is None else self.view.payload,
+            "stale_map": None if self.stale is None else self.stale.payload,
             "tier": {
                 "tier": self.tier.tier,
                 "editable": self.tier.editable,
@@ -111,6 +115,12 @@ class RepoMapFacts:
             if isinstance(parsed, str):
                 raise ValueError(parsed)
             view = parsed
+        stale: RepoMapView | None = None
+        if found["stale_map"] is not None:
+            parsed_stale = parse_map(found["stale_map"], origin="кэш")
+            if isinstance(parsed_stale, str):
+                raise ValueError(parsed_stale)
+            stale = parsed_stale
         files = _object(found["language_files"], None)
         excluded = _derived(view, found["symbol_kinds"], found["coverage"])
         return cls(
@@ -121,6 +131,7 @@ class RepoMapFacts:
             parsers=_optional(found["parsers"], _parsers),
             language_files={key: _int(count) for key, count in files.items()},
             excluded=excluded,
+            stale=stale,
         )
 
 

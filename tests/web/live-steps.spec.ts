@@ -10,7 +10,7 @@
    - [ ] Панель «Источники шагов»: Claude Code с пилюлей «структура доступна» (mint) и Codex
          с пилюлей «структура недоступна» (violet), две колонки на 1440 и одна на 390.
    - [ ] Панель «Сессии»: строки .work-row с тикетом, dispatch, ролью, batch, состоянием и числом
-         шагов; «Все сессии» и выбор роли в .work-filters; выбранная строка подсвечена (.on).
+         шагов; статусы, тикет и роль в одной строке .work-filters, 5 последних сессий и «Показать все»; выбранная строка подсвечена (.on).
    - [ ] Список «Шаги и события» вместо схемы маршрута: время, роль, текст и детали в .work-event;
          строки оркестрации подписаны «Оркестрация», Codex-строки несут «структура недоступна».
    - [ ] В списке нет thinking, входов инструментов и сырого JSON.
@@ -56,7 +56,7 @@ async function open(page: Page, width: number) {
   await page.clock.setFixedTime(new Date("2026-11-06T10:35:00Z"));
   await page.goto(`${base()}/#/agent-activity`);
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
-  await expect(page.locator(".work-event")).toHaveCount(10);
+  await expect(page.locator("#work-steps .work-event")).toHaveCount(10);
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
@@ -71,12 +71,12 @@ test("new steps arrive without a reload and the filters narrow the list", async 
   await expect(texts(page).last()).toHaveText("Тесты сервера прошли");
   expect(navigations).toEqual([]);
   expect(feed.subscriptions).toHaveLength(1);
-  await expect(page.locator(".work-events")).not.toContainText("{");
+  await expect(page.locator("#work-steps")).not.toContainText("{");
 
   await page.locator('[data-dispatch="dispatch-rev"]').click();
   await expect(texts(page)).toHaveText(["Проверяю изменения в request_router.py", "exec"]);
-  await expect(page.locator(".work-events .orch-pill")).toHaveText(["структура недоступна", "структура недоступна"]);
-  await page.getByRole("button", { name: "Все сессии" }).click();
+  await expect(page.locator("#work-steps .orch-pill")).toHaveText(["структура недоступна", "структура недоступна"]);
+  await page.locator('[data-dispatch="dispatch-rev"]').click();
   await page.getByLabel("Фильтр по роли").selectOption("architect");
   await expect(texts(page)).toHaveText(["Dispatch dispatch-arch: working → reported", "Гейт dispatch-arch: accept"]);
 });
@@ -86,15 +86,21 @@ for (const width of [1440, 390]) {
     await mockSocket(page);
     await open(page, width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    // The 5 latest of 7 sessions and one-line step rows inside their own scroll region.
+    await expect(page.locator(".work-sessions .work-row")).toHaveCount(5);
+    const heights = await page.locator("#work-steps .work-event").evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
+    expect(heights.filter((height) => height > (width > 720 ? 32 : 52))).toEqual([]);
+    const panels = await page.locator(".work-page .panel").evaluateAll((items) => items.filter((item) => item.scrollWidth > item.clientWidth + 1).length);
+    expect(panels).toBe(0);
   });
 
   test(`agent activity filtered by dispatch at ${width} px`, async ({ page }) => {
     await mockSocket(page);
     await open(page, width);
     await page.locator('[data-dispatch="dispatch-dev"]').click();
-    await expect(page.locator(".work-event")).toHaveCount(4);
-    await page.locator(".work-events-panel").scrollIntoViewIfNeeded();
-    await expect(page.locator(".work-event").first()).toBeVisible();
+    await expect(page.locator("#work-steps .work-event")).toHaveCount(4);
+    await page.locator("#work-steps").scrollIntoViewIfNeeded();
+    await expect(page.locator("#work-steps .work-event").first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }

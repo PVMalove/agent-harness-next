@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { menuCounter, preRelease } from "../../harness/console/frontend/src/AppShell";
+import { NAV_ITEMS } from "../../harness/console/frontend/src/navigation";
 import type { HomeSnapshot } from "../../harness/console/frontend/src/ws/types";
 import fixture from "./fixtures/home-snapshot.json";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
@@ -39,7 +40,7 @@ describe("the shell header and menu counters", () => {
       ...(fixture as unknown as HomeSnapshot),
       health: { ok: 1, warn: 1, fail: 2, skipped: 0 },
       drift_counts: { total: 3, added: 1, missing: 0, package_changed: 2, local_changed: 0, conflict: 0, retired: 0 },
-      repo_map: { tier: "full", message: "", head_map: null },
+      repo_map: { tier: "full", message: "", head_map: null, stale_map: null },
     };
     expect(menuCounter("diagnostics", snapshot)).toEqual({ text: "2", css: "err" });
     expect(menuCounter("update-harness", snapshot)).toEqual({ text: "3", css: "warn" });
@@ -54,6 +55,18 @@ describe("the shell header and menu counters", () => {
 describe("the shell", () => {
   beforeEach(() => {
     window.location.hash = "#/";
+  });
+
+  test("the header branch carries the branch icon, not a text glyph", () => {
+    FakeSocket.reset();
+    renderApp();
+    const socket = FakeSocket.last;
+    act(() => socket.open());
+    act(() => socket.reply({ v: 1, id: socket.request("home.snapshot").id, type: "home.snapshot", ok: true,
+      cached: false, age_seconds: 0, snapshot: fixture }));
+    const branch = document.querySelector("#branch") as HTMLElement;
+    expect(branch.querySelector("svg")?.getAttribute("data-icon")).toBe("branch");
+    expect(branch.textContent).toBe("feature/issue-7");
   });
 
   test("lists 13 sections in three groups and marks the current one", () => {
@@ -112,7 +125,7 @@ describe("the shell", () => {
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Harness");
     // The command panel lives in the "Команды" tab, mounted even while another tab is shown.
-    expect(screen.getByRole("heading", { level: 2, name: "Команды", hidden: true })).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 2, name: "Команды", hidden: true }).length).toBeGreaterThan(0);
     expect(document.querySelector(".command-panel")?.closest("main")).toBeTruthy();
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
@@ -194,11 +207,33 @@ describe("the shell", () => {
 
   test("the language switch translates the shell in place", () => {
     renderApp();
-    act(() => fireEvent.click(screen.getByRole("button", { name: "Английский язык" })));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     const nav = screen.getByRole("navigation", { name: "Console sections" });
     expect(within(nav).getByRole("link", { name: "Home" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("button", { name: "English language" }).getAttribute("aria-pressed")).toBe(
+    expect(screen.getByRole("button", { name: "EN · English language" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
+  });
+
+  test("a skip link comes first and moves focus to the page without touching the route", async () => {
+    renderApp();
+    window.location.hash = "#/diagnostics";
+    const skip = screen.getByRole("link", { name: "Перейти к содержимому" });
+    const focusable = document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]");
+    expect(focusable[0]).toBe(skip);
+    await act(async () => fireEvent.click(skip));
+    expect(document.activeElement).toBe(document.getElementById("content"));
+    expect(window.location.hash).toBe("#/diagnostics");
+  });
+
+  test("every page title equals its menu item (Home keeps the mockup's «Состояние харнесса»)", () => {
+    for (const item of NAV_ITEMS.filter((entry) => entry.route !== "")) {
+      window.location.hash = `#/${item.route}`;
+      const { unmount } = renderApp();
+      const link = within(navigation()).getAllByRole("link").find((node) => node.getAttribute("href") === `#/${item.route}`);
+      const heading = document.querySelector("main#content h1");
+      expect(heading?.textContent?.trim(), item.route).toBe(link?.textContent?.trim());
+      unmount();
+    }
   });
 });

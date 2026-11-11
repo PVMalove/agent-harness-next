@@ -3,7 +3,8 @@
 The SPA in `harness/console/frontend` reads the same Russian-to-English strings as the TUI:
 `render()` turns `EN`, `FACT_LABELS_EN`, `TAB_LABELS_EN`, the section labels, the Russian texts
 of the cleanup and worktree reasons, the Russian labels of the health check groups and the rationale of
-each health check (`check_rationale.RATIONALES`) into one JSON document, and the
+each health check (`check_rationale.RATIONALES`), the check titles (`check_rationale.TITLES`) and
+the state labels (`i18n_strings.STATE_LABELS`) into one JSON document, and the
 committed `catalog.json` must equal it. Regenerate with `python -m harness.console.kernel.web_catalog`."""
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from pathlib import Path
 from ...health.render import GROUP_LABELS_RU
 from . import check_rationale
 from .i18n import sections
-from .i18n_strings import EN, FACT_LABELS_EN, TAB_LABELS_EN
+from .i18n_strings import EN, FACT_LABELS_EN, TAB_LABELS_EN, state_labels
 from .maintenance import REASONS_RU
 
 CATALOG_PATH = (
@@ -33,6 +34,8 @@ def render() -> str:
         "groups": GROUP_LABELS_RU,
         "tabs": TAB_LABELS_EN,
         "rationales": check_rationale.catalog(),
+        "titles": check_rationale.titles(),
+        "states": state_labels(),
     }
     return json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 

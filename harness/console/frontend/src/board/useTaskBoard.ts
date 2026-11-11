@@ -30,7 +30,8 @@ const storeSpec = (spec: string) => {
 
 export interface BoardSpecsState {
   specs: Screen<BoardSpecs>;
-  /** The selected spec: the remembered one while the tracker lists it, else the first. */
+  /** The selected spec: the remembered one while the tracker lists it, else the first. Before
+      the specs arrive it is the remembered one, so its board is asked in parallel with them. */
   spec: string | null;
   choose(spec: string): void;
 }
@@ -39,7 +40,7 @@ export function useBoardSpecs(): BoardSpecsState {
   const specs = useScreen({ type: "task_board.specs" }, parseSpecs);
   const [chosen, setChosen] = useState<string | null>(readSpec);
   const list = specs.data?.specs ?? [];
-  const spec = list.find((item) => item.id === chosen)?.id ?? list[0]?.id ?? null;
+  const spec = specs.data ? (list.find((item) => item.id === chosen)?.id ?? list[0]?.id ?? null) : chosen;
   const choose = useCallback((next: string) => {
     storeSpec(next);
     setChosen(next);
@@ -64,7 +65,7 @@ export function touchesBoard(board: TaskBoard, events: readonly unknown[]): bool
 
 export interface BoardState {
   board: Screen<TaskBoard>;
-  /** The refreshing panel shows on the first read and after a manual refresh only. */
+  /** The first read or a manual refresh: the frame stays, the cards wait for the snapshot. */
   refreshing: boolean;
   /** A `reload` is under way: the board stays on screen under the updating overlay. */
   updating: boolean;

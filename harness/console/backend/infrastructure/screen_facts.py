@@ -8,8 +8,10 @@ updates or starts a worker."""
 from __future__ import annotations
 
 import argparse
+import shutil
 import threading
-from collections.abc import Sequence
+import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
@@ -20,10 +22,12 @@ from ....storage import storage_root
 from ...kernel import data as console_data
 from ...kernel.batch_history import History, load_history
 from ...kernel.configuration_snapshot import collect_configuration
+from ...kernel.configuration_wizard import wizard_parameters
 from ...kernel.container_inventory import configured_engine, container_inventory
 from ...kernel.container_route import Authored, read_authored
 from ...kernel.coordinator_api import ApiResult, CoordinatorApi
 from ...kernel.harness_facts import harness_state
+from ...kernel.home_snapshot import StoreFacts
 from ...kernel.maintenance import load_maintenance
 from ...kernel.open_project_snapshot import Candidate, OpenProjectFacts
 from ...kernel.project_target import (
@@ -33,14 +37,17 @@ from ...kernel.project_target import (
     installation_blockers,
 )
 from ...kernel.pr_timings import load_reports_view
-from ...kernel.repo_map import cached_map, head_commit
+from ...kernel.repo_map import cached_map, head_commit, latest_cached_map
 from ...kernel.repo_map_coverage import excluded_files
 from ...kernel.repo_map_settings import language_files, memory_status, tier_setting
 from ...kernel.repo_map_snapshot import RepoMapFacts
 from ...kernel.reports import LedgerView, load_ledger_view
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.update_harness_snapshot import UpdateHarnessFacts
-from .home_facts import store_facts
+from ....health.project_tracker import ProjectTracker, resolve_project_tracker
+from ....orchestration.ledger.lifecycle import STORE_LEDGER_VERSION
+from ....orchestration.runtime_client import RuntimeClient, RuntimeClientError
+from .home_facts import RUNTIME_DOWN, RUNTIME_TIMEOUT_SECONDS, runtime_reason, store_facts
 
 
 def collect_ledger(repo: Path) -> LedgerView:
@@ -124,6 +131,99 @@ def container_facts(repo: Path) -> dict[str, object]:
     return container_inventory(configured_engine(storage_root(repo))).to_payload()
 
 
+RevisionRead = Callable[[], "int | None"]
+
+
+def _read_revision(repo: Path) -> RevisionRead:
+    """One empty `state.read` of the project's running runtime (2 s): its store revision. The
+    runtime is never started; no snapshot is opened."""
+
+    def read() -> int | None:
+        reply = RuntimeClient(repo).call(
+            "state.read",
+            operation_id=f"console-state.read-{uuid.uuid4().hex}",
+            payload={"collections": [], "paths": []},
+            timeout_seconds=RUNTIME_TIMEOUT_SECONDS,
+        )
+        return reply.revision
+
+    return read
+
+
+def runtime_status(repo: Path, *, read: RevisionRead | None = None) -> dict[str, object]:
+    """Whether the runtime answers, with its store revision, or why it does not (`read`
+    replaces the probe in tests)."""
+    try:
+        revision = (read or _read_revision(repo))()
+    except (RuntimeClientError, OSError, ValueError) as error:
+        reason = runtime_reason(error)
+    else:
+        return {"state": "online", "revision": revision, "reason": ""}
+    return {"state": "offline", "revision": None, "reason": reason}
+
+
+def _runtime_after(repo: Path, store: StoreFacts) -> dict[str, object]:
+    """The runtime status after the store facts: a runtime-store probe that got no answer already
+    waited its 2 s, so the status reuses that reason instead of a second probe; a cold snapshot
+    waits for one probe at most."""
+    if store.authority == "runtime-store" and store.reason.startswith(RUNTIME_DOWN.split("{")[0]):
+        return {"state": "offline", "revision": None, "reason": store.reason}
+    return runtime_status(repo)
+
+
+# The runtime adapters of the Harness page: (name, adapter file marker, CLI on PATH).
+_RUNTIMES = (("Claude Code", "claude", "claude"), ("Codex", "codex", "codex"))
+_TRACKERS = {"github": ("GitHub", "gh"), "gitlab": ("GitLab", "glab"), "local": ("Local", None)}
+
+
+def _runtime_adapter_status(files: list[dict[str, object]]) -> str:
+    if not files:
+        return "missing"
+    return "current" if all(item.get("status") == "current" for item in files) else "outdated"
+
+
+def integration_facts(
+    adapters: list[dict[str, object]] | None,
+    tracker: ProjectTracker,
+    *,
+    which: Callable[[str], str | None] = shutil.which,
+) -> list[dict[str, object]]:
+    """Claude Code and Codex (their adapter files of the installed capabilities and the CLI on
+    PATH) and the project tracker (its CLI on PATH); nothing is run and nothing goes online."""
+    found: list[dict[str, object]] = []
+    for name, marker, cli in _RUNTIMES:
+        files = [item for item in adapters or [] if marker in str(item.get("path", "")).lower()]
+        found.append(
+            {
+                "name": name,
+                "kind": "runtime",
+                "status": "unknown" if adapters is None else _runtime_adapter_status(files),
+                "cli": which(cli) is not None,
+                "detail": ", ".join(str(item.get("path", "")) for item in files),
+            }
+        )
+    title, tool = _TRACKERS.get(tracker.type, (tracker.type, None))
+    present = None if tool is None else which(tool) is not None
+    found.append(
+        {
+            "name": title,
+            "kind": "tracker",
+            "status": "missing" if present is False else "current",
+            "cli": present,
+            "detail": "/".join(part for part in (tracker.host, tracker.project) if part),
+        }
+    )
+    return found
+
+
+def _integrations(repo: Path, adapters: list[dict[str, object]] | None) -> list[dict[str, object]] | None:
+    try:
+        tracker = resolve_project_tracker(repo).effective
+    except (OSError, ValueError):  # an unreadable tracker config: the adapters stay unknown
+        return None
+    return integration_facts(adapters, tracker)
+
+
 def harness_facts(repo: Path) -> dict[str, object]:
     """The installed harness, the package version, the drift state and file count (`harness diff
     --json` in a subprocess), the state store, the runtime adapters and the read-only inventory of
@@ -140,13 +240,17 @@ def harness_facts(repo: Path) -> dict[str, object]:
         drift = state if isinstance(state, str) else "unknown"
         counts = console_data.drift_counts(report) or ()
         drift_files = sum(count for _kind, count in counts)
+    adapters = adapter_facts(repo)
+    store = store_facts(repo)
     return {
         "state": harness_state(repo).to_payload(),
         "package_version": console_data.harness_version(),
         "drift": drift,
         "drift_files": drift_files,
-        "store": asdict(store_facts(repo)),
-        "adapters": adapter_facts(repo),
+        "store": asdict(store),
+        "adapters": adapters,
+        "integrations": _integrations(repo, adapters),
+        "runtime": _runtime_after(repo, store),
         "containers": container_facts(repo),
     }
 
@@ -163,6 +267,7 @@ def maintenance_facts(repo: Path) -> dict[str, object]:
 
 def repo_map_facts(repo: Path) -> dict[str, object]:
     """HEAD, the map cached for it, the tier, the parser bundle (null when it cannot be read),
+    the latest cached map of another commit when HEAD has none (stale for HEAD),
     the project languages, the memory status and the tracked files the map leaves out
     (`git ls-tree`, read-only); never runs the Repo Map CLI."""
     head = head_commit(repo)
@@ -179,6 +284,7 @@ def repo_map_facts(repo: Path) -> dict[str, object]:
         parsers=parsers,
         language_files=language_files(repo),
         excluded=excluded_files(repo, view) if view is not None else None,
+        stale=latest_cached_map(repo, exclude=head) if head is not None and view is None else None,
     ).to_payload()
 
 
@@ -237,11 +343,16 @@ def open_project_facts(repo: Path) -> dict[str, object]:
 def update_harness_facts(repo: Path) -> dict[str, object]:
     """The installed harness, the package version and the `harness diff --json` report (in a
     subprocess); a project without the harness is never diffed, and an unreadable report is
-    null."""
+    null. The runtime-store facts and the ledger schema an update migrates to fill the
+    migration panel; reading them never migrates anything."""
     state = harness_state(repo)
     drift = console_data.drift_report(repo) if state.installed else None
     return UpdateHarnessFacts(
-        state, console_data.harness_version(), drift
+        state,
+        console_data.harness_version(),
+        drift,
+        store=store_facts(repo),
+        store_target_schema=STORE_LEDGER_VERSION,
     ).to_payload()
 
 
@@ -252,5 +363,5 @@ def update_diff(repo: Path, relative: str) -> str:
 
 def configuration_facts(repo: Path) -> dict[str, object]:
     """The masked configuration files with their digests, a pending transaction and the runtime
-    adapter preview; never writes or recovers."""
-    return collect_configuration(repo).to_payload()
+    adapter preview with the Settings wizard parameter catalog; never writes or recovers."""
+    return {**collect_configuration(repo).to_payload(), "wizard": wizard_parameters(repo)}

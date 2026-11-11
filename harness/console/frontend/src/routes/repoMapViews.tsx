@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
+import { Icon } from "../icons";
 import { SYMBOL_KINDS } from "../ws/repoMap";
 import type { MapFile, RepoMap as MapData, RepoMapFacts, SymbolKind } from "../ws/repoMap";
 
@@ -19,7 +20,7 @@ export function Fields({ rows }: { rows: [string, ReactNode][] }) {
     <span>{t(label)}</span><b>{value ?? "—"}</b></div>)}</>;
 }
 
-export function Settings({ facts }: { facts: RepoMapFacts }) {
+export function Settings({ facts, map }: { facts: RepoMapFacts; map: MapData | null }) {
   const { t } = useI18n();
   const { memory: m, parsers: p, tier } = facts;
   const parserState = p === null ? t("Состояние парсеров не прочитано") :
@@ -38,26 +39,61 @@ export function Settings({ facts }: { facts: RepoMapFacts }) {
     <Panel title="Парсеры"><Fields rows={[["Состояние", parserState],
       ["Пара", p?.pair], ["Источник", p?.source], ["Каталог", p?.registry], ["Грамматики", p?.grammars.join(", ")]]} /></Panel>
     <Panel title="Языки проекта"><Fields rows={Object.entries(facts.language_files)} /></Panel>
+    {map && <Panel title="Provenance парсера"><Fields rows={[["Коммит", map.commit.slice(0, 12)], ["Парсер", map.parser],
+      ["Причина", t(map.degradation_reason)],
+      ...Object.entries(map.parser_provenance).map(([key, value]): [string, ReactNode] =>
+        [key, typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "—")])]} /></Panel>}
+    {map && <Panel title="Диагностики">{map.diagnostics.length ? map.diagnostics.map((d, i) => <p key={i}>{d.code}: {d.path}</p>) : t("диагностик нет")}</Panel>}
   </div>;
 }
 
+/** The mockup file tree: one row per folder and file, indented 14px per level; a folder row
+    folds its subtree, a file row carries its parser status. */
 function FileTree({ files, selected, select }: { files: MapFile[]; selected: string | null; select: (path: string) => void }) {
-  const render = (prefix: string): ReactNode => {
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (path: string) => {
+    const next = new Set(folded);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setFolded(next);
+  };
+  const indent = (depth: number) => <span className="repo-tree-indent" style={{ width: `${depth * 14}px` }} />;
+  const render = (prefix: string, depth: number): ReactNode[] => {
     const nested = new Set<string>();
-    return files.filter((f) => f.path.startsWith(prefix)).map((f) => {
+    return files.filter((f) => f.path.startsWith(prefix)).flatMap((f) => {
       const rest = f.path.slice(prefix.length);
       const slash = rest.indexOf("/");
       if (slash >= 0) {
-        const directory = rest.slice(0, slash + 1);
-        if (nested.has(directory)) return null;
+        const directory = rest.slice(0, slash);
+        if (nested.has(directory)) return [];
         nested.add(directory);
-        return <details key={directory} open><summary className="repo-dir">▾ {directory}</summary>{render(prefix + directory)}</details>;
+        const path = prefix + directory + "/";
+        const open = !folded.has(path);
+        return [
+          <button key={path} type="button" className="repo-dir" aria-expanded={open} onClick={() => toggle(path)}>
+            {indent(depth)}
+            <span className={`repo-caret${open ? " open" : ""}`}>{open ? "▾" : "▸"}</span>
+            <Icon name="folder" />
+            <b>{directory}/</b>
+          </button>,
+          ...(open ? render(path, depth + 1) : []),
+        ];
       }
-      return <button key={f.path} type="button" className={`repo-file ${selected === f.path ? "on" : ""}`}
-        aria-label={f.path} aria-pressed={selected === f.path} onClick={() => select(f.path)}>{rest}</button>;
+      return [
+        <button key={f.path} type="button" className={`repo-file ${selected === f.path ? "on" : ""}`}
+          title={f.path} aria-pressed={selected === f.path} onClick={() => select(f.path)}>
+          {indent(depth)}
+          <span className="repo-caret dot" aria-hidden="true">·</span>
+          <Icon name="terminal" />
+          {/* The accessible name is the whole path; the row shows the file name. */}
+          <span className="sr-only">{f.path}</span>
+          <b aria-hidden="true">{rest}</b>
+          <em aria-hidden="true">[{f.parser_status ?? "—"}]</em>
+        </button>,
+      ];
     });
   };
-  return <>{render("")}</>;
+  return <>{render("", 0)}</>;
 }
 
 function Relations({ map, path }: { map: MapData; path: string }) {
@@ -145,14 +181,14 @@ export function Links({ map, select }: { map: MapData; select: (path: string) =>
   const paths = [...new Set(map.edges.flatMap((e) => [e.source, e.target]))].slice(0, 10);
   return <><Panel title="Связи" className="repo-links">
     <p className="repo-note">{t("Граф файлов: показано {shown} из {total}", { shown: paths.length, total: new Set(map.edges.flatMap((e) => [e.source, e.target])).size })}</p>
-    {paths.length > 0 && <div className="repo-graph-scroll"><svg className="repo-graph" viewBox={`0 0 800 ${paths.length * 42}`} role="img" aria-label={t("Связи файлов")}>
+    {paths.length > 0 && <div className="repo-graph-scroll"><svg className="repo-graph" viewBox={`0 0 800 ${paths.length * 42}`} role="group" aria-label={t("Связи файлов")}>
       {map.edges.filter((e) => paths.includes(e.source) && paths.includes(e.target)).map((e, i) =>
         <path key={i} className="repo-edge" d={`M 370 ${paths.indexOf(e.source) * 42 + 18} Q 750 ${(paths.indexOf(e.source) + paths.indexOf(e.target)) * 21 + 18} 370 ${paths.indexOf(e.target) * 42 + 18}`} />)}
       {paths.map((path, i) => <g key={path} className="repo-node" role="button" tabIndex={0} aria-label={path}
         onClick={() => select(path)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(path); } }}>
         <rect x="0" y={i * 42} width="370" height="34" rx="5" /><text className="repo-node-title" x="10" y={i * 42 + 21}>{path}</text></g>)}
     </svg></div>}
-    <div className="repo-link-table"><div className="repo-link-head"><span>from</span><span>to</span><span>type</span><span>{t("Достоверность")}</span></div>
+    <div className="repo-link-table" role="region" tabIndex={0} aria-label={t("Связи")}><div className="repo-link-head"><span>from</span><span>to</span><span>type</span><span>{t("Достоверность")}</span></div>
       {map.edges.map((e, i) => <div className="repo-link-row" key={i}><b>{e.source}</b><span>{e.target}</span><span>{e.kind}</span><span>{e.confidence}</span></div>)}</div>
     {!map.edges.length && <p className="repo-empty">{t("связей нет")}</p>}</Panel>
     <Panel title="Хабы"><Fields rows={hubs} /></Panel></>;

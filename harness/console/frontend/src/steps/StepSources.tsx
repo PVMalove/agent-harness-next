@@ -32,7 +32,7 @@ export function StepSources() {
         {SOURCES.map((source) => (
           <div key={source.kind} className={`work-source ${source.kind}`} data-source={source.kind}>
             <span>
-              <Icon name="activity" />
+              <Icon name={source.kind === "plain" ? "terminal" : "activity"} />
             </span>
             <div>
               <b>{source.name}</b>

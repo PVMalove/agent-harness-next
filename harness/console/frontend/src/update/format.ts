@@ -5,6 +5,7 @@
    the TUI's and are the translation keys. tests/web/fixtures/update-harness-facts.json pins them. */
 import type { Language } from "../i18n";
 import type { UpdateHarnessFacts } from "../ws/projectScreens";
+import type { StoreFacts } from "../ws/types";
 import { shellJoin } from "../project/format";
 
 type Translate = (text: string) => string;
@@ -23,6 +24,15 @@ export const MODE_CONSEQUENCES: Readonly<Record<UpdateMode, readonly [string, To
   "update-force-managed": ["⚠ Заменит и конфликтные файлы версией пакета: ваши правки в них пропадут.", "warn"],
   [SEED_MODE]: ["Только отмеченные seed-файлы; остальное не меняется.", null],
 };
+/** The mockup mode cards: (mode, short description, tag, tag tone). */
+export const MODE_CARDS: Readonly<Record<UpdateMode, readonly [string, string, "ok" | "err" | "active"]>> = {
+  update: ["Локальные правки сохраняются; стоп на конфликтах.", "рекомендуется", "ok"],
+  "update-force-managed": ["Заменит управляемые и конфликтные файлы; правки пропадут.", "опасно", "err"],
+  [SEED_MODE]: ["Только отмеченные seed-файлы.", "выборочно", "active"],
+};
+/** The mockup icon of a drift tone (count rows and diff list). */
+export const TONE_ICONS: Readonly<Record<Tone, string>> = { ok: "check", warn: "warning", fail: "x", skipped: "info" };
+export const TONE_CLASS: Readonly<Record<Tone, string>> = { ok: "ok", warn: "warn", fail: "err", skipped: "muted" };
 const DRIFT_ROWS: readonly (readonly [string, string, Tone])[] = [
   ["package_changed", "обновятся", "ok"],
   ["added", "добавятся", "ok"],
@@ -76,7 +86,7 @@ export function renderVersions(facts: UpdateHarnessFacts, t: Translate): Version
   if (!state.installed) {
     return {
       installed: false,
-      missing: [`${ICONS.fail} ${t("Харнесс не установлен: нет читаемого .harness/harness.lock")}`, t("Установите его через «Открыть проект».")],
+      missing: [t("Харнесс не установлен: нет читаемого .harness/harness.lock"), t("Установите его через «Открыть проект».")],
       pairs: [],
       verdict: null,
       rows: [],
@@ -90,7 +100,7 @@ export function renderVersions(facts: UpdateHarnessFacts, t: Translate): Version
       [t("Установлено"), state.installed_version],
       [t("Доступно"), facts.package_version],
     ],
-    verdict: current ? { tone: "ok", text: `${ICONS.ok} ${t("Версия актуальна")}` } : { tone: "warn", text: `${ICONS.warn} ${t("Доступно обновление")}` },
+    verdict: current ? { tone: "ok", text: t("Версия актуальна") } : { tone: "warn", text: t("Доступно обновление") },
     rows: [
       [t("Состав"), state.capabilities.join(", ") || t("нет")],
       [t("Скилов"), String(state.skills)],
@@ -109,7 +119,7 @@ export interface DriftRow {
 /** What an update would touch, from the drift counters (`render_drift`): the rows, or one line. */
 export function renderDrift(drift: Record<string, unknown> | null, t: Translate): { rows: DriftRow[]; line: { tone: Tone | null; text: string } | null } {
   if (drift === null) {
-    return { rows: [], line: { tone: "fail", text: `${ICONS.fail} ${t("Не удалось проверить дрейф")}` } };
+    return { rows: [], line: { tone: "fail", text: t("Не удалось проверить дрейф") } };
   }
   const rows = DRIFT_ROWS.filter(([field]) => driftCount(drift[field])).map(([field, label, tone]) => ({
     count: driftCount(drift[field]),
@@ -117,7 +127,7 @@ export function renderDrift(drift: Record<string, unknown> | null, t: Translate)
     label: t(label),
   }));
   if (rows.length) return { rows, line: null };
-  if (drift.state === "clean") return { rows, line: { tone: "ok", text: `${ICONS.ok} ${t("Расхождений нет")}` } };
+  if (drift.state === "clean") return { rows, line: { tone: "ok", text: t("Расхождений нет") } };
   return { rows, line: { tone: null, text: `${t("Состояние:")} ${String(drift.state ?? t("неизвестно"))}` } };
 }
 
@@ -126,7 +136,7 @@ export function stopWarning(drift: Record<string, unknown> | null, mode: UpdateM
   const conflicts = driftCount(drift?.conflict);
   if (!conflicts || mode !== "update") return null;
   return [
-    `${ICONS.warn} ${t("Обычное обновление остановится:")} ${conflictsText(conflicts, language)}`,
+    `${t("Обычное обновление остановится:")} ${conflictsText(conflicts, language)}`,
     t("Выберите режим с перезаписью или разберите файл вручную (см. diff ниже)."),
   ];
 }
@@ -180,4 +190,39 @@ export function diffText(text: string, language: Language): string {
 export function seedFiles(drift: Record<string, unknown> | null): string[] {
   const paths = drift?.seed_differing;
   return Array.isArray(paths) ? paths.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** The wall-clock time of a snapshot `ageSeconds` old, as the mockup's `HH:MM:SS`. */
+export function snapshotClock(ageSeconds: number | null, language: Language, now: number = Date.now()): string {
+  return new Intl.DateTimeFormat(language, { timeStyle: "medium", hour12: false }).format(new Date(now - (ageSeconds ?? 0) * 1000));
+}
+
+export type MigrationState = "pending" | "done" | "nodata" | "after";
+export interface MigrationStep {
+  num: string;
+  title: string;
+  caption: string;
+  state: MigrationState;
+}
+
+/** The four steps of the runtime-store migration plan (`migration-track` of the mockup) from the
+    project's store facts; the console only shows the plan and never runs a migration. */
+export function migrationSteps(store: StoreFacts | null, target: number | null, t: Translate): MigrationStep[] {
+  const from = store?.schema ?? null;
+  const schema = `Schema ${from ?? "?"} → ${target ?? "?"}`;
+  const migrated = store?.authority === "runtime-store";
+  if (migrated) {
+    return [
+      { num: "01", title: "Backup", caption: t("факт резервной копии в указателе не хранится"), state: "nodata" },
+      { num: "02", title: `Schema ${from ?? "?"}`, caption: t("схема runtime-store"), state: "done" },
+      { num: "03", title: "Cutover", caption: store?.cutover_at ? store.cutover_at.slice(0, 16).replace("T", " ") : t("время cutover не записано"), state: "done" },
+      { num: "04", title: "Health", caption: t("harness health после миграции"), state: "after" },
+    ];
+  }
+  return [
+    { num: "01", title: "Backup", caption: t("копия runtime.db до записи"), state: "pending" },
+    { num: "02", title: schema, caption: `schema ${from ?? "?"} → ${target ?? "?"}`, state: "pending" },
+    { num: "03", title: "Cutover", caption: "authority runtime-store", state: "pending" },
+    { num: "04", title: "Health", caption: t("harness health после миграции"), state: "after" },
+  ];
 }

@@ -3,6 +3,7 @@ import { createContext, createElement, useContext, useEffect, useMemo, useReduce
 import type { ReactNode } from "react";
 import { INITIAL, reduce } from "./connection";
 import type { ConnectionState } from "./connection";
+import type { HomeSnapshot } from "./ws/types";
 import { createConsoleClient } from "./ws/client";
 import type { ConsoleClient, SocketFactory } from "./ws/client";
 
@@ -15,6 +16,9 @@ export interface ConsoleValue {
   events: number;
   /** When the last valid Home snapshot arrived; null before the first one. */
   snapshotAt: Date | null;
+  /** The last valid Home snapshot (kept while reconnecting); null before the first one. Other
+      pages read its facts (project, harness, store, health) instead of asking again. */
+  snapshot: HomeSnapshot | null;
 }
 
 const ConsoleContext = createContext<ConsoleValue | null>(null);
@@ -70,7 +74,7 @@ export function ConsoleProvider({
   }, [client]);
 
   const value = useMemo(
-    () => ({ state, client, replies, events, snapshotAt }),
+    () => ({ state, client, replies, events, snapshotAt, snapshot: state.snapshot }),
     [state, client, replies, events, snapshotAt],
   );
   return createElement(ConsoleContext.Provider, { value }, children);

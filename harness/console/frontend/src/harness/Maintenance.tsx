@@ -4,6 +4,7 @@
    runs them with the server's confirmation and the digest of the plan shown here. */
 import { useState } from "react";
 import { reasonText, useI18n } from "../i18n";
+import { Icon } from "../icons";
 import type { MaintenanceFacts } from "../ws/screens";
 import { baseName, formatSize } from "./format";
 
@@ -35,7 +36,7 @@ export function Maintenance({
         <h2>{t("Обслуживание")}</h2>
         <span className="harness-maintenance-actions">
           <button className="btn" type="button" disabled={!view} aria-expanded={details} onClick={() => setDetails(!details)}>
-            {t("План")}
+            <Icon name="reports" /> {t("План")}
           </button>
           <button
             className="btn primary"
@@ -43,15 +44,17 @@ export function Maintenance({
             disabled={!soft || soft.items === 0}
             onClick={onClean}
           >
-            {t("Очистить…")}
+            <Icon name="x" /> {t("Очистить…")}
           </button>
           <button className="btn" type="button" aria-label={t("Обновить")} onClick={onRefresh}>
-            ↻
+            <Icon name="refresh" />
           </button>
         </span>
       </div>
       <div className="harness-maintenance-body">
-        <h3>{t("Временные файлы")}</h3>
+        <h3>
+          <Icon name="clock" /> {t("Временные файлы")}
+        </h3>
         {failure ? (
           <p className="harness-maintenance-error" role="alert">
             {t("Ошибка плана очистки: ")}
@@ -94,7 +97,9 @@ export function Maintenance({
             {soft.plan.remove.length === 0 && soft.plan.skipped.length === 0 && <div>{t("Временных файлов нет")}</div>}
           </div>
         )}
-        <h3>Worktree</h3>
+        <h3>
+          <Icon name="branch" /> Worktree
+        </h3>
         {!view ? (
           <p className="muted">Worktree: …</p>
         ) : view.worktree_error ? (
@@ -119,7 +124,7 @@ export function Maintenance({
                     aria-label={`${t("Удалить…")} ${baseName(tree.path)}`}
                     onClick={() => onRemove(tree.path)}
                   >
-                    {t("Удалить…")}
+                    <Icon name="x" /> {t("Удалить…")}
                   </button>
                 </div>
               );

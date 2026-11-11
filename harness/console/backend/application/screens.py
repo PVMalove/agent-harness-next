@@ -386,6 +386,8 @@ class ScreenService:
             "drift_files": facts.get("drift_files"),
             "store": facts.get("store"),
             "adapters": facts.get("adapters"),
+            "integrations": facts.get("integrations"),
+            "runtime": facts.get("runtime"),
             "containers": facts.get("containers"),
             "usage": pipeline_usage(ledger.view),
             "cached": cached,

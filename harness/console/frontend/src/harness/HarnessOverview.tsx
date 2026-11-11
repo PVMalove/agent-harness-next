@@ -1,38 +1,54 @@
-/* The "Установка" and "Использование пайплайна" panels of the Harness overview, filled only with
-   the facts of harness.overview: the lock state, the package version, the drift state and the
-   pipeline usage counted on the server. */
+/* The panels of the Harness page, filled only with the facts of harness.overview: the lock
+   state, the package version and drift, the state store with the runtime status probe, the
+   Claude Code, Codex and tracker adapters, the audit count and the container engine inventory. */
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import type { HarnessOverview, MaintenanceView } from "../ws/screens";
-import { driftLabel } from "./format";
+
+/** The six installation rows of the mockup: name, value, detail, and the state pill with its
+    tone. The hook policy is not part of harness.overview, so its row says no data. */
+export function installRows(
+  overview: HarnessOverview,
+  t: (text: string, values?: Record<string, string | number>) => string,
+  word: (state: string) => string,
+): [string, string, string, string, string][] {
+  const state = overview.state;
+  const store = overview.store;
+  const current = state.installed_version === overview.package_version;
+  return [
+    [
+      "Harness package",
+      state.installed_version,
+      t("доступно {version}", { version: overview.package_version }),
+      word(current ? "current" : "outdated"),
+      current ? "mint" : "lavender",
+    ],
+    [
+      "Skills snapshot",
+      String(state.skills),
+      `drift ${overview.drift_files ?? "—"} · ${t("{count} управляемых файлов", { count: state.managed_files })}`,
+      word(overview.drift === "clean" ? "clean" : "drift"),
+      overview.drift === "clean" ? "mint" : "lavender",
+    ],
+    ["Managed files", String(state.managed_files), ".harness/harness.lock", word("ok"), "mint"],
+    ["Hook policy", t("нет данных"), t("политику hook снимок harness.overview не читает"), t("нет данных"), "blue"],
+    [
+      "Runtime store",
+      store?.schema != null ? `schema ${store.schema}` : t("нет данных"),
+      store ? `generation ${store.generation ?? "—"} · audit ${store.audit_records ?? "—"}` : "—",
+      store ? store.authority : t("нет данных"),
+      store ? "mint" : "blue",
+    ],
+    ["harness.lock", state.updated_at || "—", t("Lock обновлён"), word(state.updated_at ? "ok" : "missing"), state.updated_at ? "mint" : "violet"],
+  ];
+}
 
 export function InstallPanel({ overview }: { overview: HarnessOverview | null }) {
-  const { t, section } = useI18n();
+  const { t, section, state: word } = useI18n();
   const state = overview?.state;
   const installed = state?.installed ?? false;
-  // name, value, detail, and the state pill with its tone when the fact has a state.
-  const components: [string, string, string, string, string][] = state
-    ? [
-        [t("Скилов"), String(state.skills), ".harness/skills", "", ""],
-        [t("Управляемых файлов"), String(state.managed_files), ".harness/harness.lock", "", ""],
-        ["Lock", state.updated_at || "—", t("Lock обновлён"), "", ""],
-        [
-          t("Оркестрация"),
-          state.orchestration ? "✔" : "○",
-          ".harness/orchestration",
-          state.orchestration ? t("✔ подключена") : t("○ не подключена"),
-          state.orchestration ? "mint" : "violet",
-        ],
-        [
-          t("Дрейф"),
-          overview.drift,
-          "harness diff",
-          t(driftLabel(overview.drift)),
-          overview.drift === "clean" ? "mint" : "lavender",
-        ],
-      ]
-    : [];
+  const components = overview && state ? installRows(overview, t, word) : [];
   return (
     <section className="panel harness-install" id="harness-install">
       <div className="panel-head">
@@ -93,57 +109,6 @@ export function InstallPanel({ overview }: { overview: HarnessOverview | null })
   );
 }
 
-export function UsagePanel({ overview }: { overview: HarnessOverview | null }) {
-  const { t, section } = useI18n();
-  const usage = overview?.usage;
-  const facts: [string, number][] = usage
-    ? [
-        [t("Запусков (batch)"), usage.batches],
-        [t("Тикетов"), usage.tickets],
-        [t("Диспатчей"), usage.dispatches],
-        [t("Отчётов"), usage.reports],
-      ]
-    : [];
-  return (
-    <section className="panel harness-runtime" id="harness-usage">
-      <div className="panel-head">
-        <h2>{t("Использование пайплайна")}</h2>
-        {usage && (
-          <span className={`orch-pill ${usage.unavailable === null ? "mint" : "violet"}`}>
-            {usage.unavailable === null ? "ledger" : t("недоступно")}
-          </span>
-        )}
-      </div>
-      <div className="harness-runtime-body">
-        {!usage ? (
-          <p className="harness-install-note">{t("Состояние харнесса загружается…")}</p>
-        ) : usage.unavailable !== null ? (
-          <p className="harness-install-note">
-            {t("Использование пайплайна")}: {t(usage.unavailable)}
-          </p>
-        ) : (
-          <div className="harness-store-facts">
-            {facts.map(([label, value]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <b>{value}</b>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="harness-runtime-actions">
-          <a className="btn" href={href("orchestration")}>
-            <Icon name="orchestration" /> {section("Orchestration")}
-          </a>
-          <a className="btn" href={href("reports")}>
-            <Icon name="reports" /> {section("Reports")}
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /** The explicit no-data value of a fact the console has no source for. */
 function NoData({ why }: { why?: string }) {
   const { t } = useI18n();
@@ -167,7 +132,7 @@ const FLOW: [string, string, string][] = [
 function Flow({ overview, compact }: { overview: HarnessOverview | null; compact: boolean }) {
   const store = overview?.store ?? null;
   return (
-    <div className={`harness-flow${compact ? " compact" : ""}`}>
+    <div className={`harness-flow${compact ? " compact" : ""}`} role="region" tabIndex={0} aria-label="Runtime flow">
       {FLOW.map(([icon, label, tone], index) => (
         <span key={label} style={{ display: "contents" }}>
           <div className={`harness-flow-node ${tone}`}>
@@ -193,28 +158,30 @@ function Flow({ overview, compact }: { overview: HarnessOverview | null; compact
 export function RuntimePanel({ overview, compact }: { overview: HarnessOverview | null; compact: boolean }) {
   const { t, section } = useI18n();
   const store = overview?.store ?? null;
+  const runtime = overview?.runtime ?? null;
   const facts: [string, string | number | null][] = [
     ["authority", store?.authority ?? null],
     ["schema", store?.schema ?? null],
     ["generation", store?.generation ?? null],
     ["audit", store?.audit_records ?? null],
-    ["cutover", null],
-    ["protocol", null],
+    ["cutover", store?.cutover_at ?? (store?.authority === "file-ledger" ? t("не выполнен") : null)],
+    ["revision", runtime?.revision ?? null],
   ];
   return (
     <section className="panel harness-runtime" id="harness-runtime">
       <div className="panel-head">
         <h2>Runtime</h2>
-        <span className={`orch-pill ${store ? "mint" : "violet"}`}>{store ? store.authority : t("нет данных")}</span>
+        <span className={`orch-pill ${runtime?.state === "online" || (!runtime && store?.authority === "file-ledger") ? "mint" : "violet"}`}>
+          {runtime ? (runtime.state === "online" ? t("работает") : t("не отвечает")) : (store?.authority ?? t("нет данных"))}
+        </span>
       </div>
       <div className="harness-runtime-body">
         <div className="harness-runtime-line">
           <span>
-            <Icon name="harness" /> binary <NoData />
+            <Icon name="harness" /> harness-runtime
           </span>
-          <span>
-            uptime <NoData />
-          </span>
+          <span>{store ? store.authority : <NoData />}</span>
+          {runtime?.reason ? <span className="muted">{t(runtime.reason)}</span> : null}
         </div>
         <div className="harness-store-facts">
           {facts.map(([label, value]) => (
@@ -235,39 +202,43 @@ export function RuntimePanel({ overview, compact }: { overview: HarnessOverview 
   );
 }
 
+const INTEGRATION_ICONS: Record<string, string> = { "Claude Code": "terminal", Codex: "command", GitHub: "github-mark", GitLab: "gitlab-mark", Local: "folder" };
+const INTEGRATION_TONES: Record<string, string> = { current: "mint", outdated: "lavender", missing: "violet", unknown: "blue" };
+
+/** The mockup adapters: Claude Code and Codex (adapter files of the installed capabilities, CLI on
+    PATH) and the project tracker (its CLI on PATH). Nothing is checked online. */
 export function AdaptersPanel({ overview, compact }: { overview: HarnessOverview | null; compact: boolean }) {
-  const { t } = useI18n();
-  const adapters = overview?.adapters ?? null;
+  const { t, state } = useI18n();
+  const integrations = overview?.integrations ?? null;
   return (
     <section className="panel harness-adapters" id="harness-adapters">
       <div className="panel-head">
         <h2>{t("Адаптеры")}</h2>
-        <span className="small muted">{adapters ? t("{count} файлов адаптеров", { count: adapters.length }) : ""}</span>
+        <span className="small muted">{integrations ? integrations.map((item) => item.name).join(" · ") : ""}</span>
       </div>
-      {adapters === null ? (
-        <p className="harness-note">{t("нет данных")}</p>
-      ) : adapters.length === 0 ? (
-        <p className="harness-note">{t("Файлов адаптеров нет")}</p>
+      {integrations === null ? (
+        <p className="harness-note">
+          <NoData why={t("Адаптеры не собраны в этом снимке")} />
+        </p>
       ) : (
         <div className="harness-adapter-grid">
-          {adapters.map((adapter) => (
-            <article className="harness-adapter" key={adapter.path}>
+          {integrations.map((item) => (
+            <article className="harness-adapter" key={item.name}>
               <div className="harness-adapter-head">
                 <span>
-                  <Icon name="settings" />
+                  <Icon name={INTEGRATION_ICONS[item.name] ?? "settings"} />
                 </span>
-                <em className={`orch-pill ${adapter.status === "current" ? "mint" : "lavender"}`}>{adapter.status}</em>
+                <em className={`orch-pill ${INTEGRATION_TONES[item.status]}`}>{state(item.status)}</em>
               </div>
-              <h3>{adapter.path.split("/").slice(-2).join("/")}</h3>
+              <h3>{item.name}</h3>
               <div className="harness-adapter-meta">
-                <span>
-                  CLI <NoData />
-                </span>
+                <span>{item.kind === "runtime" ? t("runtime-адаптер") : t("адаптер трекера")}</span>
+                <span>CLI {item.cli === null ? "—" : item.cli ? t("найден в PATH") : t("не найден в PATH")}</span>
               </div>
-              <p>{adapter.problem ?? adapter.path}</p>
+              <p>{item.detail || (item.kind === "runtime" ? t("Файлов адаптера нет") : t("локальная работа"))}</p>
               {compact ? null : (
                 <div className="harness-adapter-foot">
-                  <span>{adapter.path}</span>
+                  <span>{item.kind === "tracker" ? t("сеть и права не проверялись") : t("файлы адаптера из harness.lock")}</span>
                   <a className="btn" href={href("diagnostics")}>
                     <Icon name="pulse" /> {t("Проверить")}
                   </a>
@@ -296,6 +267,21 @@ export function AuditPanel({ overview }: { overview: HarnessOverview | null }) {
 }
 
 const CONTAINER_KINDS = /container|network|volume|image/;
+
+type PlannedItem = MaintenanceView["soft"]["plan"]["remove"][number];
+
+function planRows(planned: PlannedItem[] | null, keep: (kind: string) => boolean, empty: string) {
+  if (planned === null) return null;
+  const rows = planned.filter((item) => keep(item.kind));
+  if (rows.length === 0) return <p className="harness-note">{empty}</p>;
+  return rows.map((item) => (
+    <div className="harness-container-row" key={`${item.kind}-${item.path}`}>
+      <b>{item.path}</b>
+      <span>{item.kind}</span>
+      <em className="orch-pill lavender">cleanup</em>
+    </div>
+  ));
+}
 
 export function ContainersPanel({
   overview,
@@ -380,17 +366,40 @@ export function ContainersPanel({
         </div>
         {planned === null ? (
           <p className="harness-note">{t("План обслуживания загружается…")}</p>
-        ) : planned.length === 0 ? (
-          <p className="harness-note">{t("В плане очистки нет контейнеров и сетей")}</p>
         ) : (
-          planned.map((item) => (
-            <div className="harness-container-row" key={`${item.kind}-${item.path}`}>
-              <b>{item.path}</b>
-              <span>{item.kind}</span>
-              <em className="orch-pill lavender">cleanup</em>
-            </div>
-          ))
+          planRows(planned, (kind) => kind === "container", t("В плане очистки нет контейнеров"))
         )}
+      </div>
+      <div className="harness-container-grid" id="harness-container-grid">
+        <section className="harness-container-block" aria-label="Images">
+          <div className="harness-block-head">
+            <h3>Images</h3>
+            <span>{inventory?.images ?? "—"}</span>
+          </div>
+          <p className="harness-note">
+            {inventory?.images_problem ?? t("Инвентарь движка содержит только число образов: список, теги и размер не читаются.")}
+          </p>
+          {planRows(planned, (kind) => kind === "image", t("В плане очистки нет образов"))}
+        </section>
+        <section className="harness-container-block" aria-label="Networks / volumes">
+          <div className="harness-block-head">
+            <h3>Networks / volumes</h3>
+            <span>— / {inventory?.volumes ?? "—"}</span>
+          </div>
+          <p className="harness-note">
+            {inventory?.volumes_problem ?? t("Сети не входят в инвентарь движка; для томов известно только число.")}
+          </p>
+          <div className="harness-cleanup">
+            <span>{t("Очистка")}</span>
+            {planned === null ? (
+              <b className="muted">{t("План обслуживания загружается…")}</b>
+            ) : (
+              <b className={planned.some((item) => /network|volume/.test(item.kind)) ? "amber" : "muted"}>
+                {t("в плане {count}", { count: planned.filter((item) => /network|volume/.test(item.kind)).length })}
+              </b>
+            )}
+          </div>
+        </section>
       </div>
       <p className="harness-note">
         {t("Удаление выполняется только командами очистки с подтверждением на вкладке «Команды».")}

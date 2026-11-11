@@ -88,7 +88,12 @@ export interface MaintenanceFacts {
 export type HarnessOverview = Pick<
   HarnessOverviewReply,
   "state" | "package_version" | "drift" | "drift_files" | "store" | "adapters" | "containers" | "usage"
->;
+> & {
+  /** Claude Code, Codex and the tracker adapter; null when not collected. */
+  integrations?: NonNullable<HarnessOverviewReply["integrations"]> | null;
+  /** The runtime status probe; null when not collected. */
+  runtime?: NonNullable<HarnessOverviewReply["runtime"]> | null;
+};
 
 type Check = (value: unknown) => boolean;
 
@@ -183,12 +188,31 @@ const store = exact({
   schema: nullable(count),
   generation: nullable(string),
   audit_records: nullable(count),
+  cutover_at: nullable(string),
+  reason: string,
 });
 const adapter = exact({
   path: string,
   status: (value) => value === "current" || value === "outdated" || value === "missing",
   problem: nullable(string),
 });
+const integration = exact({
+  name: string,
+  kind: (value) => value === "runtime" || value === "tracker",
+  status: (value) => value === "current" || value === "outdated" || value === "missing" || value === "unknown",
+  cli: nullable(flag),
+  detail: string,
+});
+const runtimeStatus = exact({
+  state: (value) => value === "online" || value === "offline",
+  revision: nullable(count),
+  reason: string,
+});
+/** An optional field of a newer server: absent, null or valid. */
+const optional =
+  (check: Check): Check =>
+  (value) =>
+    value === undefined || value === null || check(value);
 /** The container engine inventory of harness/console/kernel/container_inventory.py. */
 const containers = exact({
   engine: string,
@@ -227,6 +251,8 @@ export function parseMaintenance(value: unknown): MaintenanceFacts | null {
 /** The facts of a harness.overview reply, or null for any other shape. */
 export function parseHarnessOverview(value: unknown): HarnessOverview | null {
   if (!overview(value)) return null;
+  const extra = value as Record<string, unknown>;
+  if (!optional(list(integration))(extra.integrations) || !optional(runtimeStatus)(extra.runtime)) return null;
   const found = value as unknown as HarnessOverview;
   return {
     state: found.state,
@@ -237,6 +263,9 @@ export function parseHarnessOverview(value: unknown): HarnessOverview | null {
     adapters: found.adapters,
     containers: found.containers,
     usage: found.usage,
+    // A server before the runtime probe sends neither field: they stay absent.
+    ...(found.integrations !== undefined ? { integrations: found.integrations } : {}),
+    ...(found.runtime !== undefined ? { runtime: found.runtime } : {}),
   };
 }
 

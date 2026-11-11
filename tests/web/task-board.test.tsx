@@ -61,6 +61,20 @@ describe("the Task Board route", () => {
     vi.useRealTimers();
   });
 
+  test("#/board?ticket=<id> opens that ticket's card, as the session route «Открыть задачу» asks", () => {
+    renderBoard({ language: "?ticket=%23512" });
+    const dialog = document.querySelector("dialog")!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain("Источник данных доски");
+  });
+
+  test("a card's tracker link carries the external icon", () => {
+    renderBoard();
+    const link = document.querySelector('[data-board-ticket="#512"] .board-card-foot a')!;
+    expect(link.textContent).toBe("Открыть");
+    expect(link.querySelector("svg")).not.toBeNull();
+  });
+
   test("shows the spec switcher, KPIs and five columns with their card counters", () => {
     const socket = renderBoard();
     expect(socket.request("task_board.specs")).toMatchObject({ force: false });
@@ -93,7 +107,53 @@ describe("the Task Board route", () => {
   test("a remembered spec the tracker no longer lists falls back to the first", () => {
     window.localStorage.setItem(SPEC_KEY, "#999");
     const socket = renderBoard();
-    expect(boards(socket).map((body) => body.spec)).toEqual(["#501"]);
+    // The remembered spec is asked in parallel with the specs; the listing then picks the first.
+    expect(boards(socket).map((body) => body.spec)).toEqual(["#999", "#501"]);
+  });
+
+  test("the remembered spec's board is asked before the specs answer, over the drawn frame", () => {
+    window.localStorage.setItem(SPEC_KEY, "#502");
+    window.location.hash = "#/board";
+    const client = createConsoleClient({
+      url: "ws://127.0.0.1:1/ws",
+      WebSocket: FakeSocket,
+      timers: new ManualClock(),
+      probeHealth: async () => false,
+    });
+    render(
+      <LanguageProvider>
+        <App client={client} />
+      </LanguageProvider>,
+    );
+    const socket = FakeSocket.last;
+    act(() => socket.open());
+    expect(socket.sent.some((body) => body.type === "task_board.specs")).toBe(true);
+    expect(boards(socket).map((body) => body.spec)).toEqual(["#502"]);
+    expect(document.querySelectorAll("[data-board-frame] [data-board-col]")).toHaveLength(5);
+    expect(document.querySelector("#board-updating .board-mascot")).not.toBeNull();
+    answer(socket, "task_board.snapshot", BOARD);
+    expect(cards()).toHaveLength(7);
+    expect(document.querySelector("#board-updating")).toBeNull();
+  });
+
+  test("the spec row finds a spec by its number on Enter, never per keystroke, and names a number it does not know", () => {
+    const socket = renderBoard();
+    const field = () => screen.getByRole("searchbox", { name: "Найти спеку по номеру" });
+    const asked = boards(socket).length;
+    expect((document.querySelector("#board-spec") as HTMLSelectElement).value).toBe("#501");
+    for (const typed of ["5", "50", "502"]) act(() => fireEvent.change(field(), { target: { value: typed } }));
+    expect(boards(socket)).toHaveLength(asked);
+    expect((document.querySelector("#board-spec") as HTMLSelectElement).value).toBe("#501");
+    expect(document.querySelector(".board-spec-missing")).toBeNull();
+    act(() => fireEvent.submit(field().closest("form")!));
+    expect((document.querySelector("#board-spec") as HTMLSelectElement).value).toBe("#502");
+    expect(boards(socket)).toHaveLength(asked + 1);
+    expect(boards(socket).at(-1)).toMatchObject({ spec: "#502" });
+    expect(window.localStorage.getItem(SPEC_KEY)).toBe("#502");
+    act(() => fireEvent.change(field(), { target: { value: "77" } }));
+    expect(document.querySelector(".board-spec-missing")).toBeNull();
+    act(() => fireEvent.submit(field().closest("form")!));
+    expect(document.querySelector(".board-spec-missing")?.textContent).toBe("Спека #77 не найдена");
   });
 
   test("search, priority and only-without-blockers narrow the cards and the column counters", () => {
@@ -122,7 +182,7 @@ describe("the Task Board route", () => {
 
   test("the search field shows a magnifier hidden from screen readers", () => {
     renderBoard();
-    const search = document.querySelector(".board-search") as HTMLElement;
+    const search = document.querySelector(".board-toolbar .board-search") as HTMLElement;
     const icon = search.querySelector("svg.hi") as SVGElement;
 
     expect(icon).not.toBeNull();
@@ -136,11 +196,12 @@ describe("the Task Board route", () => {
     act(() => fireEvent.click(document.querySelector("#board-refresh") as HTMLElement));
     expect(socket.request("task_board.specs")).toMatchObject({ force: true });
     expect(socket.request("task_board.snapshot")).toMatchObject({ spec: "#501", force: true });
-    expect(document.querySelector('[data-board-state="loading"]')).not.toBeNull();
-    expect(content()).toContain("Обновление доски");
+    expect(document.querySelector('[data-board-state="loading"]')).toBeNull();
+    expect(document.querySelectorAll("[data-board-frame] [data-board-col]")).toHaveLength(5);
+    expect(document.querySelector("#board-updating .board-mascot")).not.toBeNull();
     answer(socket, "task_board.specs", SPECS);
     answer(socket, "task_board.snapshot", BOARD);
-    expect(document.querySelector('[data-board-state="loading"]')).toBeNull();
+    expect(document.querySelector("#board-updating")).toBeNull();
     expect(cards()).toHaveLength(7);
   });
 
@@ -206,7 +267,8 @@ describe("the Task Board route", () => {
     answered.clear();
     document.body.innerHTML = "";
     const next = renderBoard({ board: null });
-    expect(document.querySelector('[data-board-state="loading"]')).not.toBeNull();
+    expect(document.querySelectorAll("[data-board-frame] [data-board-col]")).toHaveLength(5);
+    expect(document.querySelector("#board-updating .board-mascot")).not.toBeNull();
     answer(next, "task_board.snapshot", {
       ...BOARD,
       tickets: [],
