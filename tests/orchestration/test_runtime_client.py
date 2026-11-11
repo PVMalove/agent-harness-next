@@ -1195,6 +1195,19 @@ def test_a_runtime_directory_open_to_others_or_a_symlink_is_never_trusted(
     assert runtime.requests == []
 
 
+def test_the_directory_check_is_skipped_on_windows_without_posix_ownership_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Windows has no os.getuid and no group/other mode bits; the DACL protects the pipe instead.
+    directory = tmp_path / "open"
+    directory.mkdir()
+    directory.chmod(0o755)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delattr(os, "getuid", raising=False)
+
+    runtime_client._check_directory(directory)
+
+
 @UNIX_ONLY
 def test_a_platform_without_unix_sockets_is_runtime_unavailable(
     dirs: Directories, monkeypatch: pytest.MonkeyPatch

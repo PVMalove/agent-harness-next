@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -20,6 +22,12 @@ ROOT = Path(__file__).resolve().parents[2]
 # fixtures of the claude_code adapter tests.
 external_worker = claude_adapter.external_worker
 claude_endpoint = claude_adapter.reachable_endpoint
+
+CODEX_ADAPTER = ROOT / "harness/adapters/codex_worker.py"
+CODEX_SPEC = importlib.util.spec_from_file_location("codex_worker", CODEX_ADAPTER)
+assert CODEX_SPEC and CODEX_SPEC.loader
+codex_worker = importlib.util.module_from_spec(CODEX_SPEC)
+CODEX_SPEC.loader.exec_module(codex_worker)
 
 
 @pytest.fixture
@@ -640,3 +648,82 @@ def test_claude_code_runs_the_worker_in_the_foreground_under_the_runtime_supervi
     terminal = json.loads(Path(receipt["terminal_path"]).read_text())
     assert terminal["exit_code"] == 3
     assert not (Path(receipt["terminal_path"]).parent / "supervisor.log").exists()
+
+
+class _SubprocessWith:
+    """The subprocess module with some attributes replaced."""
+
+    def __init__(self, **replaced: object) -> None:
+        self.replaced = replaced
+
+    def __getattr__(self, name: str) -> object:
+        return self.replaced[name] if name in self.replaced else getattr(subprocess, name)
+
+
+class StuckProcess:
+    """A worker process that never becomes ready and records how it was stopped."""
+
+    pid = 424242
+
+    def __init__(self) -> None:
+        self.stopped_by: list[str] = []
+        self.stdin = self
+
+    def write(self, data: bytes) -> int:
+        return len(data)
+
+    def close(self) -> None:
+        pass
+
+    def poll(self) -> None:
+        return None
+
+    def wait(self, timeout: float | None = None) -> int:
+        return 0
+
+    def terminate(self) -> None:
+        self.stopped_by.append("terminate")
+
+
+@pytest.mark.parametrize(
+    "platform,stopped_by",
+    [("win32", ["terminate"]), ("linux", ["killpg"])],
+)
+def test_codex_stops_a_stuck_worker_by_group_only_where_posix_groups_exist(
+    dispatch: tuple[Path, Path, dict[str, object]],
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    stopped_by: list[str],
+) -> None:
+    repo, worker, brief = dispatch
+    path = repo / "brief.json"
+    path.write_text(json.dumps(brief), encoding="utf-8")
+    process = StuckProcess()
+
+    def killpg(pid: int, number: int) -> None:
+        process.stopped_by.append("killpg")
+        assert (pid, number) == (process.pid, signal.SIGTERM)
+
+    monkeypatch.chdir(worker)
+    monkeypatch.setattr(sys, "platform", platform)
+    # Windows has no os.killpg: the stand-in must not exist there, and is never a real group.
+    monkeypatch.setattr(os, "killpg", killpg, raising=False)
+    # Only the adapter's own Popen is replaced; its `git` calls still run for real.
+    monkeypatch.setattr(
+        codex_worker,
+        "subprocess",
+        _SubprocessWith(Popen=lambda *a, **k: process),
+    )
+    # A negative window ends the readiness wait at once.
+    monkeypatch.setattr(codex_worker, "STARTUP_CHECK_SECONDS", -2)
+    args = codex_worker.argparse.Namespace(
+        repo=str(repo),
+        brief=str(path),
+        codex_bin="codex",
+        network_access="disabled",
+        extra_prompt_file=None,
+        dry_run=False,
+    )
+
+    assert codex_worker.start(args) == 1
+    assert process.stopped_by == stopped_by
