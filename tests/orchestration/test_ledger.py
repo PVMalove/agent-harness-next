@@ -36,8 +36,10 @@ from harness.orchestration.core.constants import (
     BatchState,
     DispatchState,
     CONTEXT_PACKAGE_FIELDS,
+    DISPATCH_FIELDS,
     LEGACY_CONTEXT_PACKAGE_FIELDS,
     LEGACY_CONTEXT_PACKAGE_FIELDS_NO_TOKENS,
+    POLICY_BRIEF_FIELDS,
 )
 from harness.orchestration.core.utils import CoordinatorError
 from harness.orchestration.ledger.lifecycle import (
@@ -1097,6 +1099,81 @@ class ContextPackageSchemaCompatibilityTests(unittest.TestCase):
             with self.assertRaises(CoordinatorError) as raised:
                 history._validate_context_package(root, batch, package)
             self.assertIn("schema mismatch", raised.exception.message)
+
+
+class DispatchFieldShapeTests(unittest.TestCase):
+    """`_dispatch_fields_accepted` admits every historical brief shape and nothing else."""
+
+    LEGACY = DISPATCH_FIELDS - {
+        "context_package_summary",
+        "worker_attestation_required",
+        "snapshot_commit",
+        "communication_policy",
+        "commit_plan",
+        "liveness",
+    }
+
+    def accepted(self, fields: frozenset[str]) -> bool:
+        return history._dispatch_fields_accepted(fields)
+
+    def test_the_current_and_the_historical_base_shapes_are_accepted(self) -> None:
+        for fields in (
+            DISPATCH_FIELDS,
+            DISPATCH_FIELDS - {"context_package_summary"},
+            self.LEGACY,
+        ):
+            self.assertTrue(self.accepted(frozenset(fields)))
+
+    def test_each_later_group_may_be_absent_as_a_whole(self) -> None:
+        groups = (
+            {"report_staging_path"},
+            {"retry_reason"},
+            {"allowed_tools", "context_budget"},
+            set(POLICY_BRIEF_FIELDS),
+            {"commit_plan_divergence"},
+            {"carried_items"},
+            {"rebase_target_commit"},
+            {"runtime_access"},
+            {"delta_review_scope"},
+            {"allowed_paths"},
+            {"accepted_design"},
+        )
+        for group in groups:
+            self.assertTrue(self.accepted(frozenset(DISPATCH_FIELDS - group)), group)
+        every = set().union(*groups)
+        self.assertTrue(self.accepted(frozenset(self.LEGACY - every)))
+
+    def test_half_of_a_group_is_rejected(self) -> None:
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS - {"allowed_tools"})))
+        some_policy = set(sorted(POLICY_BRIEF_FIELDS)[:1])
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS - some_policy)))
+
+    def test_a_missing_base_field_or_an_unknown_field_is_rejected(self) -> None:
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS - {"role"})))
+        self.assertFalse(
+            self.accepted(frozenset(DISPATCH_FIELDS - {"snapshot_commit"}))
+        )
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS | {"unexpected"})))
+
+    def test_optional_fields_may_be_added(self) -> None:
+        added = {
+            "resolver",
+            "preserved_progress",
+            "verification_plan",
+            "hook_policy_sha256",
+            "execution",
+        }
+        self.assertTrue(self.accepted(frozenset(DISPATCH_FIELDS | added)))
+        self.assertTrue(self.accepted(frozenset(self.LEGACY | {"resolver"})))
+
+    def test_image_digests_need_an_access_plan_and_carry_the_qa_execution(
+        self,
+    ) -> None:
+        images = DISPATCH_FIELDS | {"runtime_images"}
+        self.assertTrue(self.accepted(frozenset(images)))
+        self.assertTrue(self.accepted(frozenset(images | {"qa_execution"})))
+        self.assertFalse(self.accepted(frozenset(images - {"runtime_access"})))
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS | {"qa_execution"})))
 
 
 if __name__ == "__main__":

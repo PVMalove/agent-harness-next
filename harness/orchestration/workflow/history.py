@@ -1296,6 +1296,86 @@ def _validate_resolver_section(dispatch: JsonObject) -> None:
         )
 
 
+# Briefs are immutable. A record created before worker attestation was introduced keeps its
+# historical shape; mandatory writer/review startup proof is enforced by the report handler.
+_DISPATCH_BASE_SHAPES = (
+    DISPATCH_FIELDS,
+    DISPATCH_FIELDS - {"context_package_summary"},
+    DISPATCH_FIELDS
+    - {
+        "context_package_summary",
+        "worker_attestation_required",
+        "snapshot_commit",
+        "communication_policy",
+        "commit_plan",
+        "liveness",
+    },
+)
+# Field groups a brief written before them lacks; each group is present or absent as a whole.
+_DISPATCH_LATER_GROUPS = (
+    # A brief written before the canonical reporting path existed keeps its historical shape.
+    frozenset({"report_staging_path"}),
+    frozenset({"retry_reason"}),
+    # The role tool policy and context budget were added together, so a brief holds both or neither.
+    frozenset({"allowed_tools", "context_budget"}),
+    # The transition-bound approval contract (issue #250) was added as one group as well.
+    frozenset(POLICY_BRIEF_FIELDS),
+    # The code-review brief's commit-plan divergence (issue #478) came later than all of them.
+    frozenset({"commit_plan_divergence"}),
+    # The carried-items section (issue #499) came after that.
+    frozenset({"carried_items"}),
+    # The approved rebase target (issue #504) came after that.
+    frozenset({"rebase_target_commit"}),
+    # Runtime access is added as an approval-bound group; historical briefs keep inherit.
+    frozenset({"runtime_access"}),
+    # The delta-review scope of a code-review after a fix-forward (issue #625) came after that.
+    frozenset({"delta_review_scope"}),
+    # The batch scope every role sees and the accepted design of a developer (issue #1015).
+    frozenset({"allowed_paths"}),
+    frozenset({"accepted_design"}),
+)
+# Optional fields any brief may carry on top of its shape.
+_DISPATCH_OPTIONAL_FIELDS = frozenset(
+    {
+        # The conflict-resolver brief's resolver section (issue #534).
+        "resolver",
+        # The image digests a docker brief pins (issue #704); they need its access plan.
+        "runtime_images",
+        "preserved_progress",
+        # The verification plan (ADR 0023), present only for a batch whose configuration carried
+        # `verification_plan_policy`.
+        "verification_plan",
+        # The pinned hook policy (issue #794) of every new brief.
+        "hook_policy_sha256",
+        # The execution the runtime supervises (ADR 0022) of an external brief created on the
+        # runtime store.
+        "execution",
+    }
+)
+
+
+def _dispatch_fields_accepted(fields: frozenset[str]) -> bool:
+    """A historical brief shape: a base shape without whole later groups, plus optional fields.
+
+    A test, not an enumeration: every later group doubles the number of shapes.
+    """
+    # The QA execution a container QA brief pins (ADR 0022, section 3) only ever accompanies the
+    # image digests of its access plan.
+    if "runtime_images" in fields:
+        if "runtime_access" not in fields:
+            return False
+        fields -= {"qa_execution"}
+    core = fields - _DISPATCH_OPTIONAL_FIELDS
+    for base in _DISPATCH_BASE_SHAPES:
+        if not core <= base:
+            continue
+        missing = base - core
+        absent = [group & base for group in _DISPATCH_LATER_GROUPS]
+        if frozenset().union(*(g for g in absent if g <= missing)) == missing:
+            return True
+    return False
+
+
 def _validate_dispatch(
     repo: Path, config: JsonObject, root: Path, batch: JsonObject, dispatch: JsonObject
 ) -> None:
@@ -1315,67 +1395,7 @@ def _validate_dispatch(
         runtime_access.validate_binding(dispatch)
     except runtime_access.AccessError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
-    # Briefs are immutable. A record created before worker attestation was introduced keeps its
-    # historical shape; mandatory writer/review startup proof is enforced by the report handler.
-    pre_summary_fields = DISPATCH_FIELDS - {"context_package_summary"}
-    legacy_fields = DISPATCH_FIELDS - {
-        "context_package_summary",
-        "worker_attestation_required",
-        "snapshot_commit",
-        "communication_policy",
-        "commit_plan",
-        "liveness",
-    }
-    # A brief written before the canonical reporting path existed keeps its historical shape, the
-    # same way every earlier field addition is treated here.
-    accepted = {
-        frozenset(fields)
-        for fields in (DISPATCH_FIELDS, pre_summary_fields, legacy_fields)
-    }
-    accepted |= {fields - {"report_staging_path"} for fields in set(accepted)}
-    accepted |= {fields - {"retry_reason"} for fields in set(accepted)}
-    # The role tool policy and context budget were added together, so a brief holds both or neither.
-    accepted |= {
-        fields - {"allowed_tools", "context_budget"} for fields in set(accepted)
-    }
-    # The transition-bound approval contract (issue #250) was added as one group as well.
-    accepted |= {fields - POLICY_BRIEF_FIELDS for fields in set(accepted)}
-    # The code-review brief's commit-plan divergence (issue #478) came later than all of them.
-    accepted |= {fields - {"commit_plan_divergence"} for fields in set(accepted)}
-    # The carried-items section (issue #499) came after that.
-    accepted |= {fields - {"carried_items"} for fields in set(accepted)}
-    # The approved rebase target (issue #504) came after that.
-    accepted |= {fields - {"rebase_target_commit"} for fields in set(accepted)}
-    # Runtime access is added as an approval-bound group; historical briefs keep inherit.
-    accepted |= {fields - {"runtime_access"} for fields in set(accepted)}
-    # The delta-review scope of a code-review after a fix-forward (issue #625) came after that.
-    accepted |= {fields - {"delta_review_scope"} for fields in set(accepted)}
-    # The batch scope every role sees and the accepted design of a developer (issue #1015).
-    accepted |= {fields - {"allowed_paths"} for fields in set(accepted)}
-    accepted |= {fields - {"accepted_design"} for fields in set(accepted)}
-    # The conflict-resolver brief's resolver section (issue #534) is one field added on top.
-    accepted |= {fields | {"resolver"} for fields in set(accepted)}
-    # The image digests a docker brief pins (issue #704) only ever accompany its access plan.
-    accepted |= {
-        fields | {"runtime_images"}
-        for fields in set(accepted)
-        if "runtime_access" in fields
-    }
-    accepted |= {fields | {"preserved_progress"} for fields in set(accepted)}
-    # The verification plan (ADR 0023) is one optional field, present only for a batch whose
-    # configuration carried `verification_plan_policy`.
-    accepted |= {fields | {"verification_plan"} for fields in set(accepted)}
-    # The pinned hook policy (issue #794) is one optional field of every new brief.
-    accepted |= {fields | {"hook_policy_sha256"} for fields in set(accepted)}
-    # The execution the runtime supervises (ADR 0022) is one optional field of an external brief
-    # created on the runtime store.
-    accepted |= {fields | {"execution"} for fields in set(accepted)}
-    fields = frozenset(dispatch)
-    # The QA execution a container QA brief pins (ADR 0022, section 3) only ever accompanies the
-    # image digests of its access plan.
-    if "runtime_images" in fields:
-        fields -= {"qa_execution"}
-    if fields not in accepted:
+    if not _dispatch_fields_accepted(frozenset(dispatch)):
         raise CoordinatorError(
             "dispatch record schema mismatch",
             remedy="the dispatch record schema is malformed -- "
