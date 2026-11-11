@@ -67,6 +67,34 @@ fn alive(pid: i64) -> bool {
     matches!(identity::probe(pid), Probe::Running(_))
 }
 
+/// Whether `pid` runs and nothing signalled it: a signal sent to it stays pending until it is
+/// delivered, so a stop on the way shows at once, without waiting for its effect.
+fn untouched(pid: i64) -> bool {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap();
+    let field = |name: &str| {
+        status
+            .lines()
+            .find_map(|line| line.strip_prefix(name))
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let state = field("State:");
+    !state.starts_with('Z')
+        && !state.starts_with('X')
+        && ["SigPnd:", "ShdPnd:"]
+            .iter()
+            .all(|name| u64::from_str_radix(&field(name), 16) == Ok(0))
+}
+
+/// The time since boot in clock ticks of `/proc/<pid>/stat` (USER_HZ, 100 a second on Linux).
+fn uptime_ticks() -> u64 {
+    let uptime = std::fs::read_to_string("/proc/uptime").unwrap();
+    let seconds = uptime.split_whitespace().next().unwrap();
+    let (whole, hundredths) = seconds.split_once('.').unwrap();
+    whole.parse::<u64>().unwrap() * 100 + hundredths.parse::<u64>().unwrap()
+}
+
 #[test]
 fn a_launched_process_leads_its_group_has_its_proc_identity_and_outlives_its_handle() {
     let mut scratch = Scratch::new("leader");
@@ -78,7 +106,7 @@ fn a_launched_process_leads_its_group_has_its_proc_identity_and_outlives_its_han
     assert_eq!(pgid, pid);
     assert_eq!(identity::observe(pid, &observer), Some(recorded.clone()));
     assert!(recorded.boot_id.is_some() && recorded.pid_namespace.is_some());
-    std::thread::sleep(Duration::from_millis(200));
+    assert!(untouched(pid));
     assert!(alive(pid));
     assert_eq!(
         identity::verdict(Some(&recorded), &observer, &identity::probe(pid)),
@@ -111,15 +139,22 @@ fn the_label_scan_finds_the_group_leader_and_never_a_labelled_child() {
 fn the_label_scan_chooses_the_first_started_leader_and_never_one_older_than_the_intent() {
     let mut scratch = Scratch::new("first");
     let first = scratch.spawn("op-first", "sleep 30");
-    // A later labelled leader: a process of the execution that leads its own group.
-    std::thread::sleep(Duration::from_millis(100));
-    let later = scratch.spawn("op-first", "sleep 30");
     let observer = identity::observer();
     let start = |pid: i64| {
         let (recorded, _) = process::identity_of(pid, &observer).unwrap();
         recorded.start_time
     };
-    let (first_start, later_start) = (start(first), start(later));
+    let first_start = start(first);
+    // A later labelled leader, a process of the execution that leads its own group, starts on a
+    // later clock tick than the first one.
+    let first_tick = first_start.parse::<u64>().unwrap();
+    let until = Instant::now() + Duration::from_secs(10);
+    while uptime_ticks() <= first_tick + 1 {
+        assert!(Instant::now() < until, "the clock tick never advanced");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let later = scratch.spawn("op-first", "sleep 30");
+    let later_start = start(later);
     assert!(first_start.parse::<u64>().unwrap() < later_start.parse::<u64>().unwrap());
 
     assert_eq!(
