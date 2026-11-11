@@ -61,6 +61,20 @@ describe("the Task Board route", () => {
     vi.useRealTimers();
   });
 
+  test("#/board?ticket=<id> opens that ticket's card, as the session route «Открыть задачу» asks", () => {
+    renderBoard({ language: "?ticket=%23512" });
+    const dialog = document.querySelector("dialog")!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain("Источник данных доски");
+  });
+
+  test("a card's tracker link carries the external icon", () => {
+    renderBoard();
+    const link = document.querySelector('[data-board-ticket="#512"] .board-card-foot a')!;
+    expect(link.textContent).toBe("Открыть");
+    expect(link.querySelector("svg")).not.toBeNull();
+  });
+
   test("shows the spec switcher, KPIs and five columns with their card counters", () => {
     const socket = renderBoard();
     expect(socket.request("task_board.specs")).toMatchObject({ force: false });

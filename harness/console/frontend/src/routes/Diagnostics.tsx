@@ -16,6 +16,7 @@ import { useScreen } from "../screens/useScreen";
 import type { LocalJob } from "../ws/jobs";
 import { checkTotal, parseHealthReport } from "../ws/screens";
 import type { HealthReport } from "../ws/screens";
+import { snapshotClock } from "../update/format";
 import { HealthStrip } from "./Home";
 
 /** The catalog commands that run the internal fixers and print the new report. */
@@ -118,8 +119,8 @@ export function Diagnostics() {
             {report && <span>{t("групп: {count}", { count: groups })}</span>}
             <span id="diag-mode">{shownOnline ? t("онлайн") : t("офлайн")}</span>
             {screen.data && !fixed && (
-              <span id="diag-cache">
-                {screen.cached ? t("Кэш") : t("Новый снимок")} · {screen.ageSeconds ?? 0} s
+              <span id="diag-cache" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+                {snapshotClock(screen.ageSeconds, language)}
               </span>
             )}
           </div>

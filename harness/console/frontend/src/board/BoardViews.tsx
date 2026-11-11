@@ -163,8 +163,9 @@ function Card({
       <div className="board-card-foot">
         <span>{t("критериев: {count}", { count: card.criteria.length })}</span>
         {link ? (
-          <a href={link} target="_blank" rel="noopener noreferrer">
+          <a className="board-open" href={link} target="_blank" rel="noopener noreferrer">
             {t("Открыть")}
+            <Icon name="external" />
           </a>
         ) : (
           <span>{t("нет данных")}</span>

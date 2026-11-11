@@ -59,7 +59,7 @@ export function CheckDetail({
           <span className={`diag-pill ${meta.tone}`}>{state(check.status)}</span>
         </div>
       </div>
-      <div className="diag-detail-body">
+      <div className="diag-detail-body" role="region" tabIndex={0} aria-label={t("Детали проверки")}>
         <div className="diag-detail-top">
           <span className="diag-area">{groupLabel(language, check.group)}</span>
         </div>
@@ -76,7 +76,7 @@ export function CheckDetail({
               <dd className="diag-rationale">{rationale}</dd>
             ) : (
               <dd className="muted no-data" title={t("Описания этой проверки в каталоге нет")}>
-                {t("нет данных")}
+                {t("нет данных · обоснование для проверки не записано")}
               </dd>
             )}
           </div>

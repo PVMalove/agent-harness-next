@@ -113,7 +113,7 @@ describe("the shell", () => {
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Harness");
     // The command panel lives in the "Команды" tab, mounted even while another tab is shown.
-    expect(screen.getByRole("heading", { level: 2, name: "Команды", hidden: true })).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 2, name: "Команды", hidden: true }).length).toBeGreaterThan(0);
     expect(document.querySelector(".command-panel")?.closest("main")).toBeTruthy();
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });

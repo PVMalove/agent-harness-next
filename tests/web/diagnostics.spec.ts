@@ -172,5 +172,20 @@ for (const width of [1440, 390]) {
     await open(page, width);
     await expect(page.locator(".command-panel [data-command]")).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width > 600) {
+      // The check list runs down the window (at least 420 px), and the detail keeps its action
+      // in view while its body scrolls inside the panel.
+      const list = await page.locator("#diag-list").evaluate((box) => box.getBoundingClientRect().height);
+      expect(list).toBeGreaterThanOrEqual(420);
+      const action = await page.locator("#diag-detail .diag-action").evaluate((box) => {
+        const panel = box.closest(".diag-detail-panel")!.getBoundingClientRect();
+        const own = box.getBoundingClientRect();
+        return own.bottom <= panel.bottom + 1 && own.top >= panel.top;
+      });
+      expect(action).toBe(true);
+      const body = page.locator("#diag-detail .diag-detail-body");
+      await expect(body).toHaveAttribute("role", "region");
+      await expect(body).toHaveAttribute("tabindex", "0");
+    }
   });
 }

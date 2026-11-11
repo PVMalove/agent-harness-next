@@ -5,34 +5,50 @@ import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import type { HarnessOverview, MaintenanceView } from "../ws/screens";
-import { driftLabel } from "./format";
+
+/** The six installation rows of the mockup: name, value, detail, and the state pill with its
+    tone. The hook policy is not part of harness.overview, so its row says no data. */
+export function installRows(
+  overview: HarnessOverview,
+  t: (text: string, values?: Record<string, string | number>) => string,
+  word: (state: string) => string,
+): [string, string, string, string, string][] {
+  const state = overview.state;
+  const store = overview.store;
+  const current = state.installed_version === overview.package_version;
+  return [
+    [
+      "Harness package",
+      state.installed_version,
+      t("доступно {version}", { version: overview.package_version }),
+      word(current ? "current" : "outdated"),
+      current ? "mint" : "lavender",
+    ],
+    [
+      "Skills snapshot",
+      String(state.skills),
+      `drift ${overview.drift_files ?? "—"} · ${t("{count} управляемых файлов", { count: state.managed_files })}`,
+      word(overview.drift === "clean" ? "clean" : "drift"),
+      overview.drift === "clean" ? "mint" : "lavender",
+    ],
+    ["Managed files", String(state.managed_files), ".harness/harness.lock", word("ok"), "mint"],
+    ["Hook policy", t("нет данных"), t("политику hook снимок harness.overview не читает"), t("нет данных"), "blue"],
+    [
+      "Runtime store",
+      store?.schema != null ? `schema ${store.schema}` : t("нет данных"),
+      store ? `generation ${store.generation ?? "—"} · audit ${store.audit_records ?? "—"}` : "—",
+      store ? store.authority : t("нет данных"),
+      store ? "mint" : "blue",
+    ],
+    ["harness.lock", state.updated_at || "—", t("Lock обновлён"), word(state.updated_at ? "ok" : "missing"), state.updated_at ? "mint" : "violet"],
+  ];
+}
 
 export function InstallPanel({ overview }: { overview: HarnessOverview | null }) {
-  const { t, section } = useI18n();
+  const { t, section, state: word } = useI18n();
   const state = overview?.state;
   const installed = state?.installed ?? false;
-  // name, value, detail, and the state pill with its tone when the fact has a state.
-  const components: [string, string, string, string, string][] = state
-    ? [
-        [t("Скилов"), String(state.skills), ".harness/skills", "", ""],
-        [t("Управляемых файлов"), String(state.managed_files), ".harness/harness.lock", "", ""],
-        ["Lock", state.updated_at || "—", t("Lock обновлён"), "", ""],
-        [
-          t("Оркестрация"),
-          state.orchestration ? "✔" : "○",
-          ".harness/orchestration",
-          state.orchestration ? t("✔ подключена") : t("○ не подключена"),
-          state.orchestration ? "mint" : "violet",
-        ],
-        [
-          t("Дрейф"),
-          overview.drift,
-          "harness diff",
-          t(driftLabel(overview.drift)),
-          overview.drift === "clean" ? "mint" : "lavender",
-        ],
-      ]
-    : [];
+  const components = overview && state ? installRows(overview, t, word) : [];
   return (
     <section className="panel harness-install" id="harness-install">
       <div className="panel-head">
@@ -155,8 +171,8 @@ export function RuntimePanel({ overview, compact }: { overview: HarnessOverview 
     <section className="panel harness-runtime" id="harness-runtime">
       <div className="panel-head">
         <h2>Runtime</h2>
-        <span className={`orch-pill ${runtime?.state === "online" ? "mint" : "violet"}`}>
-          {runtime ? (runtime.state === "online" ? t("работает") : t("не отвечает")) : t("нет данных")}
+        <span className={`orch-pill ${runtime?.state === "online" || (!runtime && store?.authority === "file-ledger") ? "mint" : "violet"}`}>
+          {runtime ? (runtime.state === "online" ? t("работает") : t("не отвечает")) : (store?.authority ?? t("нет данных"))}
         </span>
       </div>
       <div className="harness-runtime-body">

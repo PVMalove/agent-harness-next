@@ -53,3 +53,5 @@ def test_the_overview_fixture_is_a_harness_overview_reply() -> None:
         **payload,
     }
     assert isinstance(REPLIES.validate_python(reply), HarnessOverviewReply)
+    # The e2e Adapters block reads the wire's integrations, not a "no data" placeholder.
+    assert [item["name"] for item in payload["integrations"]] == ["Claude Code", "Codex", "GitHub"]

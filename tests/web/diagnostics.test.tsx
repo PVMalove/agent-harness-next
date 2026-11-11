@@ -78,8 +78,15 @@ describe("the Diagnostics route", () => {
     expect(checkRationale("ru", "tracker.online")).toBeNull();
     act(() => fireEvent.click(document.querySelector('[data-check="tracker.online"]')!));
     const why = within(detail()).getByText("Почему важно").nextElementSibling as HTMLElement;
-    expect(why.textContent).toBe("нет данных");
+    expect(why.textContent).toBe("нет данных · обоснование для проверки не записано");
     expect(why.className).toContain("no-data");
+  });
+
+  test("the title facts end with the snapshot time, not the cache age", () => {
+    renderDiagnostics();
+    const facts = [...document.querySelectorAll(".diag-title .home-facts span")].map((item) => item.textContent);
+    expect(facts.at(-1)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(facts.join(" ")).not.toContain("Новый снимок");
   });
 
   test("the summary counts are the server's even when they differ from the list", () => {

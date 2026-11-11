@@ -286,8 +286,11 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* Page fit (#1066): on a desktop window the long lists of Diagnostics, Reports and the Agent
    activity sessions scroll inside their block, so the page itself fits the window. */
 @media (min-width: 981px) {
-  #diag-list { max-height: max(200px, calc(100dvh - 720px)); overflow-y: auto; }
-  #diag-detail { max-height: max(280px, calc(100dvh - 600px)); overflow-y: auto; }
+  #diag-list { min-height: 420px; max-height: max(420px, calc(100dvh - 400px)); overflow-y: auto; }
+  /* The detail panel fits the window: its body scrolls, the command action stays in view. */
+  .diag-detail-panel { max-height: max(420px, calc(100dvh - 120px)); }
+  .diag-detail-body { min-height: 0; overflow-y: auto; }
+  .diag-detail-body .diag-action { position: sticky; bottom: -16px; padding: 8px 0; background: var(--surface); }
   .work-sessions .work-list { max-height: max(240px, calc(100dvh - 460px)); overflow-y: auto; }
   #report-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; }
   .report-timeline { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }
@@ -352,3 +355,12 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .orch-map-node.live .orch-map-bg { animation: none; }
 }
 .orch-heartbeat { white-space: nowrap; }
+.board-open { display: inline-flex; align-items: center; gap: 4px; }
+.board-open .hi { width: 12px; height: 12px; }
+/* Harness (#1066): the installation rows keep one line (a lock time or schema fits its value
+   column), the KPI captions wrap instead of cutting the generation id, and the maintenance panel
+   follows the command panel on the Commands tab. */
+.harness-component { grid-template-columns: minmax(100px, 1.2fr) minmax(70px, max-content) minmax(100px, 1.4fr) auto; }
+.harness-component > b { white-space: nowrap; }
+.harness-kpis small { display: block; overflow-wrap: anywhere; }
+#harness-tab-commands .harness-maintenance { margin-top: 16px; }

@@ -2755,6 +2755,14 @@ EN.update(
         "PR не готов к созданию": "The PR is not ready to create",
         "PR готов к созданию": "The PR is ready to create",
         "Почему": "Why",
+        "нет данных · обоснование для проверки не записано": "no data · no rationale is recorded for the check",
+        "политику hook снимок harness.overview не читает": "the harness.overview snapshot does not read the hook policy",
+        "быстрый доступ": "quick access",
+        "команда": "command",
+        "режим": "mode",
+        "последний результат": "last result",
+        "результат запуска виден в панели команд": "a run's result shows in the command panel",
+        "Показать": "Show",
     }
 )
 
