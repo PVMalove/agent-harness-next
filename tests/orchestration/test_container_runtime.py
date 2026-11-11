@@ -602,3 +602,41 @@ def test_a_runtime_killed_at_container_launch_adopts_the_worker_and_its_egress_p
     sent = killed_at_launch(repo, engine)
 
     assert_adopted(repo, engine, sent, proxy_id=PROXY_ID)
+
+
+@pytest.mark.fault_injection
+def test_a_worker_that_exited_before_its_receipt_keeps_its_logs_and_its_launch_is_lost_without_a_second_create(
+    podman: Podman,
+) -> None:
+    repo, engine = podman(access_policy=proxy_policy(), env=PAUSE_AT_LAUNCHED)
+
+    def worker_exited(state: JsonObject) -> None:
+        state["objects"][WORKER_CONTAINER].update(status="exited", exit_code=0)
+
+    code, _, err = killed_at_launch(repo, engine, worker_exited)
+
+    assert code == 2, err
+    assert "left no running labelled worker; never relaunched" in err, err
+    assert dig(repo.execution(), "state") == "lost"
+    [(state, result)] = repo.rows(
+        "SELECT state, result_json FROM operations WHERE operation = 'execution.launch'"
+    )
+    assert state == "failed"
+    assert json.loads(str(result))["code"] == "engine_unavailable", result
+    calls = engine.calls()
+    created = sorted(
+        create[create.index("--name") + 1] for create in verbs(engine, "create")
+    )
+    [worker_name, proxy_name] = created
+    assert proxy_name == f"{worker_name}-proxy", created
+    roles = {
+        worker_name: "worker", WORKER_CONTAINER: "worker",
+        proxy_name: "proxy", PROXY_ID: "proxy",
+    }
+    removals = engine.removals()
+    assert [roles.get(call[-1], "network") for call in removals] == [
+        "worker", "proxy", "network", "network",
+    ], removals
+    assert all(call[1] == "network" for call in removals[2:]), removals
+    assert calls.index(["podman", "logs", WORKER_CONTAINER]) < calls.index(removals[0])
+    assert engine.state()["objects"] == {}
