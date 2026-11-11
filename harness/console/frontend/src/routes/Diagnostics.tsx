@@ -10,7 +10,7 @@ import { CheckList, visibleChecks } from "../diagnostics/CheckList";
 import type { CheckFilter } from "../diagnostics/CheckList";
 import { downloadJson, exportName, exportPayload } from "../diagnostics/exportReport";
 import { Icon } from "../icons";
-import { groupLabel, useI18n } from "../i18n";
+import { checkTitle, groupLabel, useI18n } from "../i18n";
 import { href } from "../navigation";
 import { useScreen } from "../screens/useScreen";
 import type { LocalJob } from "../ws/jobs";
@@ -58,9 +58,10 @@ export function Diagnostics() {
   }, [screen.data]);
 
   const group = useCallback((id: string) => groupLabel(language, id), [language]);
+  const title = useCallback((id: string) => checkTitle(language, id), [language]);
   const visible = useMemo(
-    () => (report ? visibleChecks(report, filter, query, group) : []),
-    [report, filter, query, group],
+    () => (report ? visibleChecks(report, filter, query, group, title) : []),
+    [report, filter, query, group, title],
   );
   const current = visible.find((check) => check.id === selected) ?? visible[0] ?? null;
   const shownOnline = report ? report.online : online;

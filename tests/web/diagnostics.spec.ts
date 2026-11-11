@@ -8,7 +8,7 @@
    - [x] «Сводка здоровья»: four counters and the health strip from the report summary, the
          Офлайн/Онлайн switch, the checked count and the CLI line.
    - [x] «Проверки»: chips Все/Проблемы/Пропущено/Пройдено with the summary counts, search, rows
-         sorted fail → warn → skip → ok with status icon, id, group · message and pill.
+         sorted fail → warn → skip → ok with status icon, check title, group · message and status word.
    - [x] Master-detail of equal height; the detail shows pill, group, id, message, «Как исправить:»,
          the manual command with «Копировать команду», the source line and the skip callout.
    - [x] «Экспорт» saves JSON of the visible checks with the filter (Blob, no CSP change).

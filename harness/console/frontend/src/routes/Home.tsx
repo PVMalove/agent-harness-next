@@ -172,7 +172,7 @@ function AreaRows({ areas }: { areas: AreaCounters[] }) {
             <span
               className="health-bar"
               role="img"
-              aria-label={`${name}: ok ${area.ok}, warn ${area.warn}, fail ${area.fail}, skip ${area.skipped}`}
+              aria-label={`${name}: ${t("пройдено")} ${area.ok}, ${t("внимание")} ${area.warn}, ${t("ошибки")} ${area.fail}, ${t("пропущено")} ${area.skipped}`}
             >
               {segments.map(([value, css]) =>
                 value ? <i key={css} className={css} style={{ width: `${(value / total) * 100}%` }} /> : null,
@@ -558,7 +558,7 @@ export function Home() {
                 {install?.installed ? <span>{t("установлено {version}", { version: install.installed_version })}</span> : null}
                 {store ? <span>{store.authority}</span> : null}
                 <span id="home-facts">
-                  {health ? `${health.ok} ok · ${health.warn} warn · ${health.fail} fail · ${health.skipped} skip` : unavailable}
+                  {health ? `${health.ok} ${t("пройдено")} · ${health.warn} ${t("внимание")} · ${health.fail} ${t("ошибки")} · ${health.skipped} ${t("пропущено")}` : unavailable}
                 </span>
                 {install ? <span>{t("{count} навыков", { count: install.skills })}</span> : null}
                 {snapshot.repo_map.tier ? <span>Repo Map {snapshot.repo_map.tier}</span> : null}

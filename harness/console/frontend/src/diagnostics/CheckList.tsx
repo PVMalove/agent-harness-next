@@ -1,16 +1,17 @@
 /* The Diagnostics check list of the mockup: status filter chips with the report's counts, a search
-   over the id, the group and the message, rows sorted by severity. */
+   over the id, the title, the group and the message, rows sorted by severity. A row names the check
+   by its catalog title and its status in words (kernel STATE_LABELS), never the raw id or FAIL/OK. */
 import { Icon } from "../icons";
 import { groupLabel, useI18n } from "../i18n";
 import type { CheckStatus, HealthCheck, HealthReport } from "../ws/screens";
 
 export type CheckFilter = "all" | "problem" | "skipped" | "ok";
 
-export const STATUS_META: Readonly<Record<CheckStatus, { short: string; word: string; icon: string; tone: string }>> = {
-  fail: { short: "FAIL", word: "ошибки", icon: "x", tone: "err" },
-  warn: { short: "WARN", word: "внимание", icon: "warning", tone: "warn" },
-  skipped: { short: "SKIP", word: "пропущено", icon: "clock", tone: "skip" },
-  ok: { short: "OK", word: "пройдено", icon: "check", tone: "ok" },
+export const STATUS_META: Readonly<Record<CheckStatus, { word: string; icon: string; tone: string }>> = {
+  fail: { word: "ошибки", icon: "x", tone: "err" },
+  warn: { word: "внимание", icon: "warning", tone: "warn" },
+  skipped: { word: "пропущено", icon: "clock", tone: "skip" },
+  ok: { word: "пройдено", icon: "check", tone: "ok" },
 };
 
 const ORDER: Readonly<Record<CheckStatus, number>> = { fail: 0, warn: 1, skipped: 2, ok: 3 };
@@ -27,6 +28,7 @@ export function visibleChecks(
   filter: CheckFilter,
   query: string,
   group: (id: string) => string,
+  title: (id: string) => string = (id) => id,
 ): HealthCheck[] {
   const needle = query.trim().toLowerCase();
   return report.checks
@@ -34,7 +36,7 @@ export function visibleChecks(
     .filter(
       ({ check }) =>
         inFilter(check, filter) &&
-        (!needle || [check.id, check.group, group(check.group), check.message].join(" ").toLowerCase().includes(needle)),
+        (!needle || [check.id, title(check.id), check.group, group(check.group), check.message].join(" ").toLowerCase().includes(needle)),
     )
     .sort((a, b) => ORDER[a.check.status] - ORDER[b.check.status] || a.index - b.index)
     .map(({ check }) => check);
@@ -61,7 +63,7 @@ export function CheckList({
   onSelect: (id: string) => void;
   cli: string;
 }) {
-  const { t, language } = useI18n();
+  const { t, language, state, check: checkName } = useI18n();
   const { summary } = report;
   const counts: Record<CheckFilter, number> = {
     all: report.checks.length,
@@ -140,12 +142,12 @@ export function CheckList({
                   <Icon name={meta.icon} />
                 </span>
                 <span className="diag-row-main">
-                  <b>{check.id}</b>
+                  <b>{checkName(check.id)}</b>
                   <small>
                     {groupLabel(language, check.group)} · {check.message}
                   </small>
                 </span>
-                <span className={`diag-pill ${meta.tone}`}>{meta.short}</span>
+                <span className={`diag-pill ${meta.tone}`}>{state(check.status)}</span>
                 <span className="diag-chevron">
                   <Icon name="chevron" />
                 </span>

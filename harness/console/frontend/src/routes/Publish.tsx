@@ -36,8 +36,9 @@ interface Check {
   detail: string;
 }
 
-/** The preflight rows of one entry; a fact the view could not read is "unknown", never a pass. */
-export function preflightRows(entry: PublishEntry): Check[] {
+/** The preflight rows of one entry; a fact the view could not read is "unknown", never a pass.
+    `word` renders a report outcome in the UI language (the raw value without it). */
+export function preflightRows(entry: PublishEntry, word: (state: string) => string = (state) => state): Check[] {
   const flag = (value: boolean | null): [string, Tone] =>
     value === null ? ["unknown", "blue"] : value ? ["ok", "mint"] : ["blocked", "violet"];
   const report = (ref: PublishEntry["qa"]): [string, Tone] =>
@@ -47,12 +48,12 @@ export function preflightRows(entry: PublishEntry): Check[] {
   const [head, headTone] = flag(entry.head_matches);
   const [target, targetTone] = flag(entry.target_in_history);
   return [
-    { label: "QA evidence", status: qa, tone: qaTone, detail: entry.qa ? `${entry.qa.dispatch_id} · ${entry.qa.outcome}` : "—" },
+    { label: "QA evidence", status: qa, tone: qaTone, detail: entry.qa ? `${entry.qa.dispatch_id} · ${word(entry.qa.outcome)}` : "—" },
     {
       label: "Review",
       status: review,
       tone: reviewTone,
-      detail: entry.review ? `${entry.review.dispatch_id} · ${entry.review.outcome}` : "—",
+      detail: entry.review ? `${entry.review.dispatch_id} · ${word(entry.review.outcome)}` : "—",
     },
     {
       label: "Release Gate",
@@ -67,7 +68,7 @@ export function preflightRows(entry: PublishEntry): Check[] {
 
 function Preflight({ entry, compact }: { entry: PublishEntry; compact: boolean }) {
   const { state } = useI18n();
-  const rows = preflightRows(entry);
+  const rows = preflightRows(entry, state);
   return (
     <div className="publish-preflight">
       {(compact ? rows.slice(0, 3) : rows).map((row) => (

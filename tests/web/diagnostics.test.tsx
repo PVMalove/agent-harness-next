@@ -63,7 +63,7 @@ describe("the Diagnostics route", () => {
     expect(document.querySelector("#diag-total")?.textContent).toBe("5 проверок");
     expect(document.querySelector("#diag-checked")?.textContent).toContain("проверено 4 из 5");
     expect(rows()).toEqual(["hooks.policy", "environment.uv", "tracker.online", "files.lock", "directories.sandboxes"]);
-    expect(within(detail()).getAllByText("Нет .harness/hook-policy.json").length).toBe(2);
+    expect(within(detail()).getAllByText("Нет .harness/hook-policy.json").length).toBe(1);
     expect(within(detail()).getByText("Почему важно").nextElementSibling!.textContent).toBe(
       checkRationale("ru", "hooks.policy"),
     );
@@ -163,6 +163,29 @@ describe("the Diagnostics route", () => {
     expect(payload).toMatchObject({ schema_version: 1, online: false, filter: "problem", summary: report.summary });
     expect(payload.checks.map((check) => check.id)).toEqual(["hooks.policy", "environment.uv"]);
     expect(exportName(new Date("2026-11-05T10:41:00Z"))).toBe("harness-diagnostics-2026-11-05-10-41-00.json");
+  });
+
+  test("the Russian page names checks by title and statuses in words, never raw ids or FAIL/WARN/SKIP/OK", () => {
+    renderDiagnostics();
+    const list = document.querySelector("#diag-list") as HTMLElement;
+    const text = `${list.textContent} ${detail().textContent}`;
+    for (const raw of ["FAIL", "WARN", "SKIP", "hooks.policy", "environment.uv", "files.lock"]) expect(text).not.toContain(raw);
+    expect(text).not.toMatch(/\bOK\b/);
+    expect(within(list).getByText("Политика хуков")).toBeTruthy();
+    expect(within(list).getByText("Менеджер пакетов uv")).toBeTruthy();
+    expect(within(list).getAllByText("Ошибка").length).toBeGreaterThan(0);
+    expect(within(list).getAllByText("Норма").length).toBeGreaterThan(0);
+    expect(within(detail()).getByRole("heading", { level: 3, name: "Политика хуков" })).toBeTruthy();
+    act(() => fireEvent.change(screen.getByRole("searchbox"), { target: { value: "менеджер пакетов" } }));
+    expect(rows()).toEqual(["environment.uv"]);
+  });
+
+  test("in English the check titles and status words come from the catalog", () => {
+    renderDiagnostics(HEALTH_REPORT, "?lang=en");
+    const list = document.querySelector("#diag-list") as HTMLElement;
+    expect(within(list).getByText("Hook policy")).toBeTruthy();
+    expect(within(list).getAllByText("Failure").length).toBeGreaterThan(0);
+    expect(within(list).getAllByText("Skipped").length).toBeGreaterThan(0);
   });
 
   test("in English the page labels and the check groups are translated", () => {

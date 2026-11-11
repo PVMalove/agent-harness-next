@@ -59,7 +59,7 @@ describe("Home", () => {
     const health = document.getElementById("home-health")!;
     expect(within(health).getByText("42").className).toBe("ok");
     expect(document.getElementById("health-fail")!.textContent).toBe("2");
-    expect(document.getElementById("home-facts")!.textContent).toBe("42 ok · 1 warn · 2 fail · 11 skip");
+    expect(document.getElementById("home-facts")!.textContent).toBe("42 пройдено · 1 внимание · 2 ошибки · 11 пропущено");
     const chips = document.getElementById("home-chips")!.textContent!;
     expect(chips).toContain("установлено 1.5.1");
     expect(chips).toContain("file-ledger");
@@ -139,6 +139,7 @@ describe("Home", () => {
     expect(document.getElementById("problems-limit")!.textContent).toBe(
       "Showing 3 of 5 · Full check catalog unavailable",
     );
+    expect(document.getElementById("home-facts")!.textContent).toBe("42 passed · 1 warnings · 2 errors · 11 skipped");
     expect(document.documentElement.lang).toBe("en");
   });
 
