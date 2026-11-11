@@ -480,12 +480,12 @@ mod snapshots {
     fn an_idle_or_old_or_closed_snapshot_is_expired() {
         let (repo, _) = migrated("snapshot-expiry");
         let state = repo.state();
+        // A zero idle time or lifetime is outlived by the next request: no test waits for it.
         for registry in [
-            Registry::with_limits(Duration::from_millis(50), Duration::from_secs(60), 8),
-            Registry::with_limits(Duration::from_secs(60), Duration::from_millis(50), 8),
+            Registry::with_limits(Duration::ZERO, Duration::from_secs(60), 8),
+            Registry::with_limits(Duration::from_secs(60), Duration::ZERO, 8),
         ] {
             let id = open(&registry, &state).snapshot.unwrap();
-            std::thread::sleep(Duration::from_millis(120));
 
             let error = named(&registry, &state, &id).unwrap_err();
 

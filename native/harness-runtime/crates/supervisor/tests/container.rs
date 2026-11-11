@@ -652,7 +652,7 @@ fn an_exit_is_stored_before_the_removal_and_a_restarted_runtime_repeats_the_remo
 
 #[test]
 fn a_worker_past_its_deadline_is_stopped_with_its_grace_then_killed() {
-    let repo = Repo::new("deadline", 1);
+    let repo = Repo::new("deadline", 3600);
     let probe = CrashAtRemoval::new(&repo, false);
     let supervisor = repo.supervisor_on(Vec::new(), Arc::clone(&probe) as Arc<dyn Engine>);
     repo.launch(&supervisor).unwrap();
@@ -667,7 +667,13 @@ fn a_worker_past_its_deadline_is_stopped_with_its_grace_then_killed() {
     let engine = Arc::clone(&repo.engine);
     let git_common = repo.git_common.clone();
     let stopped_id = id.clone();
-    std::thread::sleep(Duration::from_millis(1100));
+    // The deadline has passed: the next reconcile stops the worker, without waiting for it.
+    repo.store()
+        .execute(
+            "UPDATE executions SET execution_deadline = '2000-01-01T00:00:00+00:00' WHERE id = ?1",
+            [&id],
+        )
+        .unwrap();
     // The kill ends the worker: the next inspect shows it exited.
     std::thread::spawn(move || {
         let until = Instant::now() + Duration::from_secs(20);

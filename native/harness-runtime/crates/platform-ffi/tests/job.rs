@@ -172,10 +172,10 @@ fn a_suspended_child_runs_only_after_resume() {
     let mut reaper = Reaper(vec![suspended(&script)]);
     let process = Process::from_child(&reaper.0[0]).unwrap();
 
-    std::thread::sleep(Duration::from_millis(500));
     assert!(!marker.exists());
     assert_eq!(process.exit_code().unwrap(), None);
 
+    // The previous suspend count proves the child was held until here: nothing waits for it.
     assert!(process.resume().unwrap() >= 1);
     let status = reaper.0[0].wait().unwrap();
     assert!(status.success(), "{status:?}");
