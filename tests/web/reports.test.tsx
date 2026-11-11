@@ -8,7 +8,6 @@ import { parseReports } from "../../harness/console/frontend/src/ws/ledger";
 import { FakeSocket, ManualClock, screenPage } from "./fake-socket";
 import FACTS from "./fixtures/reports-facts.json";
 import REPORT from "./fixtures/reports-report.json";
-import TIMELINE from "./fixtures/reports-timeline.json";
 import REPORTS from "./fixtures/reports.json";
 
 const answered = new Set<unknown>();
@@ -48,6 +47,33 @@ function renderReports(language = "", snapshot: unknown = REPORTS) {
 }
 
 const content = () => document.querySelector("main#content")?.textContent ?? "";
+/* The TUI facts the web Reports page does not repeat: the batch history and its chronology live on
+   the Orchestration page (the mockup has no batch block on Reports), and the report sections are
+   laid out as the mockup's summary, Evidence and conclusion rather than the TUI's section titles. */
+const TUI_ONLY = new Set([
+  "▶ в работе",
+  "08.11.2026 09:00 UTC",
+  "PR ещё не создан",
+  "08.11.2026 08:00 UTC",
+  "✔ завершён",
+  "01.11.2026 08:00 UTC",
+  "до PR: 1 д 2 ч 30 мин",
+  "Output",
+  "Checks",
+  "Next action",
+  "developer → review → qa → developer",
+  "батч создан",
+  "developer: d-dev, итог: reported",
+  "отчёт developer: completed",
+  "review: d-rev, итог: reported",
+  "отчёт review: completed",
+  "qa: d-qa, итог: reported",
+  "developer: d-wip, итог: working",
+  "отчёт qa: failed",
+  "решение coordinator: developer-retry → developer (policy:auto) — QA упал",
+]);
+/** A TUI status is a symbol plus words; the mockup's rows show the words only. */
+const words = (fact: string) => fact.replace(/^[✔▶Ⅱ○✖⚠] /, "");
 const evidenceMarks = () =>
   [...document.querySelectorAll("#reports-evidence .report-evidence-row")].map((row) =>
     [...row.querySelectorAll(".report-evidence-cell")].map((cell) => cell.textContent).join(""),
@@ -63,11 +89,13 @@ describe("the Reports route", () => {
     const socket = renderReports();
     expect(socket.request("reports.snapshot")).toMatchObject({ force: false });
     expect(socket.request("reports.report")).toMatchObject({ dispatch_id: "d-qa" });
-    act(() => fireEvent.click(document.querySelector('[data-batch="b-887"]') as HTMLElement));
-    expect(socket.request("reports.timeline")).toMatchObject({ batch_id: "b-887" });
-    answer(socket, "reports.timeline", TIMELINE);
-    const shown = content();
-    const missing = (FACTS as string[]).filter((fact) => !shown.includes(fact));
+    const list = content();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Качество" })));
+    const shown = list + content();
+    // An Evidence row shows the check command and its evidence as name and detail.
+    const missing = (FACTS as string[]).filter(
+      (fact) => !TUI_ONLY.has(fact) && !words(fact).split(" — ").every((part) => shown.includes(part)),
+    );
     expect(missing).toEqual([]);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Отчёты");
   });
@@ -78,7 +106,8 @@ describe("the Reports route", () => {
     expect(order()).toEqual(["d-qa", "d-wip", "d-rev", "d-dev", "d-arch-888", "d-old"]);
     act(() => fireEvent.change(document.querySelector("#filter-completion") as HTMLElement, { target: { value: "open" } }));
     expect(order()).toEqual(["d-wip", "d-arch-888"]);
-    expect(content()).toContain("⚠ в работе · отчёта ещё нет");
+    expect(content()).toContain("в работе · отчёта ещё нет");
+    expect(content()).not.toContain("⚠ в работе");
     expect(content()).toContain("нет отчёта");
     act(() => fireEvent.change(document.querySelector("#filter-completion") as HTMLElement, { target: { value: "all" } }));
     act(() => fireEvent.change(document.querySelector("#filter-role") as HTMLElement, { target: { value: "rev" } }));
@@ -86,6 +115,67 @@ describe("the Reports route", () => {
     answer(socket, "reports.report", { output: "<img src=x onerror=alert(1)>", risks: { status: "none", details: "" } });
     expect(document.querySelector("img")).toBeNull();
     expect(content()).toContain("<img src=x onerror=alert(1)>");
+  });
+
+  test("the mockup order: two title actions, 4 + 4 KPI, one filter row, compact rows, detail, then the QA lane", () => {
+    renderReports();
+    const title = document.querySelector(".reports-title .actions")!;
+    expect([...title.children].map((item) => item.id)).toEqual(["reports-refresh", "reports-export"]);
+    expect(title.querySelector("#reports-export use, #reports-export svg")).not.toBeNull();
+    expect(document.querySelector("#reports-updated")!.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(content()).not.toContain("Новый снимок");
+    expect(document.querySelectorAll("#reports-summary > div")).toHaveLength(4);
+    const kpi = [...document.querySelectorAll("#reports-kpi > div > span")].map((item) => item.textContent);
+    expect(kpi).toEqual(["Evidence полно", "Stale evidence", "Задержка отчёта", "QA с первого раза"]);
+    expect(document.querySelector("#reports-kpi")!.textContent).not.toContain("С рисками");
+    const row = document.querySelector("#report-filter-row")!;
+    expect(row.querySelector("select#report-status")).not.toBeNull();
+    expect(row.querySelector(".report-search svg")).not.toBeNull();
+    expect(row.querySelector("input#reports-search")).not.toBeNull();
+    expect(document.querySelector("details#report-more-filters #filter-completion")).not.toBeNull();
+    expect(document.querySelector(".report-list-foot")!.textContent).toBe("Отчёты не заменяют решение; evidence доступен в деталях.");
+    const first = document.querySelector("#report-list .report-row")!;
+    expect([...first.children].map((item) => item.className.split(" ")[0])).toEqual([
+      "report-type-icon",
+      "report-row-main",
+      "report-status",
+      "report-time",
+    ]);
+    expect(first.querySelector(".report-status")!.textContent).toBe("отчёт получен · ошибка");
+    expect(first.querySelector(".report-time")!.textContent).toBe("12:00");
+    const detail = document.querySelector("#report-detail .report-detail-body")!;
+    const blocks = [".report-detail-top", "h3", ".report-meta", ".report-summary", ".report-evidences", ".report-conclusion", ".report-actions"];
+    const tops = blocks.map((selector) => [...detail.querySelectorAll("*")].indexOf(detail.querySelector(selector)!));
+    expect(tops.every((index) => index >= 0)).toBe(true);
+    expect([...tops].sort((a, b) => a - b)).toEqual(tops);
+    expect(detail.querySelector(".report-meta")!.textContent).not.toMatch(/T\d{2}:/);
+    expect(detail.querySelectorAll(".report-evidences .report-evidence")).toHaveLength(3);
+    expect(detail.querySelector(".report-actions a")!.getAttribute("href")).toBe("#/orchestration");
+    const grid = document.querySelector(".reports-grid")!;
+    expect(grid.nextElementSibling?.id).toBe("qa-lane");
+    expect(document.querySelector("#qa-lane details#report-qa-log")).not.toBeNull();
+    expect(document.querySelector("#batch-list")).toBeNull();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Качество" })));
+    expect(document.querySelector("#reports-quality-kpi")!.textContent).toContain("С рисками");
+    expect(document.querySelector("#reports-quality-kpi")!.textContent).toContain("С блокерами");
+  });
+
+  test("the search reads ticket, role, outcome and dispatch; the status select reads the report state", () => {
+    renderReports();
+    const order = () => [...document.querySelectorAll("#report-list [data-stage]")].map((row) => row.getAttribute("data-stage"));
+    act(() => fireEvent.change(document.querySelector("#reports-search") as HTMLElement, { target: { value: "rev" } }));
+    expect(order()).toEqual(["d-rev"]);
+    act(() => fireEvent.change(document.querySelector("#reports-search") as HTMLElement, { target: { value: "failed" } }));
+    expect(order()).toEqual(["d-qa"]);
+    act(() => fireEvent.change(document.querySelector("#reports-search") as HTMLElement, { target: { value: "#886" } }));
+    expect(order()).toEqual(["d-old"]);
+    act(() => fireEvent.change(document.querySelector("#reports-search") as HTMLElement, { target: { value: "" } }));
+    act(() => fireEvent.change(document.querySelector("#report-status") as HTMLElement, { target: { value: "blocked" } }));
+    expect(order()).toEqual(["d-qa"]);
+    act(() => fireEvent.change(document.querySelector("#report-status") as HTMLElement, { target: { value: "attention" } }));
+    expect(order()).toEqual(["d-rev"]);
+    act(() => fireEvent.change(document.querySelector("#report-status") as HTMLElement, { target: { value: "passed" } }));
+    expect(order()).toEqual(["d-dev", "d-old"]);
   });
 
   test("selectStages sorts by ticket and keeps unknown times last", () => {
@@ -100,7 +190,7 @@ describe("the Reports route", () => {
     renderReports();
     expect(document.querySelector("#reports-summary")!.textContent).toContain("Отчётов4");
     expect(document.querySelector("#qa-lane")!.textContent).toContain("QA lane · #887");
-    expect(document.querySelector("#report-conclusion")!.textContent).toBe("developer-retry");
+    expect(document.querySelector("#report-conclusion p")!.textContent).toBe("developer-retry");
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
     const matrix = document.querySelector("#reports-evidence")!;
     expect(matrix.querySelectorAll(".report-evidence-row").length).toBeGreaterThan(0);
@@ -162,7 +252,7 @@ describe("the Reports route", () => {
     renderReports("?lang=en");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Reports");
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Reports", "Evidence", "Quality", "Readiness"]);
-    expect(content()).toContain("✖ report received · failed");
+    expect(content()).toContain("report received · failed");
     expect(content()).toContain("Evidence complete");
   });
 });

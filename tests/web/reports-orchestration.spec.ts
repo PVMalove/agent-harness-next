@@ -5,15 +5,16 @@
 
    Manual mockup-conformance checklist (docs/design/web-console-mockups):
    #reports
-   - [ ] Title: h1 «Отчёты», subtitle, cache fact, actions «Обновить отчёты» and «Оркестрация».
-   - [ ] KPI row (`report-kpis`): Отчётов, Evidence полно, Задержка отчёта, QA с первого раза,
-         С рисками, С блокерами; a figure that needs attention starts with ⚠.
-   - [ ] Master-detail grid (`reports-grid`): «Стадии и отчёты» with the TUI filters (тикет, роль,
-         outcome, дата, статус стадии, completion, sort, direction) and stage rows with a status
-         symbol; «Детали отчёта» with the report sections and the QA log.
-   - [ ] «История batch» with state, start and time to PR; a chosen batch opens «Хронология batch».
-   - Deviations: no type chips and no evidence matrix (the ledger carries no report types); the
-     stage list replaces the mockup's report cards, as in the TUI.
+   - [ ] Title: h1 «Отчёты», subtitle, facts ending with the snapshot time, actions «Обновить» and
+         «Экспорт» (download icon).
+   - [ ] `reports-summary` (4) and `report-kpis` (4): Evidence полно, Stale evidence, Задержка
+         отчёта, QA с первого раза; the risk and blocker tiles sit on the «Качество» tab.
+   - [ ] `reports-grid`: «Отчёты» with type chips, one row (status select, search) and the TUI
+         filters folded under «Ещё фильтры»; compact rows (icon, role · ticket, status words, HH:MM);
+         «Детали отчёта» in the mockup order (summary, Evidence, conclusion, actions).
+   - [ ] QA lane full width under the grid with the QA log folded inside.
+   - Deviations: the batch history and chronology stay on Orchestration; «Открыть отчёт» has no
+     reader in the web console (docs/design/web-console-mockups/parity-1066.md).
    #orchestration
    - [ ] Title with links «Восстановление», «Контейнерный маршрут», «Ход работы», «Отчёты».
    - [ ] KPI row (`orch-kpis`) of the eight TUI tiles.
@@ -110,10 +111,24 @@ for (const width of [1440, 390]) {
     await mockSocket(page);
     await open(page, "reports", width, "#reports-kpi");
     await expect(page.locator("#report-list [data-stage]")).toHaveCount(6);
-    await expect(page.locator("#report-detail")).toContainText("✖ fail");
-    await expect(page.locator("#report-qa-log")).toContainText("хвост лога (последние 2 из 42 строк):");
-    await page.locator('#batch-list [data-batch="b-887"]').click();
-    await expect(page.locator("#report-timeline")).toContainText("developer → review → qa → developer");
+    await expect(page.locator("#report-detail .report-evidences .report-evidence")).toHaveCount(3);
+    await expect(page.locator("#qa-lane #report-qa-log")).toContainText("хвост лога (последние 2 из 42 строк):");
+    await expect(page.locator("#batch-list")).toHaveCount(0);
+    // Every block of the page stays inside its frame, and a report row is one line.
+    const wide = await page.evaluate(() =>
+      [...document.querySelectorAll(".reports-page .panel, .reports-page .report-kpis, .reports-page .reports-summary, .report-row, .report-section")]
+        .filter((box) => box.scrollWidth > box.clientWidth + 1)
+        .map((box) => box.className),
+    );
+    expect(wide).toEqual([]);
+    // On a phone the mockup moves the time under the row (its 720 px rule); on a desktop a row is one line.
+    const rowHeight = await page.locator("#report-list .report-row").first().evaluate((row) => row.getBoundingClientRect().height);
+    expect(rowHeight).toBeLessThanOrEqual(width > 600 ? 64 : 96);
+    await page.getByRole("tab", { name: "Готовность" }).click();
+    const pills = await page.evaluate(() =>
+      [...document.querySelectorAll("#reports-readiness .orch-pill")].filter((pill) => pill.scrollWidth > pill.clientWidth + 1).length,
+    );
+    expect(pills).toBe(0);
     expect(await noOverflow(page)).toBe(true);
   });
 

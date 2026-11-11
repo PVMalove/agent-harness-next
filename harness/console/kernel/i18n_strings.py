@@ -2744,6 +2744,13 @@ EN.update(
         "в ledger нет batch": "no batch in the ledger",
         "выберите batch в истории ниже": "choose a batch in the history below",
         "проверки восстановления в снимке не собираются": "the snapshot does not collect recovery checks",
+        # parity-1066 follow-up
+        "Статус отчёта": "Report status",
+        "Найти отчёт": "Find a report",
+        "Поиск отчёта": "Report search",
+        "Ещё фильтры": "More filters",
+        "нельзя считать актуальным": "cannot count as current",
+        "нет данных · следующее действие не записано": "no data · the next action is not recorded",
     }
 )
 

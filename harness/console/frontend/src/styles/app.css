@@ -83,16 +83,30 @@
 .worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
 .worktree-row .btn { flex: none; padding: 4px 8px; font-size: var(--fs-1); }
 .harness-component > em:empty { display: none; }
-/* Reports: the stage rows carry the role icon, the report sections and the QA log keep the
-   untrusted text wrapped, and the batch history sits under the stage list. */
+/* Reports: the mockup's report rows and one status/search row; the TUI's text filters fold under
+   «Ещё фильтры», the report sections and the QA log keep the untrusted text wrapped. */
 .reports-page > .command-refusal { margin-bottom: 12px; }
-.reports-page .report-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
-.reports-page .report-row .report-time { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-1); }
 .reports-page .report-row.on { background: #232c37; }
-.reports-page .report-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-.reports-page .report-filter-row > * { flex: 1 1 120px; min-width: 0; }
-.reports-detail-column { display: grid; gap: 20px; align-content: start; min-width: 0; }
-.report-section { margin-top: 12px; }
+.report-more-filters { margin-top: 8px; font-size: var(--fs-1); }
+.report-more-filters > summary { color: var(--muted); cursor: pointer; }
+.report-more-filters .report-filters { display: grid; gap: 8px; padding: 8px 0 0; }
+.report-more-filters .report-filter-row { flex-wrap: wrap; align-items: start; margin-top: 0; }
+.report-more-filters .report-filter-row > * { flex: 1 1 120px; min-width: 0; }
+.report-section { margin-top: 12px; min-width: 0; }
+/* The matrix header rule of the mockup (min-width 560px) also matches the detail labels: a label
+   is a plain line, as in the mockup detail. */
+.report-detail-body .report-evidence-head { display: block; min-width: 0; padding: 0; border-top: 0; }
+.report-evidence { cursor: default; }
+.report-evidence-state.passed { color: var(--ok); }
+.report-evidence-state.attention { color: var(--warn); }
+.report-evidence-state.blocked { color: var(--err); }
+.report-conclusion > div { min-width: 0; }
+.report-conclusion .report-line { margin: 4px 0 0; }
+.report-line-title { color: var(--muted); }
+.qa-lane-panel .report-qa-log { border-top: 1px solid var(--rule); }
+.qa-lane-panel .report-qa-log > summary { padding: 8px 16px; color: var(--muted); font-size: var(--fs-1); cursor: pointer; }
+#reports-quality-kpi { margin-bottom: 12px; }
+.report-ready-row .orch-pill, #reports-readiness .orch-pill { white-space: nowrap; min-width: max-content; }
 .report-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; font-size: var(--fs-1); overflow-wrap: anywhere; white-space: pre-wrap; }
 .report-line-text { min-width: 0; }
 .report-log { margin: 0; padding: 12px 16px; max-height: 320px; overflow: auto; font: var(--fs-1)/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -265,7 +279,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   #diag-detail { max-height: max(280px, calc(100dvh - 600px)); overflow-y: auto; }
   .work-sessions .work-list { max-height: max(240px, calc(100dvh - 460px)); overflow-y: auto; }
   #report-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; }
-  .report-timeline, .reports-batches .reports-panel { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }
+  .report-timeline { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }
 }
 /* Task Board spec row (#1066): the search by spec number beside the spec select. */
 .board-specbar .board-spec-search { flex: 0 1 200px; }

@@ -2,6 +2,7 @@
    lane, and the Evidence, Quality and Readiness tabs. The evidence matrix is the kernel's
    (`evidence` of the snapshot, pipeline_kpi.py `evidence_matrix`); a column without a source shows
    no data. */
+import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
 import { Bar, NoData } from "../steps/ActivityViews";
 import type {
@@ -59,8 +60,9 @@ export function ReportsSummary({ reports }: { reports: readonly ReportHead[] }) 
   );
 }
 
-/** The QA lane of the selected ticket: its failed attempts, then its QA runs, in time order. */
-export function QaLane({ ledger, ticket }: { ledger: Ledger; ticket: string }) {
+/** The QA lane of the selected ticket, full width under the report grid: its failed attempts,
+    then its QA runs, in time order; `children` (the folded QA log) close the panel. */
+export function QaLane({ ledger, ticket, children }: { ledger: Ledger; ticket: string; children?: ReactNode }) {
   const { t, state } = useI18n();
   const ticketDispatches = new Set(ledger.stages.filter((stage) => stage.ticket === ticket).map((stage) => stage.dispatch_id));
   const attempts = ledger.qa_attempts
@@ -98,6 +100,7 @@ export function QaLane({ ledger, ticket }: { ledger: Ledger; ticket: string }) {
           ))}
         </div>
       )}
+      {children}
     </section>
   );
 }
