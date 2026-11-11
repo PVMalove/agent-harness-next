@@ -1,5 +1,5 @@
 {
- "version": 8,
+ "version": 9,
  "engine": "sqlite3 FTS5 bm25, path tie-break",
  "corpus": "Tracked ADRs and CONTEXT.md; excludes task archives and tracker snapshots",
  "k_values": [
@@ -12,7 +12,7 @@
  "max_noise_ratio": 0.7,
  "dataset_hash": "27ae576158e8a67a0524831467f2e4d157f5beb707d8c7bf2ed5c24c04060d17",
  "source_hashes": {
-  "CONTEXT.md": "3d7f29094b0a5a1318236d450b80567ab52bd80ad5e7e8920d76c0185c89145a",
+  "CONTEXT.md": "47726b5dd5acca48c91c14d27f9688e628c4240ee7a994ae3b7256a2a723f0ab",
   "docs/adr/0001-portable-capability-delivery.md": "7f35b9513f2a9b63ad081ef5ade53b971a39aa94743167b426b6e7be5611c602",
   "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
   "docs/adr/0003-orchestration-core.md": "3e4e61af72ab7701013cba42f1faa8cdc2b3f4b9c23e7f2d0fc884f03f957854",
@@ -483,5 +483,5 @@
   "gate_passed": true
  },
  "annotation_revision": "Version 2 corrected source-grounded multi-label annotations; versions 3, 4 and 5 re-evaluate updated corpora. Initial single-label measurement remains unchanged in baseline_fts5_initial.json.",
- "corpus_revision": "Issue #716 updates worker observation/recovery in CONTEXT.md and ADR 0003, and session scratchpad binding in ADR 0006; issue #555 updates the test author in CONTEXT.md and ADR 0005; the import of integration/console-redesign into Harness Next merges them with the Harness Next CONTEXT.md and ADR 0003 changes (#635, #662, #786, #789). Re-evaluated the merged source set; dataset, labels, engine, windows and thresholds are unchanged. The initial corpus remains preserved in tests/memory/fixtures/initial-corpus.json. Issue #978 moves the public docs under site/docs and renames the repository; only the CONTEXT.md source hash changes and the report is identical. PR #892 merges the web console and runtime reliability corpora, including the external developer test-author route (#971) and canonical configuration/recovery terms (#685). Re-evaluated the merged source bytes with the dataset, labels, engine, windows and thresholds unchanged."
+ "corpus_revision": "Issue #716 updates worker observation/recovery in CONTEXT.md and ADR 0003, and session scratchpad binding in ADR 0006; issue #555 updates the test author in CONTEXT.md and ADR 0005; the import of integration/console-redesign into Harness Next merges them with the Harness Next CONTEXT.md and ADR 0003 changes (#635, #662, #786, #789). Re-evaluated the merged source set; dataset, labels, engine, windows and thresholds are unchanged. The initial corpus remains preserved in tests/memory/fixtures/initial-corpus.json. Issue #978 moves the public docs under site/docs and renames the repository; only the CONTEXT.md source hash changes and the report is identical. PR #892 merges the web console and runtime reliability corpora, including the external developer test-author route (#971) and canonical configuration/recovery terms (#685). Re-evaluated the merged source bytes with the dataset, labels, engine, windows and thresholds unchanged. Version 9 re-evaluates the corpus after the CONTEXT.md edits of a7d6c65 and cf188dd on integration/web-console; only the CONTEXT.md source hash changes and the report is identical to version 8."
 }

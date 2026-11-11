@@ -27,7 +27,8 @@ jobs:
   verify-light:
     # lint, the Rust format and lint checks, the tests of the pull request's own diff and the
     # metadata check. The tests come from `scripts/ci_light_tests.py` (the diff selection of #935);
-    # nothing here widens them to related tests or to the whole suite.
+    # nothing here widens them to related tests or to the whole suite. Its one addition: a change to
+    # the memory corpus (`CONTEXT.md`, `docs/adr/*.md`) also runs the FTS5 baseline test (#1061).
     if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     timeout-minutes: 30

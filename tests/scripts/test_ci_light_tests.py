@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -155,6 +156,82 @@ class SelectionTests(LightTestsCase):
         selection = light.select(self.repo.root, moved, head)
 
         self.assertEqual(selection.python_tests, ("tests/test_mine.py",))
+
+    def test_a_changed_memory_corpus_file_selects_the_memory_baseline_test(
+        self,
+    ) -> None:
+        # The FTS5 baseline hashes CONTEXT.md and the ADRs; a stale hash fails only that test.
+        for path in ("CONTEXT.md", "docs/adr/0099-new-decision.md"):
+            with self.subTest(path=path):
+                head = self.repo.commit({path: f"# {path}\n"})
+
+                selection = light.select(self.repo.root, self.base, head)
+
+                self.assertEqual(selection.python_tests, ("tests/memory/test_eval.py",))
+
+    def test_an_adr_moved_out_of_the_memory_corpus_selects_the_memory_baseline_test(
+        self,
+    ) -> None:
+        self.repo.git("checkout", "master")
+        base = self.repo.commit({"docs/adr/0001-decision.md": "# Decision\n" * 20})
+        self.repo.git("checkout", "-B", "feature")
+        (self.repo.root / "docs/archive").mkdir()
+        self.repo.git(
+            "mv", "docs/adr/0001-decision.md", "docs/archive/0001-decision.md"
+        )
+        self.repo.git("commit", "-m", "move")
+
+        selection = light.select(
+            self.repo.root, base, self.repo.git("rev-parse", "HEAD")
+        )
+
+        self.assertEqual(selection.python_tests, ("tests/memory/test_eval.py",))
+
+    def test_every_source_of_the_fts5_baseline_is_a_memory_corpus_file(self) -> None:
+        # A new baseline source outside the rule would let the light job miss its stale hash.
+        baseline = json.loads(
+            (SCRIPT.parents[1] / "tests/memory/baseline_fts5.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for path in baseline["source_hashes"]:
+            with self.subTest(path=path):
+                self.assertTrue(light.is_memory_corpus(path))
+
+    def test_a_diff_outside_the_memory_corpus_never_selects_the_memory_baseline_test(
+        self,
+    ) -> None:
+        head = self.repo.commit(
+            {
+                "README.md": "text\n",
+                "docs/adr/drafts/0099-draft.md": "# Draft\n",
+                "docs/agents/guide.md": "# Guide\n",
+                "site/docs/CONTEXT.md": "# Copy\n",
+            }
+        )
+
+        selection = light.select(self.repo.root, self.base, head)
+
+        self.assertTrue(selection.empty)
+
+    def test_the_memory_baseline_test_is_selected_once_with_the_tests_of_the_diff(
+        self,
+    ) -> None:
+        head = self.repo.commit(
+            {
+                "CONTEXT.md": "# Glossary\n",
+                "tests/memory/test_eval.py": PASSING,
+                "tests/test_new.py": PASSING,
+            }
+        )
+
+        selection = light.select(self.repo.root, self.base, head)
+
+        self.assertEqual(
+            sorted(selection.python_tests),
+            ["tests/memory/test_eval.py", "tests/test_new.py"],
+        )
 
 
 class ExecuteTests(unittest.TestCase):
