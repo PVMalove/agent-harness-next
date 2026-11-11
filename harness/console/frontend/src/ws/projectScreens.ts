@@ -74,6 +74,19 @@ export interface AdapterPreview {
 export const CONFIG_NAMES = ["project.json", "orchestration.json"] as const;
 export type ConfigName = (typeof CONFIG_NAMES)[number];
 
+/** One parameter of the Settings wizard (kernel/configuration_wizard.py): a real schema path. */
+export interface WizardParam {
+  group: string;
+  file: ConfigName;
+  path: string[];
+  label: string;
+  type: string;
+  choices: (string | number | boolean)[];
+  default: unknown;
+  minimum: number | null;
+  description: string;
+}
+
 export interface ConfigurationFacts {
   schema_installed: boolean;
   orchestration_installed: boolean;
@@ -81,6 +94,8 @@ export interface ConfigurationFacts {
   store_root: string;
   files: Record<ConfigName, ConfigFile>;
   adapters: { preview: AdapterPreview | null; error: string };
+  /** The wizard parameter catalog; absent or null from a server without it. */
+  wizard?: WizardParam[] | null;
 }
 
 export interface HelpSection {
@@ -149,9 +164,25 @@ export function parseUpdateDiff(value: unknown): UpdateDiff | null {
   return updateDiff(value) ? (value as UpdateDiff) : null;
 }
 
+const wizardParam = exact({
+  group: string,
+  file: (value) => (CONFIG_NAMES as readonly unknown[]).includes(value),
+  path: list(string),
+  label: string,
+  type: string,
+  choices: list((value) => ["string", "number", "boolean"].includes(typeof value)),
+  default: () => true,
+  minimum: (value) => value === null || typeof value === "number",
+  description: string,
+});
+
 /** The facts of a configuration.snapshot reply, or null for any other shape. */
 export function parseConfiguration(value: unknown): ConfigurationFacts | null {
-  return configuration(value) ? (value as ConfigurationFacts) : null;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const { wizard, ...facts } = value as Record<string, unknown>;
+  if (!configuration(facts)) return null;
+  if (wizard !== undefined && wizard !== null && !list(wizardParam)(wizard)) return null;
+  return wizard === undefined ? (facts as unknown as ConfigurationFacts) : ({ ...facts, wizard } as unknown as ConfigurationFacts);
 }
 
 /** The guide of a help.snapshot reply, or null for any other shape. */

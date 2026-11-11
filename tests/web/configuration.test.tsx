@@ -39,6 +39,16 @@ const confirm = () => act(() => fireEvent.click(within(screen.getByRole("dialog"
 const edit = (name: string, document: unknown) =>
   act(() => fireEvent.change(screen.getByRole("textbox", { name }), { target: { value: JSON.stringify(document, null, 2) } }));
 const PROJECT = CONFIGURATION.files["project.json"].document;
+const WIZARD = [
+  { group: "orchestrator", file: "orchestration.json", path: ["approval_policy"], label: "Политика согласования", type: "enum",
+    choices: ["manual_all", "milestone", "low_risk", "auto"], default: "manual_all", minimum: null, description: "Политика согласования шагов." },
+  { group: "project", file: "project.json", path: ["language"], label: "Язык отчётов", type: "enum", choices: ["ru", "en"], default: null, minimum: null, description: "" },
+  { group: "qa", file: "orchestration.json", path: ["execution_policy", "qa_lease_seconds"], label: "Аренда QA lane, с", type: "integer",
+    choices: [], default: 1800, minimum: 1, description: "Срок аренды QA lane в секундах." },
+  { group: "dispatch", file: "orchestration.json", path: ["execution_policy", "dispatch_poll_interval_seconds"], label: "Интервал опроса dispatch, с",
+    type: "integer", choices: [], default: 5, minimum: 1, description: "" },
+  { group: "hooks", file: "project.json", path: ["branch_pattern"], label: "Шаблон имени ветки", type: "string", choices: [], default: null, minimum: null, description: "" },
+];
 
 describe("the Configuration route", () => {
   beforeEach(() => FakeSocket.reset());
@@ -118,6 +128,48 @@ describe("the Configuration route", () => {
       values: { request: '{"description":""}' },
       confirmed: true,
     });
+  });
+
+  test("the tabs follow the mockup: Overview, Settings, project.json, orchestration.json, History", () => {
+    renderPage({ ...CONFIGURATION, wizard: WIZARD });
+    expect(screen.getAllByRole("tab").map((item) => item.textContent)).toEqual(["Обзор", "Настройки", "project.json", "orchestration.json", "История"]);
+  });
+
+  test("the Settings wizard asks group by group and sends the answer as a confirmed draft", () => {
+    const { socket } = renderPage({ ...CONFIGURATION, wizard: WIZARD });
+    tab("Настройки");
+    const groups = [...document.querySelectorAll("#configuration-wizard .wizard-group")];
+    expect(groups.map((item) => item.querySelector("b")?.textContent)).toEqual(["Оркестратор", "Проект", "QA", "Dispatch", "Хуки"]);
+    const wizard = document.querySelector("#configuration-wizard") as HTMLElement;
+    expect(wizard.querySelector(".wizard-param-head code")?.textContent).toBe("orchestration.json → approval_policy");
+    expect(wizard.textContent).toContain("Политика согласования");
+    expect(wizard.textContent).toContain("manual_all");
+    act(() => fireEvent.change(within(wizard).getByLabelText("Политика согласования"), { target: { value: "milestone" } }));
+    act(() => fireEvent.click(groups[2]!));
+    expect(wizard.querySelector(".wizard-param-head code")?.textContent).toBe("orchestration.json → execution_policy.qa_lease_seconds");
+    act(() => fireEvent.change(within(wizard).getByLabelText("Аренда QA lane, с"), { target: { value: "900" } }));
+    expect([...wizard.querySelectorAll(".configuration-changes li")].map((item) => item.textContent)).toEqual([
+      'orchestration.json → approval_policy "milestone"',
+      "orchestration.json → execution_policy.qa_lease_seconds 900",
+    ]);
+    act(() => fireEvent.click(within(wizard).getByRole("button", { name: "Применить" })));
+    confirm();
+    const [start] = starts(socket);
+    expect(start).toMatchObject({ command_id: "configuration-apply", confirmed: true });
+    expect(JSON.parse(String((start!.values as Record<string, string>).request))).toEqual({
+      changes: [
+        { file: "orchestration.json", path: ["approval_policy"], value: "milestone" },
+        { file: "orchestration.json", path: ["execution_policy", "qa_lease_seconds"], value: 900 },
+      ],
+      expected: { "orchestration.json": CONFIGURATION.files["orchestration.json"].digest },
+      description: "",
+    });
+  });
+
+  test("without a wizard catalog the Settings tab says why", () => {
+    renderPage();
+    tab("Настройки");
+    expect(document.querySelector("#configuration-wizard")?.textContent).toContain("нет данных");
   });
 
   test("without the schema no file can be written", () => {

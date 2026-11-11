@@ -2554,6 +2554,46 @@ EN.update(
     }
 )
 
+# Web console #1066: the Settings wizard — groups, parameter labels of kernel/configuration_wizard.py and its steps.
+EN.update(
+    {
+        "не задано": "not set",
+        "Каталог параметров не получен: схема конфигурации не установлена или сервер старее консоли.": "No parameter catalog: the configuration schema is not installed or the server is older than the console.",
+        "Группы": "Groups",
+        "Прогресс": "Progress",
+        "{done} из {total} параметров заданы": "{done} of {total} parameters set",
+        "Группа {current} / {total}": "Group {current} / {total}",
+        "Параметр {current} / {total}": "Parameter {current} / {total}",
+        "Выбрать параметр": "Choose a parameter",
+        "По умолчанию в схеме:": "Schema default:",
+        "варианты:": "choices:",
+        "Сейчас:": "Now:",
+        "Взять значение по умолчанию": "Use the default",
+        "Следующий параметр": "Next parameter",
+        "Оркестратор": "Orchestrator",
+        "QA": "QA",
+        "Dispatch": "Dispatch",
+        "Хуки": "Hooks",
+        "Политика согласования": "Approval policy",
+        "Проверка согласования человеком": "Human approval check",
+        "Одновременных batch": "Concurrent batches",
+        "Аттестация всех воркеров": "Attestation of every worker",
+        "Минимальная серьёзность для повтора": "Minimum severity for a retry",
+        "Повторов разработчика": "Developer retries",
+        "Инфраструктурные повторы": "Infrastructure retries",
+        "Инфраструктурных повторов до остановки": "Infrastructure retries before stopping",
+        "Язык отчётов": "Report language",
+        "Базовая ветка": "Base branch",
+        "Оболочка qa-gate": "qa-gate shell",
+        "Аренда QA lane, с": "QA lane lease, s",
+        "Ожидание dispatch, с": "Dispatch wait, s",
+        "Интервал опроса dispatch, с": "Dispatch poll interval, s",
+        "Молчание воркера до зависания, с": "Worker silence before stale, s",
+        "Интервал heartbeat, с": "Heartbeat interval, s",
+        "Шаблон имени ветки": "Branch name pattern",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

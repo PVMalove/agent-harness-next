@@ -4,7 +4,8 @@
    digests of the changed files go to the server, which replays them on the current files. Every
    write (draft version, apply, adapters, current version, recovery) runs only through the
    CommandPanel of the job section `configuration`, and every run opens the confirmation first.
-   The TUI's guided wizard, version list and restore read local files the snapshot does not
+   The Settings tab is the mockup wizard over the kernel parameter catalog; its answers take the
+   same confirmed draft path. The version list and restore read local files the snapshot does not
    carry; the page says they are in the TUI. */
 import { useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
@@ -12,6 +13,7 @@ import type { RunRequest } from "../commands/CommandPanel";
 import { MASK_REFUSAL, draftRequest, holdsMask, leafChanges } from "../configuration/changes";
 import type { Change } from "../configuration/changes";
 import { ADAPTER_STATUS, adapterName, shortDigest, writeBlock } from "../configuration/format";
+import { Wizard } from "../configuration/Wizard";
 import { useI18n } from "../i18n";
 import { TabList, TabPanels } from "../views/Tabs";
 import { Icon } from "../icons";
@@ -19,9 +21,10 @@ import { useScreen } from "../screens/useScreen";
 import { CONFIG_NAMES, parseConfiguration } from "../ws/projectScreens";
 import type { ConfigName, ConfigurationFacts, JsonObject } from "../ws/projectScreens";
 
-type Tab = "overview" | ConfigName | "history";
+type Tab = "overview" | "wizard" | ConfigName | "history";
 const TABS: readonly (readonly [Tab, string])[] = [
   ["overview", "Обзор"],
+  ["wizard", "Настройки"],
   ["project.json", "project.json"],
   ["orchestration.json", "orchestration.json"],
   ["history", "История"],
@@ -285,12 +288,13 @@ export function Configuration() {
             label={section("Configuration")}
             className="settings-tabbar tabs"
             tabClass={(selected) => (selected ? "on" : "")}
-            tabs={TABS.map(([key, label]) => [key, key === "overview" || key === "history" ? tabLabel(label) : label] as const)}
+            tabs={TABS.map(([key, label]) => [key, key === "overview" || key === "history" ? tabLabel(label) : key === "wizard" ? t(label) : label] as const)}
             value={tab}
             onChange={(key) => setTab(key as Tab)}
           />
           <TabPanels id="settings" tabs={TABS} value={tab}>
           {tab === "overview" && <Overview facts={facts} onRun={run} />}
+          {tab === "wizard" && <Wizard facts={facts} onRun={run} />}
           {(tab === "project.json" || tab === "orchestration.json") && (
             <FileEditor
               key={textKey(tab)}

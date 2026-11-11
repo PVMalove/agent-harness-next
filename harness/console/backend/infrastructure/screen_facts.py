@@ -22,6 +22,7 @@ from ....storage import storage_root
 from ...kernel import data as console_data
 from ...kernel.batch_history import History, load_history
 from ...kernel.configuration_snapshot import collect_configuration
+from ...kernel.configuration_wizard import wizard_parameters
 from ...kernel.container_inventory import configured_engine, container_inventory
 from ...kernel.container_route import Authored, read_authored
 from ...kernel.coordinator_api import ApiResult, CoordinatorApi
@@ -347,5 +348,5 @@ def update_diff(repo: Path, relative: str) -> str:
 
 def configuration_facts(repo: Path) -> dict[str, object]:
     """The masked configuration files with their digests, a pending transaction and the runtime
-    adapter preview; never writes or recovers."""
-    return collect_configuration(repo).to_payload()
+    adapter preview with the Settings wizard parameter catalog; never writes or recovers."""
+    return {**collect_configuration(repo).to_payload(), "wizard": wizard_parameters(repo)}
