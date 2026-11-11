@@ -1,8 +1,9 @@
 /* Update Harness (#/update-harness): the installed and available versions, the drift counters,
-   the three update modes with the plan, the seed files and the file diffs of
-   update_harness.snapshot. A file's diff is read (update_harness.diff) only once the file is
-   clicked. «Обновить» runs only through the CommandPanel of the job section `update`, and every
-   run opens the confirmation first: cancelling it starts nothing. */
+   the three update modes with the plan, the seed files, the runtime-store migration plan, the last
+   run result and the file diffs of update_harness.snapshot. The diff of one file at a time is read
+   (update_harness.diff): the first file opens without a click, another one once it is clicked.
+   «Обновить» runs only through the CommandPanel of the job section `update`, and every run opens
+   the confirmation first: cancelling it starts nothing. */
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
