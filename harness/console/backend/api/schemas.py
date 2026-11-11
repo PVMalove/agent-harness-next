@@ -524,6 +524,27 @@ class AdapterPayload(_Strict):  # type: ignore[explicit-any]
     problem: str | None
 
 
+class RuntimeStatusPayload(_Strict):  # type: ignore[explicit-any]
+    """Whether the project's runtime answered an empty `state.read` (2 s, never started), with its
+    store revision, or why it did not."""
+
+    state: Literal["online", "offline"]
+    revision: Annotated[int | None, Field(ge=0)]
+    reason: str
+
+
+class IntegrationPayload(_Strict):  # type: ignore[explicit-any]
+    """One adapter of the Harness page: Claude Code or Codex (`runtime`: adapter files of the
+    installed capabilities, CLI on PATH) or the project tracker (`tracker`: CLI on PATH, null for
+    local work); nothing is checked online."""
+
+    name: str
+    kind: Literal["runtime", "tracker"]
+    status: Literal["current", "outdated", "missing", "unknown"]
+    cli: bool | None
+    detail: str
+
+
 class ContainersPayload(_Strict):  # type: ignore[explicit-any]
     """The read-only inventory of the configured container engine; a fact a probe could not
     give is null with the probe's reason beside it."""
@@ -543,8 +564,9 @@ class ContainersPayload(_Strict):  # type: ignore[explicit-any]
 
 class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     """The Harness state, the package version, the drift state and file count, the state store,
-    the runtime adapters (null: unreadable), the container engine inventory (null: not
-    collected) and the pipeline usage."""
+    the runtime adapters (null: unreadable), the Claude Code, Codex and tracker adapters and the
+    runtime status (null: not collected), the container engine inventory (null: not collected) and
+    the pipeline usage."""
 
     type: Literal["harness.overview"]
     ok: Literal[True]
@@ -554,6 +576,8 @@ class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     drift_files: Annotated[int | None, Field(ge=0)]
     store: StorePayload | None
     adapters: list[AdapterPayload] | None
+    integrations: list[IntegrationPayload] | None = None
+    runtime: RuntimeStatusPayload | None = None
     containers: ContainersPayload | None
     usage: PipelineUsage
     cached: bool

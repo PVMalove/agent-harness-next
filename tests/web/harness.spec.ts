@@ -69,7 +69,7 @@ async function open(page: Page, width: number) {
 test("the overview shows the server's facts and the cleanup is bound to the shown plan", async ({ page }) => {
   const starts = await mockSocket(page);
   await open(page, 1440);
-  await expect(page.locator("#harness-usage")).toContainText("212");
+  await expect(page.locator("#harness-usage")).toHaveCount(0);
   await expect(page.locator("#harness-drift")).toHaveText("⚠ дрейф есть");
   await expect(page.locator("#harness-maintenance")).toContainText("Жёсткий режим: +40.0 MiB");
   await page.getByRole("button", { name: "Очистить…" }).click();

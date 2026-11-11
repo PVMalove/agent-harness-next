@@ -2528,6 +2528,23 @@ EN.update(
     }
 )
 
+# Web console #1066: Harness page — runtime status probe and the Claude Code, Codex and tracker adapters.
+EN.update(
+    {
+        "работает": "running",
+        "не отвечает": "not answering",
+        "Адаптеры не собраны в этом снимке": "The adapters are not collected in this snapshot",
+        "runtime-адаптер": "runtime adapter",
+        "адаптер трекера": "tracker adapter",
+        "найден в PATH": "found on PATH",
+        "не найден в PATH": "not found on PATH",
+        "Файлов адаптера нет": "No adapter files",
+        "локальная работа": "local work",
+        "сеть и права не проверялись": "network and permissions not checked",
+        "файлы адаптера из harness.lock": "adapter files from harness.lock",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

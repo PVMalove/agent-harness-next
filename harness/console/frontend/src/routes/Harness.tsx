@@ -1,10 +1,10 @@
 /* Harness: the mockup's #harness with the facts of harness.overview (state, package version,
-   drift, pipeline usage) and harness.maintenance (cleanup plans, worktrees). Tabs "Обзор" and
+   drift, store, runtime status, adapters) and harness.maintenance (cleanup plans, worktrees). Tabs "Обзор" and
    "Команды" are both mounted, the inactive one hidden, so a page button can hand a run to the
    command panel, whose dialog shows the server's confirmation. Runtime and Adapters show the
    store and adapter facts of harness.overview, Containers its container engine inventory; facts
-   without a source say so. The
-   maintenance and usage panels have no mockup slot and follow the mockup blocks (H4). */
+   without a source say so. The maintenance panel follows the mockup blocks (H4); the pipeline
+   usage block is not in the mockup and is not shown. */
 import { useCallback, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
@@ -14,7 +14,6 @@ import {
   ContainersPanel,
   InstallPanel,
   RuntimePanel,
-  UsagePanel,
 } from "../harness/HarnessOverview";
 import { Maintenance } from "../harness/Maintenance";
 import { driftLabel } from "../harness/format";
@@ -145,7 +144,6 @@ export function Harness() {
           <RuntimePanel overview={data} compact />
         </div>
         <AdaptersPanel overview={data} compact />
-        <UsagePanel overview={data} />
         <Maintenance
           facts={maintenance.data}
           error={maintenance.error && !maintenance.data ? maintenance.error.message || maintenance.error.code : null}

@@ -1,6 +1,6 @@
-/* The "Установка" and "Использование пайплайна" panels of the Harness overview, filled only with
-   the facts of harness.overview: the lock state, the package version, the drift state and the
-   pipeline usage counted on the server. */
+/* The panels of the Harness page, filled only with the facts of harness.overview: the lock
+   state, the package version and drift, the state store with the runtime status probe, the
+   Claude Code, Codex and tracker adapters, the audit count and the container engine inventory. */
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -93,57 +93,6 @@ export function InstallPanel({ overview }: { overview: HarnessOverview | null })
   );
 }
 
-export function UsagePanel({ overview }: { overview: HarnessOverview | null }) {
-  const { t, section } = useI18n();
-  const usage = overview?.usage;
-  const facts: [string, number][] = usage
-    ? [
-        [t("Запусков (batch)"), usage.batches],
-        [t("Тикетов"), usage.tickets],
-        [t("Диспатчей"), usage.dispatches],
-        [t("Отчётов"), usage.reports],
-      ]
-    : [];
-  return (
-    <section className="panel harness-runtime" id="harness-usage">
-      <div className="panel-head">
-        <h2>{t("Использование пайплайна")}</h2>
-        {usage && (
-          <span className={`orch-pill ${usage.unavailable === null ? "mint" : "violet"}`}>
-            {usage.unavailable === null ? "ledger" : t("недоступно")}
-          </span>
-        )}
-      </div>
-      <div className="harness-runtime-body">
-        {!usage ? (
-          <p className="harness-install-note">{t("Состояние харнесса загружается…")}</p>
-        ) : usage.unavailable !== null ? (
-          <p className="harness-install-note">
-            {t("Использование пайплайна")}: {t(usage.unavailable)}
-          </p>
-        ) : (
-          <div className="harness-store-facts">
-            {facts.map(([label, value]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <b>{value}</b>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="harness-runtime-actions">
-          <a className="btn" href={href("orchestration")}>
-            <Icon name="orchestration" /> {section("Orchestration")}
-          </a>
-          <a className="btn" href={href("reports")}>
-            <Icon name="reports" /> {section("Reports")}
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /** The explicit no-data value of a fact the console has no source for. */
 function NoData({ why }: { why?: string }) {
   const { t } = useI18n();
@@ -193,28 +142,30 @@ function Flow({ overview, compact }: { overview: HarnessOverview | null; compact
 export function RuntimePanel({ overview, compact }: { overview: HarnessOverview | null; compact: boolean }) {
   const { t, section } = useI18n();
   const store = overview?.store ?? null;
+  const runtime = overview?.runtime ?? null;
   const facts: [string, string | number | null][] = [
     ["authority", store?.authority ?? null],
     ["schema", store?.schema ?? null],
     ["generation", store?.generation ?? null],
     ["audit", store?.audit_records ?? null],
-    ["cutover", null],
-    ["protocol", null],
+    ["cutover", store?.cutover_at ?? (store?.authority === "file-ledger" ? t("не выполнен") : null)],
+    ["revision", runtime?.revision ?? null],
   ];
   return (
     <section className="panel harness-runtime" id="harness-runtime">
       <div className="panel-head">
         <h2>Runtime</h2>
-        <span className={`orch-pill ${store ? "mint" : "violet"}`}>{store ? store.authority : t("нет данных")}</span>
+        <span className={`orch-pill ${runtime?.state === "online" ? "mint" : "violet"}`}>
+          {runtime ? (runtime.state === "online" ? t("работает") : t("не отвечает")) : t("нет данных")}
+        </span>
       </div>
       <div className="harness-runtime-body">
         <div className="harness-runtime-line">
           <span>
-            <Icon name="harness" /> binary <NoData />
+            <Icon name="harness" /> harness-runtime
           </span>
-          <span>
-            uptime <NoData />
-          </span>
+          <span>{store ? store.authority : <NoData />}</span>
+          {runtime?.reason ? <span className="muted">{t(runtime.reason)}</span> : null}
         </div>
         <div className="harness-store-facts">
           {facts.map(([label, value]) => (
@@ -235,39 +186,43 @@ export function RuntimePanel({ overview, compact }: { overview: HarnessOverview 
   );
 }
 
+const INTEGRATION_ICONS: Record<string, string> = { "Claude Code": "terminal", Codex: "command", GitHub: "github-mark", GitLab: "gitlab-mark", Local: "folder" };
+const INTEGRATION_TONES: Record<string, string> = { current: "mint", outdated: "lavender", missing: "violet", unknown: "blue" };
+
+/** The mockup adapters: Claude Code and Codex (adapter files of the installed capabilities, CLI on
+    PATH) and the project tracker (its CLI on PATH). Nothing is checked online. */
 export function AdaptersPanel({ overview, compact }: { overview: HarnessOverview | null; compact: boolean }) {
-  const { t } = useI18n();
-  const adapters = overview?.adapters ?? null;
+  const { t, state } = useI18n();
+  const integrations = overview?.integrations ?? null;
   return (
     <section className="panel harness-adapters" id="harness-adapters">
       <div className="panel-head">
         <h2>{t("Адаптеры")}</h2>
-        <span className="small muted">{adapters ? t("{count} файлов адаптеров", { count: adapters.length }) : ""}</span>
+        <span className="small muted">{integrations ? integrations.map((item) => item.name).join(" · ") : ""}</span>
       </div>
-      {adapters === null ? (
-        <p className="harness-note">{t("нет данных")}</p>
-      ) : adapters.length === 0 ? (
-        <p className="harness-note">{t("Файлов адаптеров нет")}</p>
+      {integrations === null ? (
+        <p className="harness-note">
+          <NoData why={t("Адаптеры не собраны в этом снимке")} />
+        </p>
       ) : (
         <div className="harness-adapter-grid">
-          {adapters.map((adapter) => (
-            <article className="harness-adapter" key={adapter.path}>
+          {integrations.map((item) => (
+            <article className="harness-adapter" key={item.name}>
               <div className="harness-adapter-head">
                 <span>
-                  <Icon name="settings" />
+                  <Icon name={INTEGRATION_ICONS[item.name] ?? "settings"} />
                 </span>
-                <em className={`orch-pill ${adapter.status === "current" ? "mint" : "lavender"}`}>{adapter.status}</em>
+                <em className={`orch-pill ${INTEGRATION_TONES[item.status]}`}>{state(item.status)}</em>
               </div>
-              <h3>{adapter.path.split("/").slice(-2).join("/")}</h3>
+              <h3>{item.name}</h3>
               <div className="harness-adapter-meta">
-                <span>
-                  CLI <NoData />
-                </span>
+                <span>{item.kind === "runtime" ? t("runtime-адаптер") : t("адаптер трекера")}</span>
+                <span>CLI {item.cli === null ? "—" : item.cli ? t("найден в PATH") : t("не найден в PATH")}</span>
               </div>
-              <p>{adapter.problem ?? adapter.path}</p>
+              <p>{item.detail || (item.kind === "runtime" ? t("Файлов адаптера нет") : t("локальная работа"))}</p>
               {compact ? null : (
                 <div className="harness-adapter-foot">
-                  <span>{adapter.path}</span>
+                  <span>{item.kind === "tracker" ? t("сеть и права не проверялись") : t("файлы адаптера из harness.lock")}</span>
                   <a className="btn" href={href("diagnostics")}>
                     <Icon name="pulse" /> {t("Проверить")}
                   </a>

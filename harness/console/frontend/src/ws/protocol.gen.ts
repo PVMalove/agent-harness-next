@@ -179,8 +179,17 @@ export type VolumesProblem = string | null;
 export type Drift = string;
 export type DriftFiles = number | null;
 export type Id12 = string | number | null;
+export type Integrations = IntegrationPayload[] | null;
+export type Cli = boolean | null;
+export type Detail = string;
+export type Kind3 = "runtime" | "tracker";
+export type Name = string;
+export type Status1 = "current" | "outdated" | "missing" | "unknown";
 export type Ok10 = true;
 export type PackageVersion = string;
+export type Reason = string;
+export type Revision = number | null;
+export type State = "online" | "offline";
 export type Capabilities = string[];
 export type Installed = boolean;
 export type InstalledVersion = string;
@@ -192,7 +201,7 @@ export type AuditRecords = number | null;
 export type Authority = "file-ledger" | "runtime-store" | "none";
 export type CutoverAt = string | null;
 export type Generation = string | null;
-export type Reason = string;
+export type Reason1 = string;
 export type Schema = number | null;
 export type Type11 = "harness.overview";
 export type Batches = number;
@@ -231,11 +240,11 @@ export type LastStepAgeSeconds = number | null;
 export type Message1 = string;
 export type More = boolean;
 export type Offset = number;
-export type Reason1 = ("no_log" | "log_missing" | "log_unreadable" | "log_outside_storage" | "log_unrecognised") | null;
+export type Reason2 = ("no_log" | "log_missing" | "log_unreadable" | "log_outside_storage" | "log_unrecognised") | null;
 export type Reset = boolean;
 export type Source2 = "structured" | "plain" | "none";
-export type State = "connected" | "waiting" | "unavailable";
-export type Kind3 = string;
+export type State1 = "connected" | "waiting" | "unavailable";
+export type Kind4 = string;
 export type Text5 = string;
 export type Steps = WorkerStep[];
 export type Structure1 = "available" | "unavailable";
@@ -249,18 +258,18 @@ export type LastEventAt = string;
 export type Role1 = string;
 export type Silent = boolean;
 export type StartedAt = string;
-export type State1 = string;
+export type State2 = string;
 export type Ticket = string;
 export type Dispatches1 = RosterDispatch[];
 export type Id17 = string | number | null;
-export type Kind4 = "roster";
+export type Kind5 = "roster";
 export type Ok15 = true;
 export type Orchestration1 = "available" | "unavailable";
 export type Reset1 = boolean;
 export type Type16 = "steps.subscribe";
 export type V15 = 1;
 export type Id18 = string | number | null;
-export type Kind5 = "steps";
+export type Kind6 = "steps";
 export type Ok16 = true;
 export type BatchId2 = string | null;
 export type Decision = string | null;
@@ -688,8 +697,9 @@ export interface ScreenSnapshotReply {
 }
 /**
  * The Harness state, the package version, the drift state and file count, the state store,
- * the runtime adapters (null: unreadable), the container engine inventory (null: not
- * collected) and the pipeline usage.
+ * the runtime adapters (null: unreadable), the Claude Code, Codex and tracker adapters and the
+ * runtime status (null: not collected), the container engine inventory (null: not collected) and
+ * the pipeline usage.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HarnessOverviewReply".
@@ -702,8 +712,10 @@ export interface HarnessOverviewReply {
   drift: Drift;
   drift_files: DriftFiles;
   id: Id12;
+  integrations?: Integrations;
   ok: Ok10;
   package_version: PackageVersion;
+  runtime?: RuntimeStatusPayload | null;
   state: HarnessStatePayload;
   store: StorePayload | null;
   type: Type11;
@@ -729,6 +741,33 @@ export interface ContainersPayload {
   version: Version;
   volumes: Volumes;
   volumes_problem: VolumesProblem;
+}
+/**
+ * One adapter of the Harness page: Claude Code or Codex (`runtime`: adapter files of the
+ * installed capabilities, CLI on PATH) or the project tracker (`tracker`: CLI on PATH, null for
+ * local work); nothing is checked online.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "IntegrationPayload".
+ */
+export interface IntegrationPayload {
+  cli: Cli;
+  detail: Detail;
+  kind: Kind3;
+  name: Name;
+  status: Status1;
+}
+/**
+ * Whether the project's runtime answered an empty `state.read` (2 s, never started), with its
+ * store revision, or why it did not.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "RuntimeStatusPayload".
+ */
+export interface RuntimeStatusPayload {
+  reason: Reason;
+  revision: Revision;
+  state: State;
 }
 /**
  * What is installed in the project, read from `.harness/harness.lock`.
@@ -758,7 +797,7 @@ export interface StorePayload {
   authority: Authority;
   cutover_at: CutoverAt;
   generation: Generation;
-  reason: Reason;
+  reason: Reason1;
   schema: Schema;
 }
 /**
@@ -838,10 +877,10 @@ export interface WorkerStepsPage {
   message: Message1;
   more: More;
   offset: Offset;
-  reason: Reason1;
+  reason: Reason2;
   reset: Reset;
   source: Source2;
-  state: State;
+  state: State1;
   steps: Steps;
   structure: Structure1;
 }
@@ -850,7 +889,7 @@ export interface WorkerStepsPage {
  * via the `definition` "WorkerStep".
  */
 export interface WorkerStep {
-  kind: Kind3;
+  kind: Kind4;
   text: Text5;
 }
 /**
@@ -862,7 +901,7 @@ export interface WorkerStep {
 export interface StepsRosterReply {
   dispatches: Dispatches1;
   id: Id17;
-  kind: Kind4;
+  kind: Kind5;
   ok: Ok15;
   orchestration: Orchestration1;
   reset: Reset1;
@@ -885,7 +924,7 @@ export interface RosterDispatch {
   role: Role1;
   silent: Silent;
   started_at: StartedAt;
-  state: State1;
+  state: State2;
   ticket: Ticket;
 }
 /**
@@ -894,7 +933,7 @@ export interface RosterDispatch {
  */
 export interface StepsReply {
   id: Id18;
-  kind: Kind5;
+  kind: Kind6;
   ok: Ok16;
   steps: Steps1;
   type: Type17;

@@ -64,7 +64,7 @@ const kpis = () => document.querySelector("#harness-kpis") as HTMLElement;
 describe("the Harness route", () => {
   beforeEach(() => FakeSocket.reset());
 
-  test("shows the overview facts and the server's pipeline usage counts", () => {
+  test("shows the overview facts; the pipeline usage block of no mockup slot is gone", () => {
     const { socket } = renderHarness();
     expect(socket.request("harness.overview")).toMatchObject({ force: false });
     expect(screen.getByRole("tab", { name: "Обзор" }).getAttribute("aria-selected")).toBe("true");
@@ -85,17 +85,8 @@ describe("the Harness route", () => {
       "Контейнеры",
       "Команды",
     ]);
-    const usage = document.querySelector("#harness-usage") as HTMLElement;
-    for (const value of ["4", "3", "12", "9"]) expect(within(usage).getByText(value)).toBeTruthy();
+    expect(document.querySelector("#harness-usage")).toBeNull();
     expect(within(document.querySelector("#harness-install") as HTMLElement).getByText("engineering-suite")).toBeTruthy();
-  });
-
-  test("an unavailable ledger shows its reason instead of counts", () => {
-    renderHarness({
-      ...HARNESS_OVERVIEW,
-      usage: { unavailable: "Леджер не найден", batches: 0, tickets: 0, dispatches: 0, reports: 0 },
-    });
-    expect(within(document.querySelector("#harness-usage") as HTMLElement).getByText(/Леджер не найден/)).toBeTruthy();
   });
 
   test("the maintenance panel shows the server's plan, skips and worktree reasons", () => {
@@ -154,17 +145,6 @@ describe("the Harness route", () => {
     expect(screen.getByText(/worktree has uncommitted changes/)).toBeTruthy();
   });
 
-  test("in English the server's ledger reason is translated through the catalog", () => {
-    const reason = "леджер оркестрации не найден или не инициализирован";
-    renderHarness(
-      { ...HARNESS_OVERVIEW, usage: { unavailable: reason, batches: 0, tickets: 0, dispatches: 0, reports: 0 } },
-      "?lang=en",
-    );
-    const english = "the orchestration ledger is not found or not initialized";
-    expect(within(document.querySelector("#harness-usage") as HTMLElement).getByText(`Pipeline usage: ${english}`)).toBeTruthy();
-    expect(screen.queryByText(new RegExp(reason))).toBeNull();
-  });
-
   test("Runtime, Adapters and Containers show the overview facts and say what has no source", () => {
     renderHarness();
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Runtime" })));
@@ -174,7 +154,7 @@ describe("the Harness route", () => {
     expect(within(runtime).getAllByText("нет данных").length).toBeGreaterThan(0);
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Адаптеры" })));
     const adapters = document.querySelector("#harness-tab-adapters") as HTMLElement;
-    expect(within(adapters).getByText("current")).toBeTruthy();
+    expect(within(adapters).getAllByText("нет данных").length).toBeGreaterThan(0);
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Контейнеры" })));
     const containers = document.querySelector("#harness-tab-containers") as HTMLElement;
     // Every probe failed: the engine is named, each fact says no data with the probe's reason.
@@ -184,6 +164,38 @@ describe("the Harness route", () => {
     const counts = containers.querySelectorAll("[data-fact='images-volumes'] .no-data");
     expect([...counts].map((item) => (item as HTMLElement).title)).toEqual(["docker images: код 1", "docker volume ls: код 1"]);
     expect(within(containers).getAllByText("нет данных").length).toBeGreaterThan(4);
+  });
+
+  test("Runtime shows the runtime status probe, Adapters the Claude Code, Codex and GitHub adapters", () => {
+    renderHarness({
+      ...HARNESS_OVERVIEW,
+      runtime: { state: "online", revision: 41, reason: "" },
+      integrations: [
+        { name: "Claude Code", kind: "runtime", status: "current", cli: true, detail: ".harness/adapters/claude_worker.py" },
+        { name: "Codex", kind: "runtime", status: "outdated", cli: false, detail: ".harness/adapters/codex_worker.py" },
+        { name: "GitHub", kind: "tracker", status: "current", cli: true, detail: "github.com/owner/repo" },
+      ],
+    });
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Runtime" })));
+    const runtime = document.querySelector("#harness-tab-runtime #harness-runtime") as HTMLElement;
+    expect(runtime.querySelector(".panel-head .orch-pill")?.textContent).toBe("работает");
+    expect(within(runtime).getByText("41")).toBeTruthy();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Адаптеры" })));
+    const cards = [...document.querySelectorAll("#harness-tab-adapters .harness-adapter")];
+    expect(cards.map((card) => card.querySelector("h3")?.textContent)).toEqual(["Claude Code", "Codex", "GitHub"]);
+    expect(cards.map((card) => card.querySelector(".harness-adapter-head svg")?.getAttribute("data-icon"))).toEqual(["terminal", "command", "github-mark"]);
+    expect(cards.map((card) => card.querySelector("em")?.textContent)).not.toContain("current");
+  });
+
+  test("a runtime that does not answer says why; maintenance actions carry icons", () => {
+    renderHarness({ ...HARNESS_OVERVIEW, runtime: { state: "offline", revision: null, reason: "runtime не отвечает (runtime_unavailable)" } });
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Runtime" })));
+    const runtime = document.querySelector("#harness-tab-runtime #harness-runtime") as HTMLElement;
+    expect(runtime.querySelector(".panel-head .orch-pill")?.textContent).toBe("не отвечает");
+    expect(runtime.textContent).toContain("runtime не отвечает (runtime_unavailable)");
+    const buttons = [...document.querySelectorAll("#harness-maintenance button")];
+    expect(buttons.length).toBeGreaterThan(2);
+    expect(buttons.every((button) => button.querySelector("svg") !== null)).toBe(true);
   });
 
   test("the Containers tab shows the engine inventory the kernel probed", () => {

@@ -18,6 +18,8 @@ CONTAINERS: dict[str, object] = {"engine": "docker", "info_problem": "fake"}
 def no_engine_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     """The container engine inventory runs processes: these tests replace it."""
     monkeypatch.setattr(screen_facts, "container_facts", lambda repo: CONTAINERS)
+    # The tracker adapter reads the git origin in a process (test_harness_screen_facts.py).
+    monkeypatch.setattr(screen_facts, "_integrations", lambda repo, adapters: None)
 
 
 def test_drift_files_count_every_differing_file(

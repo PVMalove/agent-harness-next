@@ -8,8 +8,10 @@ updates or starts a worker."""
 from __future__ import annotations
 
 import argparse
+import shutil
 import threading
-from collections.abc import Sequence
+import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
@@ -40,7 +42,9 @@ from ...kernel.repo_map_snapshot import RepoMapFacts
 from ...kernel.reports import LedgerView, load_ledger_view
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.update_harness_snapshot import UpdateHarnessFacts
-from .home_facts import store_facts
+from ....health.project_tracker import ProjectTracker, resolve_project_tracker
+from ....orchestration.runtime_client import RuntimeClient, RuntimeClientError
+from .home_facts import RUNTIME_TIMEOUT_SECONDS, store_facts
 
 
 def collect_ledger(repo: Path) -> LedgerView:
@@ -124,6 +128,92 @@ def container_facts(repo: Path) -> dict[str, object]:
     return container_inventory(configured_engine(storage_root(repo))).to_payload()
 
 
+RevisionRead = Callable[[], "int | None"]
+
+
+def _read_revision(repo: Path) -> RevisionRead:
+    """One empty `state.read` of the project's running runtime (2 s): its store revision. The
+    runtime is never started; no snapshot is opened."""
+
+    def read() -> int | None:
+        reply = RuntimeClient(repo).call(
+            "state.read",
+            operation_id=f"console-state.read-{uuid.uuid4().hex}",
+            payload={"collections": [], "paths": []},
+            timeout_seconds=RUNTIME_TIMEOUT_SECONDS,
+        )
+        return reply.revision
+
+    return read
+
+
+def runtime_status(repo: Path, *, read: RevisionRead | None = None) -> dict[str, object]:
+    """Whether the runtime answers, with its store revision, or why it does not (`read`
+    replaces the probe in tests)."""
+    try:
+        revision = (read or _read_revision(repo))()
+    except RuntimeClientError as error:
+        reason = f"runtime не отвечает ({error.code})"
+    except (OSError, ValueError) as error:
+        reason = f"runtime не отвечает ({type(error).__name__})"
+    else:
+        return {"state": "online", "revision": revision, "reason": ""}
+    return {"state": "offline", "revision": None, "reason": reason}
+
+
+# The runtime adapters of the Harness page: (name, adapter file marker, CLI on PATH).
+_RUNTIMES = (("Claude Code", "claude", "claude"), ("Codex", "codex", "codex"))
+_TRACKERS = {"github": ("GitHub", "gh"), "gitlab": ("GitLab", "glab"), "local": ("Local", None)}
+
+
+def _runtime_adapter_status(files: list[dict[str, object]]) -> str:
+    if not files:
+        return "missing"
+    return "current" if all(item.get("status") == "current" for item in files) else "outdated"
+
+
+def integration_facts(
+    adapters: list[dict[str, object]] | None,
+    tracker: ProjectTracker,
+    *,
+    which: Callable[[str], str | None] = shutil.which,
+) -> list[dict[str, object]]:
+    """Claude Code and Codex (their adapter files of the installed capabilities and the CLI on
+    PATH) and the project tracker (its CLI on PATH); nothing is run and nothing goes online."""
+    found: list[dict[str, object]] = []
+    for name, marker, cli in _RUNTIMES:
+        files = [item for item in adapters or [] if marker in str(item.get("path", "")).lower()]
+        found.append(
+            {
+                "name": name,
+                "kind": "runtime",
+                "status": "unknown" if adapters is None else _runtime_adapter_status(files),
+                "cli": which(cli) is not None,
+                "detail": ", ".join(str(item.get("path", "")) for item in files),
+            }
+        )
+    title, tool = _TRACKERS.get(tracker.type, (tracker.type, None))
+    present = None if tool is None else which(tool) is not None
+    found.append(
+        {
+            "name": title,
+            "kind": "tracker",
+            "status": "missing" if present is False else "current",
+            "cli": present,
+            "detail": "/".join(part for part in (tracker.host, tracker.project) if part),
+        }
+    )
+    return found
+
+
+def _integrations(repo: Path, adapters: list[dict[str, object]] | None) -> list[dict[str, object]] | None:
+    try:
+        tracker = resolve_project_tracker(repo).effective
+    except (OSError, ValueError):  # an unreadable tracker config: the adapters stay unknown
+        return None
+    return integration_facts(adapters, tracker)
+
+
 def harness_facts(repo: Path) -> dict[str, object]:
     """The installed harness, the package version, the drift state and file count (`harness diff
     --json` in a subprocess), the state store, the runtime adapters and the read-only inventory of
@@ -140,13 +230,16 @@ def harness_facts(repo: Path) -> dict[str, object]:
         drift = state if isinstance(state, str) else "unknown"
         counts = console_data.drift_counts(report) or ()
         drift_files = sum(count for _kind, count in counts)
+    adapters = adapter_facts(repo)
     return {
         "state": harness_state(repo).to_payload(),
         "package_version": console_data.harness_version(),
         "drift": drift,
         "drift_files": drift_files,
         "store": asdict(store_facts(repo)),
-        "adapters": adapter_facts(repo),
+        "adapters": adapters,
+        "integrations": _integrations(repo, adapters),
+        "runtime": runtime_status(repo),
         "containers": container_facts(repo),
     }
 
