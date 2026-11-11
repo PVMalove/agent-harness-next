@@ -142,9 +142,11 @@ test("Task Board state: first load draws the frame with the jumping mascot", asy
 test("Task Board spec row finds a spec by its number", async ({ page }) => {
   const asked = await open(page, 1440);
   await page.locator("#board-spec-number").fill("502");
+  await page.locator("#board-spec-number").press("Enter");
   await expect(page.locator("#board-spec")).toHaveValue("#502");
   await expect.poll(() => asked.at(-1)).toMatchObject({ spec: "#502" });
   await page.locator("#board-spec-number").fill("#9");
+  await page.locator("#board-spec-number").press("Enter");
   await expect(page.locator(".board-spec-missing")).toHaveText("Спека #9 не найдена");
 });
 

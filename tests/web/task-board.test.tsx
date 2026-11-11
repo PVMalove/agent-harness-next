@@ -122,14 +122,23 @@ describe("the Task Board route", () => {
     expect(document.querySelector("#board-updating")).toBeNull();
   });
 
-  test("the spec row finds a spec by its number and names a number it does not know", () => {
+  test("the spec row finds a spec by its number on Enter, never per keystroke, and names a number it does not know", () => {
     const socket = renderBoard();
-    const field = screen.getByRole("searchbox", { name: "Найти спеку по номеру" });
-    act(() => fireEvent.change(field, { target: { value: "#502" } }));
+    const field = () => screen.getByRole("searchbox", { name: "Найти спеку по номеру" });
+    const asked = boards(socket).length;
+    expect((document.querySelector("#board-spec") as HTMLSelectElement).value).toBe("#501");
+    for (const typed of ["5", "50", "502"]) act(() => fireEvent.change(field(), { target: { value: typed } }));
+    expect(boards(socket)).toHaveLength(asked);
+    expect((document.querySelector("#board-spec") as HTMLSelectElement).value).toBe("#501");
+    expect(document.querySelector(".board-spec-missing")).toBeNull();
+    act(() => fireEvent.submit(field().closest("form")!));
     expect((document.querySelector("#board-spec") as HTMLSelectElement).value).toBe("#502");
+    expect(boards(socket)).toHaveLength(asked + 1);
     expect(boards(socket).at(-1)).toMatchObject({ spec: "#502" });
     expect(window.localStorage.getItem(SPEC_KEY)).toBe("#502");
-    act(() => fireEvent.change(screen.getByRole("searchbox", { name: "Найти спеку по номеру" }), { target: { value: "77" } }));
+    act(() => fireEvent.change(field(), { target: { value: "77" } }));
+    expect(document.querySelector(".board-spec-missing")).toBeNull();
+    act(() => fireEvent.submit(field().closest("form")!));
     expect(document.querySelector(".board-spec-missing")?.textContent).toBe("Спека #77 не найдена");
   });
 

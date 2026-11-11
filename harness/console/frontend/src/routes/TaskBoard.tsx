@@ -3,6 +3,7 @@
    or by the status select of its modal, after a confirmation, through the server's mutating job.
    The frame of the five columns is drawn at once; the mascot jumps over it while a snapshot loads. */
 import { useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import {
   BoardBanner,
   BoardColumns,
@@ -72,17 +73,20 @@ function SpecBar({
 }) {
   const { t } = useI18n();
   const [number, setNumber] = useState("");
-  const wanted = specNumber(number);
-  const missing = number.trim() !== "" && (wanted === null || !specs.specs.some((item) => item.n === wanted));
-  const find = (text: string) => {
-    setNumber(text);
-    const n = specNumber(text);
+  // The number asked with Enter: typing "1066" never opens #1, #10 and #106 on the way.
+  const [asked, setAsked] = useState<string | null>(null);
+  const wanted = asked === null ? null : specNumber(asked);
+  const missing = asked !== null && asked.trim() !== "" && (wanted === null || !specs.specs.some((item) => item.n === wanted));
+  const find = (event: FormEvent) => {
+    event.preventDefault();
+    setAsked(number);
+    const n = specNumber(number);
     const found = n === null ? undefined : specs.specs.find((item) => item.n === n);
     if (found && found.id !== spec) onChoose(found.id);
   };
   return (
     <div className="board-specbar">
-      <label className="board-search board-spec-search">
+      <form className="board-search board-spec-search" role="search" onSubmit={find}>
         <Icon name="search" />
         <input
           id="board-spec-number"
@@ -91,12 +95,15 @@ function SpecBar({
           value={number}
           placeholder={t("Номер спеки")}
           aria-label={t("Найти спеку по номеру")}
-          onChange={(event) => find(event.target.value)}
+          onChange={(event) => {
+            setNumber(event.target.value);
+            setAsked(null);
+          }}
         />
-      </label>
+      </form>
       {missing && (
         <span className="board-spec-missing" role="status">
-          {t("Спека #{n} не найдена", { n: number.trim().replace(/^#/, "") })}
+          {t("Спека #{n} не найдена", { n: (asked ?? "").trim().replace(/^#/, "") })}
         </span>
       )}
       <label>
