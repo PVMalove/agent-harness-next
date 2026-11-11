@@ -36,6 +36,7 @@ EXPECTED_LABELS = [
     "SIGKILL of the runtime",
     "SIGKILL of the runtime: running container adopted",
     "SIGKILL of the runtime: paused or restarting container adopted",
+    "SIGKILL of the runtime: container and egress proxy adopted",
     "lost IPC reply",
     "orphan worker",
     "double start",

@@ -20,7 +20,7 @@ from harness.json_types import JsonObject
 from harness.orchestration import container_executor, runtime_access
 from tests.orchestration.runtime_store_support import Supervised
 from tests.orchestration.scripted_engine import WORKER_ID as WORKER_CONTAINER
-from tests.orchestration.scripted_engine import ScriptedEngine, docker_info
+from tests.orchestration.scripted_engine import PROXY_ID, ScriptedEngine, docker_info
 
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
@@ -580,3 +580,25 @@ def test_a_runtime_killed_at_container_launch_adopts_a_paused_or_restarting_work
     sent = killed_at_launch(repo, engine, worker_status)
 
     assert_adopted(repo, engine, sent)
+
+
+def proxy_policy() -> JsonObject:
+    """A plan that reaches one host through the egress proxy of the worker."""
+    return policy(
+        container={
+            "engine": "podman", "worker_image": WORKER_TAG, "proxy_image": PROXY_TAG,
+        },
+        network={"hosts": ["api.example.com"]},
+    )
+
+
+@pytest.mark.fault_injection
+def test_a_runtime_killed_at_container_launch_adopts_the_worker_and_its_egress_proxy(
+    podman: Podman,
+) -> None:
+    repo, engine = podman(access_policy=proxy_policy(), env=PAUSE_AT_LAUNCHED)
+    assert repo.brief["runtime_images"] == {"worker": WORKER_ID, "proxy": PROXY_IMAGE_ID}
+
+    sent = killed_at_launch(repo, engine)
+
+    assert_adopted(repo, engine, sent, proxy_id=PROXY_ID)
