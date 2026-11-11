@@ -316,3 +316,14 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .work-gantt-track { height: 20px; }
 .work-gantt-row { padding: 4px 0; }
 .work-gantt-name small, .work-gantt-last { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Orchestration: the live step of a coordinator or human gate pulses like a live role (the
+   mockup's global reduced-motion rule stops it), the statusbar names the live step, and long
+   dispatch lists scroll inside their panel. */
+.orch-map-node.live .orch-map-bg { stroke: #6fa8dc; stroke-width: 1.5; animation: orchMapPulse 2s ease-in-out infinite; }
+.orch-map-statusbar .orch-live { margin-left: auto; color: var(--primary); }
+.orch-dispatch-scroll { max-height: 448px; overflow-y: auto; }
+.orch-ticket-table .orch-pill { justify-self: start; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .orch-map-node.live .orch-map-bg { animation: none; }
+}
+.orch-heartbeat { white-space: nowrap; }

@@ -109,7 +109,7 @@ for (const width of [1440, 390]) {
   test(`reports at ${width} px`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "reports", width, "#reports-kpi");
-    await expect(page.locator("#report-list [data-stage]")).toHaveCount(5);
+    await expect(page.locator("#report-list [data-stage]")).toHaveCount(6);
     await expect(page.locator("#report-detail")).toContainText("✖ fail");
     await expect(page.locator("#report-qa-log")).toContainText("хвост лога (последние 2 из 42 строк):");
     await page.locator('#batch-list [data-batch="b-887"]').click();
@@ -125,6 +125,29 @@ for (const width of [1440, 390]) {
     await page.locator('#batch-history [data-batch="b-887"]').click();
     await expect(page.locator("#open-recovery")).toHaveAttribute("href", "#/recovery?batch=b-887");
     expect(await noOverflow(page)).toBe(true);
+    // The blocks after the diagram: three batch cards (one row on a wide screen) and five-column dispatch rows.
+    const cards = await page.locator(".orch-batches > article.orch-batch").evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().top)));
+    expect(cards).toHaveLength(3);
+    if (width > 1100) expect(new Set(cards).size).toBe(1);
+    const children = await page.locator(".orch-dispatch-row").evaluateAll((rows) => rows.map((row) => row.children.length));
+    expect(children.every((count) => count === 5)).toBe(true);
+    await expect(page.locator(".orch-ticket-table .orch-ticket-row")).toHaveCount(3);
+  });
+
+  test(`orchestration at ${width} px: only the live step moves, and never under reduced motion`, async ({ page }) => {
+    await mockSocket(page);
+    await open(page, "orchestration", width, "#orch-kpi");
+    const animations = () =>
+      page.locator("#orch-scheme").evaluate((map) => ({
+        edges: [...map.querySelectorAll(".orch-map-edge.active")].map((edge) => getComputedStyle(edge).animationName),
+        nodes: [...map.querySelectorAll(".orch-map-node.active .orch-map-bg, .orch-map-node.live .orch-map-bg")].map((bg) => getComputedStyle(bg).animationName),
+      }));
+    const moving = await animations();
+    expect(moving.edges).toEqual(["orchMapFlow", "orchMapFlow"]);
+    expect(moving.nodes).toEqual(["orchMapPulse", "orchMapPulse"]);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const still = await animations();
+    expect([...still.edges, ...still.nodes].every((name) => name === "none")).toBe(true);
   });
 
   test(`recovery at ${width} px: hidden route, a cancelled confirmation starts nothing`, async ({ page }) => {

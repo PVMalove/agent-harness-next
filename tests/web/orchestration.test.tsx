@@ -68,7 +68,7 @@ describe("the Orchestration route", () => {
 
   test("the QA lane follows the newest batch; the snapshot lists batches newest first", () => {
     renderOrchestration();
-    expect(ORCHESTRATION.ledger.batches.map((batch) => batch.ticket)).toEqual(["#887", "#886"]);
+    expect(ORCHESTRATION.ledger.batches.map((batch) => batch.ticket)).toEqual(["#887", "#888", "#886"]);
     const lane = document.querySelector("#qa-lane") as HTMLElement;
     expect(within(lane).getByRole("heading").textContent).toBe("QA lane · #887");
     expect(lane.querySelectorAll(".qa-attempt")).toHaveLength(2);
@@ -86,7 +86,7 @@ describe("the Orchestration route", () => {
   test("the state filter narrows the history; analytics tabs only switch the rows", () => {
     renderOrchestration();
     const history = () => [...document.querySelectorAll("#batch-history [data-batch]")].map((row) => row.getAttribute("data-batch"));
-    expect(history()).toEqual(["b-887", "b-886"]);
+    expect(history()).toEqual(["b-887", "b-888", "b-886"]);
     act(() => fireEvent.change(document.querySelector("#state-filter") as HTMLElement, { target: { value: "completed" } }));
     expect(history()).toEqual(["b-886"]);
     const analytics = document.querySelector("#orch-analytics") as HTMLElement;
@@ -99,10 +99,15 @@ describe("the Orchestration route", () => {
     renderOrchestration();
     const map = document.querySelector("#orch-scheme") as HTMLElement;
     expect(map.querySelectorAll(".orch-group")).toHaveLength(3);
-    const developer = map.querySelector('[data-node="Разработчик"]') as Element;
-    expect(developer.getAttribute("class")).toContain("active");
-    expect(developer.querySelector(".orch-map-count text")?.textContent).toBe("1");
-    expect(map.querySelectorAll(".orch-map-edge.active")).toHaveLength(1);
+    // The live step of each active batch: #888's architect is at work, #887's QA reported and
+    // waits for the coordinator's QA gate; #887's older developer stage is open but not live.
+    const node = (name: string) => map.querySelector(`[data-node="${name}"]`) as Element;
+    expect(node("Архитектор").getAttribute("class")).toContain("active");
+    expect(node("Approve QA").getAttribute("class")).toContain("live");
+    expect(node("Разработчик").getAttribute("class")).not.toContain("active");
+    expect(node("Разработчик").querySelector(".orch-map-count text")?.textContent).toBe("1");
+    expect(map.querySelectorAll(".orch-map-edge.active")).toHaveLength(2);
+    expect(map.querySelector(".orch-map-statusbar .orch-live")?.textContent).toBe("живой шаг: #887 · Approve QA; #888 · Architect");
     const tabs = document.querySelector("#orch-tabs") as HTMLElement;
     act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Поток" })));
     const flow = document.querySelector('#orch-tab-view[data-tab="flow"]') as HTMLElement;
@@ -144,6 +149,28 @@ describe("the Orchestration route", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Orchestration");
     expect(content()).toContain("Ledger lock held: report submit");
     expect(content()).toContain("Pipeline state, batch history and human decisions.");
-    expect(content()).toContain("in progress (1)");
+    expect(content()).toContain("in progress (2)");
+  });
+
+  test("after the diagram: three batch cards, five-column dispatch rows and the all-tickets table", () => {
+    renderOrchestration();
+    const cards = [...document.querySelectorAll(".orch-batches > article.orch-batch")];
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.className.split(" ").at(-1))).toEqual(["awaiting", "working", "done"]);
+    expect(cards[0]!.querySelector("h3")?.textContent).toBe("#887 · feature/issue-887");
+    expect(cards[0]!.querySelector(".orch-batch-meta")?.textContent).toContain("QA");
+    expect([...cards[0]!.querySelectorAll(".orch-mini .orch-mini-step")].map((step) => step.className.replace("orch-mini-step", "").trim())).toEqual(["", "done", "done", "done", ""]);
+    expect(cards[0]!.querySelector('.orch-batch-foot a[href="#/agent-activity"]')).not.toBeNull();
+    const rows = [...document.querySelectorAll("#orch-dispatch-list .orch-dispatch-row")];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.classList.contains("row")).toBe(false);
+      expect([...row.children].map((child) => child.className.split(" ")[0])).toEqual(["orch-role", "orch-dispatch-main", "orch-status", "orch-heartbeat", "orch-link"]);
+      expect(row.querySelector(".orch-dispatch-main small")?.textContent).not.toMatch(/T\d{2}:\d{2}/);
+    }
+    const table = document.querySelector("#orch-tickets .orch-ticket-table") as HTMLElement;
+    expect([...table.querySelectorAll(".orch-ticket-head span")].map((cell) => cell.textContent)).toEqual(["тикет", "название", "стадия / роль", "статус", "возраст", "обновлён"]);
+    expect(table.querySelectorAll(".orch-ticket-row")).toHaveLength(3);
+    expect(document.querySelector("#orch-tickets .panel-head .small")?.textContent).toBe("3 в выборке");
   });
 });

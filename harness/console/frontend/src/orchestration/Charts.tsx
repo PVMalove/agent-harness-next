@@ -5,7 +5,7 @@
 import { useI18n } from "../i18n";
 import { Bar, NoData, roleName } from "../steps/ActivityViews";
 import type { Figure, OrchestrationSnapshot } from "../ws/ledger";
-import { AGING, AGING_BUCKETS, seconds } from "./format";
+import { AGING, AGING_BUCKETS, ROLE_NODE, liveSteps, seconds } from "./format";
 import { GateTrend } from "./OrchViews";
 
 const ACTIVE = new Set(["working", "dispatched", "approved"]);
@@ -316,12 +316,17 @@ interface Place {
     publish. A role node holds the ledger's open stages; the edge into it moves only then. */
 export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
   const { t } = useI18n();
+  const live = liveSteps(data.ledger);
+  const liveNodes = new Set(live.map((step) => step.node));
+  // Only the live step moves: an open stage that is not the newest of its batch stays still.
   const place = (roles: string[]): Place => {
     const open = data.ledger.stages.filter((stage) => roles.includes(stage.role) && (ACTIVE.has(stage.state) || ATTENTION.has(stage.state)));
+    const node = ROLE_NODE[roles[0]!] ?? "";
     if (!open.length) return { tone: "idle", chip: "", count: 0 };
-    const tone = open.some((stage) => ATTENTION.has(stage.state)) ? "err" : "active";
+    const tone = open.some((stage) => ATTENTION.has(stage.state)) ? "err" : liveNodes.has(node) ? "active" : "warn";
     return { tone, chip: open.at(-1)!.ticket, count: open.length };
   };
+  const gateLive = (name: string): Place | undefined => (liveNodes.has(name) ? { tone: "active", chip: "", count: 0 } : undefined);
   const arch = place(["architect"]);
   const dev = place(["developer"]);
   const rev = place(["review", "code-review"]);
@@ -331,8 +336,8 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
   const blocked = batches.filter((batch) => ATTENTION.has(batch.state)).length;
   const awaiting = batches.filter((batch) => batch.state === "awaiting_approval").length;
   const gate = typeof data.analytics.gates.awaiting === "number" && data.analytics.gates.awaiting > 0 ? "wait" : "idle";
-  const node = (x: number, y: number, w: number, h: number, type: string, tone: string, title: string, sub: string, at?: Place) => (
-    <g className={`orch-map-node ${type} ${tone}`} data-node={title}>
+  const node = (x: number, y: number, w: number, h: number, type: string, tone: string, title: string, sub: string, at?: Place, name: string = title) => (
+    <g className={`orch-map-node ${type} ${tone}${type !== "role" && liveNodes.has(name) ? " live" : ""}`} data-node={title}>
       <rect x={x} y={y} width={w} height={h} rx="7" className="orch-map-bg" />
       <rect x={x} y={y + 9} width="3" height={h - 18} rx="1.5" className="orch-map-accent" />
       <text className="orch-map-title" x={x + 14} y={y + 21}>
@@ -370,6 +375,11 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
           <b>{awaiting}</b> {t("ждёт")}
         </span>
         <span className="muted">{t("{count} задач в конвейере", { count: working + blocked + awaiting })}</span>
+        <span className="orch-live">
+          {live.length
+            ? `${t("живой шаг")}: ${live.map((step) => `${step.ticket} · ${step.kind === "role" ? roleName(step.role) : step.node === "Approve QA" ? "Approve QA" : t(step.node)}`).join("; ")}`
+            : t("живого шага нет")}
+        </span>
       </div>
       <div className="orch-map-scroll" tabIndex={0} role="region" aria-label={t("Схема ролей оркестрации")}>
         <svg className="orch-map" viewBox="0 0 1200 416" role="img" aria-label={t("Схема ролей оркестрации")}>
@@ -409,8 +419,8 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
           {node(280, 275, 220, 52, "role", qa.tone, "QA · clean-room", t("закреплённый SHA"), qa)}
           {node(540, 210, 240, 52, "exception", "review", t("Находки review"), t("возврат в Developer"))}
           {node(540, 275, 240, 52, "exception", "qa", t("Находки QA"), t("повтор или дефект"))}
-          {node(860, 80, 280, 52, "human", gate, "Approve QA", t("гейт человека"))}
-          {node(860, 145, 280, 52, "coord", "idle", t("Итоговый отчёт"), t("evidence + решение"))}
+          {node(860, 80, 280, 52, "human", gate, "Approve QA", t("гейт человека"), undefined, "Approve QA")}
+          {node(860, 145, 280, 52, "coord", "idle", t("Итоговый отчёт"), t("evidence + решение"), undefined, "Итоговый отчёт")}
           {node(860, 210, 280, 52, "coord", "idle", t("Публикация"), t("принятый SHA"))}
           {node(860, 275, 280, 52, "human", "idle", "/to-pull-requests", t("передача человеку"))}
           {edge("M220 109H280", "aqua", arch)}
@@ -421,9 +431,9 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
           {edge("M500 301H540", "rose")}
           {edge("M540 236H520V160H500", "rose", undefined, true)}
           {edge("M540 301H510V205H440V197", "rose", undefined, true)}
-          {edge("M390 327V350H800V106H860", "aqua")}
+          {edge("M390 327V350H800V106H860", "aqua", gateLive("Approve QA"))}
           {edge("M780 301H810V171H860", "orange", undefined, true)}
-          {edge("M1000 132V145", "aqua")}
+          {edge("M1000 132V145", "aqua", gateLive("Итоговый отчёт"))}
           {edge("M1000 197V210", "aqua")}
           {edge("M1000 262V275", "aqua")}
         </svg>

@@ -7,7 +7,7 @@
 import type { Language } from "../i18n";
 import { durationText, pyRound } from "../reports/format";
 import type { Tile } from "../reports/format";
-import type { Analytics, AnalyticsSection, BatchSummary, Figure, Figures, Ledger } from "../ws/ledger";
+import type { Analytics, AnalyticsSection, BatchSummary, Figure, Figures, Ledger, StageHead } from "../ws/ledger";
 
 type Translate = (text: string) => string;
 
@@ -423,4 +423,57 @@ export function lockLines(lock: Record<string, unknown> | null, error: string | 
     words.release,
     ...lease,
   ];
+}
+
+/* -- Live step and the blocks after the diagram ------------------------------------------------ */
+
+/** The diagram node of each role (`conflict-resolver` works as a developer). */
+export const ROLE_NODE: Readonly<Record<string, string>> = {
+  architect: "Архитектор",
+  developer: "Разработчик",
+  "conflict-resolver": "Разработчик",
+  review: "Code review",
+  "code-review": "Code review",
+  qa: "QA · clean-room",
+};
+const LIVE = new Set(["working", "dispatched"]);
+const stageTime = (stage: StageHead): string => stage.at || stage.started_at;
+
+export interface LiveStep {
+  batch: string;
+  ticket: string;
+  /** A role at work, or a coordinator gate after a report with no next stage yet. */
+  kind: "role" | "gate";
+  role: string;
+  /** The diagram node that pulses; its incoming edge flows. */
+  node: string;
+}
+
+/** The newest stage of each active batch decides its live step: a working or dispatched stage
+    pulses its role; a reported one with nothing after it waits at the coordinator's gate («Approve
+    QA» after QA, «Итоговый отчёт» otherwise); anything else is idle. Newest batch first. */
+export function liveSteps(ledger: Ledger): LiveStep[] {
+  const found: (LiveStep & { at: string })[] = [];
+  for (const batch of ledger.batches) {
+    if (batch.state !== "active") continue;
+    const stages = ledger.stages.filter((stage) => stage.batch_id === batch.batch_id);
+    const last = [...stages].sort((a, b) => (stageTime(a) < stageTime(b) ? 1 : stageTime(a) > stageTime(b) ? -1 : 0))[0];
+    if (!last) continue;
+    const base = { batch: batch.batch_id, ticket: batch.ticket || batch.batch_id, role: last.role, at: stageTime(last) };
+    if (LIVE.has(last.state) && ROLE_NODE[last.role]) found.push({ ...base, kind: "role", node: ROLE_NODE[last.role]! });
+    else if (last.state === "reported") found.push({ ...base, kind: "gate", node: last.role === "qa" ? "Approve QA" : "Итоговый отчёт" });
+  }
+  return found.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).map(({ at: _at, ...step }) => step);
+}
+
+/** The five steps of a batch card: done when the role reported, current at the live step. */
+export function miniSteps(ledger: Ledger, batch: BatchSummary, live: LiveStep | undefined): ("done" | "current" | "")[] {
+  const stages = ledger.stages.filter((stage) => stage.batch_id === batch.batch_id);
+  const roles: string[][] = [["architect"], ["developer", "conflict-resolver"], ["review", "code-review"], ["qa"]];
+  const steps = roles.map((names): "done" | "current" | "" => {
+    if (live?.kind === "role" && names.includes(live.role)) return "current";
+    return stages.some((stage) => names.includes(stage.role) && stage.report) ? "done" : "";
+  });
+  steps.push(batch.pr_state === "found" ? "done" : "");
+  return steps;
 }

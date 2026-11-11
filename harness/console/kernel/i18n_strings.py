@@ -2726,6 +2726,15 @@ EN.update(
         "Показать все {count}": "Show all {count}",
         "ожидание": "waiting",
         "последнее": "last",
+        "dispatch ещё не было": "no dispatch yet",
+        "{count} в выборке": "{count} in the selection",
+        "Ход": "Activity",
+        "возраст": "age",
+        "ждёт гейта": "awaiting the gate",
+        "живого шага нет": "no live step",
+        "обновлён": "updated",
+        "с последнего heartbeat или события": "since the last heartbeat or event",
+        "стадия / роль": "stage / role",
     }
 )
 

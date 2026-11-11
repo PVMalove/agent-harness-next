@@ -5,9 +5,11 @@ import { TabList, TabPanels } from "../views/Tabs";
 import { useState } from "react";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
-import { NoData, roleName } from "../steps/ActivityViews";
+import { Icon } from "../icons";
+import { NoData, roleIcon, roleName } from "../steps/ActivityViews";
 import type { AnalyticsSection, Figure, OrchestrationSnapshot, StageHead } from "../ws/ledger";
 import { FlowTab, GatesTab, PipelineMap, QualityTab, RuntimeTab } from "./Charts";
+import { liveSteps, miniSteps } from "./format";
 
 const ACTIVE = new Set(["working", "dispatched", "approved"]);
 const ATTENTION = new Set(["failed", "blocked", "auto_stop"]);
@@ -216,37 +218,77 @@ export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
   );
 }
 
-export function BatchCards({ data }: { data: OrchestrationSnapshot }) {
-  const { t, state: stateText } = useI18n();
-  const batches = data.ledger.batches.slice(-6).reverse();
+/** The mockup shows three batch cards; older batches are rows of «Все тикеты». */
+export const BATCH_CARD_LIMIT = 3;
+/** Dispatch rows before the list scrolls inside its panel. */
+export const DISPATCH_ROWS = 8;
+
+const clock = (iso: string, language: string): string => {
+  const at = Date.parse(iso);
+  return Number.isNaN(at) ? "—" : new Intl.DateTimeFormat(language, { hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
+};
+const ageSeconds = (iso: string, now: number): number | null => {
+  const at = Date.parse(iso);
+  return Number.isNaN(at) ? null : Math.max(0, (now - at) / 1000);
+};
+const newestFirst = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+
+export function BatchCards({ data, now = Date.now() }: { data: OrchestrationSnapshot; now?: number }) {
+  const { t, duration, state: stateText } = useI18n();
+  const batches = [...data.ledger.batches].sort((a, b) => newestFirst(a.created_at, b.created_at)).slice(0, BATCH_CARD_LIMIT);
   if (batches.length === 0) return <div className="report-empty">{t("Batch в ledger нет")}</div>;
-  const tone = (state: string) => (ATTENTION.has(state) ? "err" : state === "active" ? "ok" : "warn");
+  const live = liveSteps(data.ledger);
   return (
     <div className="orch-batches" id="orch-batch-cards">
-      {batches.map((batch) => (
-        <article className="panel orch-batch" key={batch.batch_id}>
-          <div className="orch-batch-head">
-            <span className="orch-batch-id">{batch.batch_id}</span>
-            <span className={`orch-status ${tone(batch.state)}`} data-state={batch.state}>
-              {stateText(batch.state)}
-            </span>
-          </div>
-          <h3 title={t("Названия тикета в ledger нет: показан номер и ветка")}>{batch.ticket || batch.batch_id}</h3>
-          <div className="orch-batch-meta">
-            {batch.branch || "—"}
-            {batch.pr_url ? ` · PR ${stateText(batch.pr_state)}` : ""}
-          </div>
-        </article>
-      ))}
+      {batches.map((batch) => {
+        const step = live.find((item) => item.batch === batch.batch_id);
+        const stages = data.ledger.stages.filter((stage) => stage.batch_id === batch.batch_id).sort((a, b) => newestFirst(a.at || a.started_at, b.at || b.started_at));
+        const last = stages[0];
+        const status = ATTENTION.has(batch.state) ? "attention" : batch.state !== "active" ? "done" : step?.kind === "role" ? "working" : "awaiting";
+        const tone = status === "attention" ? "err" : status === "awaiting" ? "warn" : "ok";
+        const beat = last ? last.heartbeat_at || last.at : "";
+        return (
+          <article className={`panel orch-batch ${status}`} key={batch.batch_id} data-batch={batch.batch_id}>
+            <div className="orch-batch-head">
+              <span className="orch-batch-id">{batch.batch_id}</span>
+              <span className={`orch-status ${tone}`} data-state={batch.state}>
+                {step?.kind === "gate" ? t("ждёт гейта") : stateText(batch.state)}
+              </span>
+            </div>
+            <h3 title={t("Названия тикета в ledger нет: показан номер и ветка")}>{`${batch.ticket || batch.batch_id} · ${batch.branch || "—"}`}</h3>
+            <div className="orch-batch-meta">
+              {last ? (
+                <>
+                  <Icon name={roleIcon(last.role)} /> {roleName(last.role)} · heartbeat {beat ? duration(ageSeconds(beat, now)) : t("нет данных")}
+                </>
+              ) : (
+                t("dispatch ещё не было")
+              )}
+            </div>
+            <div className="orch-mini">
+              {miniSteps(data.ledger, batch, step).map((state, index) => (
+                <span key={index} className={`orch-mini-step ${state}`.trim()} title={["Architect", "Developer", "Review", "QA", "PR"][index]} />
+              ))}
+            </div>
+            <div className="orch-batch-foot">
+              <span>{last ? `${last.dispatch_id} · ${duration(ageSeconds(last.started_at || last.at, now))}` : "—"}</span>
+              <a href={href("agent-activity")}>
+                {t("Ход работы")} <Icon name="chevron" />
+              </a>
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
 
 const statusOf = (stage: StageHead): string =>
   ACTIVE.has(stage.state) ? "working" : ATTENTION.has(stage.state) ? "attention" : stage.report ? "reported" : "awaiting";
+const STATUS_TONE: Readonly<Record<string, string>> = { working: "ok", attention: "err", awaiting: "warn", reported: "" };
 
-export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
-  const { t, state: stateText } = useI18n();
+export function DispatchTable({ data, now = Date.now() }: { data: OrchestrationSnapshot; now?: number }) {
+  const { t, language, duration, state: stateText } = useI18n();
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
   const roles = [...new Set(data.ledger.stages.map((stage) => stage.role))].sort();
@@ -278,23 +320,27 @@ export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
           <option value="reported">{t("Отчёт получен")}</option>
         </select>
       </div>
-      <div id="orch-dispatch-list" tabIndex={0} role="region" aria-label="Dispatch">
+      <div id="orch-dispatch-list" className={shown.length > DISPATCH_ROWS ? "orch-dispatch-scroll" : undefined} tabIndex={0} role="region" aria-label="Dispatch">
         {shown.length === 0 ? (
           <div className="report-empty">{t("Dispatch с такими фильтрами нет")}</div>
         ) : (
           shown.map((stage) => (
-            <div className="orch-dispatch-row row" key={stage.dispatch_id}>
-              <div>
-                <b>
-                  {stage.ticket} · {roleName(stage.role)}
-                </b>
-                <small>
-                  {stage.dispatch_id} · {stage.at || "—"}
-                </small>
-              </div>
-              <span className={`status ${statusOf(stage) === "attention" ? "err" : statusOf(stage) === "working" ? "active" : ""}`}>
-                {stateText(stage.state)}
+            <div className="orch-dispatch-row" key={stage.dispatch_id} data-dispatch={stage.dispatch_id}>
+              <span className="orch-role" title={roleName(stage.role)}>
+                <Icon name={roleIcon(stage.role)} />
               </span>
+              <span className="orch-dispatch-main">
+                <b>{`${stage.dispatch_id} · ${stage.ticket || stage.batch_id}`}</b>
+                <small>{`${stage.batch_id} · ${roleName(stage.role)} · ${t("старт")} ${clock(stage.started_at || stage.at, language)}`}</small>
+              </span>
+              <span className={`orch-status ${STATUS_TONE[statusOf(stage)] ?? ""}`}>{stateText(stage.state)}</span>
+              <span className="orch-heartbeat" title={t("с последнего heartbeat или события")}>
+                {/* The 44px column of the mockup holds the largest unit only («3 дн», «12 мин»). */}
+                {duration(ageSeconds(stage.heartbeat_at || stage.at, now)).split(" ").slice(0, 2).join(" ")}
+              </span>
+              <a className="orch-link" href={href("agent-activity")}>
+                {t("Ход")} <Icon name="chevron" />
+              </a>
             </div>
           ))
         )}
@@ -303,29 +349,50 @@ export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
   );
 }
 
-export function TicketList({ data }: { data: OrchestrationSnapshot }) {
-  const { t, state: stateText } = useI18n();
-  const tickets = [...new Map(data.ledger.batches.map((batch) => [batch.ticket || batch.batch_id, batch])).values()];
+export function TicketList({ data, now = Date.now() }: { data: OrchestrationSnapshot; now?: number }) {
+  const { t, language, duration, state: stateText } = useI18n();
+  const batches = [...data.ledger.batches].sort((a, b) => newestFirst(a.created_at, b.created_at));
+  const rows = [...new Map(batches.map((batch) => [batch.ticket || batch.batch_id, batch])).values()];
   return (
     <section className="panel orch-tickets" id="orch-tickets">
       <div className="panel-head">
         <h2>{t("Все тикеты")}</h2>
-        <span className="small muted">{tickets.length}</span>
+        <span className="small muted">{t("{count} в выборке", { count: rows.length })}</span>
       </div>
-      {tickets.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="report-empty">{t("Batch в ledger нет")}</div>
       ) : (
-        tickets.map((batch) => (
-          <div className="row" key={batch.batch_id}>
-            <div>
-              <b>{batch.ticket || batch.batch_id}</b>
-              <small title={t("Названия тикета в ledger нет: показан номер и ветка")}>{batch.branch || batch.batch_id}</small>
-            </div>
-            <a className="status" href={`${href("recovery")}?batch=${encodeURIComponent(batch.batch_id)}`}>
-              {stateText(batch.state)}
-            </a>
+        <div className="orch-ticket-table" tabIndex={0} role="region" aria-label={t("Все тикеты")}>
+          <div className="orch-ticket-head">
+            <span>{t("тикет")}</span>
+            <span>{t("название")}</span>
+            <span>{t("стадия / роль")}</span>
+            <span>{t("статус")}</span>
+            <span>{t("возраст")}</span>
+            <span>{t("обновлён")}</span>
           </div>
-        ))
+          {rows.map((batch) => {
+            const last = data.ledger.stages
+              .filter((stage) => stage.batch_id === batch.batch_id)
+              .sort((a, b) => newestFirst(a.at || a.started_at, b.at || b.started_at))[0];
+            const tone = ATTENTION.has(batch.state) ? "err" : batch.state === "active" ? "ok" : "muted";
+            return (
+              <div className="orch-ticket-row" key={batch.batch_id} data-batch={batch.batch_id}>
+                <b>{batch.ticket || batch.batch_id}</b>
+                <div className="orch-ticket-title" title={t("Названия тикета в ledger нет: показан номер и ветка")}>
+                  <span>{batch.branch || batch.batch_id}</span>
+                  <small>{batch.batch_id}</small>
+                </div>
+                <span>{last ? `${roleName(last.role)} · ${stateText(last.state)}` : "—"}</span>
+                <a className={`orch-pill ${tone}`} href={`${href("recovery")}?batch=${encodeURIComponent(batch.batch_id)}`}>
+                  {stateText(batch.state)}
+                </a>
+                <span>{duration(ageSeconds(batch.created_at, now))}</span>
+                <span>{last ? clock(last.at || last.started_at, language) : "—"}</span>
+              </div>
+            );
+          })}
+        </div>
       )}
     </section>
   );

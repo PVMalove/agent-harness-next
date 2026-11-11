@@ -5,16 +5,18 @@
         "d1_3": 0,
         "d3_7": 0,
         "gt_7d": 0,
-        "lt_1d": 1
+        "lt_1d": 2
       },
       "aging_by_role": {
+        "architect:gt_4h": 1,
         "developer:h1_4": 1
       },
       "by_state": {
-        "active": 1,
+        "active": 2,
         "completed": 1
       },
       "current_by_role": {
+        "architect": 1,
         "developer": 1
       },
       "cycle_p50_seconds": 95400,
@@ -112,7 +114,7 @@
       ],
       "pr_states": {
         "found": 1,
-        "missing": 1
+        "missing": 2
       }
     },
     "quality": {
@@ -139,30 +141,31 @@
       }
     },
     "runtime": {
-      "heartbeat_age_p95_seconds": 5100,
-      "oldest_unfinished_seconds": 5400,
+      "heartbeat_age_p95_seconds": 17400,
+      "oldest_unfinished_seconds": 17700,
       "open_age_by_role": {
+        "architect": 17700,
         "developer": 5400
       },
       "stage_states": {
         "reported": 4,
-        "working": 1
+        "working": 2
       },
       "stale": 0,
-      "stale_dispatches": 0,
-      "unfinished": 1
+      "stale_dispatches": 1,
+      "unfinished": 2
     }
   },
   "kpi": {
     "awaiting_approval": 0,
-    "batches": 2,
+    "batches": 3,
     "blocked": 0,
     "cycle_p50_seconds": 95400,
     "cycle_p95_seconds": 95400,
     "failed": 0,
     "flow_efficiency_pct": 3,
     "oldest_approval_seconds": null,
-    "oldest_wip_seconds": 14400,
+    "oldest_wip_seconds": 18000,
     "qa_first_pass": 0,
     "qa_tickets": 1,
     "rework": 1,
@@ -170,7 +173,7 @@
     "stale": 0,
     "throughput_7d": 1,
     "unknown": 0,
-    "wip": 1
+    "wip": 2
   },
   "ledger": {
     "batches": [
@@ -185,6 +188,16 @@
         "ticket": "#887"
       },
       {
+        "batch_id": "b-888",
+        "branch": "feature/issue-888",
+        "created_at": "2026-11-08T08:00:00+00:00",
+        "pr_created_at": "",
+        "pr_state": "missing",
+        "pr_url": "",
+        "state": "active",
+        "ticket": "#888"
+      },
+      {
         "batch_id": "b-886",
         "branch": "feature/issue-886",
         "created_at": "2026-11-01T08:00:00+00:00",
@@ -196,6 +209,9 @@
       }
     ],
     "dispatches": {
+      "d-arch-888": {
+        "role": "architect"
+      },
       "d-dev": {
         "role": "developer"
       },
@@ -222,6 +238,16 @@
         "receipt": "none",
         "review": "present",
         "ticket": "#887"
+      },
+      {
+        "batch_id": "b-888",
+        "developer": "missing",
+        "publish": "none",
+        "qa": "missing",
+        "qa_run": "missing",
+        "receipt": "none",
+        "review": "missing",
+        "ticket": "#888"
       },
       {
         "batch_id": "b-886",
@@ -391,6 +417,17 @@
         "started_at": "2026-11-08T09:10:00+00:00",
         "state": "reported",
         "ticket": "#887"
+      },
+      {
+        "at": "2026-11-08T08:05:00+00:00",
+        "batch_id": "b-888",
+        "dispatch_id": "d-arch-888",
+        "heartbeat_at": "2026-11-08T08:10:00+00:00",
+        "report": null,
+        "role": "architect",
+        "started_at": "2026-11-08T08:05:00+00:00",
+        "state": "working",
+        "ticket": "#888"
       },
       {
         "at": "2026-11-01T09:00:00+00:00",

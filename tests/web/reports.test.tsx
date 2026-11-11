@@ -75,9 +75,9 @@ describe("the Reports route", () => {
   test("the stage list follows the TUI order and filters; the report body stays text", () => {
     const socket = renderReports();
     const order = () => [...document.querySelectorAll("#report-list [data-stage]")].map((row) => row.getAttribute("data-stage"));
-    expect(order()).toEqual(["d-qa", "d-wip", "d-rev", "d-dev", "d-old"]);
+    expect(order()).toEqual(["d-qa", "d-wip", "d-rev", "d-dev", "d-arch-888", "d-old"]);
     act(() => fireEvent.change(document.querySelector("#filter-completion") as HTMLElement, { target: { value: "open" } }));
-    expect(order()).toEqual(["d-wip"]);
+    expect(order()).toEqual(["d-wip", "d-arch-888"]);
     expect(content()).toContain("⚠ в работе · отчёта ещё нет");
     expect(content()).toContain("нет отчёта");
     act(() => fireEvent.change(document.querySelector("#filter-completion") as HTMLElement, { target: { value: "all" } }));
@@ -148,14 +148,14 @@ describe("the Reports route", () => {
   test("the evidence matrix shows the kernel's cells", () => {
     renderReports();
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
-    expect(evidenceMarks()).toEqual(["✓✓✓✓··", "✓———··"]);
+    expect(evidenceMarks()).toEqual(["✓✓✓✓··", "————··", "✓———··"]);
   });
 
   test("the client does not recompute a cell the kernel marked stale", () => {
     const stale = { ...REPORTS, evidence: REPORTS.evidence.map((row) => ({ ...row, qa_run: "stale" })) };
     renderReports("", stale);
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
-    expect(evidenceMarks()).toEqual(["✓✓✓!··", "✓——!··"]);
+    expect(evidenceMarks()).toEqual(["✓✓✓!··", "———!··", "✓——!··"]);
   });
 
   test("English labels come from the catalog", () => {
