@@ -9,9 +9,12 @@ import {
   FakeSocket,
   ManualClock,
   ORCHESTRATION_STEP,
+  ROSTER,
   rosterReply,
+  screenPage,
   stepsReply,
 } from "./fake-socket";
+import TIMELINE from "./fixtures/reports-timeline.json";
 
 function renderActivity() {
   window.location.hash = "#/agent-activity";
@@ -34,7 +37,7 @@ function renderActivity() {
   return { socket, id };
 }
 
-const list = () => document.querySelector(".work-events") as HTMLElement;
+const list = () => document.querySelector("#work-steps") as HTMLElement;
 const rows = () => [...list().querySelectorAll(".work-event")].map((row) => row.querySelector("b")?.textContent);
 
 describe("the agent activity route", () => {
@@ -75,6 +78,52 @@ describe("the agent activity route", () => {
     expect(document.querySelector("#work-stats")!.textContent).toContain("События в минуту");
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Таймлайн" })));
     expect(document.querySelector("#work-timeline")).not.toBeNull();
+  });
+
+  test("sessions show role icons and localized statuses; the ticket picker narrows them", () => {
+    const { socket, id } = renderActivity();
+    const other = { ...ROSTER[0], dispatch_id: "dispatch-qa-9", batch_id: "batch-901", ticket: "#901", role: "qa", state: "failed" };
+    act(() => socket.reply(rosterReply(id, true, [...ROSTER, other])));
+    const sessions = document.querySelector(".work-sessions") as HTMLElement;
+    const icons = [...sessions.querySelectorAll(".work-row .work-role [data-icon]")].map((icon) => icon.getAttribute("data-icon"));
+    expect(icons).toEqual(["developer", "review", "qa"]);
+    const statuses = [...sessions.querySelectorAll(".work-row .work-status")].map((status) => status.textContent?.trim());
+    expect(statuses).toEqual(["Выполняется", "Выполняется · тишина", "Заблокировано"]);
+    expect(sessions.textContent).not.toContain("working");
+    const picker = screen.getByRole("combobox", { name: "Выбрать задачу" }) as HTMLSelectElement;
+    expect([...picker.options].map((option) => option.value)).toEqual(["", "#901", "#885"]);
+    act(() => fireEvent.change(picker, { target: { value: "#901" } }));
+    expect([...sessions.querySelectorAll(".work-row")].map((row) => row.getAttribute("data-dispatch"))).toEqual(["dispatch-qa-9"]);
+    expect(document.querySelector("#work-route")!.textContent).toContain("Маршрут сессии #901");
+  });
+
+  test("the session route carries role icons and localized step labels; session events come from the batch chronology", () => {
+    const { socket } = renderActivity();
+    const route = document.querySelector("#work-route")!;
+    expect([...route.querySelectorAll(".work-flow-icon [data-icon]")].map((icon) => icon.getAttribute("data-icon"))).toEqual([
+      "architect",
+      "developer",
+      "review",
+      "qa",
+      "pr",
+    ]);
+    expect(route.querySelector('[data-step="Developer"] small')!.textContent).toBe("Выполняется");
+    const ask = socket.request("reports.timeline");
+    expect(ask).toMatchObject({ batch_id: "batch-885" });
+    act(() => socket.reply(screenPage(ask.id, "reports.timeline", JSON.stringify(TIMELINE))));
+    const events = document.querySelector("#work-events-panel") as HTMLElement;
+    expect(events.textContent).toContain("События сессии #885");
+    const first = events.querySelector(".work-event") as HTMLElement;
+    expect(first.querySelector("b")!.textContent).toBe(TIMELINE.events.at(-1)!.text);
+    expect(events.querySelector('[data-kind="report"] small')!.textContent).toBe("отчёт");
+  });
+
+  test("statistics count the observed events of the last hour by type", () => {
+    renderActivity();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "Статистика" })));
+    const types = document.querySelector("#work-event-types") as HTMLElement;
+    expect(types.textContent).toContain("за час");
+    expect(document.querySelector("#work-rate svg")).not.toBeNull();
   });
 
   test("the rendered list never shows thinking, tool inputs or raw JSON", () => {

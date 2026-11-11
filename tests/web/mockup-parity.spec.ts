@@ -87,7 +87,7 @@ const PAGES: PageSpec[] = [
   {
     route: "agent-activity",
     title: "Ход работы",
-    blocks: ["#work-summary", "#work-kpis", ".work-sources", ".work-sessions", "#work-route", ".work-events-panel"],
+    blocks: ["#work-summary", "#work-kpis", ".work-sources", ".work-sessions", "#work-route", "#work-events-panel"],
     tabs: ["Обзор", "Таймлайн", "Статистика"],
   },
   {

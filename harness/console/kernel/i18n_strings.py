@@ -2405,6 +2405,34 @@ EN.update(
 )
 
 
+# Web console #1066: Agent activity — ticket picker, session events and the live-feed statistics.
+EN.update(
+    {
+        "Все задачи": "All tickets",
+        "Выбрать задачу": "Pick a ticket",
+        "События сессии": "Session events",
+        "Событий нет.": "No events.",
+        "Загрузка…": "Loading…",
+        "состояние": "state",
+        "запуск роли": "role start",
+        "отчёт": "report",
+        "решение": "decision",
+        "риск": "risk",
+        "шаги агента": "agent steps",
+        "переходы batch": "batch transitions",
+        "переходы dispatch": "dispatch transitions",
+        "решения гейтов": "gate decisions",
+        "QA-прогоны": "QA runs",
+        "попытки QA": "QA attempts",
+        "срез последнего часа · только события": "last hour · events only",
+        "{count} событий за час": "{count} events in the hour",
+        "за час": "in the hour",
+        "События в минуту за последний час": "Events per minute in the last hour",
+        "−{n} мин": "−{n} min",
+        "Шаги наблюдаются с открытия страницы; события до этого не учитываются.": "Steps are observed since the page opened; earlier events are not counted.",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

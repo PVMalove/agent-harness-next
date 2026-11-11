@@ -259,3 +259,14 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* Task Board spec row (#1066): the search by spec number beside the spec select. */
 .board-specbar .board-spec-search { flex: 0 1 200px; }
 .board-spec-missing { color: var(--warn); font: var(--fs-1) var(--mono); }
+/* Agent activity (#1066): wider step sources and the session route replays a step change. */
+.work-sources .work-source-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); padding: 12px 16px; }
+.work-sources .work-source { padding: 12px 16px; }
+.work-filters #work-ticket { max-width: 160px; }
+.work-analytics .work-stat-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 32px; }
+.work-status .hi { width: 12px; height: 12px; vertical-align: -2px; }
+.work-flow-node.current { animation: work-step-in 0.3s ease-out both; }
+@keyframes work-step-in { from { opacity: 0.4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .work-flow-node.current, .work-flow-node.current .work-flow-icon, .work-flow-edge.active::after { animation: none; }
+}

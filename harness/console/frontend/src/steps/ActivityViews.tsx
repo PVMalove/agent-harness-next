@@ -5,7 +5,7 @@ import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import type { Analytics, Ledger, StageHead } from "../ws/ledger";
-import type { RosterDispatch } from "../ws/steps";
+import type { HeldStep, RosterDispatch } from "../ws/steps";
 
 export type SessionStatus = "running" | "blocked" | "awaiting" | "other";
 
@@ -20,6 +20,32 @@ export function sessionStatus(entry: RosterDispatch): SessionStatus {
 }
 
 export const STATUS_TONE: Record<SessionStatus, string> = { running: "ok", blocked: "err", awaiting: "warn", other: "" };
+
+/** The mockup's status icons and labels of a session; "other" keeps the state's own label. */
+export const STATUS_ICON: Record<SessionStatus, string> = { running: "play", blocked: "blocked", awaiting: "awaiting", other: "completed" };
+export const STATUS_LABEL: Record<Exclude<SessionStatus, "other">, string> = {
+  running: "Выполняется",
+  blocked: "Заблокировано",
+  awaiting: "Ждёт решения",
+};
+
+/** The mockup's role names and icons; a role without one keeps its own name and the activity glyph. */
+export const ROLE_NAMES: Record<string, string> = {
+  architect: "Architect",
+  developer: "Developer",
+  "code-review": "Review",
+  review: "Review",
+  qa: "QA",
+};
+export const ROLE_ICON: Record<string, string> = {
+  architect: "architect",
+  developer: "developer",
+  "code-review": "review",
+  review: "review",
+  qa: "qa",
+};
+export const roleName = (role: string): string => ROLE_NAMES[role] ?? role;
+export const roleIcon = (role: string): string => ROLE_ICON[role] ?? "activity";
 
 export function statusCounts(dispatches: readonly RosterDispatch[]): Record<"all" | SessionStatus, number> {
   const counts = { all: dispatches.length, running: 0, blocked: 0, awaiting: 0, other: 0 };
@@ -134,11 +160,11 @@ export function WorkKpis({
   );
 }
 
-const ROUTE: [string, string[]][] = [
-  ["Architect", ["architect"]],
-  ["Developer", ["developer"]],
-  ["Review", ["review", "code-review"]],
-  ["QA", ["qa"]],
+const ROUTE: [string, string[], string][] = [
+  ["Architect", ["architect"], "architect"],
+  ["Developer", ["developer"], "developer"],
+  ["Review", ["review", "code-review"], "review"],
+  ["QA", ["qa"], "qa"],
 ];
 
 /** The route of the selected session's batch: Architect -> Developer -> Review -> QA -> PR. */
@@ -153,7 +179,7 @@ export function SessionRoute({
   prState: string | null;
   now: number;
 }) {
-  const { t, section } = useI18n();
+  const { t, section, state: stateText } = useI18n();
   if (!session) {
     return (
       <section className="panel work-route-panel" id="work-route">
@@ -163,25 +189,26 @@ export function SessionRoute({
   }
   const batch = dispatches.filter((entry) => entry.batch_id === session.batch_id);
   const tone = STATUS_TONE[sessionStatus(session)];
-  const steps = ROUTE.map(([name, roles]) => {
+  const steps = ROUTE.map(([name, roles, icon]) => {
     const entry = batch.filter((item) => roles.includes(item.role)).at(-1);
     const state = !entry ? "pending" : sessionStatus(entry) === "running" ? "current" : "done";
-    return { name, state, label: entry ? entry.state : t("Не начат") };
+    return { name, state, icon, label: entry ? stateText(entry.state) : t("Не начат") };
   });
-  steps.push({ name: "PR", state: prState ? "done" : "pending", label: prState || t("нет данных") });
+  steps.push({ name: "PR", state: prState ? "done" : "pending", icon: "pr", label: prState ? stateText(prState) : t("нет данных") });
   const current = steps.find((step) => step.state === "current") ?? null;
   return (
     <section className="panel work-route-panel" id="work-route">
       <div className="panel-head">
         <h2>{t("Маршрут сессии {id}", { id: session.ticket || session.batch_id })}</h2>
-        <span className={`work-status ${tone}`}>{session.state}</span>
+        <span className={`work-status ${tone}`}>{stateText(session.state)}</span>
       </div>
       <div className="work-route-body">
         <div className="work-task-meta">
           <span>
-            <Icon name="activity" /> {session.role}
+            <Icon name={roleIcon(session.role)} /> {roleName(session.role)}
           </span>
           <span className="branch-inline">
+            <Icon name="branch" />
             <b>{session.branch || "—"}</b>
           </span>
           <span>
@@ -193,9 +220,14 @@ export function SessionRoute({
           <div className="work-flow">
             {steps.map((step, index) => (
               <span key={step.name} style={{ display: "contents" }}>
-                <div className={`work-flow-node ${step.state} ${step.state === "current" ? tone : ""}`}>
+                <div
+                  // A new key on a step change replays the mockup's step transition (off under reduced motion).
+                  key={`${step.name}-${step.state}`}
+                  className={`work-flow-node ${step.state} ${step.state === "current" ? tone : ""}`}
+                  data-step={step.name}
+                >
                   <span className="work-flow-icon">
-                    <Icon name={step.name === "PR" ? "github" : "activity"} />
+                    <Icon name={step.icon} />
                   </span>
                   <b>{step.name}</b>
                   <small>{step.label}</small>
@@ -313,7 +345,7 @@ export function ActivityTimeline({ ledger, now }: { ledger: Ledger | null; now: 
 const record = (figure: unknown): Record<string, number> =>
   figure && typeof figure === "object" && !Array.isArray(figure) ? (figure as Record<string, number>) : {};
 
-function Rows({ values, tone }: { values: Record<string, number>; tone: string }) {
+function Rows({ values, tone, name = (key) => key }: { values: Record<string, number>; tone: string; name?: (key: string) => string }) {
   const { t } = useI18n();
   const entries = Object.entries(values);
   if (!entries.length) return <p className="orch-note">{t("нет данных")}</p>;
@@ -322,7 +354,7 @@ function Rows({ values, tone }: { values: Record<string, number>; tone: string }
     <>
       {entries.map(([label, value]) => (
         <div className="work-stat-row" key={label}>
-          <span>{label}</span>
+          <span>{name(label)}</span>
           <Bar value={value} max={max} tone={tone} />
           <b>{value}</b>
         </div>
@@ -331,9 +363,86 @@ function Rows({ values, tone }: { values: Record<string, number>; tone: string }
   );
 }
 
-export function ActivityStats({ analytics }: { analytics: Analytics | null }) {
+const HOUR_MS = 3600000;
+const RATE_BINS = 12;
+
+/** The observed step feed of the last hour: events per minute in 5-minute bins and counts by type. */
+export function eventFigures(steps: readonly HeldStep[], now: number): { rate: number[]; types: Record<string, number>; total: number } {
+  const rate = new Array<number>(RATE_BINS).fill(0);
+  const types: Record<string, number> = {};
+  let total = 0;
+  for (const { step } of steps) {
+    const at = Date.parse(step.observed_at);
+    if (Number.isNaN(at) || at > now || now - at >= HOUR_MS) continue;
+    const bin = RATE_BINS - 1 - Math.floor((now - at) / (HOUR_MS / RATE_BINS));
+    rate[bin] = (rate[bin] ?? 0) + 1;
+    const type = step.origin === "agent" ? "agent" : step.event;
+    types[type] = (types[type] ?? 0) + 1;
+    total += 1;
+  }
+  const perMinute = HOUR_MS / RATE_BINS / 60000;
+  return { rate: rate.map((count) => Math.round((count / perMinute) * 10) / 10), types, total };
+}
+
+const EVENT_TYPES: Record<string, string> = {
+  agent: "шаги агента",
+  "batch.transition": "переходы batch",
+  "dispatch.transition": "переходы dispatch",
+  "gate.decision": "решения гейтов",
+  "qa.run": "QA-прогоны",
+  "qa.attempt": "попытки QA",
+};
+
+/** The mockup's events-per-minute line over the last hour; a flat chart when nothing was seen. */
+function RateChart({ rate }: { rate: readonly number[] }) {
+  const { t } = useI18n();
+  const W = 760;
+  const H = 170;
+  const L = 28;
+  const R = 10;
+  const T = 12;
+  const B = 24;
+  const max = Math.max(1, ...rate);
+  const x = (i: number) => L + (i * (W - L - R)) / Math.max(1, rate.length - 1);
+  const y = (v: number) => T + ((max - v) / max) * (H - T - B);
+  const points = rate.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return (
+    <div className="work-rate-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("События в минуту за последний час")}>
+        {[0, max / 2, max].map((v) => (
+          <g key={v}>
+            <line x1={L} y1={y(v)} x2={W - R} y2={y(v)} className="work-rate-grid" />
+            <text x={L - 5} y={y(v) + 3} textAnchor="end" className="work-rate-axis">
+              {Math.round(v * 10) / 10}
+            </text>
+          </g>
+        ))}
+        {[0, 15, 30, 45, 60].map((m) => (
+          <text key={m} x={L + (m / 60) * (W - L - R)} y={H - 7} textAnchor="middle" className="work-rate-axis">
+            {t("−{n} мин", { n: 60 - m })}
+          </text>
+        ))}
+        <polyline points={points} className="work-rate-line" />
+      </svg>
+    </div>
+  );
+}
+
+export function ActivityStats({
+  analytics,
+  steps = [],
+  now = Date.now(),
+}: {
+  analytics: Analytics | null;
+  steps?: readonly HeldStep[];
+  now?: number;
+}) {
   const { t } = useI18n();
   const why = t("Журнал событий не агрегируется сервером");
+  const events = eventFigures(steps, now);
+  const typeRows = Object.fromEntries(
+    Object.entries(events.types).map(([type, count]) => [t(EVENT_TYPES[type] ?? type), count]),
+  );
   const open = record(analytics?.runtime.open_age_by_role);
   const p50 = record(analytics?.flow.stage_p50_by_role);
   const p95 = record(analytics?.flow.stage_p95_by_role);
@@ -344,31 +453,30 @@ export function ActivityStats({ analytics }: { analytics: Analytics | null }) {
     <section className="panel work-analytics" id="work-stats">
       <div className="panel-head">
         <h2>{t("Статистика")}</h2>
-        <span className="small muted">{t("аналитика ledger")}</span>
+        <span className="small muted">{t("срез последнего часа · только события")}</span>
       </div>
       <div className="orch-analytics-grid">
-        <article className="orch-chart wide">
+        <article className="orch-chart wide" id="work-rate">
           <div className="orch-chart-head">
             <h3>{t("События в минуту")}</h3>
+            <span>{t("{count} событий за час", { count: events.total })}</span>
           </div>
-          <p className="orch-note">
-            <NoData why={why} />
-          </p>
+          <RateChart rate={events.rate} />
+          <p className="orch-note">{t("Шаги наблюдаются с открытия страницы; события до этого не учитываются.")}</p>
         </article>
-        <article className="orch-chart">
+        <article className="orch-chart" id="work-event-types">
           <div className="orch-chart-head">
             <h3>{t("Типы событий")}</h3>
+            <span>{t("за час")}</span>
           </div>
-          <p className="orch-note">
-            <NoData why={why} />
-          </p>
+          <Rows values={typeRows} tone="cyan" />
         </article>
         <article className="orch-chart">
           <div className="orch-chart-head">
             <h3>{t("Загрузка ролей")}</h3>
             <span>{t("активные сессии")}</span>
           </div>
-          {analytics ? <Rows values={record(analytics.flow.current_by_role)} tone="cyan" /> : <NoData />}
+          {analytics ? <Rows values={record(analytics.flow.current_by_role)} tone="cyan" name={roleName} /> : <NoData />}
         </article>
         <article className="orch-chart wide">
           <div className="orch-chart-head">
@@ -380,7 +488,7 @@ export function ActivityStats({ analytics }: { analytics: Analytics | null }) {
           ) : (
             roles.map((role) => (
               <div className="work-stage-age" key={role}>
-                <span>{role}</span>
+                <span>{roleName(role)}</span>
                 <div className="work-age-bars">
                   {(
                     [
@@ -418,7 +526,7 @@ export function ActivityStats({ analytics }: { analytics: Analytics | null }) {
             <h3>Retry</h3>
             <span>{t("по ролям")}</span>
           </div>
-          {analytics ? <Rows values={record(analytics.quality.rework_by_role)} tone="violet" /> : <NoData />}
+          {analytics ? <Rows values={record(analytics.quality.rework_by_role)} tone="violet" name={roleName} /> : <NoData />}
           <p className="orch-note">
             {t("Причины повтора")}: <NoData why={why} />
           </p>
