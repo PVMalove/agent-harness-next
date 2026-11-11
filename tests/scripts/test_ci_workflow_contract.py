@@ -194,6 +194,14 @@ class FullPathTests(unittest.TestCase):
         self.assertIn("-m docker_smoke", jobs["docker-smoke"])
         self.assertIn("-m fault_injection", jobs["fault-injection"])
 
+    def test_the_windows_job_runs_the_full_suite_on_a_pull_request(self) -> None:
+        job = _jobs()["verify-windows"]
+
+        # The comment lines are removed by `_jobs`, so only code can fail this.
+        self.assertNotIn("--platform-subset", job)
+        self.assertIn("--fail-fast", job)
+        self.assertEqual(_condition(job), FULL_CONDITION)
+
     def test_the_jobs_without_tests_are_unchanged(self) -> None:
         jobs = _jobs()
 
