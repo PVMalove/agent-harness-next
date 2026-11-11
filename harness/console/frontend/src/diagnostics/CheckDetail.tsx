@@ -1,9 +1,9 @@
-/* The detail of one check: its status, group and message, the remedy and the manual command of
-   the report, the source of the report and, for a skipped check, why a skip is not a pass. The
+/* The detail of one check: its status, group and message, why it matters (the kernel catalog of
+   check rationales; an unknown id says no data), the remedy and the manual command of the report, the source of the report and, for a skipped check, why a skip is not a pass. The
    console never runs a remedy command; "Исправить" runs the server's internal fixers. */
 import { useState } from "react";
 import { Icon } from "../icons";
-import { groupLabel, useI18n } from "../i18n";
+import { checkRationale, groupLabel, useI18n } from "../i18n";
 import type { HealthCheck } from "../ws/screens";
 import { STATUS_META } from "./CheckList";
 
@@ -33,6 +33,7 @@ export function CheckDetail({
     );
   }
   const meta = STATUS_META[check.status];
+  const rationale = checkRationale(language, check.id);
   const command = check.fix?.command ?? null;
   const copy = () => {
     if (command === null) return;
@@ -64,9 +65,24 @@ export function CheckDetail({
           <code>{check.id}</code>
         </div>
         <h3>{check.message}</h3>
+        <p className="diag-detail-lead">{groupLabel(language, check.group)} · {meta.short}</p>
         <dl className="diag-facts">
           <div>
-            <dt>{t("Как исправить:")}</dt>
+            <dt>{t("Что проверено")}</dt>
+            <dd>{check.message}</dd>
+          </div>
+          <div>
+            <dt>{t("Почему важно")}</dt>
+            {rationale !== null ? (
+              <dd className="diag-rationale">{rationale}</dd>
+            ) : (
+              <dd className="muted no-data" title={t("Описания этой проверки в каталоге нет")}>
+                {t("нет данных")}
+              </dd>
+            )}
+          </div>
+          <div>
+            <dt>{t("Что сделать")}</dt>
             <dd>{check.fix ? check.fix.text : t("Рекомендация отсутствует")}</dd>
           </div>
           <div>

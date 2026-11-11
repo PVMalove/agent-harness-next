@@ -147,7 +147,11 @@ If the integration ref has moved forward, `qa_replacement.applies` becomes `fals
 `re_refresh_required` becomes `true`: a new refresh and a new collection are needed. The fallback path is a full local
 QA. It is needed on `fallback` with the reason `unsupported_tracker`, `not_configured`, `unavailable`,
 `unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`,
-or `inconclusive_check`. In this case nothing is written. CI unavailability counts neither as a
+or `inconclusive_check`, or `light_check`. In this case nothing is written. The `light_check` reason
+means that `ci_required_checks` contains a check whose name ends in `-light` (the `verify-light` job
+for PRs to `integration/**`), while the pair requires full QA: the saved pair selection is not
+`ticket-diff`, there is no pair record, it uses the old contract, or it is damaged. Such a check does
+not confirm the pair, so a full local QA or full CI is required. CI unavailability counts neither as a
 code finding nor as a success. A completed `failure` on a confirmed pair is recorded as
 `collector-failed`. A CI linked manually through `link-evidence` stays `unverified` and does not close the verification of
 the pair. CI does not replace the source QA reports.

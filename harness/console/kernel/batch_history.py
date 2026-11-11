@@ -181,21 +181,24 @@ class BatchHistorySource:
 
     @staticmethod
     def _entry_from(batch_id: str, result: ApiResult) -> RecoveryEntry:
-        # A refusal is a document too: the core printed its findings and exited 2.
-        if (
-            result.outcome not in (Outcome.DOCUMENT, Outcome.REFUSED)
-            or result.document is None
-        ):
-            text = result.problem_text or result.outcome.value
-            return RecoveryEntry(
-                batch_id, False, State.NOT_CHECKED, f"не проверено: {text}"
-            )
-        reason = recovery_reason(result.document)
-        if reason:
-            return RecoveryEntry(batch_id, True, State.WARN, reason)
-        return RecoveryEntry(
-            batch_id,
-            False,
-            State.OK,
-            "ядро не сообщает приостановки или незавершённой операции",
-        )
+        return recovery_entry_from(batch_id, result)
+
+
+def recovery_entry_from(batch_id: str, result: ApiResult) -> RecoveryEntry:
+    """Whether 'Open recovery' is offered for `batch_id` after its `recovery status` answer."""
+    # A refusal is a document too: the core printed its findings and exited 2.
+    if (
+        result.outcome not in (Outcome.DOCUMENT, Outcome.REFUSED)
+        or result.document is None
+    ):
+        text = result.problem_text or result.outcome.value
+        return RecoveryEntry(batch_id, False, State.NOT_CHECKED, f"не проверено: {text}")
+    reason = recovery_reason(result.document)
+    if reason:
+        return RecoveryEntry(batch_id, True, State.WARN, reason)
+    return RecoveryEntry(
+        batch_id,
+        False,
+        State.OK,
+        "ядро не сообщает приостановки или незавершённой операции",
+    )

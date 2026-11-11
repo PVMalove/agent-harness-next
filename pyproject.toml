@@ -26,9 +26,11 @@ files = [
     "scripts/verify.py",
     "scripts/verification",
     "scripts/perf",
+    "scripts/check_license_headers.py",
     "scripts/check_public_metadata.py",
     "scripts/check_private_terms.py",
     "scripts/diff_coverage.py",
+    "scripts/ci_light_tests.py",
     "scripts/build_parser_bundle.py",
     "skills/first-party/engineering/qa-gate/scripts/test_summary.py",
 ]
@@ -47,6 +49,10 @@ markers = [
     "podman_smoke: real rootless Podman smoke on Fedora with SELinux enforcing; run only with -m podman_smoke",
     "fault_injection: a scenario of the fault-injection and security matrix at seam 1 (tests/orchestration/fault_injection_matrix.py)",
 ]
+
+[tool.coverage.run]
+# CLI adapters run in child Python processes, including their detached worker supervisors.
+patch = ["subprocess"]
 
 [tool.ruff.lint.per-file-ignores]
 # Facade: `import x as x` marks explicit re-exports under mypy strict (no implicit reexport).

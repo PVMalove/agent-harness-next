@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """Проверка всего проекта: согласованность конфигурации и скиллов, целостность вендорного
 snapshot, затем mypy, pytest и полный clean-room прогон."""
 
@@ -89,6 +96,7 @@ _COMPILED_SCRIPTS = (
     ROOT / "harness" / "bin" / "harness.py",
     ROOT / "bin" / "install-global.py",
     ROOT / "scripts" / "build_registry.py",
+    ROOT / "scripts" / "check_license_headers.py",
     ROOT / "scripts" / "verify.py",
     ROOT / "scripts" / "test_clean_room.py",
 )
@@ -200,7 +208,7 @@ def _check_private_terms(test_env: dict[str, str]) -> None:
 
 def _static_checks(test_env: dict[str, str]) -> None:
     """Быстрые проверки до тестов: приватные термины, JSON каталога, компиляция, скиллы, реестр,
-    canonical-конфиги оркестрации и документация."""
+    canonical-конфиги оркестрации, лицензионные шапки и документация."""
     _check_private_terms(test_env)
     run_ok(
         [
@@ -219,6 +227,10 @@ def _static_checks(test_env: dict[str, str]) -> None:
     run_ok(["git", "-C", str(ROOT), "diff", "--exit-code", "--", "skills/REGISTRY.md"])
     run_ok(
         [sys.executable, str(ROOT / "scripts" / "check_canonical_tracked_data.py")],
+        env=test_env,
+    )
+    run_ok(
+        [sys.executable, str(ROOT / "scripts" / "check_license_headers.py")],
         env=test_env,
     )
     _check_documentation()
@@ -546,7 +558,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "stages:\n"
             "  1. static checks: private terms, CAPABILITIES.json syntax, Python compilation,\n"
-            "     global skills, documentation sync, vendor pin\n"
+            "     global skills, license headers, documentation sync, vendor pin\n"
             "  2. skills/REGISTRY.md: rebuilt in place, then must match the committed file\n"
             "  3. mypy\n"
             "  4. pytest\n"

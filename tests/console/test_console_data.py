@@ -37,7 +37,11 @@ def test_dashboard_aggregates_supplied_health_facts(
     )
     monkeypatch.setattr(console_data, "run_health", lambda repo, **kwargs: report)
     monkeypatch.setattr(console_data, "harness_version", lambda: "1.2.3")
-    monkeypatch.setattr(console_data, "drift_state", lambda repo: "clean")
+    monkeypatch.setattr(
+        console_data,
+        "drift_report",
+        lambda repo: {"state": "drift", "added": ["a", "b"], "package_changed": ["c"]},
+    )
     monkeypatch.setattr(console_data, "active_batches", lambda repo: 2)
 
     result = console_data.collect_dashboard(tmp_path)
@@ -52,4 +56,19 @@ def test_dashboard_aggregates_supplied_health_facts(
     assert result.problems == (
         ("fail", "files.agents", "missing"),
         ("warn", "memory.index", "rebuild index"),
+    )
+    assert result.drift_state == "drift"
+    assert result.drift_counts == (
+        ("added", 2),
+        ("missing", 0),
+        ("package_changed", 1),
+        ("local_changed", 0),
+        ("conflict", 0),
+        ("retired", 0),
+    )
+    assert result.checks == (
+        ("ok", "files.lock", "ready", "files"),
+        ("warn", "memory.index", "rebuild index", "memory"),
+        ("fail", "files.agents", "missing", "files"),
+        ("skipped", "repo_map.tier", "minimal", "repo_map"),
     )

@@ -237,6 +237,22 @@ def _developer_commit_plan(
     return [dict(entry) for entry in pinned]
 
 
+def _accepted_design(root: Path, batch: JsonObject) -> JsonObject | None:
+    """The accepted architect report a developer works from, pinned by its integrity hash.
+
+    The developer takes its seam from this design instead of a coordinator retelling (#1015).
+    A batch without an accepted architect report of its own carries none.
+    """
+    for item in plan_rules.decided_entries(batch, "architect", ACCEPTED_DECISIONS):
+        report = _pending_report(root, batch, item)
+        return {
+            "dispatch_id": item["dispatch_id"],
+            "report_sha256": item["report_sha256"],
+            "output": report["output"],
+        }
+    return None
+
+
 def _accepted_divergence(
     repo: Path, root: Path, batch: JsonObject
 ) -> JsonObject | None:
@@ -466,7 +482,12 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
         if progress is not None:
             preserved_progress.require_current(repo, root, batch, progress)
         package = _latest_context_package(root, batch)
-        package_pointer: JsonObject = {}
+        # Preflight writes nothing: before `dispatch create` registers the package it names who
+        # will, instead of an empty pointer that reads like an empty package (#1015).
+        package_pointer: JsonObject = {
+            "status": "not-registered",
+            "registered_by": "dispatch create",
+        }
         if package is not None:
             package_pointer = {
                 "package_id": package["context_package_id"],
@@ -1540,6 +1561,8 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             "access": role["mode"],
             "zone": batch.get("zone"),
             "write_paths": write_paths,
+            # The batch scope every role sees, so a read-only architect plans inside it (#1015).
+            "allowed_paths": batch.get("allowed_paths"),
             "branch": batch["branch"],
             "worktree": batch["worktree"],
             "definition_of_done": batch["definition_of_done"],
@@ -1601,6 +1624,9 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             if is_review_work
             else None,
             "carried_items": carried,
+            "accepted_design": _accepted_design(root, batch)
+            if role_name == "developer" and purpose == "work"
+            else None,
             # The human-approved target a rebase-fix-forward developer-retry rebases onto.
             "rebase_target_commit": transition.get("rebase_target_sha"),
             "runtime_access": access_plan,

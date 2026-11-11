@@ -93,6 +93,19 @@ QA_ENVIRONMENT_REMEDY = (
     "TMPDIR under .harness/.sandboxes/), then a human re-runs QA on the same candidate with "
     "batch rewind --to qa"
 )
+# A QA environment that cannot build or start the runtime (#1015) needs its own fix.
+QA_ENVIRONMENT_REMEDIES = {
+    "missing-linker": (
+        "cargo found no linker in the QA environment, so a developer retry cannot fix it: install "
+        "a C toolchain (cc) in the QA environment, then a human re-runs QA on the same candidate "
+        "with batch rewind --to qa"
+    ),
+    "socket-path-too-long": (
+        "the runtime socket path in the QA environment is longer than the Unix limit, so a "
+        "developer retry cannot fix it: set a short absolute XDG_RUNTIME_DIR (or TMPDIR) for QA, "
+        "then a human re-runs QA on the same candidate with batch rewind --to qa"
+    ),
+}
 CLEAN_BASIS = (
     "the report is clean: completed, no blockers, every check passed, and nothing is left "
     "uncovered, unclosed, open or outside the approved scope"
@@ -361,7 +374,9 @@ def environment_stop(stage: str, report: JsonObject, repo: Path) -> Stop | None:
         {
             "command": failed.get("command"),
             "classification": found,
-            "remedy": QA_ENVIRONMENT_REMEDY,
+            "remedy": QA_ENVIRONMENT_REMEDIES.get(
+                str(found["category"]), QA_ENVIRONMENT_REMEDY
+            ),
             "failure": failure.to_json()
             if failure is not None
             else failure_domains.unrecognised(
@@ -791,12 +806,16 @@ def resolve(
         "commit_plan_file": inputs.commit_plan_file,
     }
     if choice.decision == "accept":
-        if inputs.commit_plan_file is not None and report.get("role") == "architect":
+        if report.get("role") == "architect":
             # A plan file that cannot be read is a session input error: the command refuses and
-            # records nothing. Only the plan in the file goes through the deterministic gate.
-            document = decisions._commit_plan_document(repo, inputs.commit_plan_file)
+            # records nothing. The plan in the file or in the report goes through the gate.
+            document = (
+                decisions._commit_plan_document(repo, inputs.commit_plan_file)
+                if inputs.commit_plan_file is not None
+                else None
+            )
             try:
-                plan = decisions._pin_commit_plan(batch, document)
+                plan = decisions.accepted_commit_plan(batch, report, document)
             except CoordinatorError as exc:
                 return Resolution(
                     stop=Stop(
@@ -805,7 +824,9 @@ def resolve(
                         {"gate": "commit-plan", "refused": exc.message},
                     )
                 )
-            outside = plan_rules.paths_outside_scope(plan, batch.get("allowed_paths"))
+            outside = plan_rules.paths_outside_scope(
+                plan or [], batch.get("allowed_paths")
+            )
             if outside:
                 return Resolution(
                     stop=Stop(

@@ -1,6 +1,6 @@
 /* One screen snapshot of a route: requested on mount and again after every reconnect, read to its
    end by the client and checked by `parse`. The last good value stays shown while a refresh runs. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useConsole } from "../useConsole";
 import { screenKey } from "../ws/client";
 import type { ScreenRequest } from "../ws/client";
@@ -22,8 +22,10 @@ export interface Screen<T> {
 
 export function useScreen<T>(request: ScreenRequest, parse: (value: unknown) => T | null): Screen<T> {
   const { client } = useConsole();
-  const { type, online } = request;
-  const key = screenKey({ type, online });
+  const key = screenKey(request);
+  // The request is rebuilt by every render; its key names it, so the latest one is kept.
+  const latest = useRef(request);
+  latest.current = request;
   const [data, setData] = useState<T | null>(null);
   const [cached, setCached] = useState(false);
   const [ageSeconds, setAge] = useState<number | null>(null);
@@ -33,9 +35,10 @@ export function useScreen<T>(request: ScreenRequest, parse: (value: unknown) => 
   const ask = useCallback(
     (force: boolean) => {
       setLoading(true);
-      client.requestScreen({ type, online, force });
+      client.requestScreen({ ...latest.current, force });
     },
-    [client, type, online],
+    // The key changes exactly when the request does.
+    [client, key],
   );
 
   useEffect(() => {

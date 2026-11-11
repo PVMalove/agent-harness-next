@@ -89,7 +89,14 @@ Start these steps only after the ticket pre-flight in "Coordinator contract" (bl
    moves the batch from `planned` to `awaiting-approval`. This needs the operator's explicit
    approval: present the command, as for `batch abandon`, and do not run it for them.
 
-**Commit plan file.** Pin the architect's plan with `batch decide --batch <id> --decision accept --approved-by <operator> --approved-at <UTC time> --commit-plan-file <path>`. The operator approves this decision; never supply `--approved-by` for them.
+**Commit plan.** The architect puts its plan in the report field `commit_plan`; `report submit`
+refuses a plan that breaks the rules below or names a path outside the batch `allowed_paths`, and an
+accept pins the reported plan. Pass a plan file only when the report carries none: pin it with
+`batch decide --batch <id> --decision accept --approved-by <operator> --approved-at <UTC time> --commit-plan-file <path>`. The operator approves this decision; never supply `--approved-by` for them.
+A plan file passed beside a reported plan must hold the same plan. Write the file under
+`.harness/.sandboxes/scratch/inbox/` or the project session scratchpad
+`.harness/.sandboxes/scratch/sessions/<session_id>/scratchpad/`; a path outside the repository and
+its worktrees, such as an external `/tmp` scratchpad, is refused.
 The file is a JSON object with the single key `commit_plan`, a non-empty list in commit order:
 
 ```json
@@ -165,6 +172,8 @@ prompt to the author along with one test path within the brief's scope.
 
 For `in-process`, the main preflight with `--worktree <send.worker_worktree>` still answers
 `checkout_mismatch` for a separate worker. Preserve ordinary TDD there and name the reason;
+in-process developers do not use the test author by design, and `harness health` reports author
+readiness only for the main checkout.
 Keep the selected executor visible in refusals; never substitute Claude for an unsupported runtime. A preflight refusal or unavailable author
 never creates a blocker or changes the Rust ledger. State this in the worker prompt.
 
@@ -226,7 +235,7 @@ as `policy:auto`; follow "Automatic path" in `.harness/orchestration/playbook.md
 `dispatch resume --trigger` without them. For every pending report that the `report submit` or
 `qa run` chain did not accept, including the publish report, run
 `batch auto-decide --batch <id>`. Pass `--commit-plan-file` with the architect's plan copied
-exactly, `--findings-file` for coordinator findings on a developer report, `--bug-ticket` after
+exactly only when the report carries no `commit_plan`, `--findings-file` for coordinator findings on a developer report, `--bug-ticket` after
 you file or reuse the tool's bug ticket through the tracker CLI, and `--block-bypass --note` when a
 role worked around a block. Pass nothing else, and never choose the decision yourself. After a refused command, run `batch auto-report --batch <id>` to observe evidence. This read-only
 command does not record a stop. If it shows `observed_stop`, run `batch auto-decide --batch <id>`
@@ -320,6 +329,8 @@ Run the native worker probe before feature work; a permanent EROFS/EPERM needs e
 
 Use `dispatch wait` for lifecycle signals. The console/`dispatch observe` reads existing events
 locally: no extra model calls, agent progress prompts or logs in model context for observation.
+An in-process worker has no event stream (`stream_reason` says so); follow its self-report,
+heartbeat and the `checkpoints` that `observe` lists.
 A proven early exit uses auto-report → auto-decide → human `resume-stop --restart`; the one
 confirmation covers only an unchanged successor and never resets the infrastructure budget.
 A ready but unsent report uses the playbook's "Delivering a worker report after a tool refusal",
@@ -389,6 +400,8 @@ unfinished handoff and requests the missing protocol from the same available wor
 
 Large documents (the role catalog, `playbook.md`, `git-workflow.md`) and
 prior reports reach a worker only as Context Package section ranges or through the retry handoff.
+A developer brief carries the accepted architect design in `accepted_design`; do not retell it in
+the prompt.
 The work a prompt asks for is exactly its brief plus, for a retry, the handoff's blocking findings (developer) or the retry reason line (architect).
 
 A developer retry is always a new session started from its compact handoff, never a continuation of

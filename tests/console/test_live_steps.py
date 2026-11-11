@@ -16,12 +16,15 @@ from harness.console.backend.application.live_steps import (
 from harness.console.backend.application.worker_steps import WorkerNotFound
 from harness.console.backend.domain.live_steps import (
     AgentStep,
+    DispatchTiming,
     OrchestrationStep,
     RosterDispatch,
     chunks,
+    dispatch_timing,
     followed,
     orchestration_step,
     roster_from_view,
+    timed,
 )
 from harness.console.backend.domain.worker_steps import StepsPage, WorkerStep
 
@@ -149,6 +152,11 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "ticket": "#885",
             "role": "architect",
             "state": "reported",
+            "batch_state": "active",
+            "branch": "",
+            "started_at": "",
+            "last_event_at": "",
+            "silent": False,
         },
         {
             "dispatch_id": "dispatch-d",
@@ -156,6 +164,11 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "ticket": "#885",
             "role": "developer",
             "state": "working",
+            "batch_state": "active",
+            "branch": "",
+            "started_at": "",
+            "last_event_at": "",
+            "silent": False,
         },
         {
             "dispatch_id": "dispatch-q",
@@ -163,6 +176,11 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "ticket": "#885",
             "role": "qa",
             "state": "dispatched",
+            "batch_state": "active",
+            "branch": "",
+            "started_at": "",
+            "last_event_at": "",
+            "silent": False,
         },
     ]
     assert roster_from_view(None) == ()
@@ -375,3 +393,47 @@ def test_an_unknown_dispatch_is_skipped_without_ending_the_feed() -> None:
 
     assert ("dispatch-d", 0) in reads
     assert all(offset == 0 for _, offset in reads)
+
+
+def test_a_live_dispatch_without_a_heartbeat_for_ten_minutes_is_silent() -> None:
+    entry = roster_from_view(_view({"dispatch-d": "working"}))[1]
+    timing = dispatch_timing(
+        {"created_at": "2026-11-05T10:00:00+00:00"},
+        {
+            "heartbeat_at": "2026-11-05T10:05:00+00:00",
+            "updated_at": "2026-11-05T10:01:00+00:00",
+        },
+    )
+    assert timing == DispatchTiming(
+        "2026-11-05T10:00:00+00:00", "2026-11-05T10:05:00+00:00"
+    )
+    quiet = timed(entry, timing, "2026-11-05T10:16:00+00:00")
+    assert (quiet.started_at, quiet.last_event_at, quiet.silent) == (
+        "2026-11-05T10:00:00+00:00",
+        "2026-11-05T10:05:00+00:00",
+        True,
+    )
+    assert not timed(entry, timing, "2026-11-05T10:10:00+00:00").silent
+    assert timed(entry, None, "2026-11-05T10:16:00+00:00") == entry
+    # No heartbeat yet: the dispatch's age decides.
+    fresh = dispatch_timing({"created_at": "2026-11-05T10:00:00+00:00"}, None)
+    assert fresh.last_event_at == ""
+    assert timed(entry, fresh, "2026-11-05T10:30:00+00:00").silent
+
+
+def test_the_feed_times_only_the_live_dispatches_of_its_roster() -> None:
+    asked: list[str] = []
+
+    async def timing(dispatch_id: str) -> DispatchTiming | None:
+        asked.append(dispatch_id)
+        return DispatchTiming("2026-11-06T09:00:00+00:00", "2026-11-06T09:55:00+00:00")
+
+    journal = Journal(_view({"dispatch-d": "working"}), [])
+    feed = _feed(journal, Workers({}), timing=timing)
+    first = asyncio.run(_take(feed.subscribe(), 1))[0]
+    assert isinstance(first, RosterItem)
+    by_id = {entry.dispatch_id: entry for entry in first.dispatches}
+    assert by_id["dispatch-d"].last_event_at == "2026-11-06T09:55:00+00:00"
+    assert not by_id["dispatch-d"].silent
+    assert by_id["dispatch-a"].started_at == ""
+    assert set(asked) == {"dispatch-d", "dispatch-q"}

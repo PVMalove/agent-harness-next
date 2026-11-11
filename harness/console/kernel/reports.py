@@ -26,7 +26,7 @@ from ...orchestration.core.constants import STATE_REL
 from ...orchestration.core.report_evidence import evidence_is_none
 from ...orchestration.ledger.lifecycle import JsonObject, JsonValue, LifecycleLedger
 from .export import MarkdownDocument, MarkdownSection
-from .home_snapshot import _fields, _int, _list, _optional, _str
+from .home_snapshot import _bool, _fields, _int, _list, _optional, _str
 from .json_fields import strings, text
 from .status import Status
 
@@ -60,6 +60,9 @@ class StageEntry:
     state: str
     at: str
     report: ReportEntry | None = None
+    # When the dispatch was created and when its worker last sent a heartbeat; "" when unknown.
+    started_at: str = ""
+    heartbeat_at: str = ""
 
     @property
     def finished(self) -> bool:
@@ -446,6 +449,7 @@ def _load_stages(view: LedgerView, root: Path) -> None:
         report = reports.get(dispatch_id)
         batch_id = text(dispatch.get("batch_id")) or (report.batch_id if report else "")
         batch = view._batch_records.get(batch_id, {})
+        status = statuses.get(dispatch_id, {})
         view.stages.append(
             StageEntry(
                 dispatch_id=dispatch_id,
@@ -454,13 +458,16 @@ def _load_stages(view: LedgerView, root: Path) -> None:
                 if report
                 else text(dispatch.get("ticket")) or text(batch.get("ticket"), "?"),
                 role=report.role if report else text(dispatch.get("role"), "?"),
-                state=text(statuses.get(dispatch_id, {}).get("state"))
+                state=text(status.get("state"))
                 or text(entries.get(dispatch_id, {}).get("state"), "неизвестно"),
                 at=report.reported_at
                 if report
                 else text(dispatch.get("created_at"))
                 or _first_write_at(view, f"dispatches/{dispatch_id}.json"),
                 report=report,
+                started_at=text(dispatch.get("created_at"))
+                or _first_write_at(view, f"dispatches/{dispatch_id}.json"),
+                heartbeat_at=text(status.get("heartbeat_at")),
             )
         )
     view.stages[:] = select_stages(view.stages)
@@ -871,7 +878,7 @@ def timeline_document(timeline: BatchTimeline) -> MarkdownDocument:
 # The wire codec of the Reports and Orchestration snapshots: the view without report bodies and raw
 # ledger records, small enough to page over the console server. A body and a chronology are read
 # with their own requests.
-LEDGER_PAYLOAD_VERSION = 1
+LEDGER_PAYLOAD_VERSION = 2
 
 _LEDGER_KEYS = frozenset(
     {
@@ -885,13 +892,22 @@ _LEDGER_KEYS = frozenset(
         "dispatches",
     }
 )
-# A payload may also carry the Reports KPIs the server computed beside the ledger.
-_OPTIONAL_LEDGER_KEYS = frozenset({"reports_kpi"})
+# A payload may also carry the Reports KPIs the server computed beside the ledger, the
+# read-only publication view (`publish_view.publish_payload`) and the evidence matrix
+# (`pipeline_kpi.evidence_payload`), which a TUI does not decode.
+_OPTIONAL_LEDGER_KEYS = frozenset({"reports_kpi", "publish", "evidence"})
+
+
+def _present(value: object) -> bool:
+    return isinstance(value, dict) and value.get("status") == "present"
 
 
 def _report_head(entry: ReportEntry) -> dict[str, object]:
+    """The report without its body, with whether the body records a risk and a blocker."""
     head = asdict(entry)
     del head["report"]
+    head["has_risks"] = _present(entry.report.get("risks"))
+    head["has_blockers"] = _present(entry.report.get("blockers"))
     return head
 
 
@@ -941,9 +957,13 @@ def _batch_from(value: object) -> BatchSummary:
 
 
 def _report_from(value: object) -> ReportEntry:
+    """A report head; its risk and blocker flags are checked and dropped, the body stays empty."""
     if not isinstance(value, dict) or "report" in value:
         raise ValueError("ReportEntry: not a report head")
-    found = cast(dict[str, str], _strings_of({**value, "report": ""}, ReportEntry))
+    head = dict(value)
+    for name in ("has_risks", "has_blockers"):
+        _bool(head.pop(name, None))
+    found = cast(dict[str, str], _strings_of({**head, "report": ""}, ReportEntry))
     del found["report"]
     return ReportEntry(**found, report={})
 

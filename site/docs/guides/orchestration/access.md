@@ -92,9 +92,9 @@ Podman, а при заданном `access_policy.operations.qa.container` — �
 - Компонент `container` содержит `worker_image` (обязателен), необязательный `proxy_image` и
   необязательный `engine` (`docker` по умолчанию или `podman`). Тег — одна ссылка на образ без
   пробелов и без ведущего `-`. Override роли или операции заменяет компонент целиком. Resolver
-  берёт теги только из конфига и не опрашивает движок, сеть и образы. `harness health` и схема
-  требуют `access_policy.defaults.container`, если выбран `docker`: без него роль осталась бы без
-  образа.
+  берёт теги только из конфига и не опрашивает движок, сеть и образы. Если выбран `docker`,
+  `harness health` и схема требуют `access_policy.defaults.container`, а без `defaults` —
+  `access_policy.operations.qa.container`: иначе исполнителю нечего запускать.
 - Компонент `environment` — список уникальных имён переменных окружения (`[A-Za-z_][A-Za-z0-9_]*`),
   никогда не значений. Override роли или операции заменяет список целиком. План хранит имена в
   отсортированном виде, поэтому они входят в `plan_digest` и закрепляются в brief при approval:
@@ -102,9 +102,16 @@ Podman, а при заданном `access_policy.operations.qa.container` — �
   берёт из окружения `harness-runtime serve`, поэтому после их смены runtime нужно перезапустить.
   Значения не попадают в конфиг, brief, digest, argv, evidence, логи, тексты ошибок и слои образа.
   Auth-файлы агента не монтируются.
-- Каждая роль, которую отправляет `dispatch send`, должна иметь `transport: external` в
-  `assignment_plans`. Исполнитель оборачивает команду external-адаптера и не знает конкретного
-  агента.
+- Роль, которую называет `access_policy.defaults` или её собственный `access_policy.roles.<роль>`,
+  должна иметь `transport: external` в `assignment_plans`: исполнитель оборачивает команду
+  external-адаптера и не знает конкретного агента. Такую in-process роль загрузка конфигурации
+  называет предупреждением, а `dispatch preflight` блокирует. Роль, которую `access_policy` не
+  называет, получает прежний legacy-inherit план и запускается in-process как раньше, поэтому
+  контейнерный QA можно включить одним `operations.qa`. Без `defaults` override роли должен сам
+  нести `container`, иначе загрузка называет и его.
+- Воркер в контейнере не может выполнить `dispatch self-report` и `dispatch heartbeat`: их
+  записывает coordinator на хосте по снимку stdout контейнера и утверждённому плану (ADR 0025,
+  «Решения реализации»).
 - Исполнитель работает только в эпохе runtime store и только на Linux: на файловом ledger и вне
   Linux `dispatch preflight` блокирует его с remedy (`harness-runtime migrate`, затем
   `harness-runtime serve`).

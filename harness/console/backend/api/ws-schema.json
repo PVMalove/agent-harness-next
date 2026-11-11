@@ -1,5 +1,42 @@
 {
   "$defs": {
+    "AdapterPayload": {
+      "additionalProperties": false,
+      "description": "One runtime adapter file of the installed capabilities.",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Problem"
+        },
+        "status": {
+          "enum": [
+            "current",
+            "outdated",
+            "missing"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "problem"
+      ],
+      "title": "AdapterPayload",
+      "type": "object"
+    },
     "AgentStep": {
       "additionalProperties": false,
       "description": "A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.",
@@ -144,7 +181,9 @@
             "setup",
             "configuration",
             "memory",
-            "decisions"
+            "decisions",
+            "recovery",
+            "update"
           ],
           "title": "Section",
           "type": "string"
@@ -278,6 +317,7 @@
         "mapping": {
           "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
+          "container_route.view": "#/$defs/ContainerRouteViewRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
           "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
@@ -297,6 +337,7 @@
           "orchestration.snapshot": "#/$defs/OrchestrationSnapshotRequest",
           "orchestration.subscribe": "#/$defs/OrchestrationSubscribeRequest",
           "recovery.snapshot": "#/$defs/RecoverySnapshotRequest",
+          "recovery.view": "#/$defs/RecoveryViewRequest",
           "repo_map.snapshot": "#/$defs/RepoMapSnapshotRequest",
           "reports.report": "#/$defs/ReportRequest",
           "reports.snapshot": "#/$defs/ReportsSnapshotRequest",
@@ -363,6 +404,12 @@
         },
         {
           "$ref": "#/$defs/ContainerRouteSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/RecoveryViewRequest"
+        },
+        {
+          "$ref": "#/$defs/ContainerRouteViewRequest"
         },
         {
           "$ref": "#/$defs/TaskBoardSpecsRequest"
@@ -462,6 +509,193 @@
         "type"
       ],
       "title": "ContainerRouteSnapshotRequest",
+      "type": "object"
+    },
+    "ContainerRouteViewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "role": {
+          "default": "developer",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "runtime": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Runtime",
+          "type": "string"
+        },
+        "type": {
+          "const": "container_route.view",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ContainerRouteViewRequest",
+      "type": "object"
+    },
+    "ContainersPayload": {
+      "additionalProperties": false,
+      "description": "The read-only inventory of the configured container engine; a fact a probe could not\ngive is null with the probe's reason beside it.",
+      "properties": {
+        "cgroup_driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cgroup Driver"
+        },
+        "cgroup_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cgroup Version"
+        },
+        "engine": {
+          "title": "Engine",
+          "type": "string"
+        },
+        "images": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Images"
+        },
+        "images_problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Images Problem"
+        },
+        "info_problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Info Problem"
+        },
+        "rootless": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rootless"
+        },
+        "selinux": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selinux"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        },
+        "volumes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Volumes"
+        },
+        "volumes_problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Volumes Problem"
+        }
+      },
+      "required": [
+        "engine",
+        "version",
+        "cgroup_driver",
+        "cgroup_version",
+        "selinux",
+        "rootless",
+        "info_problem",
+        "images",
+        "images_problem",
+        "volumes",
+        "volumes_problem"
+      ],
+      "title": "ContainersPayload",
       "type": "object"
     },
     "CoordinatorInput": {
@@ -775,8 +1009,22 @@
     },
     "HarnessOverviewReply": {
       "additionalProperties": false,
-      "description": "The Harness state, the package version, the drift state and the pipeline usage.",
+      "description": "The Harness state, the package version, the drift state and file count, the state store,\nthe runtime adapters (null: unreadable), the container engine inventory (null: not\ncollected) and the pipeline usage.",
       "properties": {
+        "adapters": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AdapterPayload"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Adapters"
+        },
         "age_seconds": {
           "title": "Age Seconds",
           "type": "number"
@@ -785,9 +1033,31 @@
           "title": "Cached",
           "type": "boolean"
         },
+        "containers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContainersPayload"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "drift": {
           "title": "Drift",
           "type": "string"
+        },
+        "drift_files": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Drift Files"
         },
         "id": {
           "anyOf": [
@@ -816,6 +1086,16 @@
         "state": {
           "$ref": "#/$defs/HarnessStatePayload"
         },
+        "store": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StorePayload"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "type": {
           "const": "harness.overview",
           "title": "Type",
@@ -838,6 +1118,10 @@
         "state",
         "package_version",
         "drift",
+        "drift_files",
+        "store",
+        "adapters",
+        "containers",
         "usage",
         "cached",
         "age_seconds"
@@ -1345,7 +1629,9 @@
             "setup",
             "configuration",
             "memory",
-            "decisions"
+            "decisions",
+            "recovery",
+            "update"
           ],
           "title": "Section",
           "type": "string"
@@ -2423,6 +2709,59 @@
       "title": "RecoverySnapshotRequest",
       "type": "object"
     },
+    "RecoveryViewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Batch",
+          "type": "string"
+        },
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "skip": {
+          "default": [],
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Skip",
+          "type": "array"
+        },
+        "type": {
+          "const": "recovery.view",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "RecoveryViewRequest",
+      "type": "object"
+    },
     "RepoMapSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
@@ -2540,17 +2879,38 @@
     },
     "RosterDispatch": {
       "additionalProperties": false,
+      "description": "A dispatch of the journal view; the timing is read for a live dispatch only (\"\" and\nfalse otherwise).",
       "properties": {
         "batch_id": {
           "title": "Batch Id",
+          "type": "string"
+        },
+        "batch_state": {
+          "title": "Batch State",
+          "type": "string"
+        },
+        "branch": {
+          "title": "Branch",
           "type": "string"
         },
         "dispatch_id": {
           "title": "Dispatch Id",
           "type": "string"
         },
+        "last_event_at": {
+          "title": "Last Event At",
+          "type": "string"
+        },
         "role": {
           "title": "Role",
+          "type": "string"
+        },
+        "silent": {
+          "title": "Silent",
+          "type": "boolean"
+        },
+        "started_at": {
+          "title": "Started At",
           "type": "string"
         },
         "state": {
@@ -2567,7 +2927,12 @@
         "batch_id",
         "ticket",
         "role",
-        "state"
+        "state",
+        "batch_state",
+        "branch",
+        "started_at",
+        "last_event_at",
+        "silent"
       ],
       "title": "RosterDispatch",
       "type": "object"
@@ -2626,6 +2991,8 @@
             "orchestration.snapshot",
             "recovery.snapshot",
             "container_route.snapshot",
+            "recovery.view",
+            "container_route.view",
             "task_board.specs",
             "task_board.snapshot",
             "diagnostics.snapshot",
@@ -2934,6 +3301,63 @@
         "type"
       ],
       "title": "StepsSubscribeRequest",
+      "type": "object"
+    },
+    "StorePayload": {
+      "additionalProperties": false,
+      "description": "The state authority read without the ledger lock or a runtime call; unread facts are null.",
+      "properties": {
+        "audit_records": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Audit Records"
+        },
+        "authority": {
+          "enum": [
+            "file-ledger",
+            "runtime-store",
+            "none"
+          ],
+          "title": "Authority",
+          "type": "string"
+        },
+        "generation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Generation"
+        },
+        "schema": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Schema"
+        }
+      },
+      "required": [
+        "authority",
+        "schema",
+        "generation",
+        "audit_records"
+      ],
+      "title": "StorePayload",
       "type": "object"
     },
     "TaskBoardSnapshotRequest": {

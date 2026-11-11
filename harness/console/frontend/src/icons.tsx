@@ -68,6 +68,12 @@ const PATHS = {
   "menu": (
     <><path d="M4 6.5h16M4 12h16M4 17.5h16" /></>
   ),
+  "search": (
+    <><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></>
+  ),
+  "terminal": (
+    <><rect x="3.4" y="4.8" width="17.2" height="14.4" rx="2" /><path d="m7.2 9.2 2.6 2.5-2.6 2.5M12.4 14.4h4.2" /></>
+  ),
 } satisfies Record<string, ReactElement>;
 
 export type IconName = keyof typeof PATHS;

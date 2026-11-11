@@ -46,7 +46,7 @@ describe("connection views", () => {
     act(() => FakeSocket.last.open());
     reply();
     expect(chip().className).toBe("conn-chip connected");
-    expect(chip().textContent).toBe("Подключено");
+    expect(chip().textContent).toBe("online");
     expect(banner()).toBeNull();
     expect(page()).toBeNull();
     expect(document.getElementById("home")).not.toBeNull();
@@ -73,6 +73,8 @@ describe("connection views", () => {
     expect(chip().className).toBe("conn-chip offline");
     expect(page()!.getAttribute("data-status")).toBe("no_server");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Нет связи с сервером консоли");
+    expect(page()!.textContent).toContain("ws://127.0.0.1:1/ws");
+    expect(page()!.textContent).toContain("последний снимок");
     expect(document.getElementById("home")).toBeNull();
     const retry = vi.spyOn(client, "retryNow");
     act(() => fireEvent.click(screen.getByRole("button", { name: "Повторить подключение" })));
@@ -111,10 +113,22 @@ describe("connection views", () => {
     act(() => FakeSocket.last.open());
     reply({ ...fixture, health: { ok: 0, warn: 0, fail: 0, skipped: 0 }, problems: [], problems_total: 0 });
     expect(chip().className).toBe("conn-chip empty");
-    expect(chip().textContent).toBe("Нет данных");
+    expect(chip().textContent).toBe("пусто");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Данных пока нет");
     const refresh = vi.spyOn(client, "requestHome");
     act(() => fireEvent.click(screen.getByRole("button", { name: "Обновить" })));
     expect(refresh).toHaveBeenCalledWith({ force: true });
+  });
+
+  test("empty: a page with its own data keeps its content; the empty page is Home's", async () => {
+    setup();
+    act(() => FakeSocket.last.open());
+    reply({ ...fixture, health: { ok: 0, warn: 0, fail: 0, skipped: 0 }, problems: [], problems_total: 0 });
+    await act(async () => {
+      window.location.hash = "#/board";
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(page()).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Доска задач");
   });
 });

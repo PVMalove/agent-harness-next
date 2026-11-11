@@ -9,28 +9,48 @@
         "batch_id": "batch-885",
         "ticket": "#885",
         "role": "architect",
-        "state": "reported"
+        "state": "reported",
+        "batch_state": "active",
+        "branch": "feature/issue-885",
+        "started_at": "",
+        "last_event_at": "",
+        "silent": false
       },
       {
         "dispatch_id": "dispatch-dev",
         "batch_id": "batch-885",
         "ticket": "#885",
         "role": "developer",
-        "state": "working"
+        "state": "working",
+        "batch_state": "active",
+        "branch": "feature/issue-885",
+        "started_at": "2026-11-05T10:00:00+00:00",
+        "last_event_at": "2026-11-05T10:12:00+00:00",
+        "silent": false
       },
       {
         "dispatch_id": "dispatch-rev",
         "batch_id": "batch-885",
         "ticket": "#885",
         "role": "review",
-        "state": "working"
+        "state": "working",
+        "batch_state": "active",
+        "branch": "feature/issue-885",
+        "started_at": "2026-11-05T10:00:00+00:00",
+        "last_event_at": "2026-11-05T10:12:00+00:00",
+        "silent": false
       },
       {
         "dispatch_id": "dispatch-qa",
         "batch_id": "batch-885",
         "ticket": "#885",
         "role": "qa",
-        "state": "dispatched"
+        "state": "dispatched",
+        "batch_state": "active",
+        "branch": "feature/issue-885",
+        "started_at": "2026-11-05T10:00:00+00:00",
+        "last_event_at": "2026-11-05T10:12:00+00:00",
+        "silent": false
       }
     ]
   },

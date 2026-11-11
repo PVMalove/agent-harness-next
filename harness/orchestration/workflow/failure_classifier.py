@@ -84,6 +84,19 @@ READ_ONLY_PATTERN = re.compile(
 PERMISSION_PATTERN = re.compile(
     r"permission denied:?\s*['\"]?(/[^'\"\s]+)", re.IGNORECASE
 )
+# Exact signatures of a QA environment that cannot build or start the runtime (#1015). They are
+# checked before the code-defect signs, which would read cargo's `could not compile` as a compile
+# error: a missing linker and an over-long socket path (runtime_client.py, ipc/src/paths.rs).
+EXACT_ENVIRONMENT_PATTERNS = (
+    ("missing-linker", re.compile(r"error: linker `[^`]+` not found", re.IGNORECASE)),
+    (
+        "socket-path-too-long",
+        re.compile(
+            r"socket path \S+ is (?:longer than \d+ bytes|\d+ bytes long; the limit is \d+)",
+            re.IGNORECASE,
+        ),
+    ),
+)
 # A failed-test summary line (pytest's `FAILED <id> - <reason>`); each must name an environment sign.
 FAILURE_LINE = re.compile(r"^(?:FAILED|ERROR)\b")
 
@@ -106,11 +119,21 @@ def _environment_sign(line: str, repo: Path) -> tuple[str, str] | None:
 def classify_environment(text: object, repo: Path) -> JsonObject | None:
     """The environment category of a failed check's output, or None when the code may be at fault.
 
-    Any code-defect sign wins, and so does a failed-test line without an environment sign: a real
-    test failure next to the environment one still routes to a developer retry.
+    An exact environment signature wins first. Otherwise any code-defect sign wins, and so does a
+    failed-test line without an environment sign: a real test failure next to the environment one
+    still routes to a developer retry.
     """
     if not isinstance(text, str) or not text.strip():
         return None
+    for category, pattern in EXACT_ENVIRONMENT_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return {
+                "method": "heuristic",
+                "category": category,
+                "matched": match.group(0),
+                "text": text[:500],
+            }
     lowered = text.lower()
     if any(re.search(p, lowered) for p in CODE_DEFECT_PATTERNS):
         return None

@@ -85,7 +85,10 @@ export interface MaintenanceFacts {
 }
 
 /** The harness.overview reply without its envelope. */
-export type HarnessOverview = Pick<HarnessOverviewReply, "state" | "package_version" | "drift" | "usage">;
+export type HarnessOverview = Pick<
+  HarnessOverviewReply,
+  "state" | "package_version" | "drift" | "drift_files" | "store" | "adapters" | "containers" | "usage"
+>;
 
 type Check = (value: unknown) => boolean;
 
@@ -158,7 +161,8 @@ const view = exact({
 });
 const maintenance = exact({ maintenance: nullable(view), error: string });
 
-const state = exact({
+/** The `HarnessState` payload of harness/console/kernel/harness_facts.py. */
+export const harnessState = exact({
   installed: flag,
   installed_version: string,
   capabilities: list(string),
@@ -174,7 +178,41 @@ const usage = exact({
   dispatches: count,
   reports: count,
 });
-const overview = has({ state, package_version: string, drift: string, usage });
+const store = exact({
+  authority: (value) => value === "file-ledger" || value === "runtime-store" || value === "none",
+  schema: nullable(count),
+  generation: nullable(string),
+  audit_records: nullable(count),
+});
+const adapter = exact({
+  path: string,
+  status: (value) => value === "current" || value === "outdated" || value === "missing",
+  problem: nullable(string),
+});
+/** The container engine inventory of harness/console/kernel/container_inventory.py. */
+const containers = exact({
+  engine: string,
+  version: nullable(string),
+  cgroup_driver: nullable(string),
+  cgroup_version: nullable(string),
+  selinux: nullable(flag),
+  rootless: nullable(flag),
+  info_problem: nullable(string),
+  images: nullable(count),
+  images_problem: nullable(string),
+  volumes: nullable(count),
+  volumes_problem: nullable(string),
+});
+const overview = has({
+  state: harnessState,
+  package_version: string,
+  drift: string,
+  drift_files: nullable(count),
+  store: nullable(store),
+  adapters: nullable(list(adapter)),
+  containers: nullable(containers),
+  usage,
+});
 
 /** The `harness health --json` report (schema v1), or null for any other shape. */
 export function parseHealthReport(value: unknown): HealthReport | null {
@@ -190,7 +228,16 @@ export function parseMaintenance(value: unknown): MaintenanceFacts | null {
 export function parseHarnessOverview(value: unknown): HarnessOverview | null {
   if (!overview(value)) return null;
   const found = value as unknown as HarnessOverview;
-  return { state: found.state, package_version: found.package_version, drift: found.drift, usage: found.usage };
+  return {
+    state: found.state,
+    package_version: found.package_version,
+    drift: found.drift,
+    drift_files: found.drift_files,
+    store: found.store,
+    adapters: found.adapters,
+    containers: found.containers,
+    usage: found.usage,
+  };
 }
 
 /** The total number of checks the report's summary counts. */

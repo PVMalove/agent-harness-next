@@ -92,9 +92,9 @@ under the name `docker`.
 - The `container` component contains `worker_image` (required), an optional `proxy_image`, and an
   optional `engine` (`docker` by default, or `podman`). A tag is a single image reference without
   spaces and without a leading `-`. A role or operation override replaces the whole component. The resolver
-  takes tags only from the config and does not query the engine, the network, or the images. `harness health` and the schema
-  require `access_policy.defaults.container` if `docker` is selected: without it, a role would be left without an
-  image.
+  takes tags only from the config and does not query the engine, the network, or the images. If `docker` is selected,
+  `harness health` and the schema require `access_policy.defaults.container`; if there is no `defaults`, they require
+  `access_policy.operations.qa.container`: otherwise the executor has nothing to run.
 - The `environment` component is a list of unique environment variable names (`[A-Za-z_][A-Za-z0-9_]*`),
   never values. A role or operation override replaces the whole list. The plan stores the names in
   sorted order, so they are part of `plan_digest` and are pinned in the brief at approval:
@@ -102,9 +102,15 @@ under the name `docker`.
   takes the values from the environment of `harness-runtime serve`, so after changing them you must restart the runtime.
   The values do not reach the config, brief, digest, argv, evidence, logs, error texts, or image layers.
   The agent's auth files are not mounted.
-- Every role that `dispatch send` sends must have `transport: external` in
-  `assignment_plans`. The executor wraps the external adapter's command and does not know the specific
-  agent.
+- A role named by `access_policy.defaults` or by its own `access_policy.roles.<role>` must have
+  `transport: external` in `assignment_plans`: the executor wraps the external adapter's command and does not know
+  the specific agent. The configuration loader reports such an in-process role as a warning, and
+  `dispatch preflight` blocks it. A role that `access_policy` does not name keeps the legacy-inherit plan and
+  still runs in-process, so container QA can be enabled with a single `operations.qa`. Without `defaults`, a role
+  override must carry `container` itself; otherwise the loader reports that as well.
+- A container worker cannot run `dispatch self-report` and `dispatch heartbeat`: the coordinator records
+  them on the host from the container's stdout snapshot and the approved plan (ADR 0025, "Implementation
+  decisions").
 - The executor works only in the runtime store epoch and only on Linux: on the file ledger and outside
   Linux, `dispatch preflight` blocks it with a remedy (`harness-runtime migrate`, then
   `harness-runtime serve`).

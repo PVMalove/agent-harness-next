@@ -166,7 +166,7 @@ def _ledger(repo: Path) -> LedgerView:
     )
 
 
-def _runtime(tmp_path: Path, tracker: Tracker) -> Runtime:
+def _runtime(tmp_path: Path, tracker: Tracker, jobs: JobService | None = None) -> Runtime:
     facts, clock = Facts(), Clock()
     board = TaskBoardService(
         tmp_path,
@@ -192,7 +192,7 @@ def _runtime(tmp_path: Path, tracker: Tracker) -> Runtime:
     parts = composition.compose(
         tmp_path,
         snapshots=cast(SnapshotService, object()),
-        jobs=cast(JobService, object()),
+        jobs=cast(JobService, object()) if jobs is None else jobs,
         decisions=cast(DecisionService, object()),
         events=cast(OrchestrationEvents, object()),
         screens=screens,
@@ -286,13 +286,11 @@ def test_the_board_round_trips_with_every_column_row(tmp_path: Path) -> None:
             assert prompts["#903"].startswith("/to-guide #903\n")
             assert prompts["#904"].startswith("/implement #904\n")
             for part in (
-                "TICKET: #901 — Ticket 901",
-                "EPIC: #862 — Web console",
-                "BRANCH: integration/web-console",
-                "WHAT TO BUILD:\nBuild the board.",
-                "ACCEPTANCE:\n1. Columns follow the table",
-                "BLOCKERS:\n- #903 — needs ready",
-                "DISCOVERY:\n- harness/console/ — console",
+                "EPIC: #862 Web console\nTASK: #901 — Ticket 901\nISSUES: #901, #862",
+                "DEPENDENCIES: #903\nPIPELINE: afk → /fast-implement",
+                "SPECIFIC SCOPE:\nBuild the board.",
+                "ACCEPTANCE CRITERIA:\n1. Columns follow the table",
+                "CODE DISCOVERY (verify current paths/branches first):\n- harness/console/ — console",
             ):
                 assert part in prompts["#901"]
             assert cards["#901"]["blockers"] == [
@@ -383,5 +381,54 @@ def test_hostile_ticket_text_fits_the_message_limit(tmp_path: Path) -> None:
             assert max(frames) <= MESSAGE_LIMIT
             assert len(_cards(board)) == 20
             assert board["truncated"] is True
+
+    asyncio.run(scenario())
+
+
+def _move(
+    to: str,
+    allowed: bool,
+    reason: str | None,
+    blockers: list[str] | None = None,
+    batch: str | None = None,
+) -> dict[str, object]:
+    return {
+        "to": to,
+        "allowed": allowed,
+        "reason": reason,
+        "blockers": blockers or [],
+        "batch": batch,
+    }
+
+
+def test_every_card_carries_its_moves_by_the_status_change_rules(tmp_path: Path) -> None:
+    tracker = Tracker()
+    tracker.nodes.append(_node(911, ["afk", "status::blocked"], body="## What to build\nx\n"))
+    runtime = _runtime(tmp_path, tracker)
+
+    async def scenario() -> None:
+        async with AsgiWebSocket(create_app(runtime), PORT, TOKEN) as socket:
+            _, board = await _read(socket, {"type": "task_board.snapshot", "spec": "#862"})
+            moves = {
+                ref: cast(list[dict[str, object]], card["moves"])
+                for ref, card in _cards(board).items()
+            }
+            assert moves["#901"] == [
+                _move("backlog", False, "same"),
+                _move("ready", False, "open_blockers", ["#903"]),
+                _move("progress", False, "via_ready"),
+                _move("review", False, "review_target"),
+                _move("done", False, "done_target"),
+            ]
+            assert moves["#911"][1] == _move("ready", True, None)
+            assert [move["allowed"] for move in moves["#903"]] == [
+                True, False, True, False, False,
+            ]  # fmt: skip
+            assert moves["#904"][1] == _move(
+                "ready", False, "active_batch", batch="b-904"
+            )
+            assert {move["reason"] for move in moves["#905"][:3]} == {"in_review"}
+            assert moves["#908"][1] == _move("ready", False, "closed")
+        assert all(read_only(argv) for argv in tracker.calls)
 
     asyncio.run(scenario())

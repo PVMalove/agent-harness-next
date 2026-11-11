@@ -13,12 +13,13 @@ from typing import Protocol
 
 from ....orchestration.core.constants import TERMINAL_BATCH_STATES
 from ...kernel.protocol import MESSAGE_BYTES, _clip
+from .ticket_status import COLUMNS as COLUMNS
+from .ticket_status import MoveFacts, moves
 
 BOARD_TTL_SECONDS = 60.0
 # Spec boards kept for the stale fallback; the least recently served goes first.
 KEPT_BOARDS = 8
 REVIEW_ROLES = frozenset({"code-review", "qa"})
-COLUMNS = ("backlog", "ready", "progress", "review", "done")
 # Caps in wire bytes (a JSON string's encoded size), counts in items.
 BODY_READ_BYTES = 65536
 TITLE_BYTES = 300
@@ -74,6 +75,8 @@ class TrackerTicket:
     body: str
     native_blockers: tuple[BlockerFact, ...] = ()
     pr: PullRef | None = None
+    # The tracker stopped before the end of the body or of the native blocker list.
+    blockers_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,23 @@ class TicketBody:
     branch: str | None
     story_points: int | None
     truncated: bool = False
+    # The `## Tests` items of the ticket.
+    tests: tuple[str, ...] = ()
+    # `blocked_by` misses a blocker: the body or the blocker list hit its cap.
+    blockers_truncated: bool = False
+
+
+@dataclass(frozen=True)
+class PromptTemplate:
+    """The project's fixed blocks of the agent prompt; an empty block is left out."""
+
+    invariants: str = ""
+    discipline: str = ""
+
+
+NO_TEMPLATE = PromptTemplate()
+# The project file with the fixed blocks of the agent prompt, relative to the repository.
+PROMPT_TEMPLATE_PATH = "docs/agents/agent-prompt.md"
 
 
 @dataclass(frozen=True)
@@ -195,6 +215,7 @@ _FILE_SPLIT = re.compile(r"(?<!\s)\s+[—–-]\s+|:\s+")
 _BLOCKED_PREFIX = re.compile(r"^(?:[-*+]\s+)?(?:\*\*)?blocked by:?(?:\*\*)?:?\s*", re.I)
 _BACKTICK = re.compile(r"`([^`]+)`")
 _INT = re.compile(r"\d{1,6}")
+_ISSUE_URL = re.compile(r"^(https?://[^?#]+?)(?:/-)?/issues/\d+/?$")
 
 
 def _section(name: str) -> str | None:
@@ -203,6 +224,8 @@ def _section(name: str) -> str | None:
         return "what"
     if lowered.startswith("acceptance criteria"):
         return "criteria"
+    if lowered == "tests":
+        return "tests"
     if "discovery context" in lowered:
         return "files"
     if lowered.startswith("blocked by"):
@@ -276,6 +299,7 @@ def parse_body(body: str) -> TicketBody:
     `**Field:**` lines of the local template. Never raises; every field is capped."""
     caps = _Caps()
     text = caps.text(body, BODY_READ_BYTES).replace("\r\n", "\n").replace("\r", "\n")
+    body_cut = caps.fired
     sections: dict[str, list[str]] = {}
     inline: dict[str, list[str]] = {}
     loose: list[str] = []
@@ -315,6 +339,11 @@ def parse_body(body: str) -> TicketBody:
         caps.text(item, CRITERION_BYTES)
         for item in raw_criteria[: caps.items(raw_criteria, CRITERIA_MAX)]
     )
+    raw_tests = _items(lines("tests"))
+    tests = tuple(
+        caps.text(item, CRITERION_BYTES)
+        for item in raw_tests[: caps.items(raw_tests, CRITERIA_MAX)]
+    )
     raw_files = [_file(item) for item in _items(lines("files"))]
     files = tuple(
         (caps.text(path, PATH_BYTES), caps.text(why, WHY_BYTES))
@@ -334,7 +363,9 @@ def parse_body(body: str) -> TicketBody:
         blocked_by=blocked_by,
         branch=caps.text(branch, BRANCH_BYTES) if branch else None,
         story_points=_story_points(lines("sp")),
+        tests=tests,
         truncated=caps.fired,
+        blockers_truncated=body_cut or len(raw_blocked) > BLOCKERS_MAX,
     )
 
 
@@ -378,49 +409,99 @@ def _dicts(value: object) -> list[Mapping[str, object]]:
     )
 
 
-def agent_prompt(card: Mapping[str, object], spec: Mapping[str, object]) -> str:
-    """The ready agent prompt of a board card: the launch command first, then the ticket, epic,
-    branch, What to build, acceptance criteria, blockers and Discovery Context."""
+def parse_prompt_template(text: str) -> PromptTemplate:
+    """The `## Architecture invariants` and `## Implementation discipline` sections of the
+    project's prompt file, each capped: only the next `## ` heading ends a section, so its
+    `###` subheadings and `#` lines stay in the body. Any other text is ignored. Never raises."""
+    caps = _Caps()
+    found: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in caps.text(text, BODY_READ_BYTES).replace("\r\n", "\n").split("\n"):
+        heading = _HEADING.match(line)
+        if heading:
+            key = heading.group(1).strip().rstrip("#").strip().casefold()
+            current = found.setdefault(key, [])
+        elif current is not None:
+            current.append(line)
+
+    def section_text(name: str) -> str:
+        return caps.text("\n".join(found.get(name, [])).strip(), WHAT_BYTES)
+
+    return PromptTemplate(
+        invariants=section_text("architecture invariants"),
+        discipline=section_text("implementation discipline"),
+    )
+
+
+def _repository(url: str) -> str:
+    """The tracker project of an issue URL: the URL before its `/issues/<n>` (`/-/issues/<n>`)."""
+    match = _ISSUE_URL.match(url)
+    return match.group(1) if match else ""
+
+
+def _titled_block(title: str, lines: Sequence[str]) -> list[str]:
+    """A prompt block: a blank line, its title and its lines; nothing without lines."""
+    return ["", title, *lines] if lines else []
+
+
+def agent_prompt(
+    card: Mapping[str, object],
+    spec: Mapping[str, object],
+    *,
+    tests: Sequence[str] = (),
+    template: PromptTemplate = NO_TEMPLATE,
+) -> str:
+    """The ready agent prompt of a board card in the planner's `/to-guide` format: the launch
+    command, the ticket facts, the project's invariants, the scope, Discovery Context, the
+    acceptance criteria, the tests (the criteria when the ticket names none) and the project's
+    discipline. A block without data is left out."""
     ref = _str(card.get("id"))
-    blockers = [
-        "- "
-        + _str(item.get("id"))
-        + (f" — {why}" if (why := _str(item.get("why"))) else "")
-        + (" (closed)" if item.get("state") == "closed" else "")
-        for item in _dicts(card.get("blockers"))
-    ]
+    epic = _str(spec.get("id"))
+    command = _str(card.get("command"))
+    labels = card.get("labels")
+    names = set(labels) if isinstance(labels, list) else set()
+    mode = next((name for name in ("hitl", "afk") if name in names), "")
+    repository = _repository(_str(card.get("url")))
+    blockers = [_str(item.get("id")) for item in _dicts(card.get("blockers"))]
     files = [
         "- "
         + _str(item.get("path"))
         + (f" — {why}" if (why := _str(item.get("why"))) else "")
         for item in _dicts(card.get("files"))
     ]
-    criteria = card.get("criteria")
-    branch = _str(card.get("branch")) or _str(spec.get("branch")) or "not recorded"
+    raw = card.get("criteria")
+    criteria = [_str(item) for item in raw] if isinstance(raw, list) else []
+    what = _str(card.get("what"))
     return "\n".join(
         [
-            f"{_str(card.get('command'))} {ref}",
+            f"{command} {ref}",
             "",
-            f"TICKET: {ref} — {_str(card.get('title'))}",
-            f"EPIC: {_str(spec.get('id'))} — {_str(spec.get('title'))}",
-            f"BRANCH: {branch}",
-            "",
-            "WHAT TO BUILD:",
-            _str(card.get("what")),
-            "",
-            "ACCEPTANCE:",
-            *(
-                f"{index}. {_str(item)}"
-                for index, item in enumerate(
-                    criteria if isinstance(criteria, list) else [], 1
-                )
+            *([f"REPOSITORY: {repository}"] if repository else []),
+            f"EPIC: {epic} {_str(spec.get('title'))}",
+            f"TASK: {ref} — {_str(card.get('title'))}",
+            f"ISSUES: {ref}, {epic}",
+            f"DEPENDENCIES: {', '.join(blockers) or 'None'}",
+            f"PIPELINE: {f'{mode} → ' if mode else ''}{command}",
+            *_titled_block(
+                "ARCHITECTURE INVARIANTS (MANDATORY):",
+                [template.invariants] if template.invariants else [],
             ),
-            "",
-            "BLOCKERS:",
-            *(blockers or ["- None"]),
-            "",
-            "DISCOVERY:",
-            *(files or ["- None"]),
+            *_titled_block("SPECIFIC SCOPE:", [what] if what else []),
+            *_titled_block(
+                "CODE DISCOVERY (verify current paths/branches first):", files
+            ),
+            *_titled_block(
+                "ACCEPTANCE CRITERIA:",
+                [f"{index}. {item}" for index, item in enumerate(criteria, 1)],
+            ),
+            *_titled_block(
+                "TESTS / ADVERSARIAL SCENARIOS:",
+                [f"- {item}" for item in (tests or criteria)],
+            ),
+            *_titled_block(
+                "IMPLEMENTATION DISCIPLINE:",
+                [template.discipline] if template.discipline else [],
+            ),
         ]
     )
 
@@ -520,6 +601,47 @@ def _blocker_cards(
     return cards
 
 
+def ticket_blockers(
+    ticket: TrackerTicket, states: Mapping[str, bool]
+) -> tuple[list[dict[str, object]], bool]:
+    """The blockers of a ticket as the board shows them: the body's `Blocked by` merged with the
+    tracker's native blockers, each with its state `open`, `closed` or `unknown`; and whether
+    that list is complete. It is not when the body, the native list or the shown list hit a cap,
+    so a blocker past the cap is unseen and a caller deciding on the list must fail closed."""
+    body = parse_body(ticket.body)
+    keys = {number if number is not None else ref for ref, number, _ in body.blocked_by}
+    keys |= {fact.n if fact.n is not None else fact.ref for fact in ticket.native_blockers}
+    complete = not (
+        ticket.blockers_truncated or body.blockers_truncated or len(keys) > BLOCKERS_MAX
+    )
+    return _blocker_cards(ticket, body, states, _Caps()), complete
+
+
+def _moves(
+    card: Mapping[str, object],
+    blockers: Sequence[Mapping[str, object]],
+    stage: BatchStage | None,
+) -> list[dict[str, object]]:
+    """The status-change decision for every column. A blocker of unknown state does not refuse
+    a move here; the command reads it again and fails closed."""
+    facts = MoveFacts(
+        card["column"] if isinstance(card["column"], str) else None,
+        tuple(str(item["id"]) for item in blockers if item["state"] == "open"),
+        tuple(str(item["id"]) for item in blockers if item["state"] == "unknown"),
+        stage.batch_id if stage else None,
+    )
+    return [
+        {
+            "to": move.to,
+            "allowed": move.allowed,
+            "reason": move.reason,
+            "blockers": list(move.blockers),
+            "batch": move.batch,
+        }
+        for move in moves(facts, strict=False)
+    ]
+
+
 def _json_bytes(value: object) -> int:
     """An upper bound of the bytes `value` takes as JSON on the wire: every non-ASCII character
     counted as its `\\uXXXX` escape."""
@@ -558,9 +680,11 @@ def build_board_payload(
     board: SpecTickets,
     stages: Mapping[str, BatchStage],
     ledger_ok: bool,
+    template: PromptTemplate = NO_TEMPLATE,
 ) -> dict[str, object]:
     """The `task_board.snapshot` payload of one spec: its cards with columns, blockers, batch
-    stage and prompt, and the KPIs. Closed `resolution::wontfix` tickets are left out."""
+    stage and prompt, and the KPIs. Closed `resolution::wontfix` tickets are left out. The
+    prompt blocks come from the epic body's sections, else from the project's `template`."""
     caps = _Caps()
     caps.fired = board.truncated
     shown = sorted(
@@ -575,6 +699,12 @@ def build_board_payload(
     bodies = [parse_body(ticket.body) for ticket in shown]
     spec = board.spec
     branch = _spec_branch(spec)
+    # The epic's own blocks win; a block the epic lacks comes from the project file.
+    epic = parse_prompt_template(spec.body)
+    template = PromptTemplate(
+        invariants=epic.invariants or template.invariants,
+        discipline=epic.discipline or template.discipline,
+    )
     if branch is None:
         common = Counter(body.branch for body in bodies if body.branch).most_common(1)
         branch = common[0][0] if common else None
@@ -630,7 +760,10 @@ def build_board_payload(
             "dispatch": stage.role if stage else None,
             "dispatch_state": stage.dispatch_state if stage else None,
         }
-        card["prompt"] = agent_prompt(card, spec_card)
+        card["moves"] = _moves(card, blockers, stage)
+        card["prompt"] = agent_prompt(
+            card, spec_card, tests=body.tests, template=template
+        )
         card["truncated"] = own.fired or body.truncated
         used += _json_bytes(card)
         if used > BOARD_BYTES:

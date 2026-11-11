@@ -16,7 +16,13 @@ export interface RepoMapFacts {
   parsers: { registry: string; pair: string | null; source: string | null;
     grammars: string[]; problem: string | null } | null;
   language_files: Record<string, number>;
+  /** The kernel's kind of each signature, by file path (kernel/repo_map_coverage.py); null without a map. */
+  symbol_kinds: Record<string, SymbolKind[]> | null;
+  /** The map's files by class and the tracked files it leaves out (null: Git could not tell). */
+  coverage: { source: number; docs: number; tests: number; excluded: number | null } | null;
 }
+export const SYMBOL_KINDS = ["function", "method", "class", "struct", "interface", "other"] as const;
+export type SymbolKind = (typeof SYMBOL_KINDS)[number];
 
 const object = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
@@ -54,6 +60,13 @@ export function parseRepoMapFacts(v: unknown): RepoMapFacts | null {
   const p = v.parsers;
   if (p !== null && (!object(p) || typeof p.registry !== "string" || !optionalString(p.pair) ||
       !optionalString(p.source) || !optionalString(p.problem) || !strings(p.grammars))) return null;
+  const kinds = v.symbol_kinds;
+  if (kinds !== null && (!object(kinds) || !Object.values(kinds).every((list) =>
+      Array.isArray(list) && list.every((kind) => (SYMBOL_KINDS as readonly unknown[]).includes(kind))))) return null;
+  const c = v.coverage;
+  if (c !== null && (!object(c) || !integer(c.source) || !integer(c.docs) || !integer(c.tests) ||
+      !optionalInt(c.excluded))) return null;
+  if ((v.map === null) !== (kinds === null) || (v.map === null) !== (c === null)) return null;
   const facts = v as unknown as RepoMapFacts;
   if (facts.map !== null && facts.map.commit !== facts.head) return null;
   return facts;

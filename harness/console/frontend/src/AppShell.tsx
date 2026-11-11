@@ -5,10 +5,42 @@ import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Icon } from "./icons";
 import { useI18n, LANGUAGES } from "./i18n";
-import { NAV_GROUPS, NAV_ITEMS, SHORTCUTS, href } from "./navigation";
+import { HIDDEN_LABELS, NAV_GROUPS, SHORTCUTS, href, navItemOf } from "./navigation";
+import type { NavItem } from "./navigation";
+import { useConsole } from "./useConsole";
+import type { HomeSnapshot } from "./ws/types";
 
 export const COLLAPSED_KEY = "harness-nav-collapsed";
-export const VERSION = "2.0.0";
+
+/** A semver pre-release suffix (`2.1.0-rc.1` -> "rc.1"), else null: the badge shows only then. */
+export function preRelease(version: string): string | null {
+  const match = /^v?\d+\.\d+\.\d+-([0-9A-Za-z.-]+)(?:\+[0-9A-Za-z.-]+)?$/.exec(version.trim());
+  return match ? match[1]! : null;
+}
+
+interface Counter {
+  text: string;
+  css: string;
+}
+
+/** The menu counters of the mockup, each from the Home snapshot; no counter without data. */
+export function menuCounter(route: string, snapshot: HomeSnapshot | null): Counter | null {
+  if (snapshot === null) return null;
+  if (route === "diagnostics") {
+    const { fail, warn } = snapshot.health;
+    if (fail) return { text: String(fail), css: "err" };
+    return warn ? { text: String(warn), css: "warn" } : null;
+  }
+  if (route === "update-harness" || route === "harness") {
+    const drift = snapshot.drift_counts?.total ?? 0;
+    return drift ? { text: String(drift), css: "warn" } : null;
+  }
+  if (route === "repo-map") {
+    const tier = snapshot.repo_map.tier;
+    return tier ? { text: tier, css: tier === "full" ? "full" : "warn" } : null;
+  }
+  return null;
+}
 
 function readCollapsed(): boolean {
   try {
@@ -28,12 +60,19 @@ export interface AppShellProps {
 
 export function AppShell({ chip, banner, children }: AppShellProps) {
   const { t, section, language, setLanguage } = useI18n();
+  const { state } = useConsole();
+  const snapshot = state.snapshot;
+  const version = snapshot?.harness_version ?? "";
+  const channel = version ? preRelease(version) : null;
+  const project = snapshot?.project ?? null;
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const current = location.pathname.replace(/^\/+/, "").split("/")[0] ?? "";
-  const selected = NAV_ITEMS.find((item) => item.route === current) ?? NAV_ITEMS[0];
+  const selected = navItemOf(current);
+  const menuLabel = (item: NavItem): string => (item.label ? t(item.label) : section(item.section));
+  const pageLabel = HIDDEN_LABELS[current] ? t(HIDDEN_LABELS[current]!) : menuLabel(selected);
 
   useEffect(() => {
     document.body.classList.toggle("nav-open", open);
@@ -53,8 +92,8 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
   }, [location.pathname]);
 
   useEffect(() => {
-    document.title = `Harness Console · ${section(selected.section)}`;
-  }, [section, selected]);
+    document.title = `Harness Console · ${pageLabel}`;
+  }, [pageLabel]);
 
   const onKey = useCallback(
     (event: KeyboardEvent) => {
@@ -108,9 +147,20 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
           <span className="logo" aria-hidden="true">
             H›
           </span>
-          <b>Harness Console</b>
-          <span className="version">{VERSION}</span>
+          <b>Harness next</b>
+          {version ? <span className="version">{version}</span> : null}
+          {channel ? <span className="channel">pre-release</span> : null}
         </a>
+        {project ? (
+          <span id="project" className="where mono">
+            {project.name}
+          </span>
+        ) : null}
+        {project?.branch ? (
+          <span id="branch" className="where mono muted">
+            ⑂ {project.branch}
+          </span>
+        ) : null}
         <div className="top-actions">
           {chip}
           <div className="seg lang-switch" role="group" aria-label={t("Язык интерфейса")}>
@@ -140,20 +190,28 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
           {NAV_GROUPS.map((group) => (
             <div className="nav-group" key={group.label}>
               <div className="nav-group-label">{t(group.label)}</div>
-              {group.items.map((item) => (
-                <a
-                  key={item.route}
-                  href={href(item.route)}
-                  title={section(item.section)}
-                  aria-current={item === selected ? "page" : undefined}
-                  onClick={() => setOpen(false)}
-                >
-                  <span className="nav-icon">
-                    <Icon name={item.icon} />
-                  </span>
-                  <span className="nav-label">{section(item.section)}</span>
-                </a>
-              ))}
+              {group.items.map((item) => {
+                const counter = menuCounter(item.route, snapshot);
+                return (
+                  <a
+                    key={item.route}
+                    href={href(item.route)}
+                    title={counter ? `${menuLabel(item)} · ${counter.text}` : menuLabel(item)}
+                    aria-current={item === selected ? "page" : undefined}
+                    onClick={() => setOpen(false)}
+                  >
+                    <span className="nav-icon">
+                      <Icon name={item.icon} />
+                    </span>
+                    <span className="nav-label">{menuLabel(item)}</span>
+                    {counter ? (
+                      <span className={`badge-count ${counter.css}`} aria-hidden="true" data-route={item.route}>
+                        {counter.text}
+                      </span>
+                    ) : null}
+                  </a>
+                );
+              })}
             </div>
           ))}
         </nav>
@@ -177,7 +235,7 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
           </span>
         </div>
         <span id="foot-status" className="r">
-          {VERSION} · {section(selected.section)} · {t("Только чтение")}
+          {[version || null, snapshot?.store?.authority ?? null, pageLabel].filter(Boolean).join(" · ")}
         </span>
       </footer>
     </div>

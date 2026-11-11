@@ -1,3 +1,10 @@
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """The composition root of the console server: the one place that wires the infrastructure
 adapters into the use cases."""
 
@@ -9,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..kernel.catalog import (
+    BOARD_COMMANDS,
     CONFIGURATION_COMMANDS,
     DIAGNOSTICS_COMMANDS,
     HARNESS_COMMANDS,
@@ -154,9 +162,22 @@ def screen_service(
     )
 
 
+RECOVERY_COMMANDS = frozenset(
+    {
+        "recovery-reload",
+        "recovery-fix",
+        "recovery-fix-apply",
+        "recovery-resume",
+        "recovery-abort",
+    }
+)
+
+UPDATE_COMMANDS = ("update", "update-force-managed")
+
+
 def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobService:
     """The job service over the harness, the selected seed update, Diagnostics, Repo Map,
-    installation, configuration, memory, coordinator and native permission commands; without
+    installation, configuration, memory, coordinator, native permission and task-board commands; without
     `executor` the commands run as subprocesses."""
     entries: tuple[CommandSpec, ...] = (
         *HARNESS_COMMANDS,
@@ -168,8 +189,10 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         *MEMORY_COMMANDS,
         *COORDINATOR_COMMANDS,
         *NATIVE_PERMISSION_COMMANDS,
+        # The task board starts its status change itself; no section lists it.
+        *BOARD_COMMANDS,
     )
-    listed = {
+    listed: dict[str, tuple[CommandSpec, ...]] = {
         "harness": tuple(
             entry for entry in HARNESS_COMMANDS if entry.key not in HARNESS_MENU_HIDDEN
         ),
@@ -182,6 +205,15 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
             entry for entry in COORDINATOR_COMMANDS
             if entry.key in {"batch-approve", "batch-decide", "batch-attention-resolve", "dispatch-propose", "dispatch-create"}
         ) + NATIVE_PERMISSION_COMMANDS,
+        # The Recovery page runs these behind a confirmation; `recovery-status` is its screen read.
+        "recovery": tuple(
+            entry for entry in COORDINATOR_COMMANDS if entry.key in RECOVERY_COMMANDS
+        ),
+        # The Update Harness page runs these behind a confirmation.
+        "update": (
+            *(entry for entry in HARNESS_COMMANDS if entry.key in UPDATE_COMMANDS),
+            UPDATE_SEED_SELECTED,
+        ),
     }
     return JobService(
         repo,
@@ -250,6 +282,7 @@ def live_steps(
         now=utc_now_iso,
         live_states={state.value for state in LIVE_DISPATCH_STATES},
         poll_seconds=poll_seconds,
+        timing=workers.timing,
     )
 
 

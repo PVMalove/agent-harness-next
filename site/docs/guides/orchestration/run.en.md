@@ -106,7 +106,10 @@ below). Opening a PR and the merge remain manual.
    `.harness/orchestration.json`, add the `--model` and `--effort` of the calling session to `dispatch create`.
    For the coordinator and architect, choose `medium` unless the developer explicitly approved otherwise.
 
-   Accepting the architect report may pin the commit plan the architect proposed instead of the default plan:
+   The architect puts the proposed commit plan in the report's `commit_plan` field. `report submit`
+   checks it by the same rules as the plan file below and refuses if the plan path is outside the
+   batch's `allowed_paths`: each role brief names them in `allowed_paths`. Accepting such a report pins
+   the plan without a file. If the report does not carry a plan, accept may pin the plan from a file:
 
    ```bash
    python .harness/orchestration/coordinator.py --repo . batch decide \
@@ -114,7 +117,9 @@ below). Opening a PR and the merge remain manual.
      --approved-at <approval-time-utc> --commit-plan-file .harness/.sandboxes/scratch/commit-plan.json
    ```
 
-   The file lies in the repository or one of its worktrees and contains exactly one key,
+   The file lies in the repository or one of its worktrees, for example in
+   `.harness/.sandboxes/scratch/inbox/`; an external `/tmp` is rejected. A file next to a plan from the
+   report must contain the same plan. The file contains exactly one key,
    `{"commit_plan": [...]}`. Each entry contains exactly four fields: a unique `id`
    (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`), a non-empty `summary`, a non-empty list `expected_paths`
    (relative paths or globs without a leading `/` and without a `..` segment), and `covers`, the numbers of the DoD items
@@ -124,7 +129,10 @@ below). Opening a PR and the merge remain manual.
    decision, and the batch does not change. The coordinator saves the verified plan in the batch as `commit_plan`.
    The architect decision receives `commit_plan_sha256`. This plan becomes the `commit_plan` of every
    developer brief of the batch, including `developer-retry`. If the plan in the batch does not match the digest of the
-   accepted decision, the developer brief is not created. Without the file, the brief contains one `step-N` entry
+   accepted decision, the developer brief is not created. The developer brief also carries
+   `accepted_design`: the id of the architect dispatch, `report_sha256`, and the accepted report's
+   `output`, so the coordinator does not retell the design in the prompt. Without the file, the brief
+   contains one `step-N` entry
    per DoD item with `covers: [N]`. Under `low_risk` and `milestone`, the coordinator automatically accepts a
    clean architect report with the default plan. Therefore an architect who proposes a different plan
    states this in `risks`, and the report waits for a manual decision.

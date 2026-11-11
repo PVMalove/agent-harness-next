@@ -1,6 +1,9 @@
 /* Generated from harness/console/backend/api/ws-schema.json by scripts/gen-protocol.mjs.
    Do not edit: run `npm run gen:protocol` in harness/console/frontend. */
 
+export type Path = string;
+export type Problem = string | null;
+export type Status = "current" | "outdated" | "missing";
 export type BatchId = string;
 export type DispatchId = string;
 export type Kind = string;
@@ -34,7 +37,8 @@ export type Reversibility =
   | "overwrites-managed-files"
   | "downloads-files";
 export type ReversibilityLabel = string;
-export type Section = "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions";
+export type Section =
+  "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions" | "recovery" | "update";
 export type Title = string;
 export type TypedConfirmation = string | null;
 export type Force = boolean;
@@ -145,6 +149,8 @@ export type Type10 =
   | "orchestration.snapshot"
   | "recovery.snapshot"
   | "container_route.snapshot"
+  | "recovery.view"
+  | "container_route.view"
   | "task_board.specs"
   | "task_board.snapshot"
   | "diagnostics.snapshot"
@@ -156,9 +162,22 @@ export type Type10 =
   | "update_harness.snapshot"
   | "configuration.snapshot";
 export type V9 = 1;
+export type Adapters = AdapterPayload[] | null;
 export type AgeSeconds2 = number;
 export type Cached2 = boolean;
+export type CgroupDriver = string | null;
+export type CgroupVersion = string | null;
+export type Engine = string;
+export type Images = number | null;
+export type ImagesProblem = string | null;
+export type InfoProblem = string | null;
+export type Rootless = boolean | null;
+export type Selinux = boolean | null;
+export type Version = string | null;
+export type Volumes = number | null;
+export type VolumesProblem = string | null;
 export type Drift = string;
+export type DriftFiles = number | null;
 export type Id12 = string | number | null;
 export type Ok10 = true;
 export type PackageVersion = string;
@@ -169,6 +188,10 @@ export type ManagedFiles = number;
 export type Orchestration = boolean;
 export type Skills = number;
 export type UpdatedAt = string;
+export type AuditRecords = number | null;
+export type Authority = "file-ledger" | "runtime-store" | "none";
+export type Generation = string | null;
+export type Schema = number | null;
 export type Type11 = "harness.overview";
 export type Batches = number;
 export type Dispatches = number;
@@ -217,8 +240,13 @@ export type Structure1 = "available" | "unavailable";
 export type Type15 = "worker.steps" | "worker.subscribe";
 export type V14 = 1;
 export type BatchId1 = string;
+export type BatchState = string;
+export type Branch = string;
 export type DispatchId2 = string;
+export type LastEventAt = string;
 export type Role1 = string;
+export type Silent = boolean;
+export type StartedAt = string;
 export type State1 = string;
 export type Ticket = string;
 export type Dispatches1 = RosterDispatch[];
@@ -272,6 +300,8 @@ export type ConsoleRequest =
   | OrchestrationLockRequest
   | RecoverySnapshotRequest
   | ContainerRouteSnapshotRequest
+  | RecoveryViewRequest
+  | ContainerRouteViewRequest
   | TaskBoardSpecsRequest
   | TaskBoardSnapshotRequest
   | DiagnosticsSnapshotRequest
@@ -318,7 +348,8 @@ export type Type23 = "job.cancel";
 export type Id25 = string | number | null;
 export type Type24 = "job.list";
 export type Id26 = string | number | null;
-export type Section1 = "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions";
+export type Section1 =
+  "harness" | "diagnostics" | "repo-map" | "setup" | "configuration" | "memory" | "decisions" | "recovery" | "update";
 export type Type25 = "job.catalog";
 export type Id27 = string | number | null;
 export type Type26 = "decisions.snapshot";
@@ -353,62 +384,86 @@ export type Id35 = string | number | null;
 export type Role3 = string;
 export type Runtime = string;
 export type Type34 = "container_route.snapshot";
+export type Batch2 = string;
 export type Force5 = boolean;
 export type Id36 = string | number | null;
-export type Type35 = "task_board.specs";
-export type Force6 = boolean;
+/**
+ * @maxItems 32
+ */
+export type Skip1 = string[];
+export type Type35 = "recovery.view";
+export type Batch3 = string;
 export type Id37 = string | number | null;
-export type Spec = string;
-export type Type36 = "task_board.snapshot";
-export type Force7 = boolean;
+export type Role4 = string;
+export type Runtime1 = string;
+export type Type36 = "container_route.view";
+export type Force6 = boolean;
 export type Id38 = string | number | null;
-export type Online2 = boolean;
-export type Type37 = "diagnostics.snapshot";
-export type Force8 = boolean;
+export type Type37 = "task_board.specs";
+export type Force7 = boolean;
 export type Id39 = string | number | null;
-export type Type38 = "harness.snapshot";
-export type Force9 = boolean;
+export type Spec = string;
+export type Type38 = "task_board.snapshot";
+export type Force8 = boolean;
 export type Id40 = string | number | null;
-export type Type39 = "harness.overview";
-export type Force10 = boolean;
+export type Online2 = boolean;
+export type Type39 = "diagnostics.snapshot";
+export type Force9 = boolean;
 export type Id41 = string | number | null;
-export type Type40 = "harness.maintenance";
-export type Force11 = boolean;
+export type Type40 = "harness.snapshot";
+export type Force10 = boolean;
 export type Id42 = string | number | null;
-export type Type41 = "repo_map.snapshot";
-export type Force12 = boolean;
+export type Type41 = "harness.overview";
+export type Force11 = boolean;
 export type Id43 = string | number | null;
-export type Type42 = "open_project.snapshot";
+export type Type42 = "harness.maintenance";
+export type Force12 = boolean;
 export type Id44 = string | number | null;
-export type Language = "ru" | "en";
-export type Type43 = "help.snapshot";
+export type Type43 = "repo_map.snapshot";
 export type Force13 = boolean;
 export type Id45 = string | number | null;
-export type Type44 = "update_harness.snapshot";
-export type Force14 = boolean;
+export type Type44 = "open_project.snapshot";
 export type Id46 = string | number | null;
-export type Path = string;
-export type Type45 = "update_harness.diff";
+export type Language = "ru" | "en";
+export type Type45 = "help.snapshot";
+export type Force14 = boolean;
 export type Id47 = string | number | null;
+export type Type46 = "update_harness.snapshot";
+export type Force15 = boolean;
+export type Id48 = string | number | null;
+export type Path1 = string;
+export type Type47 = "update_harness.diff";
+export type Id49 = string | number | null;
 export type Offset2 = number;
 export type SnapshotId3 = number;
-export type Type46 = "snapshot.page";
+export type Type48 = "snapshot.page";
 export type DispatchId5 = string;
-export type Id48 = string | number | null;
-export type Offset3 = number;
-export type Type47 = "worker.steps";
-export type DispatchId6 = string;
-export type Id49 = string | number | null;
-export type Offset4 = number;
-export type Type48 = "worker.subscribe";
 export type Id50 = string | number | null;
-export type Type49 = "steps.subscribe";
+export type Offset3 = number;
+export type Type49 = "worker.steps";
+export type DispatchId6 = string;
+export type Id51 = string | number | null;
+export type Offset4 = number;
+export type Type50 = "worker.subscribe";
+export type Id52 = string | number | null;
+export type Type51 = "steps.subscribe";
 
 /**
  * Text frames on /ws: one request object per frame, replies by id.
  */
 export interface ConsoleWebSocketProtocol {
   [k: string]: unknown | undefined;
+}
+/**
+ * One runtime adapter file of the installed capabilities.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "AdapterPayload".
+ */
+export interface AdapterPayload {
+  path: Path;
+  problem: Problem;
+  status: Status;
 }
 /**
  * A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.
@@ -630,22 +685,48 @@ export interface ScreenSnapshotReply {
   v: V9;
 }
 /**
- * The Harness state, the package version, the drift state and the pipeline usage.
+ * The Harness state, the package version, the drift state and file count, the state store,
+ * the runtime adapters (null: unreadable), the container engine inventory (null: not
+ * collected) and the pipeline usage.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HarnessOverviewReply".
  */
 export interface HarnessOverviewReply {
+  adapters: Adapters;
   age_seconds: AgeSeconds2;
   cached: Cached2;
+  containers: ContainersPayload | null;
   drift: Drift;
+  drift_files: DriftFiles;
   id: Id12;
   ok: Ok10;
   package_version: PackageVersion;
   state: HarnessStatePayload;
+  store: StorePayload | null;
   type: Type11;
   usage: PipelineUsage;
   v: V10;
+}
+/**
+ * The read-only inventory of the configured container engine; a fact a probe could not
+ * give is null with the probe's reason beside it.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ContainersPayload".
+ */
+export interface ContainersPayload {
+  cgroup_driver: CgroupDriver;
+  cgroup_version: CgroupVersion;
+  engine: Engine;
+  images: Images;
+  images_problem: ImagesProblem;
+  info_problem: InfoProblem;
+  rootless: Rootless;
+  selinux: Selinux;
+  version: Version;
+  volumes: Volumes;
+  volumes_problem: VolumesProblem;
 }
 /**
  * What is installed in the project, read from `.harness/harness.lock`.
@@ -661,6 +742,18 @@ export interface HarnessStatePayload {
   orchestration: Orchestration;
   skills: Skills;
   updated_at: UpdatedAt;
+}
+/**
+ * The state authority read without the ledger lock or a runtime call; unread facts are null.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "StorePayload".
+ */
+export interface StorePayload {
+  audit_records: AuditRecords;
+  authority: Authority;
+  generation: Generation;
+  schema: Schema;
 }
 /**
  * Pipeline usage counted from the ledger; with `unavailable` every count is 0.
@@ -771,13 +864,21 @@ export interface StepsRosterReply {
   v: V15;
 }
 /**
+ * A dispatch of the journal view; the timing is read for a live dispatch only ("" and
+ * false otherwise).
+ *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "RosterDispatch".
  */
 export interface RosterDispatch {
   batch_id: BatchId1;
+  batch_state: BatchState;
+  branch: Branch;
   dispatch_id: DispatchId2;
+  last_event_at: LastEventAt;
   role: Role1;
+  silent: Silent;
+  started_at: StartedAt;
   state: State1;
   ticket: Ticket;
 }
@@ -986,115 +1087,137 @@ export interface ContainerRouteSnapshotRequest {
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "RecoveryViewRequest".
+ */
+export interface RecoveryViewRequest {
+  batch?: Batch2;
+  force?: Force5;
+  id?: Id36;
+  skip?: Skip1;
+  type: Type35;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ContainerRouteViewRequest".
+ */
+export interface ContainerRouteViewRequest {
+  batch?: Batch3;
+  id?: Id37;
+  role?: Role4;
+  runtime?: Runtime1;
+  type: Type36;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "TaskBoardSpecsRequest".
  */
 export interface TaskBoardSpecsRequest {
-  force?: Force5;
-  id?: Id36;
-  type: Type35;
+  force?: Force6;
+  id?: Id38;
+  type: Type37;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "TaskBoardSnapshotRequest".
  */
 export interface TaskBoardSnapshotRequest {
-  force?: Force6;
-  id?: Id37;
+  force?: Force7;
+  id?: Id39;
   spec: Spec;
-  type: Type36;
+  type: Type38;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "DiagnosticsSnapshotRequest".
  */
 export interface DiagnosticsSnapshotRequest {
-  force?: Force7;
-  id?: Id38;
+  force?: Force8;
+  id?: Id40;
   online?: Online2;
-  type: Type37;
+  type: Type39;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HarnessSnapshotRequest".
  */
 export interface HarnessSnapshotRequest {
-  force?: Force8;
-  id?: Id39;
-  type: Type38;
+  force?: Force9;
+  id?: Id41;
+  type: Type40;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HarnessOverviewRequest".
  */
 export interface HarnessOverviewRequest {
-  force?: Force9;
-  id?: Id40;
-  type: Type39;
+  force?: Force10;
+  id?: Id42;
+  type: Type41;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "HarnessMaintenanceRequest".
  */
 export interface HarnessMaintenanceRequest {
-  force?: Force10;
-  id?: Id41;
-  type: Type40;
+  force?: Force11;
+  id?: Id43;
+  type: Type42;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "RepoMapSnapshotRequest".
  */
 export interface RepoMapSnapshotRequest {
-  force?: Force11;
-  id?: Id42;
-  type: Type41;
+  force?: Force12;
+  id?: Id44;
+  type: Type43;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "OpenProjectSnapshotRequest".
  */
 export interface OpenProjectSnapshotRequest {
-  force?: Force12;
-  id?: Id43;
-  type: Type42;
-}
-/**
- * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
- * via the `definition` "HelpSnapshotRequest".
- */
-export interface HelpSnapshotRequest {
-  id?: Id44;
-  language: Language;
-  type: Type43;
-}
-/**
- * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
- * via the `definition` "UpdateHarnessSnapshotRequest".
- */
-export interface UpdateHarnessSnapshotRequest {
   force?: Force13;
   id?: Id45;
   type: Type44;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "HelpSnapshotRequest".
+ */
+export interface HelpSnapshotRequest {
+  id?: Id46;
+  language: Language;
+  type: Type45;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "UpdateHarnessSnapshotRequest".
+ */
+export interface UpdateHarnessSnapshotRequest {
+  force?: Force14;
+  id?: Id47;
+  type: Type46;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "UpdateHarnessDiffRequest".
  */
 export interface UpdateHarnessDiffRequest {
-  force?: Force14;
-  id?: Id46;
-  path: Path;
-  type: Type45;
+  force?: Force15;
+  id?: Id48;
+  path: Path1;
+  type: Type47;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "SnapshotPageRequest".
  */
 export interface SnapshotPageRequest {
-  id?: Id47;
+  id?: Id49;
   offset: Offset2;
   snapshot_id: SnapshotId3;
-  type: Type46;
+  type: Type48;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -1102,9 +1225,9 @@ export interface SnapshotPageRequest {
  */
 export interface WorkerStepsRequest {
   dispatch_id: DispatchId5;
-  id?: Id48;
+  id?: Id50;
   offset: Offset3;
-  type: Type47;
+  type: Type49;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -1112,15 +1235,15 @@ export interface WorkerStepsRequest {
  */
 export interface WorkerSubscribeRequest {
   dispatch_id: DispatchId6;
-  id?: Id49;
+  id?: Id51;
   offset?: Offset4;
-  type: Type48;
+  type: Type50;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "StepsSubscribeRequest".
  */
 export interface StepsSubscribeRequest {
-  id?: Id50;
-  type: Type49;
+  id?: Id52;
+  type: Type51;
 }

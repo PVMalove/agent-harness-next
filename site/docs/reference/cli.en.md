@@ -17,6 +17,7 @@ repository at that path and copies a verifiable snapshot into it.
 | `memory build/search/rebuild/sync/eval` | Local memory index and pointers to allowed sources | `build`, `rebuild`, `sync` — yes; `search`, `eval` — no |
 | `parsers status/install` | Project graph parsers: bundle state and language installation | `install` — yes; `status` — no |
 | `health` | Diagnostics of the installation and the environment | only with `--fix` |
+| `ticket-status` | Moves a spec's ticket to a task-board column: replaces its `status::*` label on GitHub, GitLab or in the local tracker when the transition is allowed | only for the local `.scratch/` tracker |
 | `list` | List of installed skills | no |
 | `cleanup` | Plan and removal of disposable `.harness` data | only with `--apply` |
 | `worktree-remove` | Removes a managed worktree and keeps the branch | yes |
@@ -71,6 +72,13 @@ only raise the profile for paths and roles; the validator rejects a downgrade.
 
 The `ci_required_checks` field is a list of unique non-empty names of CI checks whose evidence
 is accepted from the tracker.
+
+The names in `ci_required_checks` are full checks: `verify`, `rust` and the other jobs that
+`verify.yml` runs for a pull request into `master`. Do not list `-light` names there: the
+`verify-light` job runs only for a pull request into `integration/**`, and `collect-ci` answers such
+a check with the reason `light_check` when the pair requires full QA. The field lives in the local
+`.harness/project.json`, which is not committed. The operator sets it once when enabling CI
+evidence and describes that step in the pull request text (ADR 0016, addendum #937).
 
 ```bash
 python3 .harness/orchestration/coordinator.py --repo . integration collect-ci \

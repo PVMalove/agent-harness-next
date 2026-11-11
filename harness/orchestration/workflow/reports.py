@@ -224,9 +224,33 @@ def self_report_dispatch(args: argparse.Namespace) -> JsonObject:
             "a model self-report must name the actually active model",
             remedy="pass --model naming the model actually running this session",
         )
+    return record_self_report(
+        repo, root, args.dispatch, reported, getattr(args, "worktree", None)
+    )
+
+
+def record_self_report(
+    repo: Path,
+    root: Path,
+    dispatch_id: str,
+    reported: str,
+    supplied_worktree: str | None,
+    *,
+    source: str | None = None,
+    evidence: JsonObject | None = None,
+    block: bool = True,
+) -> JsonObject:
+    """Record the model and checkout a worker runs in, and block the dispatch on a mismatch.
+
+    The worker reports them itself (``dispatch self-report``); a container worker, which has no
+    runtime socket, is reported by the host coordinator from its event stream and its plan
+    (``source``, with the launch ``evidence``; #1014, ADR 0025). Both take the same checks.
+
+    ``block=False`` records a mismatch without blocking: the store refuses ``blocked`` while the
+    execution of a supervised dispatch runs, so its state waits for the exit (ADR 0021)."""
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
-        dispatch, status = _live_status(root, args.dispatch)
+        dispatch, status = _live_status(root, dispatch_id)
         operational_hold.require_no_hold(root, dispatch["batch_id"])
         progress = dispatch.get("preserved_progress")
         if (
@@ -244,7 +268,6 @@ def self_report_dispatch(args: argparse.Namespace) -> JsonObject:
         attestation: JsonObject | None = None
         worktree_matched = True
         if requires_attestation(dispatch):
-            supplied_worktree = getattr(args, "worktree", None)
             if not _non_empty(supplied_worktree):
                 worktree_matched = False
                 attestation = {
@@ -294,20 +317,31 @@ def self_report_dispatch(args: argparse.Namespace) -> JsonObject:
                     attestation = {"match": False, "error": str(exc)}
         matched = model_matched and worktree_matched
         moment = utils._now()
-        status["state"] = "working" if matched else "blocked"
+        if matched:
+            status["state"] = "working"
+        elif block:
+            status["state"] = "blocked"
         status["updated_at"] = moment
         status["heartbeat_at"] = moment
+        # A record without ``source`` is the worker's own report.
+        origin: JsonObject = {"source": source} if source else {}
         status["model_self_report"] = {
             "reported_model": reported,
             "expected_model": expected,
             "match": model_matched,
             "reported_at": moment,
+            **origin,
         }
         if attestation is not None:
-            status["worktree_attestation"] = {**attestation, "reported_at": moment}
+            status["worktree_attestation"] = {
+                **attestation,
+                "reported_at": moment,
+                **origin,
+                **({"container": evidence} if evidence is not None else {}),
+            }
         _safe_id(dispatch["dispatch_id"], "dispatch")
         _replace_record(ledger, DispatchStatusRecord.from_dict(status))
-        if not matched:
+        if not matched and block:
             batch = _load_batch(root, dispatch["batch_id"])
             for entry in batch.get("dispatches", []):
                 if entry["dispatch_id"] == dispatch["dispatch_id"]:
@@ -1573,6 +1607,37 @@ def _resolve_report_commit(repo: Path, commit_sha: str) -> str:
         ) from exc
 
 
+def _validate_reported_commit_plan(
+    report: JsonObject, dispatch: JsonObject, allowed_paths: object
+) -> None:
+    """An architect's ``commit_plan`` is checked at submit, not later at the accept (#1015).
+
+    It must pass the same rules as a ``--commit-plan-file`` and stay inside the batch scope the
+    brief names; a path beyond that scope is a risk the architect reports, not a plan entry.
+    """
+    if "commit_plan" not in report:
+        return
+    from harness.orchestration.workflow import commit_plan as plan_rules
+
+    if dispatch.get("role") != "architect":
+        raise CoordinatorError(
+            "only an architect completion report carries commit_plan",
+            remedy="drop commit_plan from the completion report",
+        )
+    plan = plan_rules.pinned_plan(
+        {"commit_plan": report["commit_plan"]}, dispatch["definition_of_done"]
+    )
+    allowed = dispatch.get("allowed_paths", allowed_paths)
+    outside = plan_rules.paths_outside_scope(plan, allowed)
+    if outside:
+        raise CoordinatorError(
+            f"completion report commit_plan names paths outside the batch allowed_paths: "
+            f"{', '.join(outside)} (allowed_paths: {', '.join(cast(list[str], allowed))})",
+            remedy="keep only paths inside allowed_paths in commit_plan expected_paths, "
+            "describe a path the plan needs beyond them in risks, and resubmit the report",
+        )
+
+
 def _validate_report(
     report: JsonObject,
     dispatch: JsonObject,
@@ -1581,8 +1646,11 @@ def _validate_report(
     base_commit: str | None = None,
     *,
     history: FixForwardHistory | None = None,
+    allowed_paths: object = None,
 ) -> None:
-    """Validate report shape and its proof through the candidate's history module."""
+    """Validate report shape and its proof through the candidate's history module.
+
+    ``allowed_paths`` is the batch scope, for a brief recorded before briefs named it."""
     _reject_sensitive(report, "completion report")
     if (
         not REPORT_FIELDS <= set(report)
@@ -1625,6 +1693,7 @@ def _validate_report(
         )
     _validate_tooling_blocker(report, dispatch)
     _validate_incomplete_items(report, role)
+    _validate_reported_commit_plan(report, dispatch, allowed_paths)
     for field in ("output", "next_coordinator_action"):
         if not _non_empty(report[field]):
             raise CoordinatorError(
@@ -1782,6 +1851,7 @@ def _validate_report_in_batch(
         role,
         repo,
         history=FixForwardHistory(repo, root, batch),
+        allowed_paths=batch.get("allowed_paths"),
     )
     resolver_state.validate_report(repo, root, batch, dispatch, report)
 

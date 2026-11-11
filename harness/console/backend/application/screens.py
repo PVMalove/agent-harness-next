@@ -15,9 +15,16 @@ from typing import Generic, TypeVar
 
 from ...kernel.batch_history import History
 from ...kernel.help_text import help_sections
-from ...kernel.pipeline_kpi import pipeline_analytics, pipeline_kpi, reports_kpi
+from ...kernel.pipeline_kpi import (
+    evidence_payload,
+    pipeline_analytics,
+    pipeline_kpi,
+    reports_kpi,
+)
 from ...kernel.pipeline_stats import pipeline_usage
+from ...kernel.publish_view import GitFacts, LocalGit, publish_payload
 from ...kernel.reports import LedgerView, ledger_payload, timeline_payload
+from ...kernel.screen_views import recovery_view_payload, route_view_payload
 from ...kernel.update_harness_snapshot import diff_paths
 from ..domain.snapshots import HOME_TTL_SECONDS, TextPages
 from ....json_types import JsonObject
@@ -124,10 +131,15 @@ def snapshot_text(payload: object) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False, sort_keys=True)
 
 
-def _ledger(view: LedgerView) -> _Ledger:
-    """The view with its payload: the ledger without report bodies and the Reports KPIs, which the
-    server reads from the whole bodies."""
-    payload = {**ledger_payload(view), "reports_kpi": reports_kpi(view).to_payload()}
+def _ledger(view: LedgerView, git: GitFacts) -> _Ledger:
+    """The view with its payload: the ledger without report bodies, the Reports KPIs, which the
+    server reads from the whole bodies, the read-only publication view and the evidence matrix."""
+    payload = {
+        **ledger_payload(view),
+        "reports_kpi": reports_kpi(view).to_payload(),
+        "publish": publish_payload(view, git),
+        "evidence": evidence_payload(view),
+    }
     return _Ledger(view, payload)
 
 
@@ -154,8 +166,10 @@ class ScreenService:
         update_diff: UpdateDiffReader | None = None,
         configuration: ConfigurationCollector | None = None,
         board: TaskBoardService | None = None,
+        publish_git: GitFacts | None = None,
     ) -> None:
         self._repo = repo
+        self._git: GitFacts = publish_git or LocalGit(repo)
         self._collect_ledger = ledger
         self._collect_online = ledger_online
         self._read_lock = lock
@@ -195,7 +209,7 @@ class ScreenService:
 
     async def _cached_ledger(self, force: bool) -> tuple[_Ledger, bool, float]:
         return await self._ledger.get(
-            lambda: _ledger(self._collect_ledger(self._repo)), force=force
+            lambda: _ledger(self._collect_ledger(self._repo), self._git), force=force
         )
 
     async def reports(self, *, force: bool = False, online: bool = False) -> Paged:
@@ -203,7 +217,7 @@ class ScreenService:
         never cached."""
         if online:
             found = await asyncio.to_thread(
-                lambda: _ledger(self._collect_online(self._repo))
+                lambda: _ledger(self._collect_online(self._repo), self._git)
             )
             return await self._paged(found.payload)
         ledger, cached, age = await self._cached_ledger(force)
@@ -272,6 +286,44 @@ class ScreenService:
             age,
         )
 
+    async def recovery_view(
+        self, batch: str = "", skip: Sequence[str] = (), *, force: bool = False
+    ) -> Paged:
+        """The Recovery screen as the kernel view-models draw it: the history with its labels,
+        the recovery gate, the view and the resume plan of the selected batch, from the same
+        history cache and `recovery status` reader as `recovery`."""
+        history, cached, age = await self._history.get(
+            lambda: self._recovery.history(self._repo), force=force
+        )
+        status = (
+            await asyncio.to_thread(self._recovery.status, self._repo, batch, skip)
+            if batch
+            else None
+        )
+        payload = await asyncio.to_thread(
+            recovery_view_payload, history, status, batch, skip
+        )
+        return await self._paged(payload, cached, age)
+
+    async def container_route_view(
+        self, batch: str = "", role: str = "developer", runtime: str = ""
+    ) -> Paged:
+        """The Container route as the kernel view-models draw it: the selection, the executor
+        context, the six stage tabs and every stage view, from the same readers as
+        `container_route`; never cached."""
+        authored = await asyncio.to_thread(self._route.authored, self._repo)
+        preflight = (
+            await asyncio.to_thread(
+                self._route.preflight, self._repo, batch, role, runtime
+            )
+            if batch
+            else None
+        )
+        payload = await asyncio.to_thread(
+            route_view_payload, authored, preflight, batch, role, runtime
+        )
+        return await self._paged(payload)
+
     async def container_route(
         self, batch: str = "", role: str = "developer", runtime: str = ""
     ) -> Paged:
@@ -313,11 +365,12 @@ class ScreenService:
             lambda: collect(self._repo), force=force
         )
         ledger, _, _ = await self._cached_ledger(force)
-        return await self._paged({**facts, "ledger": ledger.payload}, cached, age)
+        snapshot = {key: facts[key] for key in ("state", "package_version", "drift")}
+        return await self._paged({**snapshot, "ledger": ledger.payload}, cached, age)
 
     async def harness_overview(self, *, force: bool = False) -> dict[str, object]:
-        """The installed harness, the package version, the drift state and the pipeline usage
-        counts, from the same Harness and ledger caches as `harness`; `NotFound` without a
+        """The installed harness, the package version, the drift state, the container engine
+        inventory and the pipeline usage counts, from the same Harness and ledger caches as `harness`; `NotFound` without a
         Harness collector."""
         collect = self._collect_harness
         if collect is None:
@@ -330,6 +383,10 @@ class ScreenService:
             "state": facts["state"],
             "package_version": facts["package_version"],
             "drift": facts["drift"],
+            "drift_files": facts.get("drift_files"),
+            "store": facts.get("store"),
+            "adapters": facts.get("adapters"),
+            "containers": facts.get("containers"),
             "usage": pipeline_usage(ledger.view),
             "cached": cached,
             "age_seconds": round(age, 3),

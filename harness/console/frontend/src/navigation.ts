@@ -7,6 +7,8 @@ export interface NavItem {
   /** Section key of kernel/i18n.py `_SECTIONS`. */
   section: string;
   icon: IconName;
+  /** The mockup's menu caption when it differs from the section title, a catalog key. */
+  label?: string;
 }
 
 export interface NavGroup {
@@ -21,8 +23,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { route: "", section: "Home", icon: "home" },
       { route: "diagnostics", section: "Diagnostics", icon: "pulse" },
-      { route: "update-harness", section: "Update Harness", icon: "refresh" },
-      { route: "open-project", section: "Open project", icon: "folder" },
+      { route: "update-harness", section: "Update Harness", icon: "refresh", label: "Обновление" },
+      { route: "open-project", section: "Open project", icon: "folder", label: "Проект" },
     ],
   },
   {
@@ -40,13 +42,32 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { route: "harness", section: "Harness", icon: "harness" },
       { route: "repo-map", section: "Repo Map", icon: "map" },
-      { route: "configuration", section: "Configuration", icon: "settings" },
+      { route: "configuration", section: "Configuration", icon: "settings", label: "Настройки" },
       { route: "help", section: "Help", icon: "help" },
     ],
   },
 ];
 
 export const NAV_ITEMS: readonly NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+
+/** Routes without a menu item, each with the section it belongs to: the TUI opens Recovery and
+    Container route from Orchestration, so the Orchestration item stays highlighted. */
+export const HIDDEN_ROUTES: Readonly<Record<string, string>> = {
+  recovery: "orchestration",
+  "container-route": "orchestration",
+};
+
+/** The footer captions of the routes without a menu item, catalog keys. */
+export const HIDDEN_LABELS: Readonly<Record<string, string>> = {
+  recovery: "Восстановление",
+  "container-route": "Контейнеры",
+};
+
+/** The menu item a route belongs to: its own, a hidden route's owner, else Home. */
+export function navItemOf(route: string): NavItem {
+  const owner = HIDDEN_ROUTES[route] ?? route;
+  return NAV_ITEMS.find((item) => item.route === owner) ?? NAV_ITEMS[0];
+}
 
 /** Keyboard shortcuts of the mockup: key -> route. */
 export const SHORTCUTS: Readonly<Record<string, string>> = {

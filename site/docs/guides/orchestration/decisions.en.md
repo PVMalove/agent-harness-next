@@ -446,9 +446,10 @@ The command computes the decision from the ledger facts, passes it through the `
 as `policy:auto` with the route, the reason, and the evidence. The session passes only the inputs that require
 judgment:
 
-- `--commit-plan-file` is the architect's plan. The policy pins the plan if it lies inside `allowed_paths` and
-  covers all DoD items. Otherwise the path stops. If the command cannot read the file as a JSON object, it refuses
-  and writes nothing.
+- `--commit-plan-file` is the architect's plan when the report does not carry a `commit_plan` field;
+  the policy pins a plan from the report without a file. The policy pins the plan if it lies inside
+  `allowed_paths` and covers all DoD items. Otherwise, and when the file and the report plan differ,
+  the path stops. If the command cannot read the file as a JSON object, it refuses and writes nothing.
 - `--findings-file` holds the coordinator's findings for an accepted developer report.
 - `--bug-ticket` is the tooling bug ticket for `tooling-retry`. Without it, the command refuses and writes
   nothing.

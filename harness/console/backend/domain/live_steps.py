@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Collection, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 
 from ...kernel.json_fields import text
 from ...kernel.protocol import ID_BYTES, MESSAGE_BYTES, _clip
@@ -25,6 +26,9 @@ ORCHESTRATION_EVENTS = (
 )
 # Step items in one reply: with the envelope the reply stays below `MESSAGE_LIMIT`.
 REPLY_BUDGET_BYTES = 48 * 1024
+# A live dispatch without a heartbeat or state change for this long is silent: two heartbeat
+# intervals of the worker contract.
+SILENT_AFTER_SECONDS = 600
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,13 @@ class RosterDispatch:
     ticket: str
     role: str
     state: str
+    batch_state: str = ""
+    branch: str = ""
+    # Read for a live dispatch only: when it was created, its latest heartbeat or state change,
+    # and whether that is older than `SILENT_AFTER_SECONDS`; "" and False otherwise.
+    started_at: str = ""
+    last_event_at: str = ""
+    silent: bool = False
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -44,7 +55,63 @@ class RosterDispatch:
             "ticket": self.ticket,
             "role": self.role,
             "state": self.state,
+            "batch_state": self.batch_state,
+            "branch": self.branch,
+            "started_at": self.started_at,
+            "last_event_at": self.last_event_at,
+            "silent": self.silent,
         }
+
+
+@dataclass(frozen=True)
+class DispatchTiming:
+    """When a dispatch was created and its latest heartbeat or state change; "" when unknown."""
+
+    started_at: str
+    last_event_at: str
+
+
+def _moment(value: str) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+
+
+def dispatch_timing(
+    dispatch: Mapping[str, object], status: Mapping[str, object] | None
+) -> DispatchTiming:
+    """The timing of a dispatch from its record and status record."""
+    found = status or {}
+    moments = [
+        (moment, value)
+        for value in (text(found.get("heartbeat_at")), text(found.get("updated_at")))
+        if value and (moment := _moment(value)) is not None
+    ]
+    return DispatchTiming(
+        started_at=_clip(text(dispatch.get("created_at")), ID_BYTES),
+        last_event_at=_clip(max(moments)[1], ID_BYTES) if moments else "",
+    )
+
+
+def timed(entry: RosterDispatch, timing: DispatchTiming | None, now: str) -> RosterDispatch:
+    """`entry` with its timing and whether it is silent at `now`."""
+    if timing is None:
+        return entry
+    last, current = _moment(timing.last_event_at), _moment(now)
+    since = _moment(timing.started_at) if last is None else last
+    silent = (
+        since is not None
+        and current is not None
+        and (current - since).total_seconds() > SILENT_AFTER_SECONDS
+    )
+    return replace(
+        entry,
+        started_at=timing.started_at,
+        last_event_at=timing.last_event_at,
+        silent=silent,
+    )
 
 
 def _id(value: object) -> str | None:
@@ -81,6 +148,8 @@ def roster_from_view(view: Mapping[str, object] | None) -> tuple[RosterDispatch,
                     ticket=_id(batch.get("ticket")) or "",
                     role=role or "",
                     state=_id(states.get(dispatch_id)) or entry_state or "",
+                    batch_state=_id(batch.get("state")) or "",
+                    branch=_id(batch.get("branch")) or "",
                 )
             )
     return tuple(roster)

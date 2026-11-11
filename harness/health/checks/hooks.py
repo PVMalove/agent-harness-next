@@ -24,6 +24,7 @@ from ..hook_settings import (
 )
 from ..model import CheckResult, Fix, Status
 from ..process import run_tool
+from ..test_author import ADAPTERS as AUTHOR_ADAPTERS
 from ..test_author import AuthorUnavailable, adapter_for, read_author, preflight_reason
 from ..project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
@@ -57,13 +58,22 @@ def check_test_author(context: HealthContext) -> CheckResult:
         if selection
         else "исполнитель не выбран"
     )
+    hint = (
+        f" (поддержан runtime: {', '.join(sorted(AUTHOR_ADAPTERS))}; добавьте его с model и "
+        "effort в assignment_plans.developer.runtimes файла .harness/orchestration.json и, "
+        "если runtime несколько, выберите в assignment_plans.developer.default_runtime; "
+        "без плана developer — test_author.runtime в .harness/project.json)"
+        if reason == "runtime_unsupported"
+        else ""
+    )
     return CheckResult(
         id="hooks.test_author",
         group=GROUP,
         status=status,
         message=(
-            f"Тест-автор {executor} — preflight: {reason}; "
-            "/implement: external в доверенном worker checkout; "
+            f"Тест-автор {executor} — preflight: {reason} (основной checkout){hint}; "
+            "/implement: external в доверенном worker checkout, "
+            "in-process developer в worker worktree — обычный TDD (штатно); "
             "/fast-implement: текущий checkout; "
             "live-срабатывание hook проверяет make test-author-probe. "
             "Неподдерживаемый защищённый адаптер даёт runtime_unsupported; Rust этим решением не поддержан"

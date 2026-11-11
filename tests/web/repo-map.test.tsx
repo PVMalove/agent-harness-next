@@ -8,6 +8,9 @@ import { FakeSocket, ManualClock, snapshotReply, jobReply } from "./fake-socket"
 
 beforeEach(() => FakeSocket.reset());
 
+// Without a cached map the kernel derives no symbol kinds and no coverage.
+const NO_MAP = { ...FACTS, map: null, symbol_kinds: null, coverage: null };
+
 function open() {
   window.location.hash = "#/repo-map";
   const clock = new ManualClock();
@@ -39,9 +42,31 @@ test("Repo Map shows the TUI snapshot, selected file signatures, settings and me
   expect(within(screen.getByRole("heading", { name: "Парсеры" }).closest("section")!).getByText("python")).toBeTruthy();
 });
 
+test("coverage and symbol kinds are the kernel's; a kind the map cannot give says no data", () => {
+  const { socket } = open();
+  facts(socket);
+  const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
+  const row = (label: string) => within(coverage).getByText(label).nextElementSibling!.textContent;
+  expect([row("source"), row("docs"), row("tests"), row("excluded")]).toEqual(["3", "1", "0", "2"]);
+  act(() => fireEvent.click(screen.getByRole("tab", { name: "Символы" })));
+  const chips = [...document.querySelectorAll("#repo-kind-chips .chip")].map((chip) => chip.textContent);
+  expect(chips).toEqual(["Все 3", "Functions 2", "Modules 1"]);
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Modules 1" })));
+  const kinds = [...document.querySelectorAll(".repo-symbol-row .repo-kind")].map((kind) => kind.textContent);
+  expect(kinds).toEqual(["class"]);
+  expect(screen.getByText("Строка").nextElementSibling!.textContent).toBe("нет данных");
+});
+
+test("an unknown excluded count and a map without kinds stay explicit no-data states", () => {
+  const { socket } = open();
+  facts(socket, { ...FACTS, coverage: { ...FACTS.coverage, excluded: null } });
+  const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
+  expect(within(coverage).getByText("excluded").nextElementSibling!.textContent).toBe("нет данных");
+});
+
 test("building requires confirmation, pins the displayed HEAD and displays an uncached degraded result", () => {
   const { socket } = open();
-  facts(socket, { ...FACTS, map: null });
+  facts(socket, NO_MAP);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Отмена" })));
@@ -53,7 +78,7 @@ test("building requires confirmation, pins the displayed HEAD and displays an un
   const built = { ...FACTS.map, tier: "minimal", parser: "path-only", files: [{ path: "new.py" }], edges: [], diagnostics: [], estimated_tokens: 8 };
   act(() => socket.reply(jobReply(request.id, "job.start", { command_id: "repo-map-build", done: true,
     phase: "completed", returncode: 0, output: [{ channel: "stdout", text: JSON.stringify(built) }], cursor: 1 })));
-  facts(socket, { ...FACTS, map: null });
+  facts(socket, NO_MAP);
   expect(screen.getByRole("button", { name: "new.py" })).toBeTruthy();
   expect(screen.getByText("minimal")).toBeTruthy();
 });
@@ -83,7 +108,7 @@ test("reconnect discards an incomplete snapshot and never replays a build", () =
   act(() => next.open());
   expect(next.request("repo_map.snapshot")).toMatchObject({ force: false });
   expect(next.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
-  facts(next, { ...FACTS, head: "b".repeat(40), map: null });
+  facts(next, { ...NO_MAP, head: "b".repeat(40) });
   expect(screen.queryByRole("button", { name: "pkg/core.py" })).toBeNull();
   expect(screen.getByText("Кэша карты для HEAD нет")).toBeTruthy();
 });
@@ -93,21 +118,21 @@ test("a changed HEAD invalidates an open build confirmation", () => {
   facts(socket);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Обновить" })));
   act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
-  facts(socket, { ...FACTS, head: "b".repeat(40), map: null });
+  facts(socket, { ...NO_MAP, head: "b".repeat(40) });
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
 });
 
 test("truncated build output cannot become a map and its failure survives a snapshot refresh", () => {
   const { socket } = open();
-  facts(socket, { ...FACTS, map: null });
+  facts(socket, NO_MAP);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   act(() => socket.reply(jobReply(socket.request("job.start").id, "job.start", {
     command_id: "repo-map-build", done: true, phase: "completed", returncode: 0, truncated: true,
     output: [{ channel: "stdout", text: JSON.stringify(FACTS.map) }], cursor: 1,
   })));
-  facts(socket, { ...FACTS, map: null });
+  facts(socket, NO_MAP);
   expect(screen.getByRole("alert").getAttribute("data-code")).toBe("truncated");
   expect(screen.queryByRole("button", { name: "pkg/core.py" })).toBeNull();
 });

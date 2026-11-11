@@ -749,3 +749,63 @@ def test_a_policy_shape_the_validator_missed_is_an_internal_invariant(
         )
 
     assert caught.value.remedy == INTERNAL_INVARIANT_REMEDY
+
+
+_CONTAINER_QA_ONLY: JsonObject = {
+    "access_policy": {
+        "operations": {"qa": {"container": {"engine": "podman", "worker_image": "w:1"}}}
+    },
+    "extensions": {"runtime_access": "docker"},
+}
+
+
+def test_a_role_without_its_own_access_layer_keeps_the_legacy_inherit_plan(
+    tmp_path: Path,
+) -> None:
+    """#1014, ADR 0025: a container that only operations.qa authors leaves every worker role
+    the plan it had without access_policy, so an in-process role launches as before."""
+    repo = _repo(tmp_path)
+    legacy = runtime_access.resolve_plan(repo, repo, {}, "developer", "write")
+
+    developer = runtime_access.resolve_plan(
+        repo, repo, _CONTAINER_QA_ONLY, "developer", "write"
+    )
+
+    assert developer == legacy
+    verification, observation = runtime_access.verify_plan(developer, "in-process")
+    assert verification["status"] == runtime_access.RuntimeAccessStatus.LEGACY_INHERIT
+    assert observation is None
+
+
+def test_the_qa_operation_still_receives_the_container_it_authors(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+
+    qa = runtime_access.resolve_plan(
+        repo, repo, _CONTAINER_QA_ONLY, "qa", "read-only", operation="qa"
+    )
+
+    assert qa["sources"]["container"] == "operations.qa"
+    assert qa["runtime_extension"] == "docker"
+    assert runtime_access.qa_container(qa, "qa")
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        {"defaults": {"mode": "sandbox"}},
+        {"roles": {"developer": {"mode": "sandbox"}}},
+    ],
+)
+def test_a_role_with_a_defaults_or_its_own_layer_keeps_an_authored_plan(
+    tmp_path: Path, policy: JsonObject
+) -> None:
+    repo = _repo(tmp_path)
+
+    developer = runtime_access.resolve_plan(
+        repo, repo, {"access_policy": policy}, "developer", "write"
+    )
+
+    assert developer["mode"] == "sandbox"
+    assert "legacy" not in developer["sources"].values()

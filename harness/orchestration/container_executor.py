@@ -15,7 +15,9 @@ removes its objects with the engine of its execution.
 
 The executor runs only on the runtime store epoch and only on Linux: on the file ledger, on
 another platform and for an in-process transport ``observe`` raises ``RuntimeAccessBlocked``
-with its remedy.
+with its remedy. An in-process role reaches the executor only when access_policy names it
+through ``defaults`` or its own override; config load names that role in a warning, and any
+other in-process role keeps the legacy inherit plan (#1014).
 """
 
 from __future__ import annotations
@@ -125,8 +127,9 @@ def _plan_support(data: JsonObject, transport: str, block: _Block) -> None:
     if transport not in ("external", QA_OPERATION_TRANSPORT):
         block(
             f"the docker executor launches only an external dispatch, not {transport}",
-            "set the role's assignment_plans transport to external, then repeat dispatch "
-            "preflight and propose",
+            "set the role's assignment_plans transport to external, or remove "
+            "access_policy.defaults and access_policy.roles.<role> so the role keeps the "
+            "legacy in-process launch, then repeat dispatch preflight and propose",
         )
     container = data.get("container")
     if not container:

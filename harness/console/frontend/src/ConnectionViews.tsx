@@ -9,15 +9,23 @@ import { useConsole } from "./useConsole";
 type Translate = (text: string) => string;
 
 const CHIP: Record<ConnectionStatus, { css: string; label: (t: Translate) => string }> = {
-  connected: { css: "connected", label: (t) => t("Подключено") },
-  reconnecting: { css: "reconnecting", label: (t) => t("Переподключение") },
-  no_server: { css: "offline", label: (t) => t("Нет сервера") },
-  error: { css: "error", label: (t) => t("Ошибка") },
-  empty: { css: "empty", label: (t) => t("Нет данных") },
+  connected: { css: "connected", label: () => "online" },
+  reconnecting: { css: "reconnecting", label: () => "reconnect" },
+  no_server: { css: "offline", label: (t) => t("нет сервера") },
+  error: { css: "error", label: (t) => t("ошибка") },
+  empty: { css: "empty", label: (t) => t("пусто") },
 };
 
 /** Statuses that replace the page content with a connection page. */
 export const PAGE_STATUSES: readonly ConnectionStatus[] = ["no_server", "error", "empty"];
+
+/** Routes whose own data is the Home health snapshot: only they show the shared empty page;
+    every other page shows the empty state of its own data (H3). */
+export const EMPTY_PAGE_ROUTES: readonly string[] = ["", "diagnostics"];
+
+/** Whether the connection page replaces the content of `route`. */
+export const showsConnectionPage = (status: ConnectionStatus, route: string): boolean =>
+  status === "empty" ? EMPTY_PAGE_ROUTES.includes(route) : PAGE_STATUSES.includes(status);
 
 export function ConnectionChip() {
   const { t } = useI18n();
@@ -66,9 +74,12 @@ export function ConnectionBanner() {
 }
 
 export function ConnectionPage() {
-  const { t, section } = useI18n();
-  const { state, client } = useConsole();
+  const { t, section, language } = useI18n();
+  const { state, client, snapshotAt } = useConsole();
   const retry = () => client.retryNow();
+  const last = snapshotAt
+    ? new Intl.DateTimeFormat(language, { timeStyle: "medium" }).format(snapshotAt)
+    : t("нет");
   let page: {
     css: string;
     icon: string;
@@ -86,7 +97,11 @@ export function ConnectionPage() {
       eyebrow: t("СОЕДИНЕНИЕ · НЕТ СЕРВЕРА"),
       title: t("Нет связи с сервером консоли"),
       text: t("Сервер консоли не отвечает. Запустите harness console --web и откройте выданную ссылку."),
-      facts: [[t("Попытка"), String(state.attempt)]],
+      facts: [
+        ["endpoint", client.url],
+        [t("последний снимок"), last],
+        [t("Попытка"), String(state.attempt)],
+      ],
       action: t("Повторить подключение"),
       onAction: retry,
     };
@@ -102,7 +117,11 @@ export function ConnectionPage() {
           : state.errorCode === "invalid_snapshot"
             ? t("Ответ получен, но снимок не прошёл проверку. Показывать старые данные как актуальные нельзя.")
             : t("Сервер ответил ошибкой."),
-      facts: [[t("Код"), state.errorCode ?? "—"]],
+      facts: [
+        ["endpoint", client.url],
+        [t("Код"), state.errorCode ?? "—"],
+        [t("последний снимок"), last],
+      ],
       action: t("Загрузить заново"),
       onAction: retry,
     };
@@ -113,7 +132,11 @@ export function ConnectionPage() {
       eyebrow: t("ДАННЫЕ · ПУСТО"),
       title: t("Данных пока нет"),
       text: t("Соединение установлено, но снимок не содержит ни одной проверки. Это не ошибка загрузки."),
-      facts: [[t("Проверки"), "0"]],
+      facts: [
+        [t("соединение"), "online"],
+        [t("Проверки"), "0"],
+        [t("последний снимок"), last],
+      ],
       action: t("Обновить"),
       onAction: () => client.requestHome({ force: true }),
     };

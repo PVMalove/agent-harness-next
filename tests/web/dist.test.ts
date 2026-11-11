@@ -8,12 +8,15 @@ const DIST = join(REPO, "harness/console/frontend/dist");
 const MOCKUP_CSS = join(REPO, "docs/design/web-console-mockups/execution-console.css");
 
 /** URL-like strings in the bundle that are identifiers, never loaded: XML namespaces, React's
- * error-decoder link and React Router's URL-parsing base and doc link in a warning text. */
+ * error-decoder link, React Router's URL-parsing base and doc link in a warning text, and the
+ * polyfill its `useSearchParams` warning names (the Recovery and Container route read their
+ * batch from the hash query). */
 const NOT_LOADED = [
   /^http:\/\/www\.w3\.org\//,
   /^https:\/\/react\.dev\/errors\//,
   /^http:\/\/localhost$/,
   /^https:\/\/reactrouter\.com\//,
+  /^https:\/\/github\.com\/ungap\/url-search-params\.?$/,
 ];
 const URL_PATTERN = /https?:\/\/[^\s"'`)<>]*/g;
 
@@ -81,6 +84,37 @@ describe("the build in harness/console/frontend/dist", () => {
     // The export is a Blob download: no data: URL, no inline script.
     expect(scripts).toContain("createObjectURL");
     expect(scripts).not.toMatch(/data:application\/json/);
+  });
+
+  test("ships Reports, Orchestration, Recovery and Container route over the screen snapshots of the same server", () => {
+    const scripts = ofType(".js").map(text).join("\n");
+    for (const request of [
+      "reports.snapshot",
+      "reports.report",
+      "reports.timeline",
+      "orchestration.snapshot",
+      "recovery.view",
+      "container_route.view",
+    ]) {
+      expect(scripts).toContain(request);
+    }
+    // Report text is untrusted: no route renders it as HTML.
+    expect(scripts).not.toContain("dangerouslySetInnerHTML:");
+  });
+
+  test("ships Open Project, Update Harness, Configuration and Help over the screen snapshots of the same server", () => {
+    const scripts = ofType(".js").map(text).join("\n");
+    for (const request of [
+      "open_project.snapshot",
+      "update_harness.snapshot",
+      "update_harness.diff",
+      "configuration.snapshot",
+      "help.snapshot",
+    ]) {
+      expect(scripts).toContain(request);
+    }
+    // The guide's Markdown and the configuration documents become elements, never HTML.
+    expect(scripts).not.toContain("dangerouslySetInnerHTML:");
   });
 
   test("the server's CSP for the build stays strict", () => {

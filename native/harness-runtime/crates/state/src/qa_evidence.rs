@@ -15,6 +15,11 @@
 //! - `local-qa`: a verified local-QA result of the pair, with the same chain from its log;
 //! - `ci`: a CI check of the pair that `integration collect-ci` accepted.
 //!
+//! A pair requires `full` stages unless its stored pair record (contract 2) says `ticket-diff`:
+//! then the stages of the ticket's own diff confirm it as well, and a pytest stage that selected
+//! no test of the diff may stay `not_run`. Focused and failed-only stages never confirm a pair.
+//! The requirement is read from the stored record alone; the request cannot weaken it.
+//!
 //! Developer and review reports, the `/qa-gate` marker and a stage the store holds no output
 //! stream of are never a source: they are cached results (ADR 0023, section 4).
 
@@ -22,7 +27,8 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use contracts::{
-    QaEvidenceVerdict, QaEvidenceViolation, StageEvidenceDocument, StageResult, StageSelection,
+    QaEvidenceVerdict, QaEvidenceViolation, StageEvidence, StageEvidenceDocument, StageKind,
+    StageResult, StageSelection,
 };
 use serde_json::{Map, Value, json};
 
@@ -31,7 +37,7 @@ use crate::read::{self, ReadError};
 
 /// The record directory of the Release Gate pairs.
 pub const PAIR_DIRECTORY: &str = "reports/integration-pair";
-/// The fields of a pair record, exactly.
+/// The fields of a pair record of the first contract, exactly: it requires a full QA run.
 pub const PAIR_FIELDS: [&str; 5] = [
     "pair_id",
     "contract",
@@ -39,7 +45,18 @@ pub const PAIR_FIELDS: [&str; 5] = [
     "target_sha",
     "candidate_tree_sha",
 ];
+/// The fields of a pair record of the second contract, exactly: the first contract's and the
+/// `selection` its QA must have.
+pub const PAIR_FIELDS_V2: [&str; 6] = [
+    "pair_id",
+    "contract",
+    "candidate_sha",
+    "target_sha",
+    "candidate_tree_sha",
+    "selection",
+];
 const PAIR_CONTRACT: u64 = 1;
+const PAIR_CONTRACT_V2: u64 = 2;
 const EVIDENCE_DIRECTORY: &str = "reports/integration-evidence/";
 const LOCAL_QA_DIRECTORY: &str = "reports/integration-local-qa/";
 const QA_ARTIFACTS: &str = "qa-artifacts/";
@@ -47,6 +64,8 @@ const QA_ARTIFACTS: &str = "qa-artifacts/";
 const TRAILER: &str = "stage-evidence: ";
 /// The stage group of the approved commands: `gate-1`, `gate-2`, ... in their order.
 const GATE_STAGE: &str = "gate";
+/// The id prefix of a pytest stage that selected no test of the ticket's diff.
+const NO_TESTS_STAGE: &str = "no-tests-in-diff";
 
 /// Whether `text` is a full commit or tree id: 40 or 64 lower-case hex digits.
 pub fn is_sha(text: &str) -> bool {
@@ -103,21 +122,44 @@ impl Pair {
     }
 }
 
-/// Check a pair record a `state.write` creates at `path`: its exact fields, its contract, its
-/// three ids and the `pair_id` its pair derives.
+/// Check a pair record a `state.write` creates at `path`: its contract and the exact fields of it
+/// (contract 1: five; contract 2: those and a `selection`, `full` or `ticket-diff`), its three ids
+/// and the `pair_id` its pair derives.
 ///
 /// # Errors
 /// What breaks the record.
 pub fn check_pair_record(path: &str, record: &Map<String, Value>) -> Result<(), String> {
+    let contract = record.get("contract").and_then(Value::as_u64);
+    let fields: &[&str] = match contract {
+        Some(PAIR_CONTRACT) => &PAIR_FIELDS,
+        Some(PAIR_CONTRACT_V2) => &PAIR_FIELDS_V2,
+        _ => {
+            return Err(format!(
+                "the pair record {path} must have contract {PAIR_CONTRACT} or {PAIR_CONTRACT_V2}"
+            ));
+        }
+    };
     let keys: BTreeSet<&str> = record.keys().map(String::as_str).collect();
-    if keys != PAIR_FIELDS.into_iter().collect() {
+    if keys != fields.iter().copied().collect() {
         return Err(format!(
-            "the pair record {path} must hold exactly the fields {PAIR_FIELDS:?}"
+            "the pair record {path} of contract {} must hold exactly the fields {fields:?}",
+            contract.unwrap_or_default()
         ));
     }
-    if record.get("contract").and_then(Value::as_u64) != Some(PAIR_CONTRACT) {
+    if contract == Some(PAIR_CONTRACT_V2)
+        && !record
+            .get("selection")
+            .and_then(Value::as_str)
+            .is_some_and(|selection| {
+                [StageSelection::Full, StageSelection::TicketDiff]
+                    .into_iter()
+                    .any(|accepted| accepted.as_str() == selection)
+            })
+    {
         return Err(format!(
-            "the pair record {path} must have contract {PAIR_CONTRACT}"
+            "the pair record {path} must have the selection {:?} or {:?}",
+            StageSelection::Full.as_str(),
+            StageSelection::TicketDiff.as_str()
         ));
     }
     let text = |key: &str| {
@@ -149,6 +191,24 @@ pub fn check_pair_record(path: &str, record: &Map<String, Value>) -> Result<(), 
         ));
     }
     Ok(())
+}
+
+/// The stage selection the stored pair record requires of the QA evidence of its pair.
+///
+/// Only a contract-2 record whose `selection` is `ticket-diff` accepts diff evidence. Everything
+/// else is `full`, so a missing record, a record of the first contract and a record with an
+/// unknown value fail closed.
+pub fn required_selection(record: Option<&Value>) -> StageSelection {
+    let diff = record.is_some_and(|record| {
+        record.get("contract").and_then(Value::as_u64) == Some(PAIR_CONTRACT_V2)
+            && record.get("selection").and_then(Value::as_str)
+                == Some(StageSelection::TicketDiff.as_str())
+    });
+    if diff {
+        StageSelection::TicketDiff
+    } else {
+        StageSelection::Full
+    }
 }
 
 /// What the store holds for the verdict.
@@ -243,13 +303,14 @@ struct Source {
 pub fn judge(evidence: &impl Evidence, pair: &Pair) -> Result<Value, ReadError> {
     let records = evidence.records();
     let pair_path = pair.path();
-    let tree = records
-        .get(&pair_path)
+    let stored = records.get(&pair_path);
+    let tree = stored
         .and_then(|record| record.get("candidate_tree_sha"))
         .and_then(Value::as_str)
         .filter(|tree| is_sha(tree));
-    let mut sources = original_qa(evidence, pair)?;
-    sources.extend(local_qa(evidence, pair)?);
+    let required = required_selection(stored);
+    let mut sources = original_qa(evidence, pair, required)?;
+    sources.extend(local_qa(evidence, pair, required)?);
     sources.extend(ci(records, pair));
     let confirmed = sources.iter().find(|source| source.violations.is_empty());
     let mut violations = Vec::new();
@@ -338,7 +399,11 @@ struct Pinned {
     image_digest: Option<String>,
 }
 
-fn original_qa(evidence: &impl Evidence, pair: &Pair) -> Result<Vec<Source>, ReadError> {
+fn original_qa(
+    evidence: &impl Evidence,
+    pair: &Pair,
+    required: StageSelection,
+) -> Result<Vec<Source>, ReadError> {
     let records = evidence.records();
     let mut sources = Vec::new();
     for (_, batch) in under(records, "batches/") {
@@ -416,6 +481,7 @@ fn original_qa(evidence: &impl Evidence, pair: &Pair) -> Result<Vec<Source>, Rea
                 log.as_deref(),
                 &commands,
                 &pinned,
+                required,
             )?);
             sources.push(Source {
                 name: "original-qa",
@@ -432,7 +498,11 @@ fn of_pair(link: &Value, pair: &Pair) -> bool {
         && text(link, "target_sha") == Some(pair.target_sha.as_str())
 }
 
-fn local_qa(evidence: &impl Evidence, pair: &Pair) -> Result<Vec<Source>, ReadError> {
+fn local_qa(
+    evidence: &impl Evidence,
+    pair: &Pair,
+    required: StageSelection,
+) -> Result<Vec<Source>, ReadError> {
     let records = evidence.records();
     let mut sources = Vec::new();
     for (path, link) in under(records, EVIDENCE_DIRECTORY) {
@@ -494,6 +564,7 @@ fn local_qa(evidence: &impl Evidence, pair: &Pair) -> Result<Vec<Source>, ReadEr
             log,
             &commands,
             &pinned,
+            required,
         )?);
         sources.push(Source {
             name: "local-qa",
@@ -578,6 +649,7 @@ fn run_chain(
     log: Option<&str>,
     commands: &[String],
     pinned: &Pinned,
+    required: StageSelection,
 ) -> Result<Vec<Value>, ReadError> {
     let unverifiable = |at: &str, detail: &str| {
         vec![violation(
@@ -639,7 +711,27 @@ fn run_chain(
             ));
         }
     };
-    stage_violations(evidence, pair, &document_path, &document, commands, pinned)
+    stage_violations(
+        evidence,
+        pair,
+        &document_path,
+        &document,
+        commands,
+        pinned,
+        required,
+    )
+}
+
+/// Whether `stage` is what a pytest stage that selected no test of the ticket's diff is recorded
+/// as (`qa_lane._plan_stages`): `not_run` under an id `no-tests-in-diff...`, with no exit code and
+/// no node id.
+fn is_no_tests_stage(stage: &StageEvidence) -> bool {
+    stage.kind == StageKind::Pytest
+        && stage.selection == StageSelection::TicketDiff
+        && stage.result == StageResult::NotRun
+        && stage.stage_id.starts_with(NO_TESTS_STAGE)
+        && stage.exit_code.is_none()
+        && stage.nodeids.as_ref().is_none_or(Vec::is_empty)
 }
 
 fn stage_violations(
@@ -649,7 +741,9 @@ fn stage_violations(
     document: &StageEvidenceDocument,
     commands: &[String],
     pinned: &Pinned,
+    required: StageSelection,
 ) -> Result<Vec<Value>, ReadError> {
+    let diff = required == StageSelection::TicketDiff;
     let mut found = Vec::new();
     for (index, command) in commands.iter().enumerate() {
         let stage_id = format!("{GATE_STAGE}-{}", index + 1);
@@ -679,14 +773,16 @@ fn stage_violations(
     }
     for stage in &document.stages {
         let id = &stage.stage_id;
-        if stage.selection != StageSelection::Full {
+        if stage.selection != StageSelection::Full
+            && !(diff && stage.selection == StageSelection::TicketDiff)
+        {
             found.push(violation(
                 QaEvidenceViolation::SelectionNotFull,
                 at,
                 format!("stage {id} selected {} tests", stage.selection.as_str()),
             ));
         }
-        if stage.result != StageResult::Pass {
+        if stage.result != StageResult::Pass && !(diff && is_no_tests_stage(stage)) {
             found.push(violation(
                 QaEvidenceViolation::StageNotPassed,
                 at,

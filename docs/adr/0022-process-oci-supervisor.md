@@ -140,7 +140,7 @@ Reconcile запускается при старте runtime, перед каж�
   и rootless Podman требует self-hosted runner или VM, потому что GitHub-hosted runner её не даёт;
   до появления runner-а поддержка подтверждается только argv-матрицей, и это фиксируется в
   отчётах. Windows-контракт (named pipe, Job Objects) — отдельное лёгкое задание CI, а не полный
-  `make verify`, отключённый в #753.
+  `make verify` задания `verify-windows`, который был отключён в #753 и снова включён в #938.
 - **Команды проверки:** `cargo test` в `native/harness-runtime`;
   `.harness/.venv/bin/python -m pytest -q tests/orchestration/test_container_executor.py
   tests/orchestration/test_container_lifecycle.py tests/orchestration/test_runtime_access.py
@@ -333,7 +333,7 @@ Reconcile запускается при старте runtime, перед каж�
 
 **Принято оператором (2026-10-29).** Supervisor процессов на Windows (#806) реализует разделы 2,
 3 и 5 для Job Objects с отступлениями ниже. Контейнеры на Windows (Docker Desktop), одобрение
-политики hooks при запуске (#808) и полный `verify-windows` (#753) этот ticket не затрагивает;
+политики hooks при запуске (#808) и полный `verify-windows` (#753, включён снова в #938) этот ticket не затрагивает;
 поведение на Linux не меняется.
 
 | Текст ADR | Решение #806 | Причина |

@@ -85,6 +85,8 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "orchestration.lock": schemas.OrchestrationLockRequest,
         "recovery.snapshot": schemas.RecoverySnapshotRequest,
         "container_route.snapshot": schemas.ContainerRouteSnapshotRequest,
+        "recovery.view": schemas.RecoveryViewRequest,
+        "container_route.view": schemas.ContainerRouteViewRequest,
         "snapshot.page": schemas.SnapshotPageRequest,
         "task_board.specs": schemas.TaskBoardSpecsRequest,
         "task_board.snapshot": schemas.TaskBoardSnapshotRequest,
@@ -126,6 +128,8 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 17, "type": "update_harness.diff", "path": "AGENTS.md", "force": True},
         {"id": 18, "type": "configuration.snapshot", "force": True},
         {"id": 19, "type": "harness.overview", "force": True},
+        {"id": 20, "type": "recovery.view", "batch": "b-1", "skip": ["a1"]},
+        {"id": 21, "type": "container_route.view", "batch": "b", "role": "qa"},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -149,6 +153,10 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "update_harness.diff", "path": ""},
         {"type": "update_harness.diff", "path": "a" * 513},
         {"type": "configuration.snapshot", "names": ["project.json"]},
+        {"type": "recovery.view", "skip": [""]},
+        {"type": "recovery.view", "online": True},
+        {"type": "container_route.view", "role": ""},
+        {"type": "container_route.view", "force": True},
     ):
         with pytest.raises(ValueError):
             schemas.REQUESTS.validate_python(broken)
@@ -185,6 +193,8 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
             "harness.maintenance",
             "update_harness.snapshot",
             "configuration.snapshot",
+            "recovery.view",
+            "container_route.view",
         )
     )
     replies.append(
@@ -204,12 +214,30 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
     }
     usage = {"unavailable": None, "batches": 2, "tickets": 1, "dispatches": 5,
              "reports": 4}
+    store = {"authority": "file-ledger", "schema": 3, "generation": "g-1",
+             "audit_records": 9}
+    adapter = {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
+    containers = {
+        "engine": "docker", "version": "27.4.1", "cgroup_driver": "systemd",
+        "cgroup_version": "v2", "selinux": False, "rootless": True, "info_problem": None,
+        "images": 3, "images_problem": None, "volumes": None, "volumes_problem": "no volume",
+    }
     reply: dict[str, object] = {
         "v": 1, "id": 1, "type": "harness.overview", "ok": True, "state": state,
-        "package_version": "1.0.1", "drift": "clean", "usage": usage,
+        "package_version": "1.0.1", "drift": "clean", "drift_files": 0,
+        "store": store, "adapters": [adapter], "containers": containers, "usage": usage,
         "cached": False, "age_seconds": 0.0,
     }
     assert schemas.REPLIES.validate_python(reply).type == "harness.overview"
+    assert schemas.REPLIES.validate_python(
+        {**reply, "store": None, "adapters": None, "drift_files": None, "containers": None}
+    ).type == "harness.overview"
+    assert {
+        field.alias or name
+        for name, field in schemas.StorePayload.model_fields.items()
+    } == set(store)
+    assert _fields(schemas.AdapterPayload) == set(adapter)
+    assert _fields(schemas.ContainersPayload) == set(containers)
     assert _fields(schemas.HarnessStatePayload) == set(state)
     assert _fields(schemas.PipelineUsage) == set(usage)
     assert _fields(schemas.HarnessOverviewReply) == set(reply)
@@ -218,6 +246,11 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
         {**reply, "state": {**state, "extra": 1}},
         {**reply, "usage": {**usage, "batches": -1}},
         {**reply, "usage": {**usage, "qa_runs": 0}},
+        {**reply, "store": {**store, "authority": "sqlite"}},
+        {**reply, "adapters": [{**adapter, "status": "fine"}]},
+        {**reply, "drift_files": -1},
+        {**reply, "containers": {**containers, "images": -1}},
+        {**reply, "containers": {**containers, "extra": 1}},
     ):
         with pytest.raises(ValueError):
             schemas.REPLIES.validate_python(broken)

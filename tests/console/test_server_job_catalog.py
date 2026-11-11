@@ -126,6 +126,8 @@ def test_every_section_lists_only_kernel_catalog_entries(tmp_path: Path) -> None
         "configuration",
         "memory",
         "decisions",
+        "recovery",
+        "update",
     }
     listed = {section: served.commands(section) for section in COMMAND_SECTIONS}
     assert [c["command_id"] for c in listed["diagnostics"]] == [
@@ -134,7 +136,7 @@ def test_every_section_lists_only_kernel_catalog_entries(tmp_path: Path) -> None
     ]
     every = {str(c["command_id"]) for commands in listed.values() for c in commands}
     # Decisions have their own catalog; they are not offered as general section commands.
-    assert "update-seed-selected" not in every
+    assert "update-seed-selected" in every
     decisions = {str(c["command_id"]) for c in listed["decisions"]}
     assert decisions == {
         "batch-approve", "batch-decide", "batch-attention-resolve",
@@ -144,9 +146,42 @@ def test_every_section_lists_only_kernel_catalog_entries(tmp_path: Path) -> None
         str(c["command_id"]).startswith(("batch-", "dispatch-", "native-"))
         for section, commands in listed.items() if section != "decisions" for c in commands
     )
+    recovery = [str(c["command_id"]) for c in listed["recovery"]]
+    assert recovery == [
+        "recovery-reload",
+        "recovery-resume",
+        "recovery-fix",
+        "recovery-fix-apply",
+        "recovery-abort",
+    ]
+    assert not any(
+        str(c["command_id"]).startswith("recovery-")
+        for section, commands in listed.items() if section != "recovery" for c in commands
+    )
     with pytest.raises(JobRejected) as refused:
         served.commands("coordinator")
     assert refused.value.code == "bad_request"
+
+
+def test_the_update_section_lists_the_three_update_modes_behind_a_confirmation(
+    tmp_path: Path,
+) -> None:
+    served = _served(tmp_path)
+    listed = {section: served.commands(section) for section in COMMAND_SECTIONS}
+    update = listed["update"]
+    assert [c["command_id"] for c in update] == [
+        "update",
+        "update-force-managed",
+        "update-seed-selected",
+    ]
+    assert all(c["needs_confirmation"] is True and c["section"] == "update" for c in update)
+    assert not any(
+        c["command_id"] in {"update", "update-force-managed", "update-seed-selected"}
+        for section, commands in listed.items() if section != "update" for c in commands
+    )
+    with pytest.raises(JobRejected) as refused:
+        served.start({"command_id": "update", "client": "browser"})
+    assert refused.value.code == "confirmation_required"
 
 
 def test_a_job_summary_says_whether_the_job_holds_the_mutation_slot(
