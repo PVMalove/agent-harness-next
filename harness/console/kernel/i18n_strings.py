@@ -2628,6 +2628,14 @@ EN.update(
     }
 )
 
+# Web console #1066: names of the scrollable regions the axe sweep requires to be focusable.
+EN.update(
+    {
+        "Шаги установки": "Installation steps",
+        "Маршрут сессии": "Session route",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

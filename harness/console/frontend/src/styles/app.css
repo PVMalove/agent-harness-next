@@ -282,3 +282,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* Orchestration (#1066): long lists scroll inside their block; chart rows fit long role names. */
 #orch-dispatch-list, .orch-tickets { max-height: min(480px, calc(100dvh - 240px)); overflow-y: auto; }
 .orch-analytics .orch-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 40px; }
+/* axe sweep (#1066): muted text on a selected row is below 4.5:1 on --sel, and the mockup's
+   #7f8996 second project line is below it on --panel. */
+.diag-row[aria-pressed="true"] .diag-row-main small, .project-row.on .project-row-main small { color: var(--selfg); }
+.project-row-main small + small { color: var(--muted); }

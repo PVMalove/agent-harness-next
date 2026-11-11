@@ -309,7 +309,7 @@ function RecentTasks({ sessions }: { sessions: RecentSession[] }) {
               {section("Ход работы")} →
             </a>
           </div>
-          <div className="route-scroll">
+          <div className="route-scroll" tabIndex={0} role="region" aria-label={t("Маршрут сессии")}>
             <div className="route-steps route-steps-fill" key={active.batch_id}>
               {active.route.length ? (
                 active.route.map((step, index) => (
@@ -393,7 +393,7 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
         </span>
       </div>
       <div className="body">
-        <div className="contour-scroll">
+        <div className="contour-scroll" tabIndex={0} role="region" aria-label={t("Схема контура Harness")}>
           <svg className="contour-svg" viewBox="0 0 1000 400" role="img" aria-label={t("Схема контура Harness")}>
             <defs>
               <marker id="ct-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">

@@ -281,7 +281,7 @@ export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
           <option value="reported">{t("Отчёт получен")}</option>
         </select>
       </div>
-      <div id="orch-dispatch-list">
+      <div id="orch-dispatch-list" tabIndex={0} role="region" aria-label="Dispatch">
         {shown.length === 0 ? (
           <div className="report-empty">{t("Dispatch с такими фильтрами нет")}</div>
         ) : (

@@ -76,12 +76,14 @@ function FileTree({ files, selected, select }: { files: MapFile[]; selected: str
       }
       return [
         <button key={f.path} type="button" className={`repo-file ${selected === f.path ? "on" : ""}`}
-          aria-label={f.path} aria-pressed={selected === f.path} onClick={() => select(f.path)}>
+          title={f.path} aria-pressed={selected === f.path} onClick={() => select(f.path)}>
           {indent(depth)}
-          <span className="repo-caret dot">·</span>
+          <span className="repo-caret dot" aria-hidden="true">·</span>
           <Icon name="terminal" />
-          <b>{rest}</b>
-          <em>[{f.parser_status ?? "—"}]</em>
+          {/* The accessible name is the whole path; the row shows the file name. */}
+          <span className="sr-only">{f.path}</span>
+          <b aria-hidden="true">{rest}</b>
+          <em aria-hidden="true">[{f.parser_status ?? "—"}]</em>
         </button>,
       ];
     });

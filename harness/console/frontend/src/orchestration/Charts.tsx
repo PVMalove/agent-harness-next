@@ -371,7 +371,7 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
         </span>
         <span className="muted">{t("{count} задач в конвейере", { count: working + blocked + awaiting })}</span>
       </div>
-      <div className="orch-map-scroll">
+      <div className="orch-map-scroll" tabIndex={0} role="region" aria-label={t("Схема ролей оркестрации")}>
         <svg className="orch-map" viewBox="0 0 1200 416" role="img" aria-label={t("Схема ролей оркестрации")}>
           <defs>
             {(

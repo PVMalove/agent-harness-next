@@ -74,7 +74,7 @@ function flowNodes(facts: OpenProjectFacts, chosen: string, blocked: number, t: 
 function Stepper({ stage }: { stage: number }) {
   const { t } = useI18n();
   return (
-    <div className="install-steps" id="open-project-steps">
+    <div className="install-steps" id="open-project-steps" tabIndex={0} role="region" aria-label={t("Шаги установки")}>
       <div className="install-steps-track">
         {STAGES.map((name, index) => (
           <span key={name}>

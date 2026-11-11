@@ -216,7 +216,7 @@ export function SessionRoute({
             {session.started_at ? ` · ${t("старт")} ${session.started_at.slice(11, 16)}` : ""}
           </span>
         </div>
-        <div className="work-flow-scroll">
+        <div className="work-flow-scroll" tabIndex={0} role="region" aria-label={t("Маршрут сессии")}>
           <div className="work-flow">
             {steps.map((step, index) => (
               <span key={step.name} style={{ display: "contents" }}>
