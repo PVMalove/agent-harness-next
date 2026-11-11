@@ -30,10 +30,11 @@ from tests.orchestration.fault_injection_matrix import (
 ROOT = Path(__file__).resolve().parents[2]
 
 # Definition of Done items 2 and 3 of #813: the reliability matrix of #784, then the security
-# boundaries the ticket names.
+# boundaries the ticket names. The container cases of the runtime SIGKILL come from #1057.
 EXPECTED_LABELS = [
     "SIGKILL of the coordinator",
     "SIGKILL of the runtime",
+    "SIGKILL of the runtime: running container adopted",
     "lost IPC reply",
     "orphan worker",
     "double start",

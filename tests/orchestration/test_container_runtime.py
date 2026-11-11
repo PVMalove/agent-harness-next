@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -20,7 +20,7 @@ from harness.json_types import JsonObject
 from harness.orchestration import container_executor, runtime_access
 from tests.orchestration.runtime_store_support import Supervised
 from tests.orchestration.scripted_engine import WORKER_ID as WORKER_CONTAINER
-from tests.orchestration.scripted_engine import ScriptedEngine
+from tests.orchestration.scripted_engine import ScriptedEngine, docker_info
 
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
@@ -31,8 +31,13 @@ WORKER_TAG = "harness-worker:local"
 # Podman prints a bare image id; the brief pins ``sha256:<id>`` as Docker prints it.
 WORKER_BARE = "a" * 64
 WORKER_ID = f"sha256:{WORKER_BARE}"
+PROXY_TAG = "harness-proxy:local"
+PROXY_BARE = "b" * 64
+PROXY_IMAGE_ID = f"sha256:{PROXY_BARE}"
 SECRET_NAME = "HARNESS_TEST_API_KEY"
 SECRET = "synthetic-secret-value-5d1e"
+# The runtime stops after the engine created and started the worker, before its receipt.
+PAUSE_AT_LAUNCHED = {"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:launched"}
 
 
 def policy(**defaults: object) -> JsonObject:
@@ -53,13 +58,20 @@ class Podman(Protocol):
         access_policy: JsonObject | None = ...,
         env: dict[str, str] | None = ...,
         create: bool = ...,
+        binary: str = ...,
+        rootless: bool = ...,
     ) -> tuple[Supervised, ScriptedEngine]: ...
+
+
+def engine_env(engine: ScriptedEngine) -> dict[str, str]:
+    """The runtime environment whose only engine is ``engine``, without debug hooks."""
+    return {"PATH": str(engine.bin), SECRET_NAME: SECRET}
 
 
 @pytest.fixture
 def podman(tmp_path: Path) -> Iterator[Podman]:
     """A cut-over repository under the docker executor, served by a runtime whose only engine is
-    a scripted rootful ``podman`` that holds the worker image."""
+    a scripted ``binary`` (rootful ``podman`` by default) that holds the worker and proxy images."""
     made: list[Supervised] = []
 
     def make(
@@ -67,14 +79,25 @@ def podman(tmp_path: Path) -> Iterator[Podman]:
         access_policy: JsonObject | None = None,
         env: dict[str, str] | None = None,
         create: bool = True,
+        binary: str = "podman",
+        rootless: bool = False,
     ) -> tuple[Supervised, ScriptedEngine]:
         root = tmp_path / f"s{len(made)}"
-        engine = ScriptedEngine(root / "engine")
-        engine.update(lambda state: state["images"].update({WORKER_TAG: WORKER_BARE}))
+        engine = ScriptedEngine(root / "engine", binary)
+        if rootless:
+            engine.update(lambda state: state.update(info=docker_info(rootless=True)))
+        # Podman prints a bare image id, Docker ``sha256:<id>``.
+        images = (
+            {WORKER_TAG: WORKER_BARE, PROXY_TAG: PROXY_BARE}
+            if binary == "podman"
+            else {WORKER_TAG: WORKER_ID, PROXY_TAG: PROXY_IMAGE_ID}
+        )
+        engine.update(lambda state: state["images"].update(images))
         repo = Supervised(
             root,
-            env={"PATH": str(engine.bin), SECRET_NAME: SECRET, **(env or {})},
-            access_policy=access_policy or policy(),
+            env={**engine_env(engine), **(env or {})},
+            access_policy=access_policy
+            or policy(container={"engine": binary, "worker_image": WORKER_TAG}),
             create=create,
         )
         made.append(repo)
@@ -476,3 +499,69 @@ def test_a_container_that_exits_without_a_staged_report_is_blocked(
     status = repo.status()
     assert status["state"] == "blocked"
     assert dig(status, "runtime_failure", "kind") == "worker-exited-without-report"
+
+
+def killed_at_launch(
+    repo: Supervised,
+    engine: ScriptedEngine,
+    edit: Callable[[JsonObject], None] | None = None,
+) -> tuple[int, str, str]:
+    """``dispatch send`` whose runtime is SIGKILLed after the engine started the worker and
+    before the receipt; ``edit`` changes the engine state while no runtime runs, and a new
+    runtime in the same directory serves the repeated request. The send's code and streams."""
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:launched")
+    repo.runtime.kill()
+    if edit is not None:
+        engine.update(edit)
+    repo.restart_runtime(env=engine_env(engine))
+    out, err = send.communicate(timeout=60)
+    return send.returncode, out, err
+
+
+def verbs(engine: ScriptedEngine, verb: str) -> list[list[str]]:
+    return [call for call in engine.calls() if call[1] == verb]
+
+
+def assert_adopted(
+    repo: Supervised,
+    engine: ScriptedEngine,
+    sent: tuple[int, str, str],
+    *,
+    binary: str = "podman",
+    proxy_id: str | None = None,
+) -> None:
+    """The repeated send answers a receipt of the existing worker: no second create or start,
+    no removal, and the lease belongs to the new runtime."""
+    code, out, err = sent
+    assert code == 0, err
+    receipt = json.loads(out)["execution"]
+    assert receipt["adopted"] is True, receipt
+    assert receipt["container_id"] == WORKER_CONTAINER
+    assert receipt["engine"] == binary
+    assert receipt["proxy_id"] == proxy_id
+    containers = 1 if proxy_id is None else 2
+    assert len(verbs(engine, "create")) == containers, engine.calls()
+    assert len(verbs(engine, "start")) == containers, engine.calls()
+    assert engine.removals() == []
+    assert all(call[0] == binary for call in engine.calls())
+    assert (
+        dig(repo.execution(), "lease", "owner", "identity", "pid")
+        == repo.runtime.process.pid
+    )
+
+
+@pytest.mark.fault_injection
+@pytest.mark.parametrize(
+    ("binary", "rootless"),
+    [("podman", False), ("docker", False), ("docker", True)],
+    ids=["podman", "docker-rootful", "docker-rootless"],
+)
+def test_a_runtime_killed_between_container_launch_and_receipt_adopts_the_running_worker_without_a_second_create(
+    podman: Podman, binary: str, rootless: bool
+) -> None:
+    repo, engine = podman(env=PAUSE_AT_LAUNCHED, binary=binary, rootless=rootless)
+
+    sent = killed_at_launch(repo, engine)
+
+    assert_adopted(repo, engine, sent, binary=binary)
