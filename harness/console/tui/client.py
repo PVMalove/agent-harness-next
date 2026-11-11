@@ -668,6 +668,9 @@ class ConsoleClient:
         """The masked configuration files with their digests of «Настройка»; a reply off the
         schema is `MalformedReply`."""
         found = self._paged({"type": CONFIGURATION_REQUEST, "force": force})
+        if isinstance(found, dict):
+            # The web Settings wizard catalog rides along with the facts; the TUI has no wizard.
+            found = {key: value for key, value in found.items() if key != "wizard"}
         return self._decoded(
             ConfigurationFacts.from_payload, found, "снимок «Настройка»"
         )

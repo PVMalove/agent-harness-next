@@ -19,6 +19,7 @@ from harness.console.kernel.configuration_snapshot import (
     collect_configuration,
     config_digest,
 )
+from harness.console.kernel.configuration_wizard import wizard_parameters
 
 PROJECT = {
     "language": "ru",
@@ -128,8 +129,12 @@ def test_the_facts_round_trip_and_a_payload_off_the_schema_is_a_value_error(
 def test_the_screen_facts_adapter_is_the_kernel_collector(tmp_path: Path) -> None:
     _project(tmp_path)
 
-    found = ConfigurationFacts.from_payload(screen_facts.configuration_facts(tmp_path))
+    payload = screen_facts.configuration_facts(tmp_path)
+    wizard = payload.pop("wizard")
+
+    found = ConfigurationFacts.from_payload(payload)
 
     assert found == collect_configuration(tmp_path)
+    assert wizard == wizard_parameters(tmp_path)
     service = composition.screen_service(tmp_path)
     assert service._collect_configuration is screen_facts.configuration_facts

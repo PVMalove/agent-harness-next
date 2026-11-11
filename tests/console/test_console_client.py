@@ -846,7 +846,8 @@ def test_the_update_harness_and_configuration_snapshots_and_a_diff_are_decoded()
         json.dumps(update.to_payload()),
         json.dumps({"path": "AGENTS.md", "text": "--- a\n"}),
         None,
-        json.dumps(CONFIGURATION_FACTS.to_payload()),
+        # The server adds the web wizard catalog next to the facts; the TUI ignores it.
+        json.dumps({**CONFIGURATION_FACTS.to_payload(), "wizard": [{"key": "x"}]}),
         json.dumps({**update.to_payload(), "drift": []}),
         json.dumps({"path": "other.md", "text": ""}),
         json.dumps({**CONFIGURATION_FACTS.to_payload(), "files": {}}),
