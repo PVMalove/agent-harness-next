@@ -18,7 +18,9 @@
     "authority": "file-ledger",
     "schema": 3,
     "generation": "generation-1a2b3c4d",
-    "audit_records": 1240
+    "audit_records": 1240,
+    "cutover_at": null,
+    "reason": ""
   },
   "adapters": [
     {

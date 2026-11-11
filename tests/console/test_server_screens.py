@@ -228,6 +228,8 @@ def test_the_diagnostics_and_harness_snapshots_round_trip_and_are_cached(
                 "schema": 3,
                 "generation": "generation-1",
                 "audit_records": 4,
+                "cutover_at": None,
+                "reason": "",
             }
             assert overview["adapters"] == [
                 {"path": ".harness/adapters/a.json", "status": "current", "problem": None}

@@ -183,6 +183,8 @@ const store = exact({
   schema: nullable(count),
   generation: nullable(string),
   audit_records: nullable(count),
+  cutover_at: nullable(string),
+  reason: string,
 });
 const adapter = exact({
   path: string,

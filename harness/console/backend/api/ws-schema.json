@@ -3305,7 +3305,7 @@
     },
     "StorePayload": {
       "additionalProperties": false,
-      "description": "The state authority read without the ledger lock or a runtime call; unread facts are null.",
+      "description": "The state authority read without the ledger lock; in the runtime-store epoch the audit count\ncomes from a bounded `state.validate` of the running runtime. Unread facts are null and\n`reason` says why.",
       "properties": {
         "audit_records": {
           "anyOf": [
@@ -3328,6 +3328,17 @@
           "title": "Authority",
           "type": "string"
         },
+        "cutover_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cutover At"
+        },
         "generation": {
           "anyOf": [
             {
@@ -3338,6 +3349,10 @@
             }
           ],
           "title": "Generation"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
         },
         "schema": {
           "anyOf": [
@@ -3355,7 +3370,9 @@
         "authority",
         "schema",
         "generation",
-        "audit_records"
+        "audit_records",
+        "cutover_at",
+        "reason"
       ],
       "title": "StorePayload",
       "type": "object"

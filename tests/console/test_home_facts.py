@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from harness.console.backend.infrastructure.home_facts import (
     recent_sessions,
     store_facts,
@@ -12,6 +14,7 @@ from harness.console.backend.infrastructure.home_facts import (
 from harness.console.kernel.home_snapshot import RecentSession, RouteStep, StoreFacts
 from harness.console.kernel.reports import BatchSummary, LedgerView, StageEntry
 from harness.orchestration.core.constants import STATE_REL
+from harness.orchestration.runtime_client import RuntimeClientError
 
 
 def _pointer(repo: Path, payload: object) -> Path:
@@ -37,9 +40,71 @@ def test_file_ledger_reports_schema_generation_and_audit_count(tmp_path: Path) -
     assert store_facts(tmp_path) == StoreFacts("file-ledger", 3, "generation-ab12", 3)
 
 
-def test_runtime_store_is_named_without_asking_the_runtime(tmp_path: Path) -> None:
-    _pointer(tmp_path, {"version": 4})
-    assert store_facts(tmp_path) == StoreFacts("runtime-store", 4, None, None)
+def test_runtime_store_reads_generation_cutover_and_the_runtime_audit_count(tmp_path: Path) -> None:
+    state = _pointer(tmp_path, {"version": 4, "generation": "generation-ff01", "selected_at": "t"})
+    (state / "AUTHORITY.json").write_text(
+        json.dumps({"cutover_at": "2026-11-05T10:00:00Z", "store_id": "s", "snapshot": "x"}),
+        encoding="utf-8",
+    )
+    calls: list[tuple[str, object]] = []
+
+    def runtime(operation: str, payload: dict[str, object]) -> dict[str, object]:
+        calls.append((operation, payload))
+        return {"audit_records": 11462, "valid": True}
+
+    facts = store_facts(tmp_path, runtime=runtime)
+    assert facts == StoreFacts(
+        "runtime-store", 4, "generation-ff01", 11462, cutover_at="2026-11-05T10:00:00Z", reason=""
+    )
+    assert calls == [("state.validate", {"full": False})]
+
+
+def test_an_unanswering_runtime_leaves_the_audit_count_unread_with_its_reason(
+    tmp_path: Path,
+) -> None:
+    _pointer(tmp_path, {"version": 4, "generation": "generation-ff01"})
+
+    def runtime(operation: str, payload: dict[str, object]) -> dict[str, object]:
+        raise RuntimeClientError(
+            "runtime_unavailable", "no runtime", remedy="start it", domain="transport"
+        )
+
+    facts = store_facts(tmp_path, runtime=runtime)
+    assert facts.audit_records is None
+    assert facts.generation == "generation-ff01"
+    assert facts.cutover_at is None
+    assert "runtime_unavailable" in facts.reason
+
+
+def test_the_file_ledger_never_asks_the_runtime(tmp_path: Path) -> None:
+    _pointer(tmp_path, {"version": 3, "generation": "generation-ab12"})
+
+    def runtime(operation: str, payload: dict[str, object]) -> dict[str, object]:
+        raise AssertionError("the file ledger is read from disk")
+
+    assert store_facts(tmp_path, runtime=runtime).cutover_at is None
+
+
+def test_harness_install_names_the_capabilities_and_those_outside_the_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console.backend.infrastructure import home_facts
+    from harness.console.kernel.harness_facts import HarnessState
+
+    state = HarnessState(
+        installed=True,
+        installed_version="2.0.0",
+        capabilities=("pvmalove-suite", "backend-orchestration"),
+        skills=30,
+        managed_files=200,
+        updated_at="",
+        orchestration=True,
+    )
+    monkeypatch.setattr(home_facts, "harness_state", lambda repo: state)
+    install = home_facts.harness_install(tmp_path)
+    assert install.capabilities == 2
+    assert install.capability_names == ("pvmalove-suite", "backend-orchestration")
+    assert install.uncatalogued == ("pvmalove-suite",)
 
 
 def test_recent_sessions_list_the_newest_batches_with_their_route() -> None:
@@ -64,5 +129,8 @@ def test_recent_sessions_list_the_newest_batches_with_their_route() -> None:
         "feature/c",
         "2026-11-03",
         (RouteStep("architect", "reported"), RouteStep("developer", "working")),
+        updated_at="2026-11-03T02",
     )
     assert sessions[1].route == ()
+    assert sessions[0].updated_at == "2026-11-03T02"
+    assert sessions[1].updated_at == "2026-11-02"

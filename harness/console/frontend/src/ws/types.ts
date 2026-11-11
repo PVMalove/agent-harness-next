@@ -30,6 +30,9 @@ export interface HarnessInstall {
   capabilities: number;
   skills: number;
   managed_files: number;
+  /** Installed capability names in lock order; `uncatalogued` lacks a catalog entry. */
+  capability_names: string[];
+  uncatalogued: string[];
 }
 
 export interface StoreFacts {
@@ -38,6 +41,10 @@ export interface StoreFacts {
   schema: number | null;
   generation: string | null;
   audit_records: number | null;
+  /** `AUTHORITY.json` cutover time; null before a cutover. */
+  cutover_at: string | null;
+  /** Why a fact is null; "" when every fact was read. */
+  reason: string;
 }
 
 export interface DriftCounts {
@@ -70,6 +77,8 @@ export interface RecentSession {
   branch: string;
   created_at: string;
   route: RouteStep[];
+  /** The latest dispatch time (the creation when there is none). */
+  updated_at: string;
 }
 
 export interface HeadMap {
@@ -186,10 +195,25 @@ const SNAPSHOT = fields({
   }),
   project: nullable(fields({ name: string, branch: nullable(string), commit: nullable(string), tracker: string })),
   harness: nullable(
-    fields({ installed: flag, installed_version: string, capabilities: count, skills: count, managed_files: count }),
+    fields({
+      installed: flag,
+      installed_version: string,
+      capabilities: count,
+      skills: count,
+      managed_files: count,
+      capability_names: list(string),
+      uncatalogued: list(string),
+    }),
   ),
   store: nullable(
-    fields({ authority: string, schema: nullable(count), generation: nullable(string), audit_records: nullable(count) }),
+    fields({
+      authority: string,
+      schema: nullable(count),
+      generation: nullable(string),
+      audit_records: nullable(count),
+      cutover_at: nullable(string),
+      reason: string,
+    }),
   ),
   drift_counts: nullable(
     fields({
@@ -212,6 +236,7 @@ const SNAPSHOT = fields({
       branch: string,
       created_at: string,
       route: list(fields({ role: string, state: string })),
+      updated_at: string,
     }),
   ),
 });

@@ -79,17 +79,25 @@ class HarnessInstall:
     capabilities: int
     skills: int
     managed_files: int
+    # The installed capability names in lock order, and those `harness/CAPABILITIES.json` lacks.
+    capability_names: tuple[str, ...] = ()
+    uncatalogued: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class StoreFacts:
-    """The authority of the orchestration state and what can be read without the ledger lock or a
-    runtime call: `authority` is "file-ledger", "runtime-store" or "none"; an unread fact is None."""
+    """The authority of the orchestration state: `authority` is "file-ledger", "runtime-store" or
+    "none". The generation comes from the `ledger.json` pointer in both epochs; the audit count is
+    counted on disk in the file-ledger epoch and asked from the runtime (`state.validate`, never
+    starting it) in the runtime-store epoch; `cutover_at` comes from `AUTHORITY.json` and is None
+    before a cutover. An unread fact is None and `reason` says why (empty when all were read)."""
 
     authority: str
     schema: int | None
     generation: str | None
     audit_records: int | None
+    cutover_at: str | None = None
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,6 +142,9 @@ class RecentSession:
     branch: str
     created_at: str
     route: tuple[RouteStep, ...]
+    # The time of the batch's latest dispatch (its creation when it has none): the Home list shows
+    # the duration from `created_at` to it.
+    updated_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -330,6 +341,8 @@ def _harness_from(value: object) -> HarnessInstall:
         capabilities=_int(found["capabilities"]),
         skills=_int(found["skills"]),
         managed_files=_int(found["managed_files"]),
+        capability_names=tuple(_str(item) for item in _list(found["capability_names"])),
+        uncatalogued=tuple(_str(item) for item in _list(found["uncatalogued"])),
     )
 
 
@@ -340,6 +353,8 @@ def _store_from(value: object) -> StoreFacts:
         schema=_optional(found["schema"], _int),
         generation=_optional(found["generation"], _str),
         audit_records=_optional(found["audit_records"], _int),
+        cutover_at=_optional(found["cutover_at"], _str),
+        reason=_str(found["reason"]),
     )
 
 
@@ -373,6 +388,7 @@ def _session_from(value: object) -> RecentSession:
         branch=_str(found["branch"]),
         created_at=_str(found["created_at"]),
         route=tuple(_route_step_from(item) for item in _list(found["route"])),
+        updated_at=_str(found["updated_at"]),
     )
 
 

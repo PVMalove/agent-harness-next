@@ -35,6 +35,8 @@ def test_drift_files_count_every_differing_file(
         "schema": None,
         "generation": None,
         "audit_records": None,
+        "cutover_at": None,
+        "reason": "",
     }
     # No lock: the adapter set is unknown, never "current".
     assert facts["adapters"] is None

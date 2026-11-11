@@ -215,7 +215,7 @@ def test_the_harness_overview_reply_has_the_service_fields_and_refuses_others() 
     usage = {"unavailable": None, "batches": 2, "tickets": 1, "dispatches": 5,
              "reports": 4}
     store = {"authority": "file-ledger", "schema": 3, "generation": "g-1",
-             "audit_records": 9}
+             "audit_records": 9, "cutover_at": None, "reason": ""}
     adapter = {"path": ".harness/adapters/a.json", "status": "current", "problem": None}
     containers = {
         "engine": "docker", "version": "27.4.1", "cgroup_driver": "systemd",

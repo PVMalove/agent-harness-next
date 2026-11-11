@@ -504,12 +504,16 @@ class PipelineUsage(_Strict):  # type: ignore[explicit-any]
 
 
 class StorePayload(_Strict):  # type: ignore[explicit-any]
-    """The state authority read without the ledger lock or a runtime call; unread facts are null."""
+    """The state authority read without the ledger lock; in the runtime-store epoch the audit count
+    comes from a bounded `state.validate` of the running runtime. Unread facts are null and
+    `reason` says why."""
 
     authority: Literal["file-ledger", "runtime-store", "none"]
     schema_: Annotated[int | None, Field(alias="schema")]
     generation: str | None
     audit_records: Annotated[int | None, Field(ge=0)]
+    cutover_at: str | None
+    reason: str
 
 
 class AdapterPayload(_Strict):  # type: ignore[explicit-any]

@@ -179,6 +179,8 @@ class Facts:
                 "schema": 3,
                 "generation": "generation-1",
                 "audit_records": 4,
+                "cutover_at": None,
+                "reason": "",
             },
             "adapters": [
                 {"path": ".harness/adapters/a.json", "status": "current", "problem": None}

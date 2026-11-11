@@ -190,7 +190,9 @@ export type Skills = number;
 export type UpdatedAt = string;
 export type AuditRecords = number | null;
 export type Authority = "file-ledger" | "runtime-store" | "none";
+export type CutoverAt = string | null;
 export type Generation = string | null;
+export type Reason = string;
 export type Schema = number | null;
 export type Type11 = "harness.overview";
 export type Batches = number;
@@ -229,7 +231,7 @@ export type LastStepAgeSeconds = number | null;
 export type Message1 = string;
 export type More = boolean;
 export type Offset = number;
-export type Reason = ("no_log" | "log_missing" | "log_unreadable" | "log_outside_storage" | "log_unrecognised") | null;
+export type Reason1 = ("no_log" | "log_missing" | "log_unreadable" | "log_outside_storage" | "log_unrecognised") | null;
 export type Reset = boolean;
 export type Source2 = "structured" | "plain" | "none";
 export type State = "connected" | "waiting" | "unavailable";
@@ -744,7 +746,9 @@ export interface HarnessStatePayload {
   updated_at: UpdatedAt;
 }
 /**
- * The state authority read without the ledger lock or a runtime call; unread facts are null.
+ * The state authority read without the ledger lock; in the runtime-store epoch the audit count
+ * comes from a bounded `state.validate` of the running runtime. Unread facts are null and
+ * `reason` says why.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "StorePayload".
@@ -752,7 +756,9 @@ export interface HarnessStatePayload {
 export interface StorePayload {
   audit_records: AuditRecords;
   authority: Authority;
+  cutover_at: CutoverAt;
   generation: Generation;
+  reason: Reason;
   schema: Schema;
 }
 /**
@@ -832,7 +838,7 @@ export interface WorkerStepsPage {
   message: Message1;
   more: More;
   offset: Offset;
-  reason: Reason;
+  reason: Reason1;
   reset: Reset;
   source: Source2;
   state: State;
