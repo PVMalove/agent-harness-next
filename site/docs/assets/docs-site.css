@@ -126,7 +126,7 @@ body {
 }
 
 .md-typeset h1 {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .md-typeset code {
@@ -176,9 +176,6 @@ body {
   align-items: center;
   padding: 1.2rem 0 2.6rem;
   border-bottom: 1px solid var(--ah-rule);
-  background:
-    radial-gradient(900px 380px at 18% -10%, color-mix(in srgb, var(--ah-primary) 14%, transparent), transparent 65%),
-    radial-gradient(700px 360px at 92% 0%, color-mix(in srgb, var(--ah-accent) 11%, transparent), transparent 60%);
 }
 
 .ah-eyebrow {
@@ -191,8 +188,7 @@ body {
   background: var(--ah-surface);
   color: var(--ah-muted);
   font: 0.62rem/1.6 var(--ah-mono);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .ah-eyebrow::before {
@@ -344,9 +340,8 @@ body {
 
 .ah-status .k {
   color: var(--ah-muted);
-  font: 0.55rem/1.6 var(--ah-mono);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font: 0.56rem/1.6 var(--ah-mono);
+  letter-spacing: 0.02em;
 }
 
 .ah-status .v {
@@ -364,8 +359,7 @@ body {
 .ah-kicker {
   color: var(--ah-primary);
   font: 0.62rem/1.6 var(--ah-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .ah-section {
@@ -409,9 +403,8 @@ body {
 
 .ah-install-label {
   color: var(--ah-muted);
-  font: 0.55rem/1.5 var(--ah-mono);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font: 0.56rem/1.5 var(--ah-mono);
+  letter-spacing: 0.02em;
 }
 
 .ah-install code {
@@ -518,9 +511,8 @@ body {
 .ah-arch .tag {
   padding-top: 0.1rem;
   color: var(--ah-muted);
-  font: 0.55rem/1.5 var(--ah-mono);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font: 0.56rem/1.5 var(--ah-mono);
+  letter-spacing: 0.02em;
 }
 
 .ah-arch .nodes {
@@ -651,15 +643,14 @@ body {
   margin: 0;
   color: var(--ah-muted);
   font: 0.58rem/1.5 var(--ah-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .ah-demo-about-title {
   margin: 0.15rem 0 0.25rem;
   color: var(--ah-fg);
   font-size: 1.35rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .ah-demo-about-text {
@@ -1114,8 +1105,7 @@ body {
   margin-right: 0.15rem;
   color: var(--ah-muted);
   font: 0.56rem/1.5 var(--ah-mono);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .ah-term-chip {
@@ -1155,8 +1145,7 @@ body {
   margin-bottom: 0.4rem;
   color: var(--ah-muted);
   font: 0.6rem/1.5 var(--ah-mono);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .ah-glossary-toc-list {
@@ -1241,7 +1230,6 @@ body {
   border-color: color-mix(in srgb, var(--ah-primary) 34%, var(--ah-rule));
   background: color-mix(in srgb, var(--ah-primary) 7%, var(--ah-surface));
   color: var(--ah-fg);
-  box-shadow: 0 0 22px color-mix(in srgb, var(--ah-primary) 16%, transparent);
   font-size: 0.6rem;
 }
 
@@ -1254,7 +1242,6 @@ body {
   height: 0.38rem;
   border-radius: 50%;
   background: var(--ah-ok);
-  box-shadow: 0 0 8px var(--ah-ok);
 }
 
 .ah-hero h1 {
@@ -1293,9 +1280,8 @@ body {
 
 .ah-install-label {
   color: var(--ah-muted);
-  font: 0.55rem/1.5 var(--ah-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 0.56rem/1.5 var(--ah-mono);
+  letter-spacing: 0.02em;
 }
 
 .ah-copy {
@@ -1621,20 +1607,6 @@ body {
   color: #8290a1;
 }
 
-.ah-terminal-beta {
-  color: #5f6b7a;
-}
-
-.ah-terminal-demo {
-  padding: 0.08rem 0.38rem;
-  border: 1px solid color-mix(in srgb, var(--ah-primary) 38%, var(--ah-rule));
-  border-radius: 999px;
-  color: var(--ah-primary);
-  font: 0.5rem/1.5 var(--ah-mono);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
 .ah-demo-note {
   margin: 0;
   color: var(--ah-muted);
@@ -1730,7 +1702,6 @@ body {
   border: 1px solid var(--ah-rule);
   border-radius: 10px;
   background: var(--ah-surface);
-  box-shadow: 0 0 40px rgba(111, 168, 220, 0.035);
   overflow: hidden;
 }
 
@@ -1740,7 +1711,7 @@ body {
   gap: 0.65rem;
   padding: 0.8rem 0.85rem;
   border-right: 1px solid var(--ah-rule);
-  transition: background 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .ah-spec:last-child {
@@ -1749,7 +1720,6 @@ body {
 
 .ah-spec:hover {
   background: var(--ah-panel);
-  box-shadow: inset 0 0 28px rgba(111, 168, 220, 0.04);
 }
 
 .ah-spec-icon {
@@ -1766,9 +1736,8 @@ body {
 
 .ah-spec .k {
   color: var(--ah-muted);
-  font: 0.52rem/1.5 var(--ah-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 0.56rem/1.5 var(--ah-mono);
+  letter-spacing: 0.02em;
 }
 
 .ah-spec .v {
@@ -1823,19 +1792,18 @@ body {
   color: var(--ah-fg);
   text-align: left;
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .ah-cap:hover {
   border-color: var(--ah-edge);
   background: var(--ah-panel);
-  transform: translateY(-2px);
 }
 
 .ah-cap.is-active {
   border-color: var(--ah-primary);
   background: color-mix(in srgb, var(--ah-primary) 7%, var(--ah-surface));
-  box-shadow: 0 0 0 1px var(--ah-primary), 0 10px 30px rgba(111, 168, 220, 0.1);
+  box-shadow: 0 0 0 1px var(--ah-primary);
 }
 
 .ah-cap-icon {
@@ -1907,14 +1875,12 @@ body {
   color: var(--ah-fg);
   text-align: left;
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .ah-feature:hover {
   border-color: var(--ah-edge);
   background: var(--ah-panel);
-  transform: translateY(-2px);
-  box-shadow: 0 14px 34px #0004;
 }
 
 .ah-feature-icon {
@@ -1980,9 +1946,8 @@ body {
 .ah-flow-clients-label {
   margin-right: 0.3rem;
   color: var(--ah-muted);
-  font: 0.54rem/1.4 var(--ah-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 0.56rem/1.4 var(--ah-mono);
+  letter-spacing: 0.02em;
 }
 
 .ah-flow-chip {
@@ -2025,7 +1990,7 @@ body {
 .ah-flow-node.is-active {
   border-color: var(--ah-primary);
   background: color-mix(in srgb, var(--ah-primary) 7%, var(--ah-panel));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-primary) 55%, transparent), 0 0 26px rgba(111, 168, 220, 0.08);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-primary) 55%, transparent);
 }
 
 .ah-flow-node--rust.is-active,
@@ -2033,7 +1998,7 @@ body {
 .ah-flow-node--rust:focus-visible {
   border-color: var(--ah-ok);
   background: color-mix(in srgb, var(--ah-ok) 7%, var(--ah-panel));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-ok) 55%, transparent), 0 0 26px rgba(143, 191, 127, 0.08);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-ok) 55%, transparent);
 }
 
 .ah-flow-node--store.is-active,
@@ -2041,7 +2006,7 @@ body {
 .ah-flow-node--store:focus-visible {
   border-color: var(--ah-accent);
   background: color-mix(in srgb, var(--ah-accent) 7%, var(--ah-panel));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-accent) 55%, transparent), 0 0 26px rgba(217, 119, 87, 0.08);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ah-accent) 55%, transparent);
 }
 
 .ah-flow-icon {
@@ -2061,9 +2026,8 @@ body {
 .ah-flow-kicker {
   display: block;
   color: var(--ah-muted);
-  font: 0.52rem/1.4 var(--ah-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 0.56rem/1.4 var(--ah-mono);
+  letter-spacing: 0.02em;
 }
 
 .ah-flow-node b {
@@ -2086,10 +2050,9 @@ body {
   gap: 0.2rem;
   min-width: 2.6rem;
   color: var(--ah-muted);
-  font: 0.5rem/1.4 var(--ah-mono);
-  letter-spacing: 0.04em;
+  font: 0.56rem/1.4 var(--ah-mono);
+  letter-spacing: 0.02em;
   text-align: center;
-  text-transform: uppercase;
 }
 
 .ah-flow-link i {
@@ -2182,12 +2145,11 @@ body {
 }
 
 .ah-card {
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .ah-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px #0004;
+  border-color: var(--ah-edge);
 }
 
 .ah-card .i svg {
@@ -2553,8 +2515,7 @@ body {
   color: var(--ah-muted);
   font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .md-typeset .ah-skill-text pre,
@@ -2738,6 +2699,10 @@ body {
 
 .ah-iso-node:focus-visible {
   outline: none;
+}
+
+.ah-iso-node:focus-visible .ah-iso-focus {
+  stroke: var(--ah-primary);
 }
 
 .ah-iso-node:hover,

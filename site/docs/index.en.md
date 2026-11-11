@@ -18,7 +18,6 @@ hide:
     <div class="ah-actions">
       <a class="md-button md-button--primary" href="getting-started/index.html">Get started</a>
       <a class="md-button" href="architecture/index.html">Architecture</a>
-      <a class="md-button" href="demo/index.html">Demo</a>
     </div>
 
     <div class="ah-quickstart" id="ah-quickstart">
@@ -86,8 +85,6 @@ hide:
         <div class="ah-terminal-bar">
           <span class="ah-terminal-dots"><i></i><i></i><i></i></span>
           <span class="ah-terminal-title">harness · runtime-store</span>
-          <span class="ah-terminal-beta">beta</span>
-          <span class="ah-terminal-demo">demo</span>
           <button class="ah-terminal-play" id="ah-terminal-play" type="button" aria-label="Run the demonstration">
             <svg class="ah-play-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
             <svg class="ah-stop-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
@@ -500,7 +497,7 @@ hide:
       if (!text) return;
       navigator.clipboard.writeText(text).then(() => {
         copy.classList.add("is-copied");
-        copy.querySelector(".ah-copy-label").textContent = "Copied!";
+        copy.querySelector(".ah-copy-label").textContent = "Copied";
         window.setTimeout(() => {
           copy.classList.remove("is-copied");
           copy.querySelector(".ah-copy-label").textContent = "Copy";

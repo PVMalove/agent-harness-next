@@ -18,7 +18,6 @@ hide:
     <div class="ah-actions">
       <a class="md-button md-button--primary" href="getting-started/index.html">Начать</a>
       <a class="md-button" href="architecture/index.html">Архитектура</a>
-      <a class="md-button" href="demo/index.html">Демо</a>
     </div>
 
     <div class="ah-quickstart" id="ah-quickstart">
@@ -41,7 +40,7 @@ hide:
           <span class="ah-install-label" id="ah-step-label">Установка</span>
           <button class="ah-copy" type="button" aria-label="Скопировать команды установки">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
-            <span class="ah-copy-label">Copy</span>
+            <span class="ah-copy-label">Копировать</span>
           </button>
         </div>
 
@@ -86,8 +85,6 @@ hide:
         <div class="ah-terminal-bar">
           <span class="ah-terminal-dots"><i></i><i></i><i></i></span>
           <span class="ah-terminal-title">harness · runtime-store</span>
-          <span class="ah-terminal-beta">beta</span>
-          <span class="ah-terminal-demo">демо</span>
           <button class="ah-terminal-play" id="ah-terminal-play" type="button" aria-label="Запустить демонстрацию">
             <svg class="ah-play-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
             <svg class="ah-stop-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
@@ -109,7 +106,7 @@ hide:
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="3"></ellipse><path d="M5 5.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6M5 11.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg></span>
-    <div><div class="k">State</div><div class="v">SQLite <em>WAL</em></div><div class="s">schema 7 · audit chain</div></div>
+    <div><div class="k">Состояние</div><div class="v">SQLite <em>WAL</em></div><div class="s">schema 7 · audit chain</div></div>
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m8 10 2 2-2 2M13 14h4"></path></svg></span>
@@ -117,7 +114,7 @@ hide:
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg></span>
-    <div><div class="k">Platforms</div><div class="v"><em>Linux</em> · <em>Windows</em></div><div class="s"><em>UDS</em> и <em>named pipe</em> · контейнеры только на Linux</div></div>
+    <div><div class="k">Платформы</div><div class="v"><em>Linux</em> · <em>Windows</em></div><div class="s"><em>UDS</em> и <em>named pipe</em> · контейнеры только на Linux</div></div>
   </div>
 </div>
 
@@ -501,10 +498,10 @@ hide:
       if (!text) return;
       navigator.clipboard.writeText(text).then(() => {
         copy.classList.add("is-copied");
-        copy.querySelector(".ah-copy-label").textContent = "Copied!";
+        copy.querySelector(".ah-copy-label").textContent = "Скопировано";
         window.setTimeout(() => {
           copy.classList.remove("is-copied");
-          copy.querySelector(".ah-copy-label").textContent = "Copy";
+          copy.querySelector(".ah-copy-label").textContent = "Копировать";
         }, 1400);
       });
     });
