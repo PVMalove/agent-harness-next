@@ -44,7 +44,7 @@ export function StepFilters({
   ticket?: string | null;
   onTicket?: (ticket: string | null) => void;
 }) {
-  const { t, state: stateText } = useI18n();
+  const { t, language, state: stateText } = useI18n();
   const counts = statusCounts(dispatches);
   const shown = dispatches.filter(
     (entry) =>
@@ -151,7 +151,7 @@ export function StepFilters({
                 {entry.silent ? ` · ${t("тишина")}` : ""}
               </span>
               <span className="work-time" title={t("{count} шагов", { count: stepCounts.get(entry.dispatch_id) ?? 0 })}>
-                {formatMinutes(ageMinutes(entry.started_at, now))}
+                {formatMinutes(ageMinutes(entry.started_at, now), language)}
               </span>
             </button>
           );

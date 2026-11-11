@@ -7,6 +7,7 @@ import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
 import {
   LanguageProvider,
   checkTitle,
+  compactDuration,
   factLabel,
   plural,
   stateLabel,
@@ -127,5 +128,16 @@ describe("states, check titles and plurals", () => {
     ]);
     expect(plural("en", 1, forms, en)).toBe("1 error");
     expect(plural("en", 3, forms, en)).toBe("3 errors");
+  });
+
+  test("a duration is worded with ru/en units, never the English h/m in Russian", () => {
+    expect(compactDuration(null, "ru")).toBe("—");
+    expect(compactDuration(42, "ru")).toBe("42 с");
+    expect(compactDuration(5 * 60 + 9, "ru")).toBe("5 мин");
+    expect(compactDuration(2 * 3600 + 7 * 60, "ru")).toBe("2 ч 7 мин");
+    expect(compactDuration(145 * 3600 + 27 * 60, "ru")).toBe("6 дн 1 ч");
+    expect(compactDuration(2 * 3600 + 7 * 60, "en")).toBe("2 h 7 min");
+    expect(compactDuration(42, "en")).toBe("42 s");
+    expect(compactDuration(-30, "ru")).toBe("0 с");
   });
 });

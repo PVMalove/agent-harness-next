@@ -232,6 +232,7 @@ function renderPanel(props: {
   onJobDone?: (job: LocalJob) => void;
   confirmAll?: boolean;
   listed?: boolean;
+  commands?: unknown[];
 }) {
   const client = createConsoleClient({
     url: "ws://127.0.0.1:1/ws",
@@ -239,7 +240,7 @@ function renderPanel(props: {
     timers: new ManualClock(),
     probeHealth: async () => false,
   });
-  const view = (next: typeof props) => (
+  const view = ({ commands: _catalog, ...next }: typeof props) => (
     <LanguageProvider>
       <ConsoleProvider client={client}>
         <CommandPanel section="harness" {...next} />
@@ -256,7 +257,7 @@ function renderPanel(props: {
       id: catalogRequest.id,
       type: "job.catalog",
       ok: true,
-      commands: [...COMMANDS, CLEANUP],
+      commands: props.commands ?? [...COMMANDS, CLEANUP],
       cancel_reason: CANCEL_REASON,
     }),
   );
@@ -329,5 +330,12 @@ describe("the command panel inside a page", () => {
     expect(screen.queryByText("Команды")).toBeNull();
     act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Запустить" })));
     expect(socket.request("job.start")).toMatchObject({ command_id: "diff", confirmed: true });
+  });
+
+  test("a section without commands renders no command panel at all", () => {
+    const { socket } = renderPanel({ commands: [] });
+    expect(socket.request("job.catalog")).toBeTruthy();
+    expect(document.querySelector(".command-panel")).toBeNull();
+    expect(screen.queryByText("В этом разделе нет команд")).toBeNull();
   });
 });

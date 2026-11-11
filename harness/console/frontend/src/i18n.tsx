@@ -111,6 +111,20 @@ function readStored(): string | null {
   }
 }
 
+/** One duration wording for the whole console: `6 дн 1 ч`, `2 ч 7 мин`, `5 мин`, `42 с`. */
+export function compactDuration(seconds: number | null | undefined, language: Language): string {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return "—";
+  const total = Math.max(0, Math.floor(seconds));
+  const [day, hour, minute, second] = language === "ru" ? ["дн", "ч", "мин", "с"] : ["d", "h", "min", "s"];
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days) return hours ? `${days} ${day} ${hours} ${hour}` : `${days} ${day}`;
+  if (hours) return minutes ? `${hours} ${hour} ${minutes} ${minute}` : `${hours} ${hour}`;
+  if (minutes) return `${minutes} ${minute}`;
+  return `${total} ${second}`;
+}
+
 export interface I18n {
   language: Language;
   setLanguage: (language: Language) => void;
@@ -121,6 +135,8 @@ export interface I18n {
   state: (state: string) => string;
   check: (id: string) => string;
   plural: (count: number, ru: readonly [string, string, string], en: readonly [string, string]) => string;
+  /** `compactDuration` in the current language. */
+  duration: (seconds: number | null | undefined) => string;
 }
 
 const I18nContext = createContext<I18n | null>(null);
@@ -151,6 +167,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       state: (state) => stateLabel(language, state),
       check: (id) => checkTitle(language, id),
       plural: (count, ru, en) => plural(language, count, ru, en),
+      duration: (seconds) => compactDuration(seconds, language),
     }),
     [language, setLanguage],
   );

@@ -2,7 +2,8 @@
    the KPI row, the session route, the timeline and the statistics. Counts come from the roster
    or the server's analytics; a figure without a source shows an explicit no-data state. */
 import { Icon } from "../icons";
-import { useI18n } from "../i18n";
+import { compactDuration, useI18n } from "../i18n";
+import type { Language } from "../i18n";
 import { href } from "../navigation";
 import type { Analytics, Ledger, StageHead } from "../ws/ledger";
 import type { HeldStep, RosterDispatch } from "../ws/steps";
@@ -59,8 +60,9 @@ export function ageMinutes(iso: string, now: number): number | null {
   return iso && !Number.isNaN(at) ? Math.max(0, Math.round((now - at) / 60000)) : null;
 }
 
-export const formatMinutes = (minutes: number | null): string =>
-  minutes === null ? "—" : minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+/** Whole minutes in the console's duration wording (`2 ч 7 мин`), `—` when unknown. */
+export const formatMinutes = (minutes: number | null, language: Language): string =>
+  minutes === null ? "—" : compactDuration(minutes * 60, language);
 
 /** The mockup's bar: the share of `value` in `max`, at least 3% when not zero. */
 export function Bar({ value, max, tone = "cyan" }: { value: number; max: number; tone?: string }) {
@@ -124,7 +126,7 @@ export function WorkKpis({
   analytics: Analytics | null;
   now: number;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const times = dispatches.map((entry) => entry.last_event_at).filter(Boolean).sort();
   const last = times.length ? times[times.length - 1]! : "";
   const silent = dispatches.filter((entry) => entry.silent).length;
@@ -148,7 +150,7 @@ export function WorkKpis({
       </div>
       <div>
         <span>{t("Возраст шага")}</span>
-        <b className="blue">{oldest ? formatMinutes(ageMinutes(oldest.started_at, now)) : <NoData />}</b>
+        <b className="blue">{oldest ? formatMinutes(ageMinutes(oldest.started_at, now), language) : <NoData />}</b>
         <small>{oldest ? `${oldest.role} · ${oldest.ticket || oldest.batch_id}` : t("нет живого шага")}</small>
       </div>
       <div>
@@ -179,7 +181,7 @@ export function SessionRoute({
   prState: string | null;
   now: number;
 }) {
-  const { t, section, state: stateText } = useI18n();
+  const { t, language, section, state: stateText } = useI18n();
   if (!session) {
     return (
       <section className="panel work-route-panel" id="work-route">
@@ -212,7 +214,7 @@ export function SessionRoute({
             <b>{session.branch || "—"}</b>
           </span>
           <span>
-            <Icon name="clock" /> {formatMinutes(ageMinutes(session.started_at, now))}
+            <Icon name="clock" /> {formatMinutes(ageMinutes(session.started_at, now), language)}
             {session.started_at ? ` · ${t("старт")} ${session.started_at.slice(11, 16)}` : ""}
           </span>
         </div>
@@ -288,7 +290,7 @@ export function timelineRows(stages: readonly StageHead[], now: number): { batch
 }
 
 export function ActivityTimeline({ ledger, now }: { ledger: Ledger | null; now: number }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const rows = ledger ? timelineRows(ledger.stages, now) : [];
   const max = Math.max(1, ...rows.map((row) => row.total));
   return (
@@ -305,7 +307,7 @@ export function ActivityTimeline({ ledger, now }: { ledger: Ledger | null; now: 
             <div className="work-gantt-row" key={row.batch}>
               <div className="work-gantt-name">
                 <b>{row.ticket || row.batch}</b>
-                <small>{formatMinutes(row.total)}</small>
+                <small>{formatMinutes(row.total, language)}</small>
               </div>
               <div className="work-gantt-track">
                 {row.segments.map((segment, index) => (

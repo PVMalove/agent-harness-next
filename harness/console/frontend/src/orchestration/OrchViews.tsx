@@ -51,11 +51,8 @@ export function OrchSummary({ data }: { data: OrchestrationSnapshot }) {
   );
 }
 
-const hours = (seconds: number | null): string =>
-  seconds === null ? "—" : seconds >= 3600 ? `${Math.round(seconds / 3600)}h` : `${Math.round(seconds / 60)}m`;
-
 export function OrchKpis({ data }: { data: OrchestrationSnapshot }) {
-  const { t } = useI18n();
+  const { t, duration } = useI18n();
   const k = data.kpi;
   const value = (key: string) => k[key] ?? null;
   return (
@@ -63,7 +60,7 @@ export function OrchKpis({ data }: { data: OrchestrationSnapshot }) {
       <div>
         <span>{t("В работе / старейший")}</span>
         <b>
-          {value("wip") ?? "—"} / {hours(value("oldest_wip_seconds"))}
+          {value("wip") ?? "—"} / {duration(value("oldest_wip_seconds"))}
         </b>
         <small>{t("{count} заблокировано", { count: value("blocked") ?? 0 })}</small>
       </div>
