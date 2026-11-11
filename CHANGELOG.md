@@ -75,6 +75,7 @@
 
 ### Fixed
 
+- **[Быстрая проверка brief]:** Проверка ledger больше не перебирает все исторические формы brief: каждая команда, читающая dispatch, тратила на неё около секунды на запись, а с полями #1015 — вчетверо больше. Принимаются и отклоняются те же формы, что раньше (#1059).
 - **[Аудит закрытия batch]:** `batch abandon` пишет в аудит перехода approver, время, причину и открытые dispatch, а `batch list` и `batch auto-report` показывают запись `abandoned` (#1015).
 - **[Batch в hard cleanup]:** План и результат `harness cleanup --mode hard` называют `batch_id` и состояние batch у каждого worktree; worktree нетерминального batch по-прежнему защищён (#1015).
 - **[Scope и план архитектора]:** Brief каждой роли содержит `allowed_paths` batch. Отчёт architect несёт необязательное поле `commit_plan`: `report submit` проверяет его правилами `--commit-plan-file` и отказывает при путях вне `allowed_paths`, а accept и `batch auto-decide` закрепляют его без файла плана (#1015).
