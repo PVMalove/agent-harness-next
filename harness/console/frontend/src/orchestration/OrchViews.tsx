@@ -354,7 +354,8 @@ export function DispatchTable({ data, now = Date.now() }: { data: OrchestrationS
 export function TicketList({ data, now = Date.now() }: { data: OrchestrationSnapshot; now?: number }) {
   const { t, language, duration, state: stateText } = useI18n();
   const batches = [...data.ledger.batches].sort((a, b) => newestFirst(a.created_at, b.created_at));
-  const rows = [...new Map(batches.map((batch) => [batch.ticket || batch.batch_id, batch])).values()];
+  // One row per ticket, its newest batch: `batches` is newest first, so the first one of a ticket wins.
+  const rows = batches.filter((batch, index) => batches.findIndex((other) => (other.ticket || other.batch_id) === (batch.ticket || batch.batch_id)) === index);
   return (
     <section className="panel orch-tickets" id="orch-tickets">
       <div className="panel-head">

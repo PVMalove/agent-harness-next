@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
 import { lockLines } from "../../harness/console/frontend/src/orchestration/format";
+import { TicketList } from "../../harness/console/frontend/src/orchestration/OrchViews";
+import type { OrchestrationSnapshot } from "../../harness/console/frontend/src/ws/ledger";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import { CANCEL_REASON, FakeSocket, ManualClock, screenPage } from "./fake-socket";
 import FACTS from "./fixtures/orch-snapshot-facts.json";
@@ -213,5 +215,29 @@ describe("the Orchestration route", () => {
     expect([...table.querySelectorAll(".orch-ticket-head span")].map((cell) => cell.textContent)).toEqual(["тикет", "название", "стадия / роль", "статус", "возраст", "обновлён"]);
     expect(table.querySelectorAll(".orch-ticket-row")).toHaveLength(3);
     expect(document.querySelector("#orch-tickets .panel-head .small")?.textContent).toBe("3 в выборке");
+  });
+});
+
+describe("the All tickets table", () => {
+  test("a ticket with several batches shows its newest batch", () => {
+    const base = ORCHESTRATION.ledger.batches[0];
+    const data = {
+      ...ORCHESTRATION,
+      ledger: {
+        ...ORCHESTRATION.ledger,
+        batches: [
+          { ...base, batch_id: "b-old", branch: "feature/old", created_at: "2026-11-01T08:00:00+00:00", state: "failed", ticket: "#900" },
+          { ...base, batch_id: "b-new", branch: "feature/new", created_at: "2026-11-08T08:00:00+00:00", state: "active", ticket: "#900" },
+        ],
+        stages: [],
+      },
+    } as unknown as OrchestrationSnapshot;
+    render(
+      <LanguageProvider>
+        <TicketList data={data} now={Date.parse("2026-11-08T10:00:00+00:00")} />
+      </LanguageProvider>,
+    );
+    const rows = [...document.querySelectorAll("#orch-tickets .orch-ticket-row")];
+    expect(rows.map((row) => row.getAttribute("data-batch"))).toEqual(["b-new"]);
   });
 });
