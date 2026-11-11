@@ -9,12 +9,14 @@ import pytest
 
 from harness.console.backend.infrastructure.home_facts import (
     recent_sessions,
+    runtime_reason,
     store_facts,
 )
+from harness.console.kernel.i18n_strings import EN
 from harness.console.kernel.home_snapshot import RecentSession, RouteStep, StoreFacts
 from harness.console.kernel.reports import BatchSummary, LedgerView, StageEntry
 from harness.orchestration.core.constants import STATE_REL
-from harness.orchestration.runtime_client import RuntimeClientError
+from harness.orchestration.runtime_client import RUNTIME_ERROR_CODES, RuntimeClientError
 
 
 def _pointer(repo: Path, payload: object) -> Path:
@@ -134,3 +136,33 @@ def test_recent_sessions_list_the_newest_batches_with_their_route() -> None:
     assert sessions[1].route == ()
     assert sessions[0].updated_at == "2026-11-03T02"
     assert sessions[1].updated_at == "2026-11-02"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        *(
+            RuntimeClientError(code, "refused", remedy="see the log", domain="transport")
+            for code in RUNTIME_ERROR_CODES
+        ),
+        ConnectionResetError("reset"),
+        OSError("socket"),
+        ValueError("not json"),
+    ],
+)
+def test_every_runtime_reason_has_an_english_catalog_entry(error: Exception) -> None:
+    reason = runtime_reason(error)
+    assert reason.startswith("runtime не отвечает (")
+    assert reason in EN, reason
+
+
+def test_an_unknown_error_type_is_never_named_raw_in_the_reason() -> None:
+    assert runtime_reason(ConnectionResetError("reset")) == runtime_reason(OSError("io"))
+    assert "Error" not in runtime_reason(ValueError("bad"))
+
+
+def test_a_runtime_without_an_audit_count_has_an_english_reason(tmp_path: Path) -> None:
+    _pointer(tmp_path, {"version": 4, "generation": "generation-ff01"})
+    facts = store_facts(tmp_path, runtime=lambda operation, payload: {"valid": True})
+    assert facts.audit_records is None
+    assert facts.reason in EN

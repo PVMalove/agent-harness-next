@@ -714,8 +714,34 @@ EN: dict[str, str] = {
     "Поиск задачи по номеру": "Find a task by number",
     "Задача #{number} не найдена среди последних сессий": "Task #{number} is not among the recent sessions",
     "Схема показывает устройство контура, а не поток конкретного batch. Python решает; Rust пишет состояние и исполняет.": "The diagram shows how the contour is built, not the flow of a batch. Python decides; Rust writes the state and executes.",
-    "runtime не отвечает (runtime_unavailable)": "the runtime does not answer (runtime_unavailable)",
 }
+
+# The runtime probe reasons of the Home and Harness pages (backend home_facts.runtime_reason): one
+# per runtime error code (orchestration runtime_client.RUNTIME_ERROR_CODES) and local failure class.
+EN.update(
+    {
+        "runtime не отвечает (protocol_unsupported)": "the runtime does not answer (protocol_unsupported)",
+        "runtime не отвечает (unauthorized_peer)": "the runtime does not answer (unauthorized_peer)",
+        "runtime не отвечает (malformed_request)": "the runtime does not answer (malformed_request)",
+        "runtime не отвечает (unknown_operation)": "the runtime does not answer (unknown_operation)",
+        "runtime не отвечает (approval_mismatch)": "the runtime does not answer (approval_mismatch)",
+        "runtime не отвечает (revision_conflict)": "the runtime does not answer (revision_conflict)",
+        "runtime не отвечает (store_busy)": "the runtime does not answer (store_busy)",
+        "runtime не отвечает (lease_held)": "the runtime does not answer (lease_held)",
+        "runtime не отвечает (fencing_mismatch)": "the runtime does not answer (fencing_mismatch)",
+        "runtime не отвечает (idempotency_conflict)": "the runtime does not answer (idempotency_conflict)",
+        "runtime не отвечает (not_found)": "the runtime does not answer (not_found)",
+        "runtime не отвечает (invariant_violation)": "the runtime does not answer (invariant_violation)",
+        "runtime не отвечает (deadline_exceeded)": "the runtime does not answer (deadline_exceeded)",
+        "runtime не отвечает (engine_unavailable)": "the runtime does not answer (engine_unavailable)",
+        "runtime не отвечает (policy_denied)": "the runtime does not answer (policy_denied)",
+        "runtime не отвечает (internal)": "the runtime does not answer (internal)",
+        "runtime не отвечает (runtime_unavailable)": "the runtime does not answer (runtime_unavailable)",
+        "runtime не отвечает (ошибка ввода-вывода)": "the runtime does not answer (input/output error)",
+        "runtime не отвечает (неразборчивый ответ)": "the runtime does not answer (unreadable reply)",
+        "runtime не сообщил число записей аудита": "the runtime did not report the audit record count",
+    }
+)
 
 # Labels of the facts in the home screen's context cards. Kept apart from `EN`: a label such as
 # `Состояние` reads differently here than as a frame title.

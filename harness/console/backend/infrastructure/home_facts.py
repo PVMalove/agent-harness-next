@@ -71,6 +71,22 @@ def harness_install(repo: Path) -> HarnessInstall:
 AUTHORITY_NAME = "AUTHORITY.json"
 RuntimeCall = Callable[[str, dict[str, object]], dict[str, object]]
 RUNTIME_TIMEOUT_SECONDS = 2.0
+# Why the runtime gave no fact: one text per runtime error code, and one per local failure class,
+# so every reason has an English entry in kernel/i18n_strings.py (an exception's own type name is
+# never shown).
+RUNTIME_DOWN = "runtime не отвечает ({cause})"
+NO_AUDIT_COUNT = "runtime не сообщил число записей аудита"
+
+
+def runtime_reason(error: Exception) -> str:
+    """The reason text for a runtime probe that failed with `error`."""
+    if isinstance(error, RuntimeClientError):
+        cause = error.code
+    elif isinstance(error, OSError):
+        cause = "ошибка ввода-вывода"
+    else:
+        cause = "неразборчивый ответ"
+    return RUNTIME_DOWN.format(cause=cause)
 
 
 def _runtime_call(repo: Path) -> RuntimeCall:
@@ -122,11 +138,9 @@ def store_facts(repo: Path, *, runtime: RuntimeCall | None = None) -> StoreFacts
             if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
                 audit_records = count
             else:
-                reason = "runtime не сообщил число записей аудита"
-        except RuntimeClientError as error:
-            reason = f"runtime не отвечает ({error.code})"
-        except (OSError, ValueError) as error:
-            reason = f"runtime не отвечает ({type(error).__name__})"
+                reason = NO_AUDIT_COUNT
+        except (RuntimeClientError, OSError, ValueError) as error:
+            reason = runtime_reason(error)
         return StoreFacts(
             "runtime-store",
             schema,

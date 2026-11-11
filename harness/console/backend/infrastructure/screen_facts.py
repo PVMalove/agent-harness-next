@@ -45,7 +45,7 @@ from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.update_harness_snapshot import UpdateHarnessFacts
 from ....health.project_tracker import ProjectTracker, resolve_project_tracker
 from ....orchestration.runtime_client import RuntimeClient, RuntimeClientError
-from .home_facts import RUNTIME_TIMEOUT_SECONDS, store_facts
+from .home_facts import RUNTIME_TIMEOUT_SECONDS, runtime_reason, store_facts
 
 
 def collect_ledger(repo: Path) -> LedgerView:
@@ -153,10 +153,8 @@ def runtime_status(repo: Path, *, read: RevisionRead | None = None) -> dict[str,
     replaces the probe in tests)."""
     try:
         revision = (read or _read_revision(repo))()
-    except RuntimeClientError as error:
-        reason = f"runtime не отвечает ({error.code})"
-    except (OSError, ValueError) as error:
-        reason = f"runtime не отвечает ({type(error).__name__})"
+    except (RuntimeClientError, OSError, ValueError) as error:
+        reason = runtime_reason(error)
     else:
         return {"state": "online", "revision": revision, "reason": ""}
     return {"state": "offline", "revision": None, "reason": reason}
