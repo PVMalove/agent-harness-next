@@ -206,7 +206,9 @@ def _cached_views(repo: Path, commit: str | None) -> list[tuple[float, RepoMapVi
 
 def _best(views: list[tuple[float, RepoMapView]]) -> RepoMapView | None:
     """tier=full first, then the widest token budget (the cache is shared with the coordinator's
-    Context Package maps, whose budget and seeds differ), then the newest entry."""
+    Context Package maps, whose budget and seeds differ), then the newest entry. The web and the
+    terminal console share this choice through `repo_map.snapshot`; a wider map is safe for the
+    TUI because the reply is paged below `MESSAGE_LIMIT` (tests/console/test_server_screens.py)."""
     ranked = sorted(views, key=lambda item: (item[1].tier == "full", _budget(item[1]), item[0]))
     return ranked[-1][1] if ranked else None
 
