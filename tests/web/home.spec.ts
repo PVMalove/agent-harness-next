@@ -87,4 +87,31 @@ for (const width of [1440, 390]) {
     });
     expect(overflow).toEqual({ page: 0, main: 0, rows: 0 });
   });
+
+  test(`Home health areas stay inside their frame at ${width} px with a small bar`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${base()}/?token=${token()}`);
+    await expect(page.locator("#home-areas .health-row").first()).toBeVisible();
+    const fit = await page.evaluate(() => {
+      const boxes = [".health-panel", ".health-areas-grid", ".health-row"].flatMap((selector) => [
+        ...document.querySelectorAll<HTMLElement>(selector),
+      ]);
+      const panel = document.querySelector(".health-panel") as HTMLElement;
+      const right = panel.getBoundingClientRect().right;
+      const counts = [...document.querySelectorAll<HTMLElement>("#home-areas .health-count")];
+      const bars = [...document.querySelectorAll<HTMLElement>("#home-areas .health-bar")];
+      return {
+        overflowing: boxes.filter((box) => box.scrollWidth > box.clientWidth + 1).length,
+        outside: counts.filter((count) => count.getBoundingClientRect().right > right + 0.5).length,
+        widest: Math.max(...bars.map((bar) => bar.getBoundingClientRect().width)),
+        tallest: Math.max(...bars.map((bar) => bar.getBoundingClientRect().height)),
+        compact: counts.every((count) => /^\d+✓ \d+⚠ \d+✖ \d+–$/.test(count.textContent ?? "")),
+      };
+    });
+    expect(fit.overflowing).toBe(0);
+    expect(fit.outside).toBe(0);
+    expect(fit.widest).toBeLessThanOrEqual(240);
+    expect(fit.tallest).toBeLessThanOrEqual(6);
+    expect(fit.compact).toBe(true);
+  });
 }

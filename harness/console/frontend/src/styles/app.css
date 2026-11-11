@@ -236,7 +236,14 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .task-time, .task-status { white-space: nowrap; }
 .task-status { display: inline-flex; align-items: center; gap: 4px; }
 .stale-map { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--warn); }
-.health-count { display: inline-flex; gap: 8px; }
+/* Home health areas: the count column takes its own width so it never leaves the frame
+   (the mockup's 64px column overflows too), and the bar is short and thin. */
+.health-areas-grid .health-row { grid-template-columns: 118px minmax(0, 1fr) max-content; }
+.health-areas .health-bar { width: 100%; max-width: 240px; height: 6px; }
+.health-count { white-space: nowrap; }
+@media (max-width: 720px) {
+  .health-areas-grid .health-row { grid-template-columns: 94px minmax(0, 1fr) max-content; gap: 8px; }
+}
 .health-count .ok { color: var(--ok); } .health-count .warn { color: var(--warn); }
 .health-count .fail { color: var(--err); } .health-count .skip { color: var(--muted); }
 .route-steps-fill { display: flex; width: 100%; }

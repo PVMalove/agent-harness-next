@@ -186,13 +186,13 @@ describe("Home after the owner's review", () => {
 
   const icons = (root: Element) => [...root.querySelectorAll("svg[data-icon]")].map((svg) => svg.getAttribute("data-icon"));
 
-  test("health areas carry their own icons and spaced counters", () => {
+  test("health areas carry their own icons and the mockup's compact counters", () => {
     renderHome();
     const rows = [...document.querySelectorAll("#home-health .health-row")];
     expect(rows.map((row) => icons(row.querySelector(".health-name")!)[0])).toEqual(["github", "skills", "shield", "harness"]);
     const counts = rows[0].querySelector(".health-count")!;
     expect(counts.querySelectorAll("span").length).toBe(4);
-    expect(counts.textContent).toContain("5 ✓");
+    expect(counts.textContent).toBe("5✓ 0⚠ 1✖ 2–");
   });
 
   test("attention and checks show the localized check title, the id only as a hint", () => {

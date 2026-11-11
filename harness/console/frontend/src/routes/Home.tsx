@@ -179,10 +179,8 @@ function AreaRows({ areas }: { areas: AreaCounters[] }) {
               )}
             </span>
             <span className="health-count">
-              <span className="ok">{area.ok} ✓</span>
-              <span className="warn">{area.warn} ⚠</span>
-              <span className="fail">{area.fail} ✖</span>
-              <span className="skip">{area.skipped} –</span>
+              <span className="ok">{area.ok}✓</span> <span className="warn">{area.warn}⚠</span>{" "}
+              <span className="fail">{area.fail}✖</span> <span className="skip">{area.skipped}–</span>
             </span>
           </div>
         );
