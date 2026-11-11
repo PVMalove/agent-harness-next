@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -182,8 +183,11 @@ class TaskBoardService:
 
         def collect() -> Payload:
             kind = self._reader.tracker_type(self._repo)
-            tickets = self._reader.board(self._repo, spec)
-            stages, ledger_ok = self._stages()
+            # The ledger stages do not depend on the tracker: read both at once.
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                ledger = pool.submit(self._stages)
+                tickets = self._reader.board(self._repo, spec)
+                stages, ledger_ok = ledger.result()
             return build_board_payload(
                 kind, tickets, stages, ledger_ok, template=self._template()
             )

@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import quote
@@ -291,10 +292,13 @@ class _GitHub:
 
     def board(self, spec_ref: str) -> SpecTickets:
         number = _spec_number(spec_ref)
-        issue = _path(self._board_data(number), "data", "repository", "issue")
-        if not isinstance(issue, dict):
-            raise SpecNotFound(spec_ref)
-        pulls = self._pulls()
+        # The issue and the open pull requests are independent reads: run them side by side.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            reading = pool.submit(self._pulls)
+            issue = _path(self._board_data(number), "data", "repository", "issue")
+            if not isinstance(issue, dict):
+                raise SpecNotFound(spec_ref)
+            pulls = reading.result()
         tickets: list[TrackerTicket] = []
         more = _path(issue, "subIssues", "pageInfo", "hasNextPage") is True
         for node in _list(_path(issue, "subIssues", "nodes")):

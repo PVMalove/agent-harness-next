@@ -256,3 +256,6 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   #report-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; }
   .report-timeline, .reports-batches .reports-panel { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }
 }
+/* Task Board spec row (#1066): the search by spec number beside the spec select. */
+.board-specbar .board-spec-search { flex: 0 1 200px; }
+.board-spec-missing { color: var(--warn); font: var(--fs-1) var(--mono); }

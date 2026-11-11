@@ -293,6 +293,27 @@ def test_ledger_stage_moves_a_ticket_to_review_and_its_failure_is_reported() -> 
     asyncio.run(scenario())
 
 
+def test_the_ledger_is_read_while_the_tracker_is_read() -> None:
+    # The tracker read and the ledger read meet on one barrier: in sequence it would break.
+    reader, clock = FakeReader(), Clock()
+    meeting = threading.Barrier(2, timeout=5)
+    board = reader.board
+
+    def tracker(repo: Path, spec_ref: str) -> SpecTickets:
+        meeting.wait()
+        return board(repo, spec_ref)
+
+    def ledger(repo: Path) -> _View:
+        meeting.wait()
+        return _ledger(repo)
+
+    reader.board = tracker  # type: ignore[method-assign]
+    served = asyncio.run(_service(reader, clock, ledger).board("#862"))
+
+    assert served.payload["ledger"] == "ok"
+    assert _cards(served)[0]["column"] == "review"
+
+
 def test_old_boards_are_evicted_beyond_the_limit() -> None:
     reader, clock = FakeReader(), Clock()
     service = _service(reader, clock)

@@ -74,7 +74,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator("[data-board-ticket]")).toHaveCount(7);
     await expect(page.locator("#board-spec")).toHaveValue("#501");
     await expect(page.locator("#board-kpis > div")).toHaveCount(4);
-    await expect(page.locator(".board-search svg.hi")).toBeVisible();
+    await expect(page.locator(".board-toolbar .board-search svg.hi")).toBeVisible();
     await page.locator("#board-search").fill("фильтры");
     await expect(page.locator("[data-board-ticket]")).toHaveCount(1);
     await page.locator("#board-search").fill("");
@@ -130,11 +130,22 @@ test("Task Board state: tracker unavailable", async ({ page }) => {
   await expect(page.locator("[data-board-ticket]")).toHaveCount(7);
 });
 
-test("Task Board state: refreshing", async ({ page }) => {
+test("Task Board state: first load draws the frame with the jumping mascot", async ({ page }) => {
   const asked = await open(page, 390, { board: null });
-  await expect(page.locator('[data-board-state="loading"] h2')).toHaveText("Обновление доски");
+  await expect(page.locator("[data-board-frame] [data-board-col]")).toHaveCount(5);
+  await expect(page.locator("#board-updating .board-mascot")).toBeVisible();
+  await expect(page.locator('[data-board-state="loading"]')).toHaveCount(0);
   expect(asked[0]).toMatchObject({ spec: "#501", force: false });
   expect(await noOverflow(page)).toBe(true);
+});
+
+test("Task Board spec row finds a spec by its number", async ({ page }) => {
+  const asked = await open(page, 1440);
+  await page.locator("#board-spec-number").fill("502");
+  await expect(page.locator("#board-spec")).toHaveValue("#502");
+  await expect.poll(() => asked.at(-1)).toMatchObject({ spec: "#502" });
+  await page.locator("#board-spec-number").fill("#9");
+  await expect(page.locator(".board-spec-missing")).toHaveText("Спека #9 не найдена");
 });
 
 test("the page keeps the strict policy of the server", async ({ page }) => {

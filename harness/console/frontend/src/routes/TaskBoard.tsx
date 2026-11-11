@@ -1,8 +1,18 @@
 /* Task Board: the #913 snapshot laid out as the mockup's #board. One board per spec; the columns,
    the card order, the prompt and the allowed moves are the server's. A card moves by drag and drop
-   or by the status select of its modal, after a confirmation, through the server's mutating job. */
+   or by the status select of its modal, after a confirmation, through the server's mutating job.
+   The frame of the five columns is drawn at once; the mascot jumps over it while a snapshot loads. */
 import { useMemo, useState } from "react";
-import { BoardBanner, BoardColumns, BoardKpis, BoardStatePanel, BoardToolbar, BoardUpdating } from "../board/BoardViews";
+import {
+  BoardBanner,
+  BoardColumns,
+  BoardFrame,
+  BoardKpis,
+  BoardStatePanel,
+  BoardToolbar,
+  BoardUpdating,
+  specNumber,
+} from "../board/BoardViews";
 import { NO_FILTERS } from "../board/format";
 import { StatusConfirm, StatusNoticeLine } from "../board/StatusConfirm";
 import { TicketModal } from "../board/TicketModal";
@@ -61,8 +71,34 @@ function SpecBar({
   onChoose: (spec: string) => void;
 }) {
   const { t } = useI18n();
+  const [number, setNumber] = useState("");
+  const wanted = specNumber(number);
+  const missing = number.trim() !== "" && (wanted === null || !specs.specs.some((item) => item.n === wanted));
+  const find = (text: string) => {
+    setNumber(text);
+    const n = specNumber(text);
+    const found = n === null ? undefined : specs.specs.find((item) => item.n === n);
+    if (found && found.id !== spec) onChoose(found.id);
+  };
   return (
     <div className="board-specbar">
+      <label className="board-search board-spec-search">
+        <Icon name="search" />
+        <input
+          id="board-spec-number"
+          type="search"
+          inputMode="numeric"
+          value={number}
+          placeholder={t("Номер спеки")}
+          aria-label={t("Найти спеку по номеру")}
+          onChange={(event) => find(event.target.value)}
+        />
+      </label>
+      {missing && (
+        <span className="board-spec-missing" role="status">
+          {t("Спека #{n} не найдена", { n: number.trim().replace(/^#/, "") })}
+        </span>
+      )}
       <label>
         {t("Спека")}
         <select id="board-spec" aria-label={t("Выбрать спеку")} value={spec} onChange={(event) => onChoose(event.target.value)}>
@@ -99,7 +135,8 @@ function SpecBoard({
   onChoose,
   onRefreshSpecs,
 }: {
-  specs: BoardSpecs;
+  /** Null while the specs load: the remembered spec's board is read in parallel with them. */
+  specs: BoardSpecs | null;
   spec: string;
   onChoose: (spec: string) => void;
   onRefreshSpecs: () => void;
@@ -118,34 +155,35 @@ function SpecBoard({
   return (
     <>
       <Title board={board} onRefresh={refreshAll} />
-      <SpecBar specs={specs} spec={spec} board={board} onChoose={onChoose} />
+      {specs && <SpecBar specs={specs} spec={spec} board={board} onChoose={onChoose} />}
       <ScreenRefusal screen={screen} />
       <StatusNoticeLine notice={change.notice} running={change.running} />
-      {refreshing ? (
-        <BoardStatePanel kind="loading" onRefresh={refreshAll} />
+      {refreshing || !board ? (
+        <>
+          <BoardFrame />
+          {screen.loading && <BoardUpdating />}
+        </>
       ) : (
-        board && (
-          <>
-            {board.stale && <BoardBanner stale={board.stale} age={unavailable ? null : board.age_seconds} />}
-            {unavailable ? (
-              <BoardStatePanel kind="nosnapshot" onRefresh={refreshAll} />
-            ) : board.tickets.length === 0 ? (
-              <BoardStatePanel kind="empty" onRefresh={refreshAll} />
-            ) : (
-              <>
-                <BoardKpis board={board} />
-                <BoardToolbar filters={filters} onChange={setFilters} />
-                <BoardColumns
-                  board={board}
-                  filters={filters}
-                  onOpen={(card) => setSelected(card.id)}
-                  onMove={change.request}
-                />
-                {(change.running || updating) && <BoardUpdating />}
-              </>
-            )}
-          </>
-        )
+        <>
+          {board.stale && <BoardBanner stale={board.stale} age={unavailable ? null : board.age_seconds} />}
+          {unavailable ? (
+            <BoardStatePanel kind="nosnapshot" onRefresh={refreshAll} />
+          ) : board.tickets.length === 0 ? (
+            <BoardStatePanel kind="empty" onRefresh={refreshAll} />
+          ) : (
+            <>
+              <BoardKpis board={board} />
+              <BoardToolbar filters={filters} onChange={setFilters} />
+              <BoardColumns
+                board={board}
+                filters={filters}
+                onOpen={(card) => setSelected(card.id)}
+                onMove={change.request}
+              />
+              {(change.running || updating) && <BoardUpdating />}
+            </>
+          )}
+        </>
       )}
       {board && open && (
         <TicketModal
@@ -179,7 +217,7 @@ export function TaskBoard() {
   const refreshSpecs = () => screen.refresh(true);
   return (
     <div className="board-page" data-section="Доска задач">
-      {specs && spec ? (
+      {spec ? (
         <SpecBoard key={spec} specs={specs} spec={spec} onChoose={choose} onRefreshSpecs={refreshSpecs} />
       ) : (
         <>
@@ -187,7 +225,10 @@ export function TaskBoard() {
           <ScreenRefusal screen={screen} />
           {specs?.stale && <BoardBanner stale={specs.stale} age={null} />}
           {!specs ? (
-            screen.loading && <BoardStatePanel kind="loading" onRefresh={refreshSpecs} />
+            <>
+              <BoardFrame />
+              {screen.loading && <BoardUpdating />}
+            </>
           ) : (
             <BoardStatePanel kind={specs.stale ? "nosnapshot" : "nospecs"} onRefresh={refreshSpecs} />
           )}
