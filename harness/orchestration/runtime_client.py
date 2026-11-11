@@ -583,6 +583,8 @@ def _check_directory(directory: Path) -> None:
     """Trust the runtime directory before its token: a directory of this user that no one else
     may open. Another user could create ``/tmp/harness-<uid>`` first and pose as the runtime
     (ADR 0021, section 2). A missing directory is a runtime that does not run yet."""
+    if sys.platform == "win32":
+        return  # no POSIX owner or mode bits here; the DACL of the pipe protects it
     try:
         info = os.lstat(directory)
     except FileNotFoundError as exc:

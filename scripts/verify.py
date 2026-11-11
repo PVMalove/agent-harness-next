@@ -221,7 +221,8 @@ def _static_checks(test_env: dict[str, str]) -> None:
 
 
 # Platform-neutral and slow on Windows (hundreds of tests each spawn a dozen git.exe processes):
-# a pull request leaves them to Linux and the full run on `master` (ADR 0018).
+# a local `--platform-subset` run leaves them to Linux. CI no longer passes that flag, so a pull
+# request and `master` both run them (ADR 0018).
 WINDOWS_PR_IGNORED_TESTS = ("tests/orchestration/test_coordinator.py",)
 
 

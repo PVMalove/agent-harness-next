@@ -895,6 +895,8 @@ def _supervised_config(execution_policy: JsonObject) -> JsonObject:
 def labelled_groups(dispatch_id: str) -> set[int]:
     """The process groups whose leader carries the label of ``dispatch_id``."""
     groups: set[int] = set()
+    if sys.platform == "win32":
+        return groups  # /proc and process groups are POSIX-only
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
             continue
@@ -1143,9 +1145,10 @@ class Supervised:
     def close(self) -> None:
         self.release()
         self.release_member()
-        for group in labelled_groups(self.dispatch) if self.dispatch else set():
-            with contextlib.suppress(OSError):
-                os.killpg(group, signal.SIGKILL)
+        if sys.platform != "win32":  # os.killpg and signal.SIGKILL are POSIX-only
+            for group in labelled_groups(self.dispatch) if self.dispatch else set():
+                with contextlib.suppress(OSError):
+                    os.killpg(group, signal.SIGKILL)
         self.runtime.stop()
 
 

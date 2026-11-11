@@ -254,6 +254,8 @@ def _logs(execution: JsonObject) -> str:
 def test_a_worker_reaches_only_its_allowed_host_and_writes_as_the_host_user(
     tmp_path: Path, labelled: list[str]
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getuid and os.getgid are POSIX-only")
     require_engine()
     repo = Supervised(tmp_path / "worker", access_policy=POLICY, create=False)
     try:
@@ -307,6 +309,8 @@ def test_a_worker_reaches_only_its_allowed_host_and_writes_as_the_host_user(
 def test_a_container_qa_run_reports_the_real_exit_code_of_a_failing_gate(
     tmp_path: Path, labelled: list[str]
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getuid and os.getgid are POSIX-only")
     require_engine()
     identity = f"{os.getuid()}:{os.getgid()}"
     gate = [f'test "$(id -u):$(id -g)" = "{identity}"', "exit 3"]

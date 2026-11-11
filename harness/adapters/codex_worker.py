@@ -492,7 +492,7 @@ def start(args: argparse.Namespace) -> int:
             break
         time.sleep(0.02)
     if process.poll() is None:
-        if os.name == "posix":
+        if sys.platform != "win32":
             os.killpg(process.pid, signal.SIGTERM)
         else:
             process.terminate()

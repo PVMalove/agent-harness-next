@@ -431,6 +431,8 @@ def test_the_socket_and_the_token_sit_in_the_xdg_runtime_directory(
 def test_without_xdg_the_runtime_directory_lies_outside_the_repository(
     dirs: Directories,
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getuid is POSIX-only")
     for environ in ({}, {"XDG_RUNTIME_DIR": ""}, {"XDG_RUNTIME_DIR": "relative/run"}):
         paths = runtime_client.runtime_paths(dirs.repo, environ)
 
@@ -1195,6 +1197,19 @@ def test_a_runtime_directory_open_to_others_or_a_symlink_is_never_trusted(
     assert runtime.requests == []
 
 
+def test_the_directory_check_is_skipped_on_windows_without_posix_ownership_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Windows has no os.getuid and no group/other mode bits; the DACL protects the pipe instead.
+    directory = tmp_path / "open"
+    directory.mkdir()
+    directory.chmod(0o755)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delattr(os, "getuid", raising=False)
+
+    runtime_client._check_directory(directory)
+
+
 @UNIX_ONLY
 def test_a_platform_without_unix_sockets_is_runtime_unavailable(
     dirs: Directories, monkeypatch: pytest.MonkeyPatch
@@ -1640,6 +1655,8 @@ def test_without_xdg_the_runtime_and_the_client_meet_outside_the_repository(
     dirs: Directories,
 ) -> None:
     """The real fallback ``/tmp/harness-<uid>``: the test removes only its own lock file."""
+    if sys.platform == "win32":
+        pytest.skip("os.getuid is POSIX-only")
     environ = {
         key: value for key, value in os.environ.items() if key != "XDG_RUNTIME_DIR"
     }

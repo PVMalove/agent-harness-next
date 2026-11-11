@@ -191,7 +191,8 @@ jobs:
   # so they belong to the full path and are skipped for a pull request into `integration/**`.
   verify-windows:
     # Two parallel parts so a slow pytest run cannot starve the clean-room install run of its time
-    # budget. A pull request runs the platform subset of the tests; `master` runs all of them (ADR 0018).
+    # budget. A pull request into a branch other than `integration/**` runs the full suite of the tests
+    # too, so the job gets a long timeout (ADR 0018).
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     name: verify-windows (${{ matrix.part }})
     runs-on: windows-latest
@@ -201,7 +202,7 @@ jobs:
       matrix:
         include:
           - part: tests
-            timeout: 60
+            timeout: 180
             verify_args: >-
               --only tests
               --junit-xml .harness/.sandboxes/logs/junit-windows-tests.xml
@@ -250,7 +251,8 @@ jobs:
           PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
           PYTHONUNBUFFERED: "1"
           # A pull request stops at the first failing test (the failed ones run first); `master` runs all.
-          VERIFY_ARGS: ${{ matrix.verify_args }} ${{ github.event_name == 'pull_request' && '--platform-subset --fail-fast' || '' }}
+          # Both run the full suite: no --platform-subset (ADR 0018).
+          VERIFY_ARGS: ${{ matrix.verify_args }} ${{ github.event_name == 'pull_request' && '--fail-fast' || '' }}
         run: |
           set -o pipefail
           mkdir -p .harness/.sandboxes/logs

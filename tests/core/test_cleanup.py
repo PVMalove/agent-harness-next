@@ -469,6 +469,11 @@ class CleanupTests(unittest.TestCase):
         self.assertTrue(outside_file.exists())
 
 
+@unittest.skipIf(
+    sys.platform == "win32",
+    "the scripted podman is a #!/bin/sh wrapper that locks its state with fcntl.flock, "
+    "which is POSIX-only",
+)
 class ContainerCleanupTests(unittest.TestCase):
     """Orphaned container resources of this repository, listed and removed only by harness-runtime.
 
