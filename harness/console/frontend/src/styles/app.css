@@ -27,6 +27,15 @@
 .repo-page .repo-index-row > b { min-width: 0; overflow-wrap: anywhere; }
 .repo-page .repo-index-row > span { flex-shrink: 0; }
 .repo-page .repo-index-body > p { overflow-wrap: anywhere; }
+/* Repo Map: the tree, the code and the symbol rows read at the body size of the type scale; the
+   stale-map banner and the empty state carry the Rebuild action. */
+.repo-page .repo-dir, .repo-page .repo-file, .repo-page .repo-code, .repo-page .repo-symbol-row,
+.repo-page .repo-index-row, .repo-page .repo-file-head b { font-size: var(--fs-2); }
+.repo-page .repo-dir .hi, .repo-page .repo-file .hi { width: 13px; height: 13px; }
+.repo-page .repo-stale { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.repo-page .repo-stale > div { flex: 1; min-width: 0; }
+.repo-page .repo-stale p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.repo-page .repo-empty-state { display: grid; gap: 8px; justify-items: start; padding: 16px; }
 /* Pending decisions reuse the mockup's work panels, pills, fields and confirmation dialog. */
 .decision-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .decision-panel > p { margin: 0; font-size: var(--fs-1); color: var(--muted); }
@@ -74,10 +83,10 @@
 .worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
 .worktree-row .btn { flex: none; padding: 4px 8px; font-size: var(--fs-1); }
 .harness-component > em:empty { display: none; }
-/* Reports: the stage rows carry no type icon, the report sections and the QA log keep the
+/* Reports: the stage rows carry the role icon, the report sections and the QA log keep the
    untrusted text wrapped, and the batch history sits under the stage list. */
 .reports-page > .command-refusal { margin-bottom: 12px; }
-.reports-page .report-row { grid-template-columns: minmax(0, 1fr) auto; }
+.reports-page .report-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
 .reports-page .report-row .report-time { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-1); }
 .reports-page .report-row.on { background: #232c37; }
 .reports-page .report-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
+import { Icon } from "../icons";
 import { ConfirmDialog } from "../commands/ConfirmDialog";
 import { PHASE_LABELS } from "../commands/JobOutput";
 import { JOB_ERROR_LABELS } from "../ws/jobs";
@@ -32,7 +33,10 @@ function coverageRows(coverage: RepoMapFacts["coverage"], t: (text: string) => s
 
 export function RepoMap() {
   const { t } = useI18n();
-  const { client, state, jobs, facts, map, error, start, starting } = useRepoMap();
+  const { client, state, jobs, facts, map: current, error, start, starting } = useRepoMap();
+  // HEAD has no cached map: the latest cached map of another commit is shown, marked stale.
+  const stale = current ? null : (facts?.stale_map ?? null);
+  const map = current ?? stale;
   const [pending, setPending] = useState<{ head: string } | { job: string } | null>(null);
   const [tab, setTab] = useState("Обзор");
   const [path, setPath] = useState<string | null>(null);
@@ -45,13 +49,14 @@ export function RepoMap() {
     const a = document.createElement("a"); a.href = url; a.download = `repo-map-${map.commit.slice(0, 12)}.json`;
     a.click(); URL.revokeObjectURL(url);
   };
+  const rebuild = (className: string) => <button className={className} type="button" disabled={!facts?.head || starting || jobs.busy !== null || state.status !== "connected"}
+    onClick={() => { if (facts?.head) setPending({ head: facts.head }); }}><Icon name="map" /> {t("Перестроить")}</button>;
   return <div className="repo-page"><div className="page-title repo-title"><div><h1>Repo Map</h1>
     <p>{t("Индекс символов, модулей и импортов.")}</p><div className="home-facts" id="repo-facts"><span>HEAD {facts?.head?.slice(0, 12) ?? "—"}</span>
       {map && <><span>tier {map.tier}</span><span>{t("{count} файлов", { count: map.files.length })}</span>
         <span>{t("{count} связей", { count: map.edges.length })}</span></>}</div></div>
-    <div className="actions"><button className="btn" onClick={() => client.requestRepoMap(true)} disabled={state.status !== "connected"}>{t("Обновить")}</button>
-      <button className="btn" disabled={!facts?.head || starting || jobs.busy !== null || state.status !== "connected"}
-        onClick={() => { if (facts?.head) setPending({ head: facts.head }); }}>{t("Перестроить")}</button>
+    <div className="actions"><button className="btn" onClick={() => client.requestRepoMap(true)} disabled={state.status !== "connected"}><Icon name="refresh" /> {t("Обновить")}</button>
+      {rebuild("btn")}
       <button className="btn" disabled={!map} onClick={exportMap}>{t("Экспорт")}</button></div></div>
     {jobs.busy && <p role="status">{t("Занято: {command}", { command: jobs.busy.command_id })} · {jobs.busy.id}</p>}
     {jobs.refusal && <p role="alert" data-code={jobs.refusal.code}>{t(JOB_ERROR_LABELS[jobs.refusal.code] ?? "Сервер ответил ошибкой.")}</p>}
@@ -67,9 +72,15 @@ export function RepoMap() {
       <div className="repo-kpis">{[["Уровень", map?.tier], ["Файлы", map?.files.length],
         ["Связи", map?.edges.length], ["Оценка токенов", map?.estimated_tokens]].map(([label, value]) =>
         <div key={label}><span>{t(String(label))}</span><b className="cyan">{value ?? "—"}</b></div>)}</div>
+      {stale && <div className="plan-warning warn repo-stale" id="repo-stale" role="status"><Icon name="warning" /><div>
+        <b>{t("Карта устарела для HEAD")}</b>
+        <p>{t("Для HEAD {head} карты в кэше нет; показана последняя карта коммита {commit}.", { head: facts.head?.slice(0, 12) ?? "—", commit: stale.commit.slice(0, 12) })}</p>
+      </div>{rebuild("btn primary")}</div>}
       <TabList id="repo" label="Repo Map" className="orch-tabbar repo-tabbar" tabs={REPO_TABS.map((name) => [name, t(name)] as const)} value={tab} onChange={setTab} />
       <TabPanels id="repo" tabs={REPO_TABS.map((name) => [name, name] as const)} value={tab}>
-      {tab === "Настройки" ? <Settings facts={facts} /> : !map ? <p className="repo-empty">{t(facts.head ? "Кэша карты для HEAD нет" : "HEAD не найден")}</p> :
+      {tab === "Настройки" ? <Settings facts={facts} /> : !map ? <section className="panel repo-empty-state" id="repo-empty"><p className="repo-empty">{t(facts.head ? "Кэша карты для HEAD нет" : "HEAD не найден")}</p>
+          {facts.head && <p className="repo-note">{t("Карта строится по запросу и хранится в кэше для одного коммита; после нового коммита её нужно перестроить.")}</p>}
+          {facts.head && rebuild("btn primary")}</section> :
         tab === "Символы" ? <Symbols map={map} kinds={facts.map ? facts.symbol_kinds : null} selectedPath={path} onClear={() => setPath(null)} /> :
         tab === "Связи" ? <Links map={map} select={(path) => { setPath(path); setTab("Символы"); }} /> : <>
           <div className="repo-grid"><Panel title="Индекс"><Fields rows={[["Коммит", map.commit], ["Парсер", map.parser],

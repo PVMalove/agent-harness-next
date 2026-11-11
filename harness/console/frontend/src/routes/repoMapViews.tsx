@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
+import { Icon } from "../icons";
 import { SYMBOL_KINDS } from "../ws/repoMap";
 import type { MapFile, RepoMap as MapData, RepoMapFacts, SymbolKind } from "../ws/repoMap";
 
@@ -41,23 +42,51 @@ export function Settings({ facts }: { facts: RepoMapFacts }) {
   </div>;
 }
 
+/** The mockup file tree: one row per folder and file, indented 14px per level; a folder row
+    folds its subtree, a file row carries its parser status. */
 function FileTree({ files, selected, select }: { files: MapFile[]; selected: string | null; select: (path: string) => void }) {
-  const render = (prefix: string): ReactNode => {
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (path: string) => {
+    const next = new Set(folded);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setFolded(next);
+  };
+  const indent = (depth: number) => <span className="repo-tree-indent" style={{ width: `${depth * 14}px` }} />;
+  const render = (prefix: string, depth: number): ReactNode[] => {
     const nested = new Set<string>();
-    return files.filter((f) => f.path.startsWith(prefix)).map((f) => {
+    return files.filter((f) => f.path.startsWith(prefix)).flatMap((f) => {
       const rest = f.path.slice(prefix.length);
       const slash = rest.indexOf("/");
       if (slash >= 0) {
-        const directory = rest.slice(0, slash + 1);
-        if (nested.has(directory)) return null;
+        const directory = rest.slice(0, slash);
+        if (nested.has(directory)) return [];
         nested.add(directory);
-        return <details key={directory} open><summary className="repo-dir">▾ {directory}</summary>{render(prefix + directory)}</details>;
+        const path = prefix + directory + "/";
+        const open = !folded.has(path);
+        return [
+          <button key={path} type="button" className="repo-dir" aria-expanded={open} onClick={() => toggle(path)}>
+            {indent(depth)}
+            <span className={`repo-caret${open ? " open" : ""}`}>{open ? "▾" : "▸"}</span>
+            <Icon name="folder" />
+            <b>{directory}/</b>
+          </button>,
+          ...(open ? render(path, depth + 1) : []),
+        ];
       }
-      return <button key={f.path} type="button" className={`repo-file ${selected === f.path ? "on" : ""}`}
-        aria-label={f.path} aria-pressed={selected === f.path} onClick={() => select(f.path)}>{rest}</button>;
+      return [
+        <button key={f.path} type="button" className={`repo-file ${selected === f.path ? "on" : ""}`}
+          aria-label={f.path} aria-pressed={selected === f.path} onClick={() => select(f.path)}>
+          {indent(depth)}
+          <span className="repo-caret dot">·</span>
+          <Icon name="terminal" />
+          <b>{rest}</b>
+          <em>[{f.parser_status ?? "—"}]</em>
+        </button>,
+      ];
     });
   };
-  return <>{render("")}</>;
+  return <>{render("", 0)}</>;
 }
 
 function Relations({ map, path }: { map: MapData; path: string }) {

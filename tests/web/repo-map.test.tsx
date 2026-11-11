@@ -67,11 +67,11 @@ test("an unknown excluded count and a map without kinds stay explicit no-data st
 test("building requires confirmation, pins the displayed HEAD and displays an uncached degraded result", () => {
   const { socket } = open();
   facts(socket, NO_MAP);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Отмена" })));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   const request = socket.request("job.start");
   expect(request).toMatchObject({ command_id: "repo-map-build", values: { commit: "a".repeat(40) }, client: "browser" });
@@ -117,7 +117,7 @@ test("a changed HEAD invalidates an open build confirmation", () => {
   const { socket } = open();
   facts(socket);
   act(() => fireEvent.click(screen.getByRole("button", { name: "Обновить" })));
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   facts(socket, { ...NO_MAP, head: "b".repeat(40) });
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   expect(socket.sent.filter((r) => r.type === "job.start")).toHaveLength(0);
@@ -126,7 +126,7 @@ test("a changed HEAD invalidates an open build confirmation", () => {
 test("truncated build output cannot become a map and its failure survives a snapshot refresh", () => {
   const { socket } = open();
   facts(socket, NO_MAP);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   act(() => socket.reply(jobReply(socket.request("job.start").id, "job.start", {
     command_id: "repo-map-build", done: true, phase: "completed", returncode: 0, truncated: true,
@@ -161,7 +161,7 @@ test("parser availability respects the TUI source requirement", () => {
 test("a lost start acknowledgement reconciles the running job without replaying the command", () => {
   const { socket, clock } = open();
   facts(socket);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   act(() => socket.close());
   act(() => clock.advance(500));
@@ -179,13 +179,13 @@ test("a lost start acknowledgement reconciles the running job without replaying 
     command_id: "repo-map-build", done: true, phase: "completed", returncode: 0, cursor: 1,
     output: [{ channel: "stdout", text: JSON.stringify(FACTS.map) }],
   })));
-  expect((screen.getByRole("button", { name: "Перестроить" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((screen.getAllByRole("button", { name: "Перестроить" })[0] as HTMLButtonElement).disabled).toBe(false);
 });
 
 test("a nonzero CLI exit reports a build error and its diagnostic stderr", () => {
   const { socket } = open();
   facts(socket);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Перестроить" })));
+  act(() => fireEvent.click(screen.getAllByRole("button", { name: "Перестроить" })[0]));
   act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Собрать" })));
   act(() => socket.reply(jobReply(socket.request("job.start").id, "job.start", {
     command_id: "repo-map-build", done: true, phase: "completed", returncode: 2, cursor: 1,
@@ -204,4 +204,43 @@ test("English settings translate unavailable policy and inactive memory reasons"
   act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
   expect(screen.getByText("allow_paths is empty")).toBeTruthy();
   expect(screen.getByText("The mode is kept in orchestration.json: the backend-orchestration capability is required.")).toBeTruthy();
+});
+
+test("the file tree is the mockup hierarchy: indented folder rows that fold, file rows with their status", () => {
+  const { socket } = open();
+  facts(socket);
+  const rows = () => [...document.querySelectorAll(".repo-tree .repo-dir, .repo-tree .repo-file")];
+  const shape = () => rows().map((row) => [row.className.split(" ")[0], row.querySelector("b")?.textContent, (row.querySelector(".repo-tree-indent") as HTMLElement).style.width]);
+  expect(shape()).toEqual([
+    ["repo-dir", "pkg/", "0px"],
+    ["repo-file", "core.py", "14px"],
+    ["repo-file", "cli.py", "14px"],
+    ["repo-file", "broken.py", "14px"],
+    ["repo-file", "README.md", "0px"],
+  ]);
+  expect(rows()[0].querySelector("svg[data-icon='folder']")).not.toBeNull();
+  expect(rows()[1].querySelector("em")?.textContent).toMatch(/^\[.+\]$/);
+  act(() => fireEvent.click(rows()[0]));
+  expect(rows()[0].getAttribute("aria-expanded")).toBe("false");
+  expect(shape().map(([, name]) => name)).toEqual(["pkg/", "README.md"]);
+});
+
+test("without a map for HEAD the latest cached map shows marked stale for HEAD, with Rebuild", () => {
+  const { socket } = open();
+  const stale = { ...FACTS.map, commit: "0123456789abcdef0123456789abcdef01234567" };
+  facts(socket, { ...NO_MAP, stale_map: stale });
+  const banner = document.querySelector("#repo-stale") as HTMLElement;
+  expect(banner.textContent).toContain("устарела для HEAD");
+  expect(banner.textContent).toContain("0123456789ab");
+  expect(within(banner).getByRole("button", { name: /Перестроить/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "pkg/core.py" })).toBeTruthy();
+});
+
+test("the empty state names the reason and offers Rebuild in place", () => {
+  const { socket } = open();
+  facts(socket, NO_MAP);
+  const empty = document.querySelector("#repo-empty") as HTMLElement;
+  expect(empty.textContent).toContain("Кэша карты для HEAD нет");
+  act(() => fireEvent.click(within(empty).getByRole("button", { name: /Перестроить/ })));
+  expect(screen.getByRole("dialog")).toBeTruthy();
 });

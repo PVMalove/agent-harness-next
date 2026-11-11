@@ -2545,6 +2545,15 @@ EN.update(
     }
 )
 
+# Web console #1066: Repo Map page — the stale-for-HEAD map and Rebuild in the empty state.
+EN.update(
+    {
+        "Карта устарела для HEAD": "The map is stale for HEAD",
+        "Для HEAD {head} карты в кэше нет; показана последняя карта коммита {commit}.": "The cache holds no map for HEAD {head}; the latest map, of commit {commit}, is shown.",
+        "Карта строится по запросу и хранится в кэше для одного коммита; после нового коммита её нужно перестроить.": "A map is built on request and cached for one commit; after a new commit it has to be rebuilt.",
+    }
+)
+
 # A raw state value is never shown in the UI: the web console words every ledger, screen and
 # health state with this table. state -> (Russian label, English label)
 STATE_LABELS: dict[str, tuple[str, str]] = {

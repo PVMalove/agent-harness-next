@@ -50,11 +50,11 @@ for (const width of [1440, 390]) {
     await page.getByRole("tab", { name: "Настройки", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Память", exact: true })).toBeVisible();
     await page.getByRole("heading", { name: "Языки проекта", exact: true }).scrollIntoViewIfNeeded();
-    await page.getByRole("button", { name: "Перестроить", exact: true }).click();
+    await page.getByRole("button", { name: "Перестроить", exact: true }).first().click();
     await expect(page.getByRole("dialog")).toContainText("offline parser bundle");
     await page.getByRole("button", { name: "Отмена", exact: true }).click();
     expect(starts).toHaveLength(0);
-    await page.getByRole("button", { name: "Перестроить", exact: true }).click();
+    await page.getByRole("button", { name: "Перестроить", exact: true }).first().click();
     await page.getByRole("button", { name: "Собрать", exact: true }).click();
     await expect(page.locator(".command-output [role=status]")).toHaveText("Завершена");
     expect(starts).toHaveLength(1);
@@ -84,5 +84,5 @@ test("the real server reports absent HEAD without offering a build", async ({ pa
   await page.goto(`${base()}/?token=${process.env.CONSOLE_TOKEN!}`);
   await page.goto(`${base()}/#/repo-map`);
   await expect(page.getByText("HEAD не найден", { exact: true })).toBeVisible({ timeout: 60000 });
-  await expect(page.getByRole("button", { name: "Перестроить", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Перестроить", exact: true }).first()).toBeDisabled();
 });
