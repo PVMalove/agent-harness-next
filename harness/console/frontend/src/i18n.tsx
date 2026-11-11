@@ -20,6 +20,9 @@ const REASONS: Readonly<Record<string, string>> = catalog.reasons;
 const GROUPS: Readonly<Record<string, string>> = catalog.groups;
 // Why each health check matters (kernel/check_rationale.py RATIONALES), by check id.
 const RATIONALES: Readonly<Record<string, Readonly<Record<Language, string>>>> = catalog.rationales;
+// Check titles (kernel/check_rationale.py TITLES) and state labels (kernel/i18n_strings.py STATE_LABELS).
+const TITLES: Readonly<Record<string, Readonly<Record<Language, string>>>> = catalog.titles;
+const STATES: Readonly<Record<string, Readonly<Record<Language, string>>>> = catalog.states;
 
 const fill = (text: string, values?: Values): string =>
   values
@@ -64,6 +67,31 @@ export function checkRationale(language: Language, id: string): string | null {
   return RATIONALES[id]?.[language] ?? null;
 }
 
+/** A ledger, screen or health state in words (kernel i18n_strings.STATE_LABELS); the case of the
+    raw value does not matter. An unknown state keeps its value. */
+export function stateLabel(language: Language, state: string): string {
+  return STATES[state]?.[language] ?? STATES[state.toLowerCase()]?.[language] ?? state;
+}
+
+/** The title of a health check (kernel check_rationale.TITLES); an unknown id keeps its id. */
+export function checkTitle(language: Language, id: string): string {
+  return TITLES[id]?.[language] ?? id;
+}
+
+/** `count` with its noun: Russian forms for 1, 2-4 and 5+, English for 1 and the rest. */
+export function plural(
+  language: Language,
+  count: number,
+  ru: readonly [string, string, string],
+  en: readonly [string, string],
+): string {
+  if (language === "en") return `${count} ${count === 1 ? en[0] : en[1]}`;
+  const tens = count % 100;
+  const units = count % 10;
+  const form = units === 1 && tens !== 11 ? ru[0] : units >= 2 && units <= 4 && (tens < 12 || tens > 14) ? ru[1] : ru[2];
+  return `${count} ${form}`;
+}
+
 const isLanguage = (value: unknown): value is Language =>
   typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);
 
@@ -90,6 +118,9 @@ export interface I18n {
   section: (key: string) => string;
   fact: (label: string) => string;
   tab: (label: string) => string;
+  state: (state: string) => string;
+  check: (id: string) => string;
+  plural: (count: number, ru: readonly [string, string, string], en: readonly [string, string]) => string;
 }
 
 const I18nContext = createContext<I18n | null>(null);
@@ -117,6 +148,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       section: (key) => sectionLabel(language, key),
       fact: (label) => factLabel(language, label),
       tab: (label) => tabLabel(language, label),
+      state: (state) => stateLabel(language, state),
+      check: (id) => checkTitle(language, id),
+      plural: (count, ru, en) => plural(language, count, ru, en),
     }),
     [language, setLanguage],
   );

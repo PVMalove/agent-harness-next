@@ -2391,3 +2391,66 @@ EN.update(
         "Git не перечислил файлы коммита карты": "Git did not list the files of the map's commit",
     }
 )
+
+
+# A raw state value is never shown in the UI: the web console words every ledger, screen and
+# health state with this table. state -> (Russian label, English label)
+STATE_LABELS: dict[str, tuple[str, str]] = {
+    "abandoned": ("Брошен", "Abandoned"),
+    "active": ("Активен", "Active"),
+    "approved": ("Одобрен", "Approved"),
+    "awaiting_approval": ("Ждёт решения", "Awaiting decision"),
+    "awaiting-approval": ("Ждёт решения", "Awaiting decision"),
+    "blocked": ("Заблокировано", "Blocked"),
+    "cancelled": ("Отменён", "Cancelled"),
+    "canceled": ("Отменён", "Cancelled"),
+    "completed": ("Завершено", "Completed"),
+    "current": ("Актуальна", "Up to date"),
+    "dispatched": ("Отправлен", "Dispatched"),
+    "done": ("Готово", "Done"),
+    "draft": ("Черновик", "Draft"),
+    "error": ("Ошибка", "Error"),
+    "fail": ("Ошибка", "Failure"),
+    "failed": ("Сбой", "Failed"),
+    "missing": ("Нет", "Missing"),
+    "none": ("Нет", "None"),
+    "ok": ("Норма", "Healthy"),
+    "open": ("Открыт", "Open"),
+    "closed": ("Закрыт", "Closed"),
+    "merged": ("Слит", "Merged"),
+    "outdated": ("Устарела", "Outdated"),
+    "pass": ("Пройдено", "Passed"),
+    "passed": ("Пройдено", "Passed"),
+    "pending": ("Ожидает", "Pending"),
+    "published": ("Опубликован", "Published"),
+    "present": ("Есть", "Present"),
+    "found": ("Найден", "Found"),
+    "reported": ("Отчёт сдан", "Reported"),
+    "running": ("Выполняется", "Running"),
+    "working": ("Выполняется", "In progress"),
+    "skipped": ("Пропущено", "Skipped"),
+    "skip": ("Пропущено", "Skipped"),
+    "unknown": ("Неизвестно", "Unknown"),
+    "warn": ("Внимание", "Warning"),
+    "info": ("Сведения", "Info"),
+    "success": ("Успех", "Success"),
+    "not_run": ("Не запускалось", "Not run"),
+    "not-checked": ("Не проверено", "Not checked"),
+    "not-reported": ("Без отчёта", "Not reported"),
+    "drift": ("Расхождение", "Drift"),
+    "stale": ("Зависший", "Stale"),
+    "queued": ("В очереди", "Queued"),
+    "accepted": ("Принят", "Accepted"),
+    "rejected": ("Отклонён", "Rejected"),
+    "superseded": ("Заменён", "Superseded"),
+    "clean": ("Чисто", "Clean"),
+    "empty": ("Пусто", "Empty"),
+    "owner-alive": ("Владелец жив", "Owner alive"),
+    "ready": ("Готов", "Ready"),
+    "not_ready": ("Не готов", "Not ready"),
+}
+
+
+def state_labels() -> dict[str, dict[str, str]]:
+    """The state labels as the SPA reads them: state -> {\"ru\": ..., \"en\": ...}."""
+    return {state: {"ru": ru, "en": en} for state, (ru, en) in STATE_LABELS.items()}

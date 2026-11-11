@@ -137,7 +137,7 @@ export function OpenProject() {
     <div className="project-page work-page" data-section="Open project">
       <div className="page-title project-title">
         <div>
-          <h1>{section("Open project")}</h1>
+          <h1>{t("Проект")}</h1>
           <p>{t("Сервер консоли обслуживает один проект; другой проект открывается своей командой в терминале.")}</p>
           {facts && (
             <div className="home-facts">

@@ -65,7 +65,7 @@ function DiffPane({ file }: { file: DiffFile }) {
 }
 
 export function UpdateHarness() {
-  const { t, section, language } = useI18n();
+  const { t, language } = useI18n();
   const screen = useScreen({ type: "update_harness.snapshot" }, parseUpdateHarness);
   const facts = screen.data;
   const repo = useServedRepo();
@@ -102,7 +102,7 @@ export function UpdateHarness() {
     <div className="update-page work-page" data-section="Update Harness">
       <div className="page-title update-title">
         <div>
-          <h1>{section("Update Harness")}</h1>
+          <h1>{t("Обновление")}</h1>
           <p>{t("Обновление управляемых файлов Harness в проекте сервера; перед запуском — подтверждение.")}</p>
           {facts && (
             <div className="home-facts">

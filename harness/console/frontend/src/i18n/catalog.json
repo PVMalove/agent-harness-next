@@ -1784,7 +1784,447 @@
       "ru": "Ход работы"
     }
   },
+  "states": {
+    "abandoned": {
+      "en": "Abandoned",
+      "ru": "Брошен"
+    },
+    "accepted": {
+      "en": "Accepted",
+      "ru": "Принят"
+    },
+    "active": {
+      "en": "Active",
+      "ru": "Активен"
+    },
+    "approved": {
+      "en": "Approved",
+      "ru": "Одобрен"
+    },
+    "awaiting-approval": {
+      "en": "Awaiting decision",
+      "ru": "Ждёт решения"
+    },
+    "awaiting_approval": {
+      "en": "Awaiting decision",
+      "ru": "Ждёт решения"
+    },
+    "blocked": {
+      "en": "Blocked",
+      "ru": "Заблокировано"
+    },
+    "canceled": {
+      "en": "Cancelled",
+      "ru": "Отменён"
+    },
+    "cancelled": {
+      "en": "Cancelled",
+      "ru": "Отменён"
+    },
+    "clean": {
+      "en": "Clean",
+      "ru": "Чисто"
+    },
+    "closed": {
+      "en": "Closed",
+      "ru": "Закрыт"
+    },
+    "completed": {
+      "en": "Completed",
+      "ru": "Завершено"
+    },
+    "current": {
+      "en": "Up to date",
+      "ru": "Актуальна"
+    },
+    "dispatched": {
+      "en": "Dispatched",
+      "ru": "Отправлен"
+    },
+    "done": {
+      "en": "Done",
+      "ru": "Готово"
+    },
+    "draft": {
+      "en": "Draft",
+      "ru": "Черновик"
+    },
+    "drift": {
+      "en": "Drift",
+      "ru": "Расхождение"
+    },
+    "empty": {
+      "en": "Empty",
+      "ru": "Пусто"
+    },
+    "error": {
+      "en": "Error",
+      "ru": "Ошибка"
+    },
+    "fail": {
+      "en": "Failure",
+      "ru": "Ошибка"
+    },
+    "failed": {
+      "en": "Failed",
+      "ru": "Сбой"
+    },
+    "found": {
+      "en": "Found",
+      "ru": "Найден"
+    },
+    "info": {
+      "en": "Info",
+      "ru": "Сведения"
+    },
+    "merged": {
+      "en": "Merged",
+      "ru": "Слит"
+    },
+    "missing": {
+      "en": "Missing",
+      "ru": "Нет"
+    },
+    "none": {
+      "en": "None",
+      "ru": "Нет"
+    },
+    "not-checked": {
+      "en": "Not checked",
+      "ru": "Не проверено"
+    },
+    "not-reported": {
+      "en": "Not reported",
+      "ru": "Без отчёта"
+    },
+    "not_ready": {
+      "en": "Not ready",
+      "ru": "Не готов"
+    },
+    "not_run": {
+      "en": "Not run",
+      "ru": "Не запускалось"
+    },
+    "ok": {
+      "en": "Healthy",
+      "ru": "Норма"
+    },
+    "open": {
+      "en": "Open",
+      "ru": "Открыт"
+    },
+    "outdated": {
+      "en": "Outdated",
+      "ru": "Устарела"
+    },
+    "owner-alive": {
+      "en": "Owner alive",
+      "ru": "Владелец жив"
+    },
+    "pass": {
+      "en": "Passed",
+      "ru": "Пройдено"
+    },
+    "passed": {
+      "en": "Passed",
+      "ru": "Пройдено"
+    },
+    "pending": {
+      "en": "Pending",
+      "ru": "Ожидает"
+    },
+    "present": {
+      "en": "Present",
+      "ru": "Есть"
+    },
+    "published": {
+      "en": "Published",
+      "ru": "Опубликован"
+    },
+    "queued": {
+      "en": "Queued",
+      "ru": "В очереди"
+    },
+    "ready": {
+      "en": "Ready",
+      "ru": "Готов"
+    },
+    "rejected": {
+      "en": "Rejected",
+      "ru": "Отклонён"
+    },
+    "reported": {
+      "en": "Reported",
+      "ru": "Отчёт сдан"
+    },
+    "running": {
+      "en": "Running",
+      "ru": "Выполняется"
+    },
+    "skip": {
+      "en": "Skipped",
+      "ru": "Пропущено"
+    },
+    "skipped": {
+      "en": "Skipped",
+      "ru": "Пропущено"
+    },
+    "stale": {
+      "en": "Stale",
+      "ru": "Зависший"
+    },
+    "success": {
+      "en": "Success",
+      "ru": "Успех"
+    },
+    "superseded": {
+      "en": "Superseded",
+      "ru": "Заменён"
+    },
+    "unknown": {
+      "en": "Unknown",
+      "ru": "Неизвестно"
+    },
+    "warn": {
+      "en": "Warning",
+      "ru": "Внимание"
+    },
+    "working": {
+      "en": "In progress",
+      "ru": "Выполняется"
+    }
+  },
   "tabs": {
     "Обзор": "Overview"
+  },
+  "titles": {
+    "directories.cache": {
+      "en": "Cache directory",
+      "ru": "Каталог кэша"
+    },
+    "directories.harness": {
+      "en": "The .harness directory",
+      "ru": "Каталог .harness"
+    },
+    "directories.logs": {
+      "en": "Logs directory",
+      "ru": "Каталог журналов"
+    },
+    "directories.orchestration_state": {
+      "en": "Orchestration state directory",
+      "ru": "Каталог состояния оркестрации"
+    },
+    "directories.pr_body": {
+      "en": "PR body directory",
+      "ru": "Каталог описаний PR"
+    },
+    "directories.reports": {
+      "en": "Reports directory",
+      "ru": "Каталог отчётов"
+    },
+    "directories.runs": {
+      "en": "Runs directory",
+      "ru": "Каталог запусков"
+    },
+    "directories.sandboxes": {
+      "en": "The .sandboxes directory",
+      "ru": "Каталог .sandboxes"
+    },
+    "directories.scratch": {
+      "en": "Scratch directory",
+      "ru": "Черновой каталог"
+    },
+    "directories.worktrees": {
+      "en": "Worktrees directory",
+      "ru": "Каталог рабочих копий"
+    },
+    "environment.claude_sandbox": {
+      "en": "Claude Code sandbox",
+      "ru": "Песочница Claude Code"
+    },
+    "environment.claude_uv_cache": {
+      "en": "uv cache for Claude Code",
+      "ru": "Кэш uv для Claude Code"
+    },
+    "environment.codex_sandbox": {
+      "en": "Codex sandbox",
+      "ru": "Песочница Codex"
+    },
+    "environment.codex_uv_cache": {
+      "en": "uv cache for Codex",
+      "ru": "Кэш uv для Codex"
+    },
+    "environment.dev_env": {
+      "en": "Development environment",
+      "ru": "Окружение разработки"
+    },
+    "environment.git": {
+      "en": "Git binary",
+      "ru": "Программа Git"
+    },
+    "environment.git_identity": {
+      "en": "Git commit identity",
+      "ru": "Подпись коммитов Git"
+    },
+    "environment.gitattributes": {
+      "en": "The .gitattributes file",
+      "ru": "Файл .gitattributes"
+    },
+    "environment.glab": {
+      "en": "glab client",
+      "ru": "Клиент glab"
+    },
+    "environment.hook_bash": {
+      "en": "Bash for hooks",
+      "ru": "Bash для хуков"
+    },
+    "environment.line_endings": {
+      "en": "Line endings",
+      "ru": "Окончания строк"
+    },
+    "environment.long_paths": {
+      "en": "Long paths",
+      "ru": "Длинные пути"
+    },
+    "environment.os": {
+      "en": "Operating system",
+      "ru": "Операционная система"
+    },
+    "environment.output_encoding": {
+      "en": "Output encoding",
+      "ru": "Кодировка вывода"
+    },
+    "environment.path_length": {
+      "en": "Path length",
+      "ru": "Длина путей"
+    },
+    "environment.pytest_temp": {
+      "en": "pytest temporary directory",
+      "ru": "Временный каталог pytest"
+    },
+    "environment.python": {
+      "en": "Python interpreter",
+      "ru": "Интерпретатор Python"
+    },
+    "environment.symlinks": {
+      "en": "Symbolic links",
+      "ru": "Символические ссылки"
+    },
+    "environment.uv": {
+      "en": "uv package manager",
+      "ru": "Менеджер пакетов uv"
+    },
+    "files.agents_md": {
+      "en": "AGENTS.md instructions",
+      "ru": "Инструкция AGENTS.md"
+    },
+    "files.discovery_links": {
+      "en": "Skill discovery links",
+      "ru": "Ссылки обнаружения навыков"
+    },
+    "files.integrations": {
+      "en": "Integrations",
+      "ru": "Интеграции"
+    },
+    "files.lock": {
+      "en": "harness.lock file",
+      "ru": "Файл harness.lock"
+    },
+    "files.orchestration_config": {
+      "en": "Orchestration settings",
+      "ru": "Настройки оркестрации"
+    },
+    "files.overlay_locks": {
+      "en": "Overlay locks",
+      "ru": "Блокировки оверлеев"
+    },
+    "files.project_json": {
+      "en": "project.json settings",
+      "ru": "Настройки project.json"
+    },
+    "files.sandboxes": {
+      "en": "Sandboxes directory",
+      "ru": "Каталог песочниц"
+    },
+    "files.skill_registry": {
+      "en": "Skill registry",
+      "ru": "Реестр навыков"
+    },
+    "files.skill_snapshot": {
+      "en": "Skill snapshot",
+      "ru": "Снимок навыков"
+    },
+    "files.verification_routing": {
+      "en": "Verification routing",
+      "ru": "Маршрутизация проверок"
+    },
+    "hooks.policy": {
+      "en": "Hook policy",
+      "ru": "Политика хуков"
+    },
+    "hooks.test_author": {
+      "en": "Test author hook",
+      "ru": "Хук автора тестов"
+    },
+    "memory.index": {
+      "en": "Memory index",
+      "ru": "Индекс памяти"
+    },
+    "memory.model": {
+      "en": "Memory model",
+      "ru": "Модель памяти"
+    },
+    "orchestration.blocked_batches": {
+      "en": "Blocked batches",
+      "ru": "Заблокированные batch"
+    },
+    "orchestration.disposable_data": {
+      "en": "Disposable data",
+      "ru": "Временные данные"
+    },
+    "orchestration.ledger_summary": {
+      "en": "Ledger summary",
+      "ru": "Сводка ledger"
+    },
+    "orchestration.orphaned_worktrees": {
+      "en": "Orphaned worktrees",
+      "ru": "Брошенные рабочие копии"
+    },
+    "orchestration.stale_dispatches": {
+      "en": "Stale dispatches",
+      "ru": "Зависшие dispatch"
+    },
+    "orchestration.unfinished_batches": {
+      "en": "Unfinished batches",
+      "ru": "Незавершённые batch"
+    },
+    "repo_map.tier": {
+      "en": "Repo Map tier",
+      "ru": "Уровень Repo Map"
+    },
+    "tracker.auth": {
+      "en": "Tracker sign-in",
+      "ru": "Вход в трекер"
+    },
+    "tracker.git_base": {
+      "en": "Git base branch",
+      "ru": "Базовая ветка Git"
+    },
+    "tracker.labels": {
+      "en": "Tracker labels",
+      "ru": "Метки трекера"
+    },
+    "tracker.permissions": {
+      "en": "Tracker permissions",
+      "ru": "Права в трекере"
+    },
+    "tracker.project": {
+      "en": "Tracker project",
+      "ru": "Проект в трекере"
+    },
+    "tracker.reachability": {
+      "en": "Tracker reachability",
+      "ru": "Доступность трекера"
+    }
   }
 }

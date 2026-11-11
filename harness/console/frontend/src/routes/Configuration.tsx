@@ -217,7 +217,7 @@ export function Configuration() {
     <div className="settings-page work-page" data-section="Configuration">
       <div className="page-title settings-title">
         <div>
-          <h1>{section("Configuration")}</h1>
+          <h1>{t("Настройки")}</h1>
           <p>{t("Настройка project.json и orchestration.json: черновик, различия и подтверждённая запись с резервной копией.")}</p>
           {facts && (
             <div className="home-facts">

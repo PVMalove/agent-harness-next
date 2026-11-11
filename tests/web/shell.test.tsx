@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { menuCounter, preRelease } from "../../harness/console/frontend/src/AppShell";
+import { NAV_ITEMS } from "../../harness/console/frontend/src/navigation";
 import type { HomeSnapshot } from "../../harness/console/frontend/src/ws/types";
 import fixture from "./fixtures/home-snapshot.json";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
@@ -211,5 +212,16 @@ describe("the shell", () => {
     await act(async () => fireEvent.click(skip));
     expect(document.activeElement).toBe(document.getElementById("content"));
     expect(window.location.hash).toBe("#/diagnostics");
+  });
+
+  test("every page title equals its menu item (Home keeps the mockup's «Состояние харнесса»)", () => {
+    for (const item of NAV_ITEMS.filter((entry) => entry.route !== "")) {
+      window.location.hash = `#/${item.route}`;
+      const { unmount } = renderApp();
+      const link = within(navigation()).getAllByRole("link").find((node) => node.getAttribute("href") === `#/${item.route}`);
+      const heading = document.querySelector("main#content h1");
+      expect(heading?.textContent?.trim(), item.route).toBe(link?.textContent?.trim());
+      unmount();
+    }
   });
 });

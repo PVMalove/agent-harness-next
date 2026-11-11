@@ -83,7 +83,7 @@ function Preflight({ entry, compact }: { entry: PublishEntry; compact: boolean }
 }
 
 export function Publish() {
-  const { t, section, tab: tabLabel } = useI18n();
+  const { t, section, tab: tabLabel, state: stateText } = useI18n();
   const screen = useScreen({ type: "reports.snapshot" }, parseReports);
   const entries = screen.data?.publish ?? [];
   const [chosen, setChosen] = useState<string | null>(null);
@@ -137,7 +137,7 @@ export function Publish() {
           {entries.length === 0 ? <option value="">{t("Batch для публикации нет")}</option> : null}
           {entries.map((item) => (
             <option key={item.batch_id} value={item.batch_id}>
-              {item.ticket || item.batch_id} · {item.state}
+              {item.ticket || item.batch_id} · {stateText(item.state)}
             </option>
           ))}
         </select>

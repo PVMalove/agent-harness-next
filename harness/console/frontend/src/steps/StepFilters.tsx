@@ -27,7 +27,7 @@ export function StepFilters({
   onStatus?: (status: "all" | SessionStatus) => void;
   now?: number;
 }) {
-  const { t } = useI18n();
+  const { t, state: stateText } = useI18n();
   const counts = statusCounts(dispatches);
   const shown = dispatches.filter(
     (entry) =>
@@ -113,7 +113,7 @@ export function StepFilters({
                 </small>
               </span>
               <span className={`work-status ${STATUS_TONE[sessionStatus(entry)] || tone(entry.state)}`}>
-                {entry.state}
+                {stateText(entry.state)}
                 {entry.silent ? ` · ${t("тишина")}` : ""}
               </span>
               <span className="work-time" title={t("{count} шагов", { count: stepCounts.get(entry.dispatch_id) ?? 0 })}>

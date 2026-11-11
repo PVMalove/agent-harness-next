@@ -158,7 +158,7 @@ function sessionTone(state: string): string {
 }
 
 function RecentTasks({ sessions }: { sessions: RecentSession[] }) {
-  const { t, section, language } = useI18n();
+  const { t, section, language, state: stateText } = useI18n();
   const active = sessions.find((session) => sessionTone(session.state) === "ok") ?? sessions[0] ?? null;
   const time = (iso: string) => {
     const date = new Date(iso);
@@ -225,7 +225,7 @@ function RecentTasks({ sessions }: { sessions: RecentSession[] }) {
                     <span className="route-dot" />
                     <span className="route-copy">
                       <b>{ROLE_NAMES[step.role] ?? step.role}</b>
-                      <small>{step.state}</small>
+                      <small>{stateText(step.state)}</small>
                     </span>
                   </div>
                 ))
@@ -338,7 +338,7 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
 }
 
 export function Home() {
-  const { t, section, fact, language } = useI18n();
+  const { t, section, fact, language, state: stateText } = useI18n();
   const { state, client, replies, events } = useConsole();
   const [online, setOnline] = useState(false);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
@@ -524,7 +524,7 @@ export function Home() {
               <dl className="kv">
                 <Fact
                   label={fact("Состояние")}
-                  value={memory?.state ? `${memory.state.status}: ${memory.state.message}` : null}
+                  value={memory?.state ? `${stateText(memory.state.status)}: ${t(memory.state.message)}` : null}
                   tone={memory?.state && memory.state.status !== "ok" ? "warning" : ""}
                 />
                 <Fact label={t("Источники")} value={policy ? policy.source_types.join(" · ") || "—" : null} />

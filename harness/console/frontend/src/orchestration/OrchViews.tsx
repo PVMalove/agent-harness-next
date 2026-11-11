@@ -282,7 +282,7 @@ export function OrchTabs({ data }: { data: OrchestrationSnapshot }) {
 }
 
 export function BatchCards({ data }: { data: OrchestrationSnapshot }) {
-  const { t } = useI18n();
+  const { t, state: stateText } = useI18n();
   const batches = data.ledger.batches.slice(-6).reverse();
   if (batches.length === 0) return <div className="report-empty">{t("Batch в ledger нет")}</div>;
   const tone = (state: string) => (ATTENTION.has(state) ? "err" : state === "active" ? "ok" : "warn");
@@ -299,7 +299,7 @@ export function BatchCards({ data }: { data: OrchestrationSnapshot }) {
           </h3>
           <div className="orch-batch-meta">
             {batch.branch || "—"}
-            {batch.pr_url ? ` · PR ${batch.pr_state}` : ""}
+            {batch.pr_url ? ` · PR ${stateText(batch.pr_state)}` : ""}
           </div>
         </article>
       ))}
@@ -311,7 +311,7 @@ const statusOf = (stage: StageHead): string =>
   ACTIVE.has(stage.state) ? "working" : ATTENTION.has(stage.state) ? "attention" : stage.report ? "reported" : "awaiting";
 
 export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
-  const { t } = useI18n();
+  const { t, state: stateText } = useI18n();
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
   const roles = [...new Set(data.ledger.stages.map((stage) => stage.role))].sort();
@@ -358,7 +358,7 @@ export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
                 </small>
               </div>
               <span className={`status ${statusOf(stage) === "attention" ? "err" : statusOf(stage) === "working" ? "active" : ""}`}>
-                {stage.state}
+                {stateText(stage.state)}
               </span>
             </div>
           ))
@@ -369,7 +369,7 @@ export function DispatchTable({ data }: { data: OrchestrationSnapshot }) {
 }
 
 export function TicketList({ data }: { data: OrchestrationSnapshot }) {
-  const { t } = useI18n();
+  const { t, state: stateText } = useI18n();
   const tickets = [...new Map(data.ledger.batches.map((batch) => [batch.ticket || batch.batch_id, batch])).values()];
   return (
     <section className="panel orch-tickets" id="orch-tickets">
@@ -389,7 +389,7 @@ export function TicketList({ data }: { data: OrchestrationSnapshot }) {
               </small>
             </div>
             <a className="status" href={`${href("recovery")}?batch=${encodeURIComponent(batch.batch_id)}`}>
-              {batch.state}
+              {stateText(batch.state)}
             </a>
           </div>
         ))
