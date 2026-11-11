@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.configuration import default_document
+from harness.console.kernel.configuration import default_document
 from harness.json_types import JsonObject
 
 PACKAGE = Path(__file__).resolve().parents[2]

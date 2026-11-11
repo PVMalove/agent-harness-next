@@ -1,0 +1,23 @@
+[
+  "Выбор проекта",
+  "Предварительные проверки",
+  "Установка / внедрение",
+  "Настройка",
+  "Итоговая диагностика",
+  "Git-проект найден · действие: обновление",
+  "harness.lock есть · установлено: engineering-suite",
+  "harness update /work/project --capability engineering-suite",
+  "project",
+  "Открыт",
+  "/work/project",
+  "✔ Harness установлен",
+  "harness console --web /work/project",
+  "billing",
+  "Не открыт",
+  "/work/billing",
+  "harness console --web /work/billing",
+  "new service",
+  "/work/new service",
+  "○ Harness не установлен",
+  "harness console --web '/work/new service'"
+]

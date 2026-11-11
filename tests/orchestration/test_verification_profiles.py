@@ -168,7 +168,7 @@ class VerificationProfileBatchTests(unittest.TestCase):
                 prohibited_change=["secrets"],
                 required_gate=None,
                 dependency=None,
-                expected_file=["harness/console/app.py"],
+                expected_file=["harness/console/tui/app.py"],
                 expected_service=["console"],
                 expected_changed_lines=10,
                 expected_context_tokens=None,

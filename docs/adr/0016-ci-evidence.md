@@ -53,7 +53,10 @@
 публичных метаданных. Задания с тестами (`verify`, `diff-coverage`, `rust`, `repo-map-bundle`,
 `runtime-ipc-windows`, `docker-smoke`, `fault-injection`) на этом пути пропускаются. Pull request
 в `master` и любую другую ветку, push в `master` и вызов из другого workflow запускают полные задания.
-`private-terms` и `parser-bundle` тестов не запускают и условия не меняют.
+`private-terms` и `parser-bundle` тестов не запускают и условия не меняют. Задания `console-spa`
+(typecheck, сборка, Vitest и Playwright SPA консоли, ADR 0029) и `docs` (строгая сборка сайта)
+идут на обоих путях без условия (#1060). Выборку `verify-light` расширяет только правило корпуса
+памяти: правка `CONTEXT.md` или `docs/adr/*.md` запускает и тест FTS5 baseline (ADR 0023, #1061).
 
 Имя проверки `verify-light` заканчивается на `-light`. `evaluate(..., allow_light=False)` по
 умолчанию отвечает `fallback` с причиной `light_check` на любой обязательный check с таким

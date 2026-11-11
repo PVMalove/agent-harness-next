@@ -583,56 +583,6 @@ class RecoveryTests(unittest.TestCase):
         self._developer_commit("continued")
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
-    def test_imported_preserved_event_accepts_an_immutable_blocked_source(self) -> None:
-        from harness.orchestration.workflow import preserved_progress
-
-        batch = self._create_batch(allowed_paths=["services/**"])
-        self._accepted_architect(batch["batch_id"])
-        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
-        self._start(brief["dispatch_id"])
-        self._submit(
-            brief["dispatch_id"],
-            self._base_report(
-                brief,
-                "developer",
-                outcome="blocked",
-                commit_sha=brief["snapshot_commit"],
-                checks_run=self._checks(brief, "not_run"),
-                blockers={"status": "present", "details": "native sandbox denied IPC"},
-                tooling_blocker={
-                    "tool": "native-sandbox",
-                    "command": "python -m pytest",
-                    "message": "Operation not permitted",
-                },
-            ),
-        )
-        recorded = self._batch_record(batch["batch_id"])
-        progress: JsonObject = {
-            "source_dispatch_id": brief["dispatch_id"],
-            "snapshot_commit": brief["snapshot_commit"],
-            "head_commit": brief["snapshot_commit"],
-            "checkout": {},
-            "files": {},
-            "index_sha256": "0" * 64,
-            "worktree_sha256": "0" * 64,
-        }
-        event: JsonObject = {
-            "kind": "rewind",
-            "next_action": "developer",
-            "evidence": {
-                "preserved_progress": progress,
-                "superseded_dispatches": [brief["dispatch_id"]],
-                "writer_start_commit": brief["snapshot_commit"],
-            },
-        }
-
-        preserved_progress.validate_event(self.state_dir, recorded, event)
-
-        progress["head_commit"] = "1" * 40
-        event["evidence"]["writer_start_commit"] = "1" * 40
-        with self.assertRaisesRegex(coordinator.CoordinatorError, "diverged"):
-            preserved_progress.validate_event(self.state_dir, recorded, event)
-
     def test_cli_rewind_preserves_files_missing_from_blocked_tooling_report(
         self,
     ) -> None:
@@ -715,6 +665,46 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(immutable.read_bytes(), original_report)
         self._start(renewed["dispatch_id"])
         self.assertEqual(pending.read_bytes(), original)
+        self.assertEqual(immutable.read_bytes(), original_report)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_abandoned_batch_keeps_blocked_writer_preservation_valid(self) -> None:
+        batch = self._create_batch(allowed_paths=["services/**"])
+        self._accepted_architect(batch["batch_id"])
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        self._submit(
+            brief["dispatch_id"],
+            self._base_report(
+                brief,
+                "developer",
+                outcome="blocked",
+                commit_sha=brief["snapshot_commit"],
+                checks_run=self._checks(brief, "not_run"),
+                blockers={"status": "present", "details": "IPC unavailable"},
+            ),
+        )
+        immutable = self._records() / "reports" / f"{brief['dispatch_id']}.json"
+        original_report = immutable.read_bytes()
+        coordinator.rewind_batch(
+            self._args(
+                batch=batch["batch_id"],
+                to="developer",
+                preserved_commit=brief["snapshot_commit"],
+                preserved_file=[],
+                note="preserve the stopped writer boundary",
+                **self._approval(),
+            )
+        )
+        coordinator.abandon_batch(
+            self._args(
+                batch=batch["batch_id"],
+                reason="operator ended the recovered batch",
+                **self._approval(),
+            )
+        )
+
+        self.assertEqual(self._batch_record(batch["batch_id"])["state"], "abandoned")
         self.assertEqual(immutable.read_bytes(), original_report)
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
@@ -870,6 +860,56 @@ class RecoveryTests(unittest.TestCase):
 
         self.assertEqual(self._ledger_bytes(), before)
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_imported_preserved_event_accepts_an_immutable_blocked_source(self) -> None:
+        from harness.orchestration.workflow import preserved_progress
+
+        batch = self._create_batch(allowed_paths=["services/**"])
+        self._accepted_architect(batch["batch_id"])
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        self._submit(
+            brief["dispatch_id"],
+            self._base_report(
+                brief,
+                "developer",
+                outcome="blocked",
+                commit_sha=brief["snapshot_commit"],
+                checks_run=self._checks(brief, "not_run"),
+                blockers={"status": "present", "details": "native sandbox denied IPC"},
+                tooling_blocker={
+                    "tool": "native-sandbox",
+                    "command": "python -m pytest",
+                    "message": "Operation not permitted",
+                },
+            ),
+        )
+        recorded = self._batch_record(batch["batch_id"])
+        progress: JsonObject = {
+            "source_dispatch_id": brief["dispatch_id"],
+            "snapshot_commit": brief["snapshot_commit"],
+            "head_commit": brief["snapshot_commit"],
+            "checkout": {},
+            "files": {},
+            "index_sha256": "0" * 64,
+            "worktree_sha256": "0" * 64,
+        }
+        event: JsonObject = {
+            "kind": "rewind",
+            "next_action": "developer",
+            "evidence": {
+                "preserved_progress": progress,
+                "superseded_dispatches": [brief["dispatch_id"]],
+                "writer_start_commit": brief["snapshot_commit"],
+            },
+        }
+
+        preserved_progress.validate_event(self.state_dir, recorded, event)
+
+        progress["head_commit"] = "1" * 40
+        event["evidence"]["writer_start_commit"] = "1" * 40
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "diverged"):
+            preserved_progress.validate_event(self.state_dir, recorded, event)
 
     def test_preserved_handoff_refuses_drift_at_each_launch_boundary(self) -> None:
         for boundary, mutation in (

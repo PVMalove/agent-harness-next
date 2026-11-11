@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from rich.text import Text
 
-from harness.console import brand
-from harness.console.logtext import colorize_diff, colorize_log, colorize_overview
+from harness.console.kernel import brand
+from harness.console.tui.logtext import colorize_diff, colorize_log, colorize_overview
 
 
 def _styles(text: Text) -> dict[str, str]:

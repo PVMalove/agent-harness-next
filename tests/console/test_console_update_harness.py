@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.console import stats as console_stats
-from harness.console.catalog import seed_update_entry
-from harness.console.screens.update_harness import (
+from harness.console.kernel.catalog import seed_update_entry
+from harness.console.tui import stats as console_stats
+from harness.console.tui.screens.update_harness import (
     render_drift,
     render_versions,
 )
@@ -86,3 +86,47 @@ def test_the_versions_verdict_is_a_symbol_and_a_word() -> None:
         "✖ Харнесс не установлен: нет читаемого .harness/harness.lock",
         "Установите его через «Открыть проект».",
     ]
+
+
+def test_each_mode_is_its_server_job_and_the_seed_mode_names_the_ticked_files() -> None:
+    import pytest
+
+    from harness.console.kernel.catalog import UPDATE_SEED_SELECTED
+    from harness.console.tui.screens.update_harness import (
+        TOO_MANY_SEEDS,
+        update_job,
+    )
+
+    entry, values = update_job("update-force-managed", [])
+    assert (entry.key, values) == ("update-force-managed", {})
+    entry, values = update_job("update-seed-selected", ["a.md", "b/c.md"])
+    assert entry is UPDATE_SEED_SELECTED and values == {"paths": "a.md\nb/c.md"}
+    with pytest.raises(ValueError, match="update-force-seed|всех seed") as refused:
+        update_job("update-seed-selected", [f"dir/{'я' * 40}-{n}.md" for n in range(30)])
+    assert str(refused.value) == TOO_MANY_SEEDS
+
+
+def test_the_update_screen_reads_the_snapshot_and_updates_through_the_server() -> None:
+    """The screen neither runs `harness diff` nor reads a diff or the lock itself, and starts no
+    process: the snapshot, the diff and the update come from the console server client."""
+    import ast
+
+    from harness.console.tui.screens import update_harness
+
+    tree = ast.parse(Path(str(update_harness.__file__)).read_text(encoding="utf-8"))
+    names = {
+        node.attr if isinstance(node, ast.Attribute) else node.id
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Attribute, ast.Name))
+    }
+
+    local = {
+        "drift_report",
+        "harness_state",
+        "update_diff_text",
+        "capturing_runner",
+        "process_argv",
+        "harness_version",
+    }
+    assert not local & names
+    assert {"update_harness", "update_diff", "ServerJobRunner"} <= names

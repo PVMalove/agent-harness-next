@@ -6,9 +6,13 @@ import re
 
 import pytest
 
-from harness.console import i18n
-from harness.console.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN, help_markdown
-from harness.console.i18n_strings import EN, EN_PHRASES
+from harness.console.kernel import i18n
+from harness.console.kernel.i18n_strings import EN, EN_PHRASES
+from harness.console.kernel.help_text import (
+    HELP_MARKDOWN,
+    HELP_MARKDOWN_EN,
+    help_markdown,
+)
 
 
 def test_tr_translates_known_strings_and_leaves_the_rest() -> None:
@@ -64,13 +68,13 @@ def test_the_default_language_comes_from_the_environment(
 # ----------------------------------------------------------------------------- container route (#711)
 
 import ast  # noqa: E402
-from collections.abc import Callable  # noqa: E402
 import inspect  # noqa: E402
+from collections.abc import Callable  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-from harness.console import container_route as route_model  # noqa: E402
-from harness.console.screens import container_route as route_screen  # noqa: E402
-from harness.console.screens.orchestration import OrchestrationScreen  # noqa: E402
+from harness.console.kernel import container_route as route_model  # noqa: E402
+from harness.console.tui.screens import container_route as route_screen  # noqa: E402
+from harness.console.tui.screens.orchestration import OrchestrationScreen  # noqa: E402
 from tests.console.test_console_container_route import (  # noqa: E402
     AUTHORED_DOCUMENT,
     SECRET,
@@ -193,7 +197,7 @@ def test_tab_labels_pair_an_icon_with_the_title_and_bracket_the_current_one() ->
 
 
 def test_the_screen_is_a_shell_view_inside_orchestration_with_a_narrow_layout() -> None:
-    from harness.console.shell import ConsoleShell
+    from harness.console.tui.shell import ConsoleShell
 
     screen = route_screen.ContainerRouteScreen
     assert issubclass(screen, ConsoleShell)
@@ -238,9 +242,9 @@ def test_executor_context_strip_joins_worker_qa_and_labels() -> None:
 
 # ----------------------------------------------------------------------------- recovery screen (#711)
 
-from harness.console import batch_history as history_model  # noqa: E402
-from harness.console import recovery_view as recovery_model  # noqa: E402
-from harness.console.screens import recovery as recovery_screen  # noqa: E402
+from harness.console.kernel import batch_history as history_model  # noqa: E402
+from harness.console.kernel import recovery_view as recovery_model  # noqa: E402
+from harness.console.tui.screens import recovery as recovery_screen  # noqa: E402
 from tests.console.test_console_recovery_view import (  # noqa: E402
     held_document,
     session_with,
@@ -297,7 +301,7 @@ def test_the_reason_precedes_every_action_and_unavailable_actions_carry_their_re
 def test_the_recovery_screen_is_a_shell_view_inside_orchestration_in_both_layouts() -> (
     None
 ):
-    from harness.console.shell import ConsoleShell
+    from harness.console.tui.shell import ConsoleShell
 
     screen = recovery_screen.RecoveryScreen
     assert issubclass(screen, ConsoleShell)
@@ -339,3 +343,43 @@ def test_a_long_pointer_and_diagnostic_value_stay_fully_reachable_in_the_pane() 
             view.rows, view.blockers, view.notes, view.actions, "ru", narrow
         )
         assert pointer in text and "x" * 300 in text and "…" not in text
+
+
+def test_every_registered_check_has_a_title_in_both_languages() -> None:
+    from harness.console.kernel.check_rationale import TITLES
+    from harness.health.registry import REGISTRY
+
+    ids = [check_id for check_id, _ in REGISTRY]
+    assert set(TITLES) == set(ids)
+    for check_id in ids:
+        ru, en = TITLES[check_id]
+        assert ru.strip() and en.strip() and ru != en, check_id
+        assert check_id not in (ru, en), check_id
+        assert any("а" <= char <= "я" for char in ru.lower()), check_id
+        assert en.isascii(), check_id
+
+
+def test_state_labels_cover_the_ledger_and_screen_states_in_both_languages() -> None:
+    from harness.console.kernel.i18n_strings import STATE_LABELS
+
+    for state in (
+        "abandoned", "active", "approved", "awaiting_approval", "awaiting-approval", "blocked",
+        "cancelled", "completed", "current", "dispatched", "fail", "failed", "missing", "ok",
+        "outdated", "pass", "pending", "published", "reported", "running", "skipped", "unknown",
+        "warn", "working",
+    ):
+        ru, en = STATE_LABELS[state]
+        assert any("а" <= char <= "я" for char in ru.lower()), state
+        assert en.isascii() and en != state.upper(), state
+
+
+def test_the_web_catalog_ships_check_titles_and_state_labels() -> None:
+    import json
+
+    from harness.console.kernel import web_catalog
+    from harness.console.kernel.check_rationale import TITLES
+    from harness.console.kernel.i18n_strings import STATE_LABELS
+
+    shipped = json.loads(web_catalog.render())
+    assert shipped["titles"] == {key: {"ru": ru, "en": en} for key, (ru, en) in TITLES.items()}
+    assert shipped["states"] == {key: {"ru": ru, "en": en} for key, (ru, en) in STATE_LABELS.items()}

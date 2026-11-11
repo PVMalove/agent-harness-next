@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DOCUMENTS = (
     "harness/orchestration/playbook.md",
     "harness/orchestration/README.md",
-    "docs/backend-orchestration.md",
-    "docs/skills/implement.md",
+    "site/docs/backend-orchestration.md",
+    "site/docs/skills/implement.md",
     "skills/first-party/engineering/implement/SKILL.md",
     "README.md",
 )

@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """Проверка всего проекта: согласованность конфигурации и скиллов, целостность вендорного
 snapshot, затем mypy, pytest и полный clean-room прогон."""
 
@@ -52,7 +59,7 @@ from scripts.verification import failed_only
 from scripts.verification.docs_sync import (
     check_docs_agents_enumeration,
     check_docs_agents_mirror,
-    check_guide_diagram_previews,
+    check_diagram_previews,
     check_no_retired_path_inventory_term,
     check_pvmalove_additions_docs_sync,
     check_pvmalove_override_docs_sync,
@@ -68,6 +75,8 @@ from scripts.verification.process import (
     run_ok,
     run_stage,
 )
+from scripts.verification.site_links import check_site_links
+from scripts.verification.schema_docs import check_schema_docs
 from scripts.verification.text_checks import check_no_todo, grep_contains, grep_line
 from scripts.verification.vendor_pin import check_vendor_pin
 
@@ -87,6 +96,7 @@ _COMPILED_SCRIPTS = (
     ROOT / "harness" / "bin" / "harness.py",
     ROOT / "bin" / "install-global.py",
     ROOT / "scripts" / "build_registry.py",
+    ROOT / "scripts" / "check_license_headers.py",
     ROOT / "scripts" / "verify.py",
     ROOT / "scripts" / "test_clean_room.py",
 )
@@ -148,9 +158,9 @@ def _check_global_skills() -> None:
     grep_contains(start_project, "until the owner confirms")
     grep_contains(start_project, "Prove each layer separately")
     grep_contains(integrate_project, "Audit is read-only")
-    grep_contains(ROOT / "docs" / "skills" / "implement.md", "module-owned guidance")
+    grep_contains(ROOT / "site" / "docs" / "skills" / "implement.md", "module-owned guidance")
     grep_contains(
-        ROOT / "docs" / "skills" / "pilot.md",
+        ROOT / "site" / "docs" / "skills" / "pilot.md",
         "самоотчёт роли не является token telemetry",
     )
 
@@ -158,7 +168,7 @@ def _check_global_skills() -> None:
 def _check_documentation() -> None:
     """Проверить согласованность документации, шаблонов и постоянных инструкций."""
     check_docs_agents_mirror()
-    check_guide_diagram_previews()
+    check_diagram_previews()
     check_no_retired_path_inventory_term()
     grep_contains(
         ROOT / "skills" / "first-party" / "engineering" / "to-tickets" / "SKILL.md",
@@ -168,6 +178,8 @@ def _check_documentation() -> None:
     grep_contains(agents_seed, "For code discovery, run the Repo Map")
     grep_contains(agents_seed, "then use targeted `rg` searches and reads.")
     check_docs_agents_enumeration()
+    check_site_links()
+    check_schema_docs()
     check_pvmalove_override_docs_sync()
     check_pvmalove_additions_docs_sync()
     check_pvmalove_suite_summary_sync()
@@ -196,7 +208,7 @@ def _check_private_terms(test_env: dict[str, str]) -> None:
 
 def _static_checks(test_env: dict[str, str]) -> None:
     """Быстрые проверки до тестов: приватные термины, JSON каталога, компиляция, скиллы, реестр,
-    canonical-конфиги оркестрации и документация."""
+    canonical-конфиги оркестрации, лицензионные шапки и документация."""
     _check_private_terms(test_env)
     run_ok(
         [
@@ -215,6 +227,10 @@ def _static_checks(test_env: dict[str, str]) -> None:
     run_ok(["git", "-C", str(ROOT), "diff", "--exit-code", "--", "skills/REGISTRY.md"])
     run_ok(
         [sys.executable, str(ROOT / "scripts" / "check_canonical_tracked_data.py")],
+        env=test_env,
+    )
+    run_ok(
+        [sys.executable, str(ROOT / "scripts" / "check_license_headers.py")],
         env=test_env,
     )
     _check_documentation()
@@ -543,7 +559,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "stages:\n"
             "  1. static checks: private terms, CAPABILITIES.json syntax, Python compilation,\n"
-            "     global skills, documentation sync, vendor pin\n"
+            "     global skills, license headers, documentation sync, vendor pin\n"
             "  2. skills/REGISTRY.md: rebuilt in place, then must match the committed file\n"
             "  3. mypy\n"
             "  4. pytest\n"

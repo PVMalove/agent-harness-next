@@ -1,0 +1,33 @@
+{
+  "blockers": {
+    "details": "Падает test_reports_kpi: нужен фикс разработчика.",
+    "status": "present"
+  },
+  "changed_files": [
+    "harness/console/kernel/reports.py"
+  ],
+  "checks_run": [
+    {
+      "command": "make lint",
+      "evidence": "ruff и mypy без замечаний",
+      "result": "pass"
+    },
+    {
+      "command": "pytest -q tests/console",
+      "evidence": "1 failed",
+      "result": "fail"
+    },
+    {
+      "command": "npm run test:e2e",
+      "evidence": "",
+      "result": "not_run"
+    }
+  ],
+  "commit_sha": "c0ffee1",
+  "next_coordinator_action": "developer-retry",
+  "output": "QA остановился на pytest: один тест упал.",
+  "risks": {
+    "details": "",
+    "status": "none"
+  }
+}

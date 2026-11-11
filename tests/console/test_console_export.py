@@ -1,4 +1,4 @@
-"""harness.console.export: the console's shared Markdown export (Reports and Repo Map). No
+"""harness.console.kernel.export: the console's shared Markdown export (Reports and Repo Map). No
 textual needed."""
 
 from __future__ import annotations
@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from harness.console.export import (
+from harness.console.kernel.export import (
     MarkdownDocument,
     MarkdownSection,
     export_directory,
@@ -63,7 +63,7 @@ def test_ticket_export_uses_the_epic_folder_that_holds_the_ticket(
     (epic / "tickets" / "issue-352-qa-logs.md").write_text("ticket", encoding="utf-8")
 
     assert (
-        export_directory(tmp_path, "PVMalove/claude-agent-harness#352")
+        export_directory(tmp_path, "PVMalove/agent-harness-next#352")
         == epic / "artifacts"
     )
 

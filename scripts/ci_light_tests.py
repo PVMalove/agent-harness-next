@@ -3,19 +3,26 @@
 
 A pull request into an ``integration/*`` branch runs ``verify-light`` instead of the full suite
 (ADR 0016, ADR 0023). This script selects its tests with ``ticket_diff_selection`` (issue #935):
-the Python test modules and the ``cargo test`` targets that the diff itself adds or changes. It
-never widens the selection to related tests or to the full suite; a diff without tests selects
-nothing and passes. Only the full path (a pull request into the default branch, a push to it)
-runs the whole suite, and only that evidence confirms a pair that requires the full selection.
+the Python test modules and the ``cargo test`` targets that the diff itself adds or changes. Except
+for the memory corpus rule below, it never widens the selection to related tests or to the full
+suite; a diff without tests selects nothing and passes. Only the full path (a pull request into
+the default branch, a push to it) runs the whole suite, and only that evidence confirms a pair
+that requires the full selection.
+
+The memory corpus rule (issue #1061): a diff that changes, removes or renames a memory corpus file
+(``CONTEXT.md`` or ``docs/adr/*.md``) also selects ``tests/memory/test_eval.py``. Its FTS5
+baseline pins the hash of every corpus file, so a corpus edit without an explicit re-evaluation
+fails only that test.
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,6 +30,8 @@ ROOT = Path(__file__).resolve().parent.parent
 HELPER_TIMEOUT_SECONDS = 300
 # ``pytest`` reports "no tests collected" as exit code 5.
 PYTEST_NO_TESTS_COLLECTED = 5
+# The test that pins the hash of every memory corpus file in its FTS5 baseline.
+MEMORY_BASELINE_TEST = "tests/memory/test_eval.py"
 
 if TYPE_CHECKING:
     from harness.repo_map.change_impact import TicketDiffSelection
@@ -57,7 +66,26 @@ def select(repo: Path, base: str, head: str) -> TicketDiffSelection:
     sys.path.insert(0, str(ROOT))
     from harness.repo_map.change_impact import ticket_diff_selection
 
-    return ticket_diff_selection(repo, merge_base(repo, base, head), head)
+    selection = ticket_diff_selection(repo, merge_base(repo, base, head), head)
+    # A renamed ADR leaves the corpus under its old path, so both sides of a rename count.
+    if MEMORY_BASELINE_TEST in selection.python_tests or not any(
+        is_memory_corpus(path)
+        for item in selection.changed
+        for path in (item.path, item.old_path)
+        if path
+    ):
+        return selection
+    return dataclasses.replace(
+        selection, python_tests=(*selection.python_tests, MEMORY_BASELINE_TEST)
+    )
+
+
+def is_memory_corpus(path: str) -> bool:
+    """Whether ``path`` is a memory corpus file: ``CONTEXT.md`` or an ADR right in ``docs/adr``."""
+    posix = PurePosixPath(path)
+    return path == "CONTEXT.md" or (
+        posix.parent == PurePosixPath("docs/adr") and posix.suffix == ".md"
+    )
 
 
 def commands(selection: TicketDiffSelection, python: str) -> list[list[str]]:

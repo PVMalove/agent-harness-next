@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.console import brand
-from harness.console.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN
+from harness.console.kernel import brand
+from harness.console.kernel.help_text import HELP_MARKDOWN, HELP_MARKDOWN_EN
 
 
 def test_logo_rows_are_one_width_and_the_banner_has_a_line_per_row() -> None:
@@ -201,10 +201,35 @@ def test_shell_tokens_do_not_shadow_the_palette() -> None:
     assert not set(brand.SHELL_TOKENS) & set(brand.PALETTE)
 
 
+def test_the_palette_carries_the_approved_web_roles() -> None:
+    palette = {
+        "background": "#1b1f26",
+        "surface": "#232830",
+        "panel": "#2a303a",
+        "primary": "#6fa8dc",
+        "foreground": "#e8ebef",
+        "muted": "#9aa3af",
+        "success": "#8fbf7f",
+        "warning": "#e0a458",
+        "error": "#e67d7d",
+    }
+    tokens = {
+        "border-subtle": "#353d49",
+        "component-border": "#6b7a8c",
+        "selection-background": "#263243",
+        "selection-foreground": "#cfe2f5",
+        "row-highlight": "#303743",
+        "scrollbar-thumb": "#e8ebef",
+        "scrollbar-track": "#6b7a8c",
+    }
+    assert {key: brand.PALETTE[key] for key in palette} == palette
+    assert {key: brand.SHELL_TOKENS[key] for key in tokens} == tokens
+
+
 def test_shell_css_resolves_only_the_shell_tokens() -> None:
     css = "A { border: solid $border-subtle; color: $text; background: $selection-background; }"
     assert brand.shell_css(css) == (
-        "A { border: solid #3a3731; color: $text; background: #45332c; }"
+        "A { border: solid #353d49; color: $text; background: #263243; }"
     )
 
 

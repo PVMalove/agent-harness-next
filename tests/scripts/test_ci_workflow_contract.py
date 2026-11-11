@@ -40,7 +40,9 @@ UNCHANGED_JOBS = {
     "private-terms": "github.event_name == 'pull_request'",
     "parser-bundle": None,
 }
-ALL_JOBS = {LIGHT_JOB, "dashboard", *FULL_JOBS, *UNCHANGED_JOBS}
+# The jobs that run on both paths without a condition: the console SPA and the public site.
+BOTH_PATHS_JOBS = {"console-spa", "docs"}
+ALL_JOBS = {LIGHT_JOB, "dashboard", *FULL_JOBS, *UNCHANGED_JOBS, *BOTH_PATHS_JOBS}
 # What the light job must never contain: each of these runs, or measures, the full suite.
 FULL_SUITE_MARKERS = (
     "make verify",
@@ -172,7 +174,8 @@ class LightPathTests(unittest.TestCase):
         running = _running("pull_request", "integration/web-console")
 
         self.assertEqual(
-            running, {LIGHT_JOB, "private-terms", "parser-bundle", "dashboard"}
+            running,
+            {LIGHT_JOB, "private-terms", "parser-bundle", "dashboard", *BOTH_PATHS_JOBS},
         )
         self.assertFalse(running & set(FULL_JOBS))
 

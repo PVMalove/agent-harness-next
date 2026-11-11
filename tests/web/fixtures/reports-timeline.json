@@ -1,0 +1,74 @@
+{
+  "batch": {
+    "batch_id": "b-887",
+    "branch": "feature/issue-887",
+    "created_at": "2026-11-08T09:00:00+00:00",
+    "pr_created_at": "",
+    "pr_state": "missing",
+    "pr_url": "",
+    "state": "active",
+    "ticket": "#887"
+  },
+  "events": [
+    {
+      "at": "2026-11-08T09:00:00+00:00",
+      "kind": "state",
+      "role": null,
+      "text": "батч создан"
+    },
+    {
+      "at": "2026-11-08T09:10:00+00:00",
+      "kind": "dispatch",
+      "role": "developer",
+      "text": "developer: d-dev, итог: reported"
+    },
+    {
+      "at": "2026-11-08T10:00:00+00:00",
+      "kind": "report",
+      "role": "developer",
+      "text": "отчёт developer: completed"
+    },
+    {
+      "at": "2026-11-08T10:20:00+00:00",
+      "kind": "dispatch",
+      "role": "review",
+      "text": "review: d-rev, итог: reported"
+    },
+    {
+      "at": "2026-11-08T11:00:00+00:00",
+      "kind": "report",
+      "role": "review",
+      "text": "отчёт review: completed"
+    },
+    {
+      "at": "2026-11-08T11:15:00+00:00",
+      "kind": "dispatch",
+      "role": "qa",
+      "text": "qa: d-qa, итог: reported"
+    },
+    {
+      "at": "2026-11-08T11:30:00+00:00",
+      "kind": "dispatch",
+      "role": "developer",
+      "text": "developer: d-wip, итог: working"
+    },
+    {
+      "at": "2026-11-08T12:00:00+00:00",
+      "kind": "report",
+      "role": "qa",
+      "text": "отчёт qa: failed"
+    },
+    {
+      "at": "2026-11-08T12:10:00+00:00",
+      "kind": "decision",
+      "role": null,
+      "text": "решение coordinator: developer-retry → developer (policy:auto) — QA упал"
+    }
+  ],
+  "role_flow": [
+    "developer",
+    "review",
+    "qa",
+    "developer"
+  ]
+}

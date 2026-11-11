@@ -259,7 +259,7 @@ def test_an_agent_cannot_edit_the_hook_configuration(
         ".claude/settings.txt",
         ".claude/agents/test-author.md",
         "settings.json",
-        "docs/hooks/block-pr-merge.md",
+        "notes/policy.md",
         "harness/project/hooks/block-pr-merge.sh",
         ".harness/project.json.bak",
     ],

@@ -391,6 +391,15 @@ def run_worker(args: argparse.Namespace) -> int:
             server.close()
 
 
+def log_path(brief: Brief) -> Path:
+    """The worker's stdout+stderr log; console observation reads it by the same rule."""
+    return (
+        Path(brief["report_staging_path"]).parent.parent
+        / "worker-logs"
+        / f"{brief['dispatch_id']}.log"
+    )
+
+
 def start(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     brief_path = Path(args.brief).resolve()
@@ -445,12 +454,11 @@ def start(args: argparse.Namespace) -> int:
             )
         )
         return 0
-    log = Path(brief["report_staging_path"]).parent.parent / "worker-logs"
-    log.mkdir(parents=True, exist_ok=True)
-    log_path = log / f"{brief['dispatch_id']}.log"
-    receipt = log / f"{brief['dispatch_id']}.ready.json"
+    log = log_path(brief)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    receipt = log.with_name(f"{brief['dispatch_id']}.ready.json")
     receipt.unlink(missing_ok=True)
-    with log_path.open("ab") as sink:
+    with log.open("ab") as sink:
         process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "_run"],
             cwd=worktree,
@@ -497,7 +505,7 @@ def start(args: argparse.Namespace) -> int:
         else:
             process.terminate()
         process.wait(timeout=3)
-    tail = log_path.read_text(encoding="utf-8", errors="replace")[-500:]
+    tail = log.read_text(encoding="utf-8", errors="replace")[-500:]
     print(f"codex worker failed before native readiness: {tail}", file=sys.stderr)
     return 1
 

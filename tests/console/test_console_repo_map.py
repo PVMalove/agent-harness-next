@@ -3,42 +3,19 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping, Sequence
 
-from harness.console import repo_map as console_repo_map
-from harness.console.export import export_text, render_markdown
-from harness.console.repo_map import RepoMapView
+import pytest
+
+from harness.console.kernel import repo_map as console_repo_map
+from harness.console.kernel.export import export_text, render_markdown
+from harness.console.kernel.repo_map import RepoMapView
 from tests.console._console_repo_map_fixture import (
     HUB,
     map_payload,
 )
-
-
-class _RecordingRunner:
-    def __init__(self, result: "subprocess.CompletedProcess[str]") -> None:
-        self.result = result
-        self.calls: list[tuple[list[str], Path | None]] = []
-
-    def __call__(
-        self,
-        argv: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-        cwd: Path | None = None,
-    ) -> "subprocess.CompletedProcess[str]":
-        self.calls.append((list(argv), cwd))
-        return self.result
-
-
-def _completed(
-    stdout: str = "", stderr: str = "", code: int = 0
-) -> "subprocess.CompletedProcess[str]":
-    return subprocess.CompletedProcess(["repo_map"], code, stdout, stderr)
 
 
 def _view(commit: str = "f" * 40) -> RepoMapView:
@@ -60,52 +37,24 @@ def test_parse_map_rejects_a_payload_outside_schema_v1() -> None:
     assert "схеме v1" in problem
 
 
-def test_build_argv_prefers_the_installed_cli(tmp_path: Path) -> None:
-    argv = console_repo_map.build_argv(tmp_path, "f" * 40)
-    assert argv[:2] == [sys.executable, "-B"]
-    assert argv[2].endswith(str(Path("harness") / "repo_map" / "repo_map.py"))
-    assert argv[3:] == ["--repo", str(tmp_path), "--commit", "f" * 40]
-
-    installed = tmp_path / ".harness" / "repo_map" / "repo_map.py"
-    installed.parent.mkdir(parents=True)
-    installed.write_text("", "utf-8")
-    assert console_repo_map.build_argv(tmp_path, "f" * 40)[2] == str(installed)
-
-
-def test_build_map_runs_the_cli_through_the_runner(tmp_path: Path) -> None:
+def test_read_build_returns_the_map_the_cli_printed() -> None:
     commit = "f" * 40
-    runner = _RecordingRunner(_completed(json.dumps(map_payload(commit))))
 
-    view = console_repo_map.build_map(tmp_path, commit, runner)
+    view = console_repo_map.read_build(0, json.dumps(map_payload(commit)), "")
 
     assert not isinstance(view, str)
-    assert view.origin == "построена"
-    assert runner.calls == [(console_repo_map.build_argv(tmp_path, commit), tmp_path)]
+    assert view.origin == "построена" and view.commit == commit
 
 
-def test_build_map_reports_cli_failure_invalid_json_and_contract_drift(
-    tmp_path: Path,
-) -> None:
-    failed = console_repo_map.build_map(
-        tmp_path,
-        "f" * 40,
-        _RecordingRunner(
-            _completed(stderr="error: bad commit\nremedy: pass HEAD", code=2)
-        ),
-    )
+def test_read_build_reports_cli_failure_invalid_json_and_contract_drift() -> None:
+    failed = console_repo_map.read_build(2, "", "error: bad commit\nremedy: pass HEAD")
     assert isinstance(failed, str)
     assert "кодом 2" in failed and "remedy: pass HEAD" in failed
 
-    not_json = console_repo_map.build_map(
-        tmp_path, "f" * 40, _RecordingRunner(_completed("{"))
-    )
+    not_json = console_repo_map.read_build(0, "{", "")
     assert isinstance(not_json, str) and "не JSON" in not_json
 
-    drift = console_repo_map.build_map(
-        tmp_path,
-        "f" * 40,
-        _RecordingRunner(_completed(json.dumps({"schema_version": 2}))),
-    )
+    drift = console_repo_map.read_build(0, json.dumps({"schema_version": 2}), "")
     assert isinstance(drift, str) and "схеме v1" in drift
 
 
@@ -248,3 +197,38 @@ def test_diagnostic_rows_pair_each_code_with_a_warning_status() -> None:
     [(status, code, path)] = console_repo_map.diagnostic_rows(view)
     assert status.render("ru") == "⚠ syntax_error"
     assert (code, path) == ("syntax_error", "pkg/broken.py")
+
+
+def _cache(repo: Path, key: str, commit: str, *, max_tokens: int = 4000, mtime: float) -> None:
+    import os
+
+    from harness.repo_map.cache import write_cache
+
+    payload = map_payload(commit)
+    provenance = dict(payload["parser_provenance"])  # type: ignore[call-overload]
+    provenance["max_tokens"] = max_tokens
+    payload["parser_provenance"] = provenance
+    directory = repo / "cache"
+    write_cache(directory, key, json.dumps(payload))
+    os.utime(directory / f"{key}.json", (mtime, mtime))
+
+
+def test_cached_map_prefers_the_widest_token_budget_of_the_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(console_repo_map, "cache_directory", lambda repo: repo / "cache")
+    _cache(tmp_path, "small", "a" * 40, max_tokens=4000, mtime=200)
+    _cache(tmp_path, "wide", "a" * 40, max_tokens=16000, mtime=100)
+    view = console_repo_map.cached_map(tmp_path, "a" * 40)
+    assert view is not None and view.provenance["max_tokens"] == 16000
+
+
+def test_latest_cached_map_is_the_newest_commit_other_than_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(console_repo_map, "cache_directory", lambda repo: repo / "cache")
+    _cache(tmp_path, "old", "a" * 40, mtime=100)
+    _cache(tmp_path, "new", "b" * 40, mtime=200)
+    stale = console_repo_map.latest_cached_map(tmp_path, exclude="c" * 40)
+    assert stale is not None and stale.commit == "b" * 40
+    assert console_repo_map.latest_cached_map(tmp_path, exclude="b" * 40).commit == "a" * 40  # type: ignore[union-attr]

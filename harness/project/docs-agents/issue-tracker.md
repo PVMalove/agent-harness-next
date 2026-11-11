@@ -17,6 +17,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body-file <path>`, with the path from [git-workflow.md](./git-workflow.md) §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`)
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
+- **Replace the status label**: `gh issue edit <number> --repo <host>/<owner>/<name> --remove-label <every previous status::*> --add-label <status::new>` in one call, so the ticket keeps exactly one `status::*` label; `harness ticket-status` writes the task board's moves this way.
 - **Close**: post the explanation first with `gh issue comment <number> --body-file <path>`, then run `gh issue close <number>`; never an inline `--comment "..."`.
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
@@ -58,6 +59,7 @@ Issues and specs for this repo live as GitLab issues. Use the [`glab`](https://g
 - **List issues**: `glab issue list -R <project-url> --output json` with appropriate `--label` filters. In `glab issue list`, `-F` is `--output-format` (`details`/`ids`/`urls`), not JSON.
 - **Comment on an issue**: `GITLAB_HOST=<host> glab api projects/<project-id>/issues/<number>/notes -F body=@<path>`, with the path from [git-workflow.md](./git-workflow.md) §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`). GitLab calls comments "notes". The `note` subcommand of `glab issue` takes only an inline `--message` and cannot read a file, so it is not used for a comment body.
 - **Apply / remove labels**: `glab issue update <number> -R <project-url> --label "..."` / `--unlabel "..."`. Multiple labels can be comma-separated or by repeating the flag. Unlike `gh`, a `--label` that names a label missing from the project doesn't fail: GitLab creates it with its default color, so run `/setup-labels` before the first labelled write.
+- **Replace the status label**: `glab issue update <number> -R <project-url> --label <status::new> --unlabel <every previous status::*>`; the `--unlabel` is explicit because a scoped label replaces its namespace only on GitLab Premium. `harness ticket-status` writes the task board's moves this way.
 - **Close**: `glab issue close <number> -R <project-url>`. `glab issue close` does not accept a closing comment, so post the explanation first as a comment (see above), then close.
 - **Merge requests**: GitLab calls PRs "merge requests". Use `glab mr create -R <project-url> --target-branch <target-branch> --title '<title>' --description-file <path> --yes` (target branch and title rules in [git-workflow.md](./git-workflow.md) §2), `glab mr update`, `glab mr view`, etc. — the same shape as `gh pr ...` with `mr` in place of `pr`, `--target-branch` in place of `--base`, `--description-file` in place of `--body-file`, and `-R <project-url>` on every command. An MR comment goes through `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests/<number>/notes -F body=@<path>` (`pr-comment-<issue>-<slug>.md`), not `glab mr note --message`.
 
@@ -97,6 +99,7 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 - The spec is `.scratch/<feature-slug>/spec.md`
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
 - Triage state is recorded as a `Workflow:` line near the top of each issue file, using the `status::*` vocabulary (see [triage-labels.md](./triage-labels.md) for the exact strings)
+- `harness ticket-status` moves a local ticket by rewriting its first `**Workflow:**` line in place (or adding one after the `# ` title); it writes only inside `.scratch/` and never through a symlink
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
 ### When a skill says "publish to the issue tracker"

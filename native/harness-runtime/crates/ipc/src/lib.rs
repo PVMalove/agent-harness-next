@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+// SPDX-License-Identifier: BUSL-1.1
+// Licensed under the Business Source License 1.1 (BSL-1.1).
+// Commercial use, sale, or use in commercial application development is strictly
+// prohibited without prior written permission from the copyright holder.
+// Removing or altering this header is prohibited and voids all license rights.
+
 //! Local IPC transport of `harness-runtime` (ADR 0021, section 2): a Unix domain socket in a
 //! `0700` runtime directory with a `SO_PEERCRED` peer check, or on Windows a named pipe with a
 //! DACL for the current user and a client SID check, and a capability token on both.

@@ -1,0 +1,462 @@
+{
+  "analytics": {
+    "flow": {
+      "aging": {
+        "d1_3": 0,
+        "d3_7": 0,
+        "gt_7d": 0,
+        "lt_1d": 2
+      },
+      "aging_by_role": {
+        "architect:gt_4h": 1,
+        "developer:h1_4": 1
+      },
+      "by_state": {
+        "active": 2,
+        "completed": 1
+      },
+      "current_by_role": {
+        "architect": 1,
+        "developer": 1
+      },
+      "cycle_p50_seconds": 95400,
+      "cycle_p95_seconds": 95400,
+      "pr_per_day": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "stage_p50_by_role": {
+        "developer": 3000,
+        "qa": 2700,
+        "review": 2400
+      },
+      "stage_p95_by_role": {
+        "developer": 3000,
+        "qa": 2700,
+        "review": 2400
+      },
+      "wait_p50_by_role": {
+        "developer": 1800,
+        "qa": 900,
+        "review": 1200
+      }
+    },
+    "gates": {
+      "approval_oldest_seconds": null,
+      "approval_p50_seconds": null,
+      "approval_p95_seconds": null,
+      "awaiting": 0,
+      "decisions_by_verdict": {
+        "developer-retry": 1
+      },
+      "latency_p50_by_gate": {
+        "qa": 600
+      },
+      "latency_p50_by_hour": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        600
+      ],
+      "latency_p95_by_gate": {
+        "qa": 600
+      },
+      "latency_p95_by_hour": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        600
+      ],
+      "pr_states": {
+        "found": 1,
+        "missing": 2
+      }
+    },
+    "quality": {
+      "findings_by_severity": {
+        "warning": 1
+      },
+      "outcomes": {
+        "completed": 3,
+        "failed": 1
+      },
+      "qa_attempts_failed": 1,
+      "qa_first_pass": 0,
+      "qa_tickets": 1,
+      "reports_by_role": {
+        "developer": 2,
+        "qa": 1,
+        "review": 1
+      },
+      "returns_by_role": {
+        "qa": 1
+      },
+      "rework_by_role": {
+        "developer": 1
+      }
+    },
+    "runtime": {
+      "heartbeat_age_p95_seconds": 17400,
+      "oldest_unfinished_seconds": 17700,
+      "open_age_by_role": {
+        "architect": 17700,
+        "developer": 5400
+      },
+      "stage_states": {
+        "reported": 4,
+        "working": 2
+      },
+      "stale": 0,
+      "stale_dispatches": 1,
+      "unfinished": 2
+    }
+  },
+  "kpi": {
+    "awaiting_approval": 0,
+    "batches": 3,
+    "blocked": 0,
+    "cycle_p50_seconds": 95400,
+    "cycle_p95_seconds": 95400,
+    "failed": 0,
+    "flow_efficiency_pct": 3,
+    "oldest_approval_seconds": null,
+    "oldest_wip_seconds": 18000,
+    "qa_first_pass": 0,
+    "qa_tickets": 1,
+    "rework": 1,
+    "rework_batches": 1,
+    "stale": 0,
+    "throughput_7d": 1,
+    "unknown": 0,
+    "wip": 2
+  },
+  "ledger": {
+    "batches": [
+      {
+        "batch_id": "b-887",
+        "branch": "feature/issue-887",
+        "created_at": "2026-11-08T09:00:00+00:00",
+        "pr_created_at": "",
+        "pr_state": "missing",
+        "pr_url": "",
+        "state": "active",
+        "ticket": "#887"
+      },
+      {
+        "batch_id": "b-888",
+        "branch": "feature/issue-888",
+        "created_at": "2026-11-08T08:00:00+00:00",
+        "pr_created_at": "",
+        "pr_state": "missing",
+        "pr_url": "",
+        "state": "active",
+        "ticket": "#888"
+      },
+      {
+        "batch_id": "b-886",
+        "branch": "feature/issue-886",
+        "created_at": "2026-11-01T08:00:00+00:00",
+        "pr_created_at": "2026-11-02T10:30:00+00:00",
+        "pr_state": "found",
+        "pr_url": "https://example.com/pull/1011",
+        "state": "completed",
+        "ticket": "#886"
+      }
+    ],
+    "dispatches": {
+      "d-arch-888": {
+        "role": "architect"
+      },
+      "d-dev": {
+        "role": "developer"
+      },
+      "d-old": {
+        "role": "developer"
+      },
+      "d-qa": {
+        "role": "qa"
+      },
+      "d-rev": {
+        "role": "review"
+      },
+      "d-wip": {
+        "role": "developer"
+      }
+    },
+    "evidence": [
+      {
+        "batch_id": "b-887",
+        "developer": "present",
+        "publish": "none",
+        "qa": "present",
+        "qa_run": "present",
+        "receipt": "none",
+        "review": "present",
+        "ticket": "#887"
+      },
+      {
+        "batch_id": "b-888",
+        "developer": "missing",
+        "publish": "none",
+        "qa": "missing",
+        "qa_run": "missing",
+        "receipt": "none",
+        "review": "missing",
+        "ticket": "#888"
+      },
+      {
+        "batch_id": "b-886",
+        "developer": "present",
+        "publish": "none",
+        "qa": "missing",
+        "qa_run": "missing",
+        "receipt": "none",
+        "review": "missing",
+        "ticket": "#886"
+      }
+    ],
+    "publish": [
+      {
+        "batch_id": "b-887",
+        "branch": "feature/issue-887",
+        "candidate": "c0ffee1",
+        "head": "c0ffee1",
+        "head_matches": true,
+        "integration_ref": null,
+        "pr_state": "missing",
+        "pr_url": "",
+        "qa": {
+          "dispatch_id": "d-qa",
+          "has_blockers": true,
+          "outcome": "failed"
+        },
+        "refusals": [],
+        "review": {
+          "dispatch_id": "d-rev",
+          "has_blockers": false,
+          "outcome": "completed"
+        },
+        "state": "active",
+        "target": null,
+        "target_in_history": null,
+        "ticket": "#887",
+        "verdict": "blocked"
+      }
+    ],
+    "qa_attempts": [
+      {
+        "dispatch_id": "d-qa",
+        "failed_at": "2026-11-08T11:40:00+00:00",
+        "message": "лог QA не найден",
+        "stage": "collect"
+      }
+    ],
+    "qa_runs": [
+      {
+        "artifact": "qa-run-1.log",
+        "commands": [
+          [
+            "make lint",
+            0
+          ],
+          [
+            "pytest -q tests/console",
+            1
+          ]
+        ],
+        "dispatch_id": "d-qa",
+        "logged_at": "2026-11-08T11:58:00+00:00",
+        "outcome": "failed",
+        "tail": [
+          "E   assert 3 == 2",
+          "FAILED tests/console/test_reports.py::test_kpi"
+        ],
+        "ticket": "#887",
+        "total_lines": 42
+      }
+    ],
+    "reports": [
+      {
+        "batch_id": "b-887",
+        "dispatch_id": "d-qa",
+        "has_blockers": true,
+        "has_risks": false,
+        "outcome": "failed",
+        "reported_at": "2026-11-08T12:00:00+00:00",
+        "role": "qa",
+        "ticket": "#887"
+      },
+      {
+        "batch_id": "b-887",
+        "dispatch_id": "d-rev",
+        "has_blockers": false,
+        "has_risks": true,
+        "outcome": "completed",
+        "reported_at": "2026-11-08T11:00:00+00:00",
+        "role": "review",
+        "ticket": "#887"
+      },
+      {
+        "batch_id": "b-887",
+        "dispatch_id": "d-dev",
+        "has_blockers": false,
+        "has_risks": false,
+        "outcome": "completed",
+        "reported_at": "2026-11-08T10:00:00+00:00",
+        "role": "developer",
+        "ticket": "#887"
+      },
+      {
+        "batch_id": "b-886",
+        "dispatch_id": "d-old",
+        "has_blockers": false,
+        "has_risks": false,
+        "outcome": "completed",
+        "reported_at": "2026-11-01T09:00:00+00:00",
+        "role": "developer",
+        "ticket": "#886"
+      }
+    ],
+    "reports_kpi": {
+      "attention": 1,
+      "blocked": 1,
+      "evidence_complete": 4,
+      "latency_p50_seconds": 2700,
+      "latency_p95_seconds": 3000,
+      "qa_first_pass": 0,
+      "qa_tickets": 1,
+      "reports": 4,
+      "stale_evidence": 0
+    },
+    "stages": [
+      {
+        "at": "2026-11-08T12:00:00+00:00",
+        "batch_id": "b-887",
+        "dispatch_id": "d-qa",
+        "heartbeat_at": "",
+        "report": "d-qa",
+        "role": "qa",
+        "started_at": "2026-11-08T11:15:00+00:00",
+        "state": "reported",
+        "ticket": "#887"
+      },
+      {
+        "at": "2026-11-08T11:30:00+00:00",
+        "batch_id": "b-887",
+        "dispatch_id": "d-wip",
+        "heartbeat_at": "2026-11-08T11:35:00+00:00",
+        "report": null,
+        "role": "developer",
+        "started_at": "2026-11-08T11:30:00+00:00",
+        "state": "working",
+        "ticket": "#887"
+      },
+      {
+        "at": "2026-11-08T11:00:00+00:00",
+        "batch_id": "b-887",
+        "dispatch_id": "d-rev",
+        "heartbeat_at": "",
+        "report": "d-rev",
+        "role": "review",
+        "started_at": "2026-11-08T10:20:00+00:00",
+        "state": "reported",
+        "ticket": "#887"
+      },
+      {
+        "at": "2026-11-08T10:00:00+00:00",
+        "batch_id": "b-887",
+        "dispatch_id": "d-dev",
+        "heartbeat_at": "",
+        "report": "d-dev",
+        "role": "developer",
+        "started_at": "2026-11-08T09:10:00+00:00",
+        "state": "reported",
+        "ticket": "#887"
+      },
+      {
+        "at": "2026-11-08T08:05:00+00:00",
+        "batch_id": "b-888",
+        "dispatch_id": "d-arch-888",
+        "heartbeat_at": "2026-11-08T08:10:00+00:00",
+        "report": null,
+        "role": "architect",
+        "started_at": "2026-11-08T08:05:00+00:00",
+        "state": "working",
+        "ticket": "#888"
+      },
+      {
+        "at": "2026-11-01T09:00:00+00:00",
+        "batch_id": "b-886",
+        "dispatch_id": "d-old",
+        "heartbeat_at": "",
+        "report": "d-old",
+        "role": "developer",
+        "started_at": "2026-11-01T08:10:00+00:00",
+        "state": "reported",
+        "ticket": "#886"
+      }
+    ],
+    "unavailable": null,
+    "version": 2
+  },
+  "lock": {
+    "error": null,
+    "lock": {
+      "held_seconds": 75,
+      "locked": true,
+      "operation": "report submit",
+      "owner": {
+        "host": "build-1",
+        "pid": 4242
+      },
+      "release_available": false,
+      "remaining_seconds": 525,
+      "verdict": "owner-alive"
+    }
+  }
+}

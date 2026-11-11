@@ -1,0 +1,39 @@
+{
+  "blockers": {
+    "backend-orchestration": [
+      ".harness/orchestration/roles/developer.md"
+    ],
+    "engineering-suite": []
+  },
+  "candidates": [
+    {
+      "command": "harness console --web /work/project",
+      "current": true,
+      "installed": true,
+      "path": "/work/project"
+    },
+    {
+      "command": "harness console --web /work/billing",
+      "current": false,
+      "installed": true,
+      "path": "/work/billing"
+    },
+    {
+      "command": "harness console --web '/work/new service'",
+      "current": false,
+      "installed": false,
+      "path": "/work/new service"
+    }
+  ],
+  "error": "",
+  "repo": "/work/project",
+  "target": {
+    "action": "update",
+    "capabilities": [
+      "engineering-suite"
+    ],
+    "conflicts": [],
+    "found": [],
+    "repo": "/work/project"
+  }
+}

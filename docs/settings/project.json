@@ -9,7 +9,7 @@
   "tracker": {
     "type": "github",
     "host": "github.com",
-    "project": "PVMalove/claude-agent-harness"
+    "project": "PVMalove/agent-harness-next"
   },
   "memory": {
     "enabled": true

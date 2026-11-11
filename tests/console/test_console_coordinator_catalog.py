@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.console.catalog import Reversibility
-from harness.console.coordinator_catalog import (
+from harness.console.kernel.catalog import Reversibility
+from harness.console.kernel.coordinator_catalog import (
     COORDINATOR_COMMANDS,
     CoordinatorCommand,
     subparser,
@@ -41,6 +41,7 @@ MINIMAL_VALUES = {
         "approved_at": "now",
     },
     "batch-decision-packet": {"batch": "batch-1"},
+    "dispatch-propose": {"batch": "batch-1"},
     "dispatch-create": {"batch": "batch-1"},
     "dispatch-cancel": {
         "dispatch": "dispatch-1",
@@ -67,6 +68,9 @@ MINIMAL_VALUES = {
     "recovery-status": {"batch": "batch-1"},
     "recovery-reload": {"batch": "batch-1"},
     "recovery-resume": {"batch": "batch-1"},
+    "recovery-fix": {"batch": "batch-1", "json": "1"},
+    "recovery-fix-apply": {"batch": "batch-1", "json": "1"},
+    "recovery-abort": {"batch": "batch-1"},
     "dispatch-status": {},
     "qa-status": {},
     "ledger-status": {},
@@ -85,6 +89,7 @@ EXPECTED_HANDLER = {
     "batch-abandon": "abandon_batch",
     "batch-decide": "decide_batch",
     "batch-decision-packet": "decision_packet",
+    "dispatch-propose": "create_dispatch",
     "dispatch-create": "create_dispatch",
     "dispatch-cancel": "cancel_dispatch",
     "dispatch-send": "send_dispatch",
@@ -97,6 +102,9 @@ EXPECTED_HANDLER = {
     "recovery-status": "recovery_status",
     "recovery-reload": "recovery_reload",
     "recovery-resume": "recovery_resume",
+    "recovery-fix": "recovery_fix",
+    "recovery-fix-apply": "recovery_fix",
+    "recovery-abort": "recovery_abort",
     "dispatch-status": "dispatch_status",
     "qa-status": "qa_status",
     "ledger-status": "ledger_status",
@@ -110,6 +118,7 @@ EXPECTED_REVERSIBILITY = {
     "batch-abandon": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "batch-decide": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "batch-decision-packet": Reversibility.REVERSIBLE,
+    "dispatch-propose": Reversibility.REVERSIBLE,
     "dispatch-create": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "dispatch-cancel": Reversibility.TERMINAL_COORDINATOR_ACTION,
     "dispatch-send": Reversibility.EXTERNAL_CHANGE,
@@ -122,11 +131,24 @@ EXPECTED_REVERSIBILITY = {
     "recovery-status": Reversibility.REVERSIBLE,
     "recovery-reload": Reversibility.REVERSIBLE,
     "recovery-resume": Reversibility.TERMINAL_COORDINATOR_ACTION,
+    "recovery-fix": Reversibility.REVERSIBLE,
+    "recovery-fix-apply": Reversibility.OVERWRITES_MANAGED_FILES,
+    "recovery-abort": Reversibility.REVERSIBLE,
     "dispatch-status": Reversibility.REVERSIBLE,
     "qa-status": Reversibility.REVERSIBLE,
     "ledger-status": Reversibility.REVERSIBLE,
     "ledger-lock-status": Reversibility.REVERSIBLE,
     "ledger-release-lock": Reversibility.TERMINAL_COORDINATOR_ACTION,
+}
+
+# dispatch-status records only the first proof that a docker dispatch stopped; it stays a poll.
+EXPECTED_READS = {
+    "batch-list",
+    "batch-decision-packet",
+    "dispatch-status",
+    "qa-status",
+    "ledger-status",
+    "ledger-lock-status",
 }
 
 
@@ -141,6 +163,16 @@ def test_reversibility_matches_the_approved_architect_design() -> None:
     assert {
         key: entry.reversibility for key, entry in ENTRIES.items()
     } == EXPECTED_REVERSIBILITY
+
+
+def test_coordinator_commands_mutate_unless_declared_reads() -> None:
+    """Reversible coordinator writers still occupy the server's project mutation slot."""
+    assert {key for key, entry in ENTRIES.items() if entry.read_only} == EXPECTED_READS
+    assert all(
+        ENTRIES[key].reversibility is Reversibility.REVERSIBLE for key in EXPECTED_READS
+    )
+    assert ENTRIES["batch-create"].reversibility is Reversibility.REVERSIBLE
+    assert not ENTRIES["batch-create"].read_only
 
 
 def _live_actions(entry: CoordinatorCommand) -> list[argparse.Action]:
@@ -208,3 +240,46 @@ def test_value_less_flag_is_passed_alone_only_when_set() -> None:
     assert open_field.default is None
     assert entry.cli_argv(REPO, {"open": "1"})[-1] == "--open"
     assert "--open" not in entry.cli_argv(REPO, {"open": ""})
+
+
+def test_dispatch_propose_renders_the_transition_without_an_approval() -> None:
+    """The first step of a dispatch approval parses as a proposal and takes no approval fields."""
+    entry = ENTRIES["dispatch-propose"]
+    assert not entry.read_only
+    assert not {"approved_by", "approved_at", "transition_digest"} & {
+        field.dest for field in entry.fields
+    }
+    argv = entry.cli_argv(REPO, {"batch": "batch-1", "role": "developer"})
+    args = coordinator.parser().parse_args(argv[4:])
+    assert args.propose is True
+    assert args.role == "developer"
+
+
+def test_the_recovery_fix_preview_never_carries_apply_and_the_apply_entry_always_does() -> None:
+    preview, apply = ENTRIES["recovery-fix"], ENTRIES["recovery-fix-apply"]
+    assert "apply" not in {field.dest for field in preview.fields}
+    assert not preview.accepts({"batch": "batch-1", "apply": "1"})
+    assert "--apply" not in preview.cli_argv(REPO, {"batch": "batch-1", "json": "1"})
+    assert not apply.accepts({"batch": "batch-1", "apply": "1"})
+    argv = apply.cli_argv(REPO, {"batch": "batch-1", "json": "1"})
+    assert argv[-1] == "--apply" and argv.count("--apply") == 1
+    assert coordinator.parser().parse_args(argv[4:]).apply is True
+    assert apply.needs_confirmation and not preview.needs_confirmation
+
+
+@pytest.mark.parametrize("key", ["recovery-fix-apply", "recovery-resume"])
+def test_the_job_service_refuses_an_unconfirmed_recovery_write(
+    tmp_path: Path, key: str
+) -> None:
+    from harness.console.backend.composition import job_service
+    from harness.console.backend.domain.jobs import JobRejected
+
+    async def never(*args: object, **kwargs: object) -> int:
+        raise AssertionError("an unconfirmed write must not run")
+
+    service = job_service(tmp_path, executor=never)
+    with pytest.raises(JobRejected) as rejected:
+        service.start(
+            {"command_id": key, "values": {"batch": "batch-1"}, "client": "tui"}
+        )
+    assert rejected.value.code == "confirmation_required"

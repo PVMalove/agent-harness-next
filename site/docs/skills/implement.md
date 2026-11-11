@@ -1,0 +1,311 @@
+# Implement — Реализация
+
+## 1. Название и локализация
+
+- **Английское название:** `Implement`
+- **Русский перевод:**
+
+```text
+Реализация
+```
+
+## 2. Полный перевод текста скила
+
+<div class="ah-skill-text" markdown="1">
+
+```yaml
+name: implement
+description: Провести один backend-тикет через утверждённые handoff архитектора, разработчика, review, QA и publish.
+disable-model-invocation: true
+```
+
+### Реализация
+
+**Цель:** Провести ровно один тикет через `architect → developer → code-review → qa → publish`,
+затем предложить `/to-pull-requests`. Эта сессия — coordinator: она создаёт и наблюдает dispatch,
+но не реализует тикет сама.
+
+#### Маршрут
+
+Это opt-in маршрут `backend-orchestration`. Подтвердите, что установленный coordinator доступен:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . dispatch status
+```
+
+Если команда недоступна или не читает state, остановитесь и предложите `/fast-implement`. Не
+исправляйте и не подразумевайте opt-in capability. Завершите один batch до старта следующего.
+
+Если другой batch удерживает тот же незавершённый тикет, ветку или worktree, либо исчерпан
+`concurrency_budget`, проверьте `batch list --open`, конфликтующий dispatch и его decision packet.
+Сообщите разработчику, какой batch блокирует работу и как завершить его в штатном порядке.
+Если его worker больше не может прислать report, сначала запустите `batch auto-report`,
+`batch decision-packet`, `dispatch status` и `ledger validate` и приведите оценку `startup` этого
+dispatch: состояние worker, классификацию сбоя и то, что осталось неизвестным. Объясните, какой
+вариант применим — ожидание, исправление запуска, одобренный человеком `batch resume-stop`,
+`batch rewind` или отмена неотправленного dispatch, — и почему не подходят остальные. Только после
+этого предложите `batch abandon` как отдельное явное решение человека обо всём batch: покажите
+готовую к копированию команду с фактическим ID batch, проверенным именем оператора,
+`--approved-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"` и причиной, основанной на наблюдаемом сбое. Не
+подставляйте `--approved-by` так, будто оператор уже одобрил действие, и не выполняйте команду за
+него без этого одобрения. `ledger clean` удаляет только осиротевшие evidence, а `ledger reset` не
+очищает активный batch.
+
+#### Контракт coordinator-а
+
+Разрешите тикет, integration-ветку и блокеры по tracker/Git guidance. Статус тикета — часть этого
+pre-flight, до `batch create` и до создания issue-ветки: проверьте блокеры при любой текущей метке
+(есть открытые → стоп, назовите их, убедитесь, что стоит `status::blocked`); иначе замените метку
+`status::*` на `status::in-progress` так же, как шаги 2–3 фазы 1 `/fast-implement`, и проверьте, что
+она единственная `status::*`. Неудачная запись метки — блокер, а не предупреждение. До `batch create` запустите preflight объёма с ограниченным числом файлов и строк; при отказе разделите тикет через `/to-tickets`. При вызове `batch create` явно задайте `--required-gate review --required-gate qa`: полный маршрут реализации требует независимых проверок Standards/Spec и чистой serialized QA. До запуска write-role (`developer`) worker координатор сверяет наличие этих обязательных gates в `required_gates`; при их отсутствии останавливается до dispatch, предотвращая тупик при проверке risk triggers. Используйте isolated issue-ветку и worktree; protected и `integration/*` — не write targets. Открытый batch — evidence, которое показывают разработчику, а не запись для повторного использования или замены.
+
+Если `dispatch send` отклонил неподдерживаемый флаг adapter, исправьте `--adapter-arg` и отправьте
+тот же одобренный dispatch ещё раз; покажите `limitation` из `adapter_preflight`, если он есть.
+Диагностика запуска описана в разделе «Сбой запуска worker».
+
+Предлагайте каждый handoff и останавливайтесь до явного approval разработчика перед созданием или отправкой dispatch. Report — evidence, а не authority продвигать batch. Architect обязателен перед developer dispatch; review хранит отдельные Standards и Spec evidence; независимый QA проверяет candidate commit; publish отправляет только accepted SHA. Final report предшествует отдельно одобренному publish dispatch. Write-role worker, остановившийся до изменений, возвращает честный отчёт с `outcome: blocked`, привязанный к проверенному checkout с пустыми `changed_files` и незапущенными проверками; coordinator возвращает явный recovery route (`retry`, `block` или выбранный человеком `abandon`) без регистрации кандидата и без ослабления правил для completed reports.
+
+При `approval_policy: auto` координатор сам принимает каждое решение пути и пишет его как
+`policy:auto` (раздел «Automatic path» в playbook). Сессия не пишет `--approved-by` и
+`--approved-at`: `batch approve`, `dispatch create` и плановый `dispatch resume --trigger`
+выполняются без них. Для каждого отчёта, который цепочка `report submit` или `qa run` не приняла,
+включая отчёт publish, сессия запускает `batch auto-decide --batch <id>`. Сессия передаёт только
+входы, которые требуют суждения: `--commit-plan-file` с точной копией плана architect-а, только
+если отчёт architect не несёт поле `commit_plan`,
+`--findings-file`, `--bug-ticket` после заведения bug-тикета через CLI трекера и
+`--block-bypass --note`. Само решение сессия не выбирает. После отказа любой команды и после
+исхода `stopped` сессия запускает `batch auto-report --batch <id>`. Остановка окончательна для
+batch: проверьте `batch decision-packet`, `dispatch status` и `ledger validate`, прежде чем
+предлагать ожидание, исправление запуска, одобренный человеком `batch resume-stop` или
+`batch rewind --to <gate>`. Если инфраструктурный бюджет исчерпан, batch остаётся на паузе до
+такого решения человека. Перед `/to-pull-requests` сессия
+показывает итоговый отчёт; PR открывается только после явного подтверждения, auto-merge запрещён.
+
+Дефект, найденный в чистом developer report, чей DoD выполнен внутри своих allowed paths, не повод для retry:
+примите report через `batch decide --findings-file <path>`, а после policy auto-accept выполните
+`batch carry-over --batch <id> --findings-file <path>`, пока code-review dispatch не создан. Находка
+уходит в brief code-review как перенесённый пункт (маршрут `carry-over`), и единственный developer
+retry тратится после review. Retry developer report без accept — только при невыполненном пункте DoD
+или изменении вне scope.
+
+Воркер, обошедший блокировку hook-а или инструмента (другой формой команды, другим инструментом,
+файлом-скриптом, `eval`, другим интерпретатором или разбиением команды), нарушает протокол: такой
+report нельзя принять или закрыть через override-warning, а нарушение записывается в `--note`. Для
+architect и developer (включая publish) решение — `retry` с developer-категорией (не `tooling`) или
+`block`. Для read-only роли code-review, qa или verification `--reason-category block-bypass`
+передаётся в `batch decision-packet`, а когда его `route_preview.retry.route` равен `bypass-rerun`,
+— в `batch decide --decision retry`: та же стадия повторяется на том же SHA без нового candidate и
+без расхода developer retry, а новый dispatch требует явного approval при любой `approval_policy`,
+кроме `auto`. Report, который вместо
+этого остановился с `tooling_blocker`, сначала проверяется: его `command` законна по brief (зона и
+tool policy), а `message` её отклоняет. Если это ложное срабатывание, заведите или переиспользуйте
+bug-тикет на инструмент через CLI трекера (инструмент, команда, сообщение, dispatch ID), укажите его
+в `--note` и выполните `batch decide --decision retry`, когда `route_preview.retry.route` равен
+`tooling-retry`: тот же этап повторяется на том же SHA (developer продолжает от своего последнего
+коммита), а `retry_policy.max_developer_retries` не расходуется. Незаконная команда — не ложное
+срабатывание: retry с developer-категорией, которую подтверждает evidence. Attention
+`tooling-retry-repeated`, поднятое третьим подряд tooling-retry на одном candidate, снимается только
+после исправления инструмента.
+
+Каждая dispatched role сначала пишет model self-report относительно immutable brief и посылает
+heartbeat; эти факты служат evidence и не дают повода менять immutable brief. Между send и report
+coordinator опрашивает watchdog. Mismatch или stale dispatch — blocker; recovery создаёт новый
+approved dispatch, а не редактирует brief или state. Молчание или timeout не доказывают, что
+worker остановился; правила перезапуска — в разделе «Сбой запуска worker».
+
+Для `in-process` transport send фиксирует immutable handoff, после чего coordinator немедленно
+запускает role subagent в указанном worktree. External adapter является только transport и сохраняет
+тот же handoff, liveness, approval и report contract.
+
+**Тест-автор в полном маршруте.** Исполнитель наследует runtime/model/effort из утверждённого
+brief developer, без подмены профилем проекта. Настроенный runtime без защищённого адаптера даёт
+`runtime_unsupported` и обычный TDD. Текущий защищённый адаптер Claude Code с external transport
+запускает preflight из
+собственного worker checkout: `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <путь brief>`.
+Точный trust этого пути принимает человек. После `{"status":"ok"}` и при наличии
+`Agent(test-author)` или `Agent` в утверждённом brief developer вызывает автора без переопределения model/effort (`model: inherit`); без разрешения
+остаётся обычный TDD с причиной `agent_tool_unavailable`. Для in-process проверка основного
+checkout с `--worktree` даёт `checkout_mismatch` и оставляет обычный TDD. Отказ не становится
+blocker. Автор пишет и запускает тест в worker, а общий корень runner-логов получает от developer.
+Проверка `hooks.test_author` показывает выбранный runtime/model/effort, источник и готовность или отказ; live-проба с учётом расхода
+проверяет реальный вызов developer → author. Rust и Codex этим решением не поддержаны.
+
+Перед первым dispatch coordinator может зарегистрировать immutable Context Package, собранный
+`context_builder.py` без LLM из pinned `base_commit`/`candidate_commit`. Он содержит exact diff,
+5–10 стартовых файлов с причинами, bounded graph, связанные тесты, карточки ADR/precedent и SHA-256
+включённых файлов. Прямые локальные импорты разворачиваются на один уровень; неизвестные форматы
+получают первые 30 строк. Перед каждым dispatch freshness package проверяется в shadow-режиме.
+
+Write-роли могут записать checkpoint и продолжить тот же dispatch в новой worker session; checkpoint
+не является completion report и переносит только SHA, changed files, остаточный DoD, проверки, риски,
+blockers и ссылку на package. Read-only роли не могут checkpoint/resume. Rate-limit resume разрешён
+автоматически, остальные planned triggers требуют coordinator decision.
+
+#### Промпт воркера
+
+Каждый промпт воркера — этот шаблон, заполненный из результата `dispatch send` и вызова CLI,
+которым его отправили. Brief и Context Package несут задачу; промпт также несёт обязательный
+lifecycle. В `<coordinator CLI>` подставляются Python executable, абсолютный путь `coordinator.py`
+и абсолютный `--repo` (плюс `--state-dir`, если он задан) исходного dispatch. Пути экранируются для
+shell воркера. Адрес ledger сохраняется и при работе из другого worktree. Интервал heartbeat
+копируется дословно из `dispatch send.heartbeat.every_seconds`.
+
+```text
+You are the <role> worker for dispatch <dispatch_id>.
+Brief: <brief path from dispatch send>
+Report staging path: <report_staging_path from dispatch send, verbatim>
+Coordinator CLI: <coordinator CLI>
+Before task work, run git rev-parse --show-toplevel, git branch --show-current and git rev-parse HEAD
+in your runtime's current directory. Confirm your actually active model and the probed Git top-level:
+<coordinator CLI> dispatch self-report --dispatch <dispatch_id> --model "<actual active model>" --worktree "<probed Git top-level>"
+Proceed only after a successful self-report; escalate a mismatch or unavailable model identity.
+Immediately after self-report and at least every <heartbeat.every_seconds> seconds while working, run:
+<coordinator CLI> dispatch heartbeat --dispatch <dispatch_id>
+Context Package <context_package_id>: start from its starting_files, symbol_graph and
+related_tests. For a starting file with non-empty sections, read only the start_line–end_line
+ranges the task needs.
+Work within the brief; escalate a blocker for anything the brief and the package leave out.
+Before your final reply, write the completion report JSON to the exact report staging path using
+the common and role-specific report contract, with report_language: ru, then run:
+<coordinator CLI> report submit --file "<report_staging_path>"
+Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+If submission fails before recording, return the command and error as a blocker; keep the report file.
+If the result includes completion, relay it to the coordinator for report complete; the report is
+already recorded, so submit it only once. Chat text alone does not complete the dispatch.
+```
+
+Этот lifecycle обязателен для каждой новой или resumed worker session, включая developer-retry.
+Сессия, остановившаяся на checkpoint, следует отдельному checkpoint-протоколу вместо completion
+report. Финальный текст без записанного completion или валидного checkpoint — незавершённый
+handoff; coordinator запрашивает недостающий протокол у той же доступной worker session.
+
+Developer-retry добавляет две строки из `retry_start` своего `dispatch preflight`:
+
+```text
+Retry handoff: <retry_start.handoff, verbatim JSON>
+Retry starting files: <paths from retry_start.starting_files>
+```
+
+Большие документы (каталог ролей, `playbook.md`, `backend-orchestration.md`, `git-workflow.md`) и
+прежние отчёты попадают к воркеру только диапазонами `sections` Context Package или через retry
+handoff. Промпт поручает ровно свой brief и, для retry, блокирующие findings из handoff.
+
+Developer-retry всегда стартует новой сессией из компактного handoff и не продолжает историю прежней
+developer-сессии. Decision packet preflight-а несёт `retry_context_estimate` и
+`retry_context_warning` как evidence; они никогда не блокируют dispatch. Code-review и QA остаются новыми независимыми сессиями; по шаблону
+меняется только их промпт. Handoff, порог smart zone и компакт определены в разделе
+"Developer-retry handoff" playbook.
+
+#### Авторитетные guidance
+
+Это короткий coordinator contract, а не вторая orchestration-процедура. Полные правила —
+module-owned guidance:
+
+- `.harness/orchestration/playbook.md` владеет lifecycle, authority, immutable brief, completion
+  evidence, parallelism и metric rules.
+- `.harness/orchestration/roles/` владеет boundary, required proof и specialist trigger каждой роли.
+- `--help` и вывод `remedy` координаторского CLI владеют CLI procedure и operational recovery в целевом
+  проекте. Руководство разработчика `backend-orchestration.md` описывает setup и project
+  configuration, но живёт только в исходном репозитории и в проект не поставляется.
+- `docs/agents/git-workflow.md` владеет issue-branch, commit, push и PR boundaries.
+
+Следуйте этим файлам, не дублируя и не ослабляя их правила. Не придумывайте token metrics:
+используйте только provider- или runtime-observed telemetry и сохраняйте missing-data notes.
+
+#### Завершение
+
+После accepted publish зафиксируйте integration-связь до merge или удаления ветки:
+`python .harness/orchestration/coordinator.py --repo . integration prepare --ticket "#<ID>" --branch "<issue-branch>"`
+(добавьте `--batch <batch-id>`, если ветку опубликовало несколько batch). Команда пишет только
+неизменяемую integration-запись и безопасна для повтора; при отказе передайте разработчику её
+remedy и не обходите его. Завершённый batch и его reports вручную не правьте.
+
+Затем предложите `/to-pull-requests <ticket>`. Не запускайте его автоматически,
+не открывайте и не мержьте PR, не пишите в integration-ветку и не закрывайте тикет этим скилом. Оставьте на тикете
+`status::in-progress`: закрытие и перевод разблокированных зависимых в `status::ready` делает
+`/to-pull-requests` после merge.
+
+</div>
+
+## 3. Контракты
+
+- **Вход:** AFK-тикет, установленная opt-in capability и явные approvals разработчика.
+- **Процесс:** Coordinator проводит пять handoff, проверяет model self-report и liveness, принимая
+  только доказанные reports.
+- **Выход:** Accepted candidate SHA, QA evidence и предложение `/to-pull-requests`.
+
+## 4. Архитектурная схема
+
+![/implement: конвейер с гейтами](../diagrams/previews/implement-pipeline.workflow.png)
+
+## Восстановление
+
+`auto-report` наблюдает, `auto-decide` записывает `paused`. Ручные `resume-stop` и `rewind --to`
+сохраняют исходную остановку и включают `manual_all` для всех следующих шагов, включая 429.
+Report стадии, заблокированный только сбоем инфраструктуры при законченной работе, человек принимает
+решением `accept-conditional`: стадия остаётся открытым условием, которое закрывает более поздний
+независимый gate, а publish до этого отказывает. `resume-stop` при отсутствии структурного
+доказательства использует осторожную эвристику по тексту blockers; решает по-прежнему человек.
+Rewind не меняет Git history, но исключает старое зависимое QA/review/risk из активной цепочки.
+Счётчики сохраняются. Повторная работа developer расходует retry budget; перезапуск после
+подтверждённого сбоя окружения — отдельный infrastructure budget.
+Перед send coordinator проверяет явный каталог воркера через `--worktree`, а worker подтверждает
+фактический path/branch/HEAD через self-report. Coordinator CLI остаётся привязан к main repo/state.
+Сам coordinator никогда не делает `cd` в worktree, даже в виде `cd <worktree> && …`: рабочий каталог
+shell сохраняется между командами, поэтому один такой вызов переносит в worktree всю сессию. Файлы
+worktree читаются по абсолютным путям: `git -C <worktree> …`, `rg <шаблон> <путь в worktree>` и
+инструменты чтения файлов. Если сессия всё же сместилась, верните её в main checkout до следующей
+команды.
+Если runtime store удерживает batch (attention `operational-hold` или отказ, чей `REMEDY` называет
+recovery), запустите `recovery status --batch <id> --json`, устраните причину, разрешите открытое
+attention и выполните `recovery resume --batch <id>`. Recovery не перезапускает принятый этап и не
+запускает worker: продолжайте командой из поля `next`. Отказ `ambiguous-effect` ждёт решения
+человека. После правки конфигурации перед следующим переходом выполните
+`config validate --canonical --json`.
+Подробные ограничения задаёт `.harness/orchestration/playbook.md`, раздел Operator recovery.
+
+### Сбой запуска worker
+
+Молчание, timeout или отсутствующий report не означают, что задача потеряла смысл. Прежде чем
+предлагать восстановление или `batch abandon`, coordinator запускает read-only команды
+`batch auto-report`, `batch decision-packet`, `dispatch status` и `ledger validate`.
+`dispatch status` показывает для каждого dispatch оценку `startup`: состояние worker (`absent`,
+`reported`, `rejected-at-startup`, `stopped`, `live` или `unknown`), классификацию сбоя и то, что
+осталось неизвестным. Capacity, rate-limit и service-unavailable классифицируются отдельно от
+дефектов кода.
+
+`dispatch send` проверяет флаги `--adapter-arg` по `dispatch --help` adapter до передачи brief,
+поэтому неподдерживаемый флаг останавливает отправку, а dispatch остаётся одобренным и
+неотправленным. `dispatch runtime-probe` проверяет app-server runtime на ephemeral read-only thread
+без инструментов: модель brief в `model/list`, поля `thread/start` и завершение одного turn. Ошибка
+capacity после `thread/start` даёт классифицированный сбой, а не READY. Probe ничего не пишет в
+ledger и не заменяет model self-report.
+
+`batch resume-stop` перезапускает только worker с известным исходом. Если `startup` показывает
+`live` или `unknown`, команда отказывает: оператор останавливает worker через runtime и повторяет её
+с флагом `--runtime-stopped`. Для отклонённого self-report прежний контракт не меняется: одобрение
+человека выводит dispatch из обращения, а ledger отклоняет его поздние записи. Если инфраструктурный
+бюджет исчерпан, `resume-stop` отказывает, а batch остаётся на паузе до решения человека: ждать,
+исправить запуск, изменить attention policy, выполнить `rewind` или отдельно решить
+`batch abandon`. `dispatch cancel`
+отменяет только неотправленный dispatch, а `batch abandon` закрывает весь batch; brief, report,
+Context Package и audit в обоих случаях остаются evidence.
+
+## Обновление маршрута запуска и наблюдения
+
+Поставляется пример `.harness/orchestration/adapters/claude_code.py`, явно выбираемый через
+`--adapter`. Runtime executable выбирается отдельно; пакет не превращает `codex` в adapter.
+Проверяются доступы родителя и, перед feature work, инструментов самого worker. Глобальное
+отключение sandbox не требуется; непригодный профиль не повторяется без подготовки среды.
+
+Консоль читает существующий поток локально, без дополнительных токенов и сообщений модели.
+Receipt, процесс, exit code, ledger и сдача/приёмка отчёта показаны раздельно. Первый self-report
+имеет отдельный срок; только доказанный исход разрешает восстановление. `resume-stop --restart`
+позволяет одним человеческим подтверждением одобрить неизменный successor, сохранив manual_all
+и операционный бюджет. Готовый исходный отчёт можно передать штатным report relay с аудитом,
+сохранив fail/not_run. Причина architect-retry теперь приходит из brief.retry_reason; внешний
+extra-prompt-file и ручная строка Retry reason больше не нужны.
+
+## Источник
+
+[SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/implement/SKILL.md)

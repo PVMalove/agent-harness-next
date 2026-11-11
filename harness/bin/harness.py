@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """CLI пакетирования harness проекта во время сборки. Не участвует в сессиях агента."""
 
 from __future__ import annotations
@@ -741,7 +748,7 @@ def _seed_test_fields(args: argparse.Namespace) -> str:
     """Собрать записи `test_paths` и `test_runner` нового project.json для шаблона; "" — флагов нет.
 
     Поля пишутся только по флагам --test-path и --test-runner-command: без `test_paths` тест-автор
-    выключен, а значения зависят от раскладки и стека проекта (docs/hooks/run-test.md).
+    выключен, а значения зависят от раскладки и стека проекта (site/docs/hooks/run-test.md).
     """
     fields = ""
     paths = list(dict.fromkeys(getattr(args, "test_path", None) or []))
@@ -1445,10 +1452,47 @@ def cmd_health(args: argparse.Namespace) -> int:
 
 def cmd_console(args: argparse.Namespace) -> int:
     """Запустить интерактивную консоль TUI для диагностики harness."""
+    # The console theme is an exact hex palette; do not let a 16/256-colour profile remap it.
+    os.environ["TEXTUAL_COLOR_SYSTEM"] = "truecolor"
     from harness.console.launcher import run_console
 
     repo = Path(args.repo).expanduser().resolve()
-    return run_console(repo)
+    return run_console(repo, web=args.web, no_open=args.no_open)
+
+
+def cmd_console_server(args: argparse.Namespace) -> int:
+    """Запустить Сервер консоли проекта; его стартует `harness console` под `uv run --with`."""
+    from harness.console.backend.server import run
+
+    run(Path(args.repo).expanduser().resolve())
+    return 0
+
+
+def cmd_ticket_status(args: argparse.Namespace) -> int:
+    """Сменить статус тикета спеки: заменить метку status::* в трекере, если переход разрешён.
+
+    Печатает одну строку JSON с результатом; код выхода 0 — изменено, 3 — отказ без записи,
+    1 — ошибка записи или трекер недоступен."""
+    from harness.console.backend.application.ticket_status import change_status
+    from harness.console.backend.infrastructure.screen_facts import collect_ledger
+    from harness.console.backend.infrastructure.task_board_tracker import (
+        TrackerBoardReader,
+    )
+    from harness.console.backend.infrastructure.ticket_status_writer import (
+        TrackerStatusWriter,
+    )
+
+    outcome = change_status(
+        Path(args.repo).expanduser().resolve(),
+        spec=args.spec,
+        ticket=args.ticket,
+        to=args.to,
+        reader=TrackerBoardReader(),
+        ledger=collect_ledger,
+        writer=TrackerStatusWriter(),
+    )
+    print(json.dumps(outcome.to_json(), ensure_ascii=False))
+    return outcome.exit_code
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -1816,16 +1860,43 @@ def parser() -> argparse.ArgumentParser:
     )
     health.set_defaults(func=cmd_health)
 
+    ticket_status = commands.add_parser(
+        "ticket-status",
+        help="move a spec's ticket to a task-board column (replaces its status::* label)",
+    )
+    ticket_status.add_argument("repo")
+    ticket_status.add_argument("--spec", required=True, help="the spec (epic) of the ticket")
+    ticket_status.add_argument("--ticket", required=True, help="the ticket as the board shows it")
+    ticket_status.add_argument(
+        "--to", required=True, choices=("backlog", "ready", "progress", "review", "done")
+    )
+    ticket_status.set_defaults(func=cmd_ticket_status)
+
     list_cmd = commands.add_parser("list")
     list_cmd.add_argument("repo")
     list_cmd.set_defaults(func=cmd_list)
 
     console = commands.add_parser(
         "console",
-        help="interactive TUI diagnostics console (needs uv + network for textual)",
+        help="interactive TUI diagnostics console or --web URL (needs uv + network)",
     )
     console.add_argument("repo")
+    console.add_argument(
+        "--web",
+        action="store_true",
+        help="start the console server, print its URL with a token and exit",
+    )
+    console.add_argument(
+        "--no-open", action="store_true", help="with --web, do not open the browser"
+    )
     console.set_defaults(func=cmd_console)
+
+    console_server = commands.add_parser(
+        "console-server",
+        help="project-bound console server (started by `harness console` under `uv run --with`)",
+    )
+    console_server.add_argument("repo")
+    console_server.set_defaults(func=cmd_console_server)
     return root
 
 

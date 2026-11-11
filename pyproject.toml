@@ -26,6 +26,7 @@ files = [
     "scripts/verify.py",
     "scripts/verification",
     "scripts/perf",
+    "scripts/check_license_headers.py",
     "scripts/check_public_metadata.py",
     "scripts/check_private_terms.py",
     "scripts/diff_coverage.py",
@@ -35,7 +36,8 @@ files = [
 ]
 # Imports `tree_sitter*`, which only the parser bundle provides: checked by the separate mypy run in
 # the `repo-map-bundle` CI job with the bundle installed (ADR 0008).
-exclude = ["^harness/repo_map/tree_sitter_worker\\.py$"]
+# npm packages of the console frontend may ship Python files of their own.
+exclude = ["^harness/repo_map/tree_sitter_worker\\.py$", "/node_modules/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -71,6 +73,12 @@ patch = ["subprocess"]
 [dependency-groups]
 dev = [
     "coverage==7.16.1",
+    # Console server network tests; runtime delivery belongs to the launcher (harness/console/pin.py).
+    "fastapi==0.162.0",
+    "starlette==1.10.0",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.3",
+    "websockets==17.3",
     "mypy==2.3.1",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",

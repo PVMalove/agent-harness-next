@@ -59,9 +59,25 @@ source hash changes, and the report is identical to the #788 revision.
 Version 5 imports `integration/console-redesign` into Harness Next and re-evaluates the merged
 `CONTEXT.md`, ADR 0003 and ADR 0006 explicitly. Recall (0.95) and noise (0.61) are unchanged, and the
 gate passes; `baseline_fts5_initial.json` stays unchanged.
+#863 adds the Web Console and Console Server terms to `CONTEXT.md` and re-evaluates the corpus
+explicitly. Recall (0.95), noise (0.61) and the gate are unchanged; only the `CONTEXT.md` hash and the
+order of the retrieved paths of query 339 differ. `baseline_fts5_initial.json` stays unchanged.
+Issue #978 moves the public docs under `site/docs` and renames the repository; only the `CONTEXT.md`
+source hash changes, and the report is identical to the revision above.
+`baseline_fts5_initial.json` stays unchanged.
 Version 7 re-evaluates the corpus after #685 adds the configuration normalization, runtime store and
 confirmed boundary terms to `CONTEXT.md`. Recall (0.95) and noise (0.61) are unchanged and the gate
 passes; only `CONTEXT.md` and ADR 0003 swap places inside the top-5 window of query 339.
+Version 8 merges the Web Console and runtime reliability corpora for PR #892, including the
+external developer test-author route (#971) and canonical configuration/recovery terms (#685).
+The explicit re-evaluation keeps recall at 0.95 and measures noise at 0.61; the gate passes.
+The dataset, labels, engine, windows and thresholds are unchanged, as is the initial baseline.
+Version 9 (#1061) re-evaluates the corpus after `a7d6c65` and `cf188dd` change `CONTEXT.md` on
+`integration/web-console`. Only the `CONTEXT.md` source hash changes: recall@1/@3/@5 stay at 0.95,
+noise stays at 0.61, all 20 query results are identical to version 8 and the gate passes.
+`baseline_fts5_initial.json` stays unchanged. From #1061 on, the light CI job runs this test for
+any pull request that changes, removes or renames `CONTEXT.md` or `docs/adr/*.md`, so a stale
+hash fails there.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 

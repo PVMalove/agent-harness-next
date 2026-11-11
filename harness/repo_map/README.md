@@ -78,10 +78,7 @@ bundle, worker пропускает только файлы этого язык�
 
 ## Поток вызовов
 
-[![Последовательность построения Repo Map](../../docs/diagrams/previews/repo-map-build.sequence.png)](../../docs/diagrams/repo-map-build.sequence.html)
-
-Интерактивная схема: [`docs/diagrams/repo-map-build.sequence.html`](../../docs/diagrams/repo-map-build.sequence.html),
-спецификация Archify: [`repo-map-build.sequence.json`](../../docs/diagrams/repo-map-build.sequence.json).
+![Последовательность построения Repo Map](../../site/docs/diagrams/previews/repo-map-build.sequence.png)
 
 Ключевые точки потока:
 
@@ -99,10 +96,7 @@ bundle, worker пропускает только файлы этого язык�
 
 ## Компоненты
 
-[![Компоненты Repo Map](../../docs/diagrams/previews/repo-map-components.architecture.png)](../../docs/diagrams/repo-map-components.architecture.html)
-
-Интерактивная схема: [`docs/diagrams/repo-map-components.architecture.html`](../../docs/diagrams/repo-map-components.architecture.html),
-спецификация: [`repo-map-components.architecture.json`](../../docs/diagrams/repo-map-components.architecture.json).
+![Компоненты Repo Map](../../site/docs/diagrams/previews/repo-map-components.architecture.png)
 
 | Компонент | Ответственность |
 | --- | --- |

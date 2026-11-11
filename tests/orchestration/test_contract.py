@@ -58,8 +58,8 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         self.assertNotRegex(workflow, r"(?<!uv )\bpip install|-m pip\b")
         self.assertNotIn("run: python scripts/verify.py", workflow)
-        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 8)
-        self.assertEqual(workflow.count("run: make bootstrap"), 8)
+        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 10)
+        self.assertEqual(workflow.count("run: make bootstrap"), 9)
         self.assertEqual(workflow.count("make verify"), 2)
 
     @staticmethod
@@ -92,6 +92,24 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
             self.assertIn(f"-t {tag}", smoke)
         self.assertIn("name: junit-docker-smoke", smoke)
         self.assertIn("docker-smoke", blocks["dashboard"].split("runs-on:", 1)[0])
+
+    def test_console_ci_runs_playwright_without_comparing_screenshots(self) -> None:
+        _, blocks = self._jobs()
+        job = blocks["console-spa"]
+        self.assertIn("npm run typecheck", job)
+        self.assertIn("npm run build", job)
+        self.assertIn("run: npm test", job)
+        self.assertIn("npx playwright install --with-deps chromium", job)
+        self.assertIn("run: npm run test:e2e", job)
+        self.assertNotIn("__screenshots__", job)
+        self.assertNotIn("update-snapshots", job)
+        web = ROOT / "tests/web"
+        self.assertFalse((web / "__screenshots__").exists())
+        for spec in sorted(web.glob("*.spec.ts")):
+            self.assertNotIn("toHaveScreenshot", spec.read_text(encoding="utf-8"), spec.name)
+        config = (web / "playwright.config.ts").read_text(encoding="utf-8")
+        self.assertNotIn("toHaveScreenshot", config)
+        self.assertNotIn("snapshotPathTemplate", config)
 
     def test_the_podman_smoke_runs_only_on_the_self_hosted_runner_outside_pull_requests(
         self,

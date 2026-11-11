@@ -113,7 +113,7 @@
         "minLength": 1,
         "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$)).+$"
       },
-      "description": "Optional test paths: relative globs without '..' segments that are the only write zone of the test author; without this field the test author is off. The isolated test runner (.claude/hooks/run-test.sh, docs/hooks/run-test.md) mounts only '<directory>/**' entries writable and refuses every other form."
+      "description": "Optional test paths: relative globs without '..' segments that are the only write zone of the test author; without this field the test author is off. The isolated test runner (.claude/hooks/run-test.sh, site/docs/hooks/run-test.md) mounts only '<directory>/**' entries writable and refuses every other form."
     },
     "hook_policy": {
       "type": "object",

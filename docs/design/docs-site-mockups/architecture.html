@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Архитектура — Agent Harness Next</title>
+  <meta name="description" content="Архитектура Agent Harness Next: Python policy, Rust runtime, SQLite WAL store, IPC, supervisor и границы безопасности.">
+  <link rel="icon" href="mascot.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip" href="#main">К содержимому</a>
+
+  <header class="site-header">
+    <div class="inner">
+      <a class="brand" href="index.html">
+        <span class="logo" aria-hidden="true">H›</span>
+        <b>Agent Harness Next</b>
+        <span class="version">beta</span>
+      </a>
+      <nav class="top-nav" aria-label="Основная навигация">
+        <a href="docs.html">Docs</a>
+        <a href="docs.html#guides">Guides</a>
+        <a href="docs.html#reference">Reference</a>
+        <a href="architecture.html" aria-current="page">Архитектура</a>
+        <a href="demo.html">Demo</a>
+        <a href="https://github.com/PVMalove/claude-agent-harness" rel="noreferrer">GitHub</a>
+      </nav>
+      <div class="header-actions">
+        <button class="search-btn" type="button" data-search-open aria-label="Поиск по документации">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <span>Поиск</span>
+          <kbd>⌘K</kbd>
+        </button>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Переключить тему" title="Тема">
+          <span data-theme-icon aria-hidden="true">☀</span>
+        </button>
+        <a class="icon-btn" href="https://github.com/PVMalove/claude-agent-harness" aria-label="GitHub" title="GitHub" rel="noreferrer">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.21-3.37-1.21-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.3 9.3 0 0 1 12 6.84c.85 0 1.71.12 2.51.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"></path></svg>
+        </a>
+        <button class="icon-btn mobile-menu" type="button" data-sidebar-toggle aria-label="Открыть меню" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-shell">
+    <aside class="docs-side" aria-label="Разделы документации">
+      <div class="side-version"><span>Версия</span><b>beta</b></div>
+      <div class="side-group">
+        <div class="side-title">Начало</div>
+        <a href="docs.html">Обзор и установка</a>
+        <a href="docs.html#quick-start">Быстрый старт</a>
+      </div>
+      <div class="side-group">
+        <div class="side-title">Архитектура</div>
+        <a href="architecture.html" aria-current="page">Обзор</a>
+        <a href="architecture.html#ownership">Ownership</a>
+        <a href="architecture.html#runtime">Rust runtime</a>
+        <a href="architecture.html#store">Runtime store</a>
+        <a href="architecture.html#ipc">IPC</a>
+        <a href="architecture.html#supervisor">Supervisor</a>
+        <a href="architecture.html#security">Безопасность</a>
+      </div>
+      <div class="side-group">
+        <div class="side-title">Руководства</div>
+        <a href="docs.html#guides"><code>/implement</code></a>
+        <a href="docs.html#guides"><code>/fast-implement</code></a>
+        <a href="docs.html#release-gate">Release Gate</a>
+        <a href="demo.html">Веб-консоль</a>
+      </div>
+      <div class="side-group">
+        <div class="side-title">Справочник</div>
+        <a href="docs.html#cli">CLI</a>
+        <a href="docs.html#configuration">Конфигурация</a>
+        <a href="https://github.com/PVMalove/claude-agent-harness/tree/master/docs/adr" rel="noreferrer">ADR ↗</a>
+        <a href="https://github.com/PVMalove/claude-agent-harness/blob/master/CHANGELOG.md" rel="noreferrer">Changelog ↗</a>
+      </div>
+    </aside>
+
+    <main class="docs-main" id="main">
+      <div class="breadcrumbs">
+        <a href="index.html">Agent Harness Next</a><span>/</span>
+        <a href="docs.html">Docs</a><span>/</span>
+        <span>Архитектура</span>
+      </div>
+
+      <header class="doc-header">
+        <h1>Архитектура</h1>
+        <p>Policy и исполнение разделены. Python принимает решения, Rust runtime хранит
+          operational state и запускает процессы, а Git остаётся владельцем истории и
+          кандидатов.</p>
+        <div class="doc-meta">
+          <span>beta</span><span class="dot"></span>
+          <span>Архитектурные контракты</span><span class="dot"></span>
+          <span>12 минут чтения</span>
+        </div>
+      </header>
+
+      <div class="doc-grid">
+        <article class="doc-content">
+          <h2 id="ownership">Кто владеет чем</h2>
+          <p>В harness у каждой сущности ровно один writer. Это главное правило, из которого
+            следуют остальные границы.</p>
+          <table>
+            <thead><tr><th>Сущность</th><th>Writer</th><th>Что это значит</th></tr></thead>
+            <tbody>
+              <tr><td>Lifecycle batch/dispatch</td><td>Rust runtime</td><td>Переходы сохраняются транзакцией; Python не пишет в store напрямую.</td></tr>
+              <tr><td>Approvals и policy</td><td>Python</td><td>Решение принимает человек и policy-слой; runtime исполняет сохранённое решение.</td></tr>
+              <tr><td>Операционный intent</td><td>Rust store</td><td>Idempotency key, attempt и reconcile живут в одной транзакции.</td></tr>
+              <tr><td>Git-история и candidate</td><td>Git</td><td>Кандидат, ветки и worktree — обычные Git-объекты; runtime их не переписывает.</td></tr>
+              <tr><td>Audit</td><td>Rust store</td><td>Хэш-цепочка с checkpoint для инкрементальной проверки.</td></tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            <span class="ci">i</span>
+            <div><p><b>Fallback-writer запрещён.</b> Если runtime недоступен, Python не начинает
+              писать в файловый ledger «чтобы продолжить». Операция возвращает типизированную
+              ошибку с remedy.</p></div>
+          </div>
+
+          <h2 id="runtime">Rust runtime</h2>
+          <p><code>harness-runtime serve</code> — один процесс на state-каталог. Он слушает
+            Unix domain socket на Linux или named pipe на Windows, проверяет peer identity и
+            выполняет типизированные операции.</p>
+          <div class="arch" style="grid-template-columns:1fr;gap:14px">
+            <div class="arch-panel">
+              <div class="arch-layer">
+                <div class="tag">IPC</div>
+                <div class="body"><span class="node">hello</span><span class="node">state.read</span><span class="node">state.write</span><span class="node">qa.run</span><span class="node">execution.launch</span><span class="node">qa.evidence.verify</span></div>
+              </div>
+              <div class="arrow-down">↓</div>
+              <div class="arch-layer">
+                <div class="tag">Runtime</div>
+                <div class="body"><span class="node ok">supervisor</span><span class="node ok">reconcile</span><span class="node ok">engine</span><span class="node ok">QA executor</span></div>
+              </div>
+              <div class="arrow-down">↓</div>
+              <div class="arch-layer">
+                <div class="tag">State</div>
+                <div class="body"><span class="node">SQLite WAL</span><span class="node">operations</span><span class="node">leases</span><span class="node">audit</span><span class="node">executions</span></div>
+              </div>
+            </div>
+          </div>
+          <p>Runtime не решает policy: он принимает уже approved brief, проверяет digest-ы и
+            исполняет только сохранённый план. Python не запускает worker-а или QA-контейнер
+            напрямую.</p>
+
+          <h2 id="store">Runtime store</h2>
+          <p>Operational state — SQLite WAL с короткими транзакциями без внешних вызовов.
+            Схема store версионируется, а несовместимая версия отвергается без записи.</p>
+          <ul>
+            <li><b>Authority.</b> <code>ledger.json</code> версии 4 и <code>AUTHORITY.json</code>
+              называют store единственным writer-ом.</li>
+            <li><b>Audit.</b> Каждая мутация оставляет запись в хэш-цепочке; checkpoint
+              ускоряет обычную проверку, <code>validate --full</code> пересчитывает всё.</li>
+            <li><b>Leases.</b> QA-lane — singleton с fencing token; lease мёртвого владельца
+              снимается только по вердикту <code>owner-dead</code>.</li>
+          </ul>
+          <pre><code># полная проверка цепочки и строк store
+python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
+
+# authority и snapshot
+cat .harness/orchestration/state/AUTHORITY.json</code></pre>
+
+          <h2 id="ipc">IPC и идемпотентность</h2>
+          <p>Кадр — длина и JSON. Рукопожатие согласует версию протокола, а конверт несёт
+            <code>operation_id</code>, <code>deadline</code>, <code>expected_revision</code> и
+            digest-ы.</p>
+          <table>
+            <thead><tr><th>Поле</th><th>Назначение</th></tr></thead>
+            <tbody>
+              <tr><td><code>operation_id</code></td><td>Детерминированный ключ намерения; повтор возвращает сохранённый результат.</td></tr>
+              <tr><td><code>expected_revision</code></td><td>CAS по строке; конфликт — типизированная ошибка, а не тихая перезапись.</td></tr>
+              <tr><td><code>deadline</code></td><td>Ограничивает ожидание; клиент повторяет с тем же id.</td></tr>
+              <tr><td><code>fencing_token</code></td><td>Защищает singleton QA-lane от двух владельцев.</td></tr>
+            </tbody>
+          </table>
+          <p>Исполнение идёт в три шага: <code>intent</code> → запуск → <code>committed</code>.
+            Перед повтором runtime делает reconcile и не запускает второй процесс, если объект
+            уже существует.</p>
+
+          <h2 id="supervisor">Supervisor</h2>
+          <p>Идентичность процесса — boot, namespace, pid и время старта. Этого достаточно,
+            чтобы не принять чужой процесс с тем же pid за живой worker.</p>
+          <ul>
+            <li>Linux: группы процессов и systemd scope, stop по deadline с grace-периодом.</li>
+            <li>Windows: Job Objects с именем по операции; исполнение переживает рестарт runtime.</li>
+            <li>Контейнеры: OCI-образ, метки dispatch, запрет монтирования сокетов движка и runtime.</li>
+            <li>Recovery: после SIGKILL runtime усыновляет исполнение по меткам или пишет
+              <code>lost</code>; освобождение lease — только после доказанного выхода группы.</li>
+          </ul>
+          <div class="callout ok">
+            <span class="ci">✓</span>
+            <div><p><b>Проверяемо.</b> <code>dispatch status</code> показывает исполнение и
+              объект <code>qa_lane</code>; <code>ledger lock-status</code> — вердикт и
+              <code>release_available</code>.</p></div>
+          </div>
+
+          <h2 id="security">Безопасность</h2>
+          <p>Граница доверия проходит между Python policy, Rust runtime и untrusted worker.
+            Runtime — trusted host supervisor; worker — кандидат в контейнере или отдельном
+            процессе.</p>
+          <table>
+            <thead><tr><th>Граница</th><th>Правило</th></tr></thead>
+            <tbody>
+              <tr><td>Runtime socket</td><td>Только peer uid/SID и capability-токен; каталог 0700, сокет 0600.</td></tr>
+              <tr><td>Engine socket</td><td>Никогда не монтируется в worker или QA-контейнер.</td></tr>
+              <tr><td>Approval</td><td>Immutable brief связывает план, образ, policy digest и verification digest.</td></tr>
+              <tr><td>Hooks</td><td>Критические guards не отключаются профилем; strict не блокирует recovery.</td></tr>
+              <tr><td>Secrets</td><td>Не попадают в командную строку, логи, audit или отчёты.</td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="failure">Домены отказов</h2>
+          <p>Ошибка типизирована, чтобы retry не тратил бюджет developer-а на инфраструктуру.</p>
+          <table>
+            <thead><tr><th>Домен</th><th>Пример</th><th>Что делает harness</th></tr></thead>
+            <tbody>
+              <tr><td><code>environment_preparation</code></td><td>Нет зависимости, не собран образ</td><td>Повтор той же операции после подготовки</td></tr>
+              <tr><td><code>infrastructure</code></td><td>EPERM, SELinux, недоступный engine</td><td>Retry на том же SHA, отдельно от кода</td></tr>
+              <tr><td><code>policy</code></td><td>Нарушен approval или hook</td><td>Отказ с remedy, без auto-approve</td></tr>
+              <tr><td><code>code_test</code></td><td>Упал тест или mypy</td><td>Возврат developer-у с evidence</td></tr>
+              <tr><td><code>timeout</code></td><td>Истёк deadline</td><td>Остановка с grace и частичным evidence</td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="decisions">Решения</h2>
+          <p>Полные контракты — в ADR. Публичная страница объясняет модель, а не заменяет
+            нормативный документ.</p>
+          <table>
+            <thead><tr><th>ADR</th><th>Тема</th></tr></thead>
+            <tbody>
+              <tr><td>0019</td><td>Единый Rust runtime и verification</td></tr>
+              <tr><td>0020</td><td>Cutover на runtime store</td></tr>
+              <tr><td>0021</td><td>Authority, IPC и идемпотентность</td></tr>
+              <tr><td>0022</td><td>Supervisor процессов и OCI</td></tr>
+              <tr><td>0023</td><td>Инкрементальные проверки</td></tr>
+              <tr><td>0024</td><td>Профили hooks</td></tr>
+              <tr><td>0026</td><td>Консолидация Harness Next и Release Gate</td></tr>
+            </tbody>
+          </table>
+
+          <div class="pager">
+            <a href="docs.html#quick-start"><span class="dir">Назад</span><span class="name">Быстрый старт</span></a>
+            <a class="next" href="demo.html"><span class="dir">Далее</span><span class="name">Веб-консоль</span></a>
+          </div>
+        </article>
+
+        <nav class="toc" aria-label="На этой странице">
+          <div class="toc-title">На этой странице</div>
+          <a href="#ownership">Кто владеет чем</a>
+          <a href="#runtime">Rust runtime</a>
+          <a href="#store">Runtime store</a>
+          <a href="#ipc">IPC</a>
+          <a href="#supervisor">Supervisor</a>
+          <a href="#security">Безопасность</a>
+          <a href="#failure">Домены отказов</a>
+          <a href="#decisions">Решения</a>
+        </nav>
+      </div>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <div class="bottom">
+      <span class="foot-brand"><img src="mascot.svg" alt="" width="20" height="26"> © 2026 Agent Harness Next · MIT</span>
+      <span><a href="index.html">На главную</a> · beta</span>
+    </div>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>

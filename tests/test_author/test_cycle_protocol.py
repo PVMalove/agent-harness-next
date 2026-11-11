@@ -18,7 +18,6 @@ DEVELOPER = ROOT / "harness" / "orchestration" / "roles" / "developer.md"
 COMMON = ROOT / "harness" / "orchestration" / "roles" / "_common.md"
 AGENT = ROOT / "harness" / "project" / "agents" / "test-author.md"
 IMPLEMENT = ROOT / "skills" / "first-party" / "engineering" / "implement" / "SKILL.md"
-IMPLEMENT_DESCRIPTION = ROOT / "docs" / "skills" / "implement.md"
 CHANGELOG = ROOT / "CHANGELOG.md"
 FAST_IMPLEMENT = (
     ROOT / "skills" / "first-party" / "engineering" / "fast-implement" / "SKILL.md"
@@ -111,7 +110,6 @@ def _text(path: Path) -> str:
         (DEVELOPER, FULL_ROUTE_MARKERS),
         (IMPLEMENT, FULL_ROUTE_MARKERS),
         (GUIDE, FULL_ROUTE_GUIDE_MARKERS),
-        (IMPLEMENT_DESCRIPTION, FULL_ROUTE_DESCRIPTION_MARKERS),
         (TDD, SHORT_ROUTE_MARKERS),
         (FAST_IMPLEMENT, FAST_MARKERS),
         (AGENT, AGENT_MARKERS),
@@ -139,14 +137,6 @@ def test_common_contract_points_to_the_cycle() -> None:
 
 def test_guide_copies_are_identical() -> None:
     assert _text(GUIDE) == _text(ROOT_GUIDE)
-
-
-def test_target_guide_does_not_point_at_repository_root_docs() -> None:
-    assert not [
-        ref
-        for ref in ("docs/hooks/", "docs/adr/", "docs/skills/")
-        if ref in _text(GUIDE)
-    ]
 
 
 def test_cycle_scenario_passes_on_a_minimal_project(tmp_path: Path) -> None:

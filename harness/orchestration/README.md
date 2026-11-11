@@ -10,7 +10,7 @@ brief и report, независимый review и clean-room QA. Capability вы
 `approval_policy`. Роли не расширяют свой scope, не выбирают модель и не мержат PR.
 
 Пошаговая процедура настройки и запуска описана в
-[руководстве по backend-оркестрации](https://github.com/PVMalove/claude-agent-harness/blob/master/docs/backend-orchestration.md),
+[руководстве по backend-оркестрации](https://github.com/PVMalove/agent-harness-next/blob/master/site/docs/backend-orchestration.md),
 полный контракт lifecycle — в [playbook.md](./playbook.md), а границы ролей — в [roles/](./roles/).
 
 ## Состав
@@ -282,7 +282,7 @@ coordinator проверяет план на своём процессе: реж
 применяет к такой операции override роли (`roles`). Отказ, неподдерживаемый режим и непроверенное
 требование останавливают действие до любых изменений. Они также называют ресурс, путь и средство
 исправления. Подробности и диагностика — в
-[руководстве](https://github.com/PVMalove/claude-agent-harness/blob/master/docs/backend-orchestration.md#доступ-qa-git-и-publish).
+[руководстве](https://github.com/PVMalove/agent-harness-next/blob/master/site/docs/backend-orchestration.md#доступ-qa-git-и-publish).
 
 ## Пример
 

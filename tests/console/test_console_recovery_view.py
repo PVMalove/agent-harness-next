@@ -7,9 +7,9 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from harness.console.container_route import State
-from harness.console.coordinator_api import CoordinatorApi
-from harness.console.recovery_view import (
+from harness.console.kernel.container_route import State
+from harness.console.kernel.coordinator_api import ApiResult, CoordinatorApi, Outcome
+from harness.console.kernel.recovery_view import (
     NO_ENGINE_RESPONSE,
     UNKNOWN_OUTCOME_TITLE,
     RecoveryView,
@@ -506,7 +506,7 @@ def test_a_known_outcome_shows_neither_the_banner_nor_a_resend_action() -> None:
 
 # ----------------------------------------------------------------------------- the action planner
 
-from harness.console.recovery_view import (  # noqa: E402
+from harness.console.kernel.recovery_view import (  # noqa: E402
     FixChoice,
     FixPreview,
     RecoverySession,
@@ -910,7 +910,7 @@ def test_a_failed_action_is_shown_verbatim_and_is_a_blocker() -> None:
 
 # ----------------------------------------------------------------------------- contract (#711)
 
-from harness.console.coordinator_api import forbidden_in  # noqa: E402
+from harness.console.kernel.coordinator_api import forbidden_in  # noqa: E402
 
 
 def test_no_recovery_call_carries_a_forbidden_flag_and_none_abandons_or_kills() -> None:
@@ -977,3 +977,112 @@ def test_an_unknown_state_a_failed_status_and_a_pending_status_are_never_a_clean
     assert not any(r.state is State.OK for r in failed.rows)
     unknown = view_of(unknown_document())
     assert not action(unknown, "resume").enabled and unknown.unknown_outcome
+
+
+class RecordingApi:
+    """A local client that records the `confirmed` flag of every call."""
+
+    def __init__(self, runner: Coordinator) -> None:
+        self._api = CoordinatorApi(REPO, runner)
+        self.confirmed: list[tuple[str, bool]] = []
+
+    def call(
+        self,
+        path: tuple[str, ...],
+        values: Mapping[str, str | Sequence[str] | bool] | None = None,
+        *,
+        confirmed: bool = False,
+    ) -> ApiResult:
+        name = " ".join(path)
+        if path == ("recovery", "fix") and values and values.get("apply"):
+            name += " --apply"
+        self.confirmed.append((name, confirmed))
+        return self._api.call(path, values, confirmed=confirmed)
+
+    def cleanup(self, *, apply_digest: str | None = None) -> ApiResult:
+        return self._api.cleanup(apply_digest=apply_digest)
+
+
+def test_only_confirmed_writes_and_the_exit_forward_the_operators_confirmation() -> None:
+    runner = Coordinator()
+    runner.reply("recovery status", held_document())
+    runner.reply("recovery reload", {"action": "reload", "outcome": "done"})
+    runner.reply("recovery fix", {"action": "fix", "outcome": "done", "diff": "+x"})
+    runner.reply("recovery abort", {"action": "abort", "outcome": "done"})
+    api = RecordingApi(runner)
+    session = RecoverySession(REPO, "batch-1", api=api)
+    session.refresh()
+    session.reload()
+    session.fix(FixChoice.NORMALIZE)
+    session.apply_fix(True)
+    session.abort()
+    runner.reply("recovery status", status_document())
+    runner.reply("recovery resume", {"action": "resume", "outcome": "done"})
+    session.refresh()
+    session.resume()
+    session.resume(confirmed=True)
+    assert api.confirmed == [
+        ("recovery status", False),
+        ("recovery reload", False),
+        ("recovery fix", False),
+        ("recovery fix --apply", True),
+        ("recovery abort", True),
+        ("recovery status", False),
+        ("recovery resume", False),
+        ("recovery resume", True),
+    ]
+
+
+def test_a_session_over_the_console_server_runs_every_action_as_a_job() -> None:
+    from harness.console.kernel.batch_history import History
+    from harness.console.tui.client import JobResult, RecoveryFacts
+    from harness.console.tui.server_api import ServerCoordinatorApi
+
+    from ._home_client import FakeHomeClient
+
+    def no_runner(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("the TUI must not run a recovery command itself")
+
+    def status(document: dict[str, object]) -> ApiResult:
+        return ApiResult(Outcome.DOCUMENT, ("status",), (document,), 0)
+
+    client = FakeHomeClient(REPO)
+    client.recovery_facts = RecoveryFacts(History(), status(held_document()))
+    client.job_result = JobResult(
+        "completed", 0, json.dumps({"outcome": "done", "diff": "+x"}), "", False, None
+    )
+    session = RecoverySession(
+        REPO, "batch-1", no_runner, api=ServerCoordinatorApi(REPO, client)
+    )
+    session.refresh()
+    assert session.reload().ok
+    session.fix(FixChoice.NORMALIZE)
+    assert session.apply_fix(True).ok
+    assert session.abort().ok
+    client.recovery_facts = RecoveryFacts(History(), status(status_document()))
+    session.refresh()
+    assert session.resume(confirmed=True).ok
+    jobs = [item[1:] for item in client.screen_requests if item[0] == "job"]
+    assert jobs == [
+        ("recovery-reload", {"batch": "batch-1", "json": "1"}, False),
+        ("recovery-fix", {"batch": "batch-1", "json": "1"}, False),
+        ("recovery-fix-apply", {"batch": "batch-1", "json": "1"}, True),
+        ("recovery-abort", {"batch": "batch-1", "json": "1"}, True),
+        ("recovery-resume", {"batch": "batch-1", "json": "1"}, True),
+    ]
+    reads = [item for item in client.screen_requests if item[0] == "recovery"]
+    assert reads == [("recovery", "batch-1", ())] * 2
+
+
+def test_the_orchestration_command_menu_offers_no_recovery_command_to_run_locally() -> None:
+    """Recovery commands run only as server jobs from the Recovery screen: the Orchestration
+    menu, which runs its entries through the local runner, must not offer any of them."""
+    from harness.console.tui.screens.orchestration import OrchestrationScreen
+
+    from ._home_client import FakeHomeClient
+    from ._screen_facts import ledger
+
+    screen = OrchestrationScreen(REPO, client=FakeHomeClient(REPO, load_ledger=lambda repo: ledger()))
+    keys = [key for key, _ in screen.menu_items()]
+    assert "dispatch-send" in keys
+    assert [key for key in keys if key.startswith("recovery")] == []

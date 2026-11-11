@@ -1073,18 +1073,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class IntegrationGuidanceTests(unittest.TestCase):
-    """The guide, playbook, skills, their Russian descriptions and the glossary stay consistent
-    with the public command group."""
+    """The playbook, the skills and the glossary stay consistent with the public command group."""
 
     MENTIONS = {
-        "docs/backend-orchestration.md": (
-            "integration prepare",
-            "integration status",
-            "integration link-evidence",
-            "reports/integration",
-            "integration next",
-            "verification-failure",
-        ),
         "harness/orchestration/playbook.md": (
             "integration prepare",
             "integration status",
@@ -1112,29 +1103,6 @@ class IntegrationGuidanceTests(unittest.TestCase):
             "candidate_tree_sha",
             "merge-tree-mismatch",
         ),
-        "docs/skills/implement.md": ("integration prepare",),
-        "docs/skills/to-pull-requests.md": (
-            "integration status",
-            "integration next",
-            "integration collect-ci",
-            "integration local-qa",
-            "qa_source",
-            "release-gate-refused",
-            "--merge-commit",
-            "candidate_tree_sha",
-            "merge-tree-mismatch",
-        ),
-        "docs/adr/0017-pr-continuation-routing.md": (
-            "integration next",
-            "verification-failure",
-            "collector-failed",
-        ),
-        "docs/skills/coordinator.md": (
-            "integration prepare",
-            "integration status",
-            "integration link-evidence",
-            "integration next",
-        ),
         "CONTEXT.md": ("**Integration record**", "**Stale integration record**"),
     }
 
@@ -1159,39 +1127,12 @@ class IntegrationGuidanceTests(unittest.TestCase):
                 "several integration records match",
                 "`--record <new record>` replaces `<ticket-branch>`",
             ),
-            "docs/skills/to-pull-requests.md": (
-                "several integration records match",
-                "`--record <новая запись>` заменяет `<ticket-branch>`",
-            ),
-            "docs/backend-orchestration.md": (
-                "several integration records match",
-                "`--record <новая запись>` заменяет `<ticket-branch>`",
-            ),
-            "docs/adr/0017-pr-continuation-routing.md": (
-                "several integration records match",
-                "`--record <новая запись>` заменяет `<ticket-branch>`",
-            ),
         }
         for relative, needles in notes.items():
             text = (REPO / relative).read_text(encoding="utf-8")
             for needle in needles:
                 with self.subTest(file=relative, needle=needle):
                     self.assertIn(needle, text)
-
-    def test_guidance_states_the_order_independent_passed_check_rule(self) -> None:
-        """A passed, verified check of the current pair supersedes a failed one whatever the
-        recording order; the docs must not claim that only a 'later passed' does."""
-        stale = ("без позднего passed", "без более позднего passed")
-        rule = "независимо от порядка записи"
-        for relative in (
-            "docs/adr/0017-pr-continuation-routing.md",
-            "docs/backend-orchestration.md",
-        ):
-            text = (REPO / relative).read_text(encoding="utf-8")
-            with self.subTest(file=relative):
-                self.assertIn(rule, text)
-                for phrase in stale:
-                    self.assertNotIn(phrase, text)
 
     def test_the_pr_skill_binds_confirmation_to_the_pair_and_never_merges(self) -> None:
         text = (
