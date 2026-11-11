@@ -107,6 +107,17 @@
 .qa-lane-panel .report-qa-log > summary { padding: 8px 16px; color: var(--muted); font-size: var(--fs-1); cursor: pointer; }
 #reports-quality-kpi { margin-bottom: 12px; }
 .report-ready-row .orch-pill, #reports-readiness .orch-pill { white-space: nowrap; min-width: max-content; }
+/* Publication: the batch selector sits in the Release candidate head, a preflight pill column
+   fits its widest word, and the human decision words its reasons. */
+.publish-batch select { max-width: 220px; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 5px; background: #1a1e24; color: var(--fg); font: var(--fs-1) var(--mono); }
+.publish-meta > span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.publish-meta .hi { width: 12px; height: 12px; flex: none; }
+.publish-check { grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); }
+.publish-check .orch-pill { white-space: nowrap; }
+.publish-decision-text { min-width: 0; flex: 1 1 320px; }
+.publish-decision-text.ready b { color: var(--ok); }
+.publish-why { margin: 8px 0 0; padding-left: 16px; color: var(--muted); font-size: var(--fs-1); }
+.publish-decisions:empty { display: none; }
 .report-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; font-size: var(--fs-1); overflow-wrap: anywhere; white-space: pre-wrap; }
 .report-line-text { min-width: 0; }
 .report-log { margin: 0; padding: 12px 16px; max-height: 320px; overflow: auto; font: var(--fs-1)/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }

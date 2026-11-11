@@ -132,6 +132,28 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
   });
 
+  test(`publication at ${width} px: five preflight rows whose pill never covers the title`, async ({ page }) => {
+    await mockSocket(page);
+    await open(page, "publish", width, "#publish-kpis");
+    await expect(page.locator("#publish-preflight-overview .publish-check")).toHaveCount(5);
+    const overlaps = await page.evaluate(() =>
+      [...document.querySelectorAll("#publish-preflight-overview .publish-check")].filter((row) => {
+        const pill = row.querySelector(".orch-pill")!.getBoundingClientRect();
+        const title = row.querySelector("b")!.getBoundingClientRect();
+        return pill.right > title.left;
+      }).length,
+    );
+    expect(overlaps).toBe(0);
+    await expect(page.locator(".publish-candidate .panel-head #publish-batch select")).toBeVisible();
+    await page.getByRole("button", { name: "Почему" }).click();
+    await expect(page.locator("#publish-why li")).toHaveCount(3);
+    const wide = await page.evaluate(() =>
+      [...document.querySelectorAll(".publish-page .panel, .publish-kpis")].filter((box) => box.scrollWidth > box.clientWidth + 1).map((box) => box.className),
+    );
+    expect(wide).toEqual([]);
+    expect(await noOverflow(page)).toBe(true);
+  });
+
   test(`orchestration at ${width} px`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "orchestration", width, "#orch-mockup-kpis");

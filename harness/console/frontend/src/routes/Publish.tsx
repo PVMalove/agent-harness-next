@@ -1,8 +1,9 @@
 /* Publication: the mockup's #publish over the read-only publish view of reports.snapshot
-   (kernel/publish_view.py). A batch selector sits above the KPI row and defaults to the latest
-   batch with a review report (H1). The live ledger decisions (report-decision and attention, with
-   their confirmations) live in the "Решение человека" block of the Overview tab. The console never
-   creates a PR: "Подготовить PR" stays disabled, merge is the human's. */
+   (kernel/publish_view.py). The batch selector sits in the Release candidate head and defaults to
+   the latest batch with a review report (H1). "Решение человека" words the verdict and its reasons
+   (gate refusals and every preflight row that is not ok); the live ledger decisions (report-decision
+   and attention, with their confirmations) follow as their own panel when there are any. The
+   console never creates a PR: "Подготовить PR" stays disabled, merge is the human's. */
 import { useState } from "react";
 import { DecisionPanel } from "../decisions/DecisionPanel";
 import { Icon } from "../icons";
@@ -13,6 +14,7 @@ import { VERDICT_TONE, tree } from "../reports/ReportViews";
 import { Timeline } from "../reports/Timeline";
 import { useScreen } from "../screens/useScreen";
 import { NoData } from "../steps/ActivityViews";
+import { snapshotClock } from "../update/format";
 import { parseReports } from "../ws/ledger";
 import type { PublishEntry } from "../ws/ledger";
 
@@ -66,12 +68,23 @@ export function preflightRows(entry: PublishEntry, word: (state: string) => stri
   ];
 }
 
-function Preflight({ entry, compact }: { entry: PublishEntry; compact: boolean }) {
+/** A preflight row passes on "ok", and the gate row on the verdict "ready". */
+const passes = (row: Check) => row.status === "ok" || row.status === "ready";
+
+/** The reasons a PR is not ready: the gate refusals, then every preflight row that is not ok. */
+export const blockingReasons = (entry: PublishEntry): string[] => [
+  ...entry.refusals,
+  ...preflightRows(entry)
+    .filter((row) => !passes(row))
+    .map((row) => row.label),
+];
+
+function Preflight({ entry }: { entry: PublishEntry }) {
   const { state } = useI18n();
   const rows = preflightRows(entry, state);
   return (
     <div className="publish-preflight">
-      {(compact ? rows.slice(0, 3) : rows).map((row) => (
+      {rows.map((row) => (
         <div className="publish-check" key={row.label}>
           <span className={`orch-pill ${row.tone}`}>{state(row.status)}</span>
           <div>
@@ -85,14 +98,17 @@ function Preflight({ entry, compact }: { entry: PublishEntry; compact: boolean }
 }
 
 export function Publish() {
-  const { t, section, tab: tabLabel, state: stateText } = useI18n();
+  const { t, section, tab: tabLabel, state: stateText, language } = useI18n();
   const screen = useScreen({ type: "reports.snapshot" }, parseReports);
   const entries = screen.data?.publish ?? [];
   const [chosen, setChosen] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
+  const [why, setWhy] = useState(false);
   const batch = chosen ?? defaultBatch(entries);
   const entry = entries.find((item) => item.batch_id === batch) ?? null;
-  const blocked = entry ? preflightRows(entry).some((row) => row.status !== "ok") : true;
+  const blocked = entry ? preflightRows(entry).some((row) => !passes(row)) : true;
+  const targetRef = entry ? (entry.integration_ref ?? (entry.target ? short(entry.target) : t("нет данных"))) : "";
+  const reasons = entry ? blockingReasons(entry) : [t("Batch для публикации нет")];
   const tabs: [Tab, string][] = [
     ["overview", tabLabel("Обзор")],
     ["preflight", "Preflight"],
@@ -109,9 +125,12 @@ export function Publish() {
           {entry && (
             <div className="home-facts" id="publish-facts">
               <span>{short(entry.candidate)}</span>
-              <span>target {short(entry.target)}</span>
+              <span>target {targetRef}</span>
               <span>QA {entry.qa ? stateText(entry.qa.outcome) : "—"}</span>
               <span>Release Gate · {stateText(entry.verdict)}</span>
+              <span id="publish-updated" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+                {snapshotClock(screen.ageSeconds, language)}
+              </span>
             </div>
           )}
         </div>
@@ -134,23 +153,11 @@ export function Publish() {
         </p>
       )}
 
-      <label className="publish-batch" id="publish-batch">
-        <span>batch</span>
-        <select value={batch ?? ""} onChange={(event) => setChosen(event.target.value || null)} disabled={!entries.length}>
-          {entries.length === 0 ? <option value="">{t("Batch для публикации нет")}</option> : null}
-          {entries.map((item) => (
-            <option key={item.batch_id} value={item.batch_id}>
-              {item.ticket || item.batch_id} · {stateText(item.state)}
-            </option>
-          ))}
-        </select>
-      </label>
-
       <div className="publish-kpis" id="publish-kpis">
         <div>
           <span>Candidate</span>
           <b className="cyan">{entry ? short(entry.candidate) : <NoData />}</b>
-          <small>{entry ? `${entry.ticket} · target ${short(entry.target)}` : "—"}</small>
+          <small>{entry ? `${entry.ticket} · target ${targetRef}` : "—"}</small>
         </div>
         <div>
           <span>Release Gate</span>
@@ -178,17 +185,28 @@ export function Publish() {
         <>
           {entry ? (
             <div className="publish-grid">
-              <section className="panel publish-candidate">
+              <section className="panel publish-candidate" id="publish-candidate">
                 <div className="panel-head">
                   <h2>Release candidate</h2>
-                  <span className="small muted">{entry.ticket}</span>
+                  <span className="publish-batch" id="publish-batch">
+                    <select aria-label="batch" value={batch ?? ""} onChange={(event) => setChosen(event.target.value || null)}>
+                      {entries.map((item) => (
+                        <option key={item.batch_id} value={item.batch_id}>
+                          {item.ticket || item.batch_id} · {stateText(item.state)}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
                 </div>
                 <div className="publish-candidate-body">
                   <code className="publish-sha">{entry.candidate ?? "—"}</code>
-                  <h3>{entry.ticket || entry.batch_id}</h3>
+                  <h3>{[entry.ticket || entry.batch_id, entry.branch].filter(Boolean).join(" · ")}</h3>
                   <div className="publish-meta">
-                    <span>{entry.branch || "—"}</span>
-                    <span>target {short(entry.target)}</span>
+                    <span>
+                      <Icon name="branch" />
+                      {entry.branch || "—"}
+                    </span>
+                    <span>target {targetRef}</span>
                     <span>QA {entry.qa ? stateText(entry.qa.outcome) : "—"}</span>
                   </div>
                   <div className="publish-candidate-actions">
@@ -201,7 +219,7 @@ export function Publish() {
                   </div>
                 </div>
               </section>
-              <section className="panel publish-gate">
+              <section className="panel publish-gate" id="publish-gate">
                 <div className="panel-head">
                   <h2>Release Gate</h2>
                   <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{stateText(entry.verdict)}</span>
@@ -222,7 +240,7 @@ export function Publish() {
                     </div>
                     <div>
                       <span>reason</span>
-                      <b>{entry.refusals[0] ?? "—"}</b>
+                      <b>{entry.refusals[0] ?? t("нет отказов")}</b>
                     </div>
                     <div>
                       <span>merge</span>
@@ -238,14 +256,14 @@ export function Publish() {
             </section>
           )}
           {entry && (
-            <section className="panel publish-preflight-panel">
+            <section className="panel publish-preflight-panel" id="publish-preflight-overview">
               <div className="panel-head">
                 <h2>Preflight</h2>
                 <span className="small muted">
-                  {t("{passed} / {total} пройдено", { passed: preflightRows(entry).filter((row) => row.status === "ok").length, total: preflightRows(entry).length })}
+                  {t("{passed} / {total} пройдено", { passed: preflightRows(entry).filter(passes).length, total: preflightRows(entry).length })}
                 </span>
               </div>
-              <Preflight entry={entry} compact />
+              <Preflight entry={entry} />
             </section>
           )}
           <section className="panel publish-decision" id="publish-decision">
@@ -254,6 +272,17 @@ export function Publish() {
               <span className={`orch-pill ${blocked ? "violet" : "mint"}`}>{stateText(blocked ? "blocked" : "ready")}</span>
             </div>
             <div className="publish-decision-body">
+              <div className={`publish-decision-text ${blocked ? "blocked" : "ready"}`}>
+                <b>{blocked ? t("PR не готов к созданию") : t("PR готов к созданию")}</b>
+                <p>{reasons.length ? reasons.join(" · ") : t("Отказов гейта нет")}</p>
+                {why && reasons.length > 0 && (
+                  <ul className="publish-why" id="publish-why">
+                    {reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <div className="publish-decision-actions">
                 <button
                   className="btn primary"
@@ -264,13 +293,18 @@ export function Publish() {
                 >
                   {t("Подготовить PR")}
                 </button>
+                <button className="btn" type="button" aria-expanded={why} onClick={() => setWhy(!why)}>
+                  {t("Почему")}
+                </button>
                 <a className="btn" href={href("reports")}>
                   <Icon name="reports" /> {section("Reports")}
                 </a>
               </div>
-              <DecisionPanel kinds={["report-decision", "attention"]} />
             </div>
           </section>
+          <div className="publish-decisions" id="publish-decisions">
+            <DecisionPanel kinds={["report-decision", "attention"]} hideWhenEmpty />
+          </div>
         </>
       )}
 
@@ -280,7 +314,7 @@ export function Publish() {
             <h2>Preflight</h2>
             <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{stateText(entry.verdict)}</span>
           </div>
-          <Preflight entry={entry} compact={false} />
+          <Preflight entry={entry} />
           <div className="publish-preflight-foot">
             {t("Publish evidence должен быть привязан к candidate SHA и target SHA. Merge остаётся человеку.")}
           </div>

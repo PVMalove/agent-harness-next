@@ -105,7 +105,7 @@ const PAGES: PageSpec[] = [
   {
     route: "publish",
     title: "Публикация",
-    blocks: ["#publish-batch", "#publish-kpis", "#publish-decision"],
+    blocks: ["#publish-kpis", "#publish-candidate", "#publish-batch", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
     tabs: ["Обзор", "Preflight", "PR / MR", "Evidence"],
   },
   { route: "recovery?batch=b-887", title: "Восстановление", blocks: ["#recovery-note", "#recovery-summary", "#recovery-history"] },

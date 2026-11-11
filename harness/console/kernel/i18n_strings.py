@@ -2751,6 +2751,10 @@ EN.update(
         "Ещё фильтры": "More filters",
         "нельзя считать актуальным": "cannot count as current",
         "нет данных · следующее действие не записано": "no data · the next action is not recorded",
+        "нет отказов": "no refusals",
+        "PR не готов к созданию": "The PR is not ready to create",
+        "PR готов к созданию": "The PR is ready to create",
+        "Почему": "Why",
     }
 )
 
