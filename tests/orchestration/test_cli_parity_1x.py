@@ -49,6 +49,7 @@ ADDED_AFTER_1X: dict[str, tuple[tuple[str, ...], ...]] = {
         ("dispatches", "*", "startup", "startup_timeout_seconds"),
         ("qa_lane",),
     ),
+    "batch auto-report": (("abandoned",),),
     "batch decision-packet": (
         ("route_preview", "retry", "failure"),
         ("operational_hold",),
