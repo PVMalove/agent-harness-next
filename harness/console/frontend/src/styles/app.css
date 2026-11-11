@@ -205,10 +205,8 @@ button.diff-file { width: 100%; border: 0; border-bottom: 1px solid var(--rule);
   .diff-list { border-right: 0; border-bottom: 1px solid var(--rule); }
 }
 /* Configuration: a file or adapter row wraps its facts instead of the mockup's fixed columns. */
-.settings-page .settings-config-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 8px 16px; overflow-wrap: anywhere; }
-.settings-page .settings-resolved { margin: 8px 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.settings-page .settings-note, .settings-page .settings-config-foot, .settings-history > code, .settings-history > .field { margin: 8px 16px; }
-.settings-page .settings-textarea { width: 100%; min-height: 320px; box-sizing: border-box; font-family: var(--mono); }
+.settings-history > code, .settings-history > .field, .settings-history > .settings-history-foot, .settings-history > .settings-note { margin: 8px 16px; }
+.settings-page .settings-textarea { box-sizing: border-box; font-family: var(--mono); }
 /* Task Board: main#content takes the mockup's main.board-main layout; ticket text wraps in place. */
 main#content:has(> .board-page) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 12px; }
 @media (max-width: 980px) { main#content:has(> .board-page) { padding-bottom: 8px; } }
@@ -368,3 +366,15 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
    too), and the localized confidence header is wider than the mockup's 60px column. */
 .repo-rel-item { grid-template-columns: 48px minmax(0, 1fr) 64px; gap: 6px; }
 .repo-link-head, .repo-link-row { grid-template-columns: 1fr 1fr 1fr 96px; }
+/* Settings: the adapter plan text and the per-file change list sit inside mockup panels; the
+   type scale is the mockup's (the page used to inherit a larger body font). */
+.settings-page { font-size: var(--fs-1); }
+.settings-adapter-plan { margin: 8px 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.settings-editor-side .configuration-changes { padding: 8px 0; margin: 0; list-style: none; font: var(--fs-1) var(--mono); overflow-wrap: anywhere; }
+.settings-editor-side .field, .settings-editor-side .orch-note { margin-top: 8px; }
+.settings-config-foot > span { color: var(--muted); font-size: var(--fs-1); }
+.settings-config-row small.err, .settings-config-row small.warn { white-space: normal; }
+@media (max-width: 720px) {
+  .settings-grid, .settings-editor-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+  .settings-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

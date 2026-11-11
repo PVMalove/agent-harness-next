@@ -167,9 +167,42 @@ describe("the Configuration route", () => {
   });
 
   test("without a wizard catalog the Settings tab says why", () => {
-    renderPage();
+    renderPage({ ...CONFIGURATION, wizard: null });
     tab("Настройки");
     expect(document.querySelector("#configuration-wizard")?.textContent).toContain("нет данных");
+  });
+
+  test("the page follows the mockup: header, four KPIs, one tab bar, overview, editor and history panels", () => {
+    renderPage();
+    const actions = [...document.querySelectorAll(".settings-title .actions > *")];
+    expect(actions.map((item) => item.textContent?.trim())).toEqual(["Проверить", "Экспорт", "Диагностика"]);
+    expect(actions.every((item) => item.querySelector("svg"))).toBe(true);
+    const facts = [...document.querySelectorAll(".settings-title .home-facts > span")].map((item) => item.textContent);
+    expect(facts).toContain("1 config");
+    expect(facts.at(-1)).toMatch(/^\d\d:\d\d:\d\d$/);
+    const kpis = [...document.querySelectorAll("#configuration-kpi > div")];
+    expect(kpis.map((card) => card.querySelector("span")?.textContent)).toEqual(["project.json", "orchestration.json", "Hook policy", "Runtime store"]);
+    expect(kpis.map((card) => card.querySelector("b")?.textContent)).toEqual(["valid", "нет файла", "нет данных", "нет данных"]);
+    expect(document.querySelector("#configuration-kpi")?.textContent).not.toMatch(/[✔✖○⚠]/);
+    expect(document.querySelectorAll("main [role=tablist]")).toHaveLength(1);
+    expect(document.querySelector("main [role=tablist]")?.className).toBe("orch-tabbar settings-tabbar");
+    const rows = [...document.querySelectorAll("#configuration-files .settings-config-row")];
+    expect(rows.map((row) => row.querySelector("b")?.textContent)).toEqual(["project.json", "orchestration.json", "hook-policy.json", "runtime-store"]);
+    expect(rows.every((row) => row.querySelector("svg") && row.querySelector(".orch-pill"))).toBe(true);
+    const policy = document.querySelector("#configuration-policy") as HTMLElement;
+    expect(policy.querySelector("h2")?.textContent).toBe("Политики");
+    expect(within(policy).getByText("Шаблон имени ветки").nextElementSibling?.textContent).toBe("feature/issue-{id}-{slug}");
+    expect(policy.querySelectorAll(".settings-policy-chips .orch-pill").length).toBeGreaterThan(0);
+    expect(document.querySelector(".settings-note-body a[href='#/diagnostics']")).toBeTruthy();
+    tab("project.json");
+    expect(document.querySelector("section.settings-editor .panel-head h2")?.textContent).toBe("Редактор · project.json");
+    expect(document.querySelector("section.settings-editor .settings-file-line code")?.textContent).toBe(".harness/project.json");
+    expect(document.querySelector("aside.settings-editor-side .panel-head h2")?.textContent).toBe("Schema");
+    expect(document.querySelector("aside.settings-editor-side [data-run='configuration-apply']")).toBeTruthy();
+    tab("История");
+    const head = document.querySelector("#configuration-history > .panel-head") as HTMLElement;
+    expect(head.className).toBe("panel-head");
+    expect(head.querySelector("h2")?.textContent).toBe("История");
   });
 
   test("without the schema no file can be written", () => {

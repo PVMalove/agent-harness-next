@@ -17,6 +17,7 @@ from harness.console.kernel.configuration_snapshot import (
     ConfigurationFacts,
 )
 from harness.console.kernel.configuration import RuntimeAdapterPreview
+from harness.console.kernel.configuration_wizard import wizard_parameters
 from harness.console.kernel.harness_facts import HarnessState
 from harness.console.kernel.help_text import HelpSections, help_sections
 from harness.console.kernel.open_project_snapshot import Candidate, OpenProjectFacts
@@ -254,7 +255,8 @@ def fixtures() -> JsonObject:
         "update-harness.json": updated,
         "update-harness-diff.json": diff,
         "update-harness-facts.json": {"page": update_facts(updated), "diff": diff_facts(diff)},
-        "configuration.json": configured,
+        # The server adds the wizard catalog of the shipped schemas (screen_facts).
+        "configuration.json": {**configured, "wizard": wizard_parameters(Path(REPO))},
         "configuration-facts.json": configuration_facts(configured),
         "help-ru.json": ru,
         "help-en.json": en,
@@ -286,7 +288,10 @@ def test_every_committed_fixture_and_facts_file_equals_the_rendered_one() -> Non
 def test_the_fixtures_decode_with_the_tui_codecs() -> None:
     assert OpenProjectFacts.from_payload(_committed("open-project.json")) == open_project()
     assert UpdateHarnessFacts.from_payload(_committed("update-harness.json")) == update()
-    assert ConfigurationFacts.from_payload(_committed("configuration.json")) == configuration()
+    configured = _committed("configuration.json")
+    wizard = configured.pop("wizard")
+    assert ConfigurationFacts.from_payload(configured) == configuration()
+    assert wizard == wizard_parameters(Path(REPO)) and wizard
     for language in ("ru", "en"):
         assert HelpSections.from_payload(
             _committed(f"help-{language}.json")
@@ -305,7 +310,9 @@ def test_each_facts_file_is_what_the_tui_shows_for_its_fixture() -> None:
     assert updated["diff"] == diff_facts(_committed("update-harness-diff.json"))
     assert "⚠ Обычное обновление остановится: 1 конфликт" in updated["page"]
     configured = json.loads((FIXTURES / "configuration-facts.json").read_text(encoding="utf-8"))
-    assert configured == configuration_facts(_committed("configuration.json"))
+    assert configured == configuration_facts(
+        {k: v for k, v in _committed("configuration.json").items() if k != "wizard"}
+    )
     assert "⚠ требует обновления" in configured
     helped = _committed("help-facts.json")
     assert helped == help_facts(_committed("help-ru.json"), _committed("help-en.json"))

@@ -22,7 +22,7 @@ const keyOf = (param: WizardParam) => `${param.file}:${param.path.join(".")}`;
 const nameOf = (param: WizardParam) => `${param.file} → ${param.path.join(".")}`;
 
 /** The current value of a parameter in its served document, or undefined when absent. */
-function currentValue(facts: ConfigurationFacts, param: WizardParam): unknown {
+export function currentValue(facts: ConfigurationFacts, param: WizardParam): unknown {
   let value: unknown = facts.files[param.file].document;
   for (const key of param.path) {
     if (value === null || typeof value !== "object" || Array.isArray(value) || !Object.hasOwn(value, key)) return undefined;
@@ -31,7 +31,7 @@ function currentValue(facts: ConfigurationFacts, param: WizardParam): unknown {
   return value;
 }
 
-const shown = (value: unknown) => (value === undefined ? "—" : typeof value === "string" ? value : JSON.stringify(value));
+export const shown = (value: unknown) => (value === undefined ? "—" : typeof value === "string" ? value : JSON.stringify(value));
 
 function ValueField({ param, value, onChange }: { param: WizardParam; value: unknown; onChange: (value: unknown) => void }) {
   const { t } = useI18n();

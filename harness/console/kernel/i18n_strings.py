@@ -2779,6 +2779,23 @@ EN.update(
         "Кэш Repo Map не хранит время построения": "The Repo Map cache does not keep the build time",
         "Токены": "Tokens",
         "Кэш": "Cache",
+        "Снимок configuration.snapshot не читает hook policy": "The configuration.snapshot does not read the hook policy",
+        "Снимок Главной ещё не получен": "The Home snapshot has not arrived yet",
+        "нет файла": "no file",
+        "Редактор": "Editor",
+        "проверка на сервере": "checked on the server",
+        "Файл": "File",
+        "не установлена": "not installed",
+        "Конфигурация": "Configuration",
+        "{count} config": "{count} config",
+        "Есть незавершённая запись: сначала восстановите её.": "A write is pending: recover it first.",
+        "Незавершённой записи нет.": "No write is pending.",
+        "Политики": "Policies",
+        "Сервер не прислал каталог параметров": "The server sent no parameter catalog",
+        "Запись только с подтверждением": "Writes only after a confirmation",
+        "Изменения уходят на сервер командой configuration: проверка устаревания, резервная копия и подтверждение человека.": "Changes go to the server as a configuration command: a staleness check, a backup and a human confirmation.",
+        "Проверить в Диагностике": "Check in Diagnostics",
+        "схема не установлена": "schema not installed",
     }
 )
 
