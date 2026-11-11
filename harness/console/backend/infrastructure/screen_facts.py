@@ -27,6 +27,7 @@ from ...kernel.container_inventory import configured_engine, container_inventory
 from ...kernel.container_route import Authored, read_authored
 from ...kernel.coordinator_api import ApiResult, CoordinatorApi
 from ...kernel.harness_facts import harness_state
+from ...kernel.home_snapshot import StoreFacts
 from ...kernel.maintenance import load_maintenance
 from ...kernel.open_project_snapshot import Candidate, OpenProjectFacts
 from ...kernel.project_target import (
@@ -45,7 +46,7 @@ from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.update_harness_snapshot import UpdateHarnessFacts
 from ....health.project_tracker import ProjectTracker, resolve_project_tracker
 from ....orchestration.runtime_client import RuntimeClient, RuntimeClientError
-from .home_facts import RUNTIME_TIMEOUT_SECONDS, runtime_reason, store_facts
+from .home_facts import RUNTIME_DOWN, RUNTIME_TIMEOUT_SECONDS, runtime_reason, store_facts
 
 
 def collect_ledger(repo: Path) -> LedgerView:
@@ -160,6 +161,15 @@ def runtime_status(repo: Path, *, read: RevisionRead | None = None) -> dict[str,
     return {"state": "offline", "revision": None, "reason": reason}
 
 
+def _runtime_after(repo: Path, store: StoreFacts) -> dict[str, object]:
+    """The runtime status after the store facts: a runtime-store probe that got no answer already
+    waited its 2 s, so the status reuses that reason instead of a second probe; a cold snapshot
+    waits for one probe at most."""
+    if store.authority == "runtime-store" and store.reason.startswith(RUNTIME_DOWN.split("{")[0]):
+        return {"state": "offline", "revision": None, "reason": store.reason}
+    return runtime_status(repo)
+
+
 # The runtime adapters of the Harness page: (name, adapter file marker, CLI on PATH).
 _RUNTIMES = (("Claude Code", "claude", "claude"), ("Codex", "codex", "codex"))
 _TRACKERS = {"github": ("GitHub", "gh"), "gitlab": ("GitLab", "glab"), "local": ("Local", None)}
@@ -230,15 +240,16 @@ def harness_facts(repo: Path) -> dict[str, object]:
         counts = console_data.drift_counts(report) or ()
         drift_files = sum(count for _kind, count in counts)
     adapters = adapter_facts(repo)
+    store = store_facts(repo)
     return {
         "state": harness_state(repo).to_payload(),
         "package_version": console_data.harness_version(),
         "drift": drift,
         "drift_files": drift_files,
-        "store": asdict(store_facts(repo)),
+        "store": asdict(store),
         "adapters": adapters,
         "integrations": _integrations(repo, adapters),
-        "runtime": runtime_status(repo),
+        "runtime": _runtime_after(repo, store),
         "containers": container_facts(repo),
     }
 

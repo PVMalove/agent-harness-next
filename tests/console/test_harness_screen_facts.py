@@ -10,6 +10,7 @@ import pytest
 
 from harness.console.backend.infrastructure import screen_facts
 from harness.console.kernel import data as console_data
+from harness.console.kernel.home_snapshot import StoreFacts
 from harness.health.project_tracker import ProjectTracker
 from harness.orchestration.runtime_client import RuntimeClientError
 
@@ -91,3 +92,43 @@ def test_harness_facts_carry_the_runtime_status_and_the_adapters(
     assert isinstance(integrations, list)
     names = [item["name"] for item in integrations]
     assert names[:2] == ["Claude Code", "Codex"]
+
+
+def _harness_without_side_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(screen_facts, "container_facts", lambda repo: {})
+    monkeypatch.setattr(console_data, "drift_report", lambda repo: None)
+    monkeypatch.setattr(screen_facts, "resolve_project_tracker", lambda repo: type("R", (), {"effective": GITHUB})())
+
+
+def test_a_cold_runtime_store_snapshot_waits_for_one_probe_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _harness_without_side_reads(monkeypatch)
+    reason = "runtime не отвечает (runtime_unavailable)"
+    monkeypatch.setattr(
+        screen_facts, "store_facts", lambda repo: StoreFacts("runtime-store", 4, "g", None, reason=reason)
+    )
+
+    def second_probe(repo: Path) -> dict[str, object]:
+        raise AssertionError("the runtime was probed twice")
+
+    monkeypatch.setattr(screen_facts, "runtime_status", second_probe)
+    facts = screen_facts.harness_facts(tmp_path)
+    assert facts["runtime"] == {"state": "offline", "revision": None, "reason": reason}
+
+
+@pytest.mark.parametrize(
+    "store",
+    [
+        StoreFacts("runtime-store", 4, "g", 11, reason=""),
+        StoreFacts("runtime-store", 4, "g", None, reason="runtime не сообщил число записей аудита"),
+        StoreFacts("file-ledger", 3, "g", 2),
+    ],
+)
+def test_the_runtime_is_probed_when_the_store_read_did_not_wait_for_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, store: StoreFacts
+) -> None:
+    _harness_without_side_reads(monkeypatch)
+    monkeypatch.setattr(screen_facts, "store_facts", lambda repo: store)
+    monkeypatch.setattr(screen_facts, "runtime_status", lambda repo: {"state": "online", "revision": 9, "reason": ""})
+    assert screen_facts.harness_facts(tmp_path)["runtime"] == {"state": "online", "revision": 9, "reason": ""}
