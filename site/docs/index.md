@@ -18,20 +18,51 @@ hide:
     <div class="ah-actions">
       <a class="md-button md-button--primary" href="getting-started/index.html">Начать</a>
       <a class="md-button" href="architecture/index.html">Архитектура</a>
-      <a class="md-button" href="demo/index.html">Демо</a>
     </div>
 
-    <div class="ah-install" id="ah-install">
-      <div class="ah-install-head">
-        <span class="ah-install-label">Установка</span>
-        <button class="ah-copy" type="button" aria-label="Скопировать команду установки">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
-          <span class="ah-copy-label">Copy</span>
+    <div class="ah-quickstart" id="ah-quickstart">
+      <div class="ah-steps" role="tablist" aria-label="Порядок запуска">
+        <button class="ah-step is-active" type="button" role="tab" id="ah-tab-install" aria-selected="true" aria-controls="ah-panel-install" data-step="install" data-copy-label="Скопировать команды установки">
+          <span class="ah-step-num">1</span><span class="ah-step-name">Установка</span>
+        </button>
+        <span class="ah-step-arrow" aria-hidden="true">→</span>
+        <button class="ah-step" type="button" role="tab" id="ah-tab-console" aria-selected="false" aria-controls="ah-panel-console" data-step="console" data-copy-label="Скопировать команду веб-консоли" tabindex="-1">
+          <span class="ah-step-num">2</span><span class="ah-step-name">Веб-консоль</span>
+        </button>
+        <span class="ah-step-arrow" aria-hidden="true">→</span>
+        <button class="ah-step" type="button" role="tab" id="ah-tab-task" aria-selected="false" aria-controls="ah-panel-task" data-step="task" data-copy-label="Скопировать промпт для агента" tabindex="-1">
+          <span class="ah-step-num">3</span><span class="ah-step-name">Первая задача</span>
         </button>
       </div>
-      <div class="ah-install-lines" id="ah-install-lines">
-        <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-global">python3 bin/install-global.py --target-home "$HOME" --runtime claude --runtime codex</code></div>
-        <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-capability">python3 harness/bin/harness.py init . --capability engineering-suite</code></div>
+
+      <div class="ah-install" id="ah-install">
+        <div class="ah-install-head">
+          <span class="ah-install-label" id="ah-step-label">Установка</span>
+          <button class="ah-copy" type="button" aria-label="Скопировать команды установки">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
+            <span class="ah-copy-label">Копировать</span>
+          </button>
+        </div>
+
+        <div class="ah-step-panel" id="ah-panel-install" role="tabpanel" aria-labelledby="ah-tab-install" tabindex="0">
+          <div class="ah-install-lines" id="ah-install-lines">
+            <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-global">python3 bin/install-global.py --target-home "$HOME" --runtime claude --runtime codex</code></div>
+            <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-capability">python3 harness/bin/harness.py init . --capability engineering-suite</code></div>
+          </div>
+          <p class="ah-step-note">Сначала глобальный слой, затем подключение harness к проекту.</p>
+        </div>
+
+        <div class="ah-step-panel" id="ah-panel-console" role="tabpanel" aria-labelledby="ah-tab-console" tabindex="0" hidden>
+          <div class="ah-install-lines">
+            <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-console-command">python3 harness/bin/harness.py console . --web</code></div>
+          </div>
+          <p class="ah-step-note">Сервер выберет свободный локальный порт и напечатает URL с токеном доступа. Откройте его в браузере.</p>
+        </div>
+
+        <div class="ah-step-panel" id="ah-panel-task" role="tabpanel" aria-labelledby="ah-tab-task" tabindex="0" hidden>
+          <div class="ah-agent-prompt" id="ah-agent-prompt">Проверь этот проект и harness. Прочитай README, CONTEXT.md и .harness/project.json. Задай мне вопросы о цели, стеке и критериях готовности, затем предложи первую задачу и подготовь её спецификацию. Для нового проекта используй start-project, для существующего — integrate-project. Ничего не меняй без моего подтверждения.</div>
+          <p class="ah-step-note">Вставьте промпт в чат агента.</p>
+        </div>
       </div>
     </div>
 
@@ -48,13 +79,12 @@ hide:
     <div class="ah-terminal-wrap">
       <div class="ah-mascot ah-mascot--perch">
         <img src="assets/mascot.svg" alt="Воксельный маскот Agent Harness Next" width="108" height="140">
-        <div class="ah-bubble" id="ah-hero-bubble"><b>Привет, я H›.</b> Запускаю <code>harness health</code>.</div>
+        <div class="ah-bubble" id="ah-hero-bubble"><b>Привет, я H›.</b> Покажу демонстрационный <code>harness health</code>.</div>
       </div>
       <div class="ah-terminal" id="ah-hero-terminal">
         <div class="ah-terminal-bar">
           <span class="ah-terminal-dots"><i></i><i></i><i></i></span>
           <span class="ah-terminal-title">harness · runtime-store</span>
-          <span class="ah-terminal-beta">beta</span>
           <button class="ah-terminal-play" id="ah-terminal-play" type="button" aria-label="Запустить демонстрацию">
             <svg class="ah-play-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
             <svg class="ah-stop-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
@@ -64,6 +94,7 @@ hide:
         <pre class="ah-terminal-output" id="ah-terminal-output" aria-live="polite"><code><span class="ah-t-prompt">$</span> <span class="ah-t-cmd">harness health .</span>
 <span class="ah-t-dim">Нажмите «Демо», чтобы запустить сценарий.</span><span class="ah-cursor"></span></code></pre>
       </div>
+      <p class="ah-demo-note">Демонстрационные данные. Сайт не проверяет состояние вашего Harness.</p>
     </div>
   </div>
 </div>
@@ -75,7 +106,7 @@ hide:
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="3"></ellipse><path d="M5 5.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6M5 11.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg></span>
-    <div><div class="k">State</div><div class="v">SQLite <em>WAL</em></div><div class="s">schema 7 · audit chain</div></div>
+    <div><div class="k">Состояние</div><div class="v">SQLite <em>WAL</em></div><div class="s">schema 7 · audit chain</div></div>
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m8 10 2 2-2 2M13 14h4"></path></svg></span>
@@ -83,7 +114,7 @@ hide:
   </div>
   <div class="ah-spec">
     <span class="ah-spec-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg></span>
-    <div><div class="k">Platforms</div><div class="v"><em>Linux</em> · <em>Windows</em></div><div class="s"><em>UDS</em> и <em>named pipe</em> · контейнеры только на Linux</div></div>
+    <div><div class="k">Платформы</div><div class="v"><em>Linux</em> · <em>Windows</em></div><div class="s"><em>UDS</em> и <em>named pipe</em> · контейнеры только на Linux</div></div>
   </div>
 </div>
 
@@ -122,6 +153,21 @@ hide:
     <span class="ah-cap-name">backend-orchestration</span>
     <span class="ah-cap-desc">Роли и coordinator для распределённых систем: briefs, worktrees и ledger.</span>
   </button>
+</div>
+
+<div class="ah-roles-route" id="ah-roles-route" hidden>
+  <div class="ah-roles-head">
+    <b>Маршрут ролей для backend-orchestration</b>
+    <span>Coordinator ведёт задачу через роли; этапы открывают соответствующие разделы документации.</span>
+  </div>
+  <div class="ah-role-steps" role="list">
+    <div class="ah-role-step" role="listitem"><a href="skills/coordinator/"><span class="n">01</span><b>Coordinator</b><span>brief и dispatch</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="skills/developer/"><span class="n">02</span><b>Developer</b><span>реализация в зоне</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="skills/code-review-role/"><span class="n">03</span><b>Code review</b><span>две оси</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="skills/qa/"><span class="n">04</span><b>QA</b><span>полный gate</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="guides/orchestration/publish/"><span class="n">05</span><b>Publish</b><span>PR после подтверждения</span></a></div>
+  </div>
+  <p class="ah-roles-note">Worktree разделяет рабочие файлы и ветки; права процесса настраиваются отдельно. QA выполняет полный gate, PR открывается после отдельного подтверждения.</p>
 </div>
 
 <p class="ah-note"><a href="getting-started/index.html">Как выбрать сборку и подключить её к проекту</a></p>
@@ -176,54 +222,31 @@ hide:
   </button>
 </div>
 
-<div class="ah-section">
+<section class="ah-section" aria-labelledby="ah-task-title">
   <span class="ah-kicker">Архитектура</span>
-  <h2>Слои и границы</h2>
-  <p>Python решает policy, Rust исполняет и хранит.</p>
-</div>
+  <h2 id="ah-task-title">Как выполняется задача</h2>
+  <p>Python собирает контекст из Repo Map и включённой памяти RAG, готовит brief и получает
+    подтверждение человека или политики auto. Rust принимает запросы через IPC, исполняет план
+    и возвращает наблюдения; Python передаёт результаты клиенту консоли.</p>
+</section>
 
-<div class="ah-flow" id="ah-flow">
-  <p class="ah-core-hint">Выберите клиента: запрос пройдёт по слоям до runtime-store. Узлы кликабельны.</p>
-  <div class="ah-core-scroll"><div class="ah-core" id="ah-core"></div></div>
-  <div class="ah-flow-note" id="ah-flow-note" aria-live="polite">
-    <b>Web console · маршрут</b>
-    <span>Выберите клиента или узел схемы.</span>
+<div class="ah-flow ah-core-region" aria-labelledby="ah-task-title">
+  <div class="ah-core-controls" id="ah-core-controls" role="group" aria-label="Маршрут на схеме">
+    <button class="md-button" type="button" data-core-route="launch" aria-pressed="true" disabled>Запуск задачи</button>
+    <button class="md-button" type="button" data-core-route="context" aria-pressed="false" disabled>Контекст</button>
+    <button class="md-button" type="button" data-core-route="state" aria-pressed="false" disabled>Чтение состояния</button>
+    <button class="md-button" type="button" data-core-route="recovery" aria-pressed="false" disabled>Восстановление</button>
   </div>
-  <div class="ah-flow-principles">
-    <div class="ah-principle"><span class="tag">01</span><b>Один writer.</b> Python не пишет operational state в обход runtime.</div>
-    <div class="ah-principle"><span class="tag">02</span><b>Идемпотентность.</b> Повтор после потерянного ответа возвращает тот же результат.</div>
-    <div class="ah-principle"><span class="tag">03</span><b>Audit.</b> Хэш-цепочка и <code>ledger validate --full</code> находят удаление, вставку и перестановку.</div>
-    <div class="ah-principle"><span class="tag">04</span><b>Recovery.</b> После SIGKILL runtime находит исполнение по меткам и завершает остановку.</div>
+  <p class="ah-core-hint">Нажмите на компонент или выберите маршрут. По одной линии идут запрос (синий) и ответ (зелёный). Схема демонстрационная.</p>
+  <div class="ah-core is-isometric" id="ah-core"></div>
+  <div class="ah-flow-note" id="ah-flow-note" aria-live="polite" aria-atomic="true">
+    <b>Python → IPC → Rust</b>
+    <span>План и подтверждение → исполнение → состояние и ответ. Подробности доступны в документации ниже.</span>
   </div>
-</div>
-
-<div class="ah-section">
-  <span class="ah-kicker">Документация</span>
-  <h2>Начало работы</h2>
-  <p>Установите глобальный слой, подключите harness к проекту и проверьте окружение.</p>
-</div>
-
-<div class="ah-cards ah-cards--four">
-  <a class="ah-card" href="getting-started/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 19 19 5M9 5h10v10"></path><path d="M5 5h5v5H5z"></path></svg></span>
-    <b>Быстрый старт</b>
-    <span>Требования, установка, init/adopt и health.</span>
-  </a>
-  <a class="ah-card" href="architecture/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"></path><path d="m4 12 8 4.5 8-4.5M4 16.5 12 21l8-4.5"></path></svg></span>
-    <b>Архитектура</b>
-    <span>Слои, ownership, runtime, store и безопасность.</span>
-  </a>
-  <a class="ah-card" href="reference/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5v-13Z"></path><path d="M4 17.5h16"></path></svg></span>
-    <b>Справочник</b>
-    <span>CLI, конфигурация, hooks и агенты.</span>
-  </a>
-  <a class="ah-card" href="demo/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 21h8M12 18v3"></path></svg></span>
-    <b>Демо</b>
-    <span>Веб-консоль и демонстрационные сценарии.</span>
-  </a>
+  <div class="ah-core-links">
+    <a href="architecture/index.html">Подробнее об архитектуре →</a>
+    <a href="diagrams/harness-core.architecture.html">Полная модель связей · Archify →</a>
+  </div>
 </div>
 
 <dialog class="ah-dialog" id="ah-feature-dialog">
@@ -270,7 +293,7 @@ hide:
           ['dim', '== Оркестрация =='],
           ['ok', '✓ ledger: authority=runtime-store schema_version=7'],
           ['ok', '✓ незавершённых batch нет'],
-          ['ok', '✓ активные dispatch посылают heartbeat вовремя'],
+          ['ok', '✓ heartbeat: 300 с по умолчанию'],
           ['ok', '✓ engineering-suite: 32 skills'],
           ['ok', '✓ runtime-store: read-only · schema 7'],
           ['info', 'ℹ Rust runtime: protocol 1.7 · serving'],
@@ -287,7 +310,7 @@ hide:
           ['ok', '✓ ledger: authority=runtime-store schema_version=7'],
           ['ok', '✓ coordinator: 3 роли готовы'],
           ['ok', '✓ незавершённых batch нет'],
-          ['ok', '✓ активные dispatch посылают heartbeat вовремя'],
+          ['ok', '✓ heartbeat: 300 с по умолчанию'],
           ['warn', '⚠ QA lane: ожидает evidence'],
           ['dim', '== Итог =='],
           ['sum', '<span class="ah-t-ok">ok=46</span> <span class="ah-t-warn">warn=3</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=9</span>']
@@ -323,7 +346,7 @@ hide:
       console: {
         title: "Веб-консоль",
         desc: "TUI и браузер — клиенты одного Сервера консоли: задачи, оркестрация, отчёты и восстановление.",
-        code: "$ harness console --web\nСервер консоли: http://127.0.0.1:…/?token=…\nЭкраны: Главная · Доска задач · Оркестрация · Отчёты",
+        code: "$ python3 harness/bin/harness.py console . --web\nСервер консоли: свободный порт · URL с токеном доступа\nЭкраны: Главная · Доска задач · Оркестрация · Отчёты",
         href: "demo/index.html"
       },
       security: {
@@ -341,9 +364,45 @@ hide:
     const terminal = document.getElementById("ah-terminal-output");
     const play = document.getElementById("ah-terminal-play");
     const playLabel = play.querySelector(".ah-terminal-play-label");
+    const copy = document.querySelector(".ah-copy");
+    const rolesRoute = document.getElementById("ah-roles-route");
+    const steps = Array.from(document.querySelectorAll(".ah-step"));
+    const stepPanels = Array.from(document.querySelectorAll(".ah-step-panel"));
+    const stepLabel = document.getElementById("ah-step-label");
     let selected = "engineering-suite";
     let timers = [];
     let running = false;
+
+    function setStep(name, focus) {
+      steps.forEach((button) => {
+        const active = button.dataset.step === name;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        button.tabIndex = active ? 0 : -1;
+        if (active) {
+          stepLabel.textContent = button.querySelector(".ah-step-name").textContent;
+          copy.setAttribute("aria-label", button.dataset.copyLabel || "Скопировать");
+          if (focus) button.focus();
+        }
+      });
+      stepPanels.forEach((panel) => {
+        panel.hidden = panel.id !== "ah-panel-" + name;
+      });
+    }
+
+    steps.forEach((button, index) => {
+      button.addEventListener("click", () => setStep(button.dataset.step));
+      button.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        let next = index;
+        if (event.key === "ArrowLeft") next = (index - 1 + steps.length) % steps.length;
+        if (event.key === "ArrowRight") next = (index + 1) % steps.length;
+        if (event.key === "Home") next = 0;
+        if (event.key === "End") next = steps.length - 1;
+        setStep(steps[next].dataset.step, true);
+      });
+    });
 
     function setRunning(value) {
       running = value;
@@ -404,6 +463,7 @@ hide:
         card.setAttribute("aria-checked", active ? "true" : "false");
       });
       installCapability.textContent = "python3 harness/bin/harness.py init . --capability " + name;
+      rolesRoute.hidden = name !== "backend-orchestration";
       if (run) runScenario(name);
     }
 
@@ -423,16 +483,25 @@ hide:
       runScenario(selected);
     });
 
-    const copy = document.querySelector(".ah-copy");
+    function copyPayload() {
+      const panel = stepPanels.find((item) => !item.hidden);
+      if (!panel) return "";
+      const prompt = panel.querySelector(".ah-agent-prompt");
+      if (prompt) return prompt.textContent.trim();
+      return Array.from(panel.querySelectorAll("code"))
+        .map((code) => code.textContent.trim())
+        .join("\n");
+    }
+
     copy.addEventListener("click", () => {
-      const command = document.getElementById("ah-install-global").textContent.trim() + "\n" +
-        document.getElementById("ah-install-capability").textContent.trim();
-      navigator.clipboard.writeText(command).then(() => {
+      const text = copyPayload();
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
         copy.classList.add("is-copied");
-        copy.querySelector(".ah-copy-label").textContent = "Copied!";
+        copy.querySelector(".ah-copy-label").textContent = "Скопировано";
         window.setTimeout(() => {
           copy.classList.remove("is-copied");
-          copy.querySelector(".ah-copy-label").textContent = "Copy";
+          copy.querySelector(".ah-copy-label").textContent = "Копировать";
         }, 1400);
       });
     });
@@ -458,6 +527,7 @@ hide:
       if (event.target === dialog) dialog.close();
     });
 
+    setStep("install");
     selectCapability(selected, false);
     timers.push(window.setTimeout(() => runScenario(selected), 1100));
   })();

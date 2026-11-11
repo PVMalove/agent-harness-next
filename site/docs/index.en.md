@@ -18,20 +18,51 @@ hide:
     <div class="ah-actions">
       <a class="md-button md-button--primary" href="getting-started/index.html">Get started</a>
       <a class="md-button" href="architecture/index.html">Architecture</a>
-      <a class="md-button" href="demo/index.html">Demo</a>
     </div>
 
-    <div class="ah-install" id="ah-install">
-      <div class="ah-install-head">
-        <span class="ah-install-label">Install</span>
-        <button class="ah-copy" type="button" aria-label="Copy the install command">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
-          <span class="ah-copy-label">Copy</span>
+    <div class="ah-quickstart" id="ah-quickstart">
+      <div class="ah-steps" role="tablist" aria-label="Run order">
+        <button class="ah-step is-active" type="button" role="tab" id="ah-tab-install" aria-selected="true" aria-controls="ah-panel-install" data-step="install" data-copy-label="Copy the install commands">
+          <span class="ah-step-num">1</span><span class="ah-step-name">Install</span>
+        </button>
+        <span class="ah-step-arrow" aria-hidden="true">→</span>
+        <button class="ah-step" type="button" role="tab" id="ah-tab-console" aria-selected="false" aria-controls="ah-panel-console" data-step="console" data-copy-label="Copy the web console command" tabindex="-1">
+          <span class="ah-step-num">2</span><span class="ah-step-name">Web console</span>
+        </button>
+        <span class="ah-step-arrow" aria-hidden="true">→</span>
+        <button class="ah-step" type="button" role="tab" id="ah-tab-task" aria-selected="false" aria-controls="ah-panel-task" data-step="task" data-copy-label="Copy the agent prompt" tabindex="-1">
+          <span class="ah-step-num">3</span><span class="ah-step-name">First task</span>
         </button>
       </div>
-      <div class="ah-install-lines" id="ah-install-lines">
-        <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-global">python3 bin/install-global.py --target-home "$HOME" --runtime claude --runtime codex</code></div>
-        <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-capability">python3 harness/bin/harness.py init . --capability engineering-suite</code></div>
+
+      <div class="ah-install" id="ah-install">
+        <div class="ah-install-head">
+          <span class="ah-install-label" id="ah-step-label">Install</span>
+          <button class="ah-copy" type="button" aria-label="Copy the install commands">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
+            <span class="ah-copy-label">Copy</span>
+          </button>
+        </div>
+
+        <div class="ah-step-panel" id="ah-panel-install" role="tabpanel" aria-labelledby="ah-tab-install" tabindex="0">
+          <div class="ah-install-lines" id="ah-install-lines">
+            <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-global">python3 bin/install-global.py --target-home "$HOME" --runtime claude --runtime codex</code></div>
+            <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-install-capability">python3 harness/bin/harness.py init . --capability engineering-suite</code></div>
+          </div>
+          <p class="ah-step-note">Install the global layer first, then connect the harness to the project.</p>
+        </div>
+
+        <div class="ah-step-panel" id="ah-panel-console" role="tabpanel" aria-labelledby="ah-tab-console" tabindex="0" hidden>
+          <div class="ah-install-lines">
+            <div class="ah-install-line"><span class="ah-prompt">$</span><code id="ah-console-command">python3 harness/bin/harness.py console . --web</code></div>
+          </div>
+          <p class="ah-step-note">The server picks a free local port and prints a URL with an access token. Open it in the browser.</p>
+        </div>
+
+        <div class="ah-step-panel" id="ah-panel-task" role="tabpanel" aria-labelledby="ah-tab-task" tabindex="0" hidden>
+          <div class="ah-agent-prompt" id="ah-agent-prompt">Inspect this project and the harness. Read README, CONTEXT.md, and .harness/project.json. Ask me about the goal, stack, and acceptance criteria, then propose the first task and draft its specification. For a new project use start-project; for an existing one use integrate-project. Do not change anything without my confirmation.</div>
+          <p class="ah-step-note">Paste the prompt into the agent chat.</p>
+        </div>
       </div>
     </div>
 
@@ -48,13 +79,12 @@ hide:
     <div class="ah-terminal-wrap">
       <div class="ah-mascot ah-mascot--perch">
         <img src="../assets/mascot.svg" alt="Voxel mascot of Agent Harness Next" width="108" height="140">
-        <div class="ah-bubble" id="ah-hero-bubble"><b>Hi, I am H›.</b> I run <code>harness health</code>.</div>
+        <div class="ah-bubble" id="ah-hero-bubble"><b>Hi, I am H›.</b> I will show a demo <code>harness health</code>.</div>
       </div>
       <div class="ah-terminal" id="ah-hero-terminal">
         <div class="ah-terminal-bar">
           <span class="ah-terminal-dots"><i></i><i></i><i></i></span>
           <span class="ah-terminal-title">harness · runtime-store</span>
-          <span class="ah-terminal-beta">beta</span>
           <button class="ah-terminal-play" id="ah-terminal-play" type="button" aria-label="Run the demonstration">
             <svg class="ah-play-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
             <svg class="ah-stop-icon" viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
@@ -64,6 +94,7 @@ hide:
         <pre class="ah-terminal-output" id="ah-terminal-output" aria-live="polite"><code><span class="ah-t-prompt">$</span> <span class="ah-t-cmd">harness health .</span>
 <span class="ah-t-dim">Press “Demo” to run the scenario.</span><span class="ah-cursor"></span></code></pre>
       </div>
+      <p class="ah-demo-note">Demonstration data. The site does not check the state of your installed Harness.</p>
     </div>
   </div>
 </div>
@@ -124,6 +155,21 @@ hide:
   </button>
 </div>
 
+<div class="ah-roles-route" id="ah-roles-route" hidden>
+  <div class="ah-roles-head">
+    <b>Role route for backend-orchestration</b>
+    <span>Coordinator drives the task through roles; each stage opens the matching documentation.</span>
+  </div>
+  <div class="ah-role-steps" role="list">
+    <div class="ah-role-step" role="listitem"><a href="skills/coordinator/"><span class="n">01</span><b>Coordinator</b><span>brief and dispatch</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="skills/developer/"><span class="n">02</span><b>Developer</b><span>implementation in the zone</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="skills/code-review-role/"><span class="n">03</span><b>Code review</b><span>two axes</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="skills/qa/"><span class="n">04</span><b>QA</b><span>full gate</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
+    <div class="ah-role-step" role="listitem"><a href="guides/orchestration/publish/"><span class="n">05</span><b>Publish</b><span>PR after confirmation</span></a></div>
+  </div>
+  <p class="ah-roles-note">A worktree separates working files and branches; process permissions are configured separately. QA runs the full gate; a PR opens after a separate confirmation.</p>
+</div>
+
 <p class="ah-note"><a href="getting-started/index.html">How to choose a build and connect it to a project</a></p>
 
 <div class="ah-section">
@@ -175,54 +221,31 @@ hide:
   </button>
 </div>
 
-<div class="ah-section">
+<section class="ah-section" aria-labelledby="ah-task-title">
   <span class="ah-kicker">Architecture</span>
-  <h2>Layers and boundaries</h2>
-  <p>Python decides policy. Rust executes and stores.</p>
-</div>
+  <h2 id="ah-task-title">How a task runs</h2>
+  <p>Python builds context from Repo Map and enabled RAG memory, prepares a brief, and obtains
+    human or auto-policy approval. Rust receives requests over IPC, executes the plan,
+    and returns observations; Python sends results back to the console client.</p>
+</section>
 
-<div class="ah-flow" id="ah-flow">
-  <p class="ah-core-hint">Select a client: the request passes through the layers to the runtime store. The nodes are clickable.</p>
-  <div class="ah-core-scroll"><div class="ah-core" id="ah-core"></div></div>
-  <div class="ah-flow-note" id="ah-flow-note" aria-live="polite">
-    <b>Web console · route</b>
-    <span>Select a client or a diagram node.</span>
+<div class="ah-flow ah-core-region" aria-labelledby="ah-task-title">
+  <div class="ah-core-controls" id="ah-core-controls" role="group" aria-label="Diagram route">
+    <button class="md-button" type="button" data-core-route="launch" aria-pressed="true" disabled>Run task</button>
+    <button class="md-button" type="button" data-core-route="context" aria-pressed="false" disabled>Context</button>
+    <button class="md-button" type="button" data-core-route="state" aria-pressed="false" disabled>Read state</button>
+    <button class="md-button" type="button" data-core-route="recovery" aria-pressed="false" disabled>Recover execution</button>
   </div>
-  <div class="ah-flow-principles">
-    <div class="ah-principle"><span class="tag">01</span><b>One writer.</b> Python does not write operational state around the runtime.</div>
-    <div class="ah-principle"><span class="tag">02</span><b>Idempotence.</b> A retry after a lost response returns the same result.</div>
-    <div class="ah-principle"><span class="tag">03</span><b>Audit.</b> The hash chain and <code>ledger validate --full</code> find a deletion, an insertion, and a reorder.</div>
-    <div class="ah-principle"><span class="tag">04</span><b>Recovery.</b> After SIGKILL the runtime finds the execution by its labels and finishes the stop.</div>
+  <p class="ah-core-hint">Select a component or route. Each line carries a request (blue) and a response (green). This is a demonstration.</p>
+  <div class="ah-core is-isometric" id="ah-core"></div>
+  <div class="ah-flow-note" id="ah-flow-note" aria-live="polite" aria-atomic="true">
+    <b>Python → IPC → Rust</b>
+    <span>Plan and approval → execution → state and response. See the documentation below for details.</span>
   </div>
-</div>
-
-<div class="ah-section">
-  <span class="ah-kicker">Documentation</span>
-  <h2>Getting started</h2>
-  <p>Install the global layer, connect the harness to a project, and check the environment.</p>
-</div>
-
-<div class="ah-cards ah-cards--four">
-  <a class="ah-card" href="getting-started/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 19 19 5M9 5h10v10"></path><path d="M5 5h5v5H5z"></path></svg></span>
-    <b>Quick start</b>
-    <span>Requirements, installation, init/adopt, and health.</span>
-  </a>
-  <a class="ah-card" href="architecture/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"></path><path d="m4 12 8 4.5 8-4.5M4 16.5 12 21l8-4.5"></path></svg></span>
-    <b>Architecture</b>
-    <span>Layers, ownership, the runtime, the store, and security.</span>
-  </a>
-  <a class="ah-card" href="reference/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5v-13Z"></path><path d="M4 17.5h16"></path></svg></span>
-    <b>Reference</b>
-    <span>The CLI, configuration, hooks, and agents.</span>
-  </a>
-  <a class="ah-card" href="demo/index.html">
-    <span class="i"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 21h8M12 18v3"></path></svg></span>
-    <b>Demo</b>
-    <span>The web console and demonstration scenarios.</span>
-  </a>
+  <div class="ah-core-links">
+    <a href="architecture/index.html">Explore the architecture →</a>
+    <a href="diagrams/harness-core.architecture.html">Full relationship model · Archify →</a>
+  </div>
 </div>
 
 <dialog class="ah-dialog" id="ah-feature-dialog">
@@ -269,7 +292,7 @@ hide:
           ['dim', '== Orchestration =='],
           ['ok', '✓ ledger: authority=runtime-store schema_version=7'],
           ['ok', '✓ no unfinished batches'],
-          ['ok', '✓ active dispatches send heartbeats on time'],
+          ['ok', '✓ heartbeat: 300 s by default'],
           ['ok', '✓ engineering-suite: 32 skills'],
           ['ok', '✓ runtime-store: read-only · schema 7'],
           ['info', 'ℹ Rust runtime: protocol 1.7 · serving'],
@@ -286,7 +309,7 @@ hide:
           ['ok', '✓ ledger: authority=runtime-store schema_version=7'],
           ['ok', '✓ coordinator: 3 roles ready'],
           ['ok', '✓ no unfinished batches'],
-          ['ok', '✓ active dispatches send heartbeats on time'],
+          ['ok', '✓ heartbeat: 300 s by default'],
           ['warn', '⚠ QA lane: waiting for evidence'],
           ['dim', '== Summary =='],
           ['sum', '<span class="ah-t-ok">ok=46</span> <span class="ah-t-warn">warn=3</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=9</span>']
@@ -322,7 +345,7 @@ hide:
       console: {
         title: "Web console",
         desc: "The TUI and the browser are clients of one Console Server: tasks, orchestration, reports, and recovery.",
-        code: "$ harness console --web\nConsole Server: http://127.0.0.1:…/?token=…\nScreens: Home · Task board · Orchestration · Reports",
+        code: "$ python3 harness/bin/harness.py console . --web\nConsole Server: free port · URL with access token\nScreens: Home · Task board · Orchestration · Reports",
         href: "demo/index.html"
       },
       security: {
@@ -340,9 +363,45 @@ hide:
     const terminal = document.getElementById("ah-terminal-output");
     const play = document.getElementById("ah-terminal-play");
     const playLabel = play.querySelector(".ah-terminal-play-label");
+    const copy = document.querySelector(".ah-copy");
+    const rolesRoute = document.getElementById("ah-roles-route");
+    const steps = Array.from(document.querySelectorAll(".ah-step"));
+    const stepPanels = Array.from(document.querySelectorAll(".ah-step-panel"));
+    const stepLabel = document.getElementById("ah-step-label");
     let selected = "engineering-suite";
     let timers = [];
     let running = false;
+
+    function setStep(name, focus) {
+      steps.forEach((button) => {
+        const active = button.dataset.step === name;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        button.tabIndex = active ? 0 : -1;
+        if (active) {
+          stepLabel.textContent = button.querySelector(".ah-step-name").textContent;
+          copy.setAttribute("aria-label", button.dataset.copyLabel || "Copy");
+          if (focus) button.focus();
+        }
+      });
+      stepPanels.forEach((panel) => {
+        panel.hidden = panel.id !== "ah-panel-" + name;
+      });
+    }
+
+    steps.forEach((button, index) => {
+      button.addEventListener("click", () => setStep(button.dataset.step));
+      button.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        let next = index;
+        if (event.key === "ArrowLeft") next = (index - 1 + steps.length) % steps.length;
+        if (event.key === "ArrowRight") next = (index + 1) % steps.length;
+        if (event.key === "Home") next = 0;
+        if (event.key === "End") next = steps.length - 1;
+        setStep(steps[next].dataset.step, true);
+      });
+    });
 
     function setRunning(value) {
       running = value;
@@ -403,6 +462,7 @@ hide:
         card.setAttribute("aria-checked", active ? "true" : "false");
       });
       installCapability.textContent = "python3 harness/bin/harness.py init . --capability " + name;
+      rolesRoute.hidden = name !== "backend-orchestration";
       if (run) runScenario(name);
     }
 
@@ -422,13 +482,22 @@ hide:
       runScenario(selected);
     });
 
-    const copy = document.querySelector(".ah-copy");
+    function copyPayload() {
+      const panel = stepPanels.find((item) => !item.hidden);
+      if (!panel) return "";
+      const prompt = panel.querySelector(".ah-agent-prompt");
+      if (prompt) return prompt.textContent.trim();
+      return Array.from(panel.querySelectorAll("code"))
+        .map((code) => code.textContent.trim())
+        .join("\n");
+    }
+
     copy.addEventListener("click", () => {
-      const command = document.getElementById("ah-install-global").textContent.trim() + "\n" +
-        document.getElementById("ah-install-capability").textContent.trim();
-      navigator.clipboard.writeText(command).then(() => {
+      const text = copyPayload();
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
         copy.classList.add("is-copied");
-        copy.querySelector(".ah-copy-label").textContent = "Copied!";
+        copy.querySelector(".ah-copy-label").textContent = "Copied";
         window.setTimeout(() => {
           copy.classList.remove("is-copied");
           copy.querySelector(".ah-copy-label").textContent = "Copy";
@@ -457,6 +526,7 @@ hide:
       if (event.target === dialog) dialog.close();
     });
 
+    setStep("install");
     selectCapability(selected, false);
     timers.push(window.setTimeout(() => runScenario(selected), 1100));
   })();

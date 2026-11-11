@@ -1,23 +1,23 @@
 # QA gate and Release Gate
 
-The QA gate is a full, independent quality run on a pinned candidate. The Release Gate confirms that
-exactly the tree that was checked is the one that was published. These are two different checks: the
-first answers "the code works", the second answers "exactly what was checked reached the repository".
+The QA gate runs the project's full set of checks. In backend orchestration, an independent QA role
+checks a pinned candidate in a clean environment. The Release Gate checks the candidate/target pair
+and the resulting tree. A local `/qa-gate` run alone does not prove clean-room isolation.
 
 ## QA gate
 
-The gate runs the `qa_gate_commands` from `.harness/project.json` (linter, type check, tests) in an
-isolated environment, not in the developer's working tree. QA does not reuse the developer's cache or
-environment: otherwise the run proves only that everything was already built locally.
+`/qa-gate` reads `qa_gate_commands` and `shell` from `.harness/project.json` and runs commands in order
+in the current checkout. If the configuration is absent in a linked worktree, it reads configuration
+and the summary wrapper from the main worktree, while checks still run against the current checkout.
+The first failure stops the run. An absent file or command list requires configuration first.
 
-The full set is QA's duty. The developer gets targeted checks for their change, and the full run is
-done on the final candidate. Each command is wrapped in a summary: on success, a PASS line; on
-failure, the test totals, the failed nodes, the final exceptions, and the path to a sanitized log.
-The full stdout does not reach the session.
+The wrapper returns PASS or a bounded failure summary with failed tests, diagnostics and a sanitized
+log path. Passing targeted checks is not a full gate pass.
 
-If the `qa_gate_commands` field is empty, the check is not skipped: it stops and asks to fill in the
-configuration. The command shell is set by the `shell` field: in a project where a bare `bash`
-resolves to someone else's stub, `bash` is replaced with an explicit interpreter.
+In `backend-orchestration`, `qa run` uses `verification_commands`, prepares a clean checkout of the
+exact candidate and isolates the QA environment from developer work.
+Preparation failures and code failures have different retry routes; see [clean-room QA](orchestration/qa.md).
+Command fields and fallback rules are described in [verification settings](../getting-started/settings/orchestration/verification.md).
 
 ## Incremental verification
 

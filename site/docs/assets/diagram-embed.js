@@ -9,13 +9,13 @@
     "body{min-height:0!important;padding:6px 12px!important}",
     ".container{max-width:none!important}",
     ".toolbar{top:4px!important;right:12px!important}",
-    ".header{display:flex!important;align-items:center;min-height:48px;margin:0 0 2px!important;padding:0!important}",
-    ".header-row{flex:1 1 0;min-width:0;max-width:calc(100% - 436px);margin:0!important}",
+    ".header{display:flex!important;align-items:center;min-height:40px;margin:0 0 2px!important;padding:0!important}",
+    ".header-row{flex:1 1 0;min-width:0;max-width:calc(100% - 340px);margin:0!important}",
     ".header h1{flex:1 1 0;min-width:0;margin:0!important;overflow:hidden;font-size:15px!important;line-height:1.3!important;text-overflow:ellipsis;white-space:nowrap}",
     ".subtitle,.cards{display:none!important}",
     ".diagram-container{padding:4px 6px 56px!important;overflow:visible!important}",
     ".diagram-container>svg{min-width:0!important}",
-    "@media (max-width:720px){.header{display:none!important}.container{padding-top:48px}}"
+    "@media (max-width:720px){.header{display:none!important}.container{padding-top:40px}}"
   ].join("\n");
 
   var SKIP = { defs: 1, title: 1, desc: 1, style: 1, script: 1 };
@@ -141,7 +141,10 @@
     m.dialog.showModal();
   }
 
+  var resizeObserver, themeObserver;
   function init() {
+    if (resizeObserver) resizeObserver.disconnect();
+    if (themeObserver) themeObserver.disconnect();
     Array.prototype.forEach.call(document.querySelectorAll(".ah-diagram .ah-diagram-expand"), function (button) {
       button.addEventListener("click", function () { expand(button.closest(".ah-diagram")); });
     });
@@ -151,7 +154,7 @@
       if (frame.contentDocument && frame.contentDocument.readyState === "complete") apply(frame);
     });
     if (window.ResizeObserver) {
-      var ro = new ResizeObserver(function (entries) {
+      var ro = resizeObserver = new ResizeObserver(function (entries) {
         entries.forEach(function (entry) {
           var frame = entry.target;
           window.requestAnimationFrame(function () { fit(frame); });
@@ -159,13 +162,14 @@
       });
       frames.forEach(function (frame) { ro.observe(frame); });
     }
-    new MutationObserver(function () {
+    themeObserver = new MutationObserver(function () {
       frames.forEach(apply);
       if (modal && modal.dialog.open) apply(modal.frame);
-    })
-      .observe(document.body, { attributes: true, attributeFilter: ["data-md-color-scheme"] });
+    });
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ["data-md-color-scheme"] });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  if (window.document$) window.document$.subscribe(init);
+  else if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();

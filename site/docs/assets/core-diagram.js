@@ -1,354 +1,381 @@
+/* Isometric view of the checked Archify model; no operational requests are sent. */
 (function () {
+  var source = document.currentScript.src;
+  var dispose = null;
+  function init() {
+  if (dispose) { dispose(); dispose = null; }
   var host = document.getElementById("ah-core");
   if (!host) return;
-
+  var english = document.documentElement.lang === "en";
+  var script = source;
   var NS = "http://www.w3.org/2000/svg";
-  var W = 1120;
-  var H = 640;
-  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  /* --- English strings: keyed by the Russian source string --------------- */
-  var LANG = document.documentElement.lang === "en" ? "en" : "ru";
-  var EN = {
-    "harness и coordinator запускаются из терминала. Команды идут в policy-слой Python, а тот обращается к runtime через runtime_client.": "harness and coordinator run from the terminal. Commands go to the Python policy layer, which calls the runtime through runtime_client.",
-    "Терминальный клиент Сервера консоли: задачи, оркестрация, отчёты и восстановление. Данные берёт у сервера, а не из файлов.": "Terminal client of the Console Server: tasks, orchestration, reports, and recovery. It takes data from the server, not from files.",
-    "Браузерный клиент того же Сервера консоли. Подключается по /ws с токеном сессии; действия восстановления сервер выполняет как job.": "Browser client of the same Console Server. It connects over /ws with a session token; the server runs recovery actions as a job.",
-    "Claude Code и Codex находят скиллы и hooks через native skill roots. Hooks проверяют действия агента по профилю политики.": "Claude Code and Codex find skills and hooks through native skill roots. Hooks check agent actions against the policy profile.",
-    "Планирует batch, собирает approvals, принимает отчёты ролей и выбирает состояние dispatch по наблюдению runtime. Operational state сам не пишет.": "Plans a batch, collects approvals, accepts role reports, and picks the dispatch state from what the runtime observes. It does not write operational state itself.",
-    "Сервер консоли": "Console Server",
-    "Один сервер для TUI и браузера: отдаёт снимки экранов по /ws и ходит в runtime тем же клиентом, что и coordinator.": "One server for the TUI and the browser: it serves screen snapshots over /ws and calls the runtime with the same client as the coordinator.",
-    "профили hooks": "hook profiles",
-    "Профили задают предупреждения и повторы. Критические guards профилем не отключаются, а strict не блокирует recovery.": "Profiles set warnings and retries. A profile never disables critical guards, and strict does not block recovery.",
-    "человек и policy": "human and policy",
-    "Решение принимает человек и policy-слой. Immutable brief связывает план, образ, policy digest и verification digest.": "A human and the policy layer make the decision. The immutable brief binds the plan, image, policy digest, and verification digest.",
-    "ChangeImpact → план": "ChangeImpact → plan",
-    "ChangeImpact строит набор затронутого, VerificationPlan закрепляется digest-ом в approval. QA делает полный прогон на финальном SHA.": "ChangeImpact builds the set of affected items, and the VerificationPlan is pinned by a digest in the approval. QA runs the full pass on the final SHA.",
-    "hello · operation_id · повтор до request_deadline": "hello · operation_id · retry until request_deadline",
-    "Единственный путь Python к состоянию: hello, operation_id, повтор до request_deadline. Недоступный runtime даёт runtime_unavailable без записи в обход.": "The only Python path to state: hello, operation_id, retry until request_deadline. An unavailable runtime returns runtime_unavailable and nothing is written around it.",
-    "Unix socket / named pipe · protocol 1.7 · uid/SID + токен · expected_revision · fencing_token": "Unix socket / named pipe · protocol 1.7 · uid/SID + token · expected_revision · fencing_token",
-    "Unix domain socket, на Windows — named pipe. Кадр — длина и JSON. Проверяются peer uid/SID и токен; каталог 0700, сокет 0600.": "Unix domain socket; on Windows, a named pipe. A frame is a length plus JSON. The peer uid/SID and the token are checked; the directory is 0700, the socket is 0600.",
-    "Lifecycle и intent": "Lifecycle and intent",
-    "Переходы batch и dispatch сохраняются транзакцией: intent, запуск, committed. Единственный writer этих сущностей.": "Batch and dispatch transitions are saved in a transaction: intent, launch, committed. The only writer of these entities.",
-    "intent ↔ факт хоста": "intent ↔ host fact",
-    "Сверяет сохранённый intent с фактом на хосте. После SIGKILL усыновляет исполнение по меткам или доказывает, что процесса нет.": "Compares the saved intent with the fact on the host. After SIGKILL, it adopts the execution by labels or proves that the process is gone.",
-    "образы, метки dispatch": "images, dispatch labels",
-    "Контейнеры по метке dispatch. Сокеты движка и runtime в worker не монтируются, образы harness не собирает.": "Containers by the dispatch label. The engine and runtime sockets are not mounted into the worker, and harness does not build images.",
-    "процессы, cgroup / Job": "processes, cgroup / Job",
-    "Учёт процессов: группа процессов и cgroup v2 на Linux, Job Object на Windows. Исполняет только approved brief и policy не решает.": "Process accounting: a process group and cgroup v2 on Linux, a Job Object on Windows. It runs only the approved brief and does not decide policy.",
-    "Operational state с короткими транзакциями. Несовместимая версия схемы отвергается без записи.": "Operational state with short transactions. An incompatible schema version is rejected without a write.",
-    "хэш-цепочка": "hash chain",
-    "Каждая мутация оставляет запись в хэш-цепочке с checkpoint; ledger validate --full пересчитывает её целиком.": "Every mutation leaves a record in the hash chain with a checkpoint; ledger validate --full recomputes the whole chain.",
-    "Владелец, fencing_token и expires_at. Истёкший срок lease не снимает: сначала проверяется живость владельца.": "Owner, fencing_token, and expires_at. An expired lease is not dropped automatically: the owner's liveness is checked first.",
-    "эпоха runtime-store": "runtime-store epoch",
-    "Называет store единственным writer-ом operational state. Fallback-writer в Python запрещён.": "Names the store as the only writer of operational state. A fallback writer in Python is forbidden.",
-    "Хранит operation_id, digest запроса и результат, поэтому повтор после обрыва возвращает тот же ответ.": "Stores operation_id, the request digest, and the result, so a retry after a dropped connection returns the same answer.",
-    "Владелец истории: кандидат, ветки и worktree — обычные Git-объекты. Runtime их не переписывает.": "Owner of history: the candidate, branches, and worktrees are ordinary Git objects. The runtime does not rewrite them.",
-    "Проект": "Project",
-    ".harness/project.json, harness.lock и REGISTRY.md принадлежат целевому репозиторию; их обновляет установщик, а не runtime.": ".harness/project.json, harness.lock, and REGISTRY.md belong to the target repository; the installer updates them, not the runtime.",
-    "контейнер или процесс": "container or process",
-    "Untrusted: кандидат в контейнере или отдельном процессе. Получает только approved brief; сокеты engine и runtime ему недоступны.": "Untrusted: the candidate runs in a container or a separate process. It gets only the approved brief; the engine and runtime sockets are not available to it.",
-    "сеть только по allowlist": "network via allowlist only",
-    "Сетевой доступ worker-а идёт только через allowlist proxy.": "The worker's network access goes only through the allowlist proxy.",
-    "Пример маршрута: coordinator → runtime_client → IPC → Lifecycle → SQLite WAL. Переход batch сохраняется одной транзакцией.": "Example route: coordinator → runtime_client → IPC → Lifecycle → SQLite WAL. A batch transition is saved in one transaction.",
-    "Пример маршрута: Сервер консоли → IPC → Reconcile → Leases. Действие восстановления сервер выполняет как job, запись требует подтверждения.": "Example route: Console Server → IPC → Reconcile → Leases. The server runs a recovery action as a job, and a write needs confirmation.",
-    "Пример маршрута: Сервер консоли → IPC → Lifecycle → Audit chain. Снимок леджера собирается через runtime и кэшируется на сервере.": "Example route: Console Server → IPC → Lifecycle → Audit chain. The ledger snapshot is built through the runtime and cached on the server.",
-    "Пример маршрута: Hook policy проверяет действие агента, затем approved brief уходит в runtime, а Supervisor запускает worker-а.": "Example route: Hook policy checks the agent action, then the approved brief goes to the runtime, and the Supervisor starts the worker.",
-    "Схема ядра harness: клиенты, policy на Python, IPC, Rust runtime, runtime-store, Git, worker": "Diagram of the harness core: clients, Python policy, IPC, Rust runtime, runtime-store, Git, worker",
-    "POLICY · PYTHON РЕШАЕТ": "POLICY · PYTHON DECIDES",
-    "RUNTIME · RUST ИСПОЛНЯЕТ": "RUNTIME · RUST EXECUTES",
-    "STATE · ЕДИНСТВЕННЫЙ WRITER": "STATE · SINGLE WRITER",
-    "ГРАНИЦА ДОВЕРИЯ · UNTRUSTED": "TRUST BOUNDARY · UNTRUSTED",
-    "ВЛАДЕЛЬЦЫ ВНЕ RUNTIME": "OWNERS OUTSIDE RUNTIME",
-    " · маршрут": " · route"
-  };
-  function t(s) { return LANG === "en" && EN[s] ? EN[s] : s; }
-
-  var nodes = {};
-  var edges = [];
-
-  function node(id, kind, x, y, w, h, label, sub, title, text) {
-    label = t(label); sub = t(sub); title = t(title); text = t(text);
-    nodes[id] = { id: id, kind: kind, x: x, y: y, w: w, h: h, cx: x + w / 2, cy: y + h / 2,
-      label: label, sub: sub, title: title, text: text };
-  }
-
-  function row(items, x0, total, gap, y, h, kind) {
-    var w = (total - gap * (items.length - 1)) / items.length;
-    items.forEach(function (it, i) {
-      node(it[0], kind, x0 + i * (w + gap), y, w, h, it[1], it[2], it[3], it[4]);
-    });
-  }
-
-  /* --- данные схемы ------------------------------------------------------ */
-  row([
-    ["cli", "CLI", "harness · coordinator", "CLI", "harness и coordinator запускаются из терминала. Команды идут в policy-слой Python, а тот обращается к runtime через runtime_client."],
-    ["tui", "TUI", "harness console", "TUI", "Терминальный клиент Сервера консоли: задачи, оркестрация, отчёты и восстановление. Данные берёт у сервера, а не из файлов."],
-    ["web", "Web console", "harness console --web", "Web console", "Браузерный клиент того же Сервера консоли. Подключается по /ws с токеном сессии; действия восстановления сервер выполняет как job."],
-    ["skills", "Skills", "Claude Code · Codex", "Skills", "Claude Code и Codex находят скиллы и hooks через native skill roots. Hooks проверяют действия агента по профилю политики."]
-  ], 46, 728, 26, 22, 46, "client");
-
-  row([
-    ["coordinator", "Coordinator", "batch, dispatch", "Coordinator", "Планирует batch, собирает approvals, принимает отчёты ролей и выбирает состояние dispatch по наблюдению runtime. Operational state сам не пишет."],
-    ["console", "Сервер консоли", "WebSocket /ws", "Сервер консоли", "Один сервер для TUI и браузера: отдаёт снимки экранов по /ws и ходит в runtime тем же клиентом, что и coordinator."],
-    ["hooks", "Hook policy", "профили hooks", "Hook policy", "Профили задают предупреждения и повторы. Критические guards профилем не отключаются, а strict не блокирует recovery."],
-    ["approvals", "Approvals", "человек и policy", "Approvals", "Решение принимает человек и policy-слой. Immutable brief связывает план, образ, policy digest и verification digest."],
-    ["verification", "Verification", "ChangeImpact → план", "Verification", "ChangeImpact строит набор затронутого, VerificationPlan закрепляется digest-ом в approval. QA делает полный прогон на финальном SHA."]
-  ], 46, 728, 14, 128, 64, "policy");
-
-  node("rtclient", "bar", 46, 232, 728, 34, "runtime_client", "hello · operation_id · повтор до request_deadline",
-    "runtime_client", "Единственный путь Python к состоянию: hello, operation_id, повтор до request_deadline. Недоступный runtime даёт runtime_unavailable без записи в обход.");
-  node("wire", "bar", 46, 286, 728, 34, "IPC", "Unix socket / named pipe · protocol 1.7 · uid/SID + токен · expected_revision · fencing_token",
-    "IPC", "Unix domain socket, на Windows — named pipe. Кадр — длина и JSON. Проверяются peer uid/SID и токен; каталог 0700, сокет 0600.");
-
-  row([
-    ["lifecycle", "Lifecycle и intent", "intent → committed", "Lifecycle и intent", "Переходы batch и dispatch сохраняются транзакцией: intent, запуск, committed. Единственный writer этих сущностей."],
-    ["reconcile", "Reconcile", "intent ↔ факт хоста", "Reconcile", "Сверяет сохранённый intent с фактом на хосте. После SIGKILL усыновляет исполнение по меткам или доказывает, что процесса нет."],
-    ["engine", "OCI engine", "образы, метки dispatch", "OCI engine", "Контейнеры по метке dispatch. Сокеты движка и runtime в worker не монтируются, образы harness не собирает."],
-    ["supervisor", "Supervisor", "процессы, cgroup / Job", "Supervisor", "Учёт процессов: группа процессов и cgroup v2 на Linux, Job Object на Windows. Исполняет только approved brief и policy не решает."]
-  ], 46, 728, 14, 390, 64, "runtime");
-
-  row([
-    ["wal", "SQLite WAL", "schema 7", "SQLite WAL", "Operational state с короткими транзакциями. Несовместимая версия схемы отвергается без записи."],
-    ["audit", "Audit chain", "хэш-цепочка", "Audit chain", "Каждая мутация оставляет запись в хэш-цепочке с checkpoint; ledger validate --full пересчитывает её целиком."],
-    ["leases", "Leases", "fencing_token", "Leases", "Владелец, fencing_token и expires_at. Истёкший срок lease не снимает: сначала проверяется живость владельца."],
-    ["authority", "AUTHORITY.json", "эпоха runtime-store", "AUTHORITY.json", "Называет store единственным writer-ом operational state. Fallback-writer в Python запрещён."],
-    ["idem", "Idempotency", "operation_id", "Idempotency", "Хранит operation_id, digest запроса и результат, поэтому повтор после обрыва возвращает тот же ответ."]
-  ], 46, 728, 14, 534, 64, "store");
-
-  node("git", "side", 830, 128, 260, 64, "Git", "candidate · branch · worktree", "Git", "Владелец истории: кандидат, ветки и worktree — обычные Git-объекты. Runtime их не переписывает.");
-  node("project", "side", 830, 216, 260, 64, "Проект", "project.json · harness.lock", "Проект", ".harness/project.json, harness.lock и REGISTRY.md принадлежат целевому репозиторию; их обновляет установщик, а не runtime.");
-  node("worker", "untrusted", 836, 390, 248, 64, "Worker / QA", "контейнер или процесс", "Worker / QA", "Untrusted: кандидат в контейнере или отдельном процессе. Получает только approved brief; сокеты engine и runtime ему недоступны.");
-  node("egress", "side", 830, 534, 260, 64, "Egress proxy", "сеть только по allowlist", "Egress proxy", "Сетевой доступ worker-а идёт только через allowlist proxy.");
-
-  /* --- маршруты клиентов ------------------------------------------------- */
-  var routes = {
-    cli: { ids: ["cli", "coordinator", "rtclient", "wire", "lifecycle", "wal"],
-      text: t("Пример маршрута: coordinator → runtime_client → IPC → Lifecycle → SQLite WAL. Переход batch сохраняется одной транзакцией.") },
-    tui: { ids: ["tui", "console", "rtclient", "wire", "reconcile", "leases"],
-      text: t("Пример маршрута: Сервер консоли → IPC → Reconcile → Leases. Действие восстановления сервер выполняет как job, запись требует подтверждения.") },
-    web: { ids: ["web", "console", "rtclient", "wire", "lifecycle", "audit"],
-      text: t("Пример маршрута: Сервер консоли → IPC → Lifecycle → Audit chain. Снимок леджера собирается через runtime и кэшируется на сервере.") },
-    skills: { ids: ["skills", "hooks", "rtclient", "wire", "supervisor", "worker"],
-      text: t("Пример маршрута: Hook policy проверяет действие агента, затем approved brief уходит в runtime, а Supervisor запускает worker-а.") }
-  };
-  var order = ["cli", "tui", "web", "skills"];
-
-  /* --- геометрия --------------------------------------------------------- */
-  function bottom(n, x) { return [x === undefined ? n.cx : x, n.y + n.h]; }
-  function top(n, x) { return [x === undefined ? n.cx : x, n.y]; }
-
-  function edge(id, pts, dir) { edges.push({ id: id, pts: pts, dir: dir }); }
-
-  // клиенты → policy: колено на своём уровне, чтобы линии не слипались
-  var clientMid = { cli: 84, tui: 90, web: 96, skills: 102 };
-  [["cli", "coordinator"], ["tui", "console"], ["web", "console"], ["skills", "hooks"]].forEach(function (p) {
-    var a = nodes[p[0]], b = nodes[p[1]];
-    edge(p[0] + ">" + p[1], [bottom(a), [a.cx, clientMid[p[0]]], [b.cx, clientMid[p[0]]], top(b)]);
-  });
-  ["coordinator", "console", "hooks", "approvals", "verification"].forEach(function (id) {
-    var a = nodes[id];
-    edge(id + ">rtclient", [bottom(a), [a.cx, nodes.rtclient.y]]);
-    edge("rtclient>wire@" + id, [[a.cx, nodes.rtclient.y + nodes.rtclient.h], [a.cx, nodes.wire.y]]);
-  });
-  ["lifecycle", "reconcile", "engine", "supervisor"].forEach(function (id) {
-    var a = nodes[id];
-    edge("wire>" + id, [[a.cx, nodes.wire.y + nodes.wire.h], top(a)]);
-    edge(id + ">store", [bottom(a), [a.cx, 500]]);
-  });
-  edge("coordinator>git", [[nodes.verification.x + nodes.verification.w, 160], [830, 160]]);
-  edge("supervisor>worker", [[nodes.supervisor.cx, 454], [nodes.supervisor.cx, 468], [806, 468], [806, nodes.worker.cy], [nodes.worker.x, nodes.worker.cy]]);
-  edge("worker>egress", [bottom(nodes.worker), top(nodes.egress)]);
-
-  // путь маршрута: через бары идём по горизонтали внутри бара
-  function routePath(ids) {
-    var pts = [];
-    var lastX = null;
-    ids.forEach(function (id, i) {
-      var n = nodes[id];
-      var prev = nodes[ids[i - 1]];
-      var next = nodes[ids[i + 1]];
-      if (!prev) { pts.push(bottom(n)); lastX = n.cx; return; }
-      if (n.kind === "bar") {
-        var enter = lastX;
-        var exit = next && next.kind !== "bar" ? next.cx : enter;
-        pts.push([enter, n.y], [enter, n.cy], [exit, n.cy], [exit, n.y + n.h]);
-        lastX = exit;
-        return;
-      }
-      if (prev.kind === "bar") {
-        pts.push([n.cx, n.y]);
-      } else if (n.kind === "untrusted") {
-        pts.push([prev.cx, 468], [806, 468], [806, n.cy], [n.x, n.cy]);
-        return;
-      } else {
-        var mid = prev.kind === "client" ? clientMid[prev.id]
-          : prev.kind === "runtime" && n.kind === "store" ? 506
-          : (prev.y + prev.h + n.y) / 2;
-        pts.push([prev.cx, mid], [n.cx, mid], [n.cx, n.y]);
-      }
-      lastX = n.cx;
-      if (!next) pts.push([n.cx, n.cy]);
-    });
-    return pts;
-  }
-
-  function pathD(pts) {
-    return pts.map(function (p, i) { return (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" ");
-  }
-
-  function reversed(pts) { return pts.slice().reverse(); }
-
-  /* --- SVG --------------------------------------------------------------- */
-  function el(name, attrs, parent) {
-    var e = document.createElementNS(NS, name);
-    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
-    if (parent) parent.appendChild(e);
-    return e;
-  }
-
-  function text(parent, x, y, cls, str, anchor) {
-    var t = el("text", { x: x, y: y, class: cls }, parent);
-    if (anchor) t.setAttribute("text-anchor", anchor);
-    t.textContent = str;
-    return t;
-  }
-
-  var svg = el("svg", { viewBox: "14 0 " + (W - 28) + " " + H, role: "group", class: "ah-core-svg",
-    "aria-label": t("Схема ядра harness: клиенты, policy на Python, IPC, Rust runtime, runtime-store, Git, worker") });
-  var gBands = el("g", {}, svg);
-  var gEdges = el("g", {}, svg);
-  var gRoute = el("g", {}, svg);
-  var gNodes = el("g", {}, svg);
-  var gPackets = el("g", {}, svg);
-
-  function band(x, y, w, h, cls, label) {
-    el("rect", { x: x, y: y, width: w, height: h, rx: 12, class: "ah-core-band " + cls }, gBands);
-    if (label) text(gBands, x + 16, y + 18, "ah-core-bandlabel", label);
-  }
-  band(30, 98, 760, 118, "is-policy", t("POLICY · PYTHON РЕШАЕТ"));
-  band(30, 356, 760, 124, "is-runtime", t("RUNTIME · RUST ИСПОЛНЯЕТ"));
-  band(30, 500, 760, 118, "is-store", t("STATE · ЕДИНСТВЕННЫЙ WRITER"));
-  el("rect", { x: 22, y: 340, width: 776, height: 290, rx: 16, class: "ah-core-authority" }, gBands);
-  text(gBands, 40, 335, "ah-core-authlabel", "runtime authority");
-  el("rect", { x: 822, y: 370, width: 276, height: 104, rx: 12, class: "ah-core-untrusted" }, gBands);
-  text(gBands, 840, 365, "ah-core-trustlabel", t("ГРАНИЦА ДОВЕРИЯ · UNTRUSTED"));
-  text(gBands, 826, 111, "ah-core-bandlabel", t("ВЛАДЕЛЬЦЫ ВНЕ RUNTIME"));
-
-  edges.forEach(function (e) {
-    var p = el("path", { d: pathD(e.pts), class: "ah-core-edge", "data-edge": e.id }, gEdges);
-    p.setAttribute("marker-end", "url(#ah-core-arrow)");
-  });
-
-  var defs = el("defs", {}, svg);
-  var marker = el("marker", { id: "ah-core-arrow", viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" }, defs);
-  el("path", { d: "M0 0 L8 4 L0 8 z", class: "ah-core-arrowhead" }, marker);
-
-  var els = {};
-  Object.keys(nodes).forEach(function (id) {
-    var n = nodes[id];
-    var g = el("g", { class: "ah-core-node is-" + n.kind, tabindex: 0, role: "button", "data-node": id,
-      "aria-label": n.label + ": " + n.sub }, gNodes);
-    el("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: n.kind === "bar" ? 8 : 9, class: "ah-core-rect" }, g);
-    if (n.kind === "bar") {
-      text(g, n.x + 14, n.cy + 4, "ah-core-label is-bar", n.label);
-      text(g, n.x + 14 + n.label.length * 8.2 + 12, n.cy + 4, "ah-core-sub is-bar", n.sub);
-    } else {
-      text(g, n.cx, n.y + n.h / 2 - 3, "ah-core-label", n.label, "middle");
-      text(g, n.cx, n.y + n.h / 2 + 15, "ah-core-sub", n.sub, "middle");
-    }
-    els[id] = g;
-  });
-
-  text(gBands, 960, 507, "ah-core-note", "allowlist", "middle");
-
-  host.innerHTML = "";
-  host.appendChild(svg);
-
-  /* --- состояние и анимация ---------------------------------------------- */
   var note = document.getElementById("ah-flow-note");
-  var clientButtons = order;
-  var current = null;
-  var userTouched = false;
-  var timer = null;
+  var controls = document.getElementById("ah-core-controls");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var narrow = window.matchMedia("(max-width: 600px)");
+  var medium = window.matchMedia("(max-width: 980px)");
+  var playing = !reduced.matches;
+  var mode = "launch";
+  var selection = null;
+  var model;
+  var svg;
+  var edges;
+  var nodes;
+  var packets;
+  var moving = [];
+  var animationFrame = null;
+  var animationTime = 0;
+  var lastFrame = null;
+  var dimensions;
+  var text = english ? {
+    diagram: "Task execution: Repo Map, opt-in RAG memory, clients, human or auto approval, Python, IPC, Rust, workers and SQLite WAL",
+    loading: "Loading diagram…",
+    error: "The diagram could not load. Open the architecture documentation below.",
+    launch: ["Task execution", "Python prepares a plan and collects approval. The approved brief crosses IPC. Rust records intent, starts the worker, and returns an observation to Python."],
+    state: ["Read state", "Python requests a runtime observation over IPC. Rust reads the runtime store and returns a response. Python uses that observation to choose the dispatch state; it never writes directly to SQLite."],
+    recovery: ["Recover execution", "Python asks Rust to reconcile. Rust checks the actual process or container against saved intent, records the observation, and returns it to Python. An existing execution is not launched again."],
+    clients: "The CLI and console are entry points. A client sends an action to Python. The Python console server returns snapshots and results to the TUI or Web client; runtime operations go through IPC to Rust and back.",
+    approval: "A human or the configured auto policy approves the handoff. Auto approval requires both project configuration and the batch plan to choose auto; auto_stop or manual recovery returns control to a human. The mascot marks this decision point.",
+    repomap: "Repo Map builds a deterministic map of tracked files, symbols and imports at a pinned Git commit. Python uses that slice to assemble the Context Package; the map cache is derived, not authoritative.",
+    memory: "Opt-in project memory retrieves pointers to allowed sources, such as ADRs and CONTEXT.md. Python includes selected evidence in the Context Package. Local SQLite FTS5 retrieval needs no embedding model or network; disabled memory does not block the workflow.",
+    context: ["Build context", "Python combines the pinned code map with relevant project-memory pointers in a Context Package. Repo Map supplies files and relationships; opt-in RAG supplies allowed prior decisions. Dispatched workers use the supplied package rather than searching memory themselves."],
+    python: "The coordinator plans work, collects approvals and accepts reports. runtime_client sends requests with operation_id and request_deadline. If Rust is unavailable, Python reports an error instead of writing state itself.",
+    rust: "Rust receives typed IPC requests, checks the approved brief and executes the pinned plan. Supervisor starts workers; reconcile observes what is actually running. Rust returns observations, while Python chooses dispatch transitions.",
+    store: "Rust owns writes to operational state in SQLite WAL: intent, execution observations, audit, leases and idempotent operation results. Python has no direct write path.",
+    worker: "Worker and QA run as a process or container under the Rust supervisor. They receive an approved brief and cannot access the engine or runtime sockets.",
+    request: "IPC", command: "action / result", approved: "brief / approval", map: "code context", memoryEdge: "retrieval", write: "intent / state", launchEdge: "launch / status"
+  } : {
+    diagram: "Выполнение задачи: Repo Map, опциональная память RAG, клиенты, человек или автополитика, Python, IPC, Rust, исполнители и SQLite WAL",
+    loading: "Загрузка схемы…",
+    error: "Не удалось загрузить схему. Откройте документацию по архитектуре ниже.",
+    launch: ["Выполнение задачи", "Python готовит план и собирает подтверждение. Одобренный brief передаётся через IPC. Rust записывает intent, запускает исполнителя и возвращает наблюдение в Python."],
+    state: ["Чтение состояния", "Python запрашивает наблюдение runtime через IPC. Rust читает runtime-store и возвращает ответ. По этому наблюдению Python выбирает состояние dispatch; напрямую в SQLite он не пишет."],
+    recovery: ["Восстановление исполнения", "Python запрашивает reconcile. Rust сверяет процесс или контейнер с сохранённым intent, записывает наблюдение и возвращает его в Python. Уже существующее исполнение повторно не запускается."],
+    clients: "CLI и консоль — точки входа. Клиент отправляет действие в Python. Python-сервер консоли возвращает снимки и результаты клиенту TUI или Web; операции runtime проходят через IPC в Rust и обратно.",
+    approval: "Handoff подтверждает человек или настроенная политика auto. Для auto конфигурация проекта и план batch должны выбрать auto; auto_stop и ручное восстановление возвращают решение человеку. Маскот обозначает эту точку решения.",
+    repomap: "Repo Map строит детерминированную карту tracked-файлов, символов и импортов на закреплённом Git-коммите. Python использует этот срез для Context Package; кэш карты — производный, а не авторитетный источник.",
+    memory: "Опциональная память проекта находит ссылки на разрешённые источники: например, ADR и CONTEXT.md. Python включает выбранные свидетельства в Context Package. Локальному поиску SQLite FTS5 не нужны embedding-модель и сеть; выключенная память не блокирует работу.",
+    context: ["Подготовка контекста", "Python собирает Context Package из карты кода и найденных ссылок на память проекта. Repo Map даёт файлы и связи; опциональный RAG — разрешённые прошлые решения. Запущенные роли используют готовый пакет, а не ищут в памяти самостоятельно."],
+    python: "Coordinator планирует работу, собирает approvals и принимает отчёты. runtime_client отправляет запросы с operation_id и request_deadline. При недоступном Rust Python возвращает ошибку, а не пишет состояние самостоятельно.",
+    rust: "Rust принимает типизированные IPC-запросы, проверяет approved brief и исполняет закреплённый план. Supervisor запускает исполнителей, reconcile наблюдает фактическое исполнение. Rust возвращает наблюдения; переходы dispatch выбирает Python.",
+    store: "Rust владеет записью operational state в SQLite WAL: intent, наблюдения исполнения, audit, leases и результаты идемпотентных операций. У Python нет прямого пути записи.",
+    worker: "Worker и QA работают как процесс или контейнер под Rust supervisor. Они получают approved brief; сокеты engine и runtime им недоступны.",
+    request: "IPC", command: "действие / ответ", approved: "brief / approval", map: "контекст кода", memoryEdge: "retrieval", write: "intent / state", launchEdge: "запуск / статус"
+  };
+  var routes = {
+    launch: ["command", "map", "memory", "approved", "request", "write", "launch"],
+    context: ["command", "map", "memory"],
+    state: ["command", "request", "write"],
+    recovery: ["command", "request", "launch", "write"]
+  };
 
-  function setNote(title, body) {
-    if (!note) return;
-    note.innerHTML = "";
-    var b = document.createElement("b");
-    b.textContent = title;
-    var s = document.createElement("span");
-    s.textContent = body;
-    note.appendChild(b);
-    note.appendChild(s);
+  function element(tag, attrs, parent) {
+    var result = document.createElementNS(NS, tag);
+    Object.keys(attrs || {}).forEach(function (key) { result.setAttribute(key, attrs[key]); });
+    if (parent) parent.appendChild(result);
+    return result;
   }
-
-  function clearRoute() {
-    gRoute.innerHTML = "";
-    gPackets.innerHTML = "";
-    Object.keys(els).forEach(function (id) { els[id].classList.remove("is-on"); });
-    Array.prototype.forEach.call(gEdges.children, function (p) { p.classList.remove("is-on"); });
+  function label(parent, x, y, value, cls) {
+    var result = element("text", { x: x, y: y, class: cls, "text-anchor": "middle" }, parent);
+    result.textContent = value;
+    return result;
   }
-
-  function packet(pts, cls, begin) {
-    var c = el("circle", { r: 4.5, class: "ah-core-packet " + cls }, gPackets);
-    var a = el("animateMotion", { dur: "3.4s", repeatCount: "indefinite", begin: begin, path: pathD(pts),
-      calcMode: "linear" }, c);
-    a.setAttribute("rotate", "0");
+  function point(anchor, x, y, z) {
+    return [anchor[0] + (x - y) * 8, anchor[1] + (x + y) * 4 - z * 9];
   }
-
-  function select(id) {
-    var route = routes[id];
-    if (!route) return;
-    current = id;
-    clearRoute();
-    order.forEach(function (c) {
-      els[c].setAttribute("aria-pressed", c === id ? "true" : "false");
-    });
-    route.ids.forEach(function (n) { els[n].classList.add("is-on"); });
-    var pts = routePath(route.ids);
-    el("path", { d: pathD(pts), class: "ah-core-route" }, gRoute);
-    if (!reduce) {
-      packet(pts, "is-request", "0s");
-      packet(pts, "is-request", "-1.7s");
-      packet(reversed(pts), "is-reply", "-0.85s");
+  function face(parent, points, cls) {
+    element("polygon", { points: points.map(function (p) { return p.join(","); }).join(" "), class: cls }, parent);
+  }
+  function box(parent, anchor, x, y, z, w, d, h, cls) {
+    var g = element("g", { class: "ah-voxel " + (cls || "") }, parent);
+    var p = function (a, b, c) { return point(anchor, a, b, c); };
+    face(g, [p(x,y,z+h),p(x+w,y,z+h),p(x+w,y+d,z+h),p(x,y+d,z+h)], "ah-voxel-top");
+    face(g, [p(x,y+d,z),p(x+w,y+d,z),p(x+w,y+d,z+h),p(x,y+d,z+h)], "ah-voxel-front");
+    face(g, [p(x+w,y,z),p(x+w,y+d,z),p(x+w,y+d,z+h),p(x+w,y,z+h)], "ah-voxel-side");
+  }
+  function block(parent, anchor, x, y, z, w, d, h, cls) {
+    box(parent, anchor, x,y,z,w,d,h,cls);
+    // Discrete seams on visible faces retain the mascot's cube scale.
+    for (var i = 1; i < w; i++) {
+      var a = point(anchor,x+i,y+d,z), b = point(anchor,x+i,y+d,z+h);
+      element("path",{d:"M"+a.join(",")+"L"+b.join(","),class:"ah-voxel-seam"},parent);
     }
-    setNote(nodes[id].title + t(" · маршрут"), route.text);
-  }
-
-  function pause() {
-    if (timer) { window.clearInterval(timer); timer = null; }
-  }
-
-  function autoplay() {
-    pause();
-    if (reduce || userTouched) return;
-    timer = window.setInterval(function () {
-      if (document.hidden) return;
-      select(order[(order.indexOf(current) + 1) % order.length]);
-    }, 5200);
-  }
-
-  order.forEach(function (id) {
-    var g = els[id];
-    g.setAttribute("aria-pressed", "false");
-    g.addEventListener("click", function () { userTouched = true; pause(); select(id); });
-  });
-
-  Object.keys(els).forEach(function (id) {
-    var g = els[id];
-    function key(event) {
-      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); g.dispatchEvent(new MouseEvent("click")); }
+    for (var j = 1; j < d; j++) {
+      var c = point(anchor,x+w,y+j,z), e = point(anchor,x+w,y+j,z+h);
+      element("path",{d:"M"+c.join(",")+"L"+e.join(","),class:"ah-voxel-seam"},parent);
     }
-    g.addEventListener("keydown", key);
-    if (order.indexOf(id) === -1) {
-      g.addEventListener("click", function () {
-        userTouched = true;
-        pause();
-        setNote(nodes[id].title, nodes[id].text);
+  }
+  function object(parent, id, anchor) {
+    block(parent,anchor,-5,-4,-1,10,8,1,"ah-voxel-platform");
+    if (id === "clients") {
+      block(parent,anchor,-3,-1,0,6,3,1,"ah-voxel-neutral");
+      block(parent,anchor,-3,-3,1,6,1,5,"");
+      box(parent,anchor,-2,-1.9,2,4,0.08,3,"ah-voxel-screen");
+      box(parent,anchor,-2,-1.8,3,1,0.1,1,"ah-voxel-light");
+    } else if (id === "approval") {
+      element("image",{href:new URL("mascot.svg",script).href,x:anchor[0]-27,y:anchor[1]-71,width:54,height:71,"aria-hidden":"true"},parent);
+    } else if (id === "repomap") {
+      block(parent,anchor,-3,-2,0,2,2,2,"");
+      block(parent,anchor,1,-2,0,2,2,4,"");
+      block(parent,anchor,-1,1,0,2,2,3,"ah-voxel-neutral");
+    } else if (id === "memory") {
+      for (var book=0;book<3;book++) block(parent,anchor,-3+book*2,-2,0,1.5,4,3+book,"ah-voxel-neutral");
+    } else if (id === "python" || id === "rust") {
+      var levels = id === "rust" ? 3 : 2;
+      for (var k=0;k<levels;k++) {
+        block(parent,anchor,-3,-3,k*3,6,6,2.5,"");
+        box(parent,anchor,-2,3.06,k*3+1,1,0.1,0.7,"ah-voxel-light");
+        box(parent,anchor,0,3.06,k*3+1,2,0.1,0.7,"ah-voxel-screen");
+      }
+      block(parent,anchor,-1,-1,levels*3,2,2,1,"ah-voxel-neutral");
+    } else if (id === "store") {
+      for (var n=0;n<3;n++) block(parent,anchor,-3,-2,n*1.8,6,4,1.4, n===1 ? "ah-voxel-neutral" : "");
+    } else {
+      block(parent,anchor,-4,-2,0,8,4,4,"");
+      block(parent,anchor,-3,-1,4,6,2,1,"ah-voxel-neutral");
+    }
+  }
+  function geometry() {
+    if (narrow.matches) return {
+      size:[420,850], repomap:[108,100],approval:[312,100],clients:[108,300],python:[312,300],memory:[108,520],rust:[312,520],worker:[108,740],store:[312,740]
+    };
+    if (medium.matches) return {
+      size:[800,590],repomap:[96,120],approval:[480,120],clients:[96,312],python:[288,216],memory:[288,504],rust:[480,312],worker:[672,216],store:[672,408]
+    };
+    return {
+      size:[1024,640],repomap:[128,160],approval:[640,160],clients:[128,416],python:[384,288],memory:[384,544],rust:[640,416],worker:[896,288],store:[896,544]
+    };
+  }
+  function path(points) { return "M" + points.map(function (p) {return p.join(",");}).join("L"); }
+  function distance(a,b) { return Math.hypot(b[0]-a[0],b[1]-a[1]); }
+  function segmentDistance(p,a,b) {
+    var dx=b[0]-a[0],dy=b[1]-a[1],square=dx*dx+dy*dy;
+    var t=square ? Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/square)) : 0;
+    return distance(p,[a[0]+t*dx,a[1]+t*dy]);
+  }
+  function plane(p) { return [p[1]+p[0]/2,p[1]-p[0]/2]; }
+  function screen(p) { return [p[0]-p[1],(p[0]+p[1])/2]; }
+  function inside(p,r) {return p[0]>r[0] && p[0]<r[2] && p[1]>r[1] && p[1]<r[3];}
+  function obstacles() {
+    return model.components.flatMap(function(c){var p=dimensions[c.id];
+      var main=c.label.length*(narrow.matches?10:9)/2+4, sub=c.sublabel.length*(narrow.matches?9.7:7.3)/2+4;
+      var titleY=c.id==="python"?-98:52,subY=c.id==="python"?-78:73;
+      return [
+      {id:c.id,box:[p[0]-76,p[1]-96,p[0]+76,p[1]+48],art:true},
+      {id:c.id,box:[p[0]-main,p[1]+titleY-15,p[0]+main,p[1]+titleY+4],art:false},
+      {id:c.id,box:[p[0]-sub,p[1]+subY-13,p[0]+sub,p[1]+subY+4],art:false}
+    ];});
+  }
+  function route(c,used) {
+    var start=dimensions[c.from], end=dimensions[c.to];
+    if(!narrow.matches && c.id==="memory") {
+      var drop=end[1]-start[1];
+      return [start,[start[0]-32,start[1]+16],[start[0]+96,start[1]+80],[start[0]+128-drop,start[1]+drop/2+64],end];
+    }
+    if(Math.abs(Math.abs(end[1]-start[1])-Math.abs(end[0]-start[0])/2)<0.01)return [start,end];
+    var ports=[[0,0]];
+    var blocks=obstacles(),best=null,bestScore=Infinity;
+    ports.forEach(function(a){ports.forEach(function(b){
+      var p=[start[0]+a[0],start[1]+a[1]],q=[end[0]+b[0],end[1]+b[1]],s=plane(p),t=plane(q);
+      var candidates=[[p,screen([s[0],t[1]]),q],[p,screen([t[0],s[1]]),q]];
+      [-160,-80,0,80,160].forEach(function(offset){
+        var u=(s[0]+t[0])/2+offset,v=(s[1]+t[1])/2+offset;
+        candidates.push([p,screen([u,s[1]]),screen([u,t[1]]),q]);
+        candidates.push([p,screen([s[0],v]),screen([t[0],v]),q]);
       });
+      candidates.forEach(function(points){
+        points=points.filter(function(x,i){return !i || distance(x,points[i-1])>0.1;});
+        if(points.length<2)return;
+        var score=(points.length-2)*36;
+        points.forEach(function(x){if(x[0]<8 || x[0]>dimensions.size[0]-8 || x[1]<8 || x[1]>dimensions.size[1]-8)score+=5000;});
+        for(var i=1;i<points.length;i++){
+          var x=points[i-1],y=points[i],length=distance(x,y);score+=length;
+          if(length<28)score+=250;
+          for(var k=1;k<length/10;k++){
+            var sample=[x[0]+(y[0]-x[0])*k*10/length,x[1]+(y[1]-x[1])*k*10/length];
+            blocks.forEach(function(o){if(o.art && (o.id===c.from || o.id===c.to))return;if(inside(sample,o.box))score+=350;});
+            if(!blocks.some(function(o){return o.art && inside(sample,o.box);})) {
+              used.forEach(function(prior){for(var segment=1;segment<prior.length;segment++){if(segmentDistance(sample,prior[segment-1],prior[segment])<10)score+=90;}});
+            }
+          }
+        }
+        if(score<bestScore){best=points;bestScore=score;}
+      });
+    });});
+    return best;
+  }
+  function captionPosition(points,placed,actual,measurement) {
+    var best,bestScore=Infinity,width=measurement.width+16;
+    var blocks=actual.map(function(b){return [b.x-8,b.y-5,b.x+b.width+8,b.y+b.height+5];}).concat(placed);
+    for(var i=1;i<points.length;i++){
+      [0.25,0.5,0.75].forEach(function(t){[-12,22,-30,40,-54,62,-78,86,-102,110].forEach(function(offset){[0,-36,36].forEach(function(dx){
+        var x=points[i-1][0]+(points[i][0]-points[i-1][0])*t+dx,y=points[i-1][1]+(points[i][1]-points[i-1][1])*t+offset;
+        var r=[x-width/2,y+measurement.y-5,x+width/2,y+measurement.y+measurement.height+5],score=Math.abs(offset)+Math.abs(dx)+Math.abs(t-.5)*20;
+        if(r[0]<5 || r[2]>dimensions.size[0]-5 || r[1]<5 || r[3]>dimensions.size[1]-5)score+=10000;
+        blocks.forEach(function(b){if(r[0]<b[2] && r[2]>b[0] && r[1]<b[3] && r[3]>b[1])score+=2000;});
+        if(score<bestScore){bestScore=score;best=[x,y];}
+      });});});
     }
-  });
-
-  select("web");
-  autoplay();
+    if(bestScore>=1000) {
+      for(var gx=width/2+8;gx<dimensions.size[0]-width/2-8;gx+=12) {
+        for(var gy=26;gy<dimensions.size[1]-12;gy+=12) {
+          var candidate=[gx-width/2,gy+measurement.y-5,gx+width/2,gy+measurement.y+measurement.height+5];
+          if(blocks.some(function(b){return candidate[0]<b[2]&&candidate[2]>b[0]&&candidate[1]<b[3]&&candidate[3]>b[1];}))continue;
+          var proximity=Infinity;
+          for(var segment=1;segment<points.length;segment++)proximity=Math.min(proximity,segmentDistance([gx,gy],points[segment-1],points[segment]));
+          if(proximity+20<bestScore){bestScore=proximity+20;best=[gx,gy];}
+        }
+      }
+    }
+    placed.push([best[0]-width/2,best[1]+measurement.y-5,best[0]+width/2,best[1]+measurement.y+measurement.height+5]);
+    return best;
+  }
+  function showNote(title, body) {
+    note.replaceChildren();
+    var strong = document.createElement("b"), span = document.createElement("span");
+    strong.textContent=title; span.textContent=body;
+    note.append(strong,span);
+  }
+  function syncMotion() {
+    if (!svg) return;
+    host.classList.toggle("is-playing",playing && !document.hidden);
+    if(animationFrame!==null){cancelAnimationFrame(animationFrame);animationFrame=null;}
+    lastFrame=null;
+    if(playing && !document.hidden) animationFrame=requestAnimationFrame(tick);
+  }
+  function tick(now) {
+    animationFrame=null;
+    if(!playing || document.hidden)return;
+    if(lastFrame!==null)animationTime+=Math.min(now-lastFrame,100);
+    lastFrame=now;
+    paintPackets();
+    animationFrame=requestAnimationFrame(tick);
+  }
+  function paintPackets() {
+    moving.forEach(function(item,index){
+      var phase=((animationTime/1000+index*.7)%7)/7,forward=phase<.5;
+      var remaining=(forward ? phase*2 : (1-phase)*2)*item.length;
+      var points=item.points,segment=1;
+      while(segment<points.length-1 && remaining>distance(points[segment-1],points[segment])){remaining-=distance(points[segment-1],points[segment]);segment++;}
+      var a=points[segment-1],b=points[segment],length=distance(a,b),ratio=length?remaining/length:0;
+      var angle=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI+(forward?0:180);
+      item.el.setAttribute("transform","translate("+(a[0]+(b[0]-a[0])*ratio)+","+(a[1]+(b[1]-a[1])*ratio)+") rotate("+angle+")");
+      item.el.classList.toggle("is-answer",!forward);
+      item.el.setAttribute("data-direction",forward?"request":"response");
+    });
+  }
+  function applySelection() {
+    if (!svg) return;
+    var active = selection ? model.connections.filter(function (c) {return c.from===selection || c.to===selection;}).map(function (c) {return c.id;}) : routes[mode];
+    var activeNodes = new Set(selection ? [selection] : []);
+    packets.replaceChildren();
+    moving=[];
+    model.connections.forEach(function (c,index) {
+      var on=active.indexOf(c.id)!==-1;
+      edges[c.id].classList.toggle("is-on",on);
+      if (!on) return;
+      activeNodes.add(c.from); activeNodes.add(c.to);
+      var points=dimensions.links[c.id];
+      var packet=element("path",{d:"M-6,-4L5,0L-6,4L-3,0Z",class:"ah-iso-packet","aria-hidden":"true","data-connection":c.id},packets);
+      var length=points.slice(1).reduce(function(total,p,i){return total+distance(points[i],p);},0);
+      moving.push({el:packet,points:points,length:length});
+    });
+    Object.keys(nodes).forEach(function(id){
+      nodes[id].classList.toggle("is-on",activeNodes.has(id));
+      nodes[id].setAttribute("aria-pressed",String(id===selection));
+    });
+    var selected=model.components.find(function(c){return c.id===selection;});
+    showNote(selected ? selected.label : text[mode][0], selected ? text[selection] : text[mode][1]);
+    controls.querySelectorAll("[data-core-route]").forEach(function(button){button.setAttribute("aria-pressed",String(!selection && button.dataset.coreRoute===mode));});
+    // The same store link represents a write on launch and a read on observation.
+    var storeLabel=svg.querySelector('[data-edge-label="write"]');
+    storeLabel.textContent=mode==="state" ? (english ? "read state" : "чтение state") : text.write;
+    var workerLabel=svg.querySelector('[data-edge-label="launch"]');
+    workerLabel.textContent=mode==="recovery" ? (english ? "reconcile" : "reconcile") : text.launchEdge;
+    paintPackets();
+    syncMotion();
+  }
+  function render() {
+    dimensions=geometry();
+    dimensions.links={};
+    var used=[];
+    model.connections.slice().sort(function(a,b){return (a.id==="request"?-1:0)-(b.id==="request"?-1:0);}).forEach(function(c){
+      dimensions.links[c.id]=route(c,used);
+      used.push(dimensions.links[c.id]);
+    });
+    svg=element("svg",{viewBox:"0 0 "+dimensions.size.join(" "),class:"ah-iso-svg",role:"group","aria-label":text.diagram});
+    var floor=element("g",{"aria-hidden":"true",class:"ah-iso-floor"},svg);
+    for(var gy=-dimensions.size[0]/2;gy<dimensions.size[1];gy+=32){
+      element("path",{d:"M0,"+gy+"l"+dimensions.size[0]+","+(dimensions.size[0]/2)},floor);
+      element("path",{d:"M"+dimensions.size[0]+","+gy+"l-"+dimensions.size[0]+","+(dimensions.size[0]/2)},floor);
+    }
+    var connections=element("g",{"aria-hidden":"true"},svg);
+    edges={}; nodes={};
+    model.connections.forEach(function(c){
+      edges[c.id]=element("path",{d:path(dimensions.links[c.id]),class:"ah-iso-edge","data-connection":c.id,"data-from":c.from,"data-to":c.to},connections);
+    });
+    packets=element("g",{"aria-hidden":"true",class:"ah-iso-packets"},svg);
+    model.components.slice().sort(function(a,b){return dimensions[a.id][1]-dimensions[b.id][1];}).forEach(function(c){
+      var anchor=dimensions[c.id];
+      var g=element("g",{class:"ah-iso-node ah-iso-node--"+c.id,role:"button",tabindex:0,"aria-label":c.label+": "+c.sublabel,"aria-describedby":"ah-flow-note","data-node":c.id},svg);
+      element("rect",{x:anchor[0]-90,y:anchor[1]-(c.id==="python"?116:100),width:180,height:c.id==="python"?192:176,rx:4,class:"ah-iso-focus"},g);
+      var art=element("g",{"aria-hidden":"true"},g);
+      object(art,c.id,anchor);
+      label(g,anchor[0],anchor[1]+(c.id==="python"?-98:52),c.label,"ah-iso-label");
+      label(g,anchor[0],anchor[1]+(c.id==="python"?-78:73),c.sublabel,"ah-iso-sub");
+      g.addEventListener("click",function(){selection=selection===c.id ? null : c.id; applySelection();});
+      g.addEventListener("keydown",function(event){
+        if(event.key==="Enter" || event.key===" "){event.preventDefault();g.dispatchEvent(new MouseEvent("click"));}
+        if(event.key==="Escape"){selection=null;applySelection();}
+      });
+      nodes[c.id]=g;
+    });
+    var captions=element("g",{"aria-hidden":"true"},svg);
+    host.replaceChildren(svg);
+    host.style.aspectRatio=dimensions.size.join(" / ");
+    // Measure the actual font and voxel silhouettes after CSS applies.
+    var actual=model.components.flatMap(function(c){return [
+      nodes[c.id].querySelector('g[aria-hidden]').getBBox(),
+      nodes[c.id].querySelector('.ah-iso-label').getBBox(),
+      nodes[c.id].querySelector('.ah-iso-sub').getBBox()
+    ];});
+    var placed=[];
+    model.connections.forEach(function(c){
+      var value=text[c.id==="launch" ? "launchEdge" : c.id==="memory" ? "memoryEdge" : c.id];
+      var caption=label(captions,0,0,value,"ah-iso-edge-label");
+      var p=captionPosition(dimensions.links[c.id],placed,actual,caption.getBBox());
+      caption.setAttribute("x",p[0]);caption.setAttribute("y",p[1]);
+      caption.setAttribute("data-edge-label",c.id);
+    });
+    applySelection();
+  }
+  fetch(new URL((english ? "../en/" : "../")+"diagrams/harness-core.architecture.json",script)).then(function(response){
+    if(!response.ok) throw new Error("diagram");
+    return response.json();
+  }).then(function(data){
+    if (!host.isConnected) return;
+    model=data;
+    render();
+    controls.querySelectorAll("button").forEach(function(button){button.disabled=false;});
+    controls.addEventListener("click",function(event){
+      var button=event.target.closest("[data-core-route]");
+      if(!button) return;
+      mode=button.dataset.coreRoute; selection=null; applySelection();
+    });
+    narrow.addEventListener("change",render); medium.addEventListener("change",render);
+    function onReduced() { playing=!reduced.matches; syncMotion(); }
+    reduced.addEventListener("change",onReduced);
+    dispose = function () {
+      playing=false;
+      if(animationFrame!==null) cancelAnimationFrame(animationFrame);
+      narrow.removeEventListener("change",render);
+      medium.removeEventListener("change",render);
+      reduced.removeEventListener("change",onReduced);
+      document.removeEventListener("visibilitychange",syncMotion);
+    };
+    document.addEventListener("visibilitychange",syncMotion);
+  }).catch(function(){showNote(english ? "Architecture" : "Архитектура",text.error);});
+  }
+  if (window.document$) window.document$.subscribe(init);
+  else init();
 })();
