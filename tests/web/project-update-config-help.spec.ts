@@ -11,9 +11,11 @@
    - [ ] Selecting a project row updates the details; the copyable `harness console --web <path>` command.
    - [ ] «Путь к другому проекту» as a separate block under the list; checking it reads no Git or .harness.
    - [ ] «План установки» with the command and the confirmation; «Состав Harness» choice changes the plan.
-   - [ ] «Проверки» block (links to Diagnostics and Configuration).
-   - Deviations: the server never switches project (no «Открыть проект →»); the embedding scheme diagram
-     and the offline/online/fix check buttons are not reproduced (Diagnostics owns checks).
+   - [ ] «Детали проекта»: tracker line, name, path, branch · version, health counts, five check rows.
+   - [ ] «Схема внедрения» with Runtime and Health from the Home snapshot; «Состав Harness» with
+     descriptions and the footer; «Проверки» with counts, mode chips, fix links and the bar.
+   - Deviations: the server never switches project (no «Открыть проект →»); branch and version of
+     another candidate are not read; «Uncommitted files» is the local edits of managed files.
    #update-harness (README «Обновление · шаг 4»)
    - [ ] Versions installed → available with capabilities, skills, managed files.
    - [ ] Three modes: Обычное, С перезаписью управляемых файлов, С перезаписью выбранных seed-файлов.
@@ -111,10 +113,11 @@ for (const width of [1440, 390]) {
     await page.locator('[data-path="/work/billing"]').click();
     await expect(page.locator("#open-project-command")).toHaveText("harness console --web /work/billing");
     await expect(page.locator("#open-project-install-command")).toHaveText("harness update /work/project --capability engineering-suite");
-    // The plan is drawn whenever the snapshot arrived (a null target shows the server's reason) but
-    // starts below the first screen; the title's jump brings it into view.
-    await page.locator("#open-project-plan-jump").click();
+    // As in the mockup the title carries only «Диагностика»; the plan is below the rollout scheme.
+    await expect(page.locator(".project-title .actions > *")).toHaveCount(1);
+    await page.locator("#open-project-plan").scrollIntoViewIfNeeded();
     await expect(page.locator("#open-project-plan")).toBeInViewport();
+    await expect(page.locator("#open-project-detail .project-check")).toHaveCount(5);
     const before = sent.length;
     await page.getByLabel("Путь к локальному Git-проекту").fill("/srv/other");
     await expect(page.locator("#open-project-path-command")).toHaveText("harness console --web /srv/other");
