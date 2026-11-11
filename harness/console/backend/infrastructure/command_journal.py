@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -18,7 +19,7 @@ def append(repo: Path, record: Mapping[str, object]) -> None:
         raise ValueError("console journal directory must not be a link")
     path = directory / "commands.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
-    if os.name != "nt" and directory.stat().st_uid != os.getuid():
+    if sys.platform != "win32" and directory.stat().st_uid != os.getuid():
         raise PermissionError("console journal directory has a foreign owner")
     flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
     fd = os.open(path, flags, 0o600)

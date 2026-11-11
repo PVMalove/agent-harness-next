@@ -32,7 +32,7 @@ import tempfile
 import time
 import webbrowser
 from pathlib import Path
-from typing import BinaryIO, Callable, NoReturn, Sequence
+from typing import IO, Callable, NoReturn, Sequence
 
 from .tui.client import ConsoleClient, ConsoleClientError, HomeClient, ServerUnavailable
 from .kernel.discovery import ServerEndpoint, read_record
@@ -159,7 +159,7 @@ def _stop(process: "subprocess.Popen[bytes]") -> None:
         pass
 
 
-def _spawn_detached(argv: list[str], log: BinaryIO) -> "subprocess.Popen[bytes]":
+def _spawn_detached(argv: list[str], log: IO[bytes]) -> "subprocess.Popen[bytes]":
     """Запускает процесс отдельно от команды, чтобы сервер пережил её (ADR 0028). Его вывод идёт в
     файл, а не в каналы вызывающей команды."""
     windows = sys.platform == "win32"
@@ -179,7 +179,7 @@ def _spawn_detached(argv: list[str], log: BinaryIO) -> "subprocess.Popen[bytes]"
     )
 
 
-def _failure_reason(code: int, log: BinaryIO) -> str:
+def _failure_reason(code: int, log: IO[bytes]) -> str:
     log.seek(0)
     tail = log.read()[-500:].decode("utf-8", "replace").strip()
     return f"uv run завершился с кодом {code}" + (f": {tail}" if tail else "")

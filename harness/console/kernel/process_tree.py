@@ -10,6 +10,7 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from threading import Event
@@ -90,7 +91,7 @@ class ProcessTree:
 
         На Windows остановка всегда принудительная: после CTRL_BREAK корень мог бы выйти раньше,
         чем `taskkill /T` найдёт его дерево."""
-        if is_windows():
+        if sys.platform == "win32":
             self._kill_windows_tree()
             return
         try:
