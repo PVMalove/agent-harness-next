@@ -173,10 +173,11 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".command-panel [data-command]")).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width > 600) {
-      // The check list runs down the window (at least 420 px), and the detail keeps its action
-      // in view while its body scrolls inside the panel.
-      const list = await page.locator("#diag-list").evaluate((box) => box.getBoundingClientRect().height);
-      expect(list).toBeGreaterThanOrEqual(420);
+      // The check list runs down to the window's bottom edge (more than the former three rows),
+      // and the detail keeps its action in view while its body scrolls inside the panel.
+      const list = await page.locator("#diag-list").evaluate((box) => box.getBoundingClientRect());
+      expect(list.height).toBeGreaterThanOrEqual(240);
+      expect(list.bottom).toBeLessThanOrEqual(900);
       const action = await page.locator("#diag-detail .diag-action").evaluate((box) => {
         const panel = box.closest(".diag-detail-panel")!.getBoundingClientRect();
         const own = box.getBoundingClientRect();

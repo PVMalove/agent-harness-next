@@ -173,7 +173,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".diag-detail-panel .diag-rationale")).toHaveText(/^Без записанной политики хуков/);
     // An id the kernel catalog does not describe keeps the no-data state.
     await page.locator('#diag-list [data-check="files.managed"]').click();
-    await expect(page.locator(".diag-detail-panel .diag-facts .no-data")).toHaveText("нет данных");
+    await expect(page.locator(".diag-detail-panel .diag-facts .no-data")).toHaveText("нет данных · обоснование для проверки не записано");
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "harness", width);
