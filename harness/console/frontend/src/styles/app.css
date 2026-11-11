@@ -246,3 +246,13 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 @media (prefers-reduced-motion: reduce) {
   .route-steps-fill .route-step, .route-steps-fill .route-step.current .route-dot { animation: none; }
 }
+
+/* Page fit (#1066): on a desktop window the long lists of Diagnostics, Reports and the Agent
+   activity sessions scroll inside their block, so the page itself fits the window. */
+@media (min-width: 981px) {
+  #diag-list { max-height: max(200px, calc(100dvh - 720px)); overflow-y: auto; }
+  #diag-detail { max-height: max(280px, calc(100dvh - 600px)); overflow-y: auto; }
+  .work-sessions .work-list { max-height: max(240px, calc(100dvh - 460px)); overflow-y: auto; }
+  #report-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; }
+  .report-timeline, .reports-batches .reports-panel { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }
+}
