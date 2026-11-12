@@ -1507,7 +1507,7 @@ def test_the_coordinator_cli_reads_the_state_of_a_real_runtime(
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)
     assert report["protocol"] == {"major": 1, "minor": 7}
-    assert report["features"] == ["status"]
+    assert report["features"] == ["status", "shutdown", "runtime.attach", "runtime.release"]
     assert report["store_id"] is None
     assert report["runtime"]["state"] == "serving"
     # Both languages derive the same repo id and the same socket address.

@@ -25,6 +25,11 @@ reconcile and does not start a second process if the object already exists.
 python3 .harness/orchestration/coordinator.py --repo . runtime status
 ```
 
+A serve that the `runtime-autostart` hook started (`serve --owner-session`) is an own one: it keeps
+its owners (`runtime.attach`, `runtime.release`) and exits with code 0 by itself once no owner is
+left, no connection is open and the store is idle. A manual serve never stops by itself
+([runtime autostart](../guides/orchestration/operations.md#runtime-autostart), ADR 0031).
+
 ## Stop and restart
 
 `harness-runtime stop --repo <repo>` stops the runtime of a repository the same way as SIGTERM: it
@@ -135,6 +140,7 @@ An error is typed, so that a retry does not spend the role budget on infrastruct
 | 0023 | Incremental checks |
 | 0025 | The built-in container executor |
 | 0026 | The consolidation of Harness Next and the Release Gate |
+| 0031 | The autostart of `harness-runtime serve` for `/implement` |
 
 ## Next
 

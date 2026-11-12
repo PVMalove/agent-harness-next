@@ -1271,7 +1271,8 @@
         "mark-qa-gate-passed": "Accounting: fallback marker after the last configured QA command succeeds; never blocks.",
         "impact-first-touch": "Advisory: warns on the first touch of a risky path whose impact ChangeImpact cannot compute from the import graph; standard and strict profiles; never blocks.",
         "targeted-check-reminder": "Advisory: at the end of a role turn, reminds to report the targeted checks when files changed after the last report; standard and strict profiles; never blocks or continues the turn.",
-        "sensitive-path-recheck": "Advisory: warns on every new edit of a sensitive path and names an evidence record; strict profile only; never blocks."
+        "sensitive-path-recheck": "Advisory: warns on every new edit of a sensitive path and names an evidence record; strict profile only; never blocks.",
+        "runtime-autostart": "Advisory, Claude Code only: before a coordinator command attaches the session to harness-runtime serve and starts an owned one when none answers; Stop and SubagentStop release the owner; all profiles; never blocks or continues the turn."
       }
     },
     "hook.profile": {
@@ -1320,7 +1321,8 @@
         "apply-patch-unparseable": "An apply_patch payload could not be parsed, so a critical guard refused the edit it could not verify.",
         "risky-path-first-touch": "The first touch of a risky path in an operation was reported; ChangeImpact cannot compute its impact from the import graph.",
         "targeted-checks-unreported": "Files changed after the last report of the operation, and the targeted checks are not reported yet.",
-        "sensitive-path-touched": "An edit of a sensitive path (manifest, CI, migration, auth, permissions or hooks) was reported with an evidence record."
+        "sensitive-path-touched": "An edit of a sensitive path (manifest, CI, migration, auth, permissions or hooks) was reported with an evidence record.",
+        "runtime-autostart-failed": "The autostart of harness-runtime serve did not get a serving runtime: a missing or stale build, a start refusal, a timeout or the agent sandbox; the warning names the cause and the journal."
       }
     }
   }

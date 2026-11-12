@@ -108,6 +108,7 @@ Hooks ставятся в проект, поэтому действуют для
 | `sensitive-path-recheck` (новый) | Write, Edit чувствительного пути | поведенческий | нет | нет | предупр. и evidence | разрешает | граница `strict` ниже |
 | `count-skill-usage` | Skill | учётный | да | да | да | разрешает | — |
 | `mark-qa-gate-passed` | PostToolUse Bash | учётный | да | да | да | разрешает | — |
+| `runtime-autostart` (только Claude Code, ADR 0031) | PreToolUse Bash с coordinator, Stop, SubagentStop | операционный | предупр. | предупр. | предупр. | разрешает | remedy `[runtime_unavailable]` |
 
 - Вспомогательные скрипты (`record-qa-gate-pass`, `run-test`, `test-author-preflight`,
   `qa-gate-state.py`, `direct_commits.py`, `pr_commands.py`, `tracker-issue.py`) вызываются

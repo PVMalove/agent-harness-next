@@ -47,6 +47,9 @@
 //! has no live member) or 1 (not delivered; the reason on stderr). Other platforms refuse it with
 //! 2.
 
+#[cfg(unix)]
+mod autostart;
+
 use std::env;
 use std::ffi::OsString;
 use std::io::Write;
@@ -68,8 +71,9 @@ const STOP_WAIT: Duration = Duration::from_secs(30);
 const IPC_TIMEOUT: Duration = Duration::from_secs(10);
 /// How often `stop` looks at the instance lock again.
 const LOCK_POLL: Duration = Duration::from_millis(25);
-const USAGE: &str = "usage: harness-runtime serve [--repo <path>] | harness-runtime stop \
-    [--repo <path>] | harness-runtime restart [--repo <path>] | harness-runtime migrate \
+const USAGE: &str = "usage: harness-runtime serve [--repo <path>] [--owner-session <key> \
+    [--owner-pid <pid>] [--owner-ttl-seconds <n>]] | harness-runtime stop [--repo <path>] | \
+    harness-runtime restart [--repo <path>] | harness-runtime migrate \
     [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
     rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | \
     harness-runtime repair-import-approval [--check] [--repo <path>] \
@@ -95,6 +99,17 @@ struct Args {
     /// command itself refuses a blank field.
     approval: state::approval::Approval,
     check: bool,
+    /// The owner of a runtime the autostart hook starts (`serve --owner-session`, Unix only).
+    owner: Owner,
+}
+
+/// The first owner of `serve --owner-session <key> [--owner-pid <pid>] [--owner-ttl-seconds
+/// <n>]` (ADR 0031, section 2). Without a key the runtime is manual and never stops by itself.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Owner {
+    session: Option<String>,
+    pid: Option<i64>,
+    ttl_seconds: Option<u64>,
 }
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
@@ -112,11 +127,21 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
     let mut to_legacy = false;
     let mut check = false;
     let mut approval = state::approval::Approval::default();
+    let mut owner = Owner::default();
     while let Some(flag) = args.next() {
         let rollback = command == Command::Rollback;
         let approved = !matches!(command, Command::Serve | Command::Stop | Command::Restart);
+        let owned = cfg!(unix) && command == Command::Serve;
         let field = match flag.to_str() {
             Some("--repo") => None,
+            Some(name @ ("--owner-session" | "--owner-pid" | "--owner-ttl-seconds")) if owned => {
+                let value = args
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| format!("{name} needs a value; {USAGE}"))?;
+                parse_owner_flag(&mut owner, name, &value)?;
+                continue;
+            }
             Some("--check") if command == Command::RepairImportApproval => {
                 check = true;
                 continue;
@@ -143,6 +168,11 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
             }
         }
     }
+    if owner.session.is_none() && (owner.pid.is_some() || owner.ttl_seconds.is_some()) {
+        return Err(format!(
+            "--owner-pid and --owner-ttl-seconds need --owner-session; {USAGE}"
+        ));
+    }
     if command == Command::Rollback && !to_legacy {
         return Err(format!("rollback needs --to-legacy; {USAGE}"));
     }
@@ -157,7 +187,59 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
         repo,
         approval,
         check,
+        owner,
     })
+}
+
+/// Read one owner flag of `serve` into `owner`.
+fn parse_owner_flag(owner: &mut Owner, name: &str, value: &str) -> Result<(), String> {
+    match name {
+        "--owner-session" if ipc::valid_key(value) => owner.session = Some(value.to_owned()),
+        "--owner-session" => {
+            return Err(format!(
+                "--owner-session needs 1 to {} characters of [A-Za-z0-9._:/-]; {USAGE}",
+                ipc::MAX_KEY_LEN
+            ));
+        }
+        "--owner-pid" => {
+            owner.pid = Some(
+                value
+                    .parse::<i64>()
+                    .ok()
+                    .filter(|pid| *pid > 0)
+                    .ok_or_else(|| format!("--owner-pid needs a positive number; {USAGE}"))?,
+            );
+        }
+        _ => {
+            owner.ttl_seconds = Some(
+                value
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|seconds| *seconds > 0)
+                    .ok_or_else(|| {
+                        format!("--owner-ttl-seconds needs a positive number; {USAGE}")
+                    })?,
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The lifetime `serve` starts with: owned by its first owner, or manual.
+#[cfg(unix)]
+fn lifetime_of(owner: &Owner) -> ipc::Lifetime {
+    let Some(session) = owner.session.as_deref() else {
+        return ipc::Lifetime::manual();
+    };
+    let ttl = owner
+        .ttl_seconds
+        .map_or(ipc::DEFAULT_OWNER_TTL, std::time::Duration::from_secs);
+    let lifetime = ipc::Lifetime::owned(ttl);
+    let identity = owner
+        .pid
+        .and_then(|pid| state::identity::observe(pid, &state::identity::observer()));
+    lifetime.attach(session, identity, std::time::Instant::now());
+    lifetime
 }
 
 /// What the ctrl-break helper is asked to do.
@@ -246,6 +328,48 @@ fn ctrl_break(args: impl IntoIterator<Item = OsString>) -> ExitCode {
     }
 }
 
+/// `ensure` or `release` (ADR 0031, section 4): one JSON line on stdout, and on a failure the
+/// `ERROR:` and `REMEDY:` lines on stderr.
+#[cfg(unix)]
+fn owner_command(ensure: bool, args: impl IntoIterator<Item = OsString>) -> ExitCode {
+    let args = match autostart::parse(args, ensure) {
+        Ok(args) => args,
+        Err(message) => {
+            return Report::new(
+                ErrorCode::MalformedRequest,
+                message,
+                "pass --repo and --session as the usage says",
+            )
+            .print(EXIT_REFUSED);
+        }
+    };
+    let outcome = if ensure {
+        autostart::ensure(&args)
+    } else {
+        autostart::release(&args)
+    };
+    println!("{}", outcome.answer);
+    if outcome.exit != autostart::EXIT_OK && outcome.exit != autostart::EXIT_NOT_RUNNING {
+        let text = |key: &str| outcome.answer[key].as_str().unwrap_or("").to_owned();
+        eprintln!("ERROR: {}", text("error"));
+        eprintln!("REMEDY: {}", text("remedy"));
+    }
+    ExitCode::from(outcome.exit)
+}
+
+/// `ensure` and `release` serve the autostart hook of Claude Code on Unix only (ADR 0031,
+/// section 6).
+#[cfg(not(unix))]
+fn owner_command(ensure: bool, _args: impl IntoIterator<Item = OsString>) -> ExitCode {
+    let command = if ensure { "ensure" } else { "release" };
+    Report::new(
+        ErrorCode::MalformedRequest,
+        format!("harness-runtime {command} serves only Unix; {USAGE}"),
+        "start `harness-runtime serve --repo <repo>` by hand outside the agent sandbox",
+    )
+    .print(EXIT_REFUSED)
+}
+
 /// What an error line and its `REMEDY:` line say. The remedy line starts with the protocol error
 /// code in brackets (ADR 0021, section 8).
 #[derive(Debug)]
@@ -308,8 +432,13 @@ fn serve(args: &Args) -> Result<(), Failure> {
     let state_dir = args.repo.join(state::migrate::STATE_REL);
     // A store that an older release wrote is brought to this schema before the first request; a
     // store of a newer schema is refused, and nothing is written.
-    let server = Server::bind_serving(paths, Some(state_dir.clone()))
-        .map_err(|err| Failure::Refused(Report::new(err.code(), &err, err.remedy())))?;
+    #[cfg(unix)]
+    let bound =
+        Server::bind_with_lifetime(paths, Some(state_dir.clone()), lifetime_of(&args.owner));
+    #[cfg(not(unix))]
+    let bound = Server::bind_serving(paths, Some(state_dir.clone()));
+    let server =
+        bound.map_err(|err| Failure::Refused(Report::new(err.code(), &err, err.remedy())))?;
     state::import_approval::ensure_no_pending(&state_dir)
         .and_then(|()| state::schema::upgrade_store(&state_dir))
         .map_err(|err| Failure::Refused(Report::new(err.code(), &err, err.remedy())))?;
@@ -335,8 +464,8 @@ fn serve(args: &Args) -> Result<(), Failure> {
         })?;
     drop(stdout);
     let served = server.serve_until(&stop);
-    // A `shutdown` ends the accept loop without the signal: the periodic reconcile stops on the
-    // same flag before the server lets the instance lock go.
+    // The periodic reconcile ends with the accept loop, also when a `shutdown` or the lifetime of
+    // an owned runtime ended it without the signal.
     stop.store(true, Ordering::Relaxed);
     served.map_err(|err| {
         Failure::Failed(Report::new(
@@ -344,7 +473,15 @@ fn serve(args: &Args) -> Result<(), Failure> {
             format!("the accept loop failed: {err}"),
             "start `harness-runtime serve --repo <repo>` again",
         ))
-    })
+    })?;
+    #[cfg(unix)]
+    if server.lifetime().is_exiting() {
+        eprintln!(
+            "harness-runtime: no owner is left and the store is idle; the runtime started by \
+             the autostart hook stops"
+        );
+    }
+    Ok(())
 }
 
 /// What `stop` found: no runtime, or the pid of the runtime it stopped.
@@ -620,6 +757,10 @@ fn main() -> ExitCode {
     if words.peek().and_then(|word| word.to_str()) == Some("ctrl-break") {
         return ctrl_break(words.skip(1));
     }
+    if let Some(command @ ("ensure" | "release")) = words.peek().and_then(|word| word.to_str()) {
+        let ensure = command == "ensure";
+        return owner_command(ensure, words.skip(1));
+    }
     let args = match parse_args(words) {
         Ok(args) => args,
         Err(message) => {
@@ -787,6 +928,47 @@ mod tests {
                 .contains("unknown argument")
         );
         assert!(parse(&["--job"]).unwrap_err().contains("needs a value"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn serve_takes_its_first_owner_from_the_owner_flags() {
+        let args = parse(&[
+            "serve",
+            "--owner-session",
+            "s/agent-1",
+            "--owner-pid",
+            "42",
+            "--owner-ttl-seconds",
+            "5",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            args.owner,
+            Owner {
+                session: Some("s/agent-1".to_owned()),
+                pid: Some(42),
+                ttl_seconds: Some(5),
+            }
+        );
+        assert_eq!(parse(&["serve"]).unwrap().owner, Owner::default());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn owner_flags_are_refused_when_malformed_or_without_a_session() {
+        for words in [
+            &["serve", "--owner-session", "a b"][..],
+            &["serve", "--owner-session", ""],
+            &["serve", "--owner-session", "s", "--owner-pid", "0"],
+            &["serve", "--owner-session", "s", "--owner-ttl-seconds", "x"],
+            &["serve", "--owner-pid", "42"],
+            &["serve", "--owner-session"],
+            &["migrate", "--owner-session", "s"],
+        ] {
+            assert!(parse(words).is_err(), "{words:?}");
+        }
     }
 
     #[test]

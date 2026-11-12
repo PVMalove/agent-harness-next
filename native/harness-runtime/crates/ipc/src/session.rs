@@ -29,6 +29,9 @@ pub struct Shared {
     pub snapshots: Arc<state::read_session::Registry>,
     /// The process supervisor of the executions (ADR 0022).
     pub supervisor: Arc<supervisor::Supervisor>,
+    /// The owners of a runtime the autostart hook started (ADR 0031); a manual runtime never
+    /// stops by itself.
+    pub lifetime: Arc<crate::lifetime::Lifetime>,
 }
 
 /// The answer to one frame.
@@ -158,6 +161,8 @@ impl Session {
                     close: true,
                 }
             }
+            "runtime.attach" => runtime_attach(shared, &request),
+            "runtime.release" => runtime_release(shared, &request),
             "state.read" => state_read(shared, &request, negotiated.minor),
             "state.write" => state_write(shared, &request, self.peer_pid),
             "qa.lane.inspect" => qa_lane_inspect(shared, &request),
@@ -252,7 +257,13 @@ impl Session {
         // The store is the authority only after a cutover, which can happen while this runtime
         // lives, so every `hello` asks again.
         let store_id = shared.state_dir.as_deref().and_then(state::read::store_id);
-        let mut features = vec!["status".to_owned(), "shutdown".to_owned()];
+        // The owners of the runtime (ADR 0031): every runtime answers them, a manual one too.
+        let mut features = vec![
+            "status".to_owned(),
+            "shutdown".to_owned(),
+            "runtime.attach".to_owned(),
+            "runtime.release".to_owned(),
+        ];
         if store_id.is_some() {
             features.push("state.read".to_owned());
             features.push("state.write".to_owned());
@@ -286,6 +297,85 @@ fn supervised(shared: &Shared, operation: &str) -> bool {
     supervisor::Supervisor::supported()
         && shared.state_dir.is_some()
         && supervisor::FEATURES.contains(&operation)
+}
+
+/// The owner key of a `runtime.attach` or `runtime.release` payload, and the payload.
+fn owner_key<'a>(request: &'a Request, allowed: &[&str]) -> Result<(&'a str, &'a Value), String> {
+    let Some(payload) = request
+        .payload
+        .as_ref()
+        .filter(|payload| payload.is_object())
+    else {
+        return Err(format!("{} needs a payload object", request.operation));
+    };
+    if let Some(field) = payload.as_object().and_then(|fields| {
+        fields
+            .keys()
+            .find(|field| !allowed.contains(&field.as_str()))
+    }) {
+        return Err(format!("unknown payload field {field:?}"));
+    }
+    match payload.get("key").and_then(Value::as_str) {
+        Some(key) if crate::lifetime::valid_key(key) => Ok((key, payload)),
+        _ => Err(format!(
+            "key must be 1 to {} characters of [A-Za-z0-9._:/-]",
+            crate::lifetime::MAX_KEY_LEN
+        )),
+    }
+}
+
+/// What still needs the store of this runtime (ADR 0031, section 3).
+fn busy(shared: &Shared) -> Vec<String> {
+    shared
+        .state_dir
+        .as_deref()
+        .map(state::idle::busy)
+        .unwrap_or_default()
+}
+
+/// `runtime.attach`: add or renew the owner `key`; `owner_pid` names the process whose death
+/// releases it (ADR 0031, section 2).
+fn runtime_attach(shared: &Shared, request: &Request) -> Reply {
+    let id = &request.operation_id;
+    let (key, payload) = match owner_key(request, &["key", "owner_pid"]) {
+        Ok(found) => found,
+        Err(detail) => return malformed(id, &detail),
+    };
+    let owner_pid = match payload.get("owner_pid") {
+        None | Some(Value::Null) => None,
+        Some(pid) => match pid.as_i64().filter(|pid| *pid > 0) {
+            Some(pid) => Some(pid),
+            None => return malformed(id, "owner_pid must be a positive integer"),
+        },
+    };
+    let identity =
+        owner_pid.and_then(|pid| state::identity::observe(pid, &state::identity::observer()));
+    shared
+        .lifetime
+        .attach(key, identity, std::time::Instant::now());
+    let mut result = shared.lifetime.describe(&busy(shared));
+    result["attached"] = json!(!shared.lifetime.is_exiting());
+    Reply {
+        response: Response::ok(id, result),
+        close: false,
+    }
+}
+
+/// `runtime.release`: remove the owner `key`. It never stops the runtime by itself: the accept
+/// loop decides that (ADR 0031, section 2).
+fn runtime_release(shared: &Shared, request: &Request) -> Reply {
+    let id = &request.operation_id;
+    let key = match owner_key(request, &["key"]) {
+        Ok((key, _)) => key,
+        Err(detail) => return malformed(id, &detail),
+    };
+    let released = shared.lifetime.release(key);
+    let mut result = shared.lifetime.describe(&busy(shared));
+    result["released"] = json!(released);
+    Reply {
+        response: Response::ok(id, result),
+        close: false,
+    }
 }
 
 /// The reply of an execution operation (ADR 0022).
@@ -625,6 +715,7 @@ mod tests {
             state_dir: None,
             snapshots: Default::default(),
             supervisor: Default::default(),
+            lifetime: Default::default(),
         }
     }
 
@@ -957,7 +1048,10 @@ mod tests {
 
         let result = hello.response.result.unwrap();
         assert_eq!(result["store_id"], Value::Null);
-        assert_eq!(result["features"], json!(["status", "shutdown"]));
+        assert_eq!(
+            result["features"],
+            json!(["status", "shutdown", "runtime.attach", "runtime.release"])
+        );
         assert_eq!(code(&reply), ErrorCode::NotFound);
     }
 
@@ -981,6 +1075,8 @@ mod tests {
         let mut features = vec![
             "status",
             "shutdown",
+            "runtime.attach",
+            "runtime.release",
             "state.read",
             "state.write",
             "state.validate",

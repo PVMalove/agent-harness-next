@@ -388,6 +388,46 @@ python .harness/orchestration/coordinator.py --repo . ledger release-lock --forc
 этих записей; подмену записи вместе с её суммой или удаление файла он не обнаруживает. В консоли
 то же действие — команда «Снять lock ledger» с подтверждением.
 
+## Автозапуск runtime {#runtime-autostart}
+
+В Claude Code `harness-runtime serve` запускает hook `runtime-autostart` (ADR 0031), а не
+разработчик и не агент. Hook исполняется вне песочницы агента, поэтому serve видит Docker.
+
+- **Старт.** Перед каждой командой `.harness/orchestration/coordinator.py` hook вызывает
+  `harness-runtime ensure` для основного checkout. Если runtime не отвечает, ensure запускает свой
+  serve и ждёт готовности до 40 с; разработчик видит сообщение с pid и журналом.
+- **Переиспользование.** Работающий serve, ручной или запущенный другой сессией, переиспользуется
+  молча; второй экземпляр не запускается.
+- **Владельцы.** Свой serve хранит владельцев: сессию (`<session_id>`) и субагентов
+  (`<session_id>/<agent_id>`). `Stop` и `SubagentStop` освобождают владельца. Владелец уходит и тогда,
+  когда процесс Claude Code (`CLAUDE_PID`) завершился или владелец не обновлялся час (TTL).
+- **Остановка.** Свой serve останавливается сам, когда владельцев нет, соединений нет и store
+  простаивает: нет dispatch в `dispatched` или `working`, удерживаемого lease QA, очереди QA и
+  незавершённого исполнения. Нечитаемый store считается занятым. Ручной serve сам не
+  останавливается никогда.
+- **Журнал.** `<каталог runtime>/<repo-id>.serve.log` (права `0600`); путь называет сообщение hook-а.
+- **Устаревшая сборка.** Hook запускает только `native/harness-runtime/target/release/harness-runtime`,
+  свежий по dep-info `harness-runtime.d`, `Cargo.lock` и `Cargo.toml`. Устаревшую сборку hook не
+  запускает: он только подключается к работающему serve, иначе предупреждает «сборка устарела».
+  Пересоберите: `cargo build --release --manifest-path native/harness-runtime/Cargo.toml`.
+- **Окружение.** Serve получает окружение Claude Code без переменных, которые приложение добавляет
+  только hook-ам (`CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_PROJECT_DIR` и другие из ADR 0031).
+- **Отказ.** Отказ serve (код 2), таймаут, отсутствие бинарника или песочница дают предупреждение
+  `[runtime-autostart-failed]` с причиной и журналом. Hook ничего не блокирует.
+- **Чужой checkout.** Hook запускает только бинарник основного checkout проекта сессии
+  (`CLAUDE_PROJECT_DIR`). Coordinator другого репозитория, путь к нему, лишь упомянутый в команде,
+  или пустая `CLAUDE_PROJECT_DIR` дают предупреждение `[runtime-autostart-failed] coordinator
+  репозитория … не относится к основному checkout проекта сессии`; бинарник не запускается.
+  Запустите serve этого репозитория вручную.
+- **Доверие к сборке.** Hook исполняет `native/harness-runtime/target/release/harness-runtime`
+  основного checkout вне песочницы агента. Проверка по dep-info отсекает устаревшую сборку, но не
+  подмену файла. Не разрешайте агенту запись в `target/release` основного checkout (ADR 0031,
+  раздел 5).
+
+Codex и Windows автозапуска не получают: запустите `harness-runtime serve --repo <repo>` вручную вне
+песочницы агента. Так же говорит remedy ошибки `[runtime_unavailable]`. Hook появляется в проекте
+после `harness update`, который выполняет человек.
+
 ## Запись lifecycle в эпохе runtime store {#lifecycle-runtime-store}
 
 После `harness-runtime migrate` (`ledger.json` версии 4) каждую мутацию batch и dispatch принимает
