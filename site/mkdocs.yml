@@ -1,4 +1,4 @@
-site_name: Agent Harness Next · beta
+site_name: Agent Harness Next · 2.0
 site_description: Портативный harness для coding-агентов.
 site_url: https://pvmalove.github.io/agent-harness-next/
 repo_url: https://github.com/PVMalove/agent-harness-next
@@ -55,7 +55,7 @@ plugins:
         - locale: en
           name: English
           build: true
-          site_name: Agent Harness Next · beta
+          site_name: Agent Harness Next · 2.0
           theme:
             language: en
             palette:
