@@ -8,6 +8,12 @@ use std::process::{Command, Output};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use contracts::ErrorCode;
+#[cfg(unix)]
+use ipc::MAX_SOCKET_PATH_BYTES;
+
+#[path = "../../ipc/tests/support/runtime_dir.rs"]
+mod runtime_dir;
+use runtime_dir::RuntimeDir;
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -91,10 +97,10 @@ fn copy_tree(from: &Path, to: &Path) {
 /// The binary with a scratch runtime directory: a test never touches the real
 /// `/tmp/harness-<uid>` of the user.
 fn run(args: &[&str]) -> Output {
-    let runtime_dir = Scratch::new("run-xdg");
+    let runtime_dir = RuntimeDir::new("run-xdg");
     Command::new(env!("CARGO_BIN_EXE_harness-runtime"))
         .args(args)
-        .env("XDG_RUNTIME_DIR", &runtime_dir.0)
+        .env("XDG_RUNTIME_DIR", runtime_dir.path())
         .output()
         .unwrap()
 }
@@ -314,10 +320,10 @@ fn serve_once(repo: &Scratch) -> Output {
     use std::io::{BufRead, BufReader};
     use std::process::Stdio;
 
-    let runtime_dir = Scratch::new("xdg");
+    let runtime_dir = RuntimeDir::new("xdg");
     let mut child = Command::new(env!("CARGO_BIN_EXE_harness-runtime"))
         .args(["serve", "--repo", repo.0.to_str().unwrap()])
-        .env("XDG_RUNTIME_DIR", &runtime_dir.0)
+        .env("XDG_RUNTIME_DIR", runtime_dir.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -455,11 +461,11 @@ fn rollback_args(repo: &Scratch, approved_by: &str) -> Vec<String> {
 }
 
 fn run_rollback(repo: &Scratch, approved_by: &str, env: &[(&str, &std::ffi::OsStr)]) -> Output {
-    let runtime_dir = Scratch::new("rollback-xdg");
+    let runtime_dir = RuntimeDir::new("rollback-xdg");
     let mut command = Command::new(env!("CARGO_BIN_EXE_harness-runtime"));
     command
         .args(rollback_args(repo, approved_by))
-        .env("XDG_RUNTIME_DIR", &runtime_dir.0);
+        .env("XDG_RUNTIME_DIR", runtime_dir.path());
     for (key, value) in env {
         command.env(key, value);
     }
@@ -502,10 +508,10 @@ fn rollback_while_serve_runs_prints_the_lease_held_code_and_changes_nothing() {
     use std::process::Stdio;
 
     let (repo, _) = cut_over("rb-serving");
-    let runtime_dir = Scratch::new("xdg-rollback");
+    let runtime_dir = RuntimeDir::new("xdg-rollback");
     let mut serve = Command::new(env!("CARGO_BIN_EXE_harness-runtime"))
         .args(["serve", "--repo", repo.0.to_str().unwrap()])
-        .env("XDG_RUNTIME_DIR", &runtime_dir.0)
+        .env("XDG_RUNTIME_DIR", runtime_dir.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
@@ -519,7 +525,7 @@ fn rollback_while_serve_runs_prints_the_lease_held_code_and_changes_nothing() {
     let output = run_rollback(
         &repo,
         "human:operator",
-        &[("XDG_RUNTIME_DIR", runtime_dir.0.as_os_str())],
+        &[("XDG_RUNTIME_DIR", runtime_dir.path().as_os_str())],
     );
     serve.kill().unwrap();
     serve.wait().unwrap();
@@ -622,7 +628,7 @@ mod autostart {
     /// A repository, its private runtime directory and the runtimes a test started.
     struct Setup {
         repo: Scratch,
-        xdg: Scratch,
+        xdg: RuntimeDir,
         pids: Vec<u32>,
     }
 
@@ -630,7 +636,7 @@ mod autostart {
         fn new(name: &str, repo: Scratch) -> Self {
             Self {
                 repo,
-                xdg: Scratch::new(&format!("{name}-xdg")),
+                xdg: RuntimeDir::new(&format!("{name}-xdg")),
                 pids: Vec::new(),
             }
         }
@@ -642,7 +648,7 @@ mod autostart {
                 .arg("--repo")
                 .arg(&self.repo.0)
                 .args(&words[1..])
-                .env("XDG_RUNTIME_DIR", &self.xdg.0);
+                .env("XDG_RUNTIME_DIR", self.xdg.path());
             command
         }
 
@@ -660,7 +666,8 @@ mod autostart {
 
         fn socket(&self) -> PathBuf {
             let paths =
-                ipc::resolve_paths(&self.repo.0, &ipc::Environment::with_xdg(&self.xdg.0)).unwrap();
+                ipc::resolve_paths(&self.repo.0, &ipc::Environment::with_xdg(self.xdg.path()))
+                    .unwrap();
             paths.socket
         }
 
@@ -670,7 +677,7 @@ mod autostart {
 
             let mut child = Command::new(env!("CARGO_BIN_EXE_harness-runtime"))
                 .args(["serve", "--repo", self.repo.0.to_str().unwrap()])
-                .env("XDG_RUNTIME_DIR", &self.xdg.0)
+                .env("XDG_RUNTIME_DIR", self.xdg.path())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
@@ -906,7 +913,8 @@ mod autostart {
             .unwrap();
         let mut setup = Setup::new("ensure-stale", repo);
         let paths =
-            ipc::resolve_paths(&setup.repo.0, &ipc::Environment::with_xdg(&setup.xdg.0)).unwrap();
+            ipc::resolve_paths(&setup.repo.0, &ipc::Environment::with_xdg(setup.xdg.path()))
+                .unwrap();
         let (journal, mut file) = ipc::open_serve_log(&paths).unwrap();
         writeln!(file, "ERROR: stale start").unwrap();
         writeln!(file, "REMEDY: [lease_held] stale remedy").unwrap();
