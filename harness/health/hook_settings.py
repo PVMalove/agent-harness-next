@@ -241,7 +241,8 @@ class HookSpec:
     None — столбец «Проверка вне hook» равен «нет». `wiring` — где hook подключён: в файле
     настроек runtime или во frontmatter агента. `apply_patch` — hook понимает payload
     `apply_patch` (адаптер `apply_patch_payload.py`), поэтому runtime, который доставляет только
-    `apply_patch`, доставляет ему и Write/Edit (`PATCH_TOOLS`).
+    `apply_patch`, доставляет ему и Write/Edit (`PATCH_TOOLS`). `runtimes` — runtime, которым hook
+    поставляется: `runtime-autostart` (ADR 0031) только у Claude Code, остальные — у обоих.
     """
 
     hook_id: str
@@ -252,6 +253,7 @@ class HookSpec:
     out_of_hook: str | None = None
     wiring: Literal["settings", "agent"] = "settings"
     apply_patch: bool = False
+    runtimes: tuple[str, ...] = ("claude", "codex")
 
 
 # Инструменты первого runtime, которые второй runtime присылает одним `apply_patch`.
@@ -391,6 +393,23 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         False,
         "сверка checks_run",
     ),
+    # Автозапуск runtime (ADR 0031): только Claude Code; вне hook — remedy `[runtime_unavailable]`.
+    *(
+        HookSpec(
+            "runtime-autostart",
+            "runtime-autostart.sh",
+            event,
+            tools,
+            False,
+            "remedy [runtime_unavailable]",
+            runtimes=("claude",),
+        )
+        for event, tools in (
+            ("PreToolUse", ("Bash",)),
+            ("Stop", ("*",)),
+            ("SubagentStop", ("*",)),
+        )
+    ),
 )
 
 EventTool = tuple[str, str]
@@ -504,14 +523,17 @@ def is_wired(document: JsonObject, spec: HookSpec, tool: str) -> bool:
 
 
 def supported_tools(
-    spec: HookSpec, support: frozenset[EventTool] | None
+    spec: HookSpec,
+    support: frozenset[EventTool] | None,
+    runtime: str | None = None,
 ) -> tuple[str, ...]:
     """Инструменты `spec`, на которых runtime доставляет событие hook-а.
 
     Write и Edit считаются доставленными и тогда, когда runtime доставляет `apply_patch`, а hook
-    понимает его payload (`spec.apply_patch`).
+    понимает его payload (`spec.apply_patch`). Runtime `runtime`, которому hook не поставляется
+    (`spec.runtimes`), не получает ни одного инструмента.
     """
-    if support is None:
+    if support is None or (runtime is not None and runtime not in spec.runtimes):
         return ()
     patch = spec.apply_patch and (spec.event, "apply_patch") in support
     return tuple(

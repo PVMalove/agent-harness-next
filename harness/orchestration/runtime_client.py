@@ -93,8 +93,9 @@ _UNSAFE_DIRECTORY_REMEDY = (
     "then restart harness-runtime"
 )
 _NO_RUNTIME_REMEDY = (
-    "start the runtime with `harness-runtime serve --repo <repo>`; the coordinator never writes "
-    "state without it"
+    "start the runtime with `harness-runtime serve --repo <repo>` outside the agent sandbox; the "
+    "coordinator never writes state without it. In Claude Code the runtime-autostart hook starts "
+    "it: read its warning and the journal it names"
 )
 
 

@@ -550,6 +550,47 @@ def test_the_timeout_is_below_the_runtime_hook_timeout() -> None:
     assert 0 < advisory < hook_response.INNER_TIMEOUT_SECONDS
 
 
+def test_the_runtime_autostart_waits_longer_than_ensure_and_never_blocks() -> None:
+    # `harness-runtime ensure` waits up to 40 s for a runtime it started (ADR 0031, section 5).
+    assert 40 < hook_response.TIMEOUTS["runtime-autostart"] < 60
+    assert hook_response.HOOKS["runtime-autostart"] == ("runtime-autostart-failed", False)
+    assert hook_response.ACTIVE_PROFILES["runtime-autostart"] == hook_response.PROFILES
+    for profile in hook_response.PROFILES:
+        warned = hook_response.decide(
+            "runtime-autostart", profile, 0, "[runtime-autostart-failed] stale build\n"
+        )
+        assert (warned["decision"], warned["reason_code"]) == (
+            "warn",
+            "runtime-autostart-failed",
+        )
+
+
+@needs_bash
+def test_a_hook_with_its_own_timeout_is_cut_at_that_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import io
+
+    project = _project(tmp_path, {"profile": "standard"})
+    script = project / "inner.sh"
+    script.write_text("echo '{}'; sleep 2; exit 0", encoding="utf-8")
+    monkeypatch.setattr(hook_response, "ADVISORY_TIMEOUT_SECONDS", 20)
+    monkeypatch.setattr(hook_response, "TIMEOUTS", {"runtime-autostart": 0.5})
+    monkeypatch.setattr(hook_response, "project_root", lambda: project)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"payload")))
+
+    returned = hook_response.main(["run", "runtime-autostart", str(BASH), str(script)])
+
+    assert returned == 0
+    captured = capsys.readouterr()
+    verdict = parse_hook_response(captured.err)
+    assert (verdict["decision"], verdict["reason_code"]) == ("warn", "internal-error")
+    assert "тайм-аут" in str(verdict["remedy"])
+    assert captured.out == ""
+
+
 @needs_bash
 @pytest.mark.parametrize("hook_id", ADVISORY)
 @pytest.mark.parametrize(
