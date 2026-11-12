@@ -18,7 +18,7 @@ CLI = Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"
 FAKE_TOOL = """\
 import json, os, sys
 folder = os.environ["FAKE_TRACKER_DIR"]
-argv = [os.path.basename(sys.argv[0]), *sys.argv[1:]]
+argv = [os.path.splitext(os.path.basename(sys.argv[0]))[0], *sys.argv[1:]]
 with open(os.path.join(folder, "calls.jsonl"), "a", encoding="utf-8") as log:
     log.write(json.dumps(argv) + "\\n")
 line = " ".join(argv)
@@ -47,6 +47,13 @@ class Project:
         self.tools.mkdir()
         for name in ("gh", "glab"):
             tool = self.tools / name
+            if sys.platform == "win32":
+                script = self.tools / f"{name}.py"
+                script.write_text(FAKE_TOOL, encoding="utf-8", newline="\n")
+                tool.with_suffix(".cmd").write_text(
+                    f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8", newline=""
+                )
+                continue
             tool.write_text(f"#!{sys.executable}\n{FAKE_TOOL}", encoding="utf-8")
             tool.chmod(0o755)
         self.rules: list[dict[str, object]] = []

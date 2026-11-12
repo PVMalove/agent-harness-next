@@ -86,6 +86,7 @@ class PlanFixture(unittest.TestCase):
         (tests / "test_x.py").write_text(
             "import services.x\n\n\ndef test_value():\n    assert services.x.VALUE\n",
             encoding="utf-8",
+            newline="\n",
         )
         for arguments in (
             ("add", "-A"),

@@ -24,7 +24,7 @@ def planning() -> Iterator[Planning]:
     try:
         document = fixture.repo / "docs/adr/0030-server.md"
         document.parent.mkdir(parents=True)
-        document.write_text("# Server contract\nLoopback only.\n")
+        document.write_text("# Server contract\nLoopback only.\n", newline="\n")
         _git(fixture.repo, "add", "docs/adr/0030-server.md")
         _git(fixture.repo, "commit", "-m", "docs: server contract")
         _git(fixture.repo, "push", "origin", "master")

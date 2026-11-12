@@ -8,6 +8,7 @@ scripts/verify.py, `make test` and the diff-coverage gate never run them.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -58,6 +59,8 @@ def _selected(tmp_path: Path, *selection: str) -> list[str]:
             str(probe),
         ],
         cwd=tmp_path,
+        # The CI -vv in PYTEST_ADDOPTS turns the collection list into a tree without `::`.
+        env={k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"},
         capture_output=True,
         text=True,
         check=False,

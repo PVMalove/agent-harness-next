@@ -34,6 +34,8 @@ from harness.console.tui.screens import project_setup, update_harness
 from harness.console.tui.screens.configuration import _ADAPTER_STATUS
 from harness.json_types import JsonObject
 
+from ._posix import posix
+
 FIXTURES = Path(__file__).resolve().parents[1] / "web" / "fixtures"
 REPO = "/work/project"
 MASK = "••••••"
@@ -282,7 +284,7 @@ def _committed(name: str) -> JsonObject:
 
 def test_every_committed_fixture_and_facts_file_equals_the_rendered_one() -> None:
     for name, value in fixtures().items():
-        assert (FIXTURES / name).read_text(encoding="utf-8") == _text(value), (
+        assert (FIXTURES / name).read_text(encoding="utf-8") == _text(posix(value)), (
             f"{name} is out of date: run "
             "`python -m tests.console.test_web_fixture_project_update_config_help`"
         )

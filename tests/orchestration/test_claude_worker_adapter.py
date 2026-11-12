@@ -135,7 +135,9 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         prompt = claude_worker.build_prompt(
             brief, self.brief, self.repo, self.worktree, self.sha
         )
-        self.assertIn(f"{self.worktree}/.claude/hooks/test-author-preflight.sh", prompt)
+        self.assertIn(
+            str(Path(self.worktree) / ".claude" / "hooks" / "test-author-preflight.sh"), prompt
+        )
         self.assertIn(f"--worktree {self.worktree}", prompt)
         self.assertIn(f"--brief {self.brief}", prompt)
         self.assertIn("without model or effort overrides", prompt)

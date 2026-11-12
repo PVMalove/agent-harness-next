@@ -16,7 +16,7 @@ from harness.console.pin import CONSOLE_SERVER_REQUIREMENTS
 
 
 def test_server_dependencies_are_exact_dev_pins_only() -> None:
-    config = tomllib.loads((Path(__file__).parents[2] / "pyproject.toml").read_text())
+    config = tomllib.loads((Path(__file__).parents[2] / "pyproject.toml").read_text(encoding="utf-8"))
     assert config["project"]["dependencies"] == []
     assert set(CONSOLE_SERVER_REQUIREMENTS) <= set(config["dependency-groups"]["dev"])
 
@@ -41,6 +41,7 @@ def test_server_dependencies_are_exact_dev_pins_only() -> None:
 
 
 
+@pytest.mark.real_process
 @pytest.mark.skipif(sys.platform != "win32", reason="requires a real Windows ACL")
 def test_windows_discovery_has_protected_current_user_only_dacl(tmp_path: Path) -> None:
     from harness.console.kernel.discovery import discovery_path
