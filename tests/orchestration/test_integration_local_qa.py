@@ -479,6 +479,41 @@ class LocalQaContractTests(unittest.TestCase):
         self.assertIn("runtime store", result["remedy"])
         self.assertNotIn("QA environment", result["remedy"])
 
+    def checkout_root(self) -> JsonObject:
+        """The entries of the checkout root and the full Git status outside the harness state.
+
+        Local QA writes only its ledger records and its clean room under ``.harness``."""
+        status = _git(
+            self.branch.repo,
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--ignored",
+        )
+        return {
+            "root": sorted(path.name for path in self.branch.repo.iterdir()),
+            "status": [
+                line for line in status.splitlines() if ".harness/" not in line
+            ],
+        }
+
+    def test_local_qa_leaves_the_checkout_root_unchanged(self) -> None:
+        cases = (
+            ("passed", ["true"], "completed"),
+            ("failed", ["exit 2"], "unavailable"),
+        )
+        for name, preparation, state in cases:
+            with self.subTest(preparation=name):
+                self.configure(qa_preparation=preparation)
+                before = self.checkout_root()
+
+                result = coordinator.integration_local_qa(
+                    self.args(reason=f"No combined CI, preparation {name}")
+                )
+
+                self.assertEqual(result["state"], state)
+                self.assertEqual(self.checkout_root(), before)
+
     def test_public_cli_requires_ci_assertion_and_has_no_partial_command_option(
         self,
     ) -> None:
