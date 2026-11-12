@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Captured before the forced UTF-8 below so `harness health` can still warn about the console's
@@ -927,6 +928,43 @@ def baselined_seed_files(
     }
 
 
+FORCED_REASON = "перезаписан по флагу"
+SEED_BACKUP_REL = Path(".harness/.sandboxes/seed-backups")
+
+
+class SeedBackup:
+    """Каталог бэкапа seed-файлов одного запуска: создаётся при первой перезаписи, не раньше."""
+
+    def __init__(self, repo: Path) -> None:
+        self.repo = repo
+        self.directory: Path | None = None
+
+    def save(self, relative: str) -> None:
+        """Скопировать прежние байты seed-файла в бэкап; ошибка завершает команду до записи."""
+        try:
+            if self.directory is None:
+                root = self.repo / SEED_BACKUP_REL
+                stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+                candidate, number = root / stamp, 1
+                while candidate.exists():
+                    candidate, number = root / f"{stamp}-{number}", number + 1
+                candidate.mkdir(parents=True)
+                self.directory = candidate
+            target = self.directory / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.repo / relative, target)
+        except OSError as exc:
+            fail(
+                f"cannot back up seed file {relative} to {SEED_BACKUP_REL.as_posix()}: "
+                f"{exc}; the file was left unchanged"
+            )
+
+    def label(self) -> str:
+        """Путь каталога бэкапа от корня проекта для вывода."""
+        assert self.directory is not None
+        return self.directory.relative_to(self.repo).as_posix()
+
+
 class SeedInstall:
     """Один шаг seed в init/adopt/update: решение по каждому seed-файлу и его baseline в lock.
 
@@ -957,6 +995,25 @@ class SeedInstall:
                 + ", ".join(sorted(unknown))
             )
         self.differing: list[str] = []
+        self.backup = SeedBackup(repo)
+        # (path, reason) of every existing seed file this run overwrote after a backup.
+        self.replaced: list[tuple[str, str]] = []
+
+    def overwrite(self, relative: str, reason: str) -> None:
+        """Сделать бэкап существующего seed-файла перед его перезаписью."""
+        self.backup.save(relative)
+        self.replaced.append((relative, reason))
+
+    def report_replaced(self) -> None:
+        """Напечатать блок заменённых seed-файлов с каталогом бэкапа; пустой блок не печатается."""
+        if not self.replaced:
+            return
+        print(
+            "\n[INFO] Заменены seed-файлы, прежние байты сохранены в бэкапе: "
+            f"{self.backup.label()}"
+        )
+        for relative, reason in self.replaced:
+            print(f"  - {relative} ({reason})")
 
     def forced(self, relative: str) -> bool:
         """Перезаписывать ли файл: все seed-файлы разом или только выбранные по пути."""
@@ -973,6 +1030,7 @@ class SeedInstall:
             if not self.forced(relative):
                 self.differing.append(relative)
                 return None
+            self.overwrite(relative, FORCED_REASON)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         if executable:
@@ -990,7 +1048,7 @@ class SeedInstall:
 
 
 def _install_hook_config(
-    repo: Path, adapter: RuntimeAdapter, *, forced: bool, differing: list[str]
+    repo: Path, adapter: RuntimeAdapter, seeds: SeedInstall
 ) -> list[str]:
     """Записать или слить файл hooks runtime, напечатать отчёт и зарегистрировать интеграцию.
 
@@ -1003,7 +1061,9 @@ def _install_hook_config(
     written: list[str] = []
     recorded = recorded_managed_entries(repo, adapter.integration_id)
     baseline = set(template_digests(template_document)) | set(recorded or [])
-    if not target.exists() or forced:
+    if not target.exists() or seeds.forced(adapter.config):
+        if target.exists() and target.read_bytes() != template_bytes:
+            seeds.overwrite(adapter.config, FORCED_REASON)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(template_bytes)
         written.append(str(target))
@@ -1048,7 +1108,7 @@ def _install_hook_config(
                     "(заменит весь файл шаблоном)"
                 )
         if target.read_bytes() != template_bytes:
-            differing.append(adapter.config)
+            seeds.differing.append(adapter.config)
     try:
         final: object = json.loads(target.read_text(encoding="utf-8"))
     except JSON_READ_ERRORS:
@@ -1142,12 +1202,7 @@ def scaffold_engineering_extras(
 
     for adapter in ADAPTERS:
         written.extend(
-            _install_hook_config(
-                repo,
-                adapter,
-                forced=seeds.forced(adapter.config),
-                differing=seeds.differing,
-            )
+            _install_hook_config(repo, adapter, seeds)
         )
     written.append(str(repo / INTEGRATIONS_REL))
 
@@ -1203,6 +1258,7 @@ def scaffold_engineering_extras(
             written.append(orchestration_result)
 
     seeds.record()
+    seeds.report_replaced()
     if seeds.differing:
         print("\n[WARNING] Следующие сидируемые файлы отличаются от шаблонов upstream:")
         for relative in seeds.differing:

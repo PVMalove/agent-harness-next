@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
+import stat
 from pathlib import Path
 
 import pytest
@@ -107,3 +110,72 @@ def test_malformed_seed_baseline_fails_update_before_any_write(
     assert "seed_files" in result.stderr
     assert (repo / LOCK).read_bytes() == lock_before
     assert (repo / RULE).read_bytes() == OLD_BYTES
+
+
+BACKUPS = ".harness/.sandboxes/seed-backups"
+HOOK = ".claude/hooks/block-dangerous-git.sh"
+SETTINGS = ".claude/settings.local.json"
+
+
+def backup_dir(repo: Path) -> Path:
+    """The one backup directory of the run; its name is a UTC time without colons."""
+    (directory,) = (repo / BACKUPS).iterdir()
+    assert re.fullmatch(r"\d{8}T\d{6}Z(-\d+)?", directory.name), directory.name
+    return directory
+
+
+def test_force_seed_file_backs_up_a_modified_file_before_replacing_it(
+    repo: Path,
+) -> None:
+    template = (repo / RULE).read_bytes()
+    (repo / RULE).write_bytes(b"# local edit\n")
+
+    result = harness("update", str(repo), "--force-seed-file", RULE)
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / RULE).read_bytes() == template
+    directory = backup_dir(repo)
+    assert (directory / RULE).read_bytes() == b"# local edit\n"
+    assert directory.relative_to(repo).as_posix() in result.stdout
+    assert seed_files(repo)[RULE] == sha(template)
+
+
+@pytest.mark.parametrize("flag", ["--force-seed-files", "--force"])
+def test_force_flags_back_up_every_differing_seed_file(repo: Path, flag: str) -> None:
+    (repo / RULE).write_bytes(b"# local edit\n")
+    (repo / SETTINGS).write_text('{"permissions": {}}\n', encoding="utf-8")
+    unchanged = ".claude/rules/karpathy-guidelines.md"
+
+    result = harness("update", str(repo), flag)
+
+    assert result.returncode == 0, result.stderr
+    directory = backup_dir(repo)
+    assert (directory / RULE).read_bytes() == b"# local edit\n"
+    assert (directory / SETTINGS).read_text(encoding="utf-8") == '{"permissions": {}}\n'
+    assert not (directory / unchanged).exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX executable bit")
+def test_hook_backup_keeps_the_executable_bit(repo: Path) -> None:
+    (repo / HOOK).write_bytes(b"#!/bin/sh\necho local\n")
+    (repo / HOOK).chmod(0o755)
+
+    result = harness("update", str(repo), "--force-seed-file", HOOK)
+
+    assert result.returncode == 0, result.stderr
+    saved = backup_dir(repo) / HOOK
+    assert saved.read_bytes() == b"#!/bin/sh\necho local\n"
+    assert saved.stat().st_mode & stat.S_IXUSR
+    assert (repo / HOOK).stat().st_mode & stat.S_IXUSR
+
+
+def test_failed_backup_fails_the_command_and_keeps_the_file(repo: Path) -> None:
+    (repo / RULE).write_bytes(b"# local edit\n")
+    (repo / BACKUPS).parent.mkdir(parents=True, exist_ok=True)
+    (repo / BACKUPS).write_text("not a directory", encoding="utf-8")
+
+    result = harness("update", str(repo), "--force-seed-file", RULE)
+
+    assert result.returncode == 1
+    assert "back up" in result.stderr
+    assert (repo / RULE).read_bytes() == b"# local edit\n"
