@@ -9,8 +9,8 @@ already cut to text and tool names. Pure: the caller reads the journal and the l
 from __future__ import annotations
 
 import json
-from collections.abc import Collection, Iterable, Mapping
-from dataclasses import dataclass, replace
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 
 from ...kernel.json_fields import text
@@ -29,6 +29,71 @@ REPLY_BUDGET_BYTES = 48 * 1024
 # A live dispatch without a heartbeat or state change for this long is silent: two heartbeat
 # intervals of the worker contract.
 SILENT_AFTER_SECONDS = 600
+# Why an in-process dispatch has no step stream: it runs inside the coordinator session (#1015).
+IN_PROCESS_REASON = "in_process"
+# The newest checkpoints of an in-process dispatch a roster entry carries, so the roster reply
+# stays below `MESSAGE_LIMIT`; `checkpoint_count` says how many it recorded.
+MAX_CHECKPOINTS = 20
+
+
+@dataclass(frozen=True)
+class ObservedSelfReport:
+    """The model the worker reported for itself and whether it matched the assigned one."""
+
+    reported_model: str
+    match: bool
+    reported_at: str
+
+
+@dataclass(frozen=True)
+class ObservedCheckpoint:
+    checkpoint_id: str
+    commit_sha: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class InProcessObservation:
+    """What the ledger shows of an in-process worker, which has no step stream: the reason, its
+    latest heartbeat, its model self-report and the newest checkpoints it recorded."""
+
+    stream_reason: str
+    heartbeat_at: str
+    self_report: ObservedSelfReport | None
+    checkpoints: tuple[ObservedCheckpoint, ...]
+    checkpoint_count: int
+
+    def to_wire(self) -> dict[str, object]:
+        return {**asdict(self), "checkpoints": [asdict(item) for item in self.checkpoints]}
+
+
+def in_process_observation(
+    status: Mapping[str, object] | None, checkpoints: Sequence[Mapping[str, object]]
+) -> InProcessObservation:
+    """The observation of an in-process dispatch from its status record and the checkpoints it
+    recorded, oldest first."""
+    found = status or {}
+    report = found.get("model_self_report")
+    return InProcessObservation(
+        stream_reason=IN_PROCESS_REASON,
+        heartbeat_at=_clip(text(found.get("heartbeat_at")), ID_BYTES),
+        self_report=ObservedSelfReport(
+            reported_model=_clip(text(report.get("reported_model")), ID_BYTES),
+            match=report.get("match") is True,
+            reported_at=_clip(text(report.get("reported_at")), ID_BYTES),
+        )
+        if isinstance(report, Mapping)
+        else None,
+        checkpoints=tuple(
+            ObservedCheckpoint(
+                checkpoint_id=_clip(text(item.get("checkpoint_id")), ID_BYTES),
+                commit_sha=_clip(text(item.get("commit_sha")), ID_BYTES),
+                created_at=_clip(text(item.get("created_at")), ID_BYTES),
+            )
+            for item in checkpoints[-MAX_CHECKPOINTS:]
+        ),
+        checkpoint_count=len(checkpoints),
+    )
 
 
 @dataclass(frozen=True)
@@ -47,6 +112,9 @@ class RosterDispatch:
     started_at: str = ""
     last_event_at: str = ""
     silent: bool = False
+    # An in-process dispatch only, in any state: the ledger facts shown instead of its absent
+    # step stream.
+    observation: InProcessObservation | None = None
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -60,6 +128,9 @@ class RosterDispatch:
             "started_at": self.started_at,
             "last_event_at": self.last_event_at,
             "silent": self.silent,
+            "observation": None
+            if self.observation is None
+            else self.observation.to_wire(),
         }
 
 

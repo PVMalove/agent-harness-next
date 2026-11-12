@@ -197,12 +197,12 @@ export const ROSTER = [
   {
     dispatch_id: "dispatch-dev", batch_id: "batch-885", ticket: "#885", role: "developer", state: "working",
     batch_state: "active", branch: "feature/issue-885", started_at: "2026-11-05T10:00:00+00:00",
-    last_event_at: "2026-11-05T10:20:00+00:00", silent: false,
+    last_event_at: "2026-11-05T10:20:00+00:00", silent: false, observation: null,
   },
   {
     dispatch_id: "dispatch-rev", batch_id: "batch-885", ticket: "#885", role: "review", state: "working",
     batch_state: "active", branch: "feature/issue-885", started_at: "2026-11-05T10:05:00+00:00",
-    last_event_at: "2026-11-05T10:06:00+00:00", silent: true,
+    last_event_at: "2026-11-05T10:06:00+00:00", silent: true, observation: null,
   },
 ];
 

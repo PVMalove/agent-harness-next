@@ -12,6 +12,8 @@ from pathlib import Path
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from harness.orchestration.worker_observation import (
+    checkpoint_view,
+    dispatch_checkpoint_ids,
     external_log_path,
     read_plain_steps,
     read_structured_steps,
@@ -37,6 +39,26 @@ def read_worker_facts(repo: Path, dispatch_id: str) -> WorkerFacts | None:
         root / "dispatch-status" / f"{dispatch_id}.json"
     )
     return WorkerFacts(dispatch_id=dispatch_id, dispatch=dispatch, status=status)
+
+
+def read_worker_checkpoints(repo: Path, facts: WorkerFacts) -> list[Mapping[str, object]]:
+    batch_id = facts.dispatch.get("batch_id")
+    root = LifecycleLedger(repo / STATE_REL).records_root_lenient()
+    if root is None or not isinstance(batch_id, str) or not valid_dispatch_id(batch_id):
+        return []
+    batch = LifecycleLedger.read_record_lenient(root / "batches" / f"{batch_id}.json")
+    found: list[Mapping[str, object]] = []
+    for checkpoint_id in dispatch_checkpoint_ids(batch or {}, facts.dispatch_id):
+        record = (
+            LifecycleLedger.read_record_lenient(
+                root / "checkpoints" / f"{checkpoint_id}.json"
+            )
+            if valid_dispatch_id(checkpoint_id)
+            else None
+        )
+        if record is not None:
+            found.append(checkpoint_view(record))
+    return found
 
 
 def read_worker_log(

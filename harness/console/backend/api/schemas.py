@@ -647,9 +647,34 @@ class WorkerStepsReply(_Envelope):  # type: ignore[explicit-any]
     page: WorkerStepsPage
 
 
+class ObservedSelfReport(_Strict):  # type: ignore[explicit-any]
+    """The model an in-process worker reported for itself."""
+
+    reported_model: str
+    match: bool
+    reported_at: str
+
+
+class ObservedCheckpoint(_Strict):  # type: ignore[explicit-any]
+    checkpoint_id: str
+    commit_sha: str
+    created_at: str
+
+
+class InProcessObservation(_Strict):  # type: ignore[explicit-any]
+    """The ledger facts of an in-process worker, which has no step stream; `checkpoints` holds
+    the newest of the `checkpoint_count` it recorded."""
+
+    stream_reason: Literal["in_process"]
+    heartbeat_at: str
+    self_report: ObservedSelfReport | None
+    checkpoints: list[ObservedCheckpoint]
+    checkpoint_count: Annotated[int, Field(ge=0)]
+
+
 class RosterDispatch(_Strict):  # type: ignore[explicit-any]
     """A dispatch of the journal view; the timing is read for a live dispatch only ("" and
-    false otherwise)."""
+    false otherwise), and the observation for an in-process dispatch only (null otherwise)."""
 
     dispatch_id: str
     batch_id: str
@@ -661,6 +686,7 @@ class RosterDispatch(_Strict):  # type: ignore[explicit-any]
     started_at: str
     last_event_at: str
     silent: bool
+    observation: InProcessObservation | None
 
 
 class StepsRosterReply(_Envelope):  # type: ignore[explicit-any]

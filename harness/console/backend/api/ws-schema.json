@@ -1531,6 +1531,52 @@
       "title": "HomeSnapshotRequest",
       "type": "object"
     },
+    "InProcessObservation": {
+      "additionalProperties": false,
+      "description": "The ledger facts of an in-process worker, which has no step stream; `checkpoints` holds\nthe newest of the `checkpoint_count` it recorded.",
+      "properties": {
+        "checkpoint_count": {
+          "minimum": 0,
+          "title": "Checkpoint Count",
+          "type": "integer"
+        },
+        "checkpoints": {
+          "items": {
+            "$ref": "#/$defs/ObservedCheckpoint"
+          },
+          "title": "Checkpoints",
+          "type": "array"
+        },
+        "heartbeat_at": {
+          "title": "Heartbeat At",
+          "type": "string"
+        },
+        "self_report": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObservedSelfReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stream_reason": {
+          "const": "in_process",
+          "title": "Stream Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stream_reason",
+        "heartbeat_at",
+        "self_report",
+        "checkpoints",
+        "checkpoint_count"
+      ],
+      "title": "InProcessObservation",
+      "type": "object"
+    },
     "IntegrationPayload": {
       "additionalProperties": false,
       "description": "One adapter of the Harness page: Claude Code or Codex (`runtime`: adapter files of the\ninstalled capabilities, CLI on PATH) or the project tracker (`tracker`: CLI on PATH, null for\nlocal work); nothing is checked online.",
@@ -2103,6 +2149,55 @@
       "type": "object"
     },
     "JsonValue": {},
+    "ObservedCheckpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint_id": {
+          "title": "Checkpoint Id",
+          "type": "string"
+        },
+        "commit_sha": {
+          "title": "Commit Sha",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpoint_id",
+        "commit_sha",
+        "created_at"
+      ],
+      "title": "ObservedCheckpoint",
+      "type": "object"
+    },
+    "ObservedSelfReport": {
+      "additionalProperties": false,
+      "description": "The model an in-process worker reported for itself.",
+      "properties": {
+        "match": {
+          "title": "Match",
+          "type": "boolean"
+        },
+        "reported_at": {
+          "title": "Reported At",
+          "type": "string"
+        },
+        "reported_model": {
+          "title": "Reported Model",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reported_model",
+        "match",
+        "reported_at"
+      ],
+      "title": "ObservedSelfReport",
+      "type": "object"
+    },
     "OpenProjectSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
@@ -2957,7 +3052,7 @@
     },
     "RosterDispatch": {
       "additionalProperties": false,
-      "description": "A dispatch of the journal view; the timing is read for a live dispatch only (\"\" and\nfalse otherwise).",
+      "description": "A dispatch of the journal view; the timing is read for a live dispatch only (\"\" and\nfalse otherwise), and the observation for an in-process dispatch only (null otherwise).",
       "properties": {
         "batch_id": {
           "title": "Batch Id",
@@ -2978,6 +3073,16 @@
         "last_event_at": {
           "title": "Last Event At",
           "type": "string"
+        },
+        "observation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InProcessObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "role": {
           "title": "Role",
@@ -3010,7 +3115,8 @@
         "branch",
         "started_at",
         "last_event_at",
-        "silent"
+        "silent",
+        "observation"
       ],
       "title": "RosterDispatch",
       "type": "object"

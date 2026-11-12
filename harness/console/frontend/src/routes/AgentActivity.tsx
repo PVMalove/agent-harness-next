@@ -18,6 +18,7 @@ import {
   statusCounts,
 } from "../steps/ActivityViews";
 import type { SessionStatus } from "../steps/ActivityViews";
+import { InProcessPanel } from "../steps/InProcessPanel";
 import { SessionEvents } from "../steps/SessionEvents";
 import { StepFilters } from "../steps/StepFilters";
 import { StepList } from "../steps/StepList";
@@ -101,6 +102,7 @@ export function AgentActivity() {
             />
             <SessionRoute session={session} dispatches={live.dispatches} prState={prState} now={now} />
           </div>
+          <InProcessPanel session={session} />
           <SessionEvents session={session} />
           <StepList steps={filterSteps(steps, filter)} unavailable={live.orchestration === "unavailable"} />
           <DecisionPanel kinds={["native-permission"]} hideWhenEmpty />

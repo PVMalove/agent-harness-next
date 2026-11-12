@@ -14,7 +14,8 @@
         "branch": "feature/issue-885",
         "started_at": "",
         "last_event_at": "",
-        "silent": false
+        "silent": false,
+        "observation": null
       },
       {
         "dispatch_id": "dispatch-dev",
@@ -26,7 +27,8 @@
         "branch": "feature/issue-885",
         "started_at": "2026-11-05T10:00:00+00:00",
         "last_event_at": "2026-11-05T10:12:00+00:00",
-        "silent": false
+        "silent": false,
+        "observation": null
       },
       {
         "dispatch_id": "dispatch-rev",
@@ -38,7 +40,8 @@
         "branch": "feature/issue-885",
         "started_at": "2026-11-05T10:00:00+00:00",
         "last_event_at": "2026-11-05T10:12:00+00:00",
-        "silent": false
+        "silent": false,
+        "observation": null
       },
       {
         "dispatch_id": "dispatch-qa",
@@ -50,7 +53,8 @@
         "branch": "feature/issue-885",
         "started_at": "2026-11-05T10:00:00+00:00",
         "last_event_at": "2026-11-05T10:12:00+00:00",
-        "silent": false
+        "silent": false,
+        "observation": null
       },
       {
         "dispatch_id": "dispatch-qa-886",
@@ -62,7 +66,8 @@
         "branch": "feature/issue-886",
         "started_at": "2026-11-06T09:40:00+00:00",
         "last_event_at": "2026-11-06T10:05:00+00:00",
-        "silent": false
+        "silent": false,
+        "observation": null
       },
       {
         "dispatch_id": "dispatch-dev-887",
@@ -74,7 +79,8 @@
         "branch": "feature/issue-887",
         "started_at": "2026-11-06T09:50:00+00:00",
         "last_event_at": "2026-11-06T10:12:00+00:00",
-        "silent": false
+        "silent": false,
+        "observation": null
       },
       {
         "dispatch_id": "dispatch-rev-888",
@@ -86,7 +92,8 @@
         "branch": "feature/issue-888",
         "started_at": "2026-11-06T09:55:00+00:00",
         "last_event_at": "2026-11-06T10:02:00+00:00",
-        "silent": false
+        "silent": false,
+        "observation": null
       }
     ]
   },

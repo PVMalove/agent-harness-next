@@ -875,19 +875,16 @@ def observe_dispatch(args: argparse.Namespace) -> JsonObject:
 
 def _dispatch_checkpoints(root: Path, dispatch: JsonObject) -> list[JsonObject]:
     """The checkpoints this dispatch recorded, oldest first, as observe shows them."""
-    found: list[JsonObject] = []
-    for item in _load_batch(root, dispatch["batch_id"]).get("checkpoints", []):
-        if item.get("dispatch_id") != dispatch["dispatch_id"]:
-            continue
-        record = _load_checkpoint(root, item["checkpoint_id"])
-        found.append(
-            {
-                "checkpoint_id": record["checkpoint_id"],
-                "commit_sha": record.get("commit_sha"),
-                "created_at": record.get("created_at"),
-            }
-        )
-    return found
+    from harness.orchestration.worker_observation import (
+        checkpoint_view,
+        dispatch_checkpoint_ids,
+    )
+
+    batch = _load_batch(root, dispatch["batch_id"])
+    return [
+        checkpoint_view(_load_checkpoint(root, checkpoint_id))
+        for checkpoint_id in dispatch_checkpoint_ids(batch, dispatch["dispatch_id"])
+    ]
 
 
 def _events(
