@@ -16,7 +16,8 @@ RULES = ".claude/rules/token-efficiency.md"
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / RULES
     path.parent.mkdir(parents=True)
-    path.write_text("managed rule\n", encoding="utf-8")
+    # Bytes: on Windows `write_text` writes CRLF, and the file would no longer match the template.
+    path.write_bytes(b"managed rule\n")
     monkeypatch.setattr(
         data,
         "_packager",

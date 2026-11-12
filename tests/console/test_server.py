@@ -42,9 +42,10 @@ def test_server_dependencies_are_exact_dev_pins_only() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires a real Windows ACL")
-def test_windows_discovery_has_protected_current_user_only_dacl(project: Path) -> None:
+def test_windows_discovery_has_protected_current_user_only_dacl(tmp_path: Path) -> None:
     from harness.console.kernel.discovery import discovery_path
 
+    project = tmp_path
     async def scenario() -> None:
         server = ConsoleServer(project)
         await server.start()
