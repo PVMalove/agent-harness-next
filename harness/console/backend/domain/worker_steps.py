@@ -97,6 +97,11 @@ def select_source(facts: WorkerFacts) -> str:
     return "none"
 
 
+def in_process(facts: WorkerFacts) -> bool:
+    """An in-process worker runs inside the coordinator session and writes no step log."""
+    return facts.dispatch.get("resolved_transport") == "in-process"
+
+
 def no_log_page(dispatch_id: str, offset: int) -> StepsPage:
     return StepsPage(
         dispatch_id=dispatch_id,

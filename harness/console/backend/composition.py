@@ -84,7 +84,11 @@ from .infrastructure.screen_facts import (
     update_harness_facts,
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
-from .infrastructure.worker_steps import read_worker_facts, read_worker_log
+from .infrastructure.worker_steps import (
+    read_worker_checkpoints,
+    read_worker_facts,
+    read_worker_log,
+)
 
 
 def snapshot_service(
@@ -264,6 +268,7 @@ def worker_steps_query(
         repo,
         facts=read_worker_facts,
         log=read_worker_log,
+        checkpoints=read_worker_checkpoints,
         poll_seconds=poll_seconds,
     )
 
@@ -283,6 +288,7 @@ def live_steps(
         live_states={state.value for state in LIVE_DISPATCH_STATES},
         poll_seconds=poll_seconds,
         timing=workers.timing,
+        observation=workers.observation,
     )
 
 

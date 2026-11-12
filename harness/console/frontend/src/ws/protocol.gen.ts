@@ -256,6 +256,16 @@ export type BatchState = string;
 export type Branch = string;
 export type DispatchId2 = string;
 export type LastEventAt = string;
+export type CheckpointCount = number;
+export type CheckpointId = string;
+export type CommitSha = string;
+export type CreatedAt = string;
+export type Checkpoints = ObservedCheckpoint[];
+export type HeartbeatAt = string;
+export type Match = boolean;
+export type ReportedAt = string;
+export type ReportedModel = string;
+export type StreamReason = "in_process";
 export type Role1 = string;
 export type Silent = boolean;
 export type StartedAt = string;
@@ -912,7 +922,7 @@ export interface StepsRosterReply {
 }
 /**
  * A dispatch of the journal view; the timing is read for a live dispatch only ("" and
- * false otherwise).
+ * false otherwise), and the observation for an in-process dispatch only (null otherwise).
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "RosterDispatch".
@@ -923,11 +933,46 @@ export interface RosterDispatch {
   branch: Branch;
   dispatch_id: DispatchId2;
   last_event_at: LastEventAt;
+  observation: InProcessObservation | null;
   role: Role1;
   silent: Silent;
   started_at: StartedAt;
   state: State2;
   ticket: Ticket;
+}
+/**
+ * The ledger facts of an in-process worker, which has no step stream; `checkpoints` holds
+ * the newest of the `checkpoint_count` it recorded.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "InProcessObservation".
+ */
+export interface InProcessObservation {
+  checkpoint_count: CheckpointCount;
+  checkpoints: Checkpoints;
+  heartbeat_at: HeartbeatAt;
+  self_report: ObservedSelfReport | null;
+  stream_reason: StreamReason;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ObservedCheckpoint".
+ */
+export interface ObservedCheckpoint {
+  checkpoint_id: CheckpointId;
+  commit_sha: CommitSha;
+  created_at: CreatedAt;
+}
+/**
+ * The model an in-process worker reported for itself.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ObservedSelfReport".
+ */
+export interface ObservedSelfReport {
+  match: Match;
+  reported_at: ReportedAt;
+  reported_model: ReportedModel;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema

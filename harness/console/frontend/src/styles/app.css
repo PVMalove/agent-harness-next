@@ -307,6 +307,12 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 @media (prefers-reduced-motion: reduce) {
   .work-flow-node.current, .work-flow-node.current .work-flow-icon, .work-flow-edge.active::after { animation: none; }
 }
+/* Agent activity (#1051): an in-process worker's ledger facts in place of its absent event stream. */
+.work-observation-reason, .work-observation-title, .work-observation-facts, .work-observation-checkpoints { margin: 0; padding: 0 16px 12px; }
+.work-observation-title { font-size: var(--fs-1); }
+.work-observation-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+.work-observation-facts dd { margin: 0; }
+.work-observation-checkpoints { list-style: none; display: grid; gap: 4px; font: var(--fs-1) var(--mono); }
 /* Orchestration (#1066): long lists scroll inside their block; chart rows fit long role names. */
 #orch-dispatch-list, .orch-tickets { max-height: min(480px, calc(100dvh - 240px)); overflow-y: auto; }
 .orch-analytics .orch-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 40px; }

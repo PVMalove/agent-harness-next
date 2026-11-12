@@ -282,6 +282,16 @@ class WorkerFactsReader(Protocol):
     def __call__(self, repo: Path, dispatch_id: str, /) -> WorkerFacts | None: ...
 
 
+class CheckpointsReader(Protocol):
+    """The checkpoints the dispatch of ``facts`` recorded, oldest first, each with
+    ``checkpoint_id``, ``commit_sha`` and ``created_at``; read without the ledger lock, a missing or
+    malformed record is skipped. Blocks until read and never writes."""
+
+    def __call__(
+        self, repo: Path, facts: WorkerFacts, /
+    ) -> Sequence[Mapping[str, object]]: ...
+
+
 class StepsLogReader(Protocol):
     """One page of the worker log of ``source`` (``structured`` or ``plain``) from a byte
     offset, whose steps take at most ``budget`` bytes as JSON. Opens the log for reading and stats it

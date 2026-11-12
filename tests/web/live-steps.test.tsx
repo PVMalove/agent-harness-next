@@ -17,7 +17,7 @@ import {
 import TIMELINE from "./fixtures/reports-timeline.json";
 import ORCH from "./fixtures/orch-snapshot.json";
 
-function renderActivity() {
+function renderActivity(dispatches: unknown = ROSTER) {
   window.location.hash = "#/agent-activity";
   const client = createConsoleClient({
     url: "ws://127.0.0.1:1/ws",
@@ -33,7 +33,7 @@ function renderActivity() {
   const socket = FakeSocket.last;
   act(() => socket.open());
   const id = socket.request("steps.subscribe").id;
-  act(() => socket.reply(rosterReply(id)));
+  act(() => socket.reply(rosterReply(id, true, dispatches)));
   act(() => socket.reply(stepsReply(id, [ORCHESTRATION_STEP, AGENT_STEP, CODEX_STEP])));
   return { socket, id };
 }
@@ -43,6 +43,93 @@ const rows = () => [...list().querySelectorAll(".work-event")].map((row) => row.
 
 describe("the agent activity route", () => {
   beforeEach(() => FakeSocket.reset());
+
+  test("shows why an in-process worker has no steps, with its heartbeat, self-report and checkpoints", () => {
+    const observation = {
+      stream_reason: "in_process",
+      heartbeat_at: "2026-11-05T10:20:00+00:00",
+      self_report: { reported_model: "claude-opus-5-5", match: true, reported_at: "2026-11-05T10:01:00+00:00" },
+      checkpoints: [{ checkpoint_id: "cp-1", commit_sha: "1111111aaaa2222", created_at: "2026-11-05T10:12:00+00:00" }],
+      checkpoint_count: 1,
+    };
+
+    renderActivity([{ ...ROSTER[0], observation }, ROSTER[1]]);
+
+    const panel = document.querySelector("#work-observation") as HTMLElement;
+    expect(
+      within(panel).getByText(
+        "In-process воркер работает внутри сессии coordinator и не отдаёт поток событий. " +
+          "Ход работы виден по heartbeat, self-report модели и чекпоинтам.",
+      ),
+    ).toBeTruthy();
+    expect(within(panel).getByText("05.11.2026 10:20 UTC")).toBeTruthy();
+    expect(within(panel).getByText("claude-opus-5-5")).toBeTruthy();
+    expect(within(panel).getByText("совпадает с назначенной")).toBeTruthy();
+    const checkpoint = panel.querySelector("[data-checkpoint='cp-1']") as HTMLElement;
+    expect(within(checkpoint).getByText("1111111")).toBeTruthy();
+    expect(within(checkpoint).getByText("05.11.2026 10:12 UTC")).toBeTruthy();
+    expect(within(panel).queryByText(/Показаны последние/)).toBeNull();
+  });
+
+  test("tells an in-process worker without a self-report or checkpoints apart from a mismatched one", () => {
+    const quiet = {
+      stream_reason: "in_process",
+      heartbeat_at: "",
+      self_report: null,
+      checkpoints: [],
+      checkpoint_count: 0,
+    };
+
+    renderActivity([{ ...ROSTER[0], observation: quiet }, ROSTER[1]]);
+
+    const panel = document.querySelector("#work-observation") as HTMLElement;
+    expect(within(panel).getByText("—")).toBeTruthy();
+    expect(within(panel).getByText("ещё не отправлен")).toBeTruthy();
+    expect(within(panel).getByText("Чекпоинтов пока нет.")).toBeTruthy();
+  });
+
+  test("marks a self-report of another model and says how many checkpoints are left out", () => {
+    const checkpoints = Array.from({ length: 20 }, (_, index) => ({
+      checkpoint_id: `cp-${index + 6}`,
+      commit_sha: "abcdef0123",
+      created_at: "2026-11-05T10:12:00+00:00",
+    }));
+    const observation = {
+      stream_reason: "in_process",
+      heartbeat_at: "2026-11-05T10:20:00+00:00",
+      self_report: { reported_model: "claude-sonnet-5-5", match: false, reported_at: "2026-11-05T10:01:00+00:00" },
+      checkpoints,
+      checkpoint_count: 25,
+    };
+
+    renderActivity([{ ...ROSTER[0], observation }, ROSTER[1]]);
+
+    const panel = document.querySelector("#work-observation") as HTMLElement;
+    expect(within(panel).getByText("не совпадает с назначенной")).toBeTruthy();
+    expect(panel.querySelectorAll("[data-checkpoint]")).toHaveLength(20);
+    expect(within(panel).getByText("Показаны последние 20 из 25.")).toBeTruthy();
+  });
+
+  test("shows a stream reason it has no text for as the server sent it", () => {
+    const observation = {
+      stream_reason: "future_reason",
+      heartbeat_at: "",
+      self_report: null,
+      checkpoints: [],
+      checkpoint_count: 0,
+    };
+
+    renderActivity([{ ...ROSTER[0], observation }, ROSTER[1]]);
+
+    const panel = document.querySelector("#work-observation") as HTMLElement;
+    expect(within(panel).getByText("future_reason")).toBeTruthy();
+  });
+
+  test("shows no in-process panel for a worker with an event stream", () => {
+    renderActivity();
+
+    expect(document.querySelector("#work-observation")).toBeNull();
+  });
 
   test("shows agent and orchestration steps of one feed without a reload", () => {
     const { socket, id } = renderActivity();
