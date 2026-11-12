@@ -26,6 +26,7 @@ from harness.orchestration import coordinator, qa_lane
 from harness.orchestration.contract import ticket_diff_plan_commands
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger import LifecycleLedger
+from harness.orchestration.ledger.lifecycle import LedgerError
 from harness.orchestration.workflow import integration, local_qa
 from tests.orchestration import runtime_store_support as support
 from tests.orchestration import test_verification_plan_dispatch as plan_dispatch
@@ -421,6 +422,62 @@ class LocalQaContractTests(unittest.TestCase):
             self.assertFalse(thread.is_alive())
             self.assertEqual(errors, [])
             self.assertEqual(results[0]["state"], "completed")
+
+    def configure(self, **changes: object) -> None:
+        """An authored orchestration config with the fixture's gate and ``changes``."""
+        config: JsonObject = {
+            "provider_profiles": {},
+            "assignment_plans": {},
+            "concurrency_budget": 1,
+            "verification_commands": ["true"],
+            **changes,
+        }
+        (self.branch.repo / ".harness/orchestration.json").write_text(
+            json.dumps(config), encoding="utf-8"
+        )
+
+    def test_a_passed_preparation_precedes_the_gate_in_one_verified_log(
+        self,
+    ) -> None:
+        self.configure(qa_preparation=["true"])
+
+        result = coordinator.integration_local_qa(self.args())
+
+        self.assertEqual(
+            (result["state"], result["verification"]), ("completed", "verified")
+        )
+        self.assertEqual(
+            [stage["stage"] for stage in result["qa_stages"]["stages"]],
+            ["preparation", "gate"],
+        )
+
+    def test_a_failed_preparation_is_an_environment_preparation_failure(
+        self,
+    ) -> None:
+        self.configure(qa_preparation=['sh -c "exit 2"'])
+
+        result = coordinator.integration_local_qa(self.args())
+
+        self.assertEqual(result["state"], "unavailable")
+        self.assertEqual(result["stage"], "environment-preparation")
+        self.assertEqual((result["checks_run"], result["findings"]), ([], []))
+        stages = result["qa_stages"]
+        self.assertEqual(stages["failed_stage"], "preparation")
+        self.assertEqual(stages["code_checks_started"], "not_started")
+        self.assertIn("diagnosis", stages)
+        self.assertIn("QA environment", result["remedy"])
+        self.assertTrue(Path(result["artifact"]).is_file())
+
+    def test_an_unwritable_log_is_an_artifact_persistence_failure(self) -> None:
+        refusal = LedgerError("the store refused the artifact", remedy="restore it")
+        with mock.patch.object(LifecycleLedger, "write_artifact", side_effect=refusal):
+            result = coordinator.integration_local_qa(self.args())
+
+        self.assertEqual(result["state"], "unavailable")
+        self.assertEqual(result["stage"], "artifact-persistence")
+        self.assertEqual(result["checks_run"][0]["result"], "pass")
+        self.assertIn("runtime store", result["remedy"])
+        self.assertNotIn("QA environment", result["remedy"])
 
     def test_public_cli_requires_ci_assertion_and_has_no_partial_command_option(
         self,

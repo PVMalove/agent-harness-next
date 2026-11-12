@@ -10,18 +10,22 @@ from pathlib import Path
 
 from harness.storage import storage_path
 from harness.gate_runner.gate_runner import (
+    QA_STAGE_GATE,
+    QA_STAGE_PREPARATION,
     CleanRoomPolicy,
     EvidenceContext,
     GateResult,
     GateRunnerError,
     parse_command_log,
     run_gate,
+    run_qa_stages,
     sanitise,
 )
 from harness.orchestration.core import utils
 from harness.orchestration.core.config import (
     _attention_policy,
     _config,
+    _qa_preparation_commands,
     _verification_commands,
 )
 from harness.orchestration.core.config import _execution_policy, _lease_ttl
@@ -205,6 +209,23 @@ def _valid_result(root: Path, result: JsonObject, written: str | None = None) ->
     if hashlib.sha256(contents).hexdigest() != checksum:
         return False
     logs = parse_command_log(contents.decode("utf-8").splitlines())
+    stages = result.get("qa_stages")
+    if stages is not None:
+        # A run with preparation logs every stage: the preparation, then the gate commands.
+        recorded = [
+            (stage.get("executed_command", stage["command"]), stage["exit_code"])
+            for stage in stages["stages"]
+        ]
+        gated = [
+            stage["command"]
+            for stage in stages["stages"]
+            if stage["stage"] == QA_STAGE_GATE
+        ]
+        return (
+            logs == recorded
+            and gated == commands
+            and all(code == 0 for _, code in logs)
+        )
     return len(logs) == len(commands) and all(code == 0 for _, code in logs)
 
 
@@ -342,6 +363,15 @@ def _start_attempt(
     return document
 
 
+# The remedy of an operational stage whose failure is not the candidate's: each names its own cause.
+STAGE_REMEDIES = {
+    "environment-preparation": "fix the QA environment named in qa_stages.diagnosis (the "
+    "preparation failed before any check ran), then repeat local QA with --retry",
+    "artifact-persistence": "restore access to the runtime store or the ledger that refused "
+    "the QA evidence, then repeat local QA with --retry",
+}
+
+
 def _unavailable(
     ledger: LifecycleLedger,
     root: Path,
@@ -351,6 +381,7 @@ def _unavailable(
     stage: str,
     gate: GateResult | None = None,
     access: JsonObject | None = None,
+    qa_stages: JsonObject | None = None,
 ) -> JsonObject:
     """Retain operational evidence separately from deterministic findings; no retry loop."""
     details: JsonObject = {
@@ -367,7 +398,11 @@ def _unavailable(
     if access is not None:
         # The structured refusal and its remedy are operational evidence, never a finding.
         details["access"] = access
-        details["remedy"] = sanitise(getattr(failure, "remedy", ""))
+    if qa_stages is not None:
+        details["qa_stages"] = qa_stages
+    remedy = STAGE_REMEDIES.get(stage) or getattr(failure, "remedy", "")
+    if remedy:
+        details["remedy"] = sanitise(remedy)
     details["local_qa_id"] = IntegrationLocalQaRecord.derive_id(
         {
             "request_id": request_id,
@@ -611,17 +646,60 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             qa_lane.release(ledger, claimed)
             raise
     gate: GateResult | None = None
+    stages: JsonObject | None = None
     stage = "gate-run"
     try:
+        config = _config(repo)
+        preparation = _qa_preparation_commands(config)
+        policy = CleanRoomPolicy(repo, pair["candidate_sha"])
+        context = _evidence_context(
+            repo, pair["candidate_sha"], request.get("verification_plan")
+        )
         with qa_lease.heartbeat(ledger, claimed, seconds):
-            gate = run_gate(
-                [command for command in commands],
-                CleanRoomPolicy(repo, pair["candidate_sha"]),
-                stop_on_failure=True,
-                evidence=_evidence_context(
-                    repo, pair["candidate_sha"], request.get("verification_plan")
-                ),
-            )
+            if preparation:
+                # As in ``qa run``: the preparation runs in the same checkout before the gate.
+                staged = run_qa_stages(
+                    preparation,
+                    commands,
+                    policy,
+                    environment_probes=_qa_preparation_commands(
+                        config, "qa_environment_probes"
+                    ),
+                    project_file_checks=_qa_preparation_commands(
+                        config, "qa_project_file_checks"
+                    ),
+                    evidence=context,
+                )
+                stages = staged.record()
+                gate = GateResult(
+                    staged.gate_checks,
+                    staged.artifact,
+                    staged.duration_seconds,
+                    staged.evidence,
+                )
+                if staged.failed_stage == QA_STAGE_PREPARATION:
+                    stage = "environment-preparation"
+                    with _ledger_lock(ledger):
+                        return _unavailable(
+                            ledger,
+                            root,
+                            request_id,
+                            started,
+                            CoordinatorError(
+                                "the QA environment preparation failed before any check ran",
+                                remedy=STAGE_REMEDIES[stage],
+                            ),
+                            stage,
+                            gate,
+                            qa_stages=stages,
+                        )
+            else:
+                gate = run_gate(
+                    [command for command in commands],
+                    policy,
+                    stop_on_failure=True,
+                    evidence=context,
+                )
         stage = "artifact-persistence"
         log = gate.artifact
         # As in ``qa run``: in the store epoch the log and its stage evidence are written in a
@@ -646,6 +724,7 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             "verification": EvidenceVerification.UNVERIFIED,
             "observed_before_run": observed,
             "attempt": started["attempt"],
+            **({} if stages is None else {"qa_stages": stages}),
             "findings": [
                 {
                     "severity": "blocker",
@@ -671,7 +750,9 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
         if isinstance(exc, GateRunnerError) and exc.partial_result is not None:
             gate = exc.partial_result
         with _ledger_lock(ledger):
-            return _unavailable(ledger, root, request_id, started, exc, stage, gate)
+            return _unavailable(
+                ledger, root, request_id, started, exc, stage, gate, qa_stages=stages
+            )
     finally:
         with _ledger_lock(ledger):
             qa_lane.release(ledger, claimed)
