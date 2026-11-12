@@ -25,6 +25,11 @@ reconcile и не запускает второй процесс, если об�
 python3 .harness/orchestration/coordinator.py --repo . runtime status
 ```
 
+Serve, запущенный hook-ом `runtime-autostart` (`serve --owner-session`), — «свой»: он хранит
+владельцев (`runtime.attach`, `runtime.release`) и сам завершается кодом 0, когда владельцев нет,
+соединений нет и store простаивает. Ручной serve сам не останавливается
+([автозапуск runtime](../guides/orchestration/operations.md#runtime-autostart), ADR 0031).
+
 ## Store
 
 Operational state — SQLite WAL с короткими транзакциями и без внешних вызовов внутри транзакции.
@@ -114,6 +119,7 @@ Python по этому наблюдению: runtime никогда не пиш�
 | 0023 | Инкрементальные проверки |
 | 0025 | Встроенный контейнерный исполнитель |
 | 0026 | Консолидация Harness Next и Release Gate |
+| 0031 | Автозапуск `harness-runtime serve` на время `/implement` |
 
 ## Дальше
 

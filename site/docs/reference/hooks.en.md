@@ -51,6 +51,7 @@ These checks block in every profile, including `minimal`:
 | `impact-first-touch.sh` | `PreToolUse(Write, Edit)` | Nothing: warns about the first touch of a path whose impact is not computed from the graph |
 | `sensitive-path-recheck.sh` | `PreToolUse(Write, Edit)` | Nothing: in `strict`, reports every edit of a sensitive path and writes an evidence record |
 | `targeted-check-reminder.sh` | `PreToolUse(Write, Edit)`, `Stop`, `SubagentStop` | Nothing: in `standard` and `strict`, reminds to report targeted checks if files changed after the report |
+| `runtime-autostart.sh` | `PreToolUse(Bash)`, `Stop`, `SubagentStop` (Claude Code only) | Nothing: before a coordinator command, starts or reuses `harness-runtime serve`; at the end of a turn, releases the owner; a failure is a warning with the cause and the journal |
 | `count-skill-usage.sh` | `PreToolUse(Skill)` | Nothing: counts how often skills are called |
 | `mark-qa-gate-passed.sh` | `PostToolUse(Bash)` | Nothing: records a QA pass marker for direct command runs |
 

@@ -25,6 +25,7 @@ of the project; the profile does not turn critical guards off.
 | [require-bounded-check](require-bounded-check.md) | `PreToolUse(Bash)` | Bounded output of a full test run through the `test_summary.py` wrapper. |
 | [targeted-check-reminder](targeted-check-reminder.md) | `PreToolUse(Write/Edit)`, `Stop`, `SubagentStop` | A reminder at the end of a role turn to read back the targeted checks of the brief. |
 | [run-test](run-test.md) | a script, not a hook | An isolated run of one selected test in bubblewrap. |
+| [runtime-autostart](../guides/orchestration/operations.md#runtime-autostart) | `PreToolUse(Bash)`, `Stop`, `SubagentStop` | Claude Code only: starts `harness-runtime serve` before a coordinator command and releases it at the end of a turn (ADR 0031). |
 
 ## Policy and risky paths
 

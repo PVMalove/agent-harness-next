@@ -373,6 +373,36 @@ the lock. If the lock could not be released after the record was written, a seco
 does not detect a record replaced together with its checksum, or a deleted file. In the console, the same action is
 the command "Release ledger lock" with a confirmation.
 
+## Runtime autostart {#runtime-autostart}
+
+In Claude Code, the `runtime-autostart` hook starts `harness-runtime serve` (ADR 0031), not the
+developer and not the agent. The hook runs outside the agent sandbox, so serve can reach Docker.
+
+- **Start.** Before every `.harness/orchestration/coordinator.py` command, the hook calls
+  `harness-runtime ensure` for the main checkout. If no runtime answers, ensure starts its own serve
+  and waits up to 40 s until it is ready; the developer sees a message with the pid and the journal.
+- **Reuse.** A running serve, started by hand or by another session, is reused silently; no second
+  instance starts.
+- **Owners.** An own serve keeps its owners: the session (`<session_id>`) and subagents
+  (`<session_id>/<agent_id>`). `Stop` and `SubagentStop` release the owner. An owner also leaves when
+  the Claude Code process (`CLAUDE_PID`) ended or the owner was not renewed for an hour (TTL).
+- **Stop.** An own serve stops itself when no owner is left, no connection is open and the store is
+  idle: no dispatch in `dispatched` or `working`, no held QA lease, no QA queue and no unfinished
+  execution. A store that cannot be read counts as busy. A manual serve never stops by itself.
+- **Journal.** `<runtime directory>/<repo-id>.serve.log` (mode `0600`); the hook message names it.
+- **Stale build.** The hook starts only `native/harness-runtime/target/release/harness-runtime` that
+  is fresh by the dep-info `harness-runtime.d`, `Cargo.lock` and `Cargo.toml`. It never starts a
+  stale build: it only attaches to a running serve and otherwise warns that the build is stale.
+  Rebuild with `cargo build --release --manifest-path native/harness-runtime/Cargo.toml`.
+- **Environment.** Serve gets the environment of Claude Code without the variables the application
+  adds only for hooks (`CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_PROJECT_DIR` and the others of ADR 0031).
+- **Failure.** A serve refusal (exit code 2), a timeout, a missing binary or the sandbox give the
+  warning `[runtime-autostart-failed]` with the cause and the journal. The hook never blocks.
+
+Codex and Windows get no autostart: start `harness-runtime serve --repo <repo>` by hand outside the
+agent sandbox. The remedy of the `[runtime_unavailable]` error says the same. The hook reaches a
+project with `harness update`, which a person runs.
+
 ## Lifecycle writes in the runtime store epoch {#lifecycle-writes-in-the-runtime-store-epoch}
 
 After `harness-runtime migrate` (`ledger.json` version 4), the Rust runtime accepts every batch and dispatch
