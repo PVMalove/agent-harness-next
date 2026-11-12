@@ -94,7 +94,8 @@ def _project(repo: Path) -> Path:
             }
         )
         + "\n"
-        + '{"type": "unknown", "raw": "RAW-SECRET"}\n'
+        + '{"type": "unknown", "raw": "RAW-SECRET"}\n',
+        encoding="utf-8",
     )
     plain = repo / ".harness/.sandboxes/scratch/worker-logs/dispatch-p.log"
     plain.parent.mkdir(parents=True)
@@ -102,7 +103,8 @@ def _project(repo: Path) -> Path:
         "codex\nПроверяю тесты\n"
         "thinking\nPLAIN-THINK\n"
         "exec\nbash -lc PLAIN-INPUT\n"
-        'codex\n{"raw": "RAW-SECRET"}\n'
+        'codex\n{"raw": "RAW-SECRET"}\n',
+        encoding="utf-8",
     )
     for dispatch_id in ("dispatch-s", "dispatch-p"):
         (root / "dispatches" / f"{dispatch_id}.json").write_text(

@@ -131,9 +131,11 @@ def test_local_git_reads_remote_tracking_refs_only() -> None:
     local = LocalGit(Path("/repo"), run)
     assert local.tip("feature/a") == "abc1234"
     assert local.is_ancestor("base000", "abc1234") is False
+    # The checkout as the platform spells it: `\\repo` on Windows.
+    repo = str(Path("/repo"))
     assert calls == [
-        ["git", "-C", "/repo", "rev-parse", "--verify", "--quiet", "refs/remotes/origin/feature/a"],
-        ["git", "-C", "/repo", "merge-base", "--is-ancestor", "base000", "abc1234"],
+        ["git", "-C", repo, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/feature/a"],
+        ["git", "-C", repo, "merge-base", "--is-ancestor", "base000", "abc1234"],
     ]
     assert local.tip("--all") is None and local.is_ancestor("-x", "y") is None
     assert LocalGit(Path("/repo"), lambda argv: None).tip("feature/a") is None
