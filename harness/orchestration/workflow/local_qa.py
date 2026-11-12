@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import re
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 from harness.storage import storage_path
 from harness.gate_runner.gate_runner import (
     CleanRoomPolicy,
+    EvidenceContext,
     GateResult,
     GateRunnerError,
     parse_command_log,
@@ -23,7 +25,8 @@ from harness.orchestration.core.config import (
     _verification_commands,
 )
 from harness.orchestration.core.config import _execution_policy, _lease_ttl
-from harness.orchestration import operation_access, qa_lane, qa_lease
+from harness.orchestration import operation_access, qa_lane, qa_lease, verification_plan
+from harness.orchestration.contract import ticket_diff_plan_commands
 from harness.orchestration.core.constants import (
     INTEGRATION_SHA_PATTERN,
     LOCAL_QA_CI_CONDITIONS,
@@ -48,6 +51,7 @@ from harness.orchestration.core.utils import (
 )
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
+    _load_batch,
     _records_root,
     _write_record,
 )
@@ -59,6 +63,7 @@ from harness.orchestration.ledger.lifecycle import (
 )
 from harness.orchestration.runtime_client import RuntimeClientError
 from harness.orchestration.workflow import integration, pr_refresh, release_gate
+from harness.repo_map.policy import policy_from_section as repo_map_policy_from_section
 
 
 def _path(root: Path, record_id: str) -> Path:
@@ -93,6 +98,47 @@ def _observe_pair(
             remedy="refresh and publish the current pair before local QA",
         )
     return {"remote_branch_sha": branch, "integration_tip": target}
+
+
+def _pair_plan(
+    repo: Path, root: Path, ledger: LifecycleLedger, record: JsonObject, pair: JsonObject
+) -> tuple[str, JsonObject | None]:
+    """The QA selection the recorded pair requires and, for ``ticket-diff``, the plan of the
+    ticket's diff built from the source batch's frozen policy, as ``qa`` dispatches build it.
+
+    Call it inside the ledger lock: the pair record is read from the bound view."""
+    selection = release_gate.pair_selection(
+        ledger, pair["candidate_sha"], pair["target_sha"]
+    )
+    if selection != release_gate.SELECTION_TICKET_DIFF:
+        return selection, None
+    identity = record["identity"]
+    batch = _load_batch(root, identity["source_batch_id"])
+    plan = verification_plan.build_plan(
+        repo,
+        batch["verification_plan_policy"],
+        base=pair["target_sha"],
+        candidate=pair["candidate_sha"],
+        role="qa",
+        repo_map_policy=repo_map_policy_from_section(
+            batch.get("repo_map_policy") or {}
+        ),
+        integration_ref=identity["integration_ref"],
+    )
+    return selection, plan
+
+
+def _evidence_context(
+    repo: Path, candidate: str, plan: JsonObject | None
+) -> EvidenceContext:
+    """The stage evidence of a local QA run describes the stages of its plan by selection.
+
+    A local QA run has no brief, so its stages pin no plan digest: the runtime judges a local-QA
+    run against no pinned plan, and the request pins the plan instead."""
+    context = qa_lane.evidence_context(
+        repo, candidate, None if plan is None else {"verification_plan": plan}
+    )
+    return dataclasses.replace(context, plan_sha256=None)
 
 
 def _result_id(request_id: str) -> str:
@@ -394,16 +440,22 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             "local QA requires a non-empty bounded CI reason",
             remedy="pass --reason with at most 1600 characters",
         )
-    commands = _verification_commands(_config(repo))
-    if not commands:
-        raise CoordinatorError(
-            "local QA requires full project verification_commands",
-            remedy="configure the full QA gate before requesting local QA",
-        )
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         record = integration._load_record(root, args.record)
         pair = pr_refresh.current_pair(root, record)
+        selection, plan = _pair_plan(repo, root, ledger, record, pair)
+        commands = (
+            ticket_diff_plan_commands(plan)
+            if plan is not None
+            else _verification_commands(_config(repo))
+        )
+        if not commands:
+            raise CoordinatorError(
+                "local QA requires the verification commands of its pair",
+                remedy="configure the full QA gate, or a verification plan that selects a "
+                "command, before requesting local QA",
+            )
         members: JsonObject = {
             "integration_record_id": args.record,
             **pair,
@@ -411,6 +463,10 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             "reason": reason,
             "verification_commands": commands,
             "commands_sha256": integration._sha256({"commands": commands}),
+            "selection": selection,
+            "verification_plan_sha256": None
+            if plan is None
+            else verification_plan.plan_sha256(plan),
         }
         request_id = IntegrationLocalQaRecord.derive_id(members)
         if getattr(args, "request", None) not in (None, request_id):
@@ -421,7 +477,10 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
         path = _path(root, request_id)
         if state_view.exists(path):
             request = _read_object(path, "local QA request")
-            if request.get("members") != members:
+            pinned = request.get("verification_plan")
+            if request.get("members") != members or (
+                None if pinned is None else verification_plan.plan_sha256(pinned)
+            ) != members["verification_plan_sha256"]:
                 raise CoordinatorError(
                     "local QA request failed integrity check",
                     remedy="restore the immutable request from trusted evidence",
@@ -439,6 +498,8 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
                 "local_qa_id": request_id,
                 "event": "request",
                 "members": members,
+                # The plan is pinned here: a repeat runs exactly this plan.
+                "verification_plan": plan,
                 "created_at": utils._now(),
                 "observed": observed,
             }
@@ -557,7 +618,9 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
                 [command for command in commands],
                 CleanRoomPolicy(repo, pair["candidate_sha"]),
                 stop_on_failure=True,
-                evidence=qa_lane.evidence_context(repo, pair["candidate_sha"]),
+                evidence=_evidence_context(
+                    repo, pair["candidate_sha"], request.get("verification_plan")
+                ),
             )
         stage = "artifact-persistence"
         log = gate.artifact

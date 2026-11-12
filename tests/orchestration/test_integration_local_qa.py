@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import threading
 import unittest
 from pathlib import Path
@@ -22,9 +23,12 @@ from harness.gate_runner.gate_runner import (
 )
 
 from harness.orchestration import coordinator, qa_lane
+from harness.orchestration.contract import ticket_diff_plan_commands
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger import LifecycleLedger
 from harness.orchestration.workflow import integration, local_qa
+from tests.orchestration import runtime_store_support as support
+from tests.orchestration import test_verification_plan_dispatch as plan_dispatch
 from tests.orchestration.test_integration_record import PublishedBranch, _git
 
 
@@ -449,3 +453,109 @@ class LocalQaContractTests(unittest.TestCase):
                     "true",
                 ]
             )
+
+
+# Stages that pass in the clean room of the fixture repository: the plan's own commands, never
+# the configured ``make verify``, which has no Makefile there.
+PASSING_STAGES = [
+    {"stage_id": "lint", "kind": "lint", "argv": ["true"], "timeout_seconds": 60},
+    {
+        "stage_id": "tests",
+        "kind": "pytest",
+        "argv": ["echo", "pytest"],
+        "timeout_seconds": 60,
+    },
+]
+
+
+class PlanLocalQaFixture(plan_dispatch.TicketDiffFixture):
+    """A ticket branch published with ``ticket_diff_selection`` on and prepared into ``ref``."""
+
+    ref: str | None = "integration/it"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._configure(self._on(stages=PASSING_STAGES))
+        self.branch = PublishedBranch(self.fx, self.ref)
+        self.fx.state_dir = self.fx.repo / ".harness/orchestration/state"
+        self.branch.publish("test_y")
+        self.record = self.branch.prepare()["integration_record_id"]
+
+    def local_qa(self) -> JsonObject:
+        return coordinator.integration_local_qa(
+            self.branch.args(
+                record=self.record,
+                ci_condition="absent",
+                reason="No combined CI",
+                request=None,
+                retry=False,
+                lease_seconds=None,
+            )
+        )
+
+
+class TicketDiffLocalQaTests(PlanLocalQaFixture):
+    """Local QA runs the verification plan its pair requires (ADR 0023, section 7)."""
+
+    def test_a_ticket_diff_pair_runs_the_ticket_diff_plan_and_not_make_verify(
+        self,
+    ) -> None:
+        result = self.local_qa()
+
+        self.assertEqual(result["selection"], "ticket-diff")
+        request = json.loads(
+            (
+                self.branch.records()
+                / "reports/integration-local-qa"
+                / f"{result['request_id']}.json"
+            ).read_text(encoding="utf-8")
+        )
+        commands = ticket_diff_plan_commands(request["verification_plan"])
+        self.assertEqual(commands, ["true", "echo pytest services/test_y.py"])
+        self.assertEqual(
+            [check["command"] for check in result["checks_run"]], commands
+        )
+        self.assertNotIn("make verify", result["verification_commands"])
+        self.assertEqual(
+            (result["state"], result["verification"]), ("completed", "verified")
+        )
+
+
+    def test_the_runtime_confirms_the_ticket_diff_run_of_the_pair(self) -> None:
+        support.runtime_binary()
+        migrated = support.migrate(self.fx.repo)
+        self.assertEqual(migrated.returncode, 0, migrated.stderr)
+        runtime = support.ServingRuntime(self.fx.repo)
+        self.addCleanup(runtime.stop)
+
+        with mock.patch.dict(os.environ, support.cli_environ(runtime)):
+            result = self.local_qa()
+
+        self.assertEqual(result["verification"], "verified")
+        self.assertEqual(
+            result["pair_verdict"],
+            {
+                "verdict": "ok",
+                "confirmed_by": {
+                    "source": "local-qa",
+                    "evidence": f"reports/integration-local-qa/{result['local_qa_id']}.json",
+                },
+                "violations": [],
+            },
+        )
+
+
+class FullLocalQaTests(PlanLocalQaFixture):
+    """A pair into the default branch requires the full commands, whatever the flag."""
+
+    ref = None
+
+    def test_a_full_pair_runs_the_full_commands(self) -> None:
+        result = self.local_qa()
+
+        self.assertEqual(result["selection"], "full")
+        self.assertIsNone(result["verification_plan_sha256"])
+        self.assertEqual(result["verification_commands"], ["make verify"])
+        self.assertEqual(
+            [check["command"] for check in result["checks_run"]], ["make verify"]
+        )
