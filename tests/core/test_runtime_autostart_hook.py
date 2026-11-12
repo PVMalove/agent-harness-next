@@ -504,3 +504,37 @@ def test_a_malformed_session_is_left_alone(setup: Setup) -> None:
 
     assert verdict(done)["decision"] == "allow"
     assert setup.calls() == []
+
+
+def older_envelope(setup: Setup) -> None:
+    """The installed ``hook_response.py`` predates ``runtime-autostart``: its ``HOOKS`` lacks it."""
+    envelope = setup.project / ".claude" / "hooks" / "hook_response.py"
+    text = envelope.read_text("utf-8")
+    for line in (
+        '    "runtime-autostart": ("runtime-autostart-failed", False),\n',
+        '    "runtime-autostart": ("minimal", "standard", "strict"),\n',
+    ):
+        assert line in text
+        text = text.replace(line, "")
+    envelope.write_text(text, encoding="utf-8")
+
+
+@pytest.mark.parametrize("event", ["PreToolUse", "Stop"])
+def test_an_older_envelope_without_the_hook_id_warns_instead_of_blocking(
+    setup: Setup, event: str
+) -> None:
+    setup.source_build()
+    older_envelope(setup)
+    payload: dict[str, object] = (
+        setup.pre_tool()
+        if event == "PreToolUse"
+        else {"session_id": "s1", "hook_event_name": "Stop", "stop_hook_active": False,
+              "cwd": str(setup.main)}
+    )
+
+    done = setup.run(payload, {"status": "reused"})
+
+    assert done.returncode == 0, done.stderr
+    assert "[runtime-autostart-failed]" in done.stderr
+    assert "--force-seed-file .claude/hooks/hook_response.py" in done.stderr
+    assert done.stdout == ""
