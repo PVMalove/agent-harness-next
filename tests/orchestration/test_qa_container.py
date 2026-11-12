@@ -15,7 +15,7 @@ import json
 import sqlite3
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Protocol
 
@@ -26,6 +26,7 @@ from tests.orchestration import test_coordinator as coordinator_tests
 from tests.orchestration.fake_clock import FakeClock
 from tests.orchestration.runtime_store_support import (
     STATE_REL,
+    RuntimeHandle,
     ServingRuntime,
     coordinator_popen,
     coordinator_with,
@@ -60,7 +61,9 @@ class ContainerQa:
     the runtime that serves it and the scripted engine on its ``PATH``.
 
     ``engine``, the image tags and ``gate`` default to the scripted Podman setup; with
-    ``scripted_engine=False`` the runtime keeps the host ``PATH`` and its real engine (#710)."""
+    ``scripted_engine=False`` the runtime keeps the host ``PATH`` and its real engine (#710).
+    ``runtime_factory`` starts the runtime from the repository and the environment the runtime
+    needs instead of ``ServingRuntime`` (the autostart hook of ADR 0031)."""
 
     def __init__(
         self,
@@ -79,6 +82,7 @@ class ContainerQa:
         host_runtime_dir: Path | None = None,
         selinux: bool = False,
         clock: FakeClock | None = None,
+        runtime_factory: Callable[[Path, dict[str, str]], RuntimeHandle] | None = None,
     ) -> None:
         gate = GATE if gate is None else gate
         self.fx = coordinator_tests.CoordinatorRetryRoutingTests()
@@ -143,8 +147,12 @@ class ContainerQa:
         assert migrate(repo).returncode == 0
         engine_path = {"PATH": str(self.engine.bin)} if scripted_engine else {}
         self.environ = {**engine_path, SECRET_NAME: SECRET}
-        self.runtime = ServingRuntime(
-            repo, env=self.environ, host_runtime_dir=host_runtime_dir, clock=clock
+        self.runtime: RuntimeHandle = (
+            runtime_factory(repo, self.environ)
+            if runtime_factory is not None
+            else ServingRuntime(
+                repo, env=self.environ, host_runtime_dir=host_runtime_dir, clock=clock
+            )
         )
         self.dispatch = self.create()
 
@@ -446,14 +454,16 @@ def test_a_partial_command_record_left_by_a_killed_runtime_is_not_run_and_never_
     execution_id = str(repo.execution()["execution_id"])
 
     # SIGKILL while gate-2 runs, and its record half written: what write_record leaves behind.
-    repo.runtime.kill()
+    served = repo.runtime
+    assert isinstance(served, ServingRuntime)
+    served.kill()
     commands = repo.repo / STATE_REL / "executions" / execution_id / "commands"
     (commands / "001.json.partial").write_text(
         '{"index":1,"stage_id":"gate-2","result":"ran","exit_code":0,"stdout":{"tail":"'
         + _MARKER,
         encoding="utf-8",
     )
-    repo.runtime = ServingRuntime(repo.repo, env=repo.environ, xdg=repo.runtime.xdg)
+    repo.runtime = ServingRuntime(repo.repo, env=repo.environ, xdg=served.xdg)
     _, err = run.communicate(timeout=120)
 
     assert run.returncode == 2, err
