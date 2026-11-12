@@ -69,6 +69,8 @@ class _LedgerState:
 
         self.ledger = LifecycleLedger(repo / STATE_REL)
         self.error: str | None = None
+        # The runtime error code behind `error`, so a check can tell an unavailable runtime.
+        self.error_code: str | None = None
         self.status: JsonObject = {}
         self.batches: list[JsonObject] = []
         self.dispatch_statuses: dict[str, JsonObject] = {}
@@ -101,6 +103,8 @@ class _LedgerState:
                         self.dispatch_statuses[path.stem] = record
         except (LedgerError, HarnessError) as exc:
             self.error = str(exc)
+            code = getattr(exc, "code", None)
+            self.error_code = code if isinstance(code, str) else None
 
     @property
     def unreadable(self) -> bool:
@@ -109,6 +113,82 @@ class _LedgerState:
     @property
     def needs_migration(self) -> bool:
         return bool(self.status.get("legacy")) or bool(self.status.get("stale_schema"))
+
+
+# The same bound as the console's runtime probe (home_facts.RUNTIME_TIMEOUT_SECONDS); kept here
+# because the standalone health package imports no console module.
+_RUNTIME_TIMEOUT_SECONDS = 2.0
+
+
+def _serve_fix(context: HealthContext) -> Fix:
+    from harness.orchestration.runtime_client import serve_command
+
+    return Fix(
+        text="запустите runtime вне песочницы агента и держите его запущенным",
+        command=serve_command(context.repo),
+    )
+
+
+def _store_is_authority(repo: Path) -> bool:
+    from harness.orchestration.core.constants import STATE_REL
+    from harness.orchestration.ledger.lifecycle import store_is_authority
+
+    return store_is_authority(repo / STATE_REL)
+
+
+def check_runtime(context: HealthContext) -> CheckResult:
+    """Whether the runtime of a runtime-store repository answers one `status` request; it is
+    never started here. A file ledger needs no runtime, so the check is skipped."""
+    check_id = "orchestration.runtime"
+    if not context.orchestration_enabled():
+        return _skipped(check_id, context)
+    if not _store_is_authority(context.repo):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message="леджер файловый: runtime не нужен",
+        )
+    from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+
+    try:
+        client = RuntimeClient(context.repo)
+        reply = client.call(
+            "status",
+            operation_id=f"health-status-{client.paths.repo_id}",
+            timeout_seconds=_RUNTIME_TIMEOUT_SECONDS,
+        )
+    except RuntimeClientError as error:
+        if error.code == "runtime_unavailable":
+            return CheckResult(
+                id=check_id,
+                group="orchestration",
+                status="fail",
+                message=f"runtime не отвечает: {error}",
+                fix=_serve_fix(context),
+            )
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message=f"runtime отказал ({error.code}): {error}",
+            fix=Fix(text=error.remedy),
+        )
+    protocol = reply.hello.get("protocol")
+    version = (
+        f"{protocol.get('major')}.{protocol.get('minor')}"
+        if isinstance(protocol, dict)
+        else "?"
+    )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message=(
+            f"runtime работает: pid={reply.result.get('pid', '?')} "
+            f"server_version={reply.hello.get('server_version', '?')} протокол={version}"
+        ),
+    )
 
 
 def check_ledger_summary(context: HealthContext) -> CheckResult:
@@ -122,6 +202,7 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
             group="orchestration",
             status="fail",
             message=f"леджер оркестрации недоступен: {state.error}",
+            fix=_serve_fix(context) if state.error_code == "runtime_unavailable" else None,
         )
     if state.needs_migration:
         return CheckResult(

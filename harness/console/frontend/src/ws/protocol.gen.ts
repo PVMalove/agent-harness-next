@@ -203,6 +203,7 @@ export type CutoverAt = string | null;
 export type Generation = string | null;
 export type Reason1 = string;
 export type Schema = number | null;
+export type StartCommand = string;
 export type Type11 = "harness.overview";
 export type Batches = number;
 export type Dispatches = number;
@@ -799,6 +800,7 @@ export interface StorePayload {
   generation: Generation;
   reason: Reason1;
   schema: Schema;
+  start_command: StartCommand;
 }
 /**
  * Pipeline usage counted from the ledger; with `unavailable` every count is 0.

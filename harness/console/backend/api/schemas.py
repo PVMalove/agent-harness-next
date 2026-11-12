@@ -514,6 +514,7 @@ class StorePayload(_Strict):  # type: ignore[explicit-any]
     audit_records: Annotated[int | None, Field(ge=0)]
     cutover_at: str | None
     reason: str
+    start_command: str
 
 
 class AdapterPayload(_Strict):  # type: ignore[explicit-any]

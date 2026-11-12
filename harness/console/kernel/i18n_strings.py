@@ -147,6 +147,7 @@ EN: dict[str, str] = {
     "В тикете не указана ветка интеграции": "A ticket names no integration branch",
     "Ошибка в настройках оркестрации": "Error in the orchestration settings",
     "Каталог состояния оркестрации недоступен": "The orchestration state directory is unavailable",
+    "Runtime не отвечает": "The runtime does not answer",
     "Ledger оркестрации требует внимания": "The orchestration ledger needs attention",
     "Есть незавершённые batch": "There are unfinished batches",
     "Есть заблокированные batch": "There are blocked batches",
@@ -715,6 +716,10 @@ EN: dict[str, str] = {
     "Поиск задачи по номеру": "Find a task by number",
     "Задача #{number} не найдена среди последних сессий": "Task #{number} is not among the recent sessions",
     "Схема показывает устройство контура, а не поток конкретного batch. Python решает; Rust пишет состояние и исполняет.": "The diagram shows how the contour is built, not the flow of a batch. Python decides; Rust writes the state and executes.",
+    "Runtime: работает": "Runtime: running",
+    "Runtime: не отвечает": "Runtime: not answering",
+    "Без runtime оркестрация не работает. Запустите его вне песочницы агента:": "Orchestration does not work without the runtime. Start it outside the agent sandbox:",
+    "Скопировать команду": "Copy the command",
 }
 
 # The runtime probe reasons of the Home and Harness pages (backend home_facts.runtime_reason): one

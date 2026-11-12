@@ -117,6 +117,7 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "directories.orchestration_state": CheckRoute(
         "Каталог состояния оркестрации недоступен", "Orchestration"
     ),
+    "orchestration.runtime": CheckRoute("Runtime не отвечает", "Orchestration"),
     "orchestration.ledger_summary": CheckRoute(
         "Ledger оркестрации требует внимания", "Orchestration"
     ),

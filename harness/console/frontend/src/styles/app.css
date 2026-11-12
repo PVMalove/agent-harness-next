@@ -382,6 +382,11 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
    takes the hero's own type (eyebrow, h2 at --fs-4, muted paragraph) without the section padding. */
 #branch { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 #branch .hi { width: 13px; height: 13px; }
+.runtime-state { white-space: nowrap; font-size: var(--fs-1); }
+.runtime-state.ok { color: var(--ok); }
+.runtime-state.err { color: var(--err); }
+.runtime-down { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--err); border-radius: var(--radius); font-size: var(--fs-1); }
+.runtime-down code { overflow-wrap: anywhere; }
 .help-hero-head .help-markdown { padding: 0; }
 .help-hero-head .help-markdown h1, .help-hero-head .help-markdown h2 { margin: 4px 0; font-size: var(--fs-4); }
 .help-hero-head .help-markdown p { margin: 0; max-width: 72ch; color: var(--muted); }

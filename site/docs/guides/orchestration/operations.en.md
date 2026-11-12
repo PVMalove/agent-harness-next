@@ -449,7 +449,7 @@ code 2 and `[runtime_unavailable]`, and creates and changes nothing.
 |---|---|---|---|
 | `revision_conflict` | another command changed the row after the read | yes | `[revision_conflict]` repeat the command: it reads the store again and applies the policy to the current state |
 | `store_busy` | the store is busy longer than 5 seconds | yes | `[store_busy]` repeat the command |
-| `runtime_unavailable` | the runtime does not respond | yes | `[runtime_unavailable]` start `harness-runtime serve --repo <repo>` |
+| `runtime_unavailable` | the runtime does not respond; the `orchestration.runtime` check of `harness health` and the "Runtime" indicator of the web console show the same | yes | `[runtime_unavailable]` start `harness-runtime serve --repo <repo>`, see [Quick start "Runtime"](../../getting-started/index.md#runtime) |
 | `idempotency_conflict` | `operation_id` is already taken by another request | no | `[idempotency_conflict]` repeat the command: it derives a new id from the current revision |
 | `invariant_violation` | the change breaks a store invariant or the audit chain does not converge | no | `[invariant_violation]` stop the writers and run `ledger validate --full` |
 

@@ -44,7 +44,7 @@ const OVERVIEW = {
   package_version: "2.0.1",
   drift: "clean",
   drift_files: 0,
-  store: { authority: "file-ledger", schema: 3, generation: "generation-1", audit_records: 12, cutover_at: null, reason: "" },
+  store: { authority: "file-ledger", schema: 3, generation: "generation-1", audit_records: 12, cutover_at: null, reason: "", start_command: "" },
   adapters: [{ path: ".harness/adapters/claude/settings.json", status: "current", problem: null }],
   containers: {
     engine: "podman", version: "5.2.0", cgroup_driver: "systemd", cgroup_version: "v2", selinux: true, rootless: true,

@@ -9,7 +9,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from harness.cleanup import apply_cleanup, plan_cleanup
+from harness import cleanup
+from harness.cleanup import apply_cleanup, plan_cleanup, remove_worktree, worktree_facts
+from harness.console.kernel.maintenance import REASONS_RU
+from harness.orchestration.ledger.lifecycle import STORE_LEDGER_VERSION
 from harness.orchestration.runtime_client import RuntimeClientError
 from tests.orchestration import runtime_store_support as support
 from tests.orchestration.scripted_engine import ScriptedEngine
@@ -360,6 +363,45 @@ class CleanupTests(unittest.TestCase):
                     },
                     plan["skipped"],
                 )
+
+    def test_an_unavailable_runtime_is_named_as_the_reason_a_worktree_stays(
+        self,
+    ) -> None:
+        """Проверить, что при недоступном runtime превью и факты worktree называют runtime."""
+        self._add_origin()
+        tree = self._worktrees_dir() / "issue-4-four"
+        git(self.repo, "worktree", "add", "-b", "feature/issue-4-four", str(tree), "HEAD")
+        state = self.repo / ".harness" / "orchestration" / "state"
+        state.mkdir(parents=True, exist_ok=True)
+        (state / "ledger.json").write_text(
+            json.dumps({"version": STORE_LEDGER_VERSION}), encoding="utf-8"
+        )
+        reason = "runtime does not answer: start `harness-runtime serve --repo <repo>`"
+        with mock.patch("harness.cleanup.RuntimeClient") as client:
+            client.return_value.call.side_effect = RuntimeClientError(
+                "runtime_unavailable",
+                "offline",
+                remedy="start runtime",
+                domain="infrastructure",
+            )
+            plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+            facts = {fact.path: fact.reason for fact in worktree_facts(self.repo)}
+            with self.assertRaisesRegex(ValueError, "runtime does not answer"):
+                remove_worktree(self.repo, tree)
+        self.assertIn(
+            {"path": str(self._worktrees_dir()), "reason": reason}, plan["skipped"]
+        )
+        self.assertEqual(facts[tree.resolve()], reason)
+        self.assertEqual(
+            REASONS_RU[reason],
+            "runtime не отвечает: запустите `harness-runtime serve --repo <repo>`",
+        )
+
+    def test_every_unread_ledger_reason_has_a_russian_text(self) -> None:
+        """Проверить, что у каждой причины непрочитанного ledger есть русский текст консоли."""
+        for reason in (cleanup.LEDGER_UNAVAILABLE, cleanup.RUNTIME_UNAVAILABLE):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, REASONS_RU)
 
     def test_hard_reports_the_batch_of_a_removed_worktree(self) -> None:
         """Проверить, что план и результат hard cleanup называют batch удалённого worktree."""

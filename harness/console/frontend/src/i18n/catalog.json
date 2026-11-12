@@ -80,6 +80,9 @@
     "Review": "Review",
     "Review / QA": "Review / QA",
     "Rootless Podman · среда, этапы и свидетельства.": "Rootless Podman · environment, stages and evidence.",
+    "Runtime не отвечает": "The runtime does not answer",
+    "Runtime: не отвечает": "Runtime: not answering",
+    "Runtime: работает": "Runtime: running",
     "Seed-режим: отметьте файлы в панели Seed-файлы.": "Seed mode: tick the files in the Seed files panel.",
     "Seed-файл отличается от шаблона: обновление его не трогает, пока не выбрана перезапись.": "The seed file differs from the template: the update leaves it alone unless overwriting is chosen.",
     "Seed-файлы": "Seed files",
@@ -231,6 +234,7 @@
     "Батчи (хронология)": "Batches (timeline)",
     "Батчи в работе": "Batches in progress",
     "Батчи по состояниям": "Batches by state",
+    "Без runtime оркестрация не работает. Запустите его вне песочницы агента:": "Orchestration does not work without the runtime. Start it outside the agent sandbox:",
     "Без блокеров": "No blockers",
     "Без движения": "Stalled",
     "Безопасность": "Safety",
@@ -1137,6 +1141,7 @@
     "Скиллы": "Skills",
     "Скиллы отличаются от установленной версии Harness": "Skills differ from the installed Harness version",
     "Скилов": "Skills",
+    "Скопировать команду": "Copy the command",
     "Скопируйте текст вручную": "Copy the text manually",
     "Скрыто в этой сессии": "Hidden in this session",
     "Скрытое значение нельзя записать: введите его заново": "A hidden value cannot be written: enter it again",
@@ -2016,6 +2021,10 @@
       "en": "Orphaned worktrees take space and may hold unsaved work.",
       "ru": "Осиротевшие worktree занимают место и могут содержать несохранённую работу."
     },
+    "orchestration.runtime": {
+      "en": "Without a running harness-runtime serve, orchestration and worktree cleanup do not work.",
+      "ru": "Без запущенного harness-runtime serve оркестрация и очистка worktree не работают."
+    },
     "orchestration.stale_dispatches": {
       "en": "A dispatch without a heartbeat has likely hung or lost its worker and holds the slot.",
       "ru": "Dispatch без heartbeat, скорее всего, завис или потерял worker и держит слот."
@@ -2063,6 +2072,7 @@
     "not a local directory": "каталог вне локального хранилища",
     "referenced by an active batch": "используется активным batch",
     "registered QA worktree or Git unavailable": "зарегистрированный QA worktree или Git недоступен",
+    "runtime does not answer: start `harness-runtime serve --repo <repo>`": "runtime не отвечает: запустите `harness-runtime serve --repo <repo>`",
     "unowned local branch": "ветка вне шаблона проекта",
     "worktree has uncommitted changes": "есть незакоммиченные изменения",
     "worktree is not registered": "worktree не зарегистрирован",
@@ -2544,6 +2554,10 @@
     "orchestration.orphaned_worktrees": {
       "en": "Orphaned worktrees",
       "ru": "Брошенные рабочие копии"
+    },
+    "orchestration.runtime": {
+      "en": "Runtime process",
+      "ru": "Процесс runtime"
     },
     "orchestration.stale_dispatches": {
       "en": "Stale dispatches",

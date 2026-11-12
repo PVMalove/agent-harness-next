@@ -41,7 +41,8 @@
     "cutover_at": null,
     "generation": "generation-0007",
     "reason": "",
-    "schema": 3
+    "schema": 3,
+    "start_command": ""
   },
   "store_target_schema": 4
 }

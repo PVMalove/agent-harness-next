@@ -173,6 +173,7 @@ def test_registry_runs_without_crashing_even_with_a_lock_file_present(
         "tracker.permissions",
         "tracker.labels",
         "tracker.git_base",
+        "orchestration.runtime",
         "orchestration.ledger_summary",
         "orchestration.unfinished_batches",
         "orchestration.blocked_batches",

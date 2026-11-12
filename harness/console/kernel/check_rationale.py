@@ -218,6 +218,10 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "Задача без верной Git base начинается не от той ветки, и PR попадает не в ту integration-ветку.",
         "A task without the right Git base starts from the wrong branch, and its PR targets the wrong integration branch.",
     ),
+    "orchestration.runtime": (
+        "Без запущенного harness-runtime serve оркестрация и очистка worktree не работают.",
+        "Without a running harness-runtime serve, orchestration and worktree cleanup do not work.",
+    ),
     "orchestration.ledger_summary": (
         "Ledger — источник состояния оркестрации; недоступный или не мигрированный ledger скрывает работу.",
         "The ledger is the source of orchestration state; an unavailable or unmigrated ledger hides the work.",
@@ -305,6 +309,7 @@ TITLES: dict[str, tuple[str, str]] = {
     "tracker.permissions": ("Права в трекере", "Tracker permissions"),
     "tracker.labels": ("Метки трекера", "Tracker labels"),
     "tracker.git_base": ("Базовая ветка Git", "Git base branch"),
+    "orchestration.runtime": ("Процесс runtime", "Runtime process"),
     "orchestration.ledger_summary": ("Сводка ledger", "Ledger summary"),
     "orchestration.unfinished_batches": ("Незавершённые batch", "Unfinished batches"),
     "orchestration.blocked_batches": ("Заблокированные batch", "Blocked batches"),

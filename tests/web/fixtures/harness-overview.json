@@ -68,7 +68,8 @@
     "cutover_at": null,
     "generation": "generation-1a2b3c4d",
     "reason": "",
-    "schema": 3
+    "schema": 3,
+    "start_command": ""
   },
   "usage": {
     "batches": 48,

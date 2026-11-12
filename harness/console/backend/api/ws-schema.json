@@ -3479,6 +3479,10 @@
             }
           ],
           "title": "Schema"
+        },
+        "start_command": {
+          "title": "Start Command",
+          "type": "string"
         }
       },
       "required": [
@@ -3487,7 +3491,8 @@
         "generation",
         "audit_records",
         "cutover_at",
-        "reason"
+        "reason",
+        "start_command"
       ],
       "title": "StorePayload",
       "type": "object"

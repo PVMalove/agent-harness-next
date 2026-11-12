@@ -92,7 +92,8 @@ class StoreFacts:
     "none". The generation comes from the `ledger.json` pointer in both epochs; the audit count is
     counted on disk in the file-ledger epoch and asked from the runtime (`state.validate`, never
     starting it) in the runtime-store epoch; `cutover_at` comes from `AUTHORITY.json` and is None
-    before a cutover. An unread fact is None and `reason` says why (empty when all were read)."""
+    before a cutover. An unread fact is None and `reason` says why (empty when all were read).
+    `start_command` starts the runtime of a runtime store that did not answer; empty otherwise."""
 
     authority: str
     schema: int | None
@@ -100,6 +101,7 @@ class StoreFacts:
     audit_records: int | None
     cutover_at: str | None = None
     reason: str = ""
+    start_command: str = ""
 
 
 @dataclass(frozen=True)
@@ -364,6 +366,7 @@ def _store_from(value: object) -> StoreFacts:
         audit_records=_optional(found["audit_records"], _int),
         cutover_at=_optional(found["cutover_at"], _str),
         reason=_str(found["reason"]),
+        start_command=_str(found["start_command"]),
     )
 
 

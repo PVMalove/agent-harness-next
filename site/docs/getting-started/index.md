@@ -219,7 +219,7 @@ python3 harness/bin/harness.py health /path/to/repository --json
 
 Каждая строка помечена `✅` ok, `⚠️` warn, `❌` fail или `-` skipped. На `fail` команда сама печатает
 причину и команду исправления. Группа «Оркестрация» появляется только при `backend-orchestration`:
-там видно ledger, незавершённые batch, dispatch без активности и неучтённые worktree.
+там видно runtime, ledger, незавершённые batch, dispatch без активности и неучтённые worktree.
 
 ??? quote ah-skill-text "Промпт для агента: проверить health"
 
@@ -300,6 +300,62 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
     credentials/trust, migrate state or send workers without separate explicit authorization.
     ```
 
+
+## 5. Runtime {#runtime}
+
+Раздел нужен при установленной `backend-orchestration`. После однократной миграции состояние
+оркестрации хранит runtime store, и записывать его может только процесс `harness-runtime serve`.
+Миграцию `harness-runtime migrate` выполняют один раз с одобрением человека; порядок описан в
+[руководстве по backend-оркестрации](../backend-orchestration.md).
+
+После миграции `serve` должен работать всё время, пока вы пользуетесь оркестрацией. Запускайте его
+вне песочницы агента:
+
+```bash {.ah-code-wrap}
+harness-runtime serve --repo /path/to/repository
+python3 .harness/orchestration/coordinator.py --repo . runtime status
+```
+
+`runtime status` печатает pid, версию и протокол запущенного runtime. Без runtime отказывают:
+
+- `coordinator.py` команды `batch`, `dispatch`, `qa` и `recovery`: код 2 и `[runtime_unavailable]`;
+- `harness cleanup`: worktree остаются с причиной «runtime does not answer»;
+- `harness worktree-remove`: та же причина отказа.
+
+Состояние runtime показывают `harness health` (проверка `orchestration.runtime` со строкой «Как
+исправить») и веб-консоль: индикатор «Runtime» в заголовке и команда запуска на страницах
+оркестрации. В Claude Code runtime запускает hook
+[автозапуска](../guides/orchestration/operations.md#runtime-autostart). В Codex и на Windows
+держите процесс сами: в отдельном терминале или пользовательским сервисом. Пример для
+`systemd --user`:
+
+```ini {.ah-code-wrap}
+# ~/.config/systemd/user/harness-runtime.service
+[Unit]
+Description=harness-runtime serve
+
+[Service]
+ExecStart=/abs/path/to/harness-runtime serve --repo /path/to/repository
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+```bash {.ah-code-wrap}
+systemctl --user daemon-reload
+systemctl --user enable --now harness-runtime.service
+```
+
+У сервиса собственное окружение, а не окружение вашего shell:
+
+- **`PATH`.** В `ExecStart` укажите абсолютный путь к `harness-runtime`. Для контейнерного
+  исполнителя добавьте в `Environment=PATH=` каталог `docker` или `podman`.
+- **`XDG_RUNTIME_DIR`.** systemd задаёт сервису `/run/user/<uid>`. Клиенты ищут сокет в том же
+  каталоге, поэтому в shell, где работают агент и coordinator, должно быть то же значение. Если
+  в shell переменной нет, runtime и клиенты разойдутся: клиент будет искать сокет в
+  `/tmp/harness-<uid>`.
 
 ## Дальше
 
