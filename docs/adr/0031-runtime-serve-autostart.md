@@ -86,7 +86,10 @@ Windows — usage и код 2). Ответ — одна строка JSON в std
 
 - ensure запускает `current_exe serve --owner-session …` отсоединённо: stdin закрыт, stdout и
   stderr — в `<каталог runtime>/<repo-id>.serve.log` (права 0600, файл открывается после той же
-  проверки каталога, что у serve), `process_group(0)`. Ребёнок, завершившийся с `lease_held`
+  проверки каталога, что у serve), `process_group(0)`. Журнал только дописывается, после строки
+  `--- harness-runtime ensure <pid>: starting serve`, и никогда не обнуляется: ensure, проигравший
+  гонку старта, не стирает строки работающего сервера. Причину отказа ensure ищет только в строках
+  после своего маркера. Ребёнок, завершившийся с `lease_held`
   (гонка двух ensure), означает, что другой ensure уже запустил сервер: ensure повторяет attach.
   Attach с `exiting: true` — ensure ждёт исчезновения сокета и запускает новый сервер.
 - release никогда не посылает сигналов.

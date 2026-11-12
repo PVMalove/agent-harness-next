@@ -4,6 +4,7 @@
 
 use std::ffi::OsString;
 use std::fs;
+use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -147,10 +148,26 @@ fn attach(paths: &RuntimePaths, root: &Path, args: &Args) -> Result<Value, Clien
     Ok(answer)
 }
 
-/// Start an owned runtime for `args`, its output in the journal of the runtime directory.
-fn spawn(root: &Path, paths: &RuntimePaths, args: &Args) -> Result<(Child, PathBuf), Outcome> {
-    let (log, file) =
+/// The journal of a runtime this `ensure` started: its path and where the lines of this start
+/// begin. The journal is appended to, never emptied (another runtime may write it).
+struct Journal {
+    path: PathBuf,
+    start: u64,
+}
+
+/// Start an owned runtime for `args`, its output appended to the journal of the runtime
+/// directory after a start marker.
+fn spawn(root: &Path, paths: &RuntimePaths, args: &Args) -> Result<(Child, Journal), Outcome> {
+    let (log, mut file) =
         ipc::open_serve_log(paths).map_err(|err| refused_to_start(&err, err.remedy(), None))?;
+    let start = writeln!(
+        file,
+        "--- harness-runtime ensure {}: starting serve",
+        std::process::id()
+    )
+    .and_then(|()| file.metadata())
+    .map_err(|err| failed(err, "check the runtime directory, then repeat ensure"))?
+    .len();
     let stderr = file
         .try_clone()
         .map_err(|err| failed(err, "check the runtime directory, then repeat ensure"))?;
@@ -181,7 +198,7 @@ fn spawn(root: &Path, paths: &RuntimePaths, args: &Args) -> Result<(Child, PathB
             "check that harness-runtime may run, then repeat ensure",
         )
     })?;
-    Ok((child, log))
+    Ok((child, Journal { path: log, start }))
 }
 
 fn refused_to_start(error: &dyn std::fmt::Display, remedy: &str, log: Option<&Path>) -> Outcome {
@@ -197,9 +214,11 @@ fn refused_to_start(error: &dyn std::fmt::Display, remedy: &str, log: Option<&Pa
     }
 }
 
-/// The last `ERROR:` and `REMEDY:` lines of the journal.
-fn last_report(log: &Path) -> (String, String) {
-    let text = fs::read_to_string(log).unwrap_or_default();
+/// The last `ERROR:` and `REMEDY:` lines the journal got since this start.
+fn last_report(journal: &Journal) -> (String, String) {
+    let bytes = fs::read(&journal.path).unwrap_or_default();
+    let from = usize::try_from(journal.start).map_or(bytes.len(), |start| start.min(bytes.len()));
+    let text = String::from_utf8_lossy(&bytes[from..]);
     let last = |prefix: &str| {
         text.lines()
             .rev()
@@ -218,7 +237,7 @@ pub fn ensure(args: &Args) -> Outcome {
         Err(outcome) => return outcome,
     };
     let deadline = Instant::now() + READY_TIMEOUT;
-    let mut started: Option<(Child, PathBuf)> = None;
+    let mut started: Option<(Child, Journal)> = None;
     loop {
         match attach(&paths, &root, args) {
             Ok(answer) if answer["exiting"] == true => {
@@ -233,8 +252,8 @@ pub fn ensure(args: &Args) -> Outcome {
                     .as_ref()
                     .filter(|(child, _)| answer["pid"] == json!(child.id()));
                 answer["status"] = json!(if own.is_some() { "started" } else { "reused" });
-                if let Some((_, log)) = own {
-                    answer["log"] = json!(log);
+                if let Some((_, journal)) = own {
+                    answer["log"] = json!(journal.path);
                 }
                 answer["socket"] = json!(paths.socket);
                 return Outcome {
@@ -253,17 +272,18 @@ pub fn ensure(args: &Args) -> Outcome {
                     Ok(child) => started = Some(child),
                     Err(outcome) => return outcome,
                 },
-                Some((child, log)) => match child.try_wait() {
+                Some((child, journal)) => match child.try_wait() {
                     Ok(None) => {}
                     Ok(Some(status)) => {
-                        let (error, remedy) = last_report(log);
+                        let (error, remedy) = last_report(journal);
                         // Another `ensure` started the runtime first: attach to that one.
                         if status.code() == Some(i32::from(EXIT_REFUSED))
                             && remedy.starts_with("[lease_held]")
                         {
                             started = None;
                         } else {
-                            let mut outcome = refused_to_start(&error, &remedy, Some(log));
+                            let mut outcome =
+                                refused_to_start(&error, &remedy, Some(&journal.path));
                             outcome.answer["exit_code"] = json!(status.code());
                             return outcome;
                         }
@@ -285,7 +305,7 @@ pub fn ensure(args: &Args) -> Outcome {
             return Outcome {
                 answer: json!({
                     "status": "timeout",
-                    "log": started.as_ref().map(|(_, log)| log),
+                    "log": started.as_ref().map(|(_, journal)| &journal.path),
                     "seconds": READY_TIMEOUT.as_secs(),
                 }),
                 exit: EXIT_REFUSED,

@@ -172,8 +172,9 @@ pub fn serve_log_path(paths: &RuntimePaths) -> PathBuf {
     paths.dir.join(format!("{}.serve.log", paths.repo_id))
 }
 
-/// Open the journal of an autostarted runtime empty, `0600` and for appending, after the same
-/// check of the runtime directory as `serve` makes: several writers never leave a hole in it.
+/// Open the journal of an autostarted runtime `0600` and for appending, after the same check of
+/// the runtime directory as `serve` makes. It is never emptied: an `ensure` that loses the start
+/// race keeps the lines of the runtime that serves, and several writers never leave a hole in it.
 ///
 /// # Errors
 /// A runtime directory that is not private to this user, or a journal that cannot be opened.
@@ -187,8 +188,6 @@ pub fn open_serve_log(paths: &RuntimePaths) -> Result<(PathBuf, File), StartErro
     let file = options
         .open(&path)
         .map_err(io_context(format!("cannot open {}", path.display())))?;
-    file.set_len(0)
-        .map_err(io_context(format!("cannot empty {}", path.display())))?;
     Ok((path, file))
 }
 
@@ -402,6 +401,30 @@ mod tests {
         let response: Response = decode(&body).unwrap();
         assert_eq!(response.status, Status::Error);
         response.error.unwrap().code
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_new_journal_never_empties_the_one_a_running_serve_writes() {
+        let dir = std::env::temp_dir().join(format!("hr-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let paths = RuntimePaths {
+            repo_id: "0123456789abcdef".to_owned(),
+            socket: dir.join("s.sock"),
+            token: dir.join("t.token"),
+            lock: dir.join("l.lock"),
+            dir: dir.clone(),
+        };
+        let (path, mut running) = open_serve_log(&paths).unwrap();
+        running.write_all(b"ready\n").unwrap();
+
+        let (_, mut loser) = open_serve_log(&paths).unwrap();
+        loser.write_all(b"lease_held\n").unwrap();
+        running.write_all(b"served\n").unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(text, "ready\nlease_held\nserved\n");
     }
 
     #[test]
