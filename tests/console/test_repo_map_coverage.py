@@ -104,7 +104,10 @@ def test_excluded_counts_tracked_files_missing_from_the_map() -> None:
         return 0, "pkg/core.py\0pkg/cli.py\0vendor/lib.js\0assets/logo.png\0"
 
     assert excluded_files(Path("/repo"), view, run) == 2
-    assert calls == [["git", "-C", "/repo", "ls-tree", "-r", "-z", "--name-only", view.commit]]
+    # The checkout as the platform spells it: `\\repo` on Windows.
+    assert calls == [
+        ["git", "-C", str(Path("/repo")), "ls-tree", "-r", "-z", "--name-only", view.commit]
+    ]
     assert excluded_files(Path("/repo"), view, lambda argv: None) is None
     assert excluded_files(Path("/repo"), view, lambda argv: (128, "")) is None
     assert coverage(view, None) == MapCoverage(3, 1, 0, None)
