@@ -14,6 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 THRESHOLD_PERCENT = 70.0
 MAX_UNCOVERED_LINES = 25
+# GitHub shows at most ten warnings of one step: the first ranges are the ones a reviewer sees.
+MAX_ANNOTATIONS = 10
+BAR_CELLS = 10
 COVERAGE_DATA_FILE = ROOT / ".coverage"
 COVERAGE_JSON_FILE = ROOT / ".coverage.diff-coverage.json"
 # Bound for the helper commands (git, `coverage json`); the measured test run itself is unbounded.
@@ -193,6 +196,94 @@ def compact_uncovered(
     return rendered, len(uncovered) - len(selected)
 
 
+def bar(percent: float) -> str:
+    """A text progress bar of ``percent`` in tenths, as the step summary shows it."""
+    filled = min(BAR_CELLS, max(0, round(percent / 100 * BAR_CELLS)))
+    return f"`{'█' * filled}{'░' * (BAR_CELLS - filled)}` {percent:.0f}%"
+
+
+def _ranges(uncovered: Sequence[str]) -> list[tuple[str, int, int]]:
+    """Uncovered ``path:line`` locations as consecutive ranges ``(path, first, last)``."""
+    ranges: list[tuple[str, int, int]] = []
+    for entry in uncovered:
+        path, _, line_text = entry.rpartition(":")
+        line = int(line_text)
+        if ranges and ranges[-1][0] == path and ranges[-1][2] == line - 1:
+            ranges[-1] = (path, ranges[-1][1], line)
+        else:
+            ranges.append((path, line, line))
+    return ranges
+
+
+def render_summary(
+    changed: Mapping[str, set[int]], files: Mapping[str, Mapping[str, Sequence[int]]]
+) -> str:
+    """Markdown for ``$GITHUB_STEP_SUMMARY``: the verdict, then each changed file with its share
+    of covered lines, a bar and its uncovered lines, so nobody opens the job log for them."""
+    covered, total, _ = summarize_coverage(changed, files)
+    percent = 100.0 * covered / total if total else 100.0
+    passed = meets_threshold(covered, total)
+    verdict = (
+        f"порог {THRESHOLD_PERCENT:.0f}% пройден"
+        if passed
+        else f"ниже порога {THRESHOLD_PERCENT:.0f}%"
+    )
+    lines = [
+        "## diff-coverage",
+        "",
+        "> [!TIP]" if passed else "> [!WARNING]",
+        f"> **{covered}/{total}** изменённых строк покрыто ({percent:.1f}%) — {verdict}.",
+        "",
+        "| Файл | Покрыто | Доля | Непокрытые строки |",
+        "|---|---:|---|---|",
+    ]
+    for path in sorted(changed):
+        file_covered, file_total, file_uncovered = summarize_coverage(
+            {path: changed[path]}, files
+        )
+        if not file_total:
+            continue
+        missing = ", ".join(
+            str(first) if first == last else f"{first}-{last}"
+            for _, first, last in _ranges(file_uncovered)
+        )
+        lines.append(
+            f"| `{path}` | {file_covered}/{file_total} "
+            f"| {bar(100.0 * file_covered / file_total)} | {missing or '—'} |"
+        )
+    return "\n".join([*lines, ""])
+
+
+def uncovered_annotations(uncovered: Sequence[str]) -> list[str]:
+    """One workflow command `::warning` per uncovered range: GitHub shows it on those lines in the
+    "Files changed" tab of the pull request."""
+    commands = []
+    for path, first, last in _ranges(uncovered)[:MAX_ANNOTATIONS]:
+        message = (
+            f"Изменённая строка {first} не покрыта тестами"
+            if first == last
+            else f"Изменённые строки {first}-{last} не покрыты тестами"
+        )
+        commands.append(
+            f"::warning file={path},line={first},endLine={last},title=diff-coverage::{message}"
+        )
+    return commands
+
+
+def publish(
+    changed: Mapping[str, set[int]], files: Mapping[str, Mapping[str, Sequence[int]]]
+) -> None:
+    """The step summary and the line annotations of a GitHub Actions run; nothing elsewhere."""
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as handle:
+            handle.write(render_summary(changed, files))
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        _, _, uncovered = summarize_coverage(changed, files)
+        for command in uncovered_annotations(uncovered):
+            print(command)
+
+
 def main() -> int:
     """Точка входа CLI: запуск coverage, анализ диффа и проверка порога покрытия."""
     os.environ["PYTHONPATH"] = str(ROOT)
@@ -264,6 +355,7 @@ def main() -> int:
         print(f"diff-coverage: no coverable changed lines since {base}")
         return 0
 
+    publish(changed, files)
     percent = 100.0 * total_covered / total_changed
     print(
         f"diff-coverage: {total_covered}/{total_changed} changed lines covered ({percent:.1f}%)"

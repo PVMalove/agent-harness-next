@@ -304,8 +304,23 @@ def skip_notice(environ: Mapping[str, str]) -> str:
     return SKIP_NOTICE
 
 
-def _report(findings: list[Finding], terms: Terms) -> int:
-    """Напечатать итог: только локации и номера терминов, никогда сами термины."""
+def _annotation(location: str, number: int) -> str:
+    """Команда workflow `::error`: на строке файла, если локация — `путь:строка`."""
+    match = re.fullmatch(r"(?P<path>[^:\s]+):(?P<line>\d+)", location)
+    if match and not Path(match["path"]).is_absolute():
+        return (
+            f"::error file={match['path']},line={match['line']},title=private-terms"
+            f"::term #{number}"
+        )
+    return f"::error title=private-terms::{location}: term #{number}"
+
+
+def _report(
+    findings: list[Finding], terms: Terms, environ: Mapping[str, str] | None = None
+) -> int:
+    """Напечатать итог: только локации и номера терминов, никогда сами термины.
+
+    В GitHub Actions каждая находка ещё и аннотация `::error` на своей строке."""
     if not findings:
         print(f"private-terms: no matches ({terms.source}, {len(terms.entries)} terms)")
         return 0
@@ -316,6 +331,9 @@ def _report(findings: list[Finding], terms: Terms) -> int:
     )
     for location, number in findings:
         print(f"  {location}: term #{number}", file=sys.stderr)
+    if environ is not None and environ.get("GITHUB_ACTIONS") == "true":
+        for location, number in findings:
+            print(_annotation(location, number))
     print(
         "private-terms: remove or generalize the matched text before publishing.",
         file=sys.stderr,
@@ -639,7 +657,7 @@ def _hook(payload_text: str, environ: Mapping[str, str]) -> int:
     if active is None:
         print(skip_notice(environ), file=sys.stderr)
         return 0
-    return 2 if _report(list(dict.fromkeys(findings)), active) else 0
+    return 2 if _report(list(dict.fromkeys(findings)), active, environ) else 0
 
 
 def _check(args: argparse.Namespace, environ: Mapping[str, str]) -> int:
@@ -657,7 +675,7 @@ def _check(args: argparse.Namespace, environ: Mapping[str, str]) -> int:
         findings += _branch_findings(args.repo, args.branch, terms)
     for ordinal, path in enumerate(args.body_file, 1):
         findings += _body_findings(path, ordinal, terms)
-    return _report(findings, terms)
+    return _report(findings, terms, environ)
 
 
 def _parser() -> argparse.ArgumentParser:
