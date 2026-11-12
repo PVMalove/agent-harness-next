@@ -181,6 +181,9 @@ def test_parse_body_gitlab_blocked_by_lines() -> None:
         "## Acceptance criteria\r\n" + "- [ ] \ud800 crit\r\n" * 5000,
         "## What to build\n### nested\n## Blocked by\n#1 #2 #3\n## ## ##\n",
     ],
+    # The default id is the value itself: a million characters in a test name, repeated in every
+    # progress line and report, stalled the Windows run for an hour.
+    ids=["one-megabyte-line", "nul-and-surrogates", "many-criteria", "nested-headings"],
 )
 def test_parse_body_never_raises_and_is_capped(hostile: str) -> None:
     body = parse_body(hostile)
