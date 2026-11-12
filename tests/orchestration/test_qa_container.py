@@ -604,6 +604,11 @@ def test_the_runs_share_one_sidecar_and_network_and_mount_the_pinned_cache(
             and _flag(run, "--env").count(SECRET_NAME) == 1
         )
     assert not any("volume" in part for call in calls for part in call)
+    # The runtime records the exit first and removes the objects after it, so qa run may
+    # answer while the removal still runs: wait for it instead of racing it under load.
+    deadline = time.monotonic() + 60
+    while repo.engine.state()["objects"] and time.monotonic() < deadline:
+        time.sleep(0.05)
     assert repo.engine.state()["objects"] == {}
 
 
