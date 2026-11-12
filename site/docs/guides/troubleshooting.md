@@ -42,6 +42,7 @@ CLI трекера.
 | `правка меняет ключ hook_policy в .harness/project.json` | Агент пытается изменить политику hooks | Политику меняет человек; агенту разрешены правки файла без изменения ключа |
 | `настройки hooks (.claude/settings*.json, .codex/hooks.json) и каталоги hooks` | Попытка записи в настройки или каталоги hooks | Эти файлы меняет человек: их содержимое определяет, что вообще блокируется |
 | `this repository is in the file-ledger epoch` | Проект ещё не переведён на runtime-store, а команда требует новый epoch | Выполнить `harness-runtime migrate` один раз по [руководству миграции](upgrade-2-0.md) и повторить команду |
+| `hook_response.py: ожидается 'run <hook_id> <команда...>' с зарегистрированным hook_id` на любом вызове Bash | Новый hook, например `runtime-autostart`, подключён при старом `.claude/hooks/hook_response.py` | Выполнить `harness update <repo>`: он ставит hooks и их конверт одной версии |
 | `ledger validate` находит расхождение аудиторской цепочки | Состояние правили в обход CLI или цепочка повреждена | Не редактировать `.harness/orchestration/state/` вручную; прочитать отчёт и решать по маршруту восстановления |
 
 Команды восстановления — `ledger lock-status`, `qa clear-stale-lease`, `batch rewind`,
