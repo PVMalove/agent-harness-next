@@ -1,7 +1,9 @@
 """Группа 'environment': кроссплатформенные проверки утилит и настроек репозитория (задача #343).
 
 Включает проверку Git и автора коммитов, переводов строк, Python, uv, версии glab для
-GitLab-трекера проекта, dev-окружения канонического репозитория и кодировки вывода.
+GitLab-трекера проекта, dev-окружения канонического репозитория и кодировки вывода, а также
+готовность среды к обязательным QA-командам (#1050): исполняемые файлы qa_gate_commands,
+C-компоновщик для Rust и длина пути сокета runtime.
 
 Каждая внешняя утилита разрешается через `shutil.which` и вызывается по полному пути,
 благодаря чему shim-файлы `.cmd` в Windows PATH находятся так же, как в шелле. Отсутствующая
@@ -15,10 +17,13 @@ import locale
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from harness.configuration import read_config_json
 
 from ..context import HealthContext
 from ..model import CheckResult, Fix
@@ -463,6 +468,212 @@ def check_dev_environment(context: HealthContext) -> CheckResult:
         fix=Fix(
             text="синхронизируйте dev-окружение по uv.lock (или выполните make bootstrap)",
             command=_dev_sync_command(),
+        ),
+    )
+
+
+# --- QA commands (#1050) -----------------------------------------------------------------------
+# These checks only read the environment; no QA command is run.
+
+# Shell builtins are not files on PATH, so a command that starts with one is not checked.
+_SHELL_BUILTINS = frozenset({".", ":", "cd", "export", "set", "source", "test", "true", "["})
+_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _qa_gate_commands(repo: Path) -> list[str] | None:
+    """Строки qa_gate_commands из .harness/project.json; None, если файл не читается как JSON-объект."""
+    try:
+        data = read_config_json(repo / ".harness" / "project.json")
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    commands = data.get("qa_gate_commands")
+    if not isinstance(commands, list):
+        return []
+    return [command for command in commands if isinstance(command, str) and command.strip()]
+
+
+def _executable(command: str) -> str | None:
+    """Исполняемый файл, который запускает QA-команда: первое слово после присваиваний VAR=...
+
+    None, если команда начинается со встроенной команды shell или пуста.
+    """
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        words = command.split()
+    while words and _ASSIGNMENT.match(words[0]):
+        words = words[1:]
+    if not words or words[0] in _SHELL_BUILTINS:
+        return None
+    return words[0]
+
+
+def _executable_found(repo: Path, executable: str) -> bool:
+    """Найти исполняемый файл: путь с разделителем — от корня репозитория, иначе — в PATH."""
+    if "/" in executable or os.sep in executable:
+        path = Path(executable) if Path(executable).is_absolute() else repo / executable
+        return path.is_file() and os.access(path, os.X_OK)
+    return shutil.which(executable) is not None
+
+
+def _no_qa_commands(check_id: str, commands: list[str] | None) -> CheckResult:
+    """Пропуск проверки: project.json не читается (см. files.project_json) или в нём нет QA-команд."""
+    reason = (
+        "не проверено: .harness/project.json не читается (см. files.project_json)"
+        if commands is None
+        else "в .harness/project.json нет qa_gate_commands"
+    )
+    return CheckResult(id=check_id, group=GROUP, status="skipped", message=reason)
+
+
+def check_qa_executables(context: HealthContext) -> CheckResult:
+    """Проверить, что исполняемый файл каждой команды из qa_gate_commands доступен в среде агента."""
+    check_id = "environment.qa_executables"
+    commands = _qa_gate_commands(context.repo)
+    if not commands:
+        return _no_qa_commands(check_id, commands)
+    executables = list(
+        dict.fromkeys(name for name in map(_executable, commands) if name is not None)
+    )
+    missing = [name for name in executables if not _executable_found(context.repo, name)]
+    if not missing:
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="ok",
+            message=f"исполняемые файлы QA-команд найдены: {', '.join(executables) or 'нет'}",
+        )
+    names = ", ".join(missing)
+    return CheckResult(
+        id=check_id,
+        group=GROUP,
+        status="warn",
+        message=f"QA-команды не выполнятся: не найдены исполняемые файлы {names}",
+        fix=Fix(
+            text=(
+                f"установите {names} в среду, где агент запускает QA, или добавьте их каталог "
+                "в PATH; путь с '/' ищется от корня репозитория"
+            )
+        ),
+    )
+
+
+_CARGO_WORD = re.compile(r"(?<![\w./-])cargo(?![\w.-])")
+
+
+def _has_native_cargo_manifest(repo: Path) -> bool:
+    """Есть ли Cargo.toml под native/; каталоги сборки target/ не обходятся."""
+    for _root, dirs, files in os.walk(repo / "native"):
+        if "Cargo.toml" in files:
+            return True
+        dirs[:] = [name for name in dirs if name != "target"]
+    return False
+
+
+def check_c_linker(context: HealthContext) -> CheckResult:
+    """Проверить, что для сборки Rust в среде агента есть C-компоновщик cc.
+
+    Проект собирает Rust, если слово cargo есть в любой QA-команде (в том числе после `&&`)
+    или под native/ лежит Cargo.toml.
+    """
+    check_id = "environment.c_linker"
+    builds_rust = any(
+        _CARGO_WORD.search(command) for command in _qa_gate_commands(context.repo) or []
+    ) or _has_native_cargo_manifest(context.repo)
+    if not builds_rust:
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="skipped",
+            message="проект не собирает Rust: нет cargo в qa_gate_commands и native/**/Cargo.toml",
+        )
+    linker = shutil.which("cc")
+    if linker is not None:
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="ok",
+            message=f"C-компоновщик для Rust найден: {linker}",
+        )
+    return CheckResult(
+        id=check_id,
+        group=GROUP,
+        status="warn",
+        message="проект собирает Rust, но C-компоновщика cc нет в PATH: cargo не скомпонует бинарники",
+        fix=Fix(
+            text=(
+                "установите C-компилятор с компоновщиком cc (gcc или clang) в среду, где агент "
+                "запускает QA, например в контейнер или distrobox"
+            )
+        ),
+    )
+
+
+def check_runtime_socket_path(context: HealthContext) -> CheckResult:
+    """Проверить, что путь сокета runtime этого репозитория укладывается в лимит Unix-сокета.
+
+    Путь строится по правилу ADR 0021, как в runtime_client.runtime_paths: `$XDG_RUNTIME_DIR/harness`
+    или `/tmp/harness-<uid>`; TMPDIR на него не влияет. Runtime при этом не запускается.
+    """
+    check_id = "environment.runtime_socket_path"
+    if not context.orchestration_enabled():
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="skipped",
+            message=context.no_orchestration_message(),
+        )
+    if sys.platform == "win32":
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="skipped",
+            message="в Windows runtime слушает именованный канал, лимит пути сокета не действует",
+        )
+    from harness.orchestration.runtime_client import (
+        MAX_SOCKET_PATH_BYTES,
+        RuntimeClientError,
+        git_common_dir,
+        repo_id,
+        runtime_directory,
+    )
+
+    try:
+        identity = repo_id(git_common_dir(context.repo.resolve()))
+    except (RuntimeClientError, OSError, UnicodeDecodeError) as error:
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="skipped",
+            message=f"не проверено: не удалось определить Git-репозиторий ({error})",
+        )
+    directory = runtime_directory(
+        sys.platform, os.environ.get("XDG_RUNTIME_DIR"), None, os.getuid()
+    )
+    socket = Path(str(directory)) / f"{identity}.sock"
+    size = len(os.fsencode(socket))
+    if size <= MAX_SOCKET_PATH_BYTES:
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="ok",
+            message=f"путь сокета runtime в пределах {MAX_SOCKET_PATH_BYTES} байт: {socket}",
+        )
+    return CheckResult(
+        id=check_id,
+        group=GROUP,
+        status="warn",
+        message=(
+            f"путь сокета runtime {socket} занимает {size} байт, больше лимита "
+            f"{MAX_SOCKET_PATH_BYTES}: runtime не запустится"
+        ),
+        fix=Fix(
+            text=(
+                "задайте XDG_RUNTIME_DIR короткому существующему абсолютному каталогу и "
+                "перезапустите runtime"
+            )
         ),
     )
 

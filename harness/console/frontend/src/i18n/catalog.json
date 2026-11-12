@@ -501,6 +501,7 @@
     "Интервал опроса dispatch, с": "Dispatch poll interval, s",
     "Инфраструктурные повторы": "Infrastructure retries",
     "Инфраструктурных повторов до остановки": "Infrastructure retries before stopping",
+    "Исполняемые файлы QA-команд не найдены": "QA command executables are not found",
     "Использование пайплайна": "Pipeline usage",
     "Использовать блок (снять — убрать его целиком)": "Use the block (clear to remove it entirely)",
     "Использовать параметр (снять — оставить его отсутствующим)": "Use the parameter (untick to leave it absent)",
@@ -682,6 +683,7 @@
     "Неизвестный исход не считается успехом. Действия восстановления выполняются только после подтверждения.": "An unknown outcome is not a success. Recovery actions run only after a confirmation.",
     "Некорректный запрос": "Bad request",
     "Неподходящая версия Python": "Unsuitable Python version",
+    "Нет C-компоновщика cc": "The cc C linker is missing",
     "Нет данных": "No data",
     "Нет доступа к трекеру": "No access to the tracker",
     "Нет доступа к трекеру задач": "No access to the task tracker",
@@ -1046,6 +1048,7 @@
     "Путь к другому проекту": "Path to another project",
     "Путь к локальному Git-проекту": "Path to a local Git project",
     "Путь к проекту слишком длинный": "The project path is too long",
+    "Путь сокета runtime слишком длинный": "The runtime socket path is too long",
     "РАБОТА": "WORK",
     "РАБОЧИЕ СЕССИИ": "WORKING SESSIONS",
     "Работа": "Work",
@@ -1865,6 +1868,10 @@
       "en": "Task worktrees are created in worktrees; without write access a task cannot be isolated from the main checkout.",
       "ru": "Рабочие копии задач создаются в worktrees; без записи задачу нельзя изолировать от основного checkout."
     },
+    "environment.c_linker": {
+      "en": "Without the cc C linker cargo cannot link Rust binaries, and Rust tests in QA fail.",
+      "ru": "Без C-компоновщика cc cargo не собирает Rust-бинарники, и Rust-тесты в QA падают."
+    },
     "environment.claude_sandbox": {
       "en": "Without the filesystem sandbox and local Unix socket permission Claude cannot reach the harness runtime.",
       "ru": "Без файлового sandbox и разрешения на локальные Unix-сокеты Claude не достучится до runtime харнесса."
@@ -1932,6 +1939,14 @@
     "environment.python": {
       "en": "The harness and its checks need a minimum Python; an older interpreter fails on syntax and APIs.",
       "ru": "Харнесс и его проверки требуют минимальной версии Python; старый интерпретатор падает на синтаксисе и API."
+    },
+    "environment.qa_executables": {
+      "en": "If a QA command's executable is missing from the agent environment, required QA fails only after it starts.",
+      "ru": "Если исполняемого файла QA-команды нет в среде агента, обязательный QA падает уже после запуска."
+    },
+    "environment.runtime_socket_path": {
+      "en": "A socket path over 100 bytes cannot be created: the runtime and the tests that start it fail.",
+      "ru": "Путь сокета длиннее 100 байт не принимается: runtime и тесты, которые его запускают, падают."
     },
     "environment.symlinks": {
       "en": "Without the right to create symlinks the skill discovery links and some tests do not work.",
@@ -2399,6 +2414,10 @@
       "en": "Worktrees directory",
       "ru": "Каталог рабочих копий"
     },
+    "environment.c_linker": {
+      "en": "C linker for Rust",
+      "ru": "C-компоновщик для Rust"
+    },
     "environment.claude_sandbox": {
       "en": "Claude Code sandbox",
       "ru": "Песочница Claude Code"
@@ -2466,6 +2485,14 @@
     "environment.python": {
       "en": "Python interpreter",
       "ru": "Интерпретатор Python"
+    },
+    "environment.qa_executables": {
+      "en": "QA command executables",
+      "ru": "Исполняемые файлы QA-команд"
+    },
+    "environment.runtime_socket_path": {
+      "en": "Runtime socket path",
+      "ru": "Путь сокета runtime"
     },
     "environment.symlinks": {
       "en": "Symbolic links",

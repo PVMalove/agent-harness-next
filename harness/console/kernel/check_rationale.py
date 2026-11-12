@@ -146,6 +146,18 @@ RATIONALES: dict[str, tuple[str, str]] = {
         ".harness/.venv, не совпадающий с uv.lock, даёт тесты на других версиях зависимостей, чем в CI.",
         "A .harness/.venv that differs from uv.lock runs tests on other dependency versions than CI.",
     ),
+    "environment.qa_executables": (
+        "Если исполняемого файла QA-команды нет в среде агента, обязательный QA падает уже после запуска.",
+        "If a QA command's executable is missing from the agent environment, required QA fails only after it starts.",
+    ),
+    "environment.c_linker": (
+        "Без C-компоновщика cc cargo не собирает Rust-бинарники, и Rust-тесты в QA падают.",
+        "Without the cc C linker cargo cannot link Rust binaries, and Rust tests in QA fail.",
+    ),
+    "environment.runtime_socket_path": (
+        "Путь сокета длиннее 100 байт не принимается: runtime и тесты, которые его запускают, падают.",
+        "A socket path over 100 bytes cannot be created: the runtime and the tests that start it fail.",
+    ),
     "environment.output_encoding": (
         "Без UTF-8 вывода русский текст и символы статусов искажаются или вызывают ошибки кодировки.",
         "Without UTF-8 output Russian text and status symbols are garbled or raise encoding errors.",
@@ -291,6 +303,9 @@ TITLES: dict[str, tuple[str, str]] = {
     "environment.uv": ("Менеджер пакетов uv", "uv package manager"),
     "environment.glab": ("Клиент glab", "glab client"),
     "environment.dev_env": ("Окружение разработки", "Development environment"),
+    "environment.qa_executables": ("Исполняемые файлы QA-команд", "QA command executables"),
+    "environment.c_linker": ("C-компоновщик для Rust", "C linker for Rust"),
+    "environment.runtime_socket_path": ("Путь сокета runtime", "Runtime socket path"),
     "environment.output_encoding": ("Кодировка вывода", "Output encoding"),
     "environment.codex_sandbox": ("Песочница Codex", "Codex sandbox"),
     "environment.claude_sandbox": ("Песочница Claude Code", "Claude Code sandbox"),

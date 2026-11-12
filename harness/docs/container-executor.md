@@ -56,7 +56,12 @@ These environments are not supported. `dispatch preflight` reports each one as a
 - A project-owned agent adapter that can run inside the worker image (see the example below).
 - A C linker (`cc`) in the QA environment when the gate builds Rust with `cargo`, and a runtime
   socket path of at most 100 bytes: set a short absolute `XDG_RUNTIME_DIR` (or `TMPDIR`). Without
-  either, the gate stops as `qa-environment-failure` instead of a developer retry.
+  either, the gate stops as `qa-environment-failure` instead of a developer retry. `harness health`
+  warns before QA starts: `environment.c_linker` checks for `cc`, and
+  `environment.runtime_socket_path` checks the runtime's own socket under `XDG_RUNTIME_DIR` or
+  `/tmp/harness-<uid>`. The runtime ignores `TMPDIR`; test sockets under `TMPDIR` are not checked.
+  `environment.qa_executables` warns when the executable of a `qa_gate_commands` entry is not
+  found. These checks only read the environment of the process that runs `harness health`.
 
 ## Configuration and overrides
 
