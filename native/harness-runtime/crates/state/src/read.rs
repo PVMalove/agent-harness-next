@@ -665,6 +665,24 @@ impl Snapshot {
     /// # Errors
     /// See [`ReadError`].
     pub fn answer(&self, wanted: &Wanted) -> Result<Answer, ReadError> {
+        let answer = self.unbounded(wanted)?;
+        let size: usize = answer
+            .records
+            .iter()
+            .map(|(path, record)| path.len() + record.to_string().len())
+            .sum();
+        if size > MAX_ANSWER_BYTES {
+            return Err(ReadError::TooLarge);
+        }
+        Ok(answer)
+    }
+
+    /// The records `wanted` names, of any size: for a read whose records stay inside the runtime
+    /// (a verdict over them), never for an answer that leaves it in one frame.
+    ///
+    /// # Errors
+    /// See [`ReadError`]; never `TooLarge`.
+    pub(crate) fn unbounded(&self, wanted: &Wanted) -> Result<Answer, ReadError> {
         let mut found = Found::default();
         for name in &wanted.collections {
             collection(
@@ -679,13 +697,6 @@ impl Snapshot {
             one_path(&self.connection, path, &self.selected, &mut found)?;
         }
         let Found { records, revisions } = found;
-        let size: usize = records
-            .iter()
-            .map(|(path, record)| path.len() + record.to_string().len())
-            .sum();
-        if size > MAX_ANSWER_BYTES {
-            return Err(ReadError::TooLarge);
-        }
         Ok(Answer {
             revision: self.revision,
             generation_revision: self.generation_revision,

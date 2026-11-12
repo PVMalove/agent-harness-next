@@ -15,7 +15,7 @@ use contracts::{StageEvidence, StageKind, StageResult, StageSelection};
 use serde_json::{Map, Value, json};
 use state::canonical::{canonical_json, sha256_hex};
 use state::qa_evidence::{self, Evidence, Pair};
-use state::read::{ReadError, read};
+use state::read::{MAX_ANSWER_BYTES, ReadError, read};
 
 /// Evidence held in memory: JSON records by path and the bytes of the artifacts.
 struct Memory {
@@ -421,6 +421,64 @@ fn the_store_refuses_a_focused_run() {
     let answer = qa_evidence::verify(&repo.state(), Some(&payload)).unwrap();
 
     refused_with(&answer, "selection_not_full");
+}
+
+/// A store of `run` and one other report whose text alone is larger than `MAX_ANSWER_BYTES`, so
+/// its `reports` never fit one answer.
+fn with_an_oversized_report(run: &Run) -> Repo {
+    let repo = Repo::new("qa-evidence-large");
+    qa_store::write_legacy(&repo.generation(), run);
+    let ballast = "x".repeat(MAX_ANSWER_BYTES + 1);
+    std::fs::write(
+        repo.generation().join("reports/dispatch-ballast.json"),
+        qa_store::record_text(&json!({"dispatch_id": "dispatch-ballast", "output": ballast})),
+    )
+    .unwrap();
+    state::migrate::run(&repo.root, &common::approval()).unwrap();
+    repo
+}
+
+#[test]
+fn a_store_larger_than_an_answer_still_gets_a_verdict_on_the_pair() {
+    let repo = with_an_oversized_report(&accepted_qa(passed_stages()));
+    let confirmed = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET});
+    let unconfirmed = json!({"candidate_sha": "d".repeat(40), "target_sha": TARGET});
+
+    let ok = qa_evidence::verify(&repo.state(), Some(&confirmed));
+    let refused = qa_evidence::verify(&repo.state(), Some(&unconfirmed));
+
+    let ok = ok.unwrap();
+    assert_eq!(ok["verdict"], "ok", "{ok}");
+    assert_eq!(ok["confirmed_by"]["source"], "original-qa");
+    refused_with(&refused.unwrap(), "no_full_qa");
+}
+
+#[test]
+fn a_stage_evidence_document_larger_than_an_answer_still_confirms_the_pair() {
+    let mut stages = passed_stages();
+    stages[0].nodeids = Some(vec!["x".repeat(MAX_ANSWER_BYTES + 1)]);
+    let repo = Repo::new("qa-evidence-large-document");
+    qa_store::write_legacy(&repo.generation(), &accepted_qa(stages));
+    state::migrate::run(&repo.root, &common::approval()).unwrap();
+    let payload = json!({"candidate_sha": CANDIDATE, "target_sha": TARGET});
+
+    let answer = qa_evidence::verify(&repo.state(), Some(&payload)).unwrap();
+
+    assert_eq!(answer["verdict"], "ok", "{answer}");
+    assert_eq!(answer["confirmed_by"]["source"], "original-qa");
+}
+
+#[test]
+fn a_state_read_larger_than_an_answer_is_still_too_large() {
+    let repo = with_an_oversized_report(&accepted_qa(passed_stages()));
+
+    let answer = read(
+        &repo.state(),
+        Some(&json!({"collections": ["reports"]})),
+        None,
+    );
+
+    assert!(matches!(answer, Err(ReadError::TooLarge)), "{answer:?}");
 }
 
 #[test]
