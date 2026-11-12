@@ -1450,6 +1450,12 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         from harness.orchestration import pinned_configuration
 
         orchestration_policy = _orchestration_policy(config)
+        if qa_execution is not None:
+            from harness.orchestration.qa_execution import with_executable_checks
+
+            orchestration_policy["infrastructure_retry"] = with_executable_checks(
+                orchestration_policy["infrastructure_retry"], dispatch_commands
+            )
         # The hook policy and the tool list are pinned with the approval (issue #794): a later
         # edit of hook_policy or of the role tool policy does not change an approved dispatch.
         allowed_tools = resolve_allowed_tools(
