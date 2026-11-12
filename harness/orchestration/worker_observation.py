@@ -632,3 +632,24 @@ def read_structured_steps(path: Path, offset: int, budget: int) -> JsonObject:
 def read_plain_steps(path: Path, offset: int, budget: int) -> JsonObject:
     """One page of a plain worker log tail; structure is explicitly unavailable."""
     return _read_step_page(path, offset, budget, "plain", _plain_line)
+
+
+def dispatch_checkpoint_ids(batch: Mapping[str, object], dispatch_id: str) -> list[str]:
+    """The ids of the checkpoints ``dispatch_id`` recorded in its batch, oldest first."""
+    entries = batch.get("checkpoints")
+    return [
+        entry["checkpoint_id"]
+        for entry in (entries if isinstance(entries, list) else [])
+        if isinstance(entry, dict)
+        and entry.get("dispatch_id") == dispatch_id
+        and isinstance(entry.get("checkpoint_id"), str)
+    ]
+
+
+def checkpoint_view(record: Mapping[str, object]) -> JsonObject:
+    """A checkpoint as ``dispatch observe`` and the web console show it."""
+    return {
+        "checkpoint_id": record.get("checkpoint_id"),
+        "commit_sha": record.get("commit_sha"),
+        "created_at": record.get("created_at"),
+    }

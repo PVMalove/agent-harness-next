@@ -83,10 +83,15 @@ export function timestamp(value: string): Date | null {
 
 const two = (value: number) => String(value).padStart(2, "0");
 
+/** A ledger moment as DD.MM.YYYY HH:MM UTC; null for a value without a time zone. */
+export function dateTimeText(value: string): string | null {
+  const at = timestamp(value);
+  if (!at) return null;
+  return `${two(at.getUTCDate())}.${two(at.getUTCMonth() + 1)}.${at.getUTCFullYear()} ${two(at.getUTCHours())}:${two(at.getUTCMinutes())} UTC`;
+}
+
 export function batchStartText(batch: BatchSummary): string {
-  const start = timestamp(batch.created_at);
-  if (!start) return "начало: неизвестно";
-  return `${two(start.getUTCDate())}.${two(start.getUTCMonth() + 1)}.${start.getUTCFullYear()} ${two(start.getUTCHours())}:${two(start.getUTCMinutes())} UTC`;
+  return dateTimeText(batch.created_at) ?? "начало: неизвестно";
 }
 
 /** Elapsed wall time to PR creation, never inferred from publish or merge. */
