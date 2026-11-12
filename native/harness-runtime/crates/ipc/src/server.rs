@@ -406,14 +406,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_new_journal_never_empties_the_one_a_running_serve_writes() {
-        let dir = std::env::temp_dir().join(format!("hr-log-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        // A private parent: the runtime directory refuses one that others may write.
+        let base = crate::test_runtime_dir::RuntimeDir::new("log");
+        let dir = base.path().join("harness");
         let paths = RuntimePaths {
             repo_id: "0123456789abcdef".to_owned(),
             socket: dir.join("s.sock"),
             token: dir.join("t.token"),
             lock: dir.join("l.lock"),
-            dir: dir.clone(),
+            dir,
         };
         let (path, mut running) = open_serve_log(&paths).unwrap();
         running.write_all(b"ready\n").unwrap();
@@ -423,7 +424,6 @@ mod tests {
         running.write_all(b"served\n").unwrap();
 
         let text = std::fs::read_to_string(&path).unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(text, "ready\nlease_held\nserved\n");
     }
 

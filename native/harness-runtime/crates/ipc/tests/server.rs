@@ -19,8 +19,14 @@ use contracts::{
 use ipc::{Environment, PeerId, Server, StartError, resolve_paths};
 use serde_json::{Value, json};
 
+#[cfg(unix)]
+use ipc::MAX_SOCKET_PATH_BYTES;
+
 #[path = "../../state/tests/common/qa_store.rs"]
 mod qa_store;
+#[path = "support/runtime_dir.rs"]
+mod runtime_dir;
+use runtime_dir::RuntimeDir;
 
 /// The client end of the transport under test.
 #[cfg(unix)]
@@ -54,6 +60,7 @@ fn foreign_peer() -> PeerId {
 struct Fixture {
     root: PathBuf,
     xdg: PathBuf,
+    _runtime_dir: RuntimeDir,
 }
 
 impl Fixture {
@@ -61,15 +68,13 @@ impl Fixture {
         let base = std::env::temp_dir().join(format!("hr-ipc-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         let root = base.join("repo");
-        let xdg = base.join("run");
         fs::create_dir_all(root.join(".git")).unwrap();
-        fs::create_dir_all(&xdg).unwrap();
-        // Private whatever the umask: a runtime directory refuses a parent others may write.
-        #[cfg(unix)]
-        fs::set_permissions(&xdg, fs::Permissions::from_mode(0o700)).unwrap();
+        // A short private directory: the socket path must fit the limit under a long TMPDIR too.
+        let runtime_dir = RuntimeDir::new(&format!("ipc-{name}"));
         Self {
             root: fs::canonicalize(root).unwrap(),
-            xdg: fs::canonicalize(xdg).unwrap(),
+            xdg: runtime_dir.path().to_path_buf(),
+            _runtime_dir: runtime_dir,
         }
     }
 

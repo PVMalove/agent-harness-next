@@ -20,6 +20,9 @@ mod server_unix;
 #[cfg(windows)]
 mod server_windows;
 mod session;
+#[cfg(all(test, unix))]
+#[path = "../tests/support/runtime_dir.rs"]
+mod test_runtime_dir;
 mod token;
 
 #[cfg(unix)]

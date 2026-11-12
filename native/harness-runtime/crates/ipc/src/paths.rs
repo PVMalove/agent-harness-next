@@ -396,9 +396,10 @@ mod tests {
     fn the_socket_and_the_token_sit_in_the_xdg_directory_when_it_is_set() {
         let root = scratch("xdg");
         fs::create_dir(root.join(".git")).unwrap();
-        let xdg = scratch("xdg-run");
+        let runtime_dir = crate::test_runtime_dir::RuntimeDir::new("paths-xdg");
+        let xdg = runtime_dir.path();
 
-        let paths = resolve_paths(&root, &Environment::with_xdg(&xdg)).unwrap();
+        let paths = resolve_paths(&root, &Environment::with_xdg(xdg)).unwrap();
 
         assert_eq!(paths.dir, xdg.join("harness"));
         for (path, suffix) in [
