@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import socket
 import stat
 import struct
@@ -97,6 +98,11 @@ _NO_RUNTIME_REMEDY = (
     "coordinator never writes state without it. In Claude Code the runtime-autostart hook starts "
     "it: read its warning and the journal it names"
 )
+
+
+def serve_command(repo_root: Path) -> str:
+    """The shell command that starts the runtime of ``repo_root``, ready to copy."""
+    return f"harness-runtime serve --repo {shlex.quote(str(repo_root.resolve()))}"
 
 
 class RuntimeClientError(HarnessError):

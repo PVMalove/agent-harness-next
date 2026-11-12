@@ -16,6 +16,7 @@ from harness.orchestration.ledger.lifecycle import LifecycleLedger
 _HARNESS_BIN = Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"
 
 _ORCHESTRATION_CHECK_IDS = [
+    "orchestration.runtime",
     "orchestration.ledger_summary",
     "orchestration.unfinished_batches",
     "orchestration.blocked_batches",

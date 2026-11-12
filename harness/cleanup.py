@@ -34,6 +34,19 @@ _INSTALL_DIR_RE = re.compile(
 )
 # Bound of each local git call; generous because `git worktree remove` deletes a whole checkout.
 GIT_TIMEOUT_SECONDS = 300
+# Why the worktrees stay when the batches that own them were not read: the general reason, and the
+# runtime-store one that names the process to start. Each is a key of the console's REASONS_RU.
+LEDGER_UNAVAILABLE = "Git or ledger state unavailable"
+RUNTIME_UNAVAILABLE = (
+    "runtime does not answer: start `harness-runtime serve --repo <repo>`"
+)
+
+
+@dataclass(frozen=True)
+class _Unread:
+    """The batches of the worktrees were not read; `reason` is LEDGER_ or RUNTIME_UNAVAILABLE."""
+
+    reason: str
 
 
 class CleanupItem(TypedDict):
@@ -96,7 +109,7 @@ def _worktree_fact(
     root: Path,
     path: Path,
     branch: str | None,
-    active: set[Path] | None,
+    active: set[Path] | _Unread,
     min_age_hours: float,
 ) -> WorktreeFact:
     status = _git(path, "status", "--porcelain", "-z", "--untracked-files=all")
@@ -117,8 +130,8 @@ def _worktree_fact(
         for parent in managed
     ):
         reason = "not a direct managed worktree"
-    elif active is None:
-        reason = "Git or ledger state unavailable"
+    elif isinstance(active, _Unread):
+        reason = active.reason
     elif path in active:
         reason = "referenced by an active batch"
     elif branch is not None and not _branch_allowed(root, branch):
@@ -143,7 +156,7 @@ def worktree_facts(repo: Path, *, min_age_hours: float = 24) -> list[WorktreeFac
     if registered is None:
         raise ValueError("Git unavailable")
     root = storage_root(checkout)
-    active = _active_worktrees(root)
+    active = _active_paths(_worktree_batches(root))
     return [
         _worktree_fact(checkout, root, path, branch, active, min_age_hours)
         for path, branch in registered.items()
@@ -276,13 +289,16 @@ def _registered_worktrees(repo: Path) -> dict[Path, str | None] | None:
 
 def _active_worktrees(root: Path) -> set[Path] | None:
     """Получить множество путей worktree, занятых активными батчами оркестрации."""
-    return _active_paths(_worktree_batches(root))
+    active = _active_paths(_worktree_batches(root))
+    return None if isinstance(active, _Unread) else active
 
 
-def _active_paths(batches: dict[Path, tuple[str, str]] | None) -> set[Path] | None:
-    """Оставить worktree нетерминальных batch; None сохраняет «ledger не прочитан»."""
-    if batches is None:
-        return None
+def _active_paths(
+    batches: dict[Path, tuple[str, str]] | _Unread,
+) -> set[Path] | _Unread:
+    """Оставить worktree нетерминальных batch; _Unread сохраняет причину, по которой ledger не прочитан."""
+    if isinstance(batches, _Unread):
+        return batches
     return {
         path
         for path, (_, state) in batches.items()
@@ -303,8 +319,9 @@ def _remember_batch(
         batches[path] = (batch_id, state)
 
 
-def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
-    """Сопоставить worktree с id и состоянием batch; None, если ledger не прочитан."""
+def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
+    """Сопоставить worktree с id и состоянием batch; _Unread, если ledger не прочитан:
+    с RUNTIME_UNAVAILABLE при неотвечающем runtime, иначе с LEDGER_UNAVAILABLE."""
     state = root / "orchestration" / "state"
     if not state.exists():
         return {}
@@ -318,18 +335,18 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
             )
             records = reply.result.get("records")
             if not isinstance(records, dict):
-                return None
+                return _Unread(LEDGER_UNAVAILABLE)
             store_batches: dict[Path, tuple[str, str]] = {}
             for key, batch in records.items():
                 if not isinstance(batch, dict) or not isinstance(
                     batch.get("state"), str
                 ):
-                    return None
+                    return _Unread(LEDGER_UNAVAILABLE)
                 value = batch.get("worktree")
                 if not isinstance(value, str) or not value:
                     if batch["state"] in TERMINAL_BATCH_STATES:
                         continue
-                    return None
+                    return _Unread(LEDGER_UNAVAILABLE)
                 path = Path(value)
                 _remember_batch(
                     store_batches,
@@ -338,8 +355,12 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
                     batch["state"],
                 )
             return store_batches
-        except (RuntimeClientError, OSError, ValueError):
-            return None
+        except RuntimeClientError as error:
+            if error.code == "runtime_unavailable":
+                return _Unread(RUNTIME_UNAVAILABLE)
+            return _Unread(LEDGER_UNAVAILABLE)
+        except (OSError, ValueError):
+            return _Unread(LEDGER_UNAVAILABLE)
     pointer = state / "ledger.json"
     try:
         if pointer.exists():
@@ -347,12 +368,12 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
             if not isinstance(generation, str) or not re.fullmatch(
                 r"generation-[A-Za-z0-9-]+", generation
             ):
-                return None
+                return _Unread(LEDGER_UNAVAILABLE)
             records = state / "generations" / generation / "batches"
         else:
             records = state / "batches"
         if not records.exists():
-            return None if pointer.exists() else {}
+            return _Unread(LEDGER_UNAVAILABLE) if pointer.exists() else {}
         batches: dict[Path, tuple[str, str]] = {}
         for record in records.glob("batch-*.json"):
             batch = json.loads(record.read_text(encoding="utf-8"))
@@ -371,7 +392,7 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
             )
         return batches
     except (OSError, ValueError, KeyError, TypeError):
-        return None
+        return _Unread(LEDGER_UNAVAILABLE)
 
 
 def _docker_selected(root: Path) -> bool:
@@ -772,11 +793,15 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
         for worktrees in worktree_roots:
             if not worktrees.is_dir() or worktrees.is_symlink():
                 continue
-            if registered is None or active is None:
+            if registered is None or isinstance(active, _Unread):
                 skipped.append(
                     {
                         "path": str(worktrees),
-                        "reason": "Git or ledger state unavailable",
+                        "reason": (
+                            LEDGER_UNAVAILABLE
+                            if registered is None or not isinstance(active, _Unread)
+                            else active.reason
+                        ),
                     }
                 )
             else:
@@ -786,7 +811,7 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                     reason = _worktree_fact(
                         checkout, root, path, branch, active, min_age_hours
                     ).reason
-                    batch = None if batches is None else batches.get(path)
+                    batch = None if isinstance(batches, _Unread) else batches.get(path)
                     if reason:
                         kept = {"path": str(path), "reason": reason}
                         if batch is not None:

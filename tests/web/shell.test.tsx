@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { menuCounter, preRelease } from "../../harness/console/frontend/src/AppShell";
 import { NAV_ITEMS } from "../../harness/console/frontend/src/navigation";
@@ -235,5 +235,70 @@ describe("the shell", () => {
       expect(heading?.textContent?.trim(), item.route).toBe(link?.textContent?.trim());
       unmount();
     }
+  });
+});
+
+describe("the runtime indicator", () => {
+  const command = "harness-runtime serve --repo /work/repo";
+  const store = (start_command: string, authority = "runtime-store") => ({
+    ...(fixture as unknown as HomeSnapshot),
+    store: {
+      authority,
+      schema: 4,
+      generation: "generation-ff01",
+      audit_records: start_command ? null : 7,
+      cutover_at: null,
+      reason: start_command ? "runtime не отвечает (runtime_unavailable)" : "",
+      start_command,
+    },
+  });
+
+  async function showAt(hash: string, snapshot: unknown) {
+    FakeSocket.reset();
+    window.location.hash = hash;
+    const view = renderApp();
+    const socket = FakeSocket.last;
+    act(() => socket.open());
+    act(() => socket.reply({ v: 1, id: socket.request("home.snapshot").id, type: "home.snapshot", ok: true,
+      cached: false, age_seconds: 0, snapshot }));
+    return view;
+  }
+
+  test("a runtime that does not answer is shown with its start command on the pages that need it", async () => {
+    for (const hash of ["#/", "#/orchestration", "#/recovery?batch=b-1", "#/container-route?batch=b-1&role=qa"]) {
+      const { unmount } = await showAt(hash, store(command));
+      expect(screen.getByText("Runtime: не отвечает"), hash).toBeTruthy();
+      expect(screen.getByText(command), hash).toBeTruthy();
+      unmount();
+    }
+  });
+
+  test("the copy button puts the command on the clipboard and says so", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const { unmount } = await showAt("#/", store(command));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Скопировать команду" }));
+    });
+    expect(writeText).toHaveBeenCalledWith(command);
+    expect(screen.getByText("Команда скопирована")).toBeTruthy();
+    unmount();
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  });
+
+  test("other pages show the state without the command", async () => {
+    const { unmount } = await showAt("#/board", store(command));
+    expect(screen.getByText("Runtime: не отвечает")).toBeTruthy();
+    expect(screen.queryByText(command)).toBeNull();
+    unmount();
+  });
+
+  test("an answering runtime is shown as working and a file ledger shows no indicator", async () => {
+    const first = await showAt("#/", store(""));
+    expect(screen.getByText("Runtime: работает")).toBeTruthy();
+    first.unmount();
+    const second = await showAt("#/", store("", "file-ledger"));
+    expect(screen.queryByText(/^Runtime:/)).toBeNull();
+    second.unmount();
   });
 });

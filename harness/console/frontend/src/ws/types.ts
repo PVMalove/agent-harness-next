@@ -45,6 +45,8 @@ export interface StoreFacts {
   cutover_at: string | null;
   /** Why a fact is null; "" when every fact was read. */
   reason: string;
+  /** The command that starts a runtime store's runtime that did not answer; "" otherwise. */
+  start_command: string;
 }
 
 export interface DriftCounts {
@@ -218,6 +220,7 @@ const SNAPSHOT = fields({
       audit_records: nullable(count),
       cutover_at: nullable(string),
       reason: string,
+      start_command: string,
     }),
   ),
   drift_counts: nullable(

@@ -76,6 +76,47 @@ def test_an_unanswering_runtime_leaves_the_audit_count_unread_with_its_reason(
     assert facts.generation == "generation-ff01"
     assert facts.cutover_at is None
     assert "runtime_unavailable" in facts.reason
+    assert facts.start_command == f"harness-runtime serve --repo {tmp_path.resolve()}"
+
+
+@pytest.mark.parametrize("code", ["protocol_unsupported", "store_busy"])
+def test_a_runtime_that_answers_with_a_refusal_offers_no_start_command(
+    tmp_path: Path, code: str
+) -> None:
+    _pointer(tmp_path, {"version": 4, "generation": "generation-ff01"})
+
+    def runtime(operation: str, payload: dict[str, object]) -> dict[str, object]:
+        raise RuntimeClientError(code, "refused", remedy="see the log", domain="transport")
+
+    facts = store_facts(tmp_path, runtime=runtime)
+    assert code in facts.reason
+    assert facts.start_command == ""
+
+
+def test_the_start_command_quotes_a_repository_path_with_a_space(tmp_path: Path) -> None:
+    repo = tmp_path / "my repo"
+    _pointer(repo, {"version": 4, "generation": "generation-ff01"})
+
+    def runtime(operation: str, payload: dict[str, object]) -> dict[str, object]:
+        raise RuntimeClientError(
+            "runtime_unavailable", "no runtime", remedy="start it", domain="transport"
+        )
+
+    assert store_facts(repo, runtime=runtime).start_command == (
+        f"harness-runtime serve --repo '{repo.resolve()}'"
+    )
+
+
+def test_an_answering_runtime_or_a_file_ledger_offers_no_start_command(
+    tmp_path: Path,
+) -> None:
+    store = tmp_path / "store"
+    _pointer(store, {"version": 4, "generation": "generation-ff01"})
+    answered = store_facts(store, runtime=lambda operation, payload: {"audit_records": 1})
+    files = tmp_path / "files"
+    _pointer(files, {"version": 3, "generation": "generation-ab12"})
+    assert answered.start_command == ""
+    assert store_facts(files).start_command == ""
 
 
 def test_the_file_ledger_never_asks_the_runtime(tmp_path: Path) -> None:

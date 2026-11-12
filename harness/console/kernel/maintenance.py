@@ -289,6 +289,9 @@ REASONS_RU = {
     "current checkout": "текущий checkout",
     "not a direct managed worktree": "вне управляемого каталога worktree",
     "Git or ledger state unavailable": "Git или ledger недоступен",
+    "runtime does not answer: start `harness-runtime serve --repo <repo>`": (
+        "runtime не отвечает: запустите `harness-runtime serve --repo <repo>`"
+    ),
     "referenced by an active batch": "используется активным batch",
     "unowned local branch": "ветка вне шаблона проекта",
     "worktree newer than minimum age": "worktree моложе 24 ч",

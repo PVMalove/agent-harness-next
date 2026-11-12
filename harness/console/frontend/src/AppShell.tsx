@@ -12,6 +12,9 @@ import type { HomeSnapshot } from "./ws/types";
 
 export const COLLAPSED_KEY = "harness-nav-collapsed";
 
+/** The routes that do not work without the runtime: they show its start command. */
+const RUNTIME_ROUTES = new Set(["", "orchestration", "recovery", "container-route"]);
+
 /** A semver pre-release suffix (`2.1.0-rc.1` -> "rc.1"), else null: the badge shows only then. */
 export function preRelease(version: string): string | null {
   const match = /^v?\d+\.\d+\.\d+-([0-9A-Za-z.-]+)(?:\+[0-9A-Za-z.-]+)?$/.exec(version.trim());
@@ -65,6 +68,17 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
   const version = snapshot?.harness_version ?? "";
   const channel = version ? preRelease(version) : null;
   const project = snapshot?.project ?? null;
+  // Only a runtime store needs the runtime; its start command is set when it did not answer.
+  const store = snapshot?.store ?? null;
+  const runtimeStore = store?.authority === "runtime-store";
+  const startCommand = runtimeStore ? (store?.start_command ?? "") : "";
+  const [copied, setCopied] = useState("");
+  const copyStartCommand = () => {
+    void navigator.clipboard?.writeText(startCommand).then(
+      () => setCopied(startCommand),
+      () => setCopied(""),
+    );
+  };
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -172,6 +186,11 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
             {project.branch}
           </span>
         ) : null}
+        {runtimeStore ? (
+          <span id="runtime-state" className={`where runtime-state ${startCommand ? "err" : "ok"}`} role="status">
+            {startCommand ? t("Runtime: не отвечает") : t("Runtime: работает")}
+          </span>
+        ) : null}
         <div className="top-actions">
           {chip}
           <div className="seg lang-switch" role="group" aria-label={t("Язык интерфейса")}>
@@ -227,7 +246,23 @@ export function AppShell({ chip, banner, children }: AppShellProps) {
           ))}
         </nav>
         <div id="nav-scrim" className="nav-scrim" hidden={!open} onClick={() => setOpen(false)} />
-        <main id="content" tabIndex={-1}>{children}</main>
+        <main id="content" tabIndex={-1}>
+          {startCommand && RUNTIME_ROUTES.has(current) ? (
+            <div className="runtime-down" role="alert">
+              <span>{t("Без runtime оркестрация не работает. Запустите его вне песочницы агента:")}</span>
+              <code className="mono">{startCommand}</code>
+              <button className="btn" type="button" onClick={copyStartCommand}>
+                {t("Скопировать команду")}
+              </button>
+              {copied === startCommand ? (
+                <span className="small muted" role="status">
+                  {t("Команда скопирована")}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {children}
+        </main>
       </div>
 
       <footer className="foot">
