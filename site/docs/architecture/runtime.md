@@ -25,6 +25,27 @@ reconcile и не запускает второй процесс, если об�
 python3 .harness/orchestration/coordinator.py --repo . runtime status
 ```
 
+## Остановка и перезапуск
+
+`harness-runtime stop --repo <repo>` останавливает runtime репозитория тем же путём, что SIGTERM:
+отправляет по его IPC операцию `shutdown` с токеном runtime и ждёт, пока runtime отпустит lock
+экземпляра (до 30 с). Сокет и token-файл runtime удаляет сам. Исполнения переживают остановку, как
+и при SIGTERM. Команда печатает одну строку JSON.
+
+`harness-runtime restart --repo <repo>` выполняет `stop`, затем `serve` в том же процессе: печатает
+строку готовности `serve` и завершается его кодами. Соединения клиентов старого runtime
+закрываются вместе с ним; клиент заново читает новый токен.
+
+| Код | `stop` | `restart` |
+| --- | --- | --- |
+| 0 | `{"status":"stopped","pid":<pid>}` или `{"status":"not_running"}`; повтор безопасен | runtime остановлен штатно |
+| 1 | runtime держит lock, но не ответил за 30 с (`[runtime_unavailable]`), или принял `shutdown`, но не отпустил lock за 30 с (`[deadline_exceeded]`) | `stop` не удался, или запущенный `serve` завершился ошибкой |
+| 2 | отказ, ничего не остановлено: неверные аргументы, каталог не репозиторий (`[not_found]`), runtime отказал в `hello` (`[unauthorized_peer]`, `[protocol_unsupported]`) или не знает `shutdown` (`[unknown_operation]`) | `stop` отказал, или `serve` отказался стартовать |
+
+Runtime версии без `shutdown` команда не останавливает: его один раз останавливают сигналом SIGTERM
+(на Windows — Ctrl+Break), дальше работают `stop` и `restart`. На Windows контракт тот же, клиент
+подключается к named pipe runtime.
+
 ## Store
 
 Operational state — SQLite WAL с короткими транзакциями и без внешних вызовов внутри транзакции.

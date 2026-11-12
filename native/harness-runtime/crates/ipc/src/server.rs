@@ -7,6 +7,7 @@ use std::fmt;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use contracts::{
@@ -274,11 +275,14 @@ fn drops_the_response(_body: &[u8], _reply: &crate::session::Reply) -> bool {
     false
 }
 
+/// Serve one connection. A `shutdown` it answers sets `shutdown` once the answer is written, so
+/// the accept loop ends the same way as on SIGTERM.
 pub(crate) fn serve_connection<S: Read + Write>(
     stream: &mut S,
     permitted: bool,
     peer_pid: Option<u32>,
     shared: &Shared,
+    shutdown: &AtomicBool,
 ) -> Result<(), FrameError> {
     if !permitted {
         return send(
@@ -315,6 +319,9 @@ pub(crate) fn serve_connection<S: Read + Write>(
             return Ok(());
         }
         send(stream, &reply.response)?;
+        if session.stop_requested() {
+            shutdown.store(true, Ordering::Relaxed);
+        }
         if reply.close {
             return Ok(());
         }
@@ -381,7 +388,7 @@ mod tests {
     fn a_refused_peer_gets_unauthorized_peer_before_anything_is_read() {
         let mut stream = Duplex::new(vec![0xff; 16]);
 
-        serve_connection(&mut stream, false, None, &shared()).unwrap();
+        serve_connection(&mut stream, false, None, &shared(), &AtomicBool::new(false)).unwrap();
 
         assert_eq!(first_error(&stream.output), ErrorCode::UnauthorizedPeer);
         assert_eq!(stream.input.position(), 0);
@@ -391,7 +398,7 @@ mod tests {
     fn a_permitted_peer_is_served_over_any_byte_stream() {
         let mut stream = Duplex::new((MAX_FRAME_LEN + 1).to_be_bytes().to_vec());
 
-        serve_connection(&mut stream, true, None, &shared()).unwrap();
+        serve_connection(&mut stream, true, None, &shared(), &AtomicBool::new(false)).unwrap();
 
         assert_eq!(first_error(&stream.output), ErrorCode::MalformedRequest);
     }

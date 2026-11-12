@@ -28,6 +28,8 @@ pub struct Server {
     listener: UnixListener,
     paths: RuntimePaths,
     shared: Arc<Shared>,
+    /// Set by a `shutdown` request; the accept loop ends as when the caller's stop flag is set.
+    shutdown: Arc<AtomicBool>,
     /// Holds the exclusive lock of this repository's runtime until the server is dropped.
     _lock: File,
     /// A shared lock on the runtime directory: `systemd-tmpfiles` never ages a directory that a
@@ -76,6 +78,7 @@ impl Server {
             listener,
             paths,
             shared,
+            shutdown: Arc::default(),
             _lock: lock,
             _directory: directory,
         })
@@ -90,7 +93,8 @@ impl Server {
         &self.shared.supervisor
     }
 
-    /// Serve connections until `stop` is set. A connection runs on its own thread.
+    /// Serve connections until `stop` is set or a client sends `shutdown`. A connection runs on
+    /// its own thread.
     pub fn serve_until(&self, stop: &AtomicBool) -> io::Result<()> {
         self.serve_until_as(stop, own_uid())
     }
@@ -99,13 +103,14 @@ impl Server {
     /// uid to see the refusal of a foreign peer on a real socket.
     pub fn serve_until_as(&self, stop: &AtomicBool, expected_uid: PeerId) -> io::Result<()> {
         let own = expected_uid;
-        while !stop.load(Ordering::Relaxed) {
+        while !stop.load(Ordering::Relaxed) && !self.shutdown.load(Ordering::Relaxed) {
             match self.listener.accept() {
                 Ok((stream, _)) => {
                     let shared = Arc::clone(&self.shared);
+                    let shutdown = Arc::clone(&self.shutdown);
                     thread::spawn(move || {
                         // A broken connection ends its own thread, never the server.
-                        let _ = serve_unix_stream(stream, own, &shared);
+                        let _ = serve_unix_stream(stream, own, &shared, &shutdown);
                     });
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
@@ -172,6 +177,7 @@ fn serve_unix_stream(
     mut stream: UnixStream,
     own: PeerId,
     shared: &Shared,
+    shutdown: &AtomicBool,
 ) -> Result<(), FrameError> {
     // The accepted socket must block, whatever the listener's mode was.
     stream.set_nonblocking(false).map_err(FrameError::Io)?;
@@ -180,7 +186,7 @@ fn serve_unix_stream(
         .map_err(FrameError::Io)?;
     let permitted = peer_uid(&stream).is_ok_and(|uid| same_user(uid, own));
     let pid = peer_pid(&stream);
-    serve_connection(&mut stream, permitted, pid, shared)
+    serve_connection(&mut stream, permitted, pid, shared, shutdown)
 }
 
 #[cfg(test)]

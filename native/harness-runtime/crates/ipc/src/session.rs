@@ -45,6 +45,7 @@ pub struct Reply {
 pub struct Session {
     negotiated: Option<ProtocolVersion>,
     peer_pid: Option<u32>,
+    stop_requested: bool,
 }
 
 fn operation_id_of(body: &[u8]) -> String {
@@ -71,7 +72,14 @@ impl Session {
         Self {
             negotiated: None,
             peer_pid,
+            stop_requested: false,
         }
+    }
+
+    /// Whether this connection asked the runtime to stop (`shutdown`). The server sets its stop
+    /// flag only after the reply is written, so the client always reads the answer.
+    pub fn stop_requested(&self) -> bool {
+        self.stop_requested
     }
 
     /// The reply to one frame body, given the current time in UTC milliseconds.
@@ -138,6 +146,18 @@ impl Session {
                 ),
                 close: false,
             },
+            // The same stop as SIGTERM (`harness-runtime stop`): the connection closes after the
+            // answer, and the executions outlive the runtime.
+            "shutdown" => {
+                self.stop_requested = true;
+                Reply {
+                    response: Response::ok(
+                        &request.operation_id,
+                        json!({"state": "stopping", "pid": std::process::id()}),
+                    ),
+                    close: true,
+                }
+            }
             "state.read" => state_read(shared, &request, negotiated.minor),
             "state.write" => state_write(shared, &request, self.peer_pid),
             "qa.lane.inspect" => qa_lane_inspect(shared, &request),
@@ -232,7 +252,7 @@ impl Session {
         // The store is the authority only after a cutover, which can happen while this runtime
         // lives, so every `hello` asks again.
         let store_id = shared.state_dir.as_deref().and_then(state::read::store_id);
-        let mut features = vec!["status".to_owned()];
+        let mut features = vec!["status".to_owned(), "shutdown".to_owned()];
         if store_id.is_some() {
             features.push("state.read".to_owned());
             features.push("state.write".to_owned());
@@ -751,6 +771,45 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_before_hello_is_unauthorized_and_requests_no_stop() {
+        let mut session = Session::new();
+
+        let reply = session.handle(&setup().0, &status_body(1, "shutdown", NOW + 1), NOW);
+
+        assert_eq!(code(&reply), ErrorCode::UnauthorizedPeer);
+        assert!(!session.stop_requested());
+    }
+
+    #[test]
+    fn an_authenticated_shutdown_answers_the_pid_and_requests_the_stop() {
+        let (shared, root) = setup();
+        let mut session = authenticated(&shared, &root);
+        assert!(!session.stop_requested());
+
+        let reply = session.handle(&shared, &status_body(1, "shutdown", NOW + 1), NOW);
+
+        assert_eq!(reply.response.status, Status::Ok);
+        let result = reply.response.result.unwrap();
+        assert_eq!(result["state"], "stopping");
+        assert_eq!(result["pid"], std::process::id());
+        assert!(reply.close);
+        assert!(session.stop_requested());
+    }
+
+    #[test]
+    fn hello_lists_shutdown_among_the_features() {
+        let (shared, root) = setup();
+
+        let reply = Session::new().handle(&shared, &hello_body(&root, "secret", 1, 1), NOW);
+
+        let features = reply.response.result.unwrap()["features"].clone();
+        assert!(
+            features.as_array().unwrap().contains(&json!("shutdown")),
+            "{features}"
+        );
+    }
+
+    #[test]
     fn an_unknown_operation_is_named() {
         let (shared, root) = setup();
         let mut session = authenticated(&shared, &root);
@@ -898,7 +957,7 @@ mod tests {
 
         let result = hello.response.result.unwrap();
         assert_eq!(result["store_id"], Value::Null);
-        assert_eq!(result["features"], json!(["status"]));
+        assert_eq!(result["features"], json!(["status", "shutdown"]));
         assert_eq!(code(&reply), ErrorCode::NotFound);
     }
 
@@ -921,6 +980,7 @@ mod tests {
         assert_eq!(result["store_id"], store_id.as_str());
         let mut features = vec![
             "status",
+            "shutdown",
             "state.read",
             "state.write",
             "state.validate",
