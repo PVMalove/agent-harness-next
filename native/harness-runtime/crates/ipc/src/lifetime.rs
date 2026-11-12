@@ -161,8 +161,9 @@ impl Lifetime {
 
     /// Whether an owned runtime stops now: after the sweep no owner is left, no connection is
     /// open and `idle` proves the store idle. The answer `true` is final: the runtime is exiting.
-    /// The accept loop asks it on its own thread, so no connection is accepted between the
-    /// decision and the stop.
+    /// The accept loop asks it on its own thread, so it accepts nothing after the decision. A
+    /// connection the kernel queued in the backlog after the decision is closed at exit: the client
+    /// sees `NotRunning` and `ensure` starts a new serve and retries.
     pub fn should_exit(&self, now: Instant, idle: impl FnOnce() -> bool) -> bool {
         if !self.owned {
             return false;
