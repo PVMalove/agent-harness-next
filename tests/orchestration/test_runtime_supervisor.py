@@ -614,7 +614,14 @@ def test_a_store_failure_before_the_launch_starts_nothing_and_a_repeat_launches_
 def test_a_failed_receipt_write_keeps_the_intent_and_the_repeat_adopts_the_process(
     supervised: Factory,
 ) -> None:
-    repo = supervised(env={"HARNESS_RUNTIME_TEST_FAIL_AT": "execution.launch:receipt"})
+    # The periodic reconcile adopts a launch without its receipt at any second; it is stopped, so
+    # the test reads the state the failed write left and the repeat is what adopts the process.
+    repo = supervised(
+        env={
+            "HARNESS_RUNTIME_TEST_FAIL_AT": "execution.launch:receipt",
+            "HARNESS_RUNTIME_TEST_NO_RECONCILE": "1",
+        }
+    )
 
     failed = repo.send()
 

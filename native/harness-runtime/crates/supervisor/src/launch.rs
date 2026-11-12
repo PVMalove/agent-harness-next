@@ -875,6 +875,9 @@ impl Supervisor {
                 while now_ms() < until && !stop.load(Ordering::Relaxed) {
                     thread::sleep(Duration::from_millis(50));
                 }
+                if hooks::periodic_reconcile_stopped() {
+                    continue;
+                }
                 interval = supervisor.reconcile().unwrap_or(DEFAULT_POLL_SECONDS);
                 hooks::trace("reconciled");
             }
