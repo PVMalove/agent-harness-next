@@ -74,7 +74,11 @@ from harness.seed_links import propose_contract_links, print_contract_proposals
 from harness.health import registry as health_registry
 from harness.health import render as health_render
 from harness.health import report_json as health_report_json
-from harness.health.checks.hooks import recorded_managed_entries
+from harness.health.checks.hooks import (
+    ENVELOPE_REL,
+    recorded_managed_entries,
+    unregistered_envelope_scripts,
+)
 from harness.health.hook_settings import (
     ADAPTERS,
     RuntimeAdapter,
@@ -82,6 +86,7 @@ from harness.health.hook_settings import (
     critical_wiring,
     merge_hooks,
     template_digests,
+    without_scripts,
 )
 from harness.health.model import JsonObject
 from harness.health.project_files import (
@@ -1119,14 +1124,25 @@ def _install_hook_config(
     """Записать или слить файл hooks runtime, напечатать отчёт и зарегистрировать интеграцию.
 
     Нет файла или он forced — байты шаблона. Иначе managed hook-записи сливаются по пути команды
-    скрипта, записи пользователя не меняются; файл, который нельзя разобрать, остаётся как есть."""
+    скрипта, записи пользователя не меняются; файл, который нельзя разобрать, остаётся как есть.
+    Скрипт, чей hook_id не знает установленный `hook_response.py`, не подключается (новые записи
+    не добавляются и не заменяются), пока конверт не обновлён; существующие записи остаются."""
     config = Path(adapter.config)
-    template_bytes = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
-    template_document = json.loads(template_bytes.decode("utf-8"))
+    full_bytes = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
+    full_document = json.loads(full_bytes.decode("utf-8"))
+    withheld = unregistered_envelope_scripts(repo) or ()
+    template_document = without_scripts(full_document, withheld)
+    template_bytes = (
+        full_bytes
+        if template_document == full_document
+        else (json.dumps(template_document, indent=2, ensure_ascii=False) + "\n").encode(
+            "utf-8"
+        )
+    )
     target = repo / config
     written: list[str] = []
     recorded = recorded_managed_entries(repo, adapter.integration_id)
-    baseline = set(template_digests(template_document)) | set(recorded or [])
+    baseline = set(template_digests(full_document)) | set(recorded or [])
     if not target.exists() or seeds.forced(adapter.config):
         if target.exists() and target.read_bytes() != template_bytes:
             seeds.overwrite(adapter.config, FORCED_REASON)
@@ -1173,8 +1189,17 @@ def _install_hook_config(
                     f"После просмотра: --force-seed-file {adapter.config} "
                     "(заменит весь файл шаблоном)"
                 )
-        if target.read_bytes() != template_bytes:
+        if target.read_bytes() != template_bytes and not withheld:
             seeds.modified.append(adapter.config)
+    if template_document != full_document:
+        print(
+            f"[WARNING] {adapter.config}: hooks не подключены, их hook_id не регистрирует "
+            f"{ENVELOPE_REL}: {', '.join(withheld)}"
+        )
+        print(
+            f"Исправление: harness update {repo} --force-seed-file {ENVELOPE_REL} "
+            "(прежний конверт сохранится в .harness/.sandboxes/seed-backups/)"
+        )
     try:
         final: object = json.loads(target.read_text(encoding="utf-8"))
     except JSON_READ_ERRORS:

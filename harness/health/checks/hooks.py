@@ -17,8 +17,10 @@ from ..hook_settings import (
     RuntimeAdapter,
     canonical_integration_id,
     critical_wiring,
+    envelope_hook_ids,
     is_wired,
     merge_hooks,
+    script_envelope_id,
     supported_tools,
     template_digests,
 )
@@ -40,6 +42,7 @@ GROUP = "hooks"
 CHECK_ID = "hooks.policy"
 HOOK_CAPABILITIES = ("engineering-suite", BACKEND_ORCHESTRATION_CAPABILITY)
 HOOKS_DIR = ".claude/hooks"
+ENVELOPE_REL = f"{HOOKS_DIR}/hook_response.py"
 TEST_AUTHOR_AGENT = ".claude/agents/test-author.md"
 DEFAULT_SOURCE = "по умолчанию"
 PROJECT_JSON_SOURCE = ".harness/project.json"
@@ -162,6 +165,31 @@ def recorded_managed_entries(repo: Path, identifier: str) -> list[str] | None:
             ):
                 return recorded
     return None
+
+
+def unregistered_envelope_scripts(repo: Path) -> tuple[str, ...] | None:
+    """Скрипты `.claude/hooks/*.sh`, чей hook_id не зарегистрирован в установленном конверте.
+
+    Нет конверта — `()`: скрипты тогда работают без него. Конверт не разбирается — None."""
+    hooks_dir = repo / HOOKS_DIR
+    envelope = repo / ENVELOPE_REL
+    if not envelope.is_file():
+        return ()
+    try:
+        known = envelope_hook_ids(envelope.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        known = None
+    if known is None:
+        return None
+    unknown: list[str] = []
+    for script in sorted(hooks_dir.glob("*.sh")):
+        try:
+            hook_id = script_envelope_id(script.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            continue
+        if hook_id is not None and hook_id not in known:
+            unknown.append(script.name)
+    return tuple(unknown)
 
 
 def _result(
