@@ -1789,6 +1789,9 @@ def decide_batch(args: argparse.Namespace) -> JsonObject:
         elif args.decision in {"accept", "override-warning"}:
             if report["role"] == "developer":
                 if batch.get("base_rebase_required"):
+                    # Only legacy batches imported from ledger 1.x by `harness-runtime migrate`
+                    # carry this flag; 2.x code never sets it (ADR 0014 removed the gate).
+                    #
                     # Pin the tip the accepted candidate was verified to contain; a batch blocked
                     # before the target was recorded falls back to the fetched tip.
                     target = batch.pop("rebase_target_commit", None)
