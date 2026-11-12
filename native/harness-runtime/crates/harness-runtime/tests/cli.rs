@@ -607,3 +607,351 @@ fn rollback_that_fails_before_the_commit_point_replaces_its_archive_on_a_repeat(
 fn run_owned(args: &[String]) -> Output {
     run(&args.iter().map(String::as_str).collect::<Vec<_>>())
 }
+
+/// `harness-runtime ensure` and `release` with a real `serve` (ADR 0031, section 4).
+#[cfg(unix)]
+mod autostart {
+    use std::process::{Child, Stdio};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    use serde_json::Value;
+
+    use super::*;
+
+    /// A repository, its private runtime directory and the runtimes a test started.
+    struct Setup {
+        repo: Scratch,
+        xdg: Scratch,
+        pids: Vec<u32>,
+    }
+
+    impl Setup {
+        fn new(name: &str, repo: Scratch) -> Self {
+            Self {
+                repo,
+                xdg: Scratch::new(&format!("{name}-xdg")),
+                pids: Vec::new(),
+            }
+        }
+
+        fn command(&self, words: &[&str]) -> Command {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_harness-runtime"));
+            command
+                .args(&words[..1])
+                .arg("--repo")
+                .arg(&self.repo.0)
+                .args(&words[1..])
+                .env("XDG_RUNTIME_DIR", &self.xdg.0);
+            command
+        }
+
+        /// Run `ensure` or `release`: its JSON line and its exit code.
+        fn run(&mut self, words: &[&str]) -> (Value, i32) {
+            let output = self.command(words).output().unwrap();
+            let line = String::from_utf8_lossy(&output.stdout);
+            let answer: Value = serde_json::from_str(line.trim())
+                .unwrap_or_else(|err| panic!("{err}: {line:?} {:?}", stderr_lines(&output)));
+            if let Some(pid) = answer["pid"].as_u64() {
+                self.pids.push(u32::try_from(pid).unwrap());
+            }
+            (answer, output.status.code().unwrap())
+        }
+
+        fn socket(&self) -> PathBuf {
+            let paths =
+                ipc::resolve_paths(&self.repo.0, &ipc::Environment::with_xdg(&self.xdg.0)).unwrap();
+            paths.socket
+        }
+
+        /// `serve` started by hand, ready.
+        fn manual(&mut self) -> Child {
+            use std::io::{BufRead, BufReader};
+
+            let mut child = Command::new(env!("CARGO_BIN_EXE_harness-runtime"))
+                .args(["serve", "--repo", self.repo.0.to_str().unwrap()])
+                .env("XDG_RUNTIME_DIR", &self.xdg.0)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let mut line = String::new();
+            BufReader::new(child.stdout.take().unwrap())
+                .read_line(&mut line)
+                .unwrap();
+            assert!(line.contains("\"ready\""), "{line}");
+            child
+        }
+
+        /// Whether the runtime removed its socket within `seconds`.
+        fn stops_within(&self, seconds: u64) -> bool {
+            let deadline = Instant::now() + Duration::from_secs(seconds);
+            while Instant::now() < deadline {
+                if !self.socket().exists() {
+                    return true;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            false
+        }
+
+        /// Whether the runtime still serves after it had the time to decide.
+        fn keeps_serving(&self) -> bool {
+            thread::sleep(Duration::from_millis(2500));
+            self.socket().exists()
+        }
+    }
+
+    impl Drop for Setup {
+        fn drop(&mut self) {
+            for pid in &self.pids {
+                let _ = Command::new("kill")
+                    .arg(pid.to_string())
+                    .stderr(Stdio::null())
+                    .status();
+            }
+        }
+    }
+
+    #[test]
+    fn ensure_starts_an_owned_runtime_that_another_session_reuses_and_the_last_release_stops() {
+        let mut setup = Setup::new("ensure-start", Scratch::repo("ensure-start"));
+
+        let (started, code) = setup.run(&["ensure", "--session", "s1"]);
+        let (reused, reused_code) = setup.run(&["ensure", "--session", "s2", "--agent", "a"]);
+
+        assert_eq!(code, 0, "{started}");
+        assert_eq!(started["status"], "started");
+        assert_eq!(started["owned"], true);
+        assert!(started["pid"].as_u64().is_some());
+        let log = PathBuf::from(started["log"].as_str().unwrap());
+        assert!(log.ends_with(format!(
+            "{}.serve.log",
+            setup.socket().file_stem().unwrap().to_str().unwrap()
+        )));
+        assert!(fs::read_to_string(&log).unwrap().contains("\"ready\""));
+        assert_eq!(reused_code, 0);
+        assert_eq!(reused["status"], "reused");
+        assert_eq!(reused["owned"], true);
+        assert_eq!(reused["owners"], serde_json::json!(["s1", "s2/a"]));
+
+        let (released, released_code) = setup.run(&["release", "--session", "s1"]);
+        assert_eq!(
+            (released["status"].as_str(), released_code),
+            (Some("released"), 0)
+        );
+        assert!(setup.keeps_serving(), "another owner keeps the runtime");
+        let (released, _) = setup.run(&["release", "--session", "s2", "--agent", "a"]);
+        assert_eq!(released["status"], "released");
+        assert!(setup.stops_within(10), "the own runtime did not stop");
+        let (after, after_code) = setup.run(&["release", "--session", "s1"]);
+        assert_eq!(
+            (after["status"].as_str(), after_code),
+            (Some("not_running"), 0)
+        );
+    }
+
+    #[test]
+    fn a_manual_runtime_is_reused_and_never_stopped() {
+        let mut setup = Setup::new("ensure-manual", Scratch::repo("ensure-manual"));
+        let mut manual = setup.manual();
+
+        let (reused, code) = setup.run(&["ensure", "--session", "s"]);
+        let (released, _) = setup.run(&["release", "--session", "s"]);
+        let (again, _) = setup.run(&["release", "--session", "s"]);
+
+        assert_eq!(code, 0);
+        assert_eq!(reused["status"], "reused");
+        assert_eq!(reused["owned"], false);
+        assert_eq!(released["status"], "released");
+        assert_eq!(again["status"], "not_attached");
+        assert!(setup.keeps_serving(), "a manual runtime stopped");
+        assert!(manual.try_wait().unwrap().is_none());
+        manual.kill().unwrap();
+        manual.wait().unwrap();
+    }
+
+    #[test]
+    fn a_busy_store_keeps_the_own_runtime_until_it_is_idle() {
+        let (repo, store) = cut_over("ensure-busy");
+        let mut setup = Setup::new("ensure-busy", repo);
+        let (started, code) = setup.run(&["ensure", "--session", "s"]);
+        assert_eq!(
+            (started["status"].as_str(), code),
+            (Some("started"), 0),
+            "{started}"
+        );
+        let connection = rusqlite::Connection::open(&store).unwrap();
+        connection
+            .execute(
+                "INSERT INTO qa_queue (id, body_json) VALUES ('q1', '{}')",
+                [],
+            )
+            .unwrap();
+        let dispatch: String = connection
+            .query_row("SELECT id FROM dispatch_status LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let state: String = connection
+            .query_row(
+                "SELECT state FROM dispatch_status WHERE id = ?1",
+                [&dispatch],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let (released, _) = setup.run(&["release", "--session", "s"]);
+        assert_eq!(released["status"], "released");
+        assert_eq!(
+            released["busy"],
+            serde_json::json!(["the QA queue holds q1"])
+        );
+        assert!(
+            setup.keeps_serving(),
+            "a queued QA run must keep the runtime"
+        );
+
+        connection
+            .execute_batch(&format!(
+                "DELETE FROM qa_queue;
+                 UPDATE dispatch_status SET state = 'working' WHERE id = '{dispatch}';"
+            ))
+            .unwrap();
+        assert!(
+            setup.keeps_serving(),
+            "a working dispatch must keep the runtime"
+        );
+
+        connection
+            .execute(
+                "UPDATE dispatch_status SET state = ?1 WHERE id = ?2",
+                [&state, &dispatch],
+            )
+            .unwrap();
+        assert!(setup.stops_within(10), "an idle store did not let it stop");
+    }
+
+    #[test]
+    fn an_owner_whose_process_died_is_released() {
+        let mut setup = Setup::new("ensure-dead", Scratch::repo("ensure-dead"));
+        let mut owner = Command::new("sleep").arg("60").spawn().unwrap();
+        let pid = owner.id().to_string();
+
+        let (started, code) = setup.run(&["ensure", "--session", "s", "--owner-pid", &pid]);
+        assert_eq!(
+            (started["status"].as_str(), code),
+            (Some("started"), 0),
+            "{started}"
+        );
+        assert!(setup.keeps_serving(), "a live owner keeps the runtime");
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+
+        // Linux observes the start time of a pid; another Unix relies on the time to live.
+        if cfg!(target_os = "linux") {
+            assert!(setup.stops_within(10), "the dead owner kept the runtime");
+        }
+    }
+
+    #[test]
+    fn an_owner_that_does_not_attach_again_within_the_time_to_live_is_released() {
+        let mut setup = Setup::new("ensure-ttl", Scratch::repo("ensure-ttl"));
+
+        let (started, code) = setup.run(&["ensure", "--session", "s", "--owner-ttl-seconds", "1"]);
+
+        assert_eq!(
+            (started["status"].as_str(), code),
+            (Some("started"), 0),
+            "{started}"
+        );
+        assert!(setup.stops_within(10), "the expired owner kept the runtime");
+    }
+
+    #[test]
+    fn a_refused_start_is_reported_with_its_error_remedy_and_journal() {
+        let (repo, store) = cut_over("ensure-refused");
+        rusqlite::Connection::open(&store)
+            .unwrap()
+            .pragma_update(None, "user_version", state::schema::SCHEMA_VERSION + 1)
+            .unwrap();
+        let mut setup = Setup::new("ensure-refused", repo);
+
+        let (refused, code) = setup.run(&["ensure", "--session", "s"]);
+
+        assert_eq!(code, 2, "{refused}");
+        assert_eq!(refused["status"], "refused");
+        assert_eq!(refused["exit_code"], 2);
+        assert!(
+            refused["remedy"]
+                .as_str()
+                .unwrap()
+                .starts_with("[protocol_unsupported] "),
+            "{refused}"
+        );
+        assert!(!refused["error"].as_str().unwrap().is_empty());
+        let log = fs::read_to_string(refused["log"].as_str().unwrap()).unwrap();
+        assert!(log.contains("ERROR: "), "{log}");
+        assert!(!setup.socket().exists());
+    }
+
+    #[test]
+    fn attach_only_never_starts_a_runtime() {
+        let mut setup = Setup::new("ensure-attach", Scratch::repo("ensure-attach"));
+
+        let (answer, code) = setup.run(&["ensure", "--session", "s", "--attach-only"]);
+
+        assert_eq!((answer["status"].as_str(), code), (Some("not_running"), 3));
+        assert!(!setup.socket().exists());
+    }
+
+    #[test]
+    fn two_concurrent_ensures_leave_one_runtime_with_both_owners() {
+        let mut setup = Setup::new("ensure-race", Scratch::repo("ensure-race"));
+        let commands: Vec<_> = ["s1", "s2"]
+            .into_iter()
+            .map(|session| {
+                setup
+                    .command(&["ensure", "--session", session])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap()
+            })
+            .collect();
+        let mut statuses: Vec<String> = commands
+            .into_iter()
+            .map(|child| {
+                let output = child.wait_with_output().unwrap();
+                assert!(output.status.success(), "{:?}", stderr_lines(&output));
+                let answer: Value = serde_json::from_slice(&output.stdout).unwrap();
+                if let Some(pid) = answer["pid"].as_u64() {
+                    setup.pids.push(u32::try_from(pid).unwrap());
+                }
+                answer["status"].as_str().unwrap().to_owned()
+            })
+            .collect();
+        statuses.sort();
+
+        assert_eq!(statuses, ["reused", "started"]);
+        let (answer, _) = setup.run(&["ensure", "--session", "s3"]);
+        assert_eq!(answer["owners"], serde_json::json!(["s1", "s2", "s3"]));
+    }
+
+    #[test]
+    fn ensure_and_release_refuse_a_malformed_owner() {
+        for words in [
+            &["ensure", "--session", "a b"][..],
+            &["release", "--session", "s", "--attach-only"],
+        ] {
+            let setup = Setup::new("ensure-usage", Scratch::repo("ensure-usage"));
+            let output = setup.command(words).output().unwrap();
+            let (code, remedy) = refusal(&output);
+            assert_eq!(code, 2);
+            assert!(
+                remedy.starts_with("REMEDY: [malformed_request] "),
+                "{remedy}"
+            );
+        }
+    }
+}

@@ -166,6 +166,32 @@ pub fn hold_instance_lock(paths: &RuntimePaths) -> Result<File, StartError> {
     take_lock(paths)
 }
 
+/// The journal of a runtime the autostart hook started: `<runtime dir>/<repo-id>.serve.log`
+/// (ADR 0031, section 4).
+pub fn serve_log_path(paths: &RuntimePaths) -> PathBuf {
+    paths.dir.join(format!("{}.serve.log", paths.repo_id))
+}
+
+/// Open the journal of an autostarted runtime empty, `0600` and for appending, after the same
+/// check of the runtime directory as `serve` makes: several writers never leave a hole in it.
+///
+/// # Errors
+/// A runtime directory that is not private to this user, or a journal that cannot be opened.
+pub fn open_serve_log(paths: &RuntimePaths) -> Result<(PathBuf, File), StartError> {
+    secure_directory(&paths.dir, crate::paths::process_uid())?;
+    let path = serve_log_path(paths);
+    let mut options = OpenOptions::new();
+    options.append(true).create(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let file = options
+        .open(&path)
+        .map_err(io_context(format!("cannot open {}", path.display())))?;
+    file.set_len(0)
+        .map_err(io_context(format!("cannot empty {}", path.display())))?;
+    Ok((path, file))
+}
+
 /// Create the runtime directory `0700` when it is missing, then refuse it unless it is private to
 /// `owner`: a symlink, not a directory, another owner, any group or other permission bit, or a
 /// parent that the group or others may write without the sticky bit. Nothing is repaired: in a

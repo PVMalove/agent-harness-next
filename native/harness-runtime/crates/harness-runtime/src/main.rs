@@ -36,6 +36,9 @@
 //! has no live member) or 1 (not delivered; the reason on stderr). Other platforms refuse it with
 //! 2.
 
+#[cfg(unix)]
+mod autostart;
+
 use std::env;
 use std::ffi::OsString;
 use std::io::Write;
@@ -302,6 +305,48 @@ fn ctrl_break(args: impl IntoIterator<Item = OsString>) -> ExitCode {
     }
 }
 
+/// `ensure` or `release` (ADR 0031, section 4): one JSON line on stdout, and on a failure the
+/// `ERROR:` and `REMEDY:` lines on stderr.
+#[cfg(unix)]
+fn owner_command(ensure: bool, args: impl IntoIterator<Item = OsString>) -> ExitCode {
+    let args = match autostart::parse(args, ensure) {
+        Ok(args) => args,
+        Err(message) => {
+            return Report::new(
+                ErrorCode::MalformedRequest,
+                message,
+                "pass --repo and --session as the usage says",
+            )
+            .print(EXIT_REFUSED);
+        }
+    };
+    let outcome = if ensure {
+        autostart::ensure(&args)
+    } else {
+        autostart::release(&args)
+    };
+    println!("{}", outcome.answer);
+    if outcome.exit != autostart::EXIT_OK && outcome.exit != autostart::EXIT_NOT_RUNNING {
+        let text = |key: &str| outcome.answer[key].as_str().unwrap_or("").to_owned();
+        eprintln!("ERROR: {}", text("error"));
+        eprintln!("REMEDY: {}", text("remedy"));
+    }
+    ExitCode::from(outcome.exit)
+}
+
+/// `ensure` and `release` serve the autostart hook of Claude Code on Unix only (ADR 0031,
+/// section 6).
+#[cfg(not(unix))]
+fn owner_command(ensure: bool, _args: impl IntoIterator<Item = OsString>) -> ExitCode {
+    let command = if ensure { "ensure" } else { "release" };
+    Report::new(
+        ErrorCode::MalformedRequest,
+        format!("harness-runtime {command} serves only Unix; {USAGE}"),
+        "start `harness-runtime serve --repo <repo>` by hand outside the agent sandbox",
+    )
+    .print(EXIT_REFUSED)
+}
+
 /// What an error line and its `REMEDY:` line say. The remedy line starts with the protocol error
 /// code in brackets (ADR 0021, section 8).
 #[derive(Debug)]
@@ -505,6 +550,10 @@ fn main() -> ExitCode {
     let mut words = env::args_os().skip(1).peekable();
     if words.peek().and_then(|word| word.to_str()) == Some("ctrl-break") {
         return ctrl_break(words.skip(1));
+    }
+    if let Some(command @ ("ensure" | "release")) = words.peek().and_then(|word| word.to_str()) {
+        let ensure = command == "ensure";
+        return owner_command(ensure, words.skip(1));
     }
     let args = match parse_args(words) {
         Ok(args) => args,
