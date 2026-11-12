@@ -682,6 +682,7 @@
     "Нет доступа к трекеру": "No access to the tracker",
     "Нет доступа к трекеру задач": "No access to the task tracker",
     "Нет доступных команд": "No commands available",
+    "Нет или повреждён baseline seed-файлов": "The seed file baseline is missing or broken",
     "Нет карты для HEAD": "No map for HEAD",
     "Нет ожидающих решений": "No pending decisions",
     "Нет проверок в этом фильтре. Это не доказывает отсутствие проблем вне списка.": "No checks in this filter. This does not prove there are no problems outside the list.",
@@ -1967,6 +1968,10 @@
       "en": "The harness writes caches, logs and worktrees to .harness/.sandboxes; without write access its commands fail.",
       "ru": "В .harness/.sandboxes харнесс пишет кэш, логи и рабочие копии; без доступа на запись команды падают."
     },
+    "files.seed_baseline": {
+      "en": "The seed baseline lets update replace outdated seed files itself and keep locally modified ones; without it every differing file stays old.",
+      "ru": "По baseline seed-файлов update заменяет устаревшие файлы сам и не трогает изменённые локально; без него каждый отличающийся файл остаётся старым."
+    },
     "files.skill_registry": {
       "en": "A stale skill registry points the agent to missing or outdated skills.",
       "ru": "Устаревший реестр навыков ведёт агента к несуществующим или старым навыкам."
@@ -2491,6 +2496,10 @@
     "files.sandboxes": {
       "en": "Sandboxes directory",
       "ru": "Каталог песочниц"
+    },
+    "files.seed_baseline": {
+      "en": "Seed file baseline",
+      "ru": "Baseline seed-файлов"
     },
     "files.skill_registry": {
       "en": "Skill registry",

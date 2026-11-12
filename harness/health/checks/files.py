@@ -23,8 +23,11 @@ from ..project_files import (
     JSON_READ_ERRORS,
     ORCHESTRATION_CONFIG_REL,
     REGISTRY_REL,
+    SEED_CAPABILITIES,
+    canonical_capability,
     native_link_target,
     project_registry,
+    seed_baseline_problems,
     validate_integrations,
     validate_orchestration_config,
     validate_overlay_locks,
@@ -78,6 +81,62 @@ def check_lock(context: HealthContext) -> CheckResult:
         )
     return CheckResult(
         id="files.lock", group="files", status="ok", message="harness.lock присутствует"
+    )
+
+
+def check_seed_baseline(context: HealthContext) -> CheckResult:
+    """Формат baseline seed-файлов (`seed_files`) в lock; нет lock или он повреждён — files.lock."""
+    check_id, group = "files.seed_baseline", "files"
+    if context.lock is None:
+        return CheckResult(
+            id=check_id,
+            group=group,
+            status="skipped",
+            message=context.no_lock_message(),
+        )
+    if not {
+        canonical_capability(name) for name in context.lock.get("capabilities") or []
+    } & set(SEED_CAPABILITIES):
+        return CheckResult(
+            id=check_id,
+            group=group,
+            status="skipped",
+            message="seed-файлы не ставились (нет engineering-suite и backend-orchestration)",
+        )
+    if "seed_files" not in context.lock:
+        return CheckResult(
+            id=check_id,
+            group=group,
+            status="warn",
+            message="в .harness/harness.lock нет baseline seed-файлов (seed_files): "
+            "harness update не отличит устаревший seed-файл от изменённого локально",
+            fix=Fix(
+                text="запишите baseline: файлы на диске не меняются, отличающиеся от шаблона "
+                "получают null и считаются изменёнными локально",
+                command=context.harness_command(
+                    "update", str(context.repo), "--record-seed-baseline"
+                ),
+            ),
+        )
+    problems = seed_baseline_problems(context.lock["seed_files"])
+    if problems:
+        return CheckResult(
+            id=check_id,
+            group=group,
+            status="fail",
+            message="неверный формат seed_files в .harness/harness.lock: "
+            + "; ".join(problems),
+            fix=Fix(
+                text="восстановите lock из git или исправьте seed_files: путь от корня проекта "
+                "в POSIX-форме -> sha256 hex в нижнем регистре или null",
+                command="git checkout -- .harness/harness.lock",
+            ),
+        )
+    return CheckResult(
+        id=check_id,
+        group=group,
+        status="ok",
+        message=f"baseline seed-файлов: {len(context.lock['seed_files'])} записей",
     )
 
 

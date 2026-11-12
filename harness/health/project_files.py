@@ -36,6 +36,8 @@ DISCOVERY_LINKS = {
 ORCHESTRATION_CONFIG_REL = Path(".harness/orchestration.json")
 ORCHESTRATION_SCHEMA_REL = Path(".harness/orchestration/orchestration.schema.json")
 BACKEND_ORCHESTRATION_CAPABILITY = "backend-orchestration"
+# Capabilities whose install writes seed files (`harness init|adopt|update` seed step).
+SEED_CAPABILITIES = ("engineering-suite", BACKEND_ORCHESTRATION_CAPABILITY)
 
 
 def canonical_capability(name: str) -> str:

@@ -134,6 +134,7 @@ EN: dict[str, str] = {
     "Реестр скиллов не совпадает со скиллами": "The skill registry does not match the skills",
     "AGENTS.md отсутствует или устарел": "AGENTS.md is missing or outdated",
     "Ссылки обнаружения скиллов нарушены": "Skill discovery links are broken",
+    "Нет или повреждён baseline seed-файлов": "The seed file baseline is missing or broken",
     "Блокировки оверлеев не совпадают": "Overlay locks do not match",
     "Harness не установлен в проект": "Harness is not installed in the project",
     "Ошибка в .harness/project.json": "Error in .harness/project.json",
