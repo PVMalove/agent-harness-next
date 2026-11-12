@@ -217,6 +217,83 @@ def test_a_relative_coordinator_path_is_read_from_the_payload_directory(setup: S
     assert setup.calls() == [f"ensure --repo {setup.main} --session s1"]
 
 
+@pytest.fixture
+def foreign(tmp_path: Path) -> Setup:
+    """Another repository with its own runtime build, outside the session project."""
+    other = Setup(tmp_path / "foreign")
+    other.source_build()
+    return other
+
+
+def test_the_coordinator_of_another_repository_runs_no_binary(
+    setup: Setup, foreign: Setup
+) -> None:
+    setup.source_build()
+    coordinator = foreign.main / ".harness" / "orchestration" / "coordinator.py"
+
+    remedy = warning(setup.run(setup.pre_tool(f'python3 "{coordinator}" --repo x status')))
+
+    assert str(foreign.main) in remedy
+    assert setup.calls() == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo {path}",
+        "grep -n main {path}",
+        "cd /tmp && echo {path} > /dev/null",
+    ],
+)
+def test_a_quoted_coordinator_path_of_another_repository_runs_no_binary(
+    setup: Setup, foreign: Setup, command: str
+) -> None:
+    setup.source_build()
+    path = foreign.main / ".harness" / "orchestration" / "coordinator.py"
+    payload = setup.pre_tool(command.format(path=path))
+    payload["cwd"] = str(foreign.project)
+
+    setup.run(payload, extra={"CLAUDE_PROJECT_DIR": str(setup.main)})
+
+    assert setup.calls() == []
+
+
+def test_the_session_project_comes_from_the_project_directory_before_the_cwd(
+    setup: Setup, foreign: Setup
+) -> None:
+    setup.source_build()
+    own = setup.pre_tool()
+    own["cwd"] = str(foreign.main)
+
+    setup.run(own, {"status": "reused"}, extra={"CLAUDE_PROJECT_DIR": str(setup.main)})
+    assert setup.calls() == [f"ensure --repo {setup.main} --session s1"]
+
+    setup.record.unlink()
+    remedy = warning(
+        setup.run(setup.pre_tool(), extra={"CLAUDE_PROJECT_DIR": str(foreign.main)})
+    )
+    assert str(setup.main) in remedy
+    assert setup.calls() == []
+
+
+def test_the_end_of_a_turn_in_another_repository_releases_nothing(
+    setup: Setup, foreign: Setup
+) -> None:
+    setup.source_build()
+    payload: dict[str, object] = {
+        "session_id": "s1",
+        "hook_event_name": "Stop",
+        "stop_hook_active": False,
+        "cwd": str(foreign.main),
+    }
+
+    done = setup.run(payload, extra={"CLAUDE_PROJECT_DIR": str(setup.main)})
+
+    assert verdict(done)["decision"] == "allow"
+    assert done.stdout == ""
+    assert setup.calls() == []
+
+
 def test_a_started_runtime_is_named_to_the_developer(setup: Setup) -> None:
     setup.source_build()
 
@@ -241,6 +318,8 @@ def test_the_hook_scrubs_the_variables_the_application_adds_for_hooks(setup: Set
             "COLUMNS", "LINES",
         )
     }
+
+    added["CLAUDE_PROJECT_DIR"] = str(setup.main)
 
     setup.run(
         setup.pre_tool(),

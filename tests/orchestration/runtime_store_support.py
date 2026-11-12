@@ -782,7 +782,8 @@ class HookStartedRuntime:
             for part in (env.get("PATH", ""), str(binaries), os.environ.get("PATH", ""))
             if part
         )
-        self.hook_env = {**env, "PATH": path, **self.environ}
+        # The session project is ``repo``: the hook runs only its main checkout's binary.
+        self.hook_env = {**env, "PATH": path, "CLAUDE_PROJECT_DIR": str(repo), **self.environ}
         [command] = [
             handler
             for handler in hook_handlers(self.settings, "PreToolUse", "Bash")

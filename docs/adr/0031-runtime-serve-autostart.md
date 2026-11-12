@@ -96,6 +96,18 @@ Windows — usage и код 2). Ответ — одна строка JSON в std
 - `PreToolUse`: команда без `.harness/orchestration/coordinator.py` — тишина. Корень: путь
   coordinator из команды (относительный — от `cwd` payload), его третий родитель, затем
   `git rev-parse --path-format=absolute --git-common-dir` и его родитель (основной checkout).
+- Проект сессии: тот же `git rev-parse --git-common-dir` от `CLAUDE_PROJECT_DIR` (без него — от
+  `cwd` payload) даёт основной checkout проекта сессии. Если он не совпадает с основным checkout
+  из команды (coordinator чужого репозитория или путь, лишь упомянутый в `echo`/`grep`), hook
+  никакой бинарник не запускает: `PreToolUse` предупреждает
+  `[runtime-autostart-failed]` «coordinator репозитория … не относится к основному checkout
+  проекта сессии», `Stop` и `SubagentStop` молчат. Так текст команды не выбирает бинарник вне
+  проекта сессии.
+- Допущение о доверии: сборка `<main>/native/harness-runtime/target/release/harness-runtime`
+  основного checkout проекта сессии считается доверенной. Hook исполняет её вне песочницы агента
+  и вне проверок прав, поэтому агент, которому песочница разрешает запись в `target/release`
+  основного checkout, может подменить исполняемый файл. Проверка свежести по dep-info защищает от
+  устаревшей сборки, но не от подмены; это остаточный риск автозапуска.
 - Бинарник: при `<main>/native/harness-runtime/Cargo.toml` — ровно
   `<main>/native/harness-runtime/target/release/harness-runtime`. Свежесть — по dep-info
   `harness-runtime.d`, `Cargo.lock` и всем `Cargo.toml` рабочего пространства: любой файл новее

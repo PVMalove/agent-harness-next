@@ -5,11 +5,12 @@
 ``runtime-autostart.sh`` (git и ``harness-runtime ensure``/``release``), а serve запускает сам
 Rust-бинарник; Python процессов не запускает (ADR 0021).
 
-- ``parse`` читает payload из stdin и печатает четыре строки: событие, сессию, агента (или пустую
-  строку) и checkout. Для ``PreToolUse`` checkout — третий родитель пути
+- ``parse`` читает payload из stdin и печатает пять строк: событие, сессию, агента (или пустую
+  строку), checkout и ``cwd`` payload. Для ``PreToolUse`` checkout — третий родитель пути
   ``.harness/orchestration/coordinator.py`` из команды (относительный путь берётся от ``cwd``
   payload); команда без coordinator даёт пустой вывод. Для ``Stop`` и ``SubagentStop`` checkout —
-  ``cwd`` payload.
+  ``cwd`` payload. ``runtime-autostart.sh`` запускает бинарник, только если основной checkout
+  совпадает с основным checkout проекта сессии (``CLAUDE_PROJECT_DIR``, иначе ``cwd`` payload).
 - ``binary <основной checkout>`` печатает вид и путь бинарника: ``source``/``stale``/``unbuilt``
   для сборки из исходников рабочего пространства, ``path`` для ``harness-runtime`` из ``PATH`` и
   ``missing``, когда бинарника нет.
@@ -65,7 +66,7 @@ def coordinator_checkout(command: str, cwd: str) -> Optional[Path]:
 
 
 def parse(text: str) -> List[str]:
-    """Событие, сессия, агент и checkout; пустой список — hook молчит."""
+    """Событие, сессия, агент, checkout и ``cwd``; пустой список — hook молчит."""
     payload = _payload(text)
     event = _text(payload, "hook_event_name")
     session = _text(payload, "session_id")
@@ -89,9 +90,9 @@ def parse(text: str) -> List[str]:
             agent = ""
     else:
         return []
-    if "\n" in str(checkout):
+    if "\n" in str(checkout) or "\n" in cwd:
         return []
-    return [event, session, agent, str(checkout)]
+    return [event, session, agent, str(checkout), cwd]
 
 
 def dep_info_paths(text: str) -> Iterator[str]:
@@ -181,6 +182,12 @@ def report(kind: str, args: List[str]) -> int:
         )
     if kind == "git":
         return _warn(f"не найден основной checkout репозитория {args[0] if args else ''}")
+    if kind == "foreign":
+        return _warn(
+            f"coordinator репозитория {args[0] if args else ''} не относится к основному checkout "
+            "проекта сессии: бинарник этого репозитория не запускается; "
+            f"{MANUAL}"
+        )
     if kind != "ensure" or len(args) < 2:
         return _warn(f"неизвестный исход {kind}")
     code, text = args[0], args[1]

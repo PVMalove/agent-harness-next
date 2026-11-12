@@ -6,7 +6,8 @@
 # itself once no owner is left and its store is idle. The hook never blocks and never continues the
 # turn; a failure is a warning `[runtime-autostart-failed] <reason>` with a systemMessage.
 # runtime_autostart.py only parses the payload, paths and dep-info; this script runs git and the
-# Rust binary. Windows (MINGW/MSYS/CYGWIN) and the agent sandbox keep the manual start.
+# Rust binary. Only the main checkout of the session project (CLAUDE_PROJECT_DIR, else the payload
+# cwd) runs its binary. Windows (MINGW/MSYS/CYGWIN) and the agent sandbox keep the manual start.
 # Verdict envelope (hook_response.py): applies the hook profile and answers with the JSON verdict.
 if [ -z "${HARNESS_HOOK_ENVELOPE:-}" ]; then
   ENVELOPE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,7 +27,7 @@ esac
 
 PARSED="$("$PY" "$HELPER" parse)" || exit 0
 [ -n "$PARSED" ] || exit 0
-{ IFS= read -r EVENT; IFS= read -r SESSION; IFS= read -r AGENT; IFS= read -r CHECKOUT; } <<EOF
+{ IFS= read -r EVENT; IFS= read -r SESSION; IFS= read -r AGENT; IFS= read -r CHECKOUT; IFS= read -r CWD; } <<EOF
 $PARSED
 EOF
 
@@ -40,6 +41,16 @@ if [ -z "$COMMON" ]; then
   exit 0
 fi
 MAIN="$(dirname "$COMMON")"
+
+# Only the main checkout of the session project runs its binary: a coordinator path of another
+# repository (or one merely quoted in echo/grep) never selects a binary outside the sandbox.
+SESSION_DIR="${CLAUDE_PROJECT_DIR:-$CWD}"
+SESSION_COMMON=""
+[ -n "$SESSION_DIR" ] && SESSION_COMMON="$(git -C "$SESSION_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+if [ -z "$SESSION_COMMON" ] || [ "$SESSION_COMMON" != "$COMMON" ]; then
+  [ "$EVENT" = "PreToolUse" ] && exec "$PY" "$HELPER" report foreign "$MAIN"
+  exit 0
+fi
 
 FOUND="$("$PY" "$HELPER" binary "$MAIN")" || exit 0
 { IFS= read -r KIND; IFS= read -r BIN; } <<EOF
