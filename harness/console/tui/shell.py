@@ -156,6 +156,13 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "environment.dev_env": CheckRoute(
         "Окружение .harness/.venv не совпадает с uv.lock", "Diagnostics"
     ),
+    "environment.qa_executables": CheckRoute(
+        "Исполняемые файлы QA-команд не найдены", "Diagnostics"
+    ),
+    "environment.c_linker": CheckRoute("Нет C-компоновщика cc", "Diagnostics"),
+    "environment.runtime_socket_path": CheckRoute(
+        "Путь сокета runtime слишком длинный", "Diagnostics"
+    ),
     "environment.output_encoding": CheckRoute(
         "Кодировка вывода не UTF-8", "Diagnostics"
     ),
