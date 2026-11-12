@@ -278,3 +278,28 @@ def test_record_seed_baseline_refuses_force_flags(repo: Path, flag: list[str]) -
     assert result.returncode != 0
     assert "--record-seed-baseline" in result.stderr
     assert (repo / LOCK).read_bytes() == lock_before
+
+
+def test_diff_reports_the_seed_groups_and_keeps_their_union(repo: Path) -> None:
+    make_outdated(repo)
+    modified = ".claude/rules/karpathy-guidelines.md"
+    (repo / modified).write_bytes(b"# local edit\n")
+    unbaselined = ".claude/hooks/block-dangerous-git.sh"
+    (repo / unbaselined).write_bytes(b"#!/bin/sh\n# 1.x hook\n")
+    lock = load_lock(repo)
+    del lock["seed_files"][unbaselined]
+    save_lock(repo, lock)
+
+    data = json.loads(harness("diff", str(repo), "--json").stdout)
+
+    assert data["seed_outdated"] == [RULE]
+    assert data["seed_modified"] == [modified]
+    assert data["seed_unbaselined"] == [unbaselined]
+    assert data["seed_differing"] == sorted([RULE, modified, unbaselined])
+
+    text = harness("diff", str(repo)).stdout
+    assert f"seed_differing: {RULE} (устарел по версии)" in text
+    assert f"seed_differing: {modified} (изменён локально)" in text
+    assert f"seed_differing: {unbaselined} (без baseline)" in text
+    assert f"--force-seed-file {modified}" in text
+    assert "--record-seed-baseline" in text

@@ -1076,6 +1076,41 @@ class SeedInstall:
         write_lock(self.repo, lock)
 
 
+SEED_GROUP_LABELS = {
+    "outdated": "устарел по версии",
+    "modified": "изменён локально",
+    "unbaselined": "без baseline",
+}
+
+
+def seed_groups(repo: Path) -> dict[str, list[str]]:
+    """Отличающиеся от шаблона seed-файлы по группам: outdated, modified, unbaselined.
+
+    Те же правила, что у `harness update`; файлы hooks runtime без baseline — modified."""
+    templates = seed_template_files(
+        repo, orchestration_enabled=(repo / ".harness/orchestration.json").exists()
+    )
+    baseline = read_seed_baseline(load_lock(repo)) or {}
+    configs = {adapter.config for adapter in ADAPTERS}
+    groups: dict[str, list[str]] = {name: [] for name in SEED_GROUP_LABELS}
+    for relative, content in sorted(templates.items()):
+        path = repo / relative
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if data == content:
+            continue
+        if relative in configs:
+            groups["modified"].append(relative)
+        elif relative not in baseline:
+            groups["unbaselined"].append(relative)
+        elif baseline[relative] == digest(data):
+            groups["outdated"].append(relative)
+        else:
+            groups["modified"].append(relative)
+    return groups
+
+
 def _install_hook_config(
     repo: Path, adapter: RuntimeAdapter, seeds: SeedInstall
 ) -> list[str]:
@@ -1369,15 +1404,25 @@ def cmd_diff(args: argparse.Namespace) -> int:
     read_seed_baseline(load_lock(repo))
     result = snapshot_diff(repo, args.capability)
     proposals = propose_contract_links(repo, PROJECT_TEMPLATE_DIR)
+    groups = seed_groups(repo)
     if args.json:
         result["seed_link_proposals"] = proposals
         result["seed_differing"] = seed_differing(repo)
+        for name, paths in groups.items():
+            result[f"seed_{name}"] = paths
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print_diff(result)
+        hints = {
+            "outdated": f"Заменит с бэкапом: harness update {repo}",
+            "modified": "После просмотра: --force-seed-file {path}",
+            "unbaselined": f"Записать baseline: harness update {repo} --record-seed-baseline",
+        }
+        group_of = {path: name for name, paths in groups.items() for path in paths}
         for relative in seed_differing(repo):
-            print(f"  seed_differing: {relative}")
-            print(f"    После просмотра: --force-seed-file {relative}")
+            name = group_of[relative]
+            print(f"  seed_differing: {relative} ({SEED_GROUP_LABELS[name]})")
+            print(f"    {hints[name].replace('{path}', relative)}")
         print_contract_proposals(proposals)
     return 0 if result["state"] == "clean" else 1
 
