@@ -398,6 +398,15 @@ developer and not the agent. The hook runs outside the agent sandbox, so serve c
   adds only for hooks (`CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_PROJECT_DIR` and the others of ADR 0031).
 - **Failure.** A serve refusal (exit code 2), a timeout, a missing binary or the sandbox give the
   warning `[runtime-autostart-failed]` with the cause and the journal. The hook never blocks.
+- **Foreign checkout.** The hook starts only the binary of the main checkout of the session project
+  (`CLAUDE_PROJECT_DIR`). The coordinator of another repository, a path to it that a command only
+  mentions, or an empty `CLAUDE_PROJECT_DIR` give the warning `[runtime-autostart-failed]
+  coordinator репозитория … не относится к основному checkout проекта сессии` (the coordinator of
+  the repository does not belong to the main checkout of the session project); no binary starts.
+  Start the serve of that repository by hand.
+- **Build trust.** The hook runs `native/harness-runtime/target/release/harness-runtime` of the main
+  checkout outside the agent sandbox. The dep-info check rejects a stale build but not a replaced
+  file. Do not let the agent write to `target/release` of the main checkout (ADR 0031, section 5).
 
 Codex and Windows get no autostart: start `harness-runtime serve --repo <repo>` by hand outside the
 agent sandbox. The remedy of the `[runtime_unavailable]` error says the same. The hook reaches a

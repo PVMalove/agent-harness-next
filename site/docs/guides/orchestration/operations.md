@@ -414,6 +414,15 @@ python .harness/orchestration/coordinator.py --repo . ledger release-lock --forc
   только hook-ам (`CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_PROJECT_DIR` и другие из ADR 0031).
 - **Отказ.** Отказ serve (код 2), таймаут, отсутствие бинарника или песочница дают предупреждение
   `[runtime-autostart-failed]` с причиной и журналом. Hook ничего не блокирует.
+- **Чужой checkout.** Hook запускает только бинарник основного checkout проекта сессии
+  (`CLAUDE_PROJECT_DIR`). Coordinator другого репозитория, путь к нему, лишь упомянутый в команде,
+  или пустая `CLAUDE_PROJECT_DIR` дают предупреждение `[runtime-autostart-failed] coordinator
+  репозитория … не относится к основному checkout проекта сессии`; бинарник не запускается.
+  Запустите serve этого репозитория вручную.
+- **Доверие к сборке.** Hook исполняет `native/harness-runtime/target/release/harness-runtime`
+  основного checkout вне песочницы агента. Проверка по dep-info отсекает устаревшую сборку, но не
+  подмену файла. Не разрешайте агенту запись в `target/release` основного checkout (ADR 0031,
+  раздел 5).
 
 Codex и Windows автозапуска не получают: запустите `harness-runtime serve --repo <repo>` вручную вне
 песочницы агента. Так же говорит remedy ошибки `[runtime_unavailable]`. Hook появляется в проекте
