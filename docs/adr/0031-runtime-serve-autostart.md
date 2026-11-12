@@ -101,10 +101,12 @@ Windows — usage и код 2). Ответ — одна строка JSON в std
 - `PreToolUse`: команда без `.harness/orchestration/coordinator.py` — тишина. Корень: путь
   coordinator из команды (относительный — от `cwd` payload), его третий родитель, затем
   `git rev-parse --path-format=absolute --git-common-dir` и его родитель (основной checkout).
-- Проект сессии: тот же `git rev-parse --git-common-dir` от `CLAUDE_PROJECT_DIR` (без него — от
-  `cwd` payload) даёт основной checkout проекта сессии. Если он не совпадает с основным checkout
-  из команды (coordinator чужого репозитория или путь, лишь упомянутый в `echo`/`grep`), hook
-  никакой бинарник не запускает: `PreToolUse` предупреждает
+- Проект сессии: тот же `git rev-parse --git-common-dir` от `CLAUDE_PROJECT_DIR` даёт основной
+  checkout проекта сессии. `cwd` payload для этого не используется: агент меняет его через `cd`.
+  Пустая или незаданная `CLAUDE_PROJECT_DIR` означает, что проект сессии неизвестен, и любой
+  репозиторий считается чужим. Если основной checkout проекта сессии не совпадает с основным
+  checkout из команды (coordinator чужого репозитория или путь, лишь упомянутый в `echo`/`grep`),
+  hook никакой бинарник не запускает: `PreToolUse` предупреждает
   `[runtime-autostart-failed]` «coordinator репозитория … не относится к основному checkout
   проекта сессии», `Stop` и `SubagentStop` молчат. Так текст команды не выбирает бинарник вне
   проекта сессии.

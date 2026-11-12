@@ -60,6 +60,8 @@ class Setup:
             "PATH": f"{self.bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
             "HOME": str(tmp_path),
             "FAKE_RECORD": str(self.record),
+            # Claude Code sets it for every hook: the session project is the main checkout.
+            "CLAUDE_PROJECT_DIR": str(self.main),
         }
 
     def source_build(self, *, fresh: bool = True) -> Path:
@@ -258,7 +260,7 @@ def test_a_quoted_coordinator_path_of_another_repository_runs_no_binary(
     assert setup.calls() == []
 
 
-def test_the_session_project_comes_from_the_project_directory_before_the_cwd(
+def test_the_session_project_comes_from_the_project_directory_never_the_cwd(
     setup: Setup, foreign: Setup
 ) -> None:
     setup.source_build()
@@ -273,6 +275,28 @@ def test_the_session_project_comes_from_the_project_directory_before_the_cwd(
         setup.run(setup.pre_tool(), extra={"CLAUDE_PROJECT_DIR": str(foreign.main)})
     )
     assert str(setup.main) in remedy
+    assert setup.calls() == []
+
+
+@pytest.mark.parametrize("unset", [True, False], ids=["unset", "empty"])
+def test_without_the_project_directory_every_repository_is_foreign(
+    setup: Setup, unset: bool
+) -> None:
+    setup.source_build()
+    if unset:
+        del setup.env["CLAUDE_PROJECT_DIR"]
+    else:
+        setup.env["CLAUDE_PROJECT_DIR"] = ""
+
+    # The payload cwd is the agent's: even the coordinator's own checkout there selects nothing.
+    remedy = warning(setup.run(setup.pre_tool()))
+    stop = setup.run(
+        {"session_id": "s1", "hook_event_name": "Stop", "stop_hook_active": False,
+         "cwd": str(setup.main)}
+    )
+
+    assert str(setup.main) in remedy and "не относится" in remedy
+    assert verdict(stop)["decision"] == "allow" and stop.stdout == ""
     assert setup.calls() == []
 
 

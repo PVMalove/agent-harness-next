@@ -5,12 +5,13 @@
 ``runtime-autostart.sh`` (git и ``harness-runtime ensure``/``release``), а serve запускает сам
 Rust-бинарник; Python процессов не запускает (ADR 0021).
 
-- ``parse`` читает payload из stdin и печатает пять строк: событие, сессию, агента (или пустую
-  строку), checkout и ``cwd`` payload. Для ``PreToolUse`` checkout — третий родитель пути
+- ``parse`` читает payload из stdin и печатает четыре строки: событие, сессию, агента (или пустую
+  строку) и checkout. Для ``PreToolUse`` checkout — третий родитель пути
   ``.harness/orchestration/coordinator.py`` из команды (относительный путь берётся от ``cwd``
   payload); команда без coordinator даёт пустой вывод. Для ``Stop`` и ``SubagentStop`` checkout —
   ``cwd`` payload. ``runtime-autostart.sh`` запускает бинарник, только если основной checkout
-  совпадает с основным checkout проекта сессии (``CLAUDE_PROJECT_DIR``, иначе ``cwd`` payload).
+  совпадает с основным checkout проекта сессии из ``CLAUDE_PROJECT_DIR``; ``cwd`` payload агент
+  меняет через ``cd``, поэтому без этой переменной любой репозиторий считается чужим.
 - ``binary <основной checkout>`` печатает вид и путь бинарника: ``source``/``stale``/``unbuilt``
   для сборки из исходников рабочего пространства, ``path`` для ``harness-runtime`` из ``PATH`` и
   ``missing``, когда бинарника нет.
@@ -66,7 +67,7 @@ def coordinator_checkout(command: str, cwd: str) -> Optional[Path]:
 
 
 def parse(text: str) -> List[str]:
-    """Событие, сессия, агент, checkout и ``cwd``; пустой список — hook молчит."""
+    """Событие, сессия, агент и checkout; пустой список — hook молчит."""
     payload = _payload(text)
     event = _text(payload, "hook_event_name")
     session = _text(payload, "session_id")
@@ -90,9 +91,9 @@ def parse(text: str) -> List[str]:
             agent = ""
     else:
         return []
-    if "\n" in str(checkout) or "\n" in cwd:
+    if "\n" in str(checkout):
         return []
-    return [event, session, agent, str(checkout), cwd]
+    return [event, session, agent, str(checkout)]
 
 
 def dep_info_paths(text: str) -> Iterator[str]:
