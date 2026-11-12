@@ -782,13 +782,10 @@ class HookStartedRuntime:
             for part in (env.get("PATH", ""), str(binaries), os.environ.get("PATH", ""))
             if part
         )
-        # The session project is ``repo``: the hook runs only its main checkout's binary.
+        # The session project is ``repo``: the hook runs only its main checkout's binary. The
+        # handlers name the hooks installed in ``project`` by their path.
         self.hook_env = {**env, "PATH": path, "CLAUDE_PROJECT_DIR": str(repo), **self.environ}
-        [command] = [
-            handler
-            for handler in hook_handlers(self.settings, "PreToolUse", "Bash")
-            if "runtime-autostart.sh" in handler
-        ]
+        [command] = self.handlers("PreToolUse", "Bash")
         self.command = command
         done = self.pre_tool(f"--repo {repo} dispatch status")
         message = autostart_message(done)
@@ -796,6 +793,14 @@ class HookStartedRuntime:
         assert done.returncode == 0 and found, (done.stdout, done.stderr)
         self.pid = int(found.group(1))
         self.message = message
+
+    def handlers(self, event: str, tool: str = "") -> list[str]:
+        """The ``runtime-autostart`` handlers of ``event`` with the installed hook path."""
+        return [
+            handler.replace("${CLAUDE_PROJECT_DIR}", str(self.project))
+            for handler in hook_handlers(self.settings, event, tool)
+            if "runtime-autostart.sh" in handler
+        ]
 
     def pre_tool(self, arguments: str) -> subprocess.CompletedProcess[str]:
         """The autostart handler before ``coordinator.py <arguments>`` of this repository."""
@@ -819,9 +824,8 @@ class HookStartedRuntime:
             "stop_hook_active": False,
             "cwd": str(self.repo),
         }
-        for command in hook_handlers(self.settings, "Stop"):
-            if "runtime-autostart.sh" in command:
-                run_handler(command, self.project, payload, self.hook_env)
+        for command in self.handlers("Stop"):
+            run_handler(command, self.project, payload, self.hook_env)
         deadline = time.monotonic() + 15
         while self.socket_exists() and time.monotonic() < deadline:
             time.sleep(0.1)
