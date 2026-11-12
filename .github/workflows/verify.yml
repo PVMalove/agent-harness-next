@@ -810,10 +810,12 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: native/harness-runtime
         run: cargo test --locked --no-fail-fast -p supervisor
-      - name: Rust runtime restart and deadline stop tests
+      - name: Rust runtime restart, stop and deadline stop tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: native/harness-runtime
-        run: cargo test --locked --no-fail-fast -p harness-runtime --test windows_supervisor
+        run: >-
+          cargo test --locked --no-fail-fast -p harness-runtime
+          --test windows_supervisor --test stop_restart
       - name: Python IPC contract tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:

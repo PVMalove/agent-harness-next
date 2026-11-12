@@ -392,6 +392,41 @@ fn stopping_the_server_removes_the_socket_and_the_token() {
 }
 
 #[test]
+fn shutdown_answers_then_ends_the_accept_loop_without_the_stop_flag() {
+    let fixture = Fixture::new("shutdown");
+    let server = fixture.bind().unwrap();
+    let token = fs::read_to_string(&server.paths().token).unwrap();
+    let never = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&never);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let socket = server.paths().socket.clone();
+    let serving = thread::spawn(move || {
+        let served = server.serve_until(&flag);
+        done_tx.send(()).unwrap();
+        served
+    });
+    let runtime = Running {
+        stop: Arc::clone(&never),
+        thread: None,
+        socket,
+        token,
+    };
+    let mut stream = runtime.connect();
+
+    let greeting = exchange(&mut stream, &hello(&fixture.root, &runtime.token, 1, 1));
+    let answer = exchange(&mut stream, &request("shutdown", None));
+
+    assert_eq!(greeting.status, Status::Ok);
+    assert_eq!(answer.status, Status::Ok);
+    assert_eq!(answer.result.unwrap()["state"], "stopping");
+    let ended = done_rx.recv_timeout(Duration::from_secs(5));
+    // Unblock the loop of a failed run before asserting, so the test never hangs.
+    never.store(true, Ordering::Relaxed);
+    assert!(ended.is_ok(), "the accept loop still serves after shutdown");
+    serving.join().unwrap().unwrap();
+}
+
+#[test]
 fn a_peer_of_another_user_is_refused_with_unauthorized_peer() {
     let fixture = Fixture::new("peer");
     let runtime = Running::start_as(fixture.bind().unwrap(), foreign_peer());
@@ -916,7 +951,7 @@ fn a_manual_runtime_records_attached_owners_and_releases_them() {
 
     assert_eq!(
         features,
-        json!(["status", "runtime.attach", "runtime.release"])
+        json!(["status", "shutdown", "runtime.attach", "runtime.release"])
     );
     let attached = attached.result.unwrap();
     assert_eq!(attached["owned"], false);

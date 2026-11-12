@@ -29,6 +29,17 @@
 //! supervisor learns that the start worked from the readiness line, so a failure to write that
 //! line is a refusal to start (2), not a failure of a running server.
 //!
+//! `harness-runtime stop [--repo <path>]` stops the runtime of a repository the same way as
+//! SIGTERM: it sends `shutdown` over the runtime's own IPC with the runtime token, then waits until
+//! the instance lock is free. It prints one JSON line and exits with 0 (`{"status":"stopped",
+//! "pid":<pid>}`, or `{"status":"not_running"}` when no runtime serves the repository, so a repeat
+//! is harmless), 2 (refused: the arguments, the repository or the IPC refused it; nothing stopped)
+//! or 1 (failed: the runtime did not answer, or it did not let the lock go in time).
+//!
+//! `harness-runtime restart [--repo <path>]` is `stop`, then `serve` in the same process: it prints
+//! the readiness line of `serve` and uses its exit codes; a failed stop exits with the code of
+//! `stop`. The connections of the old runtime close with it.
+//!
 //! `harness-runtime ctrl-break --job <name> --group <pgid> --pid <pid> --created <time>` is the
 //! ctrl-break helper of a Windows deadline stop (ADR 0022, section 3): the runtime starts it
 //! without a console, and it sends `CTRL_BREAK` to the process group on the console of a live
@@ -46,15 +57,23 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
-use contracts::ErrorCode;
-use ipc::{Environment, Server, StartError, resolve_paths};
+use contracts::{ErrorBody, ErrorCode, Response, Status};
+use ipc::{Environment, RuntimePaths, Server, StartError, resolve_paths};
 use serde_json::json;
 
 const EXIT_FAILED: u8 = 1;
 const EXIT_REFUSED: u8 = 2;
+/// How long `stop` waits for a runtime to answer or to let the instance lock go.
+const STOP_WAIT: Duration = Duration::from_secs(30);
+/// How long one IPC exchange of `stop` may take.
+const IPC_TIMEOUT: Duration = Duration::from_secs(10);
+/// How often `stop` looks at the instance lock again.
+const LOCK_POLL: Duration = Duration::from_millis(25);
 const USAGE: &str = "usage: harness-runtime serve [--repo <path>] [--owner-session <key> \
-    [--owner-pid <pid>] [--owner-ttl-seconds <n>]] | harness-runtime migrate \
+    [--owner-pid <pid>] [--owner-ttl-seconds <n>]] | harness-runtime stop [--repo <path>] | \
+    harness-runtime restart [--repo <path>] | harness-runtime migrate \
     [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
     rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | \
     harness-runtime repair-import-approval [--check] [--repo <path>] \
@@ -64,6 +83,8 @@ const USAGE: &str = "usage: harness-runtime serve [--repo <path>] [--owner-sessi
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Command {
     Serve,
+    Stop,
+    Restart,
     Migrate,
     Rollback,
     RepairImportApproval,
@@ -95,6 +116,8 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
     let mut args = args.into_iter();
     let command = match args.next().as_deref().and_then(|word| word.to_str()) {
         Some("serve") => Command::Serve,
+        Some("stop") => Command::Stop,
+        Some("restart") => Command::Restart,
         Some("migrate") => Command::Migrate,
         Some("rollback") => Command::Rollback,
         Some("repair-import-approval") => Command::RepairImportApproval,
@@ -107,7 +130,7 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
     let mut owner = Owner::default();
     while let Some(flag) = args.next() {
         let rollback = command == Command::Rollback;
-        let approved = command != Command::Serve;
+        let approved = !matches!(command, Command::Serve | Command::Stop | Command::Restart);
         let owned = cfg!(unix) && command == Command::Serve;
         let field = match flag.to_str() {
             Some("--repo") => None,
@@ -373,11 +396,22 @@ impl Report {
     }
 }
 
-/// Why `serve` ended with an error: it never reported ready, or it failed after it was ready.
+/// Why a command ended with an error: it was refused before it changed anything (`serve` never
+/// reported ready, `stop` stopped nothing), or it failed after it began.
 #[derive(Debug)]
 enum Failure {
     Refused(Report),
     Failed(Report),
+}
+
+impl Failure {
+    /// Print the report and give back the exit code of its kind.
+    fn print(&self) -> ExitCode {
+        match self {
+            Self::Refused(report) => report.print(EXIT_REFUSED),
+            Self::Failed(report) => report.print(EXIT_FAILED),
+        }
+    }
 }
 
 fn serve(args: &Args) -> Result<(), Failure> {
@@ -429,7 +463,11 @@ fn serve(args: &Args) -> Result<(), Failure> {
             ))
         })?;
     drop(stdout);
-    server.serve_until(&stop).map_err(|err| {
+    let served = server.serve_until(&stop);
+    // The periodic reconcile ends with the accept loop, also when a `shutdown` or the lifetime of
+    // an owned runtime ended it without the signal.
+    stop.store(true, Ordering::Relaxed);
+    served.map_err(|err| {
         Failure::Failed(Report::new(
             ErrorCode::Internal,
             format!("the accept loop failed: {err}"),
@@ -443,9 +481,177 @@ fn serve(args: &Args) -> Result<(), Failure> {
              the autostart hook stops"
         );
     }
-    // The periodic reconcile ends with the accept loop.
-    stop.store(true, Ordering::Relaxed);
     Ok(())
+}
+
+/// What `stop` found: no runtime, or the pid of the runtime it stopped.
+#[derive(Debug)]
+enum Stopped {
+    NotRunning,
+    Stopped(u64),
+}
+
+/// The client end of the runtime's IPC.
+#[cfg(unix)]
+fn connect(paths: &RuntimePaths) -> std::io::Result<std::os::unix::net::UnixStream> {
+    let stream = std::os::unix::net::UnixStream::connect(&paths.socket)?;
+    stream.set_read_timeout(Some(IPC_TIMEOUT))?;
+    stream.set_write_timeout(Some(IPC_TIMEOUT))?;
+    Ok(stream)
+}
+
+/// The client end of the runtime's IPC: the `socket` of a Windows runtime is its pipe name.
+#[cfg(windows)]
+fn connect(paths: &RuntimePaths) -> std::io::Result<platform_ffi::PipeConnection> {
+    let name = paths
+        .socket
+        .to_str()
+        .ok_or_else(|| std::io::Error::other("the pipe name is not UTF-8"))?;
+    let mut pipe = platform_ffi::connect_client(name, IPC_TIMEOUT)?;
+    pipe.set_timeout(Some(IPC_TIMEOUT));
+    Ok(pipe)
+}
+
+/// One request and its response over `stream`.
+fn exchange(
+    stream: &mut (impl std::io::Read + Write),
+    operation: &str,
+    payload: Option<serde_json::Value>,
+) -> Result<Response, String> {
+    let deadline = state::time::now_millis() + u64::try_from(IPC_TIMEOUT.as_millis()).unwrap_or(0);
+    let mut request = json!({
+        "protocol_version": contracts::PROTOCOL_VERSION,
+        "operation_id": format!("{operation}-{}", std::process::id()),
+        "operation": operation,
+        "request_deadline": deadline,
+    });
+    if let Some(payload) = payload {
+        request["payload"] = payload;
+    }
+    let body = contracts::encode(&request).map_err(|err| err.to_string())?;
+    contracts::write_frame(stream, &body).map_err(|err| err.to_string())?;
+    let answer = contracts::read_frame(stream).map_err(|err| err.to_string())?;
+    contracts::decode(&answer).map_err(|err| err.to_string())
+}
+
+/// A refusal the runtime answered, with its own code and remedy.
+fn refused_by_runtime(error: &ErrorBody) -> Failure {
+    Failure::Refused(Report::new(error.code, &error.message, &error.remedy))
+}
+
+/// The runtime holds the lock but does not answer: it is starting, stopping or hung.
+fn unavailable(detail: impl std::fmt::Display) -> Failure {
+    Failure::Failed(Report::new(
+        ErrorCode::RuntimeUnavailable,
+        format!("the runtime of this repository holds its lock but does not answer: {detail}"),
+        "repeat `harness-runtime stop --repo <repo>`; if it fails again, stop the process of \
+         `harness-runtime serve` with SIGTERM",
+    ))
+}
+
+/// The result of a successful answer, or the failure the answer stands for. A runtime that does
+/// not know `shutdown` predates `harness-runtime stop`: only a signal stops it.
+fn answer(response: Result<Response, String>) -> Result<serde_json::Value, Failure> {
+    let response = response.map_err(unavailable)?;
+    match (response.status, response.result, response.error) {
+        (Status::Ok, result, _) => Ok(result.unwrap_or_default()),
+        (_, _, Some(error)) if error.code == ErrorCode::UnknownOperation => {
+            Err(Failure::Refused(Report::new(
+                error.code,
+                "the runtime of this repository is older than `harness-runtime stop` and does \
+                 not serve shutdown",
+                "stop the process of `harness-runtime serve` with SIGTERM (Ctrl+Break on \
+                 Windows) once, then start the runtime again",
+            )))
+        }
+        (_, _, Some(error)) => Err(refused_by_runtime(&error)),
+        (_, _, None) => Err(unavailable("an error without a body")),
+    }
+}
+
+/// Stop the runtime of `args.repo` through its IPC, then wait until its instance lock is free.
+fn stop(args: &Args) -> Result<Stopped, Failure> {
+    let refused = |err: StartError| Failure::Refused(Report::new(err.code(), &err, err.remedy()));
+    let paths = resolve_paths(&args.repo, &Environment::of_process())
+        .map_err(|err| Failure::Refused(Report::new(err.code(), &err, err.remedy())))?;
+    // The runtime compares the repository of `hello` with its own from its own working directory,
+    // so it gets the canonical root, not a path relative to this process.
+    let repo = std::fs::canonicalize(&args.repo).unwrap_or_else(|_| args.repo.clone());
+    let deadline = Instant::now() + STOP_WAIT;
+    // A runtime that is starting or stopping holds the lock without its socket or its token: a
+    // repeated stop waits for either the lock to go or the runtime to answer.
+    let (token, mut stream) = loop {
+        match ipc::hold_instance_lock(&paths) {
+            Ok(_free) => return Ok(Stopped::NotRunning),
+            Err(StartError::AlreadyRunning(_)) => {}
+            Err(err) => return Err(refused(err)),
+        }
+        let found =
+            std::fs::read_to_string(&paths.token).and_then(|token| Ok((token, connect(&paths)?)));
+        match found {
+            Ok(found) => break found,
+            Err(err) if Instant::now() >= deadline => return Err(unavailable(err)),
+            Err(_) => std::thread::sleep(LOCK_POLL),
+        }
+    };
+    let hello = json!({
+        "protocol": {
+            "min": {"major": contracts::PROTOCOL_VERSION.major, "minor": 0},
+            "max": contracts::PROTOCOL_VERSION,
+        },
+        "client_version": env!("CARGO_PKG_VERSION"),
+        "repo_root": repo,
+        "token": token.trim(),
+    });
+    answer(exchange(&mut stream, "hello", Some(hello)))?;
+    let pid = answer(exchange(&mut stream, "shutdown", None))?["pid"]
+        .as_u64()
+        .ok_or_else(|| unavailable("the answer to shutdown names no pid"))?;
+    wait_until_free(&paths)?;
+    Ok(Stopped::Stopped(pid))
+}
+
+/// Wait until the stopped runtime lets the instance lock go.
+fn wait_until_free(paths: &RuntimePaths) -> Result<(), Failure> {
+    let deadline = Instant::now() + STOP_WAIT;
+    loop {
+        match ipc::hold_instance_lock(paths) {
+            Ok(_free) => return Ok(()),
+            Err(StartError::AlreadyRunning(_)) if Instant::now() < deadline => {
+                std::thread::sleep(LOCK_POLL);
+            }
+            Err(StartError::AlreadyRunning(_)) => {
+                return Err(Failure::Failed(Report::new(
+                    ErrorCode::DeadlineExceeded,
+                    format!(
+                        "the runtime accepted shutdown but still holds its lock after {} s",
+                        STOP_WAIT.as_secs()
+                    ),
+                    "repeat `harness-runtime stop --repo <repo>`; if it fails again, stop the \
+                     process of `harness-runtime serve` with SIGTERM",
+                )));
+            }
+            Err(err) => return Err(Failure::Failed(Report::new(err.code(), &err, err.remedy()))),
+        }
+    }
+}
+
+/// Print the outcome of `stop` as one JSON line.
+fn print_stopped(stopped: &Stopped) -> ExitCode {
+    let line = match stopped {
+        Stopped::NotRunning => json!({"status": "not_running"}),
+        Stopped::Stopped(pid) => json!({"status": "stopped", "pid": pid}),
+    };
+    let mut stdout = std::io::stdout().lock();
+    match writeln!(stdout, "{line}").and_then(|()| stdout.flush()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => Report::new(
+            ErrorCode::Internal,
+            format!("the runtime is stopped but the result cannot be written: {err}"),
+            "repeat `harness-runtime stop --repo <repo>`: a repeat answers not_running",
+        )
+        .print(EXIT_FAILED),
+    }
 }
 
 /// Run the migration and print its outcome as one JSON line.
@@ -561,23 +767,28 @@ fn main() -> ExitCode {
             return Report::new(
                 ErrorCode::MalformedRequest,
                 message,
-                "pass `serve` with an optional `--repo <path>`, `migrate` with `--approved-by`, \
+                "pass `serve`, `stop` or `restart` with an optional `--repo <path>`, `migrate` \
+                 with `--approved-by`, \
                  `--approved-at` and `--reason`, or `rollback --to-legacy` with the same three",
             )
             .print(EXIT_REFUSED);
         }
     };
     match args.command {
+        Command::Stop => {
+            return stop(&args).map_or_else(|failure| failure.print(), |s| print_stopped(&s));
+        }
+        Command::Restart => {
+            if let Err(failure) = stop(&args) {
+                return failure.print();
+            }
+        }
         Command::Migrate => return migrate(&args),
         Command::Rollback => return rollback(&args),
         Command::RepairImportApproval => return repair_import_approval(&args),
         Command::Serve => {}
     }
-    match serve(&args) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(Failure::Refused(report)) => report.print(EXIT_REFUSED),
-        Err(Failure::Failed(report)) => report.print(EXIT_FAILED),
-    }
+    serve(&args).map_or_else(|failure| failure.print(), |()| ExitCode::SUCCESS)
 }
 
 #[cfg(test)]
@@ -647,6 +858,23 @@ mod tests {
         assert_eq!(args.approval.approved_by, "human:a");
         assert_eq!(args.approval.approved_at, "2026-10-27T10:00:00+00:00");
         assert_eq!(args.approval.reason, "back to 1.x");
+    }
+
+    #[test]
+    fn stop_and_restart_take_only_the_repository() {
+        assert_eq!(
+            parse(&["stop", "--repo", "/r"]).unwrap().command,
+            Command::Stop
+        );
+        assert_eq!(
+            parse(&["restart", "--repo", "/r"]).unwrap().repo,
+            PathBuf::from("/r")
+        );
+        assert!(
+            parse(&["stop", "--approved-by", "human:a"])
+                .unwrap_err()
+                .contains("unknown argument")
+        );
     }
 
     #[test]
