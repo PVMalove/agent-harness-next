@@ -31,6 +31,7 @@ from harness.orchestration.core.constants import (
     EvidenceVerification,
     IntegrationCheckResult,
     LocalQaState,
+    QaEvidenceVerdict,
     QaOwnerKind,
 )
 from harness.orchestration.core.git_utils import (
@@ -54,8 +55,10 @@ from harness.orchestration.ledger.lifecycle import (
     IntegrationLocalQaRecord,
     LedgerError,
     LifecycleLedger,
+    store_is_authority,
 )
-from harness.orchestration.workflow import integration, pr_refresh
+from harness.orchestration.runtime_client import RuntimeClientError
+from harness.orchestration.workflow import integration, pr_refresh, release_gate
 
 
 def _path(root: Path, record_id: str) -> Path:
@@ -98,7 +101,27 @@ def _result_id(request_id: str) -> str:
     )
 
 
-def _valid_result(root: Path, result: JsonObject) -> bool:
+def _verdict_id(request_id: str) -> str:
+    return IntegrationLocalQaRecord.derive_id(
+        {"request_id": request_id, "event": "pair-verdict"}
+    )
+
+
+def _log_bytes(root: Path, artifact: Path, written: str | None) -> bytes | None:
+    """The bytes of the QA log: the text just written, the file of the file ledger, or ``None``
+    in the runtime-store epoch, where the runtime holds the log and Python never reads it back."""
+    if written is not None:
+        return written.encode("utf-8")
+    if store_is_authority(root):
+        return None
+    return artifact.read_bytes()
+
+
+def _valid_result(root: Path, result: JsonObject, written: str | None = None) -> bool:
+    """The result matches its request and its QA log; ``written`` is the log text just written.
+
+    In the runtime-store epoch without ``written`` only the structure is checked here: the runtime
+    checks the stored log chain, and its verdict is the recorded ``pair-verdict``."""
     request_id = result["request_id"]
     request = _read_object(_path(root, request_id), "local QA request")
     members = request["members"]
@@ -130,7 +153,9 @@ def _valid_result(root: Path, result: JsonObject) -> bool:
     artifact = _records_root(root) / "qa-artifacts" / f"{checksum}.log"
     if str(artifact) != result["artifact"]:
         return False
-    contents = artifact.read_bytes()
+    contents = _log_bytes(root, artifact, written)
+    if contents is None:
+        return True
     if hashlib.sha256(contents).hexdigest() != checksum:
         return False
     logs = parse_command_log(contents.decode("utf-8").splitlines())
@@ -146,7 +171,11 @@ def verified_evidence(root: Path, link: JsonObject) -> bool:
     return _verified_generated(root, link)
 
 
-def _verified_generated(root: Path, link: JsonObject) -> bool:
+def _verified_generated(
+    root: Path, link: JsonObject, *, require_verdict: bool = True
+) -> bool:
+    """In the runtime-store epoch ``require_verdict`` also requires the recorded runtime verdict
+    ``ok`` on the pair of the request: Python does not read the stored log back."""
     try:
         request_id = link["local_qa_request_id"]
         if (
@@ -169,9 +198,68 @@ def _verified_generated(root: Path, link: JsonObject) -> bool:
                 )
             )
             and _valid_result(root, result)
+            and (
+                not require_verdict
+                or not store_is_authority(root)
+                or _recorded_verdict(root, request_id).get("verdict")
+                == QaEvidenceVerdict.OK
+            )
         )
     except (OSError, CoordinatorError, KeyError, TypeError, ValueError):
         return False
+
+
+def _recorded_verdict(root: Path, request_id: str) -> JsonObject:
+    """The recorded runtime verdict on the pair of the request, or ``{}`` before it is recorded."""
+    path = _path(root, _verdict_id(request_id))
+    if not state_view.exists(path):
+        return {}
+    return _read_object(path, "local QA pair verdict")
+
+
+def _pair_verdict(
+    repo: Path, ledger: LifecycleLedger, root: Path, result: JsonObject
+) -> JsonObject:
+    """Record the runtime's verdict on the pair of a linked result once (store epoch only).
+
+    The answer carries ``pair_verdict``, or ``pair_verdict_reason`` when the runtime cannot
+    answer; a later local QA of the same request records the verdict then."""
+    if not store_is_authority(root):
+        return {}
+    request_id = result["request_id"]
+    with _ledger_lock(ledger):
+        recorded = _recorded_verdict(root, request_id)
+    if not recorded:
+        pair = {
+            "candidate_sha": result["candidate_sha"],
+            "target_sha": result["target_sha"],
+        }
+        try:
+            answer = release_gate.qa_evidence_verify(repo, pair)
+        except (RuntimeClientError, CoordinatorError) as exc:
+            return {"pair_verdict_reason": sanitise(exc.message)}
+        recorded = {
+            "local_qa_id": _verdict_id(request_id),
+            "event": "pair-verdict",
+            "request_id": request_id,
+            **pair,
+            "verdict": answer["verdict"],
+            "confirmed_by": answer.get("confirmed_by"),
+            "violation_codes": release_gate.violation_codes(answer),
+            "recorded_at": utils._now(),
+        }
+        with _ledger_lock(ledger):
+            if state_view.exists(_path(root, recorded["local_qa_id"])):
+                recorded = _recorded_verdict(root, request_id)
+            else:
+                _write_record(ledger, IntegrationLocalQaRecord.from_dict(recorded))
+    return {
+        "pair_verdict": {
+            "verdict": recorded["verdict"],
+            "confirmed_by": recorded["confirmed_by"],
+            "violations": recorded["violation_codes"],
+        }
+    }
 
 
 def _attempts(root: Path, request_id: str) -> list[JsonObject]:
@@ -278,7 +366,9 @@ def _link_result(ledger: LifecycleLedger, root: Path, result: JsonObject) -> Jso
         },
     )
     verified = result["verification"] == EvidenceVerification.VERIFIED
-    if verified and not _verified_generated(root, linked["evidence"]):
+    if verified and not _verified_generated(
+        root, linked["evidence"], require_verdict=False
+    ):
         raise CoordinatorError(
             "existing link does not verify the generated result",
             remedy="retain the result and resolve the conflicting immutable evidence with the coordinator",
@@ -361,8 +451,12 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
     qa_lane.reap_dead_owner(ledger, root, qa_integration._ops())
     with _ledger_lock(ledger):
         result_path = _path(root, result_id)
-        if state_view.exists(result_path):
-            existing = _read_object(result_path, "local QA result")
+        existing = (
+            _read_object(result_path, "local QA result")
+            if state_view.exists(result_path)
+            else None
+        )
+        if existing is not None:
             try:
                 _observe_pair(repo, root, record, pair)
                 verified = existing.get("verification") == EvidenceVerification.VERIFIED
@@ -379,7 +473,7 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
                     "verification_reason": sanitise(str(exc)),
                 }
             try:
-                return _link_result(ledger, root, existing)
+                linked = _link_result(ledger, root, existing)
             except (CoordinatorError, OSError) as exc:
                 return {
                     **existing,
@@ -387,6 +481,10 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
                     "verification": EvidenceVerification.UNVERIFIED,
                     "reason": sanitise(str(exc)),
                 }
+    if existing is not None:
+        # The runtime judges the pair after the unit above committed the link it reads.
+        return {**linked, **_pair_verdict(repo, ledger, root, linked)}
+    with _ledger_lock(ledger):
         running = qa_lane.running_owner(
             ledger, request_id, owner_kind=QaOwnerKind.LOCAL_QA
         )
@@ -463,11 +561,14 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             )
         stage = "artifact-persistence"
         log = gate.artifact
-        if gate.evidence is not None:
-            log += qa_lane.persist_stage_evidence(ledger, gate.evidence)
-        checksum = hashlib.sha256(log.encode("utf-8")).hexdigest()
-        artifact = _records_root(root) / "qa-artifacts" / f"{checksum}.log"
-        ledger.write_artifact(artifact, log)
+        # As in ``qa run``: in the store epoch the log and its stage evidence are written in a
+        # store unit of the command, never under a path inside the store file.
+        with _ledger_lock(ledger):
+            if gate.evidence is not None:
+                log += qa_lane.persist_stage_evidence(ledger, gate.evidence)
+            checksum = hashlib.sha256(log.encode("utf-8")).hexdigest()
+            artifact = _records_root(root) / "qa-artifacts" / f"{checksum}.log"
+            ledger.write_artifact(artifact, log)
         result: JsonObject = {
             "local_qa_id": result_id,
             "event": "result",
@@ -496,12 +597,13 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
         with _ledger_lock(ledger):
             try:
                 result["observed_at_finish"] = _observe_pair(repo, root, record, pair)
-                if gate.passed and _valid_result(root, result):
+                if gate.passed and _valid_result(root, result, written=log):
                     result["verification"] = EvidenceVerification.VERIFIED
             except CoordinatorError as exc:
                 result["verification_reason"] = sanitise(exc.message)
             _write_record(ledger, IntegrationLocalQaRecord.from_dict(result))
-            return _link_result(ledger, root, result)
+            linked = _link_result(ledger, root, result)
+        return {**linked, **_pair_verdict(repo, ledger, root, linked)}
     except (GateRunnerError, CoordinatorError, LedgerError, OSError) as exc:
         if isinstance(exc, GateRunnerError) and exc.partial_result is not None:
             gate = exc.partial_result
