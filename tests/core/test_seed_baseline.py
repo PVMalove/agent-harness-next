@@ -179,3 +179,51 @@ def test_failed_backup_fails_the_command_and_keeps_the_file(repo: Path) -> None:
     assert result.returncode == 1
     assert "back up" in result.stderr
     assert (repo / RULE).read_bytes() == b"# local edit\n"
+
+
+def test_update_replaces_an_outdated_seed_file_with_a_backup(repo: Path) -> None:
+    template = make_outdated(repo)
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / RULE).read_bytes() == template
+    directory = backup_dir(repo)
+    assert (directory / RULE).read_bytes() == OLD_BYTES
+    assert directory.relative_to(repo).as_posix() in result.stdout
+    assert seed_files(repo)[RULE] == sha(template)
+    assert "--record-seed-baseline" not in result.stdout
+
+
+def test_update_keeps_a_locally_modified_seed_file_and_names_it(repo: Path) -> None:
+    (repo / RULE).write_bytes(b"# local edit\n")
+    entry = seed_files(repo)[RULE]
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / RULE).read_bytes() == b"# local edit\n"
+    assert seed_files(repo)[RULE] == entry
+    assert not (repo / BACKUPS).exists()
+    assert f"--force-seed-file {RULE}" in result.stdout
+    assert "отличаются от шаблонов upstream" not in result.stdout
+
+
+def test_update_without_a_baseline_keeps_differing_files_and_hints_the_record_flag(
+    repo: Path,
+) -> None:
+    lock = load_lock(repo)
+    del lock["seed_files"]
+    save_lock(repo, lock)
+    (repo / RULE).write_bytes(b"# 1.x seed\n")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / RULE).read_bytes() == b"# 1.x seed\n"
+    assert not (repo / BACKUPS).exists()
+    assert f"harness update {repo} --record-seed-baseline" in result.stdout
+    recorded = seed_files(repo)
+    assert RULE not in recorded
+    hook = ".claude/hooks/block-dangerous-git.sh"
+    assert recorded[hook] == sha((repo / hook).read_bytes())
