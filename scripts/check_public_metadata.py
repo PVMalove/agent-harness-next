@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -82,6 +83,10 @@ def main() -> int:
         print("Public Git metadata check failed:", file=sys.stderr)
         for violation in violations:
             print(f"- {violation}", file=sys.stderr)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            # A workflow annotation: the run page shows it above the job graph.
+            for violation in violations:
+                print(f"::error title=Public Git metadata::{violation}")
         return 1
     print("Public Git metadata check passed")
     return 0

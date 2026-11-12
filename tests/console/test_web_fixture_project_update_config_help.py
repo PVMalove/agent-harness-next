@@ -8,8 +8,11 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import sys
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from harness.console.kernel.configuration_snapshot import (
     AdapterFacts,
@@ -300,6 +303,11 @@ def test_the_fixtures_decode_with_the_tui_codecs() -> None:
     assert _committed("update-harness-diff.json")["path"] in diff_paths(DRIFT)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the facts files hold POSIX paths and shlex quoting; Windows renders its commands "
+    "with subprocess.list2cmdline (open_project_snapshot.py) and its paths with backslashes",
+)
 def test_each_facts_file_is_what_the_tui_shows_for_its_fixture() -> None:
     opened = json.loads((FIXTURES / "open-project-facts.json").read_text(encoding="utf-8"))
     assert opened == open_project_facts(_committed("open-project.json"))

@@ -366,5 +366,59 @@ class GitFailureTests(unittest.TestCase):
                 self.assertEqual(diff_coverage._base_branch(), "master")
 
 
+class StepSummaryTests(unittest.TestCase):
+    CHANGED = {"pkg/a.py": {1, 2, 3, 4}, "pkg/b.py": {1, 2}}
+    FILES = {
+        "pkg/a.py": _file(executed=[1, 2, 3, 4], missing=[]),
+        "pkg/b.py": _file(executed=[], missing=[1, 2]),
+    }
+
+    def test_each_file_has_its_share_a_bar_and_its_uncovered_lines(self) -> None:
+        text = diff_coverage.render_summary(self.CHANGED, self.FILES)
+
+        self.assertIn("| `pkg/a.py` | 4/4 | `██████████` 100% | — |", text)
+        self.assertIn("| `pkg/b.py` | 0/2 | `░░░░░░░░░░` 0% | 1-2 |", text)
+        self.assertIn("**4/6** изменённых строк покрыто (66.7%)", text)
+
+    def test_the_verdict_is_an_alert_of_its_own_kind(self) -> None:
+        below = diff_coverage.render_summary(self.CHANGED, self.FILES)
+        self.assertIn("> [!WARNING]", below)
+        full = diff_coverage.render_summary(
+            {"pkg/a.py": {1, 2}}, {"pkg/a.py": _file(executed=[1, 2], missing=[])}
+        )
+        self.assertIn("> [!TIP]", full)
+        self.assertNotIn("[!WARNING]", full)
+
+    def test_a_bar_rounds_to_tenths(self) -> None:
+        self.assertEqual(diff_coverage.bar(84.0), "`████████░░` 84%")
+
+    def test_each_uncovered_range_is_a_warning_on_its_lines(self) -> None:
+        commands = diff_coverage.uncovered_annotations(
+            ["pkg/b.py:1", "pkg/b.py:2", "pkg/b.py:9"]
+        )
+
+        self.assertEqual(
+            commands,
+            [
+                "::warning file=pkg/b.py,line=1,endLine=2,title=diff-coverage"
+                "::Изменённые строки 1-2 не покрыты тестами",
+                "::warning file=pkg/b.py,line=9,endLine=9,title=diff-coverage"
+                "::Изменённая строка 9 не покрыта тестами",
+            ],
+        )
+
+    def test_the_summary_is_appended_where_github_reads_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.md"
+            summary.write_text("before\n", encoding="utf-8")
+            with mock.patch.dict(
+                diff_coverage.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}
+            ):
+                diff_coverage.publish(self.CHANGED, self.FILES)
+            text = summary.read_text(encoding="utf-8")
+
+        self.assertTrue(text.startswith("before\n## diff-coverage"))
+
+
 if __name__ == "__main__":
     unittest.main()
