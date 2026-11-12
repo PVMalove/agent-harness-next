@@ -559,6 +559,34 @@ def _qa_preparation_failure(report: JsonObject) -> Failure | None:
     return failure_domains.of_qa_stages(stages)
 
 
+def _runtime_domain_commands(report: JsonObject) -> set[str]:
+    """The commands of a QA report's failed gate stages whose ending the runtime classified: their
+    exit code is no result of the command itself, so their failed check proves no code defect."""
+    stages = report.get("qa_stages")
+    entries = stages.get("stages") if isinstance(stages, dict) else None
+    return {
+        str(entry.get("command"))
+        for entry in (entries if isinstance(entries, list) else [])
+        if isinstance(entry, dict)
+        and entry.get("stage") == "gate"
+        and entry.get("result") == "fail"
+        and entry.get("domain") is not None
+    }
+
+
+def _qa_runtime_failure(report: JsonObject) -> Failure | None:
+    """The structured tooling or timeout domain the runtime recorded on a QA report's failed
+    stage; ``None`` for any other report."""
+    failure = failure_domains.of_qa_stages(report.get("qa_stages"))
+    if (
+        failure is not None
+        and failure.method == failure_domains.STRUCTURED
+        and failure.domain in {FailureDomain.TOOLING, FailureDomain.TIMEOUT}
+    ):
+        return failure
+    return None
+
+
 def _retry_evidence(
     report: JsonObject, candidate_moved: bool
 ) -> tuple[RetryReason, str, Failure] | None:
@@ -601,9 +629,14 @@ def _retry_evidence(
             failure_domains.structured(FailureDomain.CODE_TEST, "carried item still open"),
         )
     checks = report.get("checks_run")
+    runtime_ended = _runtime_domain_commands(report)
     if isinstance(checks, list):
         for index, check in enumerate(checks):
-            if isinstance(check, dict) and check.get("result") == "fail":
+            if (
+                isinstance(check, dict)
+                and check.get("result") == "fail"
+                and check.get("command") not in runtime_ended
+            ):
                 return (
                     RetryReason.CODE,
                     "a verification check failed",
@@ -771,6 +804,19 @@ def _retry_routing(
         category = QA_INFRASTRUCTURE_CATEGORY
         basis = "QA preparation failed on a confirmed infrastructure cause and no code check started, so the candidate code was not verified"
         failure = preparation
+    elif (
+        stage == "qa"
+        and not bypass_named
+        and explicit_category in {None, QA_INFRASTRUCTURE_CATEGORY}
+        and outcome == "blocked"
+        and (runtime := _qa_runtime_failure(report)) is not None
+    ):
+        category = QA_INFRASTRUCTURE_CATEGORY
+        basis = (
+            f"the runtime classified the ending of a QA command as {runtime.domain}, so the "
+            "candidate code was not judged"
+        )
+        failure = runtime
     elif (
         stage == "qa"
         and explicit_category is None

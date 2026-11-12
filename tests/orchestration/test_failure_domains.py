@@ -599,6 +599,42 @@ def test_a_confirmed_qa_environment_failure_routes_with_its_proof() -> None:
     assert routing["failure"]["method"] == "structured"  # type: ignore[index]
 
 
+@pytest.mark.parametrize("domain", ["tooling", "timeout"])
+def test_a_blocked_qa_report_with_a_runtime_stage_domain_reruns_the_same_candidate(
+    domain: str,
+) -> None:
+    # The failed check of a command whose ending the runtime classified is no code defect.
+    report = {
+        "outcome": "blocked",
+        "checks_run": [
+            {"command": "make lint", "result": "pass", "evidence": "exit 0"},
+            {"command": "cargo test", "result": "fail", "evidence": "exit 127"},
+        ],
+        "qa_stages": {
+            "failed_stage": "gate",
+            "code_checks_started": "started",
+            "stages": [
+                {"stage": "gate", "command": "make lint", "result": "pass", "exit_code": 0},
+                {
+                    "stage": "gate",
+                    "command": "cargo test",
+                    "result": "fail",
+                    "exit_code": 127,
+                    "diagnostics": "sh: cargo: not found",
+                    "domain": domain,
+                },
+            ],
+        },
+    }
+
+    routing = _route("qa", report)
+
+    assert routing["route"] == "same-candidate-rerun"
+    assert routing["reason_category"] == "verification-infrastructure"
+    assert routing["failure"]["domain"] == domain  # type: ignore[index]
+    assert routing["failure"]["method"] == "structured"  # type: ignore[index]
+
+
 def test_a_narrowed_retry_without_a_tooling_blocker_proves_no_cause() -> None:
     report = {
         "outcome": "completed",
