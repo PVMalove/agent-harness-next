@@ -21,6 +21,7 @@ repository at that path and copies a verifiable snapshot into it.
 | `list` | List of installed skills | no |
 | `cleanup` | Plan and removal of disposable `.harness` data | only with `--apply` |
 | `worktree-remove` | Removes a managed worktree and keeps the branch | yes |
+| `worktree-venv` | Links an issue worktree's `.harness/.venv` to the main checkout's venv when `uv.lock` and `pyproject.toml` match | yes |
 | `uninstall` | Plan and full removal of harness from the project | only with `--apply` |
 | `console` | Interactive console: TUI; `--web` starts a server | through the selected commands |
 | `console-server` | Starts the console server without the interactive shell | no |

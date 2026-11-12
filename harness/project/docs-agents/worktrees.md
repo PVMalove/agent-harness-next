@@ -30,11 +30,13 @@ The coordinator runs these commands in the main checkout and does not enter the 
 ```bash
 git fetch origin <integration-branch>
 git worktree add --no-track -b feature/issue-<ID>-<slug> .harness/.sandboxes/worktrees/issue-<ID>-<slug> origin/<integration-branch>
+harness worktree-venv . .harness/.sandboxes/worktrees/issue-<ID>-<slug>
 ```
 
 - `<integration-branch>` is the ticket's `## Integration Branch` value. If the ticket has no such section, use its `## Git base` value, then the same section of its parent epic. For a task without an epic, use `base_branch` from `.harness/project.json`. If the value is absent for a ticket that has an epic, stop and report a blocker. Do not guess it.
 - `--no-track` is required. Without it, `git worktree add -b` writes the upstream of the new branch to `.git/config`. In a sandbox, `.git/config` can be write-protected. The command then stops half done: the branch exists, but the worktree does not.
 - `git push -u origin feature/issue-<ID>-<slug>` (see [git-workflow.md](./git-workflow.md#2-workflow-sequence), step 2) sets the upstream later. It writes `.git/config` too, so it can fail the same way in a sandbox. If it fails, push with `git push origin feature/issue-<ID>-<slug>` and tell the developer that the upstream is not set.
+- `harness worktree-venv` makes the worktree's `.harness/.venv` a symlink to the main checkout's venv, so brief checks such as `make lint` run without `make bootstrap`. It links only when the worktree's `uv.lock` and `pyproject.toml` match the main checkout. Otherwise it answers `"status": "refused"` with the differing files and a remedy: a separate venv in the worktree (`UV_PROJECT_ENVIRONMENT=.harness/.venv uv sync --locked`). Do not run `make bootstrap` in a worktree with a linked venv: through the link it re-syncs the main checkout's venv. Run the command again after the recovery `git worktree add` below.
 - Pass the absolute path of the worktree as `--worktree`, the branch as `--branch`, and the integration branch as `--integration-ref` to `batch create`. For a task without an epic, omit `--integration-ref`.
 
 **Recovery after a partial failure.** If `git worktree add -b` fails and `git branch --list feature/issue-<ID>-<slug>` shows the branch, the branch exists and the worktree does not. Do not create the branch again and do not delete it. Run:
