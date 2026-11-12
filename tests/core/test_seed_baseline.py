@@ -227,3 +227,54 @@ def test_update_without_a_baseline_keeps_differing_files_and_hints_the_record_fl
     assert RULE not in recorded
     hook = ".claude/hooks/block-dangerous-git.sh"
     assert recorded[hook] == sha((repo / hook).read_bytes())
+
+
+def test_record_seed_baseline_writes_hash_or_null_and_changes_no_file(
+    repo: Path,
+) -> None:
+    lock = load_lock(repo)
+    kept = ".claude/rules/karpathy-guidelines.md"
+    lock["seed_files"] = {kept: sha(b"an earlier baseline")}
+    save_lock(repo, lock)
+    (repo / RULE).write_bytes(b"# 1.x seed\n")
+    hook = ".claude/hooks/block-dangerous-git.sh"
+    before = {
+        path: path.read_bytes()
+        for path in repo.rglob("*")
+        if path.is_file() and ".git" not in path.parts and path.name != "harness.lock"
+    }
+
+    result = harness("update", str(repo), "--record-seed-baseline")
+
+    assert result.returncode == 0, result.stderr
+    after = {
+        path: path.read_bytes()
+        for path in repo.rglob("*")
+        if path.is_file() and ".git" not in path.parts and path.name != "harness.lock"
+    }
+    assert after == before
+    recorded = seed_files(repo)
+    assert recorded[RULE] is None
+    assert recorded[hook] == sha((repo / hook).read_bytes())
+    assert recorded[kept] == sha(b"an earlier baseline")
+
+    update = harness("update", str(repo))
+
+    assert update.returncode == 0, update.stderr
+    assert (repo / RULE).read_bytes() == b"# 1.x seed\n"
+    assert f"--force-seed-file {RULE}" in update.stdout
+    assert "--record-seed-baseline" not in update.stdout
+
+
+@pytest.mark.parametrize(
+    "flag",
+    [["--force"], ["--force-managed-files"], ["--force-seed-files"], ["--force-seed-file", RULE]],
+)
+def test_record_seed_baseline_refuses_force_flags(repo: Path, flag: list[str]) -> None:
+    lock_before = (repo / LOCK).read_bytes()
+
+    result = harness("update", str(repo), "--record-seed-baseline", *flag)
+
+    assert result.returncode != 0
+    assert "--record-seed-baseline" in result.stderr
+    assert (repo / LOCK).read_bytes() == lock_before

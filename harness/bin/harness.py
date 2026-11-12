@@ -1414,6 +1414,30 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     return 0
 
 
+def record_seed_baseline(repo: Path, lock: JsonObject) -> int:
+    """Записать baseline seed-файлам без записи в lock: хэш шаблона или null. Файлы не меняются."""
+    baseline = read_seed_baseline(lock) or {}
+    selected = selected_capabilities(lock.get("capabilities"))
+    templates = baselined_seed_files(
+        repo,
+        orchestration_enabled=BACKEND_ORCHESTRATION_CAPABILITY in selected,
+    )
+    added: list[str] = []
+    for relative, content in templates.items():
+        path = repo / relative
+        if relative in baseline or not path.is_file():
+            continue
+        baseline[relative] = digest(content) if path.read_bytes() == content else None
+        added.append(relative)
+    lock["seed_files"] = {relative: baseline[relative] for relative in sorted(baseline)}
+    write_lock(repo, lock)
+    print(f"recorded seed baseline for {len(added)} files in {LOCK_REL.as_posix()}")
+    for relative in sorted(added):
+        state = "template" if baseline[relative] else "null (differs from the template)"
+        print(f"  {relative}: {state}")
+    return 0
+
+
 def cmd_update(args: argparse.Namespace) -> int:
     """Обновить управляемые файлы harness в целевом проекте."""
     repo = Path(args.repo).expanduser().resolve()
@@ -1422,6 +1446,18 @@ def cmd_update(args: argparse.Namespace) -> int:
     if lock is None:
         fail(f"project harness is missing; use 'harness init {repo}'")
     read_seed_baseline(lock)
+    if args.record_seed_baseline:
+        if (
+            args.force
+            or args.force_managed_files
+            or args.force_seed_files
+            or args.force_seed_file
+        ):
+            fail(
+                "--record-seed-baseline only records the seed baseline; "
+                "run it without --force, --force-managed-files and --force-seed-file(s)"
+            )
+        return record_seed_baseline(repo, lock)
     selected = selected_capabilities(args.capability or lock.get("capabilities"))
     result = snapshot_diff(repo, selected)
     current_files = package_files(selected)
@@ -1912,6 +1948,11 @@ def parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PATH",
         help="overwrite only this seed file (path from the project root); repeatable",
+    )
+    update.add_argument(
+        "--record-seed-baseline",
+        action="store_true",
+        help="only record a seed_files baseline for seed files without one; change no file",
     )
     _add_engineering_args(update)
     update.set_defaults(func=cmd_update)
