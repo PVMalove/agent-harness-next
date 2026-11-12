@@ -8,7 +8,7 @@
     "quality_profile": "showcase"
   },
   "nodes": [
-    { "id": "docs", "label": "Документация Harness Next", "sublabel": "beta · 6 разделов" },
+    { "id": "docs", "label": "Документация Harness Next", "sublabel": "2.0 · 6 разделов" },
     { "id": "guides", "label": "Руководства", "parent": "docs", "sublabel": "Рабочий поток" },
     { "id": "skills", "label": "Скиллы", "parent": "docs", "sublabel": "First-party и upstream" },
     { "id": "agents", "label": "Агенты", "parent": "docs", "sublabel": "Контракты ролей" },

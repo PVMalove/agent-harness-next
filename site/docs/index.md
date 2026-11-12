@@ -8,7 +8,7 @@ hide:
 
 <div class="ah-hero">
   <div class="ah-hero-head">
-    <span class="ah-eyebrow"><i></i> Agent Harness Next · beta</span>
+    <span class="ah-eyebrow"><i></i> Agent Harness Next · 2.0</span>
     <h1>Harness для coding-агентов</h1>
   </div>
   <div class="ah-hero-copy">

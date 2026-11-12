@@ -8,4 +8,4 @@ make docs-serve   # локальный предпросмотр
 make docs-build   # строгая сборка
 ```
 
-Публикация — `.github/workflows/pages.yml` через GitHub Actions Pages. Версия на сайте — `beta`.
+Публикация — `.github/workflows/pages.yml` через GitHub Actions Pages. Версия на сайте — `2.0`.

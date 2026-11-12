@@ -61,6 +61,11 @@
         <b>Troubleshooting</b>
         <span>Причины отказов и следующие действия.</span>
       </a>
+      <a class="ah-card" data-ah-entry href="upgrade-2-0/">
+        <span class="i">⇪</span>
+        <b>Миграция на 2.0</b>
+        <span>Обновление с 1.x, migrate и откат.</span>
+      </a>
     </div>
   </section>
 

@@ -58,6 +58,7 @@ python3 harness/bin/harness.py health /path/to/repository
 ## Документация
 
 - [Быстрый старт](https://pvmalove.github.io/agent-harness-next/getting-started/) — требования, установка и `health`.
+- [Миграция на 2.0](https://pvmalove.github.io/agent-harness-next/guides/upgrade-2-0/) — переход с 1.x, `harness-runtime migrate` и откат.
 - [Архитектура](https://pvmalove.github.io/agent-harness-next/architecture/) — слои, runtime, store и безопасность.
 - [Справочник](https://pvmalove.github.io/agent-harness-next/reference/) — CLI, конфигурация, hooks и агенты.
 - [Демо](https://pvmalove.github.io/agent-harness-next/demo/) — веб-консоль на демонстрационных данных.
