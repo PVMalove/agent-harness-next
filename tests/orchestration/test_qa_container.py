@@ -523,6 +523,34 @@ def test_tooling_and_timeout_endings_block_the_report_with_their_domain(
     assert (lane["lease"], lane["queue"]) == (None, [])
 
 
+def test_a_tooling_gate_ending_after_a_declared_preparation_records_a_blocked_report(
+    qa: Make,
+) -> None:
+    # The runner and the report validator decide the outcome by one rule: a gate command the
+    # runtime classified as tooling (exit 127) is a recorded blocked report, never a refusal.
+    repo = qa(preparation=PREPARATION)
+    repo.engine.script("gate-2", stderr="sh: cargo: not found\n", exit_code=127)
+
+    status, result, err = repo.qa_run()
+
+    assert status == 0 and result is not None, err
+    report = repo.report()
+    assert report["outcome"] == "blocked"
+    assert "tooling" in report["blockers"]["details"]
+    assert [c["result"] for c in report["checks_run"]] == ["pass", "fail", "not_run"]
+    stages = report["qa_stages"]
+    assert stages["failed_stage"] == "gate"
+    [failed] = [e for e in stages["stages"] if e["result"] == "fail"]
+    assert (failed["stage"], failed["exit_code"], failed["domain"]) == (
+        "gate",
+        127,
+        "tooling",
+    )
+    assert repo.attempts() == []
+    lane = repo.lane()
+    assert (lane["lease"], lane["queue"]) == (None, [])
+
+
 @pytest.mark.fault_injection
 def test_an_selinux_permission_denied_command_blocks_the_report_as_tooling_without_a_new_attempt(
     qa: Make,

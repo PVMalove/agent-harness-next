@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY, HarnessError
-from harness.orchestration.core.constants import FailureDomain
+from harness.orchestration.core.constants import QA_PRIMARY_STAGE_NAMES, FailureDomain
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.workflow import failure_classifier
 
@@ -255,6 +255,37 @@ def _gate(stages: Mapping[str, object], repo: Path | None) -> Failure:
     return structured(
         FailureDomain.CODE_TEST, "failed_stage=gate; stage gate result=fail", source
     )
+
+
+def qa_report_outcome(stages: Mapping[str, object]) -> str:
+    """The outcome of a QA report that records ``qa_stages``: the one rule the QA runner and the
+    report validator share.
+
+    No failed stage is ``completed``. A failing primary stage whose entry carries a ``domain`` is
+    ``blocked``: the runtime classified its ending, so its exit code is no result of the command
+    itself and the code was not judged. Otherwise a failed gate or a confirmed project-file defect
+    is ``failed`` (a developer retry), and any other preparation failure is ``blocked``."""
+    failed_stage = stages.get("failed_stage")
+    if failed_stage is None:
+        return "completed"
+    raw = stages.get("stages")
+    failing = next(
+        (
+            entry
+            for entry in (raw if isinstance(raw, list) else [])
+            if isinstance(entry, Mapping)
+            and entry.get("stage") in QA_PRIMARY_STAGE_NAMES
+            and entry.get("result") == "fail"
+        ),
+        None,
+    )
+    if failing is not None and failing.get("domain") is not None:
+        return "blocked"
+    diagnosis = stages.get("diagnosis")
+    category = diagnosis.get("category") if isinstance(diagnosis, Mapping) else None
+    if failed_stage == "gate" or category == "project-defect":
+        return "failed"
+    return "blocked"
 
 
 def of_qa_stages(stages: object, *, repo: Path | None = None) -> Failure | None:

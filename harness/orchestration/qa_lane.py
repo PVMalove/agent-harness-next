@@ -1433,9 +1433,24 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
             )
             raise
     domain = _container_domain(policy, stages)
-    if domain in NO_REPORT_DOMAINS:
+    from .workflow.failure_domains import qa_report_outcome
+
+    # The runner and the report validator share one outcome rule: a run-level domain that no
+    # recorded stage carries (a backstop timeout, for one) would be a report with a mismatched
+    # outcome, so the run is a new attempt instead.
+    unrecorded = (
+        domain is not None
+        and stages is not None
+        and qa_report_outcome(stages) != "blocked"
+    )
+    if domain in NO_REPORT_DOMAINS or unrecorded:
+        cause = (
+            f"a {domain} failure that no recorded QA stage carries"
+            if unrecorded
+            else f"a {domain} failure"
+        )
         failure = CoordinatorError(
-            f"QA attempt {attempt} of {dispatch['dispatch_id']} ended with a {domain} failure; "
+            f"QA attempt {attempt} of {dispatch['dispatch_id']} ended with {cause}; "
             f"its evidence is {artifact.name}",
             remedy=f"restore the QA environment, then run qa run for {dispatch['dispatch_id']} "
             f"again: it is attempt {(attempt or 0) + 1} with a new operation id and spends no "
@@ -1466,6 +1481,8 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
         report = _qa_report(dispatch, checks, artifact, checksum, stages)
         if domain is not None:
             _blocked_by(report, domain)
+        if stages is not None:
+            report["outcome"] = qa_report_outcome(stages)
         return report
 
     return _accept_and_release(

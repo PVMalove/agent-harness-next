@@ -120,6 +120,7 @@ from harness.orchestration.runtime_attestation import (
     attest as attest_runtime_worktree,
 )
 from harness.orchestration.workflow import carried_items
+from harness.orchestration.workflow import failure_domains
 from harness.orchestration.workflow.fix_forward import FixForwardHistory
 from harness.orchestration.workflow import commit_plan as plan_rules
 from harness.orchestration.workflow import rebase
@@ -1583,14 +1584,7 @@ def _validate_qa_stages(report: JsonObject, dispatch: JsonObject) -> None:
         raise refuse(
             "does not agree with checks_run (a command never reached is not_run)"
         )
-    if failed_stage is None:
-        expected_outcome = "completed"
-    elif (
-        failed_stage == "gate" or (diagnosis or {}).get("category") == "project-defect"
-    ):
-        expected_outcome = "failed"
-    else:
-        expected_outcome = "blocked"
+    expected_outcome = failure_domains.qa_report_outcome(stages)
     if report["outcome"] != expected_outcome:
         raise refuse(
             f"requires outcome {expected_outcome} for failed_stage {failed_stage}"
