@@ -424,4 +424,25 @@ mod tests {
             assert!(parse(words(refused), true).is_err(), "{refused:?}");
         }
     }
+
+    #[test]
+    fn the_report_of_a_start_ignores_the_lines_of_an_earlier_start() {
+        let path = std::env::temp_dir().join(format!(
+            "hr-autostart-journal-{}.serve.log",
+            std::process::id()
+        ));
+        let stale = "ERROR: stale\nREMEDY: [lease_held] stale\n--- harness-runtime ensure 1: starting serve\n";
+        fs::write(&path, stale).unwrap();
+        let journal = Journal {
+            path: path.clone(),
+            start: u64::try_from(stale.len()).unwrap(),
+        };
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        writeln!(file, "ERROR: fresh").unwrap();
+
+        let report = last_report(&journal);
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(report, ("fresh".to_owned(), String::new()));
+    }
 }

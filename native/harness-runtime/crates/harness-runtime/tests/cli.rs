@@ -896,6 +896,41 @@ mod autostart {
     }
 
     #[test]
+    fn a_refused_start_ignores_the_report_an_earlier_start_left_in_the_journal() {
+        use std::io::Write;
+
+        let (repo, store) = cut_over("ensure-stale");
+        rusqlite::Connection::open(&store)
+            .unwrap()
+            .pragma_update(None, "user_version", state::schema::SCHEMA_VERSION + 1)
+            .unwrap();
+        let mut setup = Setup::new("ensure-stale", repo);
+        let paths =
+            ipc::resolve_paths(&setup.repo.0, &ipc::Environment::with_xdg(&setup.xdg.0)).unwrap();
+        let (journal, mut file) = ipc::open_serve_log(&paths).unwrap();
+        writeln!(file, "ERROR: stale start").unwrap();
+        writeln!(file, "REMEDY: [lease_held] stale remedy").unwrap();
+        drop(file);
+
+        let (refused, code) = setup.run(&["ensure", "--session", "s"]);
+
+        // A stale `[lease_held]` would send ensure to attach again until its timeout.
+        assert_eq!(
+            (refused["status"].as_str(), code),
+            (Some("refused"), 2),
+            "{refused}"
+        );
+        let remedy = refused["remedy"].as_str().unwrap();
+        assert!(remedy.starts_with("[protocol_unsupported] "), "{refused}");
+        assert!(
+            !refused["error"].as_str().unwrap().contains("stale"),
+            "{refused}"
+        );
+        let log = fs::read_to_string(&journal).unwrap();
+        assert!(log.starts_with("ERROR: stale start\n"), "{log}");
+    }
+
+    #[test]
     fn attach_only_never_starts_a_runtime() {
         let mut setup = Setup::new("ensure-attach", Scratch::repo("ensure-attach"));
 
