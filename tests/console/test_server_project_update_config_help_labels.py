@@ -9,8 +9,11 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import sys
 from pathlib import Path
 from typing import cast
+
+import pytest
 
 from harness.console.backend import composition
 from harness.console.backend.api.app import create_app
@@ -191,6 +194,11 @@ def _served(tmp_path: Path) -> dict[str, object]:
     return asyncio.run(scenario())
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the fixtures hold POSIX paths and shlex quoting; Windows renders its commands with "
+    "subprocess.list2cmdline (open_project_snapshot.py) and its paths with backslashes",
+)
 def test_the_pages_read_the_fixture_data_over_the_websocket_route(
     tmp_path: Path,
 ) -> None:

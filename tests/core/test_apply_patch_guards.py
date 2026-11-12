@@ -70,6 +70,11 @@ def _add(path: str, text: str = "x") -> str:
     return f"*** Add File: {path}\n+{text}\n"
 
 
+# The hooks are Python scripts behind bash: on Windows their output follows the console code page
+# (cp1252) unless Python is told to use UTF-8, and one stray byte stops the reader of `subprocess`.
+UTF8 = {"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+
+
 def _hook(
     project: Path, hook_id: str, payload: dict[str, object], *, first_runtime: bool
 ) -> tuple[int, str, str]:
@@ -79,6 +84,7 @@ def _hook(
         for key, value in os.environ.items()
         if key not in ("CLAUDE_PROJECT_DIR", "HARNESS_HOOK_ENVELOPE")
     }
+    env.update(UTF8)
     if first_runtime:
         env["CLAUDE_PROJECT_DIR"] = str(project)
     done = subprocess.run(
@@ -87,6 +93,7 @@ def _hook(
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         env=env,
         cwd=project,
         check=False,
@@ -428,12 +435,14 @@ def _remedy(project: Path, hook_id: str, tool_input: dict[str, object]) -> str:
     env = {
         key: value for key, value in os.environ.items() if key != "CLAUDE_PROJECT_DIR"
     }
+    env.update(UTF8)
     done = subprocess.run(
         [str(BASH), str(project / ".claude" / "hooks" / f"{hook_id}.sh")],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         env=env,
         cwd=project,
         check=False,
