@@ -134,6 +134,33 @@ def file_digest(path: Path) -> str | None:
         return None
 
 
+_SEED_HASH = re.compile(r"[0-9a-f]{64}")
+
+
+def seed_baseline_problems(value: object) -> list[str]:
+    """Problems of the `seed_files` value of harness.lock; [] when it is valid.
+
+    The one format validator of the seed baseline, shared by the CLI and `harness health`: an
+    object of project-relative POSIX paths to a lowercase sha256 hex from `digest`, or null."""
+    if not isinstance(value, dict):
+        return ["seed_files must be a JSON object"]
+    problems: list[str] = []
+    for key, item in value.items():
+        if (
+            not key
+            or key.startswith("/")
+            or "\\" in key
+            or re.match(r"[A-Za-z]:", key)
+            or ".." in key.split("/")
+        ):
+            problems.append(f"{key!r} is not a relative POSIX path")
+        if item is not None and not (
+            isinstance(item, str) and _SEED_HASH.fullmatch(item)
+        ):
+            problems.append(f"{key!r}: value is neither a lowercase sha256 hex nor null")
+    return problems
+
+
 def relative_path(value: object, *, label: str) -> Path:
     """Проверить и преобразовать значение в относительный путь внутри проекта."""
     if not isinstance(value, str) or not value:
