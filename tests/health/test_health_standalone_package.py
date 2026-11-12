@@ -122,6 +122,7 @@ def test_registry_runs_without_crashing_even_with_a_lock_file_present(
     ids = {check.id for check in report.checks}
     assert ids == {
         "files.lock",
+        "files.seed_baseline",
         "files.agents_md",
         "files.discovery_links",
         "files.project_json",

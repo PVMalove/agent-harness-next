@@ -337,6 +337,18 @@ def test_script_drift_from_the_template_warns(repo: Path) -> None:
     assert "--force-seed-file .claude/hooks/count-skill-usage.sh" in result["message"]
 
 
+def test_force_seed_file_fix_says_the_file_is_backed_up(repo: Path) -> None:
+    script = repo / HOOKS_DIR / "count-skill-usage.sh"
+    script.write_text(
+        script.read_text(encoding="utf-8") + "\n# local\n", encoding="utf-8"
+    )
+
+    fix_text = check(repo)["fix"]["text"]
+
+    assert "--force-seed-file <путь>" in fix_text
+    assert ".harness/.sandboxes/seed-backups/" in fix_text
+
+
 def test_changed_managed_entry_is_reported_as_drift_not_as_a_missing_hook(
     repo: Path,
 ) -> None:

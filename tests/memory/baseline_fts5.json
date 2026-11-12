@@ -12,7 +12,7 @@
  "max_noise_ratio": 0.7,
  "dataset_hash": "27ae576158e8a67a0524831467f2e4d157f5beb707d8c7bf2ed5c24c04060d17",
  "source_hashes": {
-  "CONTEXT.md": "47726b5dd5acca48c91c14d27f9688e628c4240ee7a994ae3b7256a2a723f0ab",
+  "CONTEXT.md": "226054f6acc828b950d5e46ccff4098f718dc156d0df7c318a0f3cf2eb42e336",
   "docs/adr/0001-portable-capability-delivery.md": "7f35b9513f2a9b63ad081ef5ade53b971a39aa94743167b426b6e7be5611c602",
   "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
   "docs/adr/0003-orchestration-core.md": "3e4e61af72ab7701013cba42f1faa8cdc2b3f4b9c23e7f2d0fc884f03f957854",
@@ -215,8 +215,8 @@
     "query": "Цель: Добавить update --force-seed-files и упорядочить команды очистки в Harness console. DoD: Перезапись seed-файлов требует подтверждения; есть план soft/hard, применение hard с HARD; каталог команд, справка и тесты обновлены.",
     "retrieved": [
      "CONTEXT.md",
-     "docs/adr/0001-portable-capability-delivery.md",
      "docs/adr/0006-scratch-artifacts.md",
+     "docs/adr/0001-portable-capability-delivery.md",
      "docs/adr/0010-project-memory.md",
      "docs/adr/0009-harness-console.md"
     ],

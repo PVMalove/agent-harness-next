@@ -41,6 +41,7 @@ FixFn = Callable[[HealthContext, CheckResult], str | None]
 
 REGISTRY: list[tuple[str, CheckFn]] = [
     ("files.lock", files_checks.check_lock),
+    ("files.seed_baseline", files_checks.check_seed_baseline),
     ("files.agents_md", files_checks.check_agents_md),
     ("files.discovery_links", files_checks.check_discovery_links),
     ("files.project_json", files_checks.check_project_json),

@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Captured before the forced UTF-8 below so `harness health` can still warn about the console's
@@ -107,6 +108,7 @@ from harness.health.project_files import (
     project_registry,
     project_skill_files,
     public_skill_names,
+    seed_baseline_problems,
     skill_inventory,
     test_runner_problems,
     tracker_field_problems,
@@ -426,10 +428,36 @@ def ensure_links(
     return changed
 
 
+def write_lock(repo: Path, lock: JsonObject) -> None:
+    """Записать .harness/harness.lock: единственный писатель lock — CLI harness."""
+    lock_path = repo / LOCK_REL
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text(
+        json.dumps(lock, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def read_seed_baseline(lock: JsonObject | None) -> dict[str, str | None] | None:
+    """Baseline seed-файлов из lock (`seed_files`); None — ключа нет. Неверный формат — ошибка."""
+    if lock is None or "seed_files" not in lock:
+        return None
+    value = lock["seed_files"]
+    problems = seed_baseline_problems(value)
+    if problems:
+        fail(
+            f"invalid seed_files in {LOCK_REL.as_posix()}: {'; '.join(problems)} "
+            "(restore the lock from git or fix seed_files, then retry)"
+        )
+    return dict(value)
+
+
 def write_snapshot(repo: Path, selected: list[str], *, force: bool) -> list[str]:
     """Записать снимок файлов возможностей, сформировать harness.lock и обновить реестр."""
     files = package_files(selected)
-    previous_hashes = (load_lock(repo) or {}).get("files") or {}
+    previous_lock = load_lock(repo) or {}
+    previous_hashes = previous_lock.get("files") or {}
     for relative in files:
         if is_adapter(relative):
             problem = adapter_problem(
@@ -471,13 +499,9 @@ def write_snapshot(repo: Path, selected: list[str], *, force: bool) -> list[str]
         "capabilities": selected,
         "files": {relative: digest(data) for relative, data in sorted(files.items())},
     }
-    lock_path = repo / LOCK_REL
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(
-        json.dumps(lock, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    if "seed_files" in previous_lock:
+        lock["seed_files"] = previous_lock["seed_files"]
+    write_lock(repo, lock)
     prune_empty_skill_directories(repo)
     write_registry(repo)
     written.append(LOCK_REL.as_posix())
@@ -836,27 +860,6 @@ def _matching_arg(pattern: str, rule: str) -> Callable[[str], str]:
     return parse
 
 
-def _copy_if_absent(
-    source: Path,
-    target: Path,
-    *,
-    executable: bool = False,
-    force: bool = False,
-    differing: list[Path] | None = None,
-) -> str | None:
-    """Скопировать файл, если целевой путь отсутствует, или принудительно при force=True."""
-    if target.exists():
-        if not force:
-            if differing is not None and target.read_bytes() != source.read_bytes():
-                differing.append(target)
-            return None
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(source.read_bytes())
-    if executable:
-        target.chmod(target.stat().st_mode | 0o111)
-    return str(target)
-
-
 def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str, bytes]:
     """Seed-файлы, которые `update` может перезаписать: путь от корня проекта -> эталон из шаблона."""
     files: dict[str, bytes] = {}
@@ -911,8 +914,205 @@ def seed_differing(repo: Path) -> list[str]:
     return sorted(differing)
 
 
+def baselined_seed_files(
+    repo: Path, *, orchestration_enabled: bool
+) -> dict[str, bytes]:
+    """Seed-файлы с baseline в lock: все seed-шаблоны, кроме файлов hooks runtime."""
+    configs = {adapter.config for adapter in ADAPTERS}
+    return {
+        relative: content
+        for relative, content in seed_template_files(
+            repo, orchestration_enabled=orchestration_enabled
+        ).items()
+        if relative not in configs
+    }
+
+
+FORCED_REASON = "перезаписан по флагу"
+OUTDATED_REASON = "устарел по версии"
+SEED_BACKUP_REL = Path(".harness/.sandboxes/seed-backups")
+
+
+class SeedBackup:
+    """Каталог бэкапа seed-файлов одного запуска: создаётся при первой перезаписи, не раньше."""
+
+    def __init__(self, repo: Path) -> None:
+        self.repo = repo
+        self.directory: Path | None = None
+
+    def save(self, relative: str) -> None:
+        """Скопировать прежние байты seed-файла в бэкап; ошибка завершает команду до записи."""
+        try:
+            if self.directory is None:
+                root = self.repo / SEED_BACKUP_REL
+                stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+                candidate, number = root / stamp, 1
+                while candidate.exists():
+                    candidate, number = root / f"{stamp}-{number}", number + 1
+                candidate.mkdir(parents=True)
+                self.directory = candidate
+            target = self.directory / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.repo / relative, target)
+        except OSError as exc:
+            fail(
+                f"cannot back up seed file {relative} to {SEED_BACKUP_REL.as_posix()}: "
+                f"{exc}; the file was left unchanged"
+            )
+
+    def label(self) -> str:
+        """Путь каталога бэкапа от корня проекта для вывода."""
+        assert self.directory is not None
+        return self.directory.relative_to(self.repo).as_posix()
+
+
+class SeedInstall:
+    """Один шаг seed в init/adopt/update: решение по каждому seed-файлу и его baseline в lock.
+
+    Существующий файл, равный шаблону, — текущий: получает baseline хэша шаблона без записи.
+    Равный своему baseline-хэшу, но не шаблону, — устарел по версии: заменяется с бэкапом.
+    С baseline (хэш или null), не равный ни ему, ни шаблону, — изменён локально; без записи в
+    lock и не равный шаблону — без baseline. Оба остаются как есть, пока их не выбрал force-флаг.
+    Нет файла — он создаётся. Каждая запись файла ставит baseline хэша шаблона."""
+
+    def __init__(
+        self, repo: Path, args: argparse.Namespace, *, orchestration_enabled: bool
+    ) -> None:
+        self.repo = repo
+        self.templates = seed_template_files(
+            repo, orchestration_enabled=orchestration_enabled
+        )
+        self.baselined = set(
+            baselined_seed_files(repo, orchestration_enabled=orchestration_enabled)
+        )
+        self.baseline: dict[str, str | None] = dict(
+            read_seed_baseline(load_lock(repo)) or {}
+        )
+        self.force_all = bool(
+            getattr(args, "force_seed_files", False) or getattr(args, "force", False)
+        )
+        self.selected = set(getattr(args, "force_seed_file", None) or [])
+        unknown = self.selected - set(self.templates)
+        if unknown:
+            fail(
+                "--force-seed-file: not a seed file of this project: "
+                + ", ".join(sorted(unknown))
+            )
+        self.modified: list[str] = []
+        self.unbaselined: list[str] = []
+        self.backup = SeedBackup(repo)
+        # (path, reason) of every existing seed file this run overwrote after a backup.
+        self.replaced: list[tuple[str, str]] = []
+
+    def overwrite(self, relative: str, reason: str) -> None:
+        """Сделать бэкап существующего seed-файла перед его перезаписью."""
+        self.backup.save(relative)
+        self.replaced.append((relative, reason))
+
+    def report_replaced(self) -> None:
+        """Напечатать блок заменённых seed-файлов с каталогом бэкапа; пустой блок не печатается."""
+        if not self.replaced:
+            return
+        print(
+            "\n[INFO] Заменены seed-файлы, прежние байты сохранены в бэкапе: "
+            f"{self.backup.label()}"
+        )
+        for relative, reason in self.replaced:
+            print(f"  - {relative} ({reason})")
+
+    def report_kept(self) -> None:
+        """Напечатать блоки изменённых локально и файлов без baseline; пустой не печатается."""
+        if self.modified:
+            print("\n[WARNING] Seed-файлы изменены локально и оставлены без изменений:")
+            for relative in self.modified:
+                print(f"  - {relative}")
+                print(f"    После просмотра: --force-seed-file {relative}")
+        if self.unbaselined:
+            print(
+                "\n[WARNING] Seed-файлы без baseline в .harness/harness.lock "
+                "отличаются от шаблона и оставлены без изменений:"
+            )
+            for relative in self.unbaselined:
+                print(f"  - {relative}")
+            print(
+                f"  Записать baseline: harness update {self.repo} --record-seed-baseline"
+            )
+
+    def forced(self, relative: str) -> bool:
+        """Перезаписывать ли файл: все seed-файлы разом или только выбранные по пути."""
+        return self.force_all or relative in self.selected
+
+    def install(self, relative: str, *, executable: bool = False) -> str | None:
+        """Принять решение по seed-файлу с baseline; путь записанного файла или None."""
+        data = self.templates[relative]
+        target = self.repo / relative
+        if target.exists():
+            if target.read_bytes() == data:
+                self.baseline[relative] = digest(data)
+                return None
+            if self.forced(relative):
+                self.overwrite(relative, FORCED_REASON)
+            elif relative not in self.baseline:
+                self.unbaselined.append(relative)
+                return None
+            elif self.baseline[relative] == digest(target.read_bytes()):
+                self.overwrite(relative, OUTDATED_REASON)
+            else:
+                self.modified.append(relative)
+                return None
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        if executable:
+            target.chmod(target.stat().st_mode | 0o111)
+        self.baseline[relative] = digest(data)
+        return str(target)
+
+    def record(self) -> None:
+        """Записать baseline seed-файлов в `seed_files` lock; снимок `files` не меняется."""
+        lock = load_lock(self.repo) or {}
+        lock["seed_files"] = {
+            relative: self.baseline[relative] for relative in sorted(self.baseline)
+        }
+        write_lock(self.repo, lock)
+
+
+SEED_GROUP_LABELS = {
+    "outdated": "устарел по версии",
+    "modified": "изменён локально",
+    "unbaselined": "без baseline",
+}
+
+
+def seed_groups(repo: Path) -> dict[str, list[str]]:
+    """Отличающиеся от шаблона seed-файлы по группам: outdated, modified, unbaselined.
+
+    Те же правила, что у `harness update`; файлы hooks runtime без baseline — modified."""
+    templates = seed_template_files(
+        repo, orchestration_enabled=(repo / ".harness/orchestration.json").exists()
+    )
+    baseline = read_seed_baseline(load_lock(repo)) or {}
+    configs = {adapter.config for adapter in ADAPTERS}
+    groups: dict[str, list[str]] = {name: [] for name in SEED_GROUP_LABELS}
+    for relative, content in sorted(templates.items()):
+        path = repo / relative
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if data == content:
+            continue
+        if relative in configs:
+            groups["modified"].append(relative)
+        elif relative not in baseline:
+            groups["unbaselined"].append(relative)
+        elif baseline[relative] == digest(data):
+            groups["outdated"].append(relative)
+        else:
+            groups["modified"].append(relative)
+    return groups
+
+
 def _install_hook_config(
-    repo: Path, adapter: RuntimeAdapter, *, forced: bool, differing: list[Path]
+    repo: Path, adapter: RuntimeAdapter, seeds: SeedInstall
 ) -> list[str]:
     """Записать или слить файл hooks runtime, напечатать отчёт и зарегистрировать интеграцию.
 
@@ -925,7 +1125,9 @@ def _install_hook_config(
     written: list[str] = []
     recorded = recorded_managed_entries(repo, adapter.integration_id)
     baseline = set(template_digests(template_document)) | set(recorded or [])
-    if not target.exists() or forced:
+    if not target.exists() or seeds.forced(adapter.config):
+        if target.exists() and target.read_bytes() != template_bytes:
+            seeds.overwrite(adapter.config, FORCED_REASON)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(template_bytes)
         written.append(str(target))
@@ -970,7 +1172,7 @@ def _install_hook_config(
                     "(заменит весь файл шаблоном)"
                 )
         if target.read_bytes() != template_bytes:
-            differing.append(target)
+            seeds.modified.append(adapter.config)
     try:
         final: object = json.loads(target.read_text(encoding="utf-8"))
     except JSON_READ_ERRORS:
@@ -1026,56 +1228,29 @@ def scaffold_engineering_extras(
 ) -> list[str]:
     """Развернуть дополнительные файлы и настройки для набора возможностей engineering-suite."""
     written: list[str] = []
-    differing: list[Path] = []
-    force_seed = getattr(args, "force_seed_files", False) or getattr(
-        args, "force", False
-    )
-    selected_seed = set(getattr(args, "force_seed_file", None) or [])
-    unknown = selected_seed - set(
-        seed_template_files(repo, orchestration_enabled=orchestration_enabled)
-    )
-    if unknown:
-        fail(
-            "--force-seed-file: not a seed file of this project: "
-            + ", ".join(sorted(unknown))
-        )
-
-    def forced(target: Path) -> bool:
-        """Перезаписывать ли файл: все seed-файлы разом или только выбранные по пути."""
-        return force_seed or target.relative_to(repo).as_posix() in selected_seed
+    seeds = SeedInstall(repo, args, orchestration_enabled=orchestration_enabled)
 
     for folder, target, suffixes in SEED_FOLDERS:
         for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
             if not source.is_file() or source.suffix not in suffixes:
                 continue
-            result = _copy_if_absent(
-                source,
-                repo / target / source.name,
-                executable=folder == "hooks",
-                force=forced(repo / target / source.name),
-                differing=differing,
+            result = seeds.install(
+                f"{target}/{source.name}", executable=folder == "hooks"
             )
             if result:
                 written.append(result)
 
     scratch_gitignore = storage_path(repo, "scratch", ".gitignore")
     if scratch_gitignore.is_relative_to(repo):
-        scratch_gitignore_result = _copy_if_absent(
-            PROJECT_TEMPLATE_DIR / "scratch/.gitignore",
-            scratch_gitignore,
-            force=forced(scratch_gitignore),
-            differing=differing,
+        scratch_gitignore_result = seeds.install(
+            scratch_gitignore.relative_to(repo).as_posix()
         )
         if scratch_gitignore_result:
             written.append(scratch_gitignore_result)
 
-    harness_gitignore = repo / ".harness/.gitignore"
-    if not harness_gitignore.exists() or forced(harness_gitignore):
-        harness_gitignore.parent.mkdir(parents=True, exist_ok=True)
-        harness_gitignore.write_text(
-            HARNESS_RUNTIME_GITIGNORE, encoding="utf-8", newline="\n"
-        )
-        written.append(str(harness_gitignore))
+    harness_gitignore_result = seeds.install(".harness/.gitignore")
+    if harness_gitignore_result:
+        written.append(harness_gitignore_result)
 
     root_gitignore = repo / ".gitignore"
     root_gitignore_text = (
@@ -1090,14 +1265,7 @@ def scaffold_engineering_extras(
         written.append(str(root_gitignore))
 
     for adapter in ADAPTERS:
-        written.extend(
-            _install_hook_config(
-                repo,
-                adapter,
-                forced=forced(repo / adapter.config),
-                differing=differing,
-            )
-        )
+        written.extend(_install_hook_config(repo, adapter, seeds))
     written.append(str(repo / INTEGRATIONS_REL))
 
     project_json = repo / ".harness/project.json"
@@ -1139,38 +1307,21 @@ def scaffold_engineering_extras(
         project_json.write_text(rendered, encoding="utf-8", newline="\n")
         written.append(str(project_json))
 
-    schema_result = _copy_if_absent(
-        PROJECT_TEMPLATE_DIR / "project.schema.json",
-        repo / ".harness/project.schema.json",
-        force=forced(repo / ".harness/project.schema.json"),
-        differing=differing,
-    )
+    schema_result = seeds.install(".harness/project.schema.json")
     if schema_result:
         written.append(schema_result)
 
     if orchestration_enabled:
         # The project's own config starts as a copy of the managed example
         # (.harness/orchestration.example.json, refreshed by every init/adopt/update) and is
-        # never overwritten afterwards unless --force-seed-files is given.
-        orchestration_result = _copy_if_absent(
-            PACKAGE / "orchestration.example.json",
-            repo / ".harness/orchestration.json",
-            force=forced(repo / ".harness/orchestration.json"),
-            differing=differing,
-        )
+        # replaced afterwards only when it is outdated (equals its baseline) or forced.
+        orchestration_result = seeds.install(".harness/orchestration.json")
         if orchestration_result:
             written.append(orchestration_result)
 
-    if differing:
-        print("\n[WARNING] Следующие сидируемые файлы отличаются от шаблонов upstream:")
-        for path in differing:
-            print(f"  - {path.relative_to(repo)}")
-            print(
-                f"    После просмотра: --force-seed-file {path.relative_to(repo).as_posix()}"
-            )
-        print(
-            "Используйте --force-seed-files, чтобы перезаписать их (внимание: локальные изменения будут потеряны).\n"
-        )
+    seeds.record()
+    seeds.report_replaced()
+    seeds.report_kept()
 
     written.extend(_install_hook_policy(repo))
     return written
@@ -1250,17 +1401,28 @@ def cmd_init(args: argparse.Namespace) -> int:
 def cmd_diff(args: argparse.Namespace) -> int:
     """Сравнить текущее состояние проекта с эталонным снимком и вывести различия."""
     repo = Path(args.repo).expanduser().resolve()
+    read_seed_baseline(load_lock(repo))
     result = snapshot_diff(repo, args.capability)
     proposals = propose_contract_links(repo, PROJECT_TEMPLATE_DIR)
+    groups = seed_groups(repo)
     if args.json:
         result["seed_link_proposals"] = proposals
         result["seed_differing"] = seed_differing(repo)
+        for name, paths in groups.items():
+            result[f"seed_{name}"] = paths
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print_diff(result)
+        hints = {
+            "outdated": f"Заменит с бэкапом: harness update {repo}",
+            "modified": "После просмотра: --force-seed-file {path}",
+            "unbaselined": f"Записать baseline: harness update {repo} --record-seed-baseline",
+        }
+        group_of = {path: name for name, paths in groups.items() for path in paths}
         for relative in seed_differing(repo):
-            print(f"  seed_differing: {relative}")
-            print(f"    После просмотра: --force-seed-file {relative}")
+            name = group_of[relative]
+            print(f"  seed_differing: {relative} ({SEED_GROUP_LABELS[name]})")
+            print(f"    {hints[name].replace('{path}', relative)}")
         print_contract_proposals(proposals)
     return 0 if result["state"] == "clean" else 1
 
@@ -1269,6 +1431,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     """Внедрить harness в существующий проект с сохранением собственных скиллов."""
     repo = Path(args.repo).expanduser().resolve()
     ensure_git_repo(repo)
+    read_seed_baseline(load_lock(repo))
     selected = selected_capabilities(args.capability)
     selected_names = [source.name for source in selected_skills(selected)]
     occupied = [repo / ".harness/skills" / name for name in selected_names]
@@ -1296,6 +1459,30 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     return 0
 
 
+def record_seed_baseline(repo: Path, lock: JsonObject) -> int:
+    """Записать baseline seed-файлам без записи в lock: хэш шаблона или null. Файлы не меняются."""
+    baseline = read_seed_baseline(lock) or {}
+    selected = selected_capabilities(lock.get("capabilities"))
+    templates = baselined_seed_files(
+        repo,
+        orchestration_enabled=BACKEND_ORCHESTRATION_CAPABILITY in selected,
+    )
+    added: list[str] = []
+    for relative, content in templates.items():
+        path = repo / relative
+        if relative in baseline or not path.is_file():
+            continue
+        baseline[relative] = digest(content) if path.read_bytes() == content else None
+        added.append(relative)
+    lock["seed_files"] = {relative: baseline[relative] for relative in sorted(baseline)}
+    write_lock(repo, lock)
+    print(f"recorded seed baseline for {len(added)} files in {LOCK_REL.as_posix()}")
+    for relative in sorted(added):
+        state = "template" if baseline[relative] else "null (differs from the template)"
+        print(f"  {relative}: {state}")
+    return 0
+
+
 def cmd_update(args: argparse.Namespace) -> int:
     """Обновить управляемые файлы harness в целевом проекте."""
     repo = Path(args.repo).expanduser().resolve()
@@ -1303,6 +1490,19 @@ def cmd_update(args: argparse.Namespace) -> int:
     lock = load_lock(repo)
     if lock is None:
         fail(f"project harness is missing; use 'harness init {repo}'")
+    read_seed_baseline(lock)
+    if args.record_seed_baseline:
+        if (
+            args.force
+            or args.force_managed_files
+            or args.force_seed_files
+            or args.force_seed_file
+        ):
+            fail(
+                "--record-seed-baseline only records the seed baseline; "
+                "run it without --force, --force-managed-files and --force-seed-file(s)"
+            )
+        return record_seed_baseline(repo, lock)
     selected = selected_capabilities(args.capability or lock.get("capabilities"))
     result = snapshot_diff(repo, selected)
     current_files = package_files(selected)
@@ -1333,8 +1533,12 @@ def cmd_update(args: argparse.Namespace) -> int:
         print(f"  git diff {' '.join(blocked)}")
         print("\nВыберите действие:")
         print("  ЗАМЕНИТЬ (сбросить ваши правки до версии из апстрима):")
-        print("    harness update --force-managed-files")
-        print("    (или --force, если также нужно перезаписать seed-файлы)")
+        print(f"    harness update {repo} --force-managed-files")
+        print(
+            f"    (или harness update {repo} --force: также заменит каждый отличающийся "
+            "seed-файл, сохранив его прежние байты в "
+            f"{SEED_BACKUP_REL.as_posix()}/<UTC-время>/; у managed-скиллов бэкапа нет)"
+        )
         print("  ОСТАВИТЬ (сохранить ваши правки):")
         print("    (обновление прервано, ваши файлы не тронуты)")
         fail("update aborted due to local skill changes (drift).")
@@ -1793,6 +1997,11 @@ def parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PATH",
         help="overwrite only this seed file (path from the project root); repeatable",
+    )
+    update.add_argument(
+        "--record-seed-baseline",
+        action="store_true",
+        help="only record a seed_files baseline for seed files without one; change no file",
     )
     _add_engineering_args(update)
     update.set_defaults(func=cmd_update)

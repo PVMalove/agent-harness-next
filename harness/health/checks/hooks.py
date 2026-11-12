@@ -182,7 +182,8 @@ def _result(
     if fails or warns:
         fix = Fix(
             text="верните managed hooks: harness update восстановит недостающие файлы и записи; "
-            "изменённый файл после просмотра заменяет --force-seed-file <путь>",
+            "изменённый файл после просмотра заменяет --force-seed-file <путь>, "
+            "прежние байты сохраняются в .harness/.sandboxes/seed-backups/<UTC-время>/",
             command=context.harness_command("update", str(context.repo)),
         )
     return CheckResult(

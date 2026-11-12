@@ -15,10 +15,38 @@
 - **Что делает слияние.** Недостающая управляемая запись добавляется. Устаревшая запись, которую harness записывал раньше, заменяется шаблонной. Запись пользователя, у которой команда не ссылается на скрипт из шаблона, не меняется и не удаляется.
 - **Отпечатки.** Что harness когда-либо записал, хранится как отпечатки (`managed_entries`) в записи интеграции `.harness/integrations.json`. По ним слияние отличает устаревшую управляемую запись от записи, которую пользователь изменил. Отпечатки не копируют текст команд.
 - **Нет файла или нечитаемый файл.** Если файла нет, `harness` записывает байты шаблона. Файл, который не читается как JSON-объект или имеет неподходящую форму `hooks`, остаётся без изменений, а отчёт сообщает `cannot merge` с причиной.
-- **Флаги заменяют слияние.** `--force-seed-file .claude/settings.local.json` и `--force-seed-files` сохраняют прежний смысл: файл целиком заменяется шаблоном, записи пользователя в нём теряются. Слияние их не заменяет.
+- **Флаги заменяют слияние.** `--force-seed-file .claude/settings.local.json`, `--force-seed-files` и `--force` сохраняют прежний смысл: файл целиком заменяется шаблоном, записи пользователя в нём теряются. Перед заменой отличающегося файла прежние байты сохраняются в каталог бэкапа (см. «Baseline seed-файлов и группы update»). Слияние их не заменяет.
 
 ### Конфликт без перезаписи
 Если пользователь изменил управляемую запись в том же событии (другая команда или другой matcher при том же скрипте, лишние поля handler), слияние не знает, чьё изменение верно, и не перезаписывает её. Запись, перенесённую на другое событие, слияние считает записью пользователя и не меняет, а шаблонную запись на своём событии добавляет заново, без конфликта. Изменённая запись в том же событии остаётся как есть, `harness` печатает предупреждение `[WARNING]`, перечисляет каждую запись строкой `hooks conflict: <файл>: <событие> [<matcher>] <скрипт>` и подсказывает команду `--force-seed-file <файл>`, которая после просмотра заменит файл шаблоном. Конфликтная запись не попадает в записанные отпечатки, поэтому повторный `update` сообщает о ней снова, пока владелец не решит её судьбу.
+
+### Baseline seed-файлов и группы update
+Seed-файлы — скрипты `.claude/hooks/`, rules, subagents, `docs/agents/`, `.harness/.gitignore`, `.gitignore` каталога scratch, `.harness/project.schema.json` и `.harness/orchestration.json`. `harness init`, `adopt` и `update` записывают sha256 каждого seed-файла, который записали или нашли равным шаблону, в необязательный ключ `seed_files` файла `.harness/harness.lock`: путь от корня проекта в POSIX-форме → sha256 hex в нижнем регистре или `null`. Файлы hooks runtime (`.claude/settings.local.json`, `.codex/hooks.json`) и `.harness/project.json` в baseline не входят: файлы hooks runtime сливаются по записям, `project.json` рендерится один раз. `schema` lock остаётся `1`, lock без `seed_files` валиден и значит «baseline нет».
+
+Обычный `harness update` делит существующие seed-файлы на группы:
+
+- **текущий** — файл равен шаблону; запись baseline получает хэш шаблона;
+- **устарел по версии** — файл равен хэшу baseline, шаблон новее. `update` заменяет файл шаблоном без флага, делает бэкап и ставит в baseline хэш шаблона;
+- **изменён локально** — у файла есть baseline (хэш или `null`), а файл не равен ни ему, ни шаблону. Файл и запись не меняются. Сюда же попадает отличающийся от шаблона файл hooks runtime;
+- **без baseline** — записи нет, и файл не равен шаблону. Это установка до появления baseline; файл и lock не меняются.
+
+Отсутствующий seed-файл создаётся и получает baseline. Вместо одного предупреждения `update` печатает до трёх блоков, пустой блок не печатается:
+
+```text
+[INFO] Заменены seed-файлы, прежние байты сохранены в бэкапе: .harness/.sandboxes/seed-backups/20261111T153000Z
+  - .claude/rules/token-efficiency.md (устарел по версии)
+[WARNING] Seed-файлы изменены локально и оставлены без изменений:
+  - .claude/agents/test-author.md
+    После просмотра: --force-seed-file .claude/agents/test-author.md
+[WARNING] Seed-файлы без baseline в .harness/harness.lock отличаются от шаблона и оставлены без изменений:
+  - docs/agents/git-workflow.md
+  Записать baseline: harness update <repo> --record-seed-baseline
+```
+
+- **Бэкап.** Перед каждой перезаписью существующего seed-файла (замена устаревшего, `--force-seed-file`, `--force-seed-files`, `--force`) прежние байты копируются в `.harness/.sandboxes/seed-backups/<UTC-время>/<путь от корня проекта>`. Метка времени без `:` (например `20261111T153000Z`); один запуск — один каталог, при совпадении имени добавляется суффикс `-1`, `-2`. Каталог создаётся только при перезаписи, бит исполнения hook сохраняется. Если бэкап записать не удалось, файл не меняется и команда завершается с кодом `1`. Восстановления из бэкапа и очистки старых каталогов команда не делает.
+- **`--record-seed-baseline`.** `harness update <repo> --record-seed-baseline` только дописывает `seed_files`: каждому seed-файлу без записи — хэш шаблона, если файл равен шаблону, иначе `null`. Файлы на диске и существующие записи не меняются, снимок `files` не обновляется. С `--force`, `--force-managed-files`, `--force-seed-files` и `--force-seed-file` флаг не сочетается. Файл с `null` и отличием от шаблона следующий `update` считает изменённым локально; после просмотра его заменяет `--force-seed-file <путь>` с бэкапом и настоящим baseline.
+- **`harness diff`.** `diff --json` сохраняет ключ `seed_differing` — объединение трёх групп, на нём работает экран обновления консоли — и добавляет `seed_outdated`, `seed_modified` и `seed_unbaselined`. Текстовый `diff` печатает группу рядом с путём (`seed_differing: <путь> (устарел по версии)`) и подсказку для группы.
+- **Проверка `files.seed_baseline`.** `harness health` даёт `fail`, если `seed_files` не объект, ключ не относительный POSIX-путь (абсолютный, с `..` или `\`) или значение не sha256 hex и не `null`; `warn` с командой `harness update <repo> --record-seed-baseline`, если lock есть без `seed_files`; иначе `ok`. Без lock или с повреждённым lock проверка пропускается: это сообщает `files.lock`. Проект без `engineering-suite` и `backend-orchestration` получает `skipped`. Формат проверяет одна функция `seed_baseline_problems` для CLI и `health`; неверный `seed_files` останавливает `update`, `adopt` и `diff` до записи файлов.
 
 ### Идемпотентный update
 Повторный `harness update` без изменений в проекте не меняет ни байта в файле настроек и в `.harness/integrations.json`, не дублирует управляемые записи и печатает отчёт по каждому файлу runtime:
@@ -58,14 +86,14 @@ hooks check: .claude/settings.local.json: critical wired 9/9
 - **Дрейф от шаблона.** Конфликты управляемых записей, записи для добавления или замены и скрипты, байты которых отличаются от шаблона. Если шаблонов проекта нет (автономный запуск пакета health), проверка сообщает `дрейф не проверен`.
 - **Файл effective policy.** Нет `.harness/hook-policy.json` — `warn` `.harness/hook-policy.json отсутствует: effective policy hooks не записана`. Содержимое, которое не разбирается как JSON или отличается от effective policy текущей конфигурации, — `warn` `дрейф: .harness/hook-policy.json не совпадает с effective policy текущей конфигурации`. Сравнивается разобранный JSON, поэтому окончания строк CRLF дрейфом не считаются. Без шаблонов проекта сверяется только наличие файла; при некорректном `hook_policy` сверка пропускается, потому что проверка уже даёт `fail`. Оба предупреждения исправляет `harness update`.
 
-Проект, установленный сейчас, получает `ok`: оба runtime подключают каждый критический hook, который могут доставить, а у hooks без события второго runtime есть проверка вне hook. `protect-hook-policy` второго runtime перечислен как `protect-hook-policy (MultiEdit, NotebookEdit; вне hook: hook_policy_sha256 в brief)`: этих инструментов у runtime нет. `harness update` исправляет недостающие файлы и записи; изменённый файл после просмотра заменяет `--force-seed-file <путь>`.
+Проект, установленный сейчас, получает `ok`: оба runtime подключают каждый критический hook, который могут доставить, а у hooks без события второго runtime есть проверка вне hook. `protect-hook-policy` второго runtime перечислен как `protect-hook-policy (MultiEdit, NotebookEdit; вне hook: hook_policy_sha256 в brief)`: этих инструментов у runtime нет. `harness update` исправляет недостающие файлы и записи; изменённый файл после просмотра заменяет `--force-seed-file <путь>`, прежние байты сохраняются в `.harness/.sandboxes/seed-backups/<UTC-время>/`.
 
 ## 3. Контракты
-- **Вход (Input/Brief):** `harness init|adopt|update <repo> --capability engineering-suite`, шаблоны `harness/project/settings.local.json.tmpl` и `harness/project/codex-hooks.json.tmpl`, записи интеграций `.harness/integrations.json`.
+- **Вход (Input/Brief):** `harness init|adopt|update <repo> --capability engineering-suite`, `harness update <repo> --record-seed-baseline`, ключ `seed_files` в `.harness/harness.lock`, шаблоны `harness/project/settings.local.json.tmpl` и `harness/project/codex-hooks.json.tmpl`, записи интеграций `.harness/integrations.json`.
 - **Выход (Output/Report):**
-  - **Файлы:** `.claude/settings.local.json` и `.codex/hooks.json` с управляемыми записями шаблона и неизменёнными записями пользователя; записи интеграций `engineering-suite-hooks` и `engineering-suite-codex-hooks` с отпечатками `managed_entries`; сгенерированный `.harness/hook-policy.json`.
-  - **Отчёт:** строки `hooks merge`, `hooks conflict` и `hooks check` для каждого файла и строка `hooks policy`; код возврата `0`, конфликт не делает команду неуспешной; некорректный `hook_policy` — код `2`.
-  - **Проверка:** запись `hooks.policy` в `harness health --json` со статусом `ok`, `warn` или `fail`.
+  - **Файлы:** `.claude/settings.local.json` и `.codex/hooks.json` с управляемыми записями шаблона и неизменёнными записями пользователя; записи интеграций `engineering-suite-hooks` и `engineering-suite-codex-hooks` с отпечатками `managed_entries`; сгенерированный `.harness/hook-policy.json`; baseline `seed_files` в `.harness/harness.lock`; прежние байты перезаписанных seed-файлов в `.harness/.sandboxes/seed-backups/<UTC-время>/`.
+  - **Отчёт:** строки `hooks merge`, `hooks conflict` и `hooks check` для каждого файла и строка `hooks policy`; код возврата `0`, конфликт не делает команду неуспешной; некорректный `hook_policy` — код `2`; блоки заменённых, изменённых локально и seed-файлов без baseline; неудачный бэкап или неверный `seed_files` — код `1`; `harness diff --json` с ключами `seed_differing`, `seed_outdated`, `seed_modified` и `seed_unbaselined`.
+  - **Проверка:** записи `hooks.policy` и `files.seed_baseline` в `harness health --json` со статусом `ok`, `warn` или `fail` (`files.seed_baseline` — также `skipped`).
 ## Источник
 
 [harness.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/bin/harness.py), [hook_settings.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/hook_settings.py), [hooks.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/checks/hooks.py), [hook_policy.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/hook_policy.py), [codex-hooks.json.tmpl](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/codex-hooks.json.tmpl)

@@ -91,6 +91,9 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
         "Блокировки оверлеев не совпадают", "Update Harness"
     ),
     "files.lock": CheckRoute("Harness не установлен в проект", "Open project"),
+    "files.seed_baseline": CheckRoute(
+        "Нет или повреждён baseline seed-файлов", "Update Harness"
+    ),
     "files.project_json": CheckRoute("Ошибка в .harness/project.json", "Configuration"),
     "files.integrations": CheckRoute(
         "Нужно проверить настройки интеграций", "Configuration"

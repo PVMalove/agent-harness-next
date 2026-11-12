@@ -14,6 +14,10 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "По harness.lock харнесс знает установленную версию, capability и управляемые файлы; без него update и diff не работают.",
         "harness.lock tells the harness its installed version, capabilities and managed files; without it update and diff cannot work.",
     ),
+    "files.seed_baseline": (
+        "По baseline seed-файлов update заменяет устаревшие файлы сам и не трогает изменённые локально; без него каждый отличающийся файл остаётся старым.",
+        "The seed baseline lets update replace outdated seed files itself and keep locally modified ones; without it every differing file stays old.",
+    ),
     "files.agents_md": (
         "AGENTS.md — первая инструкция агентам; плейсхолдеры шаблона дают им неверные правила проекта.",
         "AGENTS.md is the agents' first instruction; template placeholders give them wrong project rules.",
@@ -250,6 +254,7 @@ def catalog() -> dict[str, dict[str, str]]:
 # check id -> (Russian title, English title)
 TITLES: dict[str, tuple[str, str]] = {
     "files.lock": ("Файл harness.lock", "harness.lock file"),
+    "files.seed_baseline": ("Baseline seed-файлов", "Seed file baseline"),
     "files.agents_md": ("Инструкция AGENTS.md", "AGENTS.md instructions"),
     "files.discovery_links": ("Ссылки обнаружения навыков", "Skill discovery links"),
     "files.project_json": ("Настройки project.json", "project.json settings"),
