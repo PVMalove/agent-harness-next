@@ -52,6 +52,7 @@ sys.path[:] = [
 sys.path.insert(0, str(ROOT))
 from harness.errors import HarnessError, print_and_exit
 from harness.cleanup import apply_cleanup, plan_cleanup, plan_digest, remove_worktree
+from harness.worktree_venv import WorktreeVenvError, link_worktree_venv
 from harness.uninstall import (
     CLAUDE_MD_SEED,
     CONFIRM_WORD,
@@ -679,6 +680,7 @@ ENGINEERING_CAPABILITY = "engineering-suite"
 PROJECT_TEMPLATE_DIR = PACKAGE / "project"
 HARNESS_RUNTIME_GITIGNORE = """# Generated harness runtime data
 .sandboxes/
+.venv
 config_versions/
 config-versions/
 """
@@ -1805,6 +1807,20 @@ def cmd_worktree_remove(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_worktree_venv(args: argparse.Namespace) -> int:
+    """Link an issue worktree's .harness/.venv to the main checkout's venv when locks match."""
+    try:
+        result = link_worktree_venv(Path(args.repo), Path(args.worktree))
+    except WorktreeVenvError as exc:
+        result = {"status": "refused", "reason": str(exc), "remedy": exc.remedy}
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 1
+    except OSError as exc:
+        fail(f"cannot link the worktree venv: {exc}")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_uninstall(args: argparse.Namespace) -> int:
     """Показать план полного удаления харнесса или применить его с подтверждением."""
     repo = Path(args.repo).expanduser().resolve()
@@ -1940,6 +1956,14 @@ def parser() -> argparse.ArgumentParser:
     worktree.add_argument("repo")
     worktree.add_argument("worktree")
     worktree.set_defaults(func=cmd_worktree_remove)
+
+    worktree_venv = commands.add_parser(
+        "worktree-venv",
+        help="link an issue worktree's .harness/.venv to the main checkout's venv",
+    )
+    worktree_venv.add_argument("repo")
+    worktree_venv.add_argument("worktree")
+    worktree_venv.set_defaults(func=cmd_worktree_venv)
 
     uninstall = commands.add_parser(
         "uninstall", help="preview or remove everything the harness installed"

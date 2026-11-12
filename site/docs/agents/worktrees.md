@@ -27,11 +27,13 @@ Coordinator (`/implement`) обязан создать worktree задачи д�
 ```bash
 git fetch origin <integration-branch>
 git worktree add --no-track -b feature/issue-<ID>-<slug> .harness/.sandboxes/worktrees/issue-<ID>-<slug> origin/<integration-branch>
+harness worktree-venv . .harness/.sandboxes/worktrees/issue-<ID>-<slug>
 ```
 
 - `<integration-branch>` — значение раздела `## Integration Branch` задачи. Если раздела нет, берите значение `## Git base`, затем тот же раздел родительского эпика. Для задачи без эпика берите `base_branch` из `.harness/project.json`. Если у задачи с эпиком значения нет, остановитесь и сообщите о блокере. Не угадывайте его.
 - `--no-track` обязателен. Без него `git worktree add -b` записывает upstream новой ветки в `.git/config`. В песочнице `.git/config` может быть защищён от записи, и тогда команда остановится на полпути: ветка есть, а worktree нет.
 - `git push -u origin feature/issue-<ID>-<slug>` (см. [git-workflow.md](git-workflow.md#2-workflow-sequence), шаг 2) позже задаёт upstream. Он тоже пишет в `.git/config`, поэтому в песочнице может упасть так же. В таком случае выполните `git push origin feature/issue-<ID>-<slug>` и сообщите разработчику, что upstream не задан.
+- `harness worktree-venv` делает `.harness/.venv` worktree символической ссылкой на venv основного checkout, поэтому проверки brief, например `make lint`, запускаются без `make bootstrap`. Ссылка создаётся, только если `uv.lock` и `pyproject.toml` worktree совпадают с основным checkout. Иначе команда отвечает `"status": "refused"`, называет расходящиеся файлы и remedy: отдельный venv в worktree (`UV_PROJECT_ENVIRONMENT=.harness/.venv uv sync --locked`). Не запускайте `make bootstrap` в worktree со ссылкой на venv: через ссылку он пересинхронизирует venv основного checkout. После восстановительного `git worktree add` ниже выполните команду снова.
 - В `batch create` передайте абсолютный путь worktree как `--worktree`, ветку как `--branch` и integration-ветку как `--integration-ref`. Для задачи без эпика `--integration-ref` не указывайте.
 
 **Восстановление после частичного сбоя.** Если `git worktree add -b` упал, а `git branch --list feature/issue-<ID>-<slug>` показывает ветку, значит ветка есть, а worktree нет. Не создавайте ветку заново и не удаляйте её. Выполните:
