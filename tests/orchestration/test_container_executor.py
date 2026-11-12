@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+import types
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -136,6 +137,12 @@ class DockerPlanSupportTests(unittest.TestCase):
             tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         )
         self.tmp = Path(directory)
+        # The executor supports Linux only; these blockers are the ones found on a Linux host.
+        self.enterContext(
+            mock.patch.object(
+                container_executor, "sys", types.SimpleNamespace(platform="linux")
+            )
+        )
         # The runtime is never asked for a plan the executor blocks itself.
         self.client = self.enterContext(
             mock.patch.object(

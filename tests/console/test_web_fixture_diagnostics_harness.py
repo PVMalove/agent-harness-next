@@ -12,6 +12,8 @@ from harness.console.kernel.health_report import report_from_payload
 from harness.console.kernel.maintenance import MaintenanceView
 from harness.health.report_json import to_json
 
+from ._posix import posix
+
 FIXTURES = Path(__file__).resolve().parents[1] / "web" / "fixtures"
 
 
@@ -35,7 +37,7 @@ def test_the_maintenance_fixture_decodes_with_its_digests_and_totals() -> None:
     payload = _fixture("harness-maintenance.json")
     assert isinstance(payload, dict) and set(payload) == {"maintenance", "error"}
     view = MaintenanceView.from_payload(payload["maintenance"])
-    assert view.to_payload() == payload["maintenance"]
+    assert posix(view.to_payload()) == payload["maintenance"]
     assert view.hard.total.bytes > view.soft.total.bytes
     assert any(fact.reason == "" for fact in view.worktrees)
 

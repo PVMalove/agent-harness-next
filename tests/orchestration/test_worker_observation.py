@@ -18,7 +18,11 @@ from harness.orchestration.worker_observation import (
 
 
 def _jsonl(path: Path, *records: object) -> Path:
-    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+    path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records),
+        encoding="utf-8",
+        newline="\n",
+    )
     return path
 
 

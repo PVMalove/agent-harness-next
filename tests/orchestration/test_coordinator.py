@@ -14970,8 +14970,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             with self.assertRaises(coordinator.CoordinatorError) as refused:
                 self._auto_decide(commit_plan_file=str(path))
         inbox = ".harness/.sandboxes/scratch/inbox"
-        self.assertIn(inbox, refused.exception.message)
-        self.assertIn(inbox, refused.exception.remedy)
+        self.assertIn(inbox, refused.exception.message.replace("\\", "/"))
+        self.assertIn(inbox, refused.exception.remedy.replace("\\", "/"))
         self.assertNotIn("decision", self._batch_record(self.batch_id)["dispatches"][-1])
 
         session = (

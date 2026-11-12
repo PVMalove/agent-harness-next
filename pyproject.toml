@@ -47,6 +47,7 @@ addopts = ["-m", "not docker_smoke and not podman_smoke"]
 markers = [
     "docker_smoke: real Docker smoke of the container executor; run only with -m docker_smoke",
     "podman_smoke: real rootless Podman smoke on Fedora with SELinux enforcing; run only with -m podman_smoke",
+    "real_process: a console test that needs a real OS process, so the unit boundary guard is off (tests/console/conftest.py)",
     "fault_injection: a scenario of the fault-injection and security matrix at seam 1 (tests/orchestration/fault_injection_matrix.py)",
 ]
 

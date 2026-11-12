@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import sys
 from pathlib import Path
 from collections.abc import Sequence
@@ -38,7 +39,15 @@ ADD = "*** Begin Patch\n*** Add File: notes/a.md\n+hello\n+world\n*** End Patch"
 
 
 def _paths(ops: Sequence[ap.FileOp]) -> list[tuple[str, str, str | None]]:
-    return [(op.kind, op.path, op.move_to) for op in ops]
+    # The hook joins a patch path with `/` to a native cwd; normpath makes both native.
+    return [
+        (
+            op.kind,
+            os.path.normpath(op.path),
+            None if op.move_to is None else os.path.normpath(op.move_to),
+        )
+        for op in ops
+    ]
 
 
 def test_a_quoted_heredoc_wrapper_parses_into_an_add_file() -> None:

@@ -97,7 +97,7 @@ def _init(repo: Path) -> None:
 def _write(repo: Path, files: dict[str, str]) -> None:
     for name, content in files.items():
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text(content)
+        (repo / name).write_text(content, encoding="utf-8", newline="\n")
 
 
 def _commit(repo: Path, message: str) -> str:
