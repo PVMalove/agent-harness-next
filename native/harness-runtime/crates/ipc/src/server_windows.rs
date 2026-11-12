@@ -66,6 +66,8 @@ impl Server {
             supervisor: Arc::new(crate::server::supervisor_of(&paths, state_dir.as_deref())),
             state_dir,
             snapshots: Arc::default(),
+            // A Windows runtime is started by hand (ADR 0031): it never stops by itself.
+            lifetime: Arc::new(crate::lifetime::Lifetime::manual()),
         });
         Ok(Self {
             listener: Mutex::new(listener),

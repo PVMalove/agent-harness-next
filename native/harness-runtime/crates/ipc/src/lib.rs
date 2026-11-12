@@ -9,6 +9,7 @@
 //! `0700` runtime directory with a `SO_PEERCRED` peer check, or on Windows a named pipe with a
 //! DACL for the current user and a client SID check, and a capability token on both.
 
+mod lifetime;
 mod paths;
 mod peer;
 mod server;
@@ -19,6 +20,7 @@ mod server_windows;
 mod session;
 mod token;
 
+pub use lifetime::{DEFAULT_OWNER_TTL, Lifetime, MAX_KEY_LEN, valid_key};
 pub use paths::{
     Environment, MAX_SOCKET_PATH_BYTES, PathError, Platform, RuntimePaths, git_common_dir,
     pipe_name, repo_id, resolve_paths, runtime_dir,

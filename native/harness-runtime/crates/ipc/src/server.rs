@@ -367,6 +367,7 @@ mod tests {
             state_dir: None,
             snapshots: Default::default(),
             supervisor: Default::default(),
+            lifetime: Default::default(),
         }
     }
 

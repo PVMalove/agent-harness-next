@@ -10,9 +10,11 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use contracts::FrameError;
 
+use crate::lifetime::Lifetime;
 use crate::paths::RuntimePaths;
 use crate::peer::{PeerId, own_uid, peer_pid, peer_uid, same_user};
 use crate::server::{
@@ -49,6 +51,16 @@ impl Server {
         paths: RuntimePaths,
         state_dir: Option<std::path::PathBuf>,
     ) -> Result<Self, StartError> {
+        Self::bind_with_lifetime(paths, state_dir, Lifetime::manual())
+    }
+
+    /// Like [`Server::bind_serving`] with the owners of `lifetime`: an owned lifetime stops the
+    /// accept loop once no owner is left and the store is idle (ADR 0031, section 2).
+    pub fn bind_with_lifetime(
+        paths: RuntimePaths,
+        state_dir: Option<std::path::PathBuf>,
+        lifetime: Lifetime,
+    ) -> Result<Self, StartError> {
         secure_directory(&paths.dir, own_uid())?;
         let directory = hold_directory(&paths.dir)?;
         let lock = take_lock(&paths)?;
@@ -71,6 +83,7 @@ impl Server {
             supervisor: Arc::new(crate::server::supervisor_of(&paths, state_dir.as_deref())),
             state_dir,
             snapshots: Arc::default(),
+            lifetime: Arc::new(lifetime),
         });
         Ok(Self {
             listener,
@@ -85,12 +98,19 @@ impl Server {
         &self.paths
     }
 
+    /// The owners of this runtime (ADR 0031).
+    pub fn lifetime(&self) -> &Arc<Lifetime> {
+        &self.shared.lifetime
+    }
+
     /// The process supervisor of this server's executions (ADR 0022).
     pub fn supervisor(&self) -> &Arc<supervisor::Supervisor> {
         &self.shared.supervisor
     }
 
-    /// Serve connections until `stop` is set. A connection runs on its own thread.
+    /// Serve connections until `stop` is set, or until an owned runtime decides to stop (ADR
+    /// 0031, section 2): then the socket is removed before the loop returns. A connection runs on
+    /// its own thread.
     pub fn serve_until(&self, stop: &AtomicBool) -> io::Result<()> {
         self.serve_until_as(stop, own_uid())
     }
@@ -99,16 +119,27 @@ impl Server {
     /// uid to see the refusal of a foreign peer on a real socket.
     pub fn serve_until_as(&self, stop: &AtomicBool, expected_uid: PeerId) -> io::Result<()> {
         let own = expected_uid;
+        let mut checked = Instant::now();
         while !stop.load(Ordering::Relaxed) {
             match self.listener.accept() {
                 Ok((stream, _)) => {
                     let shared = Arc::clone(&self.shared);
+                    // Counted on the accept thread, so the exit decision below sees it.
+                    let counted = self.shared.lifetime.connection();
                     thread::spawn(move || {
+                        let _counted = counted;
                         // A broken connection ends its own thread, never the server.
                         let _ = serve_unix_stream(stream, own, &shared);
                     });
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                    if checked.elapsed() >= LIFETIME_CHECK {
+                        checked = Instant::now();
+                        if self.no_longer_needed(checked) {
+                            let _ = fs::remove_file(&self.paths.socket);
+                            return Ok(());
+                        }
+                    }
                     thread::sleep(ACCEPT_POLL);
                 }
                 Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
@@ -118,6 +149,24 @@ impl Server {
         Ok(())
     }
 }
+
+impl Server {
+    /// Whether an owned runtime stops now: no owner, no connection, no open read snapshot and an
+    /// idle store (ADR 0031, section 2).
+    fn no_longer_needed(&self, now: Instant) -> bool {
+        let shared = &self.shared;
+        shared.lifetime.should_exit(now, || {
+            shared.snapshots.live() == 0
+                && shared
+                    .state_dir
+                    .as_deref()
+                    .is_none_or(|state| state::idle::busy(state).is_empty())
+        })
+    }
+}
+
+/// How often the accept loop asks whether an owned runtime is still needed.
+const LIFETIME_CHECK: Duration = Duration::from_secs(1);
 
 impl Drop for Server {
     fn drop(&mut self) {
