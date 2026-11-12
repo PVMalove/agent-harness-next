@@ -249,7 +249,7 @@ impl Evidence for Stored {
 
     fn record(&self, path: &str) -> Result<Option<Value>, ReadError> {
         let wanted = read::wanted(Some(&json!({"paths": [path]})), &[])?;
-        Ok(self.snapshot.answer(&wanted)?.records.remove(path))
+        Ok(self.snapshot.unbounded(&wanted)?.records.remove(path))
     }
 }
 
@@ -265,7 +265,9 @@ pub fn verify(state: &Path, payload: Option<&Value>) -> Result<Value, ReadError>
         Some(&json!({"collections": ["batches", "dispatches", "reports"]})),
         &[],
     )?;
-    let answer = match snapshot.answer(&wanted) {
+    // Only the verdict leaves the runtime, so the frame limit of an answer does not bound this
+    // read: a ledger of any size still gets a verdict on the pair.
+    let answer = match snapshot.unbounded(&wanted) {
         Ok(answer) => answer,
         Err(error) => {
             snapshot.close();
