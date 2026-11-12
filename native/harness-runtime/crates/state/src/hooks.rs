@@ -143,6 +143,19 @@ pub fn trace(event: &str) {
 #[cfg(not(debug_assertions))]
 pub fn trace(_event: &str) {}
 
+/// Test hook of a debug build: `HARNESS_RUNTIME_TEST_NO_RECONCILE` stops the periodic reconcile of
+/// the supervisor, so a test reads the state of an execution that the periodic pass would adopt or
+/// settle at any moment. A request still reconciles what it names. A release build compiles it away.
+#[cfg(debug_assertions)]
+pub fn periodic_reconcile_stopped() -> bool {
+    std::env::var_os("HARNESS_RUNTIME_TEST_NO_RECONCILE").is_some()
+}
+
+#[cfg(not(debug_assertions))]
+pub const fn periodic_reconcile_stopped() -> bool {
+    false
+}
+
 /// Whether a test asked, once, for the failure at `step` that has no error to return: the
 /// response of an operation is dropped after it succeeded (`state.write:respond`,
 /// `execution.launch:respond`). When it fires, the process prints `INJECTED:<step>` to stderr,
