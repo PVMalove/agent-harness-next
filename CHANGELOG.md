@@ -112,6 +112,7 @@
 
 ### Fixed
 
+- **[Обновление seed-файлов]:** `harness update` отличает устаревший по версии seed-файл от изменённого локально по baseline sha256 в ключе `seed_files` файла `.harness/harness.lock`: устаревший заменяется без флага, изменённый локально и файл без baseline остаются как есть и перечислены отдельно. Каждая перезапись seed-файла, в том числе по `--force-seed-file`, `--force-seed-files` и `--force`, сначала сохраняет прежние байты в `.harness/.sandboxes/seed-backups/<UTC-время>/`; установка 1.x записывает baseline флагом `harness update <repo> --record-seed-baseline`, а `harness health` проверяет формат baseline проверкой `files.seed_baseline` (#1049).
 - **[Быстрая проверка brief]:** Проверка ledger больше не перебирает все исторические формы brief: каждая команда, читающая dispatch, тратила на неё около секунды на запись, а с полями #1015 — вчетверо больше. Принимаются и отклоняются те же формы, что раньше (#1059).
 - **[Тесты без ожидания времени]:** Тесты сроков lease, heartbeat, `dispatch wait`, дедлайна и паузы остановки сдвигают общие тестовые часы и ждут события runtime вместо фиксированных пауз, поэтому не падают на медленной машине. Debug-сборка `harness-runtime` читает смещение часов из `HARNESS_RUNTIME_TEST_CLOCK_FILE` и печатает события `TRACE:` при `HARNESS_RUNTIME_TEST_TRACE`; release-сборка их не содержит (#1059).
 - **[Аудит закрытия batch]:** `batch abandon` пишет в аудит перехода approver, время, причину и открытые dispatch, а `batch list` и `batch auto-report` показывают запись `abandoned` (#1015).

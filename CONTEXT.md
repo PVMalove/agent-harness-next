@@ -54,7 +54,11 @@ _Avoid_: скретч без уточнения, temp-файлы.
 
 **Сидируемые файлы** (seed files):
 Проектные файлы, которые CLI добавляет при отсутствии и после этого передаёт во владение целевому
-проекту: инструкции, документы, hooks, rules, subagents и project config.
+проекту: инструкции, документы, hooks, rules, subagents и project config. Их baseline — sha256
+записанных байт в ключе `seed_files` файла `.harness/harness.lock`. По нему `harness update` сам
+заменяет устаревший по версии файл с бэкапом в `.harness/.sandboxes/seed-backups/<UTC-время>/`,
+а изменённый локально и файл без baseline оставляет как есть. Файлы hooks runtime в baseline не
+входят.
 _Avoid_: шаблонные артефакты, foundation-файлы.
 
 **Капабилити** (capability):
