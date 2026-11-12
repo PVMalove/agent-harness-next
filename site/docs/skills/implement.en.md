@@ -76,7 +76,8 @@ Under `approval_policy: auto`, the coordinator makes each path decision itself a
 or `--approved-at`: `batch approve`, `dispatch create`, and a planned `dispatch resume --trigger` run
 without them. For every report that the `report submit` or `qa run` chain did not accept, including the
 publish report, the session runs `batch auto-decide --batch <id>`. The session passes only the inputs
-that require judgment: `--commit-plan-file` with an exact copy of the architect's plan,
+that require judgment: `--commit-plan-file` with an exact copy of the architect's plan, only
+if the architect report does not carry a `commit_plan` field,
 `--findings-file`, `--bug-ticket` after a bug ticket is filed through the tracker CLI, and
 `--block-bypass --note`. The session does not choose the decision itself. After any command refuses and
 after a `stopped` outcome, the session runs `batch auto-report --batch <id>`. A stop is final for the
