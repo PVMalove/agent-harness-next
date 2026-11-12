@@ -276,8 +276,8 @@ def _lacking(adapter: RuntimeAdapter) -> tuple[list[str], list[str]]:
     unprotected: list[str] = []
     others: list[str] = []
     for spec in HOOK_CATALOG:
-        if spec.wiring == "agent":
-            continue  # subagent test-author есть только у первого runtime: не применимо
+        if spec.wiring == "agent" or adapter.runtime not in spec.runtimes:
+            continue  # hook не поставляется этому runtime: не применимо
         delivered = supported_tools(spec, adapter.support)
         missing = tuple(tool for tool in spec.tools if tool not in delivered)
         if not missing:
@@ -334,7 +334,7 @@ def _runtime_parts(
             ):
                 fails.append(problem)
             continue
-        tools = supported_tools(spec, adapter.support)
+        tools = supported_tools(spec, adapter.support, adapter.runtime)
         if not tools or all(is_wired(document, spec, tool) for tool in tools):
             continue
         if spec.critical:

@@ -363,6 +363,8 @@ def test_init_installs_the_second_runtime_adapter_from_the_same_scripts(
                 for group in groups
                 for handler in group["hooks"]
                 if (script := script_of(handler))
+                # The runtime autostart is shipped to Claude Code only (ADR 0031).
+                and script != "runtime-autostart.sh"
                 and (
                     (event == "PreToolUse" and "Bash" in group["matcher"].split("|"))
                     or event in ("Stop", "SubagentStop")
@@ -404,6 +406,7 @@ def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
             "count-skill-usage.sh",
             "impact-first-touch.sh",
             "sensitive-path-recheck.sh",
+            "runtime-autostart.sh",
         }
     )
     assert "protect-hook-policy.sh" in scripts

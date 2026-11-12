@@ -19,8 +19,14 @@ use contracts::{
 use ipc::{Environment, PeerId, Server, StartError, resolve_paths};
 use serde_json::{Value, json};
 
+#[cfg(unix)]
+use ipc::MAX_SOCKET_PATH_BYTES;
+
 #[path = "../../state/tests/common/qa_store.rs"]
 mod qa_store;
+#[path = "support/runtime_dir.rs"]
+mod runtime_dir;
+use runtime_dir::RuntimeDir;
 
 /// The client end of the transport under test.
 #[cfg(unix)]
@@ -54,6 +60,7 @@ fn foreign_peer() -> PeerId {
 struct Fixture {
     root: PathBuf,
     xdg: PathBuf,
+    _runtime_dir: RuntimeDir,
 }
 
 impl Fixture {
@@ -61,15 +68,13 @@ impl Fixture {
         let base = std::env::temp_dir().join(format!("hr-ipc-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         let root = base.join("repo");
-        let xdg = base.join("run");
         fs::create_dir_all(root.join(".git")).unwrap();
-        fs::create_dir_all(&xdg).unwrap();
-        // Private whatever the umask: a runtime directory refuses a parent others may write.
-        #[cfg(unix)]
-        fs::set_permissions(&xdg, fs::Permissions::from_mode(0o700)).unwrap();
+        // A short private directory: the socket path must fit the limit under a long TMPDIR too.
+        let runtime_dir = RuntimeDir::new(&format!("ipc-{name}"));
         Self {
             root: fs::canonicalize(root).unwrap(),
-            xdg: fs::canonicalize(xdg).unwrap(),
+            xdg: runtime_dir.path().to_path_buf(),
+            _runtime_dir: runtime_dir,
         }
     }
 
@@ -873,4 +878,175 @@ fn qa_evidence_verify_of_the_file_ledger_is_not_found() {
 
     assert!(!features.contains(&json!("qa.evidence.verify")));
     assert_eq!(error_code(&answer), ErrorCode::NotFound);
+}
+
+/// Say `hello` on a new connection of `runtime`.
+fn greeted(runtime: &Running, fixture: &Fixture) -> Client {
+    let mut stream = runtime.connect();
+    let greeting = exchange(&mut stream, &hello(&fixture.root, &runtime.token, 1, 1));
+    assert_eq!(greeting.status, Status::Ok);
+    stream
+}
+
+/// Every runtime names `runtime.attach` and `runtime.release` in `hello`, records its owners and
+/// answers whether it is owned; a manual runtime never stops by itself (ADR 0031).
+#[test]
+fn a_manual_runtime_records_attached_owners_and_releases_them() {
+    let fixture = Fixture::new("attach");
+    let runtime = Running::start(fixture.bind().unwrap());
+    let mut stream = runtime.connect();
+    let greeting = exchange(&mut stream, &hello(&fixture.root, &runtime.token, 1, 1));
+    let features = greeting.result.unwrap()["features"].clone();
+
+    let attached = exchange(
+        &mut stream,
+        &request(
+            "runtime.attach",
+            Some(json!({"key": "s/agent-1", "owner_pid": std::process::id()})),
+        ),
+    );
+    let released = exchange(
+        &mut stream,
+        &request("runtime.release", Some(json!({"key": "s/agent-1"}))),
+    );
+    let again = exchange(
+        &mut stream,
+        &request("runtime.release", Some(json!({"key": "s/agent-1"}))),
+    );
+
+    assert_eq!(
+        features,
+        json!(["status", "runtime.attach", "runtime.release"])
+    );
+    let attached = attached.result.unwrap();
+    assert_eq!(attached["owned"], false);
+    assert_eq!(attached["attached"], true);
+    assert_eq!(attached["owners"], json!(["s/agent-1"]));
+    assert_eq!(attached["busy"], json!([]));
+    assert_eq!(attached["exiting"], false);
+    let released = released.result.unwrap();
+    assert_eq!(released["released"], true);
+    assert_eq!(released["owners"], json!([]));
+    assert_eq!(again.result.unwrap()["released"], false);
+}
+
+/// An owner key outside `[A-Za-z0-9._:/-]{1,256}`, an unknown field and a pid that is no
+/// positive number are malformed, and the connection stays usable.
+#[test]
+fn a_malformed_owner_is_refused() {
+    let fixture = Fixture::new("attach-malformed");
+    let runtime = Running::start(fixture.bind().unwrap());
+    let mut stream = greeted(&runtime, &fixture);
+
+    for payload in [
+        None,
+        Some(json!({"key": ""})),
+        Some(json!({"key": "a b"})),
+        Some(json!({"key": "k".repeat(257)})),
+        Some(json!({"key": "s", "owner_pid": 0})),
+        Some(json!({"key": "s", "owner_pid": "1"})),
+        Some(json!({"key": "s", "extra": 1})),
+    ] {
+        let answer = exchange(&mut stream, &request("runtime.attach", payload.clone()));
+        assert_eq!(
+            error_code(&answer),
+            ErrorCode::MalformedRequest,
+            "{payload:?}"
+        );
+    }
+    let answer = exchange(
+        &mut stream,
+        &request("runtime.release", Some(json!({"key": "s", "owner_pid": 1}))),
+    );
+    assert_eq!(error_code(&answer), ErrorCode::MalformedRequest);
+    assert_eq!(
+        exchange(&mut stream, &request("status", None)).status,
+        Status::Ok
+    );
+}
+
+/// An owned runtime stops its accept loop and removes its socket once its last owner released
+/// and no connection is open; while a connection is open it keeps serving.
+#[cfg(unix)]
+#[test]
+fn an_owned_runtime_stops_after_its_last_owner_released_and_the_last_connection_closed() {
+    let fixture = Fixture::new("owned-stop");
+    let paths = resolve_paths(&fixture.root, &Environment::with_xdg(&fixture.xdg)).unwrap();
+    let lifetime = ipc::Lifetime::owned(ipc::DEFAULT_OWNER_TTL);
+    lifetime.attach("s", None, std::time::Instant::now());
+    let mut runtime =
+        Running::start(Server::bind_with_lifetime(paths.clone(), None, lifetime).unwrap());
+    let mut stream = greeted(&runtime, &fixture);
+
+    let released = exchange(
+        &mut stream,
+        &request("runtime.release", Some(json!({"key": "s"}))),
+    );
+    assert_eq!(released.result.unwrap()["owned"], true);
+    thread::sleep(Duration::from_millis(1500));
+    assert!(
+        paths.socket.exists(),
+        "an open connection keeps the runtime"
+    );
+    drop(stream);
+
+    let thread = runtime.thread.take().unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !thread.is_finished() && std::time::Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(50));
+    }
+    assert!(thread.is_finished(), "the owned runtime did not stop");
+    thread.join().unwrap();
+    assert!(!paths.socket.exists());
+}
+
+/// An owned runtime keeps serving while the store holds a QA lease.
+#[cfg(unix)]
+#[test]
+fn an_owned_runtime_keeps_serving_while_the_store_is_busy() {
+    let fixture = Fixture::new("owned-busy");
+    let state_dir = cut_over(&fixture);
+    let paths = resolve_paths(&fixture.root, &Environment::with_xdg(&fixture.xdg)).unwrap();
+    let busy_before = state::idle::busy(&state_dir);
+    let runtime = Running::start(
+        Server::bind_with_lifetime(
+            paths.clone(),
+            Some(state_dir.clone()),
+            ipc::Lifetime::owned(ipc::DEFAULT_OWNER_TTL),
+        )
+        .unwrap(),
+    );
+    let mut stream = greeted(&runtime, &fixture);
+    let acquired = exchange(
+        &mut stream,
+        &request(
+            "state.write",
+            Some(json!({"mutations": [{
+                "op": "lease_acquire", "path": "qa-lane/lease.json",
+                "lease": {"owner_kind": "dispatch", "owner_id": "d1", "ttl_seconds": 60},
+            }]})),
+        ),
+    );
+    assert_eq!(acquired.status, Status::Ok, "{acquired:?}");
+    let attached = exchange(
+        &mut stream,
+        &request("runtime.attach", Some(json!({"key": "s"}))),
+    );
+    let released = exchange(
+        &mut stream,
+        &request("runtime.release", Some(json!({"key": "s"}))),
+    );
+    drop(stream);
+    thread::sleep(Duration::from_millis(2500));
+
+    assert!(
+        attached.result.unwrap()["busy"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("the QA lease is held by dispatch d1")),
+        "{busy_before:?}"
+    );
+    assert_eq!(released.result.unwrap()["released"], true);
+    assert!(paths.socket.exists(), "a held lease keeps the runtime");
+    assert!(!runtime.thread.as_ref().unwrap().is_finished());
 }

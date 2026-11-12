@@ -78,6 +78,7 @@ def run(ctx: SimpleNamespace) -> None:
             "engineering-suite init did not scaffold the hook_response.py envelope"
         )
     check_change_impact_hooks(pv_project)
+    check_runtime_autostart_hook(pv_project)
     if json.loads(project_json.read_text(encoding="utf-8")).get("hook_policy") != {
         "profile": "standard"
     }:
@@ -2082,6 +2083,45 @@ def check_change_impact_hooks(project: Path) -> None:
         "risky-path-first-touch",
     ):
         sys.exit(f"impact-first-touch.sh did not warn with exit 0: {verdict}")
+
+
+def check_runtime_autostart_hook(project: Path) -> None:
+    """Hook автозапуска runtime поставлен, подключён только для Claude Code и молчит на команде
+    без coordinator (ADR 0031)."""
+    hooks = project / ".claude" / "hooks"
+    for name in ("runtime-autostart.sh", "runtime_autostart.py"):
+        if not (hooks / name).is_file():
+            sys.exit(f"engineering-suite init did not scaffold {name}")
+    settings = json.loads(
+        (project / ".claude" / "settings.local.json").read_text(encoding="utf-8")
+    )
+    for event in ("PreToolUse", "Stop", "SubagentStop"):
+        if "runtime-autostart.sh" not in json.dumps(settings["hooks"].get(event)):
+            sys.exit(f"runtime-autostart.sh is not wired for {event}")
+    codex = project / ".codex" / "hooks.json"
+    if codex.is_file() and "runtime-autostart" in codex.read_text(encoding="utf-8"):
+        sys.exit("runtime-autostart.sh is wired for the second runtime")
+    payload = {
+        "session_id": "clean-room",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status"},
+        "cwd": str(project),
+    }
+    answered = run_hook(
+        hooks / "runtime-autostart.sh",
+        project,
+        "",
+        raw_payload=json.dumps(payload),
+        cwd=project,
+    )
+    verdict = json.loads(answered.stderr.strip().splitlines()[-1])
+    if (answered.returncode, verdict.get("decision"), answered.stdout.strip()) != (
+        0,
+        "allow",
+        "",
+    ):
+        sys.exit(f"runtime-autostart.sh did not stay silent on a plain command: {verdict}")
 
 
 def check_hooks_policy_health(project: Path) -> None:

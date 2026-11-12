@@ -188,9 +188,10 @@ def test_hook_catalog_agrees_with_the_templates() -> None:
     for spec in settings_specs:
         for tool in spec.tools:
             assert is_wired(first, spec, tool), (spec.hook_id, tool)
-            # The second runtime wires exactly what it delivers, Write/Edit via apply_patch.
+            # The second runtime wires exactly what it delivers, Write/Edit via apply_patch, and
+            # only the hooks shipped to it (`HookSpec.runtimes`).
             assert is_wired(second, spec, tool) == (
-                tool in supported_tools(spec, CODEX_SUPPORT)
+                tool in supported_tools(spec, CODEX_SUPPORT, "codex")
             ), (
                 spec.hook_id,
                 tool,
@@ -208,6 +209,21 @@ def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards()
     assert delivered("test-author-guard") == ("Write", "Edit", "Bash")
     for advisory in ("impact-first-touch", "sensitive-path-recheck", "targeted-check-reminder"):
         assert delivered(advisory) == ()
+
+
+def test_the_runtime_autostart_hook_is_shipped_to_claude_code_only() -> None:
+    specs = [spec for spec in HOOK_CATALOG if spec.hook_id == "runtime-autostart"]
+
+    assert {(spec.event, spec.tools) for spec in specs} == {
+        ("PreToolUse", ("Bash",)),
+        ("Stop", ("*",)),
+        ("SubagentStop", ("*",)),
+    }
+    for spec in specs:
+        assert not spec.critical
+        assert spec.runtimes == ("claude",)
+        assert supported_tools(spec, CODEX_SUPPORT, "codex") == ()
+        assert supported_tools(spec, CODEX_SUPPORT, "claude") == spec.tools
 
 
 def test_profile_without_hook_policy_key_comes_from_the_default_source(

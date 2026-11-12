@@ -319,6 +319,12 @@ means the owner may live (`owner-alive`, `owner-pid-reused`, `owner-in-other-env
 `ledger release-lock --force` or `qa clear-stale-lease` clears it. `harness-runtime serve` must run
 in a PID namespace that sees the coordinators.
 
+Never start `harness-runtime serve` from your own Bash: in Claude Code the `runtime-autostart` hook
+starts it before the first coordinator command and releases it at the end of the turn (ADR 0031);
+in Codex and on Windows the developer starts it. On a `[runtime-autostart-failed]` warning or a
+`[runtime_unavailable]` refusal, stop the route and relay the cause, the remedy and the journal path
+(`<repo-id>.serve.log`) to the developer.
+
 ## External launch and observation
 
 Use the shipped example explicitly with `--adapter .harness/orchestration/adapters/claude_code.py`;

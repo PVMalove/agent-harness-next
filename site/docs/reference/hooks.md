@@ -51,6 +51,7 @@ hook-ом, возвращает отказ до выполнения коман�
 | `impact-first-touch.sh` | `PreToolUse(Write, Edit)` | Ничего: предупреждает о первом касании пути, влияние которого не вычисляется по графу |
 | `sensitive-path-recheck.sh` | `PreToolUse(Write, Edit)` | Ничего: в `strict` сообщает о каждой правке чувствительного пути и пишет запись доказательства |
 | `targeted-check-reminder.sh` | `PreToolUse(Write, Edit)`, `Stop`, `SubagentStop` | Ничего: в `standard` и `strict` напоминает отчитать точечные проверки, если файлы менялись после отчёта |
+| `runtime-autostart.sh` | `PreToolUse(Bash)`, `Stop`, `SubagentStop` (только Claude Code) | Ничего: перед командой coordinator запускает или переиспользует `harness-runtime serve`, в конце хода освобождает владельца; сбой — предупреждение с причиной и журналом |
 | `count-skill-usage.sh` | `PreToolUse(Skill)` | Ничего: считает частоту вызова скиллов |
 | `mark-qa-gate-passed.sh` | `PostToolUse(Bash)` | Ничего: записывает маркер прохождения QA для прямого запуска команд |
 

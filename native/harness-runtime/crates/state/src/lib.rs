@@ -18,6 +18,7 @@ pub mod executions;
 pub mod export;
 pub mod hooks;
 pub mod identity;
+pub mod idle;
 pub mod import;
 pub mod import_approval;
 pub mod lease;

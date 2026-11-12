@@ -127,6 +127,11 @@ impl Registry {
         self.len() == 0
     }
 
+    /// How many snapshots stay open after the ones that outlived their limits are ended.
+    pub fn live(&self) -> usize {
+        self.sweep(Instant::now())
+    }
+
     /// Answer one `state.read` request for the store of `state`. See the module documentation
     /// for the fields `snapshot` and `close`.
     ///

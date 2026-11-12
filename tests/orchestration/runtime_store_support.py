@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -19,6 +20,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
@@ -695,9 +697,149 @@ class ServingRuntime:
             shutil.rmtree(self.xdg, ignore_errors=True)
 
 
+class RuntimeHandle(Protocol):
+    """What a client of a test needs from a serving runtime: its environment and its clock."""
+
+    environ: dict[str, str]
+    clock: FakeClock | None
+
+    def stop(self) -> None: ...
+
+
+HOOKS = ROOT / "harness" / "project" / "hooks"
+
+
+def install_project_hooks(project: Path) -> Path:
+    """The project hooks and the Claude Code settings of the template in ``project``: the files
+    ``harness init`` installs into ``.claude/``; the settings document."""
+    shutil.copytree(
+        HOOKS, project / ".claude" / "hooks", ignore=shutil.ignore_patterns("__pycache__")
+    )
+    settings = project / ".claude" / "settings.local.json"
+    shutil.copyfile(ROOT / "harness" / "project" / "settings.local.json.tmpl", settings)
+    return settings
+
+
+def hook_handlers(settings: Path, event: str, tool: str = "") -> list[str]:
+    """The commands of the handlers that Claude Code runs for ``event`` and ``tool``."""
+    document = json.loads(settings.read_text(encoding="utf-8"))
+    commands: list[str] = []
+    for group in document["hooks"].get(event, []):
+        matcher = str(group.get("matcher", ""))
+        if matcher in ("", "*") or (tool and re.fullmatch(matcher, tool)):
+            commands.extend(str(handler["command"]) for handler in group["hooks"])
+    return commands
+
+
+def run_handler(
+    command: str, project: Path, payload: JsonObject, env: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    """One hook handler as Claude Code runs it: ``/bin/sh -c`` in a new session, the payload on
+    stdin, ``CLAUDE_PROJECT_DIR`` and ``CLAUDE_PID`` set."""
+    environ = {
+        key: value for key, value in os.environ.items() if key != "SANDBOX_RUNTIME"
+    }
+    environ.update(
+        {"CLAUDE_PROJECT_DIR": str(project), "CLAUDE_PID": str(os.getpid()), **env}
+    )
+    return subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=environ,
+        cwd=project,
+        start_new_session=True,
+        check=False,
+        timeout=120,
+    )
+
+
+def autostart_message(done: subprocess.CompletedProcess[str]) -> str:
+    """The ``systemMessage`` of the ``runtime-autostart`` handler, or an empty string."""
+    text = done.stdout.strip()
+    return str(json.loads(text).get("systemMessage", "")) if text else ""
+
+
+class HookStartedRuntime:
+    """``harness-runtime serve`` that the installed ``runtime-autostart`` hook started before a
+    coordinator command of ``repo`` (ADR 0031): the binary is ``harness-runtime`` on the ``PATH``
+    of the hook, ``env`` reaches the runtime through the hook. ``stop`` runs the ``Stop`` handler
+    and waits until the runtime stopped itself."""
+
+    def __init__(self, repo: Path, project: Path, env: dict[str, str]) -> None:
+        self.repo = repo
+        self.project = project
+        self.settings = install_project_hooks(project)
+        self.clock: FakeClock | None = None
+        self.xdg = Path(tempfile.mkdtemp(prefix="hr", dir=SHORT_TMP)).resolve()
+        self.environ = {"XDG_RUNTIME_DIR": str(self.xdg)}
+        binaries = project / "bin"
+        binaries.mkdir()
+        (binaries / "harness-runtime").symlink_to(runtime_binary())
+        path = os.pathsep.join(
+            part
+            for part in (env.get("PATH", ""), str(binaries), os.environ.get("PATH", ""))
+            if part
+        )
+        # The session project is ``repo``: the hook runs only its main checkout's binary. The
+        # handlers name the hooks installed in ``project`` by their path.
+        self.hook_env = {**env, "PATH": path, "CLAUDE_PROJECT_DIR": str(repo), **self.environ}
+        [command] = self.handlers("PreToolUse", "Bash")
+        self.command = command
+        done = self.pre_tool(f"--repo {repo} dispatch status")
+        message = autostart_message(done)
+        found = _PID.search(message)
+        assert done.returncode == 0 and found, (done.stdout, done.stderr)
+        self.pid = int(found.group(1))
+        self.message = message
+
+    def handlers(self, event: str, tool: str = "") -> list[str]:
+        """The ``runtime-autostart`` handlers of ``event`` with the installed hook path."""
+        return [
+            handler.replace("${CLAUDE_PROJECT_DIR}", str(self.project))
+            for handler in hook_handlers(self.settings, event, tool)
+            if "runtime-autostart.sh" in handler
+        ]
+
+    def pre_tool(self, arguments: str) -> subprocess.CompletedProcess[str]:
+        """The autostart handler before ``coordinator.py <arguments>`` of this repository."""
+        coordinator = self.repo / ".harness" / "orchestration" / "coordinator.py"
+        payload: JsonObject = {
+            "session_id": "hook-runtime",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": f'python3 "{coordinator}" {arguments}'},
+            "cwd": str(self.repo),
+        }
+        return run_handler(self.command, self.project, payload, self.hook_env)
+
+    def socket_exists(self) -> bool:
+        return any(self.xdg.rglob("*.sock"))
+
+    def stop(self) -> None:
+        payload: JsonObject = {
+            "session_id": "hook-runtime",
+            "hook_event_name": "Stop",
+            "stop_hook_active": False,
+            "cwd": str(self.repo),
+        }
+        for command in self.handlers("Stop"):
+            run_handler(command, self.project, payload, self.hook_env)
+        deadline = time.monotonic() + 15
+        while self.socket_exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(self.pid, signal.SIGKILL)
+        shutil.rmtree(self.xdg, ignore_errors=True)
+
+
+_PID = re.compile(r"pid (\d+)")
+
+
 def store_call(
     repo: Path,
-    runtime: ServingRuntime,
+    runtime: RuntimeHandle,
     operation: str,
     payload: JsonObject | None = None,
     *,
@@ -726,7 +868,7 @@ def store_call(
     return {**reply.result, "_revision": reply.revision}
 
 
-def store_records(repo: Path, runtime: ServingRuntime, *paths: str) -> dict[str, JsonObject]:
+def store_records(repo: Path, runtime: RuntimeHandle, *paths: str) -> dict[str, JsonObject]:
     """The records of the runtime store at ``paths``."""
     answer = store_call(repo, runtime, "state.read", {"paths": list(paths)})
     records = answer["records"]
@@ -834,7 +976,7 @@ class Store:
 
 
 def coordinator_popen(
-    repo: Path, runtime: ServingRuntime, *args: str
+    repo: Path, runtime: RuntimeHandle, *args: str
 ) -> subprocess.Popen[str]:
     """The coordinator CLI against ``repo`` as a process that the test waits for later."""
     return subprocess.Popen(
@@ -852,7 +994,7 @@ def coordinator_popen(
     )
 
 
-def cli_environ(runtime: ServingRuntime | None) -> dict[str, str]:
+def cli_environ(runtime: RuntimeHandle | None) -> dict[str, str]:
     """The environment of a coordinator CLI process that reaches ``runtime`` and shares its clock."""
     environ = {**os.environ, **(runtime.environ if runtime else {})}
     site = [str(SITE)] if runtime is not None and runtime.clock is not None else []
@@ -861,7 +1003,7 @@ def cli_environ(runtime: ServingRuntime | None) -> dict[str, str]:
 
 
 def coordinator_with(
-    repo: Path, runtime: ServingRuntime | None, *args: str, python: str | None = None
+    repo: Path, runtime: RuntimeHandle | None, *args: str, python: str | None = None
 ) -> subprocess.CompletedProcess[str]:
     """The coordinator CLI against ``repo``, reaching the runtime of ``runtime``."""
     command = (
