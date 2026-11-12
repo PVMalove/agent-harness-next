@@ -11,13 +11,32 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <div class="ah-releases" markdown="1">
 
+## v2.0.0 {.ah-release-title}
+
+<p class="ah-release-meta">Breaking: 4 · Added: 61 · Changed: 26 · Fixed: 40</p>
+
+<p class="ah-release-summary">Highlights: required Rust runtime and runtime store · ledger version 4 · migrate and rollback with human approval · web console.</p>
+
+Moving from 1.x and rolling back are described in the [upgrade guide](../guides/upgrade-2-0.md); the
+supported platforms are on the [Platforms](../project/platforms.md) page.
+
+???+ note "Breaking changes"
+
+    - **[Required Rust runtime]:** Orchestration operational state lives in the runtime store `state/runtime.db`, and only `harness-runtime serve` writes to it. An unavailable runtime gives `runtime_unavailable` and exit code 2 (#792, #801, #807).
+    - **[Ledger version 4]:** `harness-runtime migrate` moves ledger version 3 to the runtime store and writes `ledger.json` with `version: 4`; after that, a 1.x installation refuses with exit code 2 (#797).
+    - **[Coordinator requires store]:** On `ledger.json` versions 1–3, coordinator 2.0.0 exits with code 2 and names `harness-runtime migrate` in its remedy (#814).
+    - **[Migrate with approval]:** `harness-runtime migrate` and `rollback --to-legacy` require `--approved-by`, `--approved-at`, and `--reason`, and only a human runs them (#803, #826).
+
+The full list of additions, changes, and fixes is in the `[2.0.0]` section of
+[CHANGELOG.md](https://github.com/PVMalove/agent-harness-next/blob/master/CHANGELOG.md).
+
 ## v1.5.1 — 18 October 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Added: 4 · Changed: 2 · Fixed: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.5.1">Open on GitHub</a></p>
 
 <p class="ah-release-summary">Highlights: Batch verification profiles · Fast developer-retry checks · Lock ledger state.</p>
 
-???+ note "Full notes"
+??? note "Full notes"
 
     **Added**
 

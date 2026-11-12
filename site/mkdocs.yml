@@ -131,6 +131,8 @@ plugins:
             Архитектура: Architecture
             Обзор: Overview
             Релизы: Releases
+            Миграция на 2.0: Upgrade to 2.0
+            Платформы: Platforms
 
 extra_css:
   - assets/docs-site.css
@@ -189,6 +191,7 @@ nav:
       - QA gate и Release Gate: guides/qa-gate.md
       - Примеры: guides/examples.md
       - Troubleshooting: guides/troubleshooting.md
+      - Миграция на 2.0: guides/upgrade-2-0.md
       - Оркестрация:
           - backend-orchestration.md
           - Включение и конфигурация: guides/orchestration/setup.md
@@ -332,6 +335,7 @@ nav:
       - Глоссарий: reference/glossary.md
   - Проект:
       - Структура: project/structure.md
+      - Платформы: project/platforms.md
       - Архитектура:
           - architecture/index.md
           - Обзор: architecture/overview.md

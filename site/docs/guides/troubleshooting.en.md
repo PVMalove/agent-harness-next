@@ -41,7 +41,7 @@ configuration of the tracker CLI.
 | `Zero Direct Commits: команду с git commit/push не удалось разобрать` | The command is built so that the hook cannot understand its effect | Split it into simple commands without substitutions, parentheses, and chains |
 | `правка меняет ключ hook_policy в .harness/project.json` | An agent tries to change the hooks policy | A human changes the policy; the agent may edit the file without changing the key |
 | `настройки hooks (.claude/settings*.json, .codex/hooks.json) и каталоги hooks` | An attempt to write to the hooks settings or directories | A human changes these files: their content determines what is blocked at all |
-| `this repository is in the file-ledger epoch` | The project has not been moved to the runtime store yet, and the command needs the new epoch | Run `harness-runtime migrate` once and repeat the command |
+| `this repository is in the file-ledger epoch` | The project has not been moved to the runtime store yet, and the command needs the new epoch | Run `harness-runtime migrate` once as the [upgrade guide](upgrade-2-0.md) describes and repeat the command |
 | `ledger validate` finds a divergence in the audit chain | The state was edited around the CLI, or the chain is damaged | Do not edit `.harness/orchestration/state/` manually; read the report and decide by the recovery route |
 
 The recovery commands (`ledger lock-status`, `qa clear-stale-lease`, `batch rewind`, `dispatch cancel`)
