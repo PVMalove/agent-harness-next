@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [2.0.0]
+
+### Breaking Changes
+
+- **[Обязательный Rust runtime]:** Operational state оркестрации хранит runtime store `state/runtime.db`, а пишет в него только `harness-runtime serve`. Недоступный runtime даёт `runtime_unavailable` и код 2 (#792, #801, #807).
+- **[Ledger версии 4]:** `harness-runtime migrate` переводит ledger версии 3 в runtime store и пишет `ledger.json` с `version: 4`, после чего установка 1.x отказывает с кодом 2 (#797).
+- **[Coordinator требует store]:** Coordinator 2.0.0 на `ledger.json` версий 1–3 завершается с кодом 2 и называет в remedy `harness-runtime migrate` (#814).
+- **[Migrate по approval]:** `harness-runtime migrate` и `rollback --to-legacy` требуют `--approved-by`, `--approved-at` и `--reason` и выполняются только человеком. Порядок перехода и отката — в [руководстве миграции на 2.0](https://pvmalove.github.io/agent-harness-next/guides/upgrade-2-0/) (#803, #826).
+
 ### Added
 
 - **[Автозапуск harness-runtime serve]:** В Claude Code hook `runtime-autostart` перед командой coordinator вызывает `harness-runtime ensure`: работающий serve переиспользуется, иначе запускается свой serve вне песочницы агента, и QA docker executor работает с ним. `Stop` и `SubagentStop` вызывают `harness-runtime release`; свой serve завершается сам, когда владельцев нет и store простаивает (нет живого dispatch, lease и очереди QA, незавершённого исполнения). Ручной serve не останавливается. Отказ serve, устаревшая сборка, отсутствие бинарника и песочница дают предупреждение с причиной и журналом `<repo-id>.serve.log`. Codex и Windows остаются на ручном запуске. ADR 0031. Чтобы получить hook, выполните `harness update` и соберите release-бинарник (#1088).
