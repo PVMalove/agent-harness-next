@@ -73,6 +73,10 @@ coordinator лишь нормализует enum-поля в памяти с п�
 `resume` доступны и в разделе Orchestration консоли. Recovery не перезапускает принятые этапы и не восстанавливает потерянный
 контекст модели и незакоммиченные файлы. Подробности:
 [руководство по backend-оркестрации](./site/docs/backend-orchestration.md#удержание-batch-и-команды-recovery).
+Пока идёт оркестрация, `harness-runtime serve` должен работать. Без него команды coordinator
+`batch`, `dispatch`, `qa` и `recovery` отказывают с `[runtime_unavailable]`, `harness worktree-remove`
+отказывает, а `harness cleanup` оставляет worktree на месте. Как держать процесс запущенным и
+проверять его, описано в разделе [«Runtime» быстрого старта](./site/docs/getting-started/index.md#runtime).
 
 При любой capability установщик ставит общий
 [контракт технического английского](./harness/docs/technical-english.md) как

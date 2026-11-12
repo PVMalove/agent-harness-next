@@ -219,7 +219,7 @@ python3 harness/bin/harness.py health /path/to/repository --json
 
 Each line is marked `✅` ok, `⚠️` warn, `❌` fail, or `-` skipped. On `fail` the command prints the
 reason and the command that fixes it. The "Orchestration" group appears only with `backend-orchestration`.
-It shows the ledger, unfinished batches, dispatches without activity, and untracked worktrees.
+It shows the runtime, the ledger, unfinished batches, dispatches without activity, and untracked worktrees.
 
 ??? quote ah-skill-text "Agent prompt: check health"
 
@@ -300,6 +300,64 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
     credentials/trust, migrate state or send workers without separate explicit authorization.
     ```
 
+
+## 5. Runtime {#runtime}
+
+This section applies when `backend-orchestration` is installed. After a one-time migration, the
+runtime store holds the orchestration state, and only the `harness-runtime serve` process can write
+it. A human approves and runs `harness-runtime migrate` once; the
+[backend orchestration guide](../backend-orchestration.md) describes the procedure.
+
+After the migration, `serve` must keep running while you use orchestration. Start it outside the
+agent sandbox:
+
+```bash {.ah-code-wrap}
+harness-runtime serve --repo /path/to/repository
+python3 .harness/orchestration/coordinator.py --repo . runtime status
+```
+
+`runtime status` prints the pid, the version, and the protocol of the running runtime. Without the
+runtime, these commands refuse:
+
+- the `coordinator.py` commands `batch`, `dispatch`, `qa`, and `recovery`: exit code 2 and
+  `[runtime_unavailable]`;
+- `harness cleanup`: worktrees stay with the reason "runtime does not answer";
+- `harness worktree-remove`: the same refusal reason.
+
+`harness health` shows the runtime state in the `orchestration.runtime` check, with a "how to fix"
+line. The web console shows a "Runtime" indicator in the header and the start command on the
+orchestration pages. In Claude Code, the
+[autostart](../guides/orchestration/operations.md#runtime-autostart) hook starts the runtime. In
+Codex and on Windows, keep the process running yourself: in a separate terminal or as a user
+service. An example for `systemd --user`:
+
+```ini {.ah-code-wrap}
+# ~/.config/systemd/user/harness-runtime.service
+[Unit]
+Description=harness-runtime serve
+
+[Service]
+ExecStart=/abs/path/to/harness-runtime serve --repo /path/to/repository
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+```bash {.ah-code-wrap}
+systemctl --user daemon-reload
+systemctl --user enable --now harness-runtime.service
+```
+
+The service has its own environment, not the environment of your shell:
+
+- **`PATH`.** Give the absolute path to `harness-runtime` in `ExecStart`. For the container
+  executor, add the directory of `docker` or `podman` to `Environment=PATH=`.
+- **`XDG_RUNTIME_DIR`.** systemd sets `/run/user/<uid>` for the service. The clients look for the
+  socket in the same directory, so the shell where the agent and the coordinator run must have the
+  same value. If the shell has no such variable, the runtime and the clients diverge: the client
+  looks for the socket in `/tmp/harness-<uid>`.
 
 ## Next
 

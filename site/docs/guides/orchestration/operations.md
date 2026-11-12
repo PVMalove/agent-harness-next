@@ -468,7 +468,7 @@ Python не открывает `runtime.db` и не имеет запасног�
 |---|---|---|---|
 | `revision_conflict` | другая команда изменила строку после чтения | да | `[revision_conflict]` повторить команду: она заново читает store и применяет политику к текущему состоянию |
 | `store_busy` | store занят дольше 5 секунд | да | `[store_busy]` повторить команду |
-| `runtime_unavailable` | runtime не отвечает | да | `[runtime_unavailable]` запустить `harness-runtime serve --repo <repo>` |
+| `runtime_unavailable` | runtime не отвечает; это же показывают проверка `orchestration.runtime` в `harness health` и индикатор «Runtime» веб-консоли | да | `[runtime_unavailable]` запустить `harness-runtime serve --repo <repo>`, см. [«Runtime» быстрого старта](../../getting-started/index.md#runtime) |
 | `idempotency_conflict` | `operation_id` уже занят другим запросом | нет | `[idempotency_conflict]` повторить команду: она выведет новый id из текущей ревизии |
 | `invariant_violation` | изменение нарушает инвариант store или цепочка audit не сходится | нет | `[invariant_violation]` остановить писателей и выполнить `ledger validate --full` |
 
