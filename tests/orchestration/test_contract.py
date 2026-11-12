@@ -58,8 +58,9 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         self.assertNotRegex(workflow, r"(?<!uv )\bpip install|-m pip\b")
         self.assertNotIn("run: python scripts/verify.py", workflow)
-        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 10)
-        self.assertEqual(workflow.count("run: make bootstrap"), 9)
+        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 11)
+        # Each bootstrap runs in a folded group of the log.
+        self.assertEqual(workflow.count('echo "::group::make bootstrap"\n          make bootstrap\n'), 10)
         self.assertEqual(workflow.count("make verify"), 2)
 
     @staticmethod
@@ -85,7 +86,9 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         self.assertIn("tests/orchestration/test_docker_smoke.py", smoke)
         self.assertIn('HARNESS_REQUIRE_DOCKER_SMOKE: "1"', smoke)
         self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', smoke)
-        self.assertIn("cargo build --locked", smoke)
+        # The smoke runs the one debug build of the `rust` job.
+        self.assertIn("needs: rust", smoke)
+        self.assertIn("name: harness-runtime-linux-debug", smoke)
         for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy"):
             self.assertIn(f"-f harness/container/{dockerfile}", smoke)
         for tag in ("harness-worker:smoke", "harness-proxy:smoke"):
@@ -156,8 +159,11 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         self.assertIn("tests/orchestration\n", job)
         self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', job)
         self.assertIn('HARNESS_REQUIRE_FAULT_INJECTION: "1"', job)
-        # The test hooks of the runtime exist only in a debug build.
-        self.assertIn("run: cargo build --locked\n", job)
+        # The test hooks of the runtime exist only in a debug build: the `rust` job builds it.
+        self.assertIn("needs: rust", job)
+        self.assertIn("name: harness-runtime-linux-debug", job)
+        self.assertIn("run: cargo build --locked --bin harness-runtime\n", blocks["rust"])
+        self.assertNotIn("--release", blocks["rust"])
         self.assertIn("native/harness-runtime/target/debug/harness-runtime", job)
         self.assertNotIn("--release", job)
         self.assertIn("--junitxml=.harness/.sandboxes/logs/junit-fault-injection.xml", job)

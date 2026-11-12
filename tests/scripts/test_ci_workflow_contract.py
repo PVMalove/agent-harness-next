@@ -35,6 +35,8 @@ FULL_JOBS = {
     "docker-smoke": FULL_CONDITION,
     "fault-injection": FULL_CONDITION,
 }
+# The fast gate of the full path: no tests, but every suite waits for it.
+GATE_JOB = "lint"
 # The jobs without tests keep their own condition on both paths.
 UNCHANGED_JOBS = {
     "private-terms": "github.event_name == 'pull_request'",
@@ -42,7 +44,26 @@ UNCHANGED_JOBS = {
 }
 # The jobs that run on both paths without a condition: the console SPA and the public site.
 BOTH_PATHS_JOBS = {"console-spa", "docs"}
-ALL_JOBS = {LIGHT_JOB, "dashboard", *FULL_JOBS, *UNCHANGED_JOBS, *BOTH_PATHS_JOBS}
+ALL_JOBS = {
+    LIGHT_JOB,
+    GATE_JOB,
+    "dashboard",
+    *FULL_JOBS,
+    *UNCHANGED_JOBS,
+    *BOTH_PATHS_JOBS,
+}
+# What each suite waits for: the fast gate, directly or through `rust`, whose debug build of
+# harness-runtime the Linux suites download; the long suites also wait for the public site.
+STAGES = {
+    "rust": {GATE_JOB},
+    "verify": {"docs", "rust"},
+    "verify-windows": {GATE_JOB, "docs"},
+    "diff-coverage": {GATE_JOB, "docs"},
+    "repo-map-bundle": {"parser-bundle", GATE_JOB},
+    "runtime-ipc-windows": {GATE_JOB},
+    "docker-smoke": {"rust"},
+    "fault-injection": {"rust"},
+}
 # What the light job must never contain: each of these runs, or measures, the full suite.
 FULL_SUITE_MARKERS = (
     "make verify",
@@ -69,12 +90,21 @@ def _code() -> str:
 
 
 def _jobs() -> dict[str, str]:
-    """The text of each job, by job name."""
+    """The text of each job, by job name; the blank lines of the stage banners are no job."""
     jobs = _code().split("\njobs:\n", 1)[1]
     return {
         block.strip().split(":", 1)[0]: block
         for block in re.split(r"\n(?=  [a-z][a-z0-9-]*:\n)", jobs)
+        if block.strip()
     }
+
+
+def _needs(job: str) -> set[str]:
+    """The `needs` of a job: one name or an inline list."""
+    found = re.search(r"^    needs:\s*(\[[^\]]*\]|[a-z][a-z0-9-]*)\s*$", job, flags=re.MULTILINE)
+    if found is None:
+        return set()
+    return {item.strip() for item in found[1].strip("[]").split(",") if item.strip()}
 
 
 def _condition(job: str) -> str | None:
@@ -178,6 +208,48 @@ class LightPathTests(unittest.TestCase):
             {LIGHT_JOB, "private-terms", "parser-bundle", "dashboard", *BOTH_PATHS_JOBS},
         )
         self.assertFalse(running & set(FULL_JOBS))
+
+
+class StageTests(unittest.TestCase):
+    def test_the_gate_is_on_the_full_path_and_runs_the_fast_checks(self) -> None:
+        job = _jobs()[GATE_JOB]
+
+        self.assertEqual(_condition(job), FULL_CONDITION)
+        self.assertEqual(_needs(job), set())
+        for step in (
+            "make lint",
+            "cargo fmt --check",
+            "cargo clippy --locked --all-targets --message-format=json -- -D warnings",
+            "scripts/check_public_metadata.py",
+        ):
+            with self.subTest(step=step):
+                self.assertIn(step, job)
+        for marker in FULL_SUITE_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, job)
+
+    def test_every_suite_waits_for_the_fast_stage(self) -> None:
+        jobs = _jobs()
+
+        for name, needs in STAGES.items():
+            with self.subTest(job=name):
+                self.assertEqual(_needs(jobs[name]), needs)
+
+    def test_the_linux_suites_download_the_one_debug_build_of_the_rust_job(self) -> None:
+        jobs = _jobs()
+
+        self.assertIn("name: harness-runtime-linux-debug", jobs["rust"])
+        for name in ("verify", "docker-smoke", "fault-injection"):
+            with self.subTest(job=name):
+                self.assertIn("name: harness-runtime-linux-debug", jobs[name])
+                self.assertNotIn("cargo build", jobs[name])
+
+    def test_the_failed_tests_of_each_suite_become_annotations(self) -> None:
+        jobs = _jobs()
+
+        for name in ("verify", "verify-windows"):
+            with self.subTest(job=name):
+                self.assertIn("scripts/ci_summary.py annotate", jobs[name])
 
 
 class FullPathTests(unittest.TestCase):
