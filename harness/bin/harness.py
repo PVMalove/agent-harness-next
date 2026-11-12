@@ -1533,8 +1533,12 @@ def cmd_update(args: argparse.Namespace) -> int:
         print(f"  git diff {' '.join(blocked)}")
         print("\nВыберите действие:")
         print("  ЗАМЕНИТЬ (сбросить ваши правки до версии из апстрима):")
-        print("    harness update --force-managed-files")
-        print("    (или --force, если также нужно перезаписать seed-файлы)")
+        print(f"    harness update {repo} --force-managed-files")
+        print(
+            f"    (или harness update {repo} --force: также заменит каждый отличающийся "
+            "seed-файл, сохранив его прежние байты в "
+            f"{SEED_BACKUP_REL.as_posix()}/<UTC-время>/; у managed-скиллов бэкапа нет)"
+        )
         print("  ОСТАВИТЬ (сохранить ваши правки):")
         print("    (обновление прервано, ваши файлы не тронуты)")
         fail("update aborted due to local skill changes (drift).")

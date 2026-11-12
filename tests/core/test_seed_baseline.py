@@ -303,3 +303,20 @@ def test_diff_reports_the_seed_groups_and_keeps_their_union(repo: Path) -> None:
     assert f"seed_differing: {unbaselined} (без baseline)" in text
     assert f"--force-seed-file {modified}" in text
     assert "--record-seed-baseline" in text
+
+
+def test_managed_skill_drift_names_the_force_backup_promise(repo: Path) -> None:
+    managed = next(
+        relative
+        for relative in load_lock(repo)["files"]
+        if relative.startswith(".harness/skills/") and relative.endswith("SKILL.md")
+    )
+    (repo / managed).write_text("# local skill edit\n", encoding="utf-8")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 1
+    assert f"harness update {repo} --force-managed-files" in result.stdout
+    assert f"harness update {repo} --force" in result.stdout
+    assert ".harness/.sandboxes/seed-backups/" in result.stdout
+    assert "бэкапа нет" in result.stdout
