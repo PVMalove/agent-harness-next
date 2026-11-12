@@ -277,6 +277,20 @@ class FullPathTests(unittest.TestCase):
         self.assertIn("--fail-fast", job)
         self.assertEqual(_condition(job), FULL_CONDITION)
 
+    def test_the_windows_tests_report_every_failure_of_a_pull_request_in_one_run(
+        self,
+    ) -> None:
+        job = _jobs()["verify-windows"]
+
+        # `--fail-fast` stops the Windows suite at its first failure, and every fix then costs one
+        # more run to meet the next; the part that runs the tests is not stopped. The clean-room
+        # part keeps it: its scenarios are sequential, and one failure explains the rest.
+        self.assertIn("matrix.part != 'tests'", job)
+        self.assertRegex(
+            job,
+            r"github\.event_name == 'pull_request' && matrix\.part != 'tests'\) && '--fail-fast'",
+        )
+
     def test_the_jobs_without_tests_are_unchanged(self) -> None:
         jobs = _jobs()
 

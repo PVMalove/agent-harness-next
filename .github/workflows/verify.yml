@@ -712,9 +712,10 @@ jobs:
         env:
           PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
           PYTHONUNBUFFERED: "1"
-          # A pull request stops at the first failing test (the failed ones run first); `master` runs all.
-          # Both run the full suite: no --platform-subset (ADR 0018).
-          VERIFY_ARGS: ${{ matrix.verify_args }} ${{ github.event_name == 'pull_request' && '--fail-fast' || '' }}
+          # The clean-room part of a pull request stops at the first failing scenario. The tests part
+          # does not: one run lists every Windows failure, so a fix does not cost a run per failure.
+          # Both parts run the full suite: no --platform-subset (ADR 0018).
+          VERIFY_ARGS: ${{ matrix.verify_args }} ${{ (github.event_name == 'pull_request' && matrix.part != 'tests') && '--fail-fast' || '' }}
         run: |
           set -o pipefail
           mkdir -p .harness/.sandboxes/logs
