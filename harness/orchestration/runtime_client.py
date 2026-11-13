@@ -621,7 +621,11 @@ def _check_directory(directory: Path) -> None:
 
 
 class RuntimeClient:
-    """Asks ``harness-runtime`` for one operation, repeating it while the transport fails."""
+    """Asks ``harness-runtime`` for one operation, repeating it while the transport fails.
+
+    Each request opens its own connection, unless the client is used as a context manager: then
+    the requests until the exit share one connection after one ``hello``. A lost transport closes
+    that connection, and the repeat of the request opens a new one."""
 
     def __init__(
         self,
@@ -636,6 +640,27 @@ class RuntimeClient:
         self.paths = runtime_paths(self.repo_root, environ)
         self._clock = clock
         self._sleep = sleep
+        # The deadline of the request in flight; the transport reads it for every operation.
+        self._deadline = 0.0
+        self._keeps = False
+        self._kept: tuple[_Transport, JsonObject] | None = None
+
+    def __enter__(self) -> RuntimeClient:
+        """Keep one connection, and its ``hello``, for the requests until the exit."""
+        self._keeps = True
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self._keeps = False
+        if self._kept is not None:
+            connection, _ = self._kept
+            self._kept = None
+            connection.close()
 
     def call(
         self,
@@ -699,7 +724,39 @@ class RuntimeClient:
     def _attempt(
         self, request: JsonObject, deadline: float, requires_minor: int = 0
     ) -> RuntimeReply:
-        """One connection: ``hello`` with the token, then the request."""
+        """The request over the kept connection, or over a new one after ``hello``."""
+        self._deadline = deadline
+        connection, greeting = self._kept or self._open(request, deadline)
+        self._kept = None
+        keep = False
+        try:
+            _require_minor(greeting, requires_minor)
+            if isinstance(connection, socket.socket):
+                connection.settimeout(max(deadline - self._clock(), 0.001))
+            answer = _exchange(connection, request)
+            keep = self._keeps
+        except OSError as exc:
+            raise _TransportFailure(str(exc)) from exc
+        finally:
+            if keep:
+                self._kept = (connection, greeting)
+            else:
+                connection.close()
+        if answer.get("status") != "ok":
+            raise _typed_error(answer)
+        hello = greeting.get("result")
+        result = answer.get("result")
+        revision = answer.get("revision")
+        return RuntimeReply(
+            hello=cast(JsonObject, hello) if isinstance(hello, dict) else {},
+            result=cast(JsonObject, result) if isinstance(result, dict) else {},
+            revision=revision if isinstance(revision, int) else None,
+        )
+
+    def _open(
+        self, request: JsonObject, deadline: float
+    ) -> tuple[_Transport, JsonObject]:
+        """A new connection after ``hello`` with the token, and the answer to ``hello``."""
         if sys.platform != "win32" and not hasattr(socket, "AF_UNIX"):
             raise RuntimeClientError(
                 "runtime_unavailable",
@@ -723,29 +780,22 @@ class RuntimeClient:
             greeting = _exchange(connection, self._hello(request, token))
             if greeting.get("status") != "ok":
                 raise _typed_error(greeting)
-            _require_minor(greeting, requires_minor)
-            answer = _exchange(connection, request)
         except OSError as exc:
-            raise _TransportFailure(str(exc)) from exc
-        finally:
             connection.close()
-        if answer.get("status") != "ok":
-            raise _typed_error(answer)
-        hello = greeting.get("result")
-        result = answer.get("result")
-        revision = answer.get("revision")
-        return RuntimeReply(
-            hello=cast(JsonObject, hello) if isinstance(hello, dict) else {},
-            result=cast(JsonObject, result) if isinstance(result, dict) else {},
-            revision=revision if isinstance(revision, int) else None,
-        )
+            raise _TransportFailure(str(exc)) from exc
+        except BaseException:
+            connection.close()
+            raise
+        return connection, greeting
 
     def _connect(self, deadline: float) -> _Transport:
         """Open the transport of this platform; every operation obeys ``deadline``."""
+        self._deadline = deadline
         if sys.platform == "win32":
+            # A kept pipe obeys the deadline of the request in flight, not of the first one.
             return _PipeConnection.open(
                 str(self.paths.socket),
-                lambda: deadline - self._clock(),
+                lambda: self._deadline - self._clock(),
             )
         connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:

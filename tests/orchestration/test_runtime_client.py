@@ -10,6 +10,7 @@ binary first (``HARNESS_REQUIRE_RUNTIME=1`` makes a missing one fail).
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import queue
@@ -24,7 +25,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import closing
+from contextlib import closing, nullcontext
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Protocol, cast
 
@@ -552,6 +553,129 @@ def test_every_attempt_keeps_the_first_request_deadline(
 
     (status,) = runtime.operations("status")
     assert status["request_deadline"] == int((timing.now + 30) * 1000)
+
+
+def test_the_requests_of_a_with_block_share_one_connection_after_one_hello(
+    dirs: Directories, runtimes: list[ScriptedRuntime]
+) -> None:
+    runtime = ScriptedRuntime(dirs)
+    runtimes.append(runtime)
+    client = RuntimeClient(dirs.repo, environ=dirs.environ)
+
+    with client:
+        for operation_id in ("a", "b", "c"):
+            assert client.call("status", operation_id=operation_id).result == {
+                "state": "serving"
+            }
+    client.call("status", operation_id="d")
+
+    assert runtime.connections == 2
+    assert [hello["operation_id"] for hello in runtime.operations("hello")] == [
+        "a.hello",
+        "d.hello",
+    ]
+    assert [request["operation_id"] for request in runtime.operations("status")] == [
+        "a",
+        "b",
+        "c",
+        "d",
+    ]
+
+
+def test_a_kept_connection_the_runtime_closed_repeats_the_request_over_a_new_one(
+    dirs: Directories, runtimes: list[ScriptedRuntime]
+) -> None:
+    dropped: list[str] = []
+
+    def answer(request: JsonObject) -> JsonObject:
+        if request["operation"] == "hello":
+            return _ok(request["operation_id"], HELLO_RESULT)
+        if request["operation_id"] == "b" and not dropped:
+            dropped.append("b")
+            raise ConnectionResetError("the runtime closes the connection")
+        return _ok(request["operation_id"], {"state": "serving"})
+
+    runtime = ScriptedRuntime(dirs, answer=answer)
+    runtimes.append(runtime)
+    timing = FakeTime()
+    client = RuntimeClient(
+        dirs.repo, environ=dirs.environ, clock=timing.clock, sleep=timing.sleep
+    )
+
+    with client:
+        client.call("status", operation_id="a", timeout_seconds=60)
+        reply = client.call("status", operation_id="b", timeout_seconds=60)
+
+    assert reply.result == {"state": "serving"}
+    assert runtime.connections == 2
+    assert len(runtime.operations("hello")) == 2
+    assert [request["operation_id"] for request in runtime.operations("status")] == [
+        "a",
+        "b",
+        "b",
+    ]
+    assert timing.sleeps == [0.1]
+
+
+def test_dispatch_status_observes_every_supervised_dispatch_over_one_connection(
+    dirs: Directories,
+    runtimes: list[ScriptedRuntime],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from harness.orchestration import qa_lane
+    from harness.orchestration.core import config as core_config
+    from harness.orchestration.workflow import delivery, startup
+
+    def answer(request: JsonObject) -> JsonObject:
+        if request["operation"] == "execution.observe":
+            dispatch_id = request["payload"]["dispatch_id"]
+            return _ok(
+                request["operation_id"],
+                {"execution": {"state": "running", "dispatch_id": dispatch_id}},
+            )
+        return _ok(request["operation_id"], HELLO_RESULT)
+
+    runtime = ScriptedRuntime(dirs, answer=answer)
+    runtimes.append(runtime)
+    for name, value in dirs.environ.items():
+        monkeypatch.setenv(name, value)
+    batch: JsonObject = {"batch_id": "batch-1", "telemetry": [], "context_pressure": []}
+    records = [
+        (
+            {"dispatch_id": dispatch_id, "state": "accepted"},
+            {
+                "dispatch_id": dispatch_id,
+                "batch_id": "batch-1",
+                "ticket": "#1",
+                "role": "developer",
+                "resolved_model": "model",
+                "execution": {"supervisor": "harness-runtime"},
+            },
+            batch,
+        )
+        for dispatch_id in ("dispatch-1", "dispatch-2", "dispatch-3")
+    ]
+    # The store, the ledger and the startup verdict stay out: only the runtime connection counts.
+    monkeypatch.setattr(delivery, "store_is_authority", lambda _root: True)
+    monkeypatch.setattr(delivery, "_status_records", lambda *_a, **_k: iter(records))
+    monkeypatch.setattr(delivery, "read_state", lambda _ledger, _repo: nullcontext())
+    monkeypatch.setattr(qa_lane, "lane_summary", lambda _ledger: None)
+    monkeypatch.setattr(startup, "assess_startup", lambda *_a, **_k: {})
+    monkeypatch.setattr(core_config, "_config", lambda _repo: {})
+    args = argparse.Namespace(
+        repo=str(dirs.repo), state_dir=None, dispatch=None, batch=None, stale_after=60
+    )
+
+    status = delivery.dispatch_status(args)
+
+    assert [entry["execution"]["dispatch_id"] for entry in status["dispatches"]] == [
+        "dispatch-1",
+        "dispatch-2",
+        "dispatch-3",
+    ]
+    assert runtime.connections == 1
+    assert len(runtime.operations("hello")) == 1
+    assert len(runtime.operations("execution.observe")) == 3
 
 
 def test_the_delay_doubles_up_to_five_seconds(dirs: Directories) -> None:

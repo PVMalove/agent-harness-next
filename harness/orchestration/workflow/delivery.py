@@ -18,7 +18,7 @@ import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from harness.orchestration import (
     container_executor,
@@ -99,6 +99,9 @@ from harness.orchestration.workflow.history import (
 from harness.orchestration.workflow.reports import (
     _persist_report,
 )
+
+if TYPE_CHECKING:
+    from harness.orchestration.runtime_client import RuntimeClient
 
 # A push of one already verified commit is bounded; the limit only stops a hung transport.
 PUBLISH_PUSH_TIMEOUT_SECONDS = 600
@@ -314,11 +317,14 @@ def _launch_execution(repo: Path, dispatch: JsonObject) -> JsonObject:
     return reply.result
 
 
-def observed_execution(repo: Path, dispatch_id: str) -> JsonObject | None:
-    """The execution of a supervised dispatch, as the runtime observes it now."""
+def observed_execution(
+    repo: Path, dispatch_id: str, client: RuntimeClient | None = None
+) -> JsonObject | None:
+    """The execution of a supervised dispatch, as the runtime observes it now; ``client`` is the
+    runtime client of the command, so its observations share one connection."""
     from harness.orchestration.runtime_client import RuntimeClient
 
-    reply = RuntimeClient(repo).call(
+    reply = (client or RuntimeClient(repo)).call(
         "execution.observe",
         operation_id=f"execution.observe-{dispatch_id}-{time.time_ns()}",
         payload={"dispatch_id": dispatch_id},
@@ -1073,8 +1079,25 @@ def dispatch_status(args: argparse.Namespace) -> JsonObject:
             # A report that waited for the exit and is refused now stays pending: the operator
             # sees why (execution_reaction), and the next view tries again.
             reaction_error = {"error": exc.message, "remedy": exc.remedy}
+    # The executions of the listed dispatches are observed over one runtime connection, made at
+    # the first observation and closed with the command.
+    runtime_session = contextlib.ExitStack()
+    runtime: RuntimeClient | None = None
+
+    def observe(dispatch_id: str) -> JsonObject | None:
+        nonlocal runtime
+        if runtime is None:
+            from harness.orchestration.runtime_client import RuntimeClient
+
+            runtime = runtime_session.enter_context(RuntimeClient(repo))
+        return observed_execution(repo, dispatch_id, runtime)
+
     # A busy ledger answers with a structured retry instead of an error: the caller polls again.
-    with contextlib.suppress(LedgerBusyError), read_state(ledger, repo):
+    with (
+        runtime_session,
+        contextlib.suppress(LedgerBusyError),
+        read_state(ledger, repo),
+    ):
         from harness.orchestration import qa_lane
 
         lane = qa_lane.lane_summary(ledger)
@@ -1099,7 +1122,7 @@ def dispatch_status(args: argparse.Namespace) -> JsonObject:
                 (
                     executions[dispatch["dispatch_id"]]
                     if dispatch["dispatch_id"] in executions
-                    else observed_execution(repo, dispatch["dispatch_id"])
+                    else observe(dispatch["dispatch_id"])
                 )
                 if from_store and dispatch.get("execution")
                 else None
