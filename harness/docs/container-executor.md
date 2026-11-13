@@ -227,8 +227,16 @@ An image without a gate executable stops the QA with an explicit environment rea
 
 - With `qa_preparation` declared, a container QA brief pins a `command -v <name>` check of every
   bare executable that a gate command starts with, after the project's preparation and again as an
-  environment probe. A missing `cargo` stops the QA before any gate command, as a new attempt
-  without a report; the error names the executable, the gate command and the image remedy.
+  environment probe. A missing `cargo` fails that check, so the QA stops before any gate command.
+  The outcome depends on the declared diagnosis facts:
+  - With `qa_environment_probes` and `qa_project_file_checks` both declared and every project-file
+    check passing, the failed probe confirms an environment cause. The QA stops as a new attempt
+    without a report; the error names the executable, the gate command and the image remedy.
+  - Without `qa_environment_probes` or without `qa_project_file_checks`, a failed probe confirms no
+    cause: the diagnosis is `unknown`. `qa run` records a `blocked` report whose failed
+    `preparation` stage is the `command -v cargo` check, with the blocker
+    `coordinator triage required; no automatic retry` and no image remedy. The missing executable
+    appears only in the failed check command and its diagnostics.
 - Without `qa_preparation`, the gate command ends with exit 127 (or 126), which the runtime
   classifies as `tooling`. The QA report is recorded as `blocked`, a retry reruns QA on the same
   candidate without spending a developer retry, and `batch auto-decide` stops with
