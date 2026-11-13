@@ -396,6 +396,13 @@ pass before implementation. A permanent access denial requires preparing the env
 Change the sandbox profile before propose/approval; global settings are not disabled.
 
 `dispatch observe --dispatch <id> --offset <next_offset>` reads the existing events locally.
+For a worker under runtime supervision (a brief with `execution`), the events come from the run
+log: the runtime writes the worker's stdout to `executions/<operation_id>/stdout.log` and its stderr
+to `stderr.log` next to it, in the orchestration state directory. `dispatch logs --dispatch <id>`
+returns a page of the same events; with `--follow`, it prints each event as a JSON line while the
+worker runs and ends with a summary line after the worker exits. The `--follow` loop does not hold
+the ledger lock, so it does not delay the self-report, heartbeat, or report submission. The web
+console worker screen shows the same log while the worker runs.
 Opening the panel, refreshing, and reconnecting do not call the model; you can close the window without stopping the
 worker. A human confirms a native-permission request; it does not give dispatch approval.
 By default, the first self-report is awaited for 120 seconds, regardless of heartbeat stale. For a proven
@@ -425,12 +432,20 @@ python /path/to/project/.harness/orchestration/coordinator.py --repo /path/to/pr
 
 For Codex, replace the adapter path with `/path/to/project/.harness/adapters/codex_worker.py`.
 The coordinator runs the `.py` file with its own Python in the worker checkout. The model and effort parameters
-come from the immutable brief, and the lifecycle prompt is passed through stdin. Claude limits
+come from the immutable brief. Under runtime supervision (a brief with `execution`), the adapter lives as long
+as the worker: it keeps the worker in its own process group, does not read its own stdin, and returns the
+worker's exit code (`128 + N` for signal N). Claude gets the prompt as the argument after `-p`, Codex as an
+`app-server` protocol request. The rule is mandatory for a new adapter too: an adapter that exits before its
+worker moves the dispatch to `blocked` with `worker-exited-without-report`. Without `execution`, the adapter
+passes the lifecycle prompt to a detached worker through stdin. Claude limits
 additional access to the incoming reports directory and uses the native `allowed_tools`;
 Codex passes this list in the prompt, and selects the sandbox by `access`: `read-only` or
 `workspace-write`. This is not a native Codex tool filter.
 Both adapters reject `qa`, `purpose: publish`, another transport, and a missing `allowed_tools`.
-An early worker exit, even with code `0`, returns a launch error and the end of the log.
+An early exit of a detached worker, even with code `0`, returns a launch error and the end of the log.
+`harness health` compares the installed adapters with the harness version (`orchestration.adapters`) and
+looks for `claude` and `codex` on the PATH of the `harness-runtime serve` environment
+(`orchestration.worker_binaries`): the runtime starts the worker in that environment, not in the coordinator's.
 To check a command without a model, there is `dispatch --dry-run`; for a test executable,
 `--claude-bin`/`--codex-bin`; for developer-retry lines, `--extra-prompt-file`.
 

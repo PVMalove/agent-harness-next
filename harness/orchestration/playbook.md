@@ -1138,6 +1138,15 @@ and changes no persistent permissions or batch approval. Secret values and think
 excluded before event storage as well as from display; the example bounds its event file to 10 MiB
 and the UI retains 500 lines. Native input is kept only in supervisor memory; the local pending
 record contains a redacted preview and digest. A stream gap is visible; a missing stream is not a dead worker.
+For a supervised worker (a brief with `execution`) `observe` reads the run log the runtime keeps in
+`<state>/executions/<operation-id>/stdout.log`; the worker's stderr goes to `stderr.log` next to
+it. `dispatch logs --dispatch <id> [--offset N]` returns one page of the same visible events with
+`source`, `execution_state` and `next_offset`; `--follow` prints each event as one JSON line while
+the worker runs and ends with a summary line once the execution has ended and a last read adds
+nothing. It reads the dispatch once under a short ledger lock and never holds the lock while
+following, so the worker's self-report, heartbeat and report are not delayed. The web console
+worker screen reads the same run log while the worker runs. A detached adapter's plain worker log
+has no visible events; `dispatch logs` names its path in `stream_reason`.
 An in-process worker has no event stream: `observe` reports `stream_state: unavailable` with a
 `stream_reason` that says so; follow it through self-report, heartbeat and the `checkpoints` list
 (`checkpoint_id`, `commit_sha`, `created_at`) that `observe` returns for every dispatch.
@@ -1208,11 +1217,41 @@ not required. Both expose `dispatch --help`, `--repo`, `--brief`, `--dry-run` an
 `--extra-prompt-file`; binary overrides are `--claude-bin` and `--codex-bin`. A retry prompt file
 can be passed with `--adapter-arg=--extra-prompt-file --adapter-arg=/absolute/path/to/retry.txt`.
 
-Adapters pass the lifecycle prompt through stdin and return after detached startup. An early
-exit, including exit zero, is a launch failure with a bounded log tail. They reject `qa`,
-`purpose: publish`, a transport other than `external`, and absent or empty `allowed_tools`.
+A brief with an `execution` section is launched by the runtime: the adapter becomes the leader of a
+new process group (a Job Object on Windows), and the runtime records the adapter's exit as the
+worker's exit. Under such a brief every adapter, shipped or new, must live exactly as long as its
+worker:
+
+- it keeps the worker in its own process group or job: it either execs into the worker or waits
+  for it in the foreground, and never starts it in a new session, so the runtime's stop signal to
+  the group reaches the worker;
+- it never reads its own stdin (the runtime connects it to the null device) and passes the prompt
+  as an argument or a file. Codex sends the prompt in the `turn/start` request over the private
+  JSON-RPC pipe of its `app-server`: that pipe is the app-server protocol channel, not a prompt
+  hand-off through the adapter's stdin;
+- it writes the worker's event stream to stdout, which the runtime keeps as the run log, and
+  diagnostics to stderr;
+- it returns the worker's exit status, `128 + N` for a worker ended by signal N.
+
+An adapter that exits before its worker leaves an empty group: the runtime records the execution
+as exited, and the dispatch is blocked with `worker-exited-without-report` while the worker still
+runs. An exit without a report carries the worker's code in `runtime_failure.exit_code`. Claude
+runs `claude -p <prompt>` in the foreground with `--output-format stream-json --verbose`; it
+refuses a prompt above 120000 UTF-8 bytes (30000 characters on Windows) and asks to shorten
+`--extra-prompt-file`. Codex serves the turn in the adapter's own process and writes allowlisted
+`harness-event` JSON lines (session connected, tool item type, agent output, error, turn result),
+never raw app-server JSON, tool input or reasoning. Follow the run log with
+`dispatch logs --dispatch <id> [--follow]` (see "Observable external workers").
+
+Without `execution` (a file ledger, or a runtime without `execution.launch`) the adapter keeps the
+detached launch: `dispatch send` waits for the adapter without a timeout, so the adapter passes the
+lifecycle prompt to a detached worker through stdin and returns after startup. An early exit,
+including exit zero, is then a launch failure with a bounded log tail.
+
+Both adapters reject `qa`, `purpose: publish`, a transport other than `external`, and absent or
+empty `allowed_tools`.
 Claude uses the brief's model, effort and native tool allowlist; its only additional directory is
-the incoming reports directory. Codex uses a detached `app-server` connection and a native named
+the incoming reports directory. Codex uses an `app-server` connection and a native named
 permission profile. The checkout has the brief's source access; the main coordinator state and
 incoming report directory remain writable for lifecycle evidence. Both source-access modes
 can write shared `.harness/.sandboxes/runs/qa` and `.harness/.sandboxes/runs/tests` temporary

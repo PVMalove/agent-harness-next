@@ -517,3 +517,64 @@ cpuset, cpu, io, memory, pids, пользовательский systemd акти
 [Положительный повтор после восстановления, попытка 3](https://github.com/PVMalove/agent-harness-next/actions/runs/41687555523/attempts/3)
 на том же SHA: 3 passed, 0 skipped; `podman info` вновь подтверждает cpu, io, memory, pids,
 SELinux остаётся Enforcing.
+
+## Решения реализации #1124
+
+**Принято оператором (2026-11-13).** Исправление #1124 приводит стандартные адаптеры
+`.harness/adapters/claude_worker.py` и `.harness/adapters/codex_worker.py` к правилу решений #805:
+выход лидера группы — выход worker-а. Правило остаётся, Rust-супервизор не меняется; ответ
+`status` получает только поле `search_path`.
+
+Причина ошибки: runtime запускает адаптер лидером новой группы процессов со stdin `/dev/null`
+(`process.rs`), а `wait_for` (`stop.rs`) записывает выход, когда лидер ушёл и в группе никого
+нет. Оба адаптера запускали worker через `Popen(start_new_session=True)` и завершались после
+проверки старта: Claude через 3 с, Codex через 10 с. Worker уходил в свою сессию и группу,
+группа исполнения пустела, исполнение становилось `exited`, и dispatch получал `blocked` с
+`worker-exited-without-report`, хотя worker продолжал работать.
+
+| Текст ADR | Решение #1124 | Причина |
+|---|---|---|
+| #805, «Адаптер»: сторонний адаптер, который возвращается сразу после старта worker, завершает исполнение | Правило жизни обязательно для любого адаптера, стандартного и нового, если brief содержит `execution`: адаптер живёт столько же, сколько worker, держит его в своей группе или job, не читает свой stdin, передаёт промпт аргументом или файлом, пишет поток событий worker-а в stdout и возвращает код выхода worker-а. Контракт записан в playbook, раздел «Role order, liveness, and transport» | Супервизор видит только адаптер. Адаптер, который отпускает worker, делает выход лидера ложным доказательством выхода worker-а, а остановка группы до worker-а не доходит. |
+| Варианты для Claude: A — `os.execv` в `claude`, B — ожидание на переднем плане, C — runtime следит за чужой сессией | B на всех платформах: адаптер ждёт `claude -p` через `subprocess.run` и возвращает его код | На Windows `os.exec*` запускает новый процесс и завершает вызывающий, поэтому лидер job ушёл бы сразу, и ошибка повторилась бы. B оставляет один путь кода, worker остаётся в группе или job адаптера, а код выхода передаётся явно; цена — один простаивающий процесс Python на worker. C отменяет правило «выход лидера — выход worker-а», которое задача менять не может. |
+| Отсоединённый запуск адаптеров | Сохраняется только для brief без `execution`: файловый ledger или runtime без `execution.launch` | `delivery._run_adapter` ждёт адаптер синхронно и без таймаута. Адаптер, который не отсоединяет worker, держал бы `dispatch send` всё время работы worker-а. |
+| Промпт не передаётся через stdin | Адаптер Codex обслуживает ход в своём процессе: без повторного запуска `_run`, без задания в stdin и без receipt. Промпт уходит в запросе `turn/start` по закрытому JSON-RPC-каналу `codex app-server` (его stdio) | Адаптер не читает свой stdin, под runtime это `/dev/null`. Канал app-server — протокол самого app-server, а не передача промпта через stdin надзираемого процесса. |
+| Код выхода исполнения | Адаптер возвращает код worker-а, а для сигнала N — `128 + N`, как в shell. Codex возвращает 0 после завершённого хода; если app-server вышел раньше, его ненулевой код или 1; при другой ошибке адаптера — 1. `runtime_failure` вида `worker-exited-without-report` получает `exit_code` из свидетельства выхода | Оператор видит код worker-а в `dispatch status` и `dispatch observe`. Сигналы кодируются так же, как в разделе 4. |
+| Двоичный файл worker-а ищется в окружении coordinator | Ответ `status` содержит `search_path` — PATH окружения `harness-runtime serve` или `null`, если PATH не задан | Runtime запускает worker со своим окружением, поэтому `claude` и `codex` адаптера ищутся в этом PATH. Поле раскрывает только PATH процесса того же пользователя через его закрытый сокет. |
+
+Как работает реализация:
+
+- **Claude.** Промпт стоит позиционным аргументом сразу после `-p`: `--allowedTools` и `--add-dir`
+  принимают несколько значений и поглотили бы промпт в конце команды. Промпт длиннее 120000 байт
+  UTF-8 (на Windows — 30000 символов) адаптер отклоняет с кодом 1 и советом сократить
+  `--extra-prompt-file`: так одна строка argv остаётся в пределах `MAX_ARG_STRLEN` (131072 байта)
+  и командной строки Windows (32767 символов). Worker получает stdin `DEVNULL` и пишет
+  `--output-format stream-json --verbose` в унаследованные stdout и stderr, то есть в
+  `executions/<operation_id>/stdout.log` и `stderr.log` runtime. Проверки старта по таймеру и
+  файла журнала worker-а под надзором нет: ранний выход наблюдает runtime. `--dry-run` печатает
+  команду с промптом.
+- **Codex.** Общий `serve_turn` обслуживает ход и для отсоединённого `_run`, и для запуска под
+  надзором. Без надзора `_run` по-прежнему читает задание из stdin, пишет receipt и печатает текст
+  агента как есть: на этот формат опирается чтение простого журнала в консоли. Под надзором
+  адаптер пишет в stdout строки `harness-event` из разрешённого набора: подключение сессии, тип
+  элемента-инструмента без входных данных и команд, текст агента по завершённому элементу, ошибку
+  и итог хода. Сырой JSON app-server и reasoning не пишутся. `codex app-server` стартует без новой
+  сессии, поэтому SIGTERM группе доходит и до адаптера, и до app-server; на Windows обоих
+  охватывает job.
+- **Наблюдение.** Путь журнала запуска следует из brief: `executions/<operation_id>/stdout.log`
+  первой попытки под state-каталогом, поэтому `dispatch observe`, новая команда
+  `dispatch logs --dispatch <id> [--offset N] [--follow]` и экран worker-а в веб-консоли читают его,
+  пока worker работает, и не спрашивают runtime. `dispatch logs` читает dispatch один раз под
+  коротким замком ledger; цикл `--follow` замок не берёт, а спрашивает runtime о состоянии
+  исполнения и заканчивается, когда исполнение завершилось и последнее чтение ничего не добавило.
+- **Health.** `orchestration.adapters` сверяет SHA-256 обоих адаптеров с `.harness/harness.lock`
+  установленной версии harness; `orchestration.worker_binaries` ищет `claude` и `codex` в
+  `search_path` и даёт `fail`, если в нём нет двоичного файла роли с транспортом `external`, и
+  `warn`, если runtime не сообщает `search_path`.
+- **Проверки.** Unit-тесты адаптеров в `tests/orchestration/test_runtime_adapters.py` с фиктивными
+  `claude` и `codex app-server`. Seam-тесты на настоящем бинаре runtime и настоящих адаптерах в
+  `tests/orchestration/test_supervised_adapters.py`: worker, который сдаёт отчёт через 5 с, даёт
+  `reported` и не попадает в `blocked` (Claude и Codex); выход 7 записывается как
+  `exit.exit_code` исполнения и `runtime_failure.exit_code`; остановка по сроку завершает и
+  worker. Журнал запуска проверяют `tests/orchestration/test_worker_logs.py` и
+  `tests/console/test_worker_steps.py`, `search_path` — unit-тест `ipc`. Не доказаны: запуск под
+  Windows Job Object (seam-тесты только для Linux) и настоящие `claude` и `codex` под runtime.

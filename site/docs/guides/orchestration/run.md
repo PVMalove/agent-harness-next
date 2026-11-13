@@ -397,6 +397,13 @@ candidate он не регистрирует. Для read-only роли вмес
 Смена sandbox-профиля делается до propose/approval; глобальные настройки не отключаются.
 
 `dispatch observe --dispatch <id> --offset <next_offset>` читает существующие события локально.
+Для worker под надзором runtime (brief с `execution`) события берутся из журнала запуска:
+runtime пишет stdout worker в `executions/<operation_id>/stdout.log`, а stderr — в `stderr.log`
+рядом, в state-каталоге оркестрации. `dispatch logs --dispatch <id>` возвращает страницу тех же
+событий, а с `--follow` печатает каждое событие строкой JSON, пока worker работает, и
+заканчивается итоговой строкой после его выхода. Цикл `--follow` не держит замок ledger, поэтому
+не мешает self-report, heartbeat и сдаче отчёта. Экран worker в веб-консоли показывает этот же
+журнал во время работы.
 Открытие панели, обновление и reconnect не вызывают модель; окно можно закрыть без остановки
 worker. Запрос native-разрешения подтверждает человек; он не даёт dispatch approval.
 Первый self-report coordinator по умолчанию ждёт 120 секунд, независимо от порога stale для heartbeat.
@@ -427,12 +434,20 @@ python /path/to/project/.harness/orchestration/coordinator.py --repo /path/to/pr
 
 Для Codex замените путь адаптера на `/path/to/project/.harness/adapters/codex_worker.py`.
 Coordinator запускает `.py` через свой Python в checkout worker. Модель и effort адаптер
-берёт из immutable brief, а lifecycle-промпт передаёт через stdin. Claude ограничивает
+берёт из immutable brief. Под надзором runtime (brief с `execution`) адаптер живёт столько же,
+сколько worker: держит его в своей группе процессов, свой stdin не читает и возвращает код выхода
+worker (`128 + N` при сигнале N). Claude получает промпт аргументом после `-p`, Codex — запросом
+протокола `app-server`. Это правило обязательно и для нового адаптера: адаптер, который
+завершается раньше worker, переводит dispatch в `blocked` с `worker-exited-without-report`. Без
+`execution` адаптер передаёт lifecycle-промпт отсоединённому worker через stdin. Claude ограничивает
 дополнительный доступ каталогом входящих отчётов и использует нативный `allowed_tools`;
 Codex передаёт этот список в промпте, а sandbox выбирает по `access`: `read-only` или
 `workspace-write`. Это не нативный фильтр инструментов Codex.
 Оба адаптера отклоняют `qa`, `purpose: publish`, другой transport и отсутствующий `allowed_tools`.
-Ранний выход worker, даже с кодом `0`, возвращает ошибку запуска и конец лога.
+Ранний выход отсоединённого worker, даже с кодом `0`, возвращает ошибку запуска и конец лога.
+`harness health` сверяет установленные адаптеры с версией harness (`orchestration.adapters`) и
+ищет `claude` и `codex` в PATH окружения `harness-runtime serve` (`orchestration.worker_binaries`):
+runtime запускает worker в этом окружении, а не в окружении coordinator.
 Для проверки команды без модели есть `dispatch --dry-run`, для тестового executable —
 `--claude-bin`/`--codex-bin`, для строк developer-retry — `--extra-prompt-file`.
 
