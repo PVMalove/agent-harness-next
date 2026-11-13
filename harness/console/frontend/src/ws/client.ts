@@ -21,8 +21,8 @@ import type {
 } from "./protocol.gen";
 import { parseStepsReply } from "./steps";
 import type { StepsEvent } from "./steps";
-import { parseHomeSnapshot } from "./types";
-import type { HomeSnapshot } from "./types";
+import { parseHomeActivity, parseHomeSnapshot } from "./types";
+import type { HomeActivity, HomeSnapshot } from "./types";
 import { repoMapReader } from "./repoMap";
 import type { RepoMapEvent } from "./repoMap";
 import { decisionsReader } from "./decisions";
@@ -55,7 +55,14 @@ export type ClientEvent =
   | { type: "open" }
   | { type: "closed"; wasOpen: boolean; attempt: number; delayMs: number }
   | { type: "health"; reachable: boolean }
-  | { type: "snapshot"; snapshot: HomeSnapshot; cached: boolean; ageSeconds: number }
+  | {
+      type: "snapshot";
+      snapshot: HomeSnapshot;
+      cached: boolean;
+      ageSeconds: number;
+      /** null: the console could not count it (an older server sends no key). */
+      activity?: HomeActivity | null;
+    }
   | { type: "invalid" }
   | { type: "error"; code: string; message: string }
   | { type: "events"; cursor: string; events: unknown[] }
@@ -497,7 +504,13 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
         const ok = reply as unknown as HomeSnapshotReply;
         const snapshot = parseHomeSnapshot(ok.snapshot);
         if (snapshot && typeof ok.cached === "boolean" && typeof ok.age_seconds === "number") {
-          emit({ type: "snapshot", snapshot, cached: ok.cached, ageSeconds: ok.age_seconds });
+          emit({
+            type: "snapshot",
+            snapshot,
+            cached: ok.cached,
+            ageSeconds: ok.age_seconds,
+            activity: parseHomeActivity(ok.activity),
+          });
         } else {
           emit({ type: "invalid" });
         }

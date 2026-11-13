@@ -73,6 +73,13 @@ export type Id1 = string | number | null;
 export type Ok = false;
 export type Type1 = string | null;
 export type V = 1;
+export type EventsTotalWindow = number;
+export type LastEventAgeSeconds = number | null;
+export type EventsPerMinute = number;
+export type LastEventAgeSeconds1 = number | null;
+export type Link = "decision" | "typed" | "write" | "launch" | "audit" | "receipts";
+export type Links = LinkActivityPayload[];
+export type WindowSeconds = number;
 export type AgeSeconds = number;
 export type Cached = boolean;
 export type Id2 = string | number | null;
@@ -560,6 +567,7 @@ export interface ErrorBody {
  * via the `definition` "HomeSnapshotReply".
  */
 export interface HomeSnapshotReply {
+  activity?: HomeActivityPayload | null;
   age_seconds: AgeSeconds;
   cached: Cached;
   id: Id2;
@@ -568,6 +576,25 @@ export interface HomeSnapshotReply {
   snapshot: Snapshot;
   type: Type2;
   v: V1;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "HomeActivityPayload".
+ */
+export interface HomeActivityPayload {
+  events_total_window: EventsTotalWindow;
+  last_event_age_seconds: LastEventAgeSeconds;
+  links: Links;
+  window_seconds: WindowSeconds;
+}
+/**
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "LinkActivityPayload".
+ */
+export interface LinkActivityPayload {
+  events_per_minute: EventsPerMinute;
+  last_event_age_seconds: LastEventAgeSeconds1;
+  link: Link;
 }
 export interface Snapshot {
   [k: string]: JsonValue | undefined;

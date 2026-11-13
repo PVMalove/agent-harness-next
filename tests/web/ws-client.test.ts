@@ -37,7 +37,25 @@ describe("the console client", () => {
       snapshot: SNAPSHOT,
       cached: false,
       ageSeconds: 0,
+      activity: null,
     });
+  });
+
+  test("a reply with the contour activity passes it on; a malformed one is dropped, not the snapshot", () => {
+    const { events, client } = setup();
+    const socket = FakeSocket.last;
+    socket.open();
+    const activity = {
+      window_seconds: 300,
+      links: [{ link: "typed", events_per_minute: 1.2, last_event_age_seconds: 4.5 }],
+      last_event_age_seconds: 4.5,
+      events_total_window: 6,
+    };
+    socket.reply({ ...snapshotReply("1-2"), activity });
+    expect(events.at(-1)).toMatchObject({ type: "snapshot", activity });
+    expect(client.requestHome({ force: true })).toBe(true);
+    socket.reply({ ...snapshotReply("1-3"), activity: { ...activity, links: "x" } });
+    expect(events.at(-1)).toMatchObject({ type: "snapshot", activity: null });
   });
 
   test("reconnects with a backoff of 0.5 s doubling to 8 s", () => {

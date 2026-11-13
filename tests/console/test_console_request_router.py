@@ -40,7 +40,9 @@ class Gate:
 def _router(
     monkeypatch: pytest.MonkeyPatch, gate: Gate
 ) -> tuple[RequestRouter, list[dict[str, object]]]:
-    async def respond(raw: str, snapshots: SnapshotService) -> str:
+    async def respond(
+        raw: str, snapshots: SnapshotService, activity: object = None
+    ) -> str:
         await gate.wait()
         return json.dumps({"id": json.loads(raw)["id"], "ok": True})
 

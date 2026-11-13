@@ -1317,6 +1317,45 @@
       "title": "HelpSnapshotRequest",
       "type": "object"
     },
+    "HomeActivityPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "events_total_window": {
+          "title": "Events Total Window",
+          "type": "integer"
+        },
+        "last_event_age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Event Age Seconds"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/LinkActivityPayload"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "window_seconds": {
+          "title": "Window Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "window_seconds",
+        "links",
+        "last_event_age_seconds",
+        "events_total_window"
+      ],
+      "title": "HomeActivityPayload",
+      "type": "object"
+    },
     "HomeProblemsReply": {
       "additionalProperties": false,
       "properties": {
@@ -1420,6 +1459,17 @@
     "HomeSnapshotReply": {
       "additionalProperties": false,
       "properties": {
+        "activity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HomeActivityPayload"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "age_seconds": {
           "title": "Age Seconds",
           "type": "number"
@@ -2103,6 +2153,45 @@
       "type": "object"
     },
     "JsonValue": {},
+    "LinkActivityPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "events_per_minute": {
+          "title": "Events Per Minute",
+          "type": "number"
+        },
+        "last_event_age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Event Age Seconds"
+        },
+        "link": {
+          "enum": [
+            "decision",
+            "typed",
+            "write",
+            "launch",
+            "audit",
+            "receipts"
+          ],
+          "title": "Link",
+          "type": "string"
+        }
+      },
+      "required": [
+        "link",
+        "events_per_minute",
+        "last_event_age_seconds"
+      ],
+      "title": "LinkActivityPayload",
+      "type": "object"
+    },
     "OpenProjectSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
