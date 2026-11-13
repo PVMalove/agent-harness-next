@@ -47,6 +47,7 @@ from harness.orchestration.ledger import (
     LifecycleLedger,
     PlanRecord,
 )
+from harness.orchestration.ledger.ledger_ops import LedgerBusyError
 from harness.orchestration.qa_lane import QaWorkflowOps
 from harness.orchestration.pinned_configuration import snapshot
 from harness.orchestration.workflow import reports, qa_integration
@@ -587,6 +588,7 @@ class QaLaneRunTests(QaLaneTestCase):
         self,
         persisted: list[dict[str, object]] | None = None,
         report_error: coordinator.CoordinatorError | None = None,
+        **overrides: object,
     ) -> QaWorkflowOps:
         def persist(
             ledger: LifecycleLedger,
@@ -604,12 +606,15 @@ class QaLaneRunTests(QaLaneTestCase):
         return cast(
             QaWorkflowOps,
             _Ops(
-                _validate_batch_integrity=lambda root, batch: None,
-                _validate_dispatch=lambda repo, config, root, batch, dispatch: None,
-                _config=lambda repo: {},
-                _role=lambda repo, name: {},
-                _validate_report=lambda *arguments, **keywords: None,
-                _persist_report=persist,
+                **{
+                    "_validate_batch_integrity": lambda root, batch: None,
+                    "_validate_dispatch": lambda repo, config, root, batch, dispatch: None,
+                    "_config": lambda repo: {},
+                    "_role": lambda repo, name: {},
+                    "_validate_report": lambda *arguments, **keywords: None,
+                    "_persist_report": persist,
+                    **overrides,
+                }
             ),
         )
 
@@ -723,6 +728,131 @@ class QaLaneRunTests(QaLaneTestCase):
         with mock.patch.object(qa_lane, "run_gate", return_value=gate):
             result = qa_lane.run(self.args, self._ops())
 
+        self.assertEqual(result["state"], "reported")
+
+    def test_a_busy_store_at_acceptance_is_read_again_and_accepts_the_evidence(
+        self,
+    ) -> None:
+        self._seed()
+        validations: list[str] = []
+
+        def validate(root: Path, batch: object) -> None:
+            validations.append("validated")
+            # The second validation is the first read of the acceptance, after the QA run: the
+            # snapshot it names expired while the commands ran.
+            if len(validations) == 2:
+                raise LedgerBusyError(
+                    "the read snapshot cannot answer: the snapshot is closed or expired",
+                    remedy="[store_busy] read again from a new snapshot",
+                )
+
+        persisted: list[dict[str, object]] = []
+        sut = self._ops(persisted, _validate_batch_integrity=validate)
+
+        with mock.patch.object(qa_lane, "run_gate", return_value=_passing_gate()) as gate:
+            result = qa_lane.run(self.args, sut)
+
+        self.assertEqual(result["state"], "reported")
+        self.assertEqual(gate.call_count, 1)
+        self.assertEqual(len(persisted), 1)
+
+    @staticmethod
+    def _refused_after_the_run(
+        refusal: coordinator.CoordinatorError,
+    ) -> Callable[[Path, object], None]:
+        """A batch validation that passes before the QA run and refuses every acceptance."""
+        validations: list[str] = []
+
+        def validate(root: Path, batch: object) -> None:
+            validations.append("validated")
+            if len(validations) > 1:
+                raise refusal
+
+        return validate
+
+    @staticmethod
+    def _busy() -> LedgerBusyError:
+        return LedgerBusyError(
+            "the read snapshot cannot answer: the snapshot is closed or expired",
+            remedy="[store_busy] read again from a new snapshot",
+        )
+
+    def _refused_run(self, refusal: coordinator.CoordinatorError) -> CoordinatorError:
+        """A QA run whose commands pass and whose acceptance ``refusal`` refuses."""
+        with (
+            mock.patch.object(qa_lane, "ACCEPT_BUSY_WAIT_SECONDS", 0.0),
+            mock.patch.object(qa_lane, "run_gate", return_value=_passing_gate()),
+            self.assertRaises(coordinator.CoordinatorError) as refused,
+        ):
+            qa_lane.run(
+                self.args,
+                self._ops(_validate_batch_integrity=self._refused_after_the_run(refusal)),
+            )
+        return refused.exception
+
+    def test_a_rerun_after_a_busy_acceptance_accepts_the_captured_evidence_without_a_new_run(
+        self,
+    ) -> None:
+        self._seed()
+
+        refused = self._refused_run(self._busy())
+
+        self.assertIn(f"qa run --dispatch {DISPATCH_ID}", refused.remedy)
+        self._assert_transient_failure_released()
+
+        persisted: list[dict[str, object]] = []
+        with mock.patch.object(qa_lane, "run_gate") as gate:
+            result = qa_lane.run(self.args, self._ops(persisted))
+
+        self.assertEqual(gate.call_count, 0)
+        self.assertEqual(result["state"], "reported")
+        self.assertEqual(result["sha256"], hashlib.sha256(b"all green").hexdigest())
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0]["outcome"], "completed")
+
+    def test_captured_evidence_refused_at_its_own_acceptance_is_not_taken_again(
+        self,
+    ) -> None:
+        self._seed()
+        self._refused_run(self._busy())
+        changed = coordinator.CoordinatorError(
+            "the harness runtime changed after this batch was planned",
+            remedy="restore the pinned runtime",
+        )
+
+        with mock.patch.object(qa_lane, "run_gate") as gate, self.assertRaises(
+            coordinator.CoordinatorError
+        ):
+            qa_lane.run(
+                self.args,
+                self._ops(_validate_batch_integrity=self._refused_after_the_run(changed)),
+            )
+        self.assertEqual(gate.call_count, 0)
+
+        with mock.patch.object(
+            qa_lane, "run_gate", return_value=_passing_gate()
+        ) as gate:
+            result = qa_lane.run(self.args, self._ops())
+
+        self.assertEqual(gate.call_count, 1)
+        self.assertEqual(result["state"], "reported")
+
+    def test_evidence_refused_for_another_reason_than_a_busy_store_is_not_taken_again(
+        self,
+    ) -> None:
+        self._seed()
+        self._refused_run(
+            coordinator.CoordinatorError(
+                "batch integrity check failed", remedy="restore the batch record"
+            )
+        )
+
+        with mock.patch.object(
+            qa_lane, "run_gate", return_value=_passing_gate()
+        ) as gate:
+            result = qa_lane.run(self.args, self._ops())
+
+        self.assertEqual(gate.call_count, 1)
         self.assertEqual(result["state"], "reported")
 
     def _evidence_gate(self, commands: list[str]) -> GateResult:
