@@ -4,8 +4,8 @@ from __future__ import annotations
 
 
 from ..coordinator_api import ApiResult
-from ..json_fields import items as _items
-from ..json_fields import mapping as _obj
+from ..json_fields import items_or_empty
+from ..json_fields import mapping_or_empty
 from .model import (
     Action,
     Effect,
@@ -34,15 +34,15 @@ def worker_entry(result: ApiResult | None, dispatch: str) -> JsonObject | None:
     """The `dispatch status` entry of `dispatch`, if the document reported it."""
     if result is None or not result.ok:
         return None
-    for item in _items(_obj(result.document).get("dispatches")):
-        entry = _obj(item)
+    for item in items_or_empty(mapping_or_empty(result.document).get("dispatches")):
+        entry = mapping_or_empty(item)
         if _text(entry.get("dispatch_id")) == dispatch:
             return entry
     return None
 
 
 def _mapping_text(value: object) -> str:
-    data = _obj(value)
+    data = mapping_or_empty(value)
     return "\n".join(f"{key}: {_text(item)}" for key, item in sorted(data.items()))
 
 
@@ -92,7 +92,7 @@ def worker_view(result: ApiResult | None, selection: Selection) -> StageView:
             (result.problem_text or result.outcome.value,),
             notes,
         )
-    document = _obj(result.document)
+    document = mapping_or_empty(result.document)
     if document.get("ledger_busy"):
         busy = Row(
             "Состояние",
@@ -117,11 +117,11 @@ def worker_view(result: ApiResult | None, selection: Selection) -> StageView:
             ),
         )
         return StageView(Stage.WORKER, early_three, actions, notes=notes)
-    execution = _obj(entry.get("execution"))
-    launch = _obj(execution.get("launch"))
-    exit_ = _obj(execution.get("exit"))
-    receipt = _obj(entry.get("adapter_receipt"))
-    startup = _obj(entry.get("startup"))
+    execution = mapping_or_empty(entry.get("execution"))
+    launch = mapping_or_empty(execution.get("launch"))
+    exit_ = mapping_or_empty(execution.get("exit"))
+    receipt = mapping_or_empty(entry.get("adapter_receipt"))
+    startup = mapping_or_empty(entry.get("startup"))
     rows = [
         Row("Dispatch", dispatch, State.INFO, "Dispatch"),
         Row("Роль", _text(entry.get("role"), "не сообщается"), None, "Dispatch"),
@@ -133,7 +133,7 @@ def worker_view(result: ApiResult | None, selection: Selection) -> StageView:
         ),
     ]
     launch_id = _text(receipt.get("launch_id")) or _text(
-        _obj(execution.get("receipt")).get("launch_id")
+        mapping_or_empty(execution.get("receipt")).get("launch_id")
     )
     rows.append(
         Row(
@@ -169,7 +169,9 @@ def worker_view(result: ApiResult | None, selection: Selection) -> StageView:
         rows.append(
             Row("Liveness (inspect)", f"{state_key}: {label}", state, "Наблюдение")
         )
-        observed = _text(_obj(execution.get("observation")).get("observed_at"))
+        observed = _text(
+            mapping_or_empty(execution.get("observation")).get("observed_at")
+        )
         rows.append(
             Row(
                 "Наблюдалось",
@@ -243,7 +245,7 @@ def worker_view(result: ApiResult | None, selection: Selection) -> StageView:
                 "Запуск",
             )
         )
-    reaction = _obj(entry.get("reaction_error"))
+    reaction = mapping_or_empty(entry.get("reaction_error"))
     blockers: list[str] = []
     if reaction:
         text = _text(reaction.get("error"))

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ..coordinator_api import ApiResult, Outcome
-from ..json_fields import items as _items
+from ..json_fields import items_or_empty
 
 
 JsonObject = dict[str, object]
@@ -146,7 +146,7 @@ def env_names(value: object) -> list[str]:
     """Environment variable names only: a stray `NAME=value` or a mapping loses its values here."""
     if isinstance(value, dict):
         return sorted(str(name) for name in value)
-    return [str(item).split("=", 1)[0] for item in _items(value)]
+    return [str(item).split("=", 1)[0] for item in items_or_empty(value)]
 
 
 def _call_failure(label: str, result: ApiResult) -> Row:

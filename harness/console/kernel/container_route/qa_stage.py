@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..coordinator_api import ApiResult
-from ..json_fields import items as _items
-from ..json_fields import mapping as _obj
+from ..json_fields import items_or_empty
+from ..json_fields import mapping_or_empty
 from .model import (
     NEED_BATCH,
     Action,
@@ -46,9 +46,9 @@ _OUTCOME_STATES = {
 def _stage_rows(report: JsonObject) -> list[Row]:
     group = "Команды gate"
     rows: list[Row] = []
-    stages = _obj(report.get("qa_stages"))
-    for index, item in enumerate(_items(stages.get("stages")), start=1):
-        stage = _obj(item)
+    stages = mapping_or_empty(report.get("qa_stages"))
+    for index, item in enumerate(items_or_empty(stages.get("stages")), start=1):
+        stage = mapping_or_empty(item)
         code = stage.get("exit_code")
         if code is None:
             state, detail = State.NOT_REPORTED, "код выхода не сообщается"
@@ -75,8 +75,8 @@ def _stage_rows(report: JsonObject) -> list[Row]:
     started = _text(stages.get("code_checks_started"))
     if started:
         rows.append(Row("Проверки кода начаты", started, None, group))
-    for item in _items(report.get("checks_run")):
-        check = _obj(item)
+    for item in items_or_empty(report.get("checks_run")):
+        check = mapping_or_empty(item)
         result = _text(check.get("result"))
         state = {
             "pass": State.OK,
@@ -104,9 +104,9 @@ def _lane_rows(status: ApiResult | None) -> list[Row]:
         ]
     if not status.ok:
         return [_call_failure("Lane", status)]
-    document = _obj(status.document)
-    lease = _obj(document.get("lease"))
-    queue = _items(document.get("queue"))
+    document = mapping_or_empty(status.document)
+    lease = mapping_or_empty(document.get("lease"))
+    queue = items_or_empty(document.get("queue"))
     if not lease:
         rows = [Row("Lane", "свободен: активного lease нет", State.OK, group)]
     elif document.get("lease_stale"):
@@ -144,10 +144,10 @@ def qa_view(qa: QaState, selection: Selection) -> StageView:
             qa.proposal_result.problem_text or qa.proposal_result.outcome.value
         )
     if held is not None:
-        plan = _obj(held.document.get("runtime_access"))
-        images = _obj(held.document.get("runtime_images"))
-        execution = _obj(held.document.get("qa_execution"))
-        container = _obj(plan.get("container"))
+        plan = mapping_or_empty(held.document.get("runtime_access"))
+        images = mapping_or_empty(held.document.get("runtime_images"))
+        execution = mapping_or_empty(held.document.get("qa_execution"))
+        container = mapping_or_empty(plan.get("container"))
         rows.append(
             Row(
                 "Образ QA",
@@ -182,7 +182,7 @@ def qa_view(qa: QaState, selection: Selection) -> StageView:
         )
     if qa.created is not None:
         if qa.created.ok:
-            dispatch = _text(_obj(qa.created.document).get("dispatch_id"))
+            dispatch = _text(mapping_or_empty(qa.created.document).get("dispatch_id"))
             rows.append(
                 Row(
                     "Создан dispatch QA",
@@ -199,7 +199,7 @@ def qa_view(qa: QaState, selection: Selection) -> StageView:
             rows.append(_call_failure("Запуск QA", qa.run))
             blockers.append(qa.run.problem_text or qa.run.outcome.value)
         else:
-            document = _obj(qa.run.document)
+            document = mapping_or_empty(qa.run.document)
             rows.append(
                 Row(
                     "Состояние QA run",

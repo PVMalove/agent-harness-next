@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..coordinator_api import ApiResult
-from ..json_fields import items as _items
-from ..json_fields import mapping as _obj
+from ..json_fields import items_or_empty
+from ..json_fields import mapping_or_empty
 from .model import (
     Action,
     Effect,
@@ -67,9 +67,12 @@ def cleanup_view(
         "одного dispatch; apply удаляет весь показанный план.",
     )
     entry = worker_entry(worker, selection.dispatch) if selection.dispatch else None
-    exit_ = _obj(_obj(_obj(entry).get("execution")).get("exit"))
+    exit_ = mapping_or_empty(
+        mapping_or_empty(mapping_or_empty(entry).get("execution")).get("exit")
+    )
     live = (
-        _text(_obj(_obj(entry).get("execution")).get("state")) in LIVE_EXECUTION_STATES
+        _text(mapping_or_empty(mapping_or_empty(entry).get("execution")).get("state"))
+        in LIVE_EXECUTION_STATES
     )
     evidence = _text(exit_.get("logs"))
     rows.append(
@@ -103,7 +106,7 @@ def cleanup_view(
             Row("Превью", "не сообщается: ядро не вернуло план", State.NOT_REPORTED)
         )
     else:
-        items = [_obj(item) for item in _items(plan.get("remove"))]
+        items = [mapping_or_empty(item) for item in items_or_empty(plan.get("remove"))]
         containers = [
             item for item in items if _text(item.get("kind")) in CONTAINER_KINDS
         ]
@@ -149,7 +152,9 @@ def cleanup_view(
                     group,
                 )
             )
-        skipped = [_obj(item) for item in _items(plan.get("skipped"))]
+        skipped = [
+            mapping_or_empty(item) for item in items_or_empty(plan.get("skipped"))
+        ]
         protected = [item for item in skipped if _is_container_skip(item)]
         for item in protected:
             rows.append(
@@ -178,9 +183,11 @@ def cleanup_view(
     if state.apply is not None:
         group = "Результат применения"
         if state.apply.documents:
-            result = _obj(state.apply.section("result"))
-            removed = [str(item) for item in _items(result.get("removed"))]
-            failed = [_obj(item) for item in _items(result.get("failed"))]
+            result = mapping_or_empty(state.apply.section("result"))
+            removed = [str(item) for item in items_or_empty(result.get("removed"))]
+            failed = [
+                mapping_or_empty(item) for item in items_or_empty(result.get("failed"))
+            ]
             rows.append(
                 Row(
                     "Удалено",
@@ -206,8 +213,8 @@ def cleanup_view(
         bool(selection.dispatch)
         and bool(plan)
         and any(
-            _item_dispatch(_obj(item)) == selection.dispatch
-            for item in _items(_obj(plan).get("remove"))
+            _item_dispatch(mapping_or_empty(item)) == selection.dispatch
+            for item in items_or_empty(mapping_or_empty(plan).get("remove"))
         )
     )
     if not state.digest:

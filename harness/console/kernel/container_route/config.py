@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..json_shape import json_object, json_str
 from .model import JsonObject
 
 
@@ -23,14 +24,13 @@ class Authored:
     @classmethod
     def from_payload(cls, payload: object) -> Authored:
         """The configuration a `to_payload` result describes; any schema break is `ValueError`."""
-        if not isinstance(payload, dict) or set(payload) != {"document", "problem"}:
-            raise ValueError("Authored: unexpected fields")
-        document = payload["document"]
-        problem = payload["problem"]
+        fields = json_object(
+            payload, "Authored: unexpected fields", frozenset({"document", "problem"})
+        )
+        document = fields["document"]
         if document is not None and not isinstance(document, dict):
             raise ValueError("Authored: the document is not an object")
-        if not isinstance(problem, str):
-            raise ValueError("Authored: the problem is not a string")
+        problem = json_str(fields["problem"], "Authored: the problem is not a string")
         return cls(document, problem)
 
 

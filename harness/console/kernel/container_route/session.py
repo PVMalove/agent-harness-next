@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Callable
 
 from ..coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls
-from ..json_fields import items as _items
-from ..json_fields import mapping as _obj
+from ..json_fields import items_or_empty
+from ..json_fields import mapping_or_empty
 from ..runner import CommandRunner, capturing_runner
 from .model import (
     NEED_BATCH,
@@ -144,10 +144,10 @@ class RouteSession:
             values["runtime"] = self.selection.runtime
         result = self.api.call(("dispatch", "propose"), values)
         document = result.document if result.ok else None
-        digest = _text(_obj(document).get("transition_digest"))
+        digest = _text(mapping_or_empty(document).get("transition_digest"))
         if document is None or not digest:
             return None, result
-        plan = _obj(document.get("runtime_access"))
+        plan = mapping_or_empty(document.get("runtime_access"))
         held = Proposal(
             self.selection.batch,
             role,
@@ -195,7 +195,7 @@ class RouteSession:
         result = self._approve(held, approved_by)
         self.created = result
         if result.ok:
-            dispatch = _text(_obj(result.document).get("dispatch_id"))
+            dispatch = _text(mapping_or_empty(result.document).get("dispatch_id"))
             if dispatch:
                 self.selection.dispatch = dispatch
             self.proposal = None
@@ -223,7 +223,7 @@ class RouteSession:
         result = self._approve(held, approved_by)
         self.qa.created = result
         if result.ok:
-            dispatch = _text(_obj(result.document).get("dispatch_id"))
+            dispatch = _text(mapping_or_empty(result.document).get("dispatch_id"))
             if dispatch:
                 self.selection.qa_dispatch = dispatch
             self.qa.proposal = None
@@ -241,7 +241,9 @@ class RouteSession:
             raise PermissionError("no approved QA dispatch")
         result = self.api.call(("qa", "run"), {"dispatch": self.selection.qa_dispatch})
         self.qa.run = result
-        path = _text(_obj(result.document).get("report")) if result.ok else ""
+        path = (
+            _text(mapping_or_empty(result.document).get("report")) if result.ok else ""
+        )
         self.qa.report = self._load_report(path) if path else None
         return result
 
@@ -254,7 +256,7 @@ class RouteSession:
         """`harness cleanup <repo>` without --apply: a plan for the whole repository; it removes
         nothing. Its digest is what a later apply is bound to."""
         result = self.api.cleanup()
-        plan = _obj(result.section("plan")) if result.ok else {}
+        plan = mapping_or_empty(result.section("plan")) if result.ok else {}
         self.cleanup = CleanupState(
             preview=result,
             plan=plan or None,
@@ -288,7 +290,9 @@ class RouteSession:
         selection = self.selection
         entry = worker_entry(self.worker, selection.dispatch) or {}
         labels = _mapping_text(
-            _obj(_obj(entry.get("execution")).get("launch")).get("labels")
+            mapping_or_empty(
+                mapping_or_empty(entry.get("execution")).get("launch")
+            ).get("labels")
         )
         return (
             ("Worker", selection.dispatch or "не создан"),
@@ -386,7 +390,7 @@ class RouteSession:
         run = self.qa.run
         if run is None or not run.ok:
             return State.FAILED, (run.problem_text if run is not None else "")
-        stages = _obj(_obj(self.qa.report).get("qa_stages"))
+        stages = mapping_or_empty(mapping_or_empty(self.qa.report).get("qa_stages"))
         if self.qa.report is None:
             return State.NOT_REPORTED, "отчёт QA не прочитан"
         if _text(stages.get("failed_stage")):
@@ -394,20 +398,20 @@ class RouteSession:
                 State.FAILED,
                 f"остановилась на стадии {_text(stages.get('failed_stage'))}",
             )
-        checks = _items(self.qa.report.get("checks_run"))
-        if any(_obj(item).get("result") == "fail" for item in checks):
+        checks = items_or_empty(self.qa.report.get("checks_run"))
+        if any(mapping_or_empty(item).get("result") == "fail" for item in checks):
             return State.FAILED, "есть проваленная проверка"
         outcome = _text(self.qa.report.get("outcome"))
         if outcome == "failed":
             return State.FAILED, "исход отчёта: failed"
         if outcome == "blocked":
             return State.BLOCKED, "исход отчёта: blocked"
-        document = _obj(run.document)
+        document = mapping_or_empty(run.document)
         if document.get("transition_blocked"):
             return State.BLOCKED, _text(
                 document.get("diagnostic"), "переход заблокирован ядром"
             )
-        if any(_obj(item).get("result") == "not_run" for item in checks):
+        if any(mapping_or_empty(item).get("result") == "not_run" for item in checks):
             return State.NOT_CHECKED, "часть проверок не выполнена"
         if outcome != "completed":
             return State.NOT_REPORTED, "исход отчёта не сообщается"
@@ -421,7 +425,7 @@ class RouteSession:
         if not self.worker.ok:
             return State.FAILED, self.worker.problem_text or self.worker.outcome.value
         entry = worker_entry(self.worker, self.selection.dispatch)
-        execution = _obj(_obj(entry).get("execution"))
+        execution = mapping_or_empty(mapping_or_empty(entry).get("execution"))
         if not execution:
             return State.NOT_REPORTED, ""
         state, label = _LIVENESS.get(

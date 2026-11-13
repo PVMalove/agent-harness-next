@@ -34,12 +34,14 @@ def json_object(
 
 
 def json_list(value: object, message: Message) -> list[object]:
+    """The JSON list."""
     if not isinstance(value, list):
         raise ValueError(_text(message, value))
     return value
 
 
 def json_str(value: object, message: Message) -> str:
+    """The string."""
     if not isinstance(value, str):
         raise ValueError(_text(message, value))
     return value
@@ -53,6 +55,7 @@ def json_int(value: object, message: Message) -> int:
 
 
 def json_bool(value: object, message: Message) -> bool:
+    """The boolean."""
     if not isinstance(value, bool):
         raise ValueError(_text(message, value))
     return value

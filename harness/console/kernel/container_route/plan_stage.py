@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..coordinator_api import ApiResult
-from ..json_fields import items as _items
-from ..json_fields import mapping as _obj
+from ..json_fields import items_or_empty
+from ..json_fields import mapping_or_empty
 from .model import (
     NEED_BATCH,
     Action,
@@ -41,8 +41,8 @@ class Proposal:
 
 def _requirement_lines(plan: JsonObject) -> str:
     lines = []
-    for item in _items(plan.get("requirements")):
-        data = _obj(item)
+    for item in items_or_empty(plan.get("requirements")):
+        data = mapping_or_empty(item)
         lines.append(
             f"{_text(data.get('resource'))} {_text(data.get('access'))} {_text(data.get('path'))}"
         )
@@ -65,10 +65,10 @@ def plan_view(
         rows.append(_call_failure("Предложение", proposal_result))
         blockers.append(proposal_result.problem_text or proposal_result.outcome.value)
     if document is not None:
-        plan = _obj(document.get("runtime_access"))
-        container = _obj(plan.get("container"))
-        images = _obj(document.get("runtime_images"))
-        transition = _obj(document.get("transition"))
+        plan = mapping_or_empty(document.get("runtime_access"))
+        container = mapping_or_empty(plan.get("container"))
+        images = mapping_or_empty(document.get("runtime_images"))
+        transition = mapping_or_empty(document.get("transition"))
         rows.append(
             Row(
                 "Монтирования", _requirement_lines(plan) or "не сообщается", None, group
@@ -78,7 +78,10 @@ def plan_view(
             Row(
                 "Сетевые хосты",
                 ", ".join(
-                    str(h) for h in _items(_obj(plan.get("network")).get("hosts"))
+                    str(h)
+                    for h in items_or_empty(
+                        mapping_or_empty(plan.get("network")).get("hosts")
+                    )
                 )
                 or "нет",
                 None,

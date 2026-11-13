@@ -4,8 +4,8 @@ from __future__ import annotations
 
 
 from ..coordinator_api import ApiResult
-from ..json_fields import items as _items
-from ..json_fields import mapping as _obj
+from ..json_fields import items_or_empty
+from ..json_fields import mapping_or_empty
 from .model import (
     NEED_BATCH,
     Action,
@@ -25,11 +25,11 @@ from .preflight_stage import _packet
 
 
 def _component_rows(group: str, component: object) -> list[Row]:
-    data = _obj(component)
+    data = mapping_or_empty(component)
     rows: list[Row] = []
     if "mode" in data:
         rows.append(Row("Режим", _text(data["mode"]), None, group))
-    container = _obj(data.get("container"))
+    container = mapping_or_empty(data.get("container"))
     if container:
         rows.append(
             Row(
@@ -55,7 +55,10 @@ def _component_rows(group: str, component: object) -> list[Row]:
         rows.append(
             Row("Переменные окружения (имена)", ", ".join(names) or "нет", None, group)
         )
-    hosts = [str(item) for item in _items(_obj(data.get("network")).get("hosts"))]
+    hosts = [
+        str(item)
+        for item in items_or_empty(mapping_or_empty(data.get("network")).get("hosts"))
+    ]
     if "network" in data:
         rows.append(Row("Сетевые хосты", ", ".join(hosts) or "нет", None, group))
     return rows
@@ -65,7 +68,8 @@ def authored_rows(authored: Authored) -> list[Row]:
     if authored.document is None:
         return [Row("Авторская конфигурация", authored.problem, State.FAILED)]
     extension = _text(
-        _obj(authored.document.get("extensions")).get("runtime_access"), "none"
+        mapping_or_empty(authored.document.get("extensions")).get("runtime_access"),
+        "none",
     )
     rows = [
         Row(
@@ -82,19 +86,19 @@ def authored_rows(authored: Authored) -> list[Row]:
                 State.WARN,
             )
         )
-    policy = _obj(authored.document.get("access_policy"))
+    policy = mapping_or_empty(authored.document.get("access_policy"))
     if not policy:
         rows.append(Row("access_policy", "не задана", State.INFO))
     rows.extend(_component_rows("access_policy.defaults", policy.get("defaults")))
     for section in ("roles", "operations"):
-        for name, component in sorted(_obj(policy.get(section)).items()):
+        for name, component in sorted(mapping_or_empty(policy.get(section)).items()):
             rows.extend(_component_rows(f"access_policy.{section}.{name}", component))
     return rows
 
 
 def _plan_rows(plan: JsonObject) -> list[Row]:
     group = "Эффективный план"
-    container = _obj(plan.get("container"))
+    container = mapping_or_empty(plan.get("container"))
     rows = [
         Row("Режим", _text(plan.get("mode"), "—"), None, group),
         Row("Движок", _text(container.get("engine"), "—"), None, group),
@@ -111,7 +115,10 @@ def _plan_rows(plan: JsonObject) -> list[Row]:
         Row(
             "Сетевые хосты",
             ", ".join(
-                str(item) for item in _items(_obj(plan.get("network")).get("hosts"))
+                str(item)
+                for item in items_or_empty(
+                    mapping_or_empty(plan.get("network")).get("hosts")
+                )
             )
             or "нет",
             None,
@@ -119,7 +126,7 @@ def _plan_rows(plan: JsonObject) -> list[Row]:
         ),
         Row("plan_digest", _text(plan.get("plan_digest"), "—"), None, group),
     ]
-    sources = _obj(plan.get("sources"))
+    sources = mapping_or_empty(plan.get("sources"))
     for key, source in sorted(sources.items()):
         text = _text(source)
         rows.append(Row("Источник", f"{key}: {text}", None, group))

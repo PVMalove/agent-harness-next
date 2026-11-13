@@ -5,8 +5,8 @@ from __future__ import annotations
 
 
 from ..coordinator_api import ApiResult, Outcome
-from ..json_fields import items as _items
-from ..json_fields import mapping as _obj
+from ..json_fields import items_or_empty
+from ..json_fields import mapping_or_empty
 from .model import (
     NEED_BATCH,
     Action,
@@ -26,10 +26,14 @@ from .model import (
 def _packet(result: ApiResult | None) -> tuple[JsonObject, JsonObject]:
     """The effective access plan and its verification from a `dispatch preflight` document."""
     document = result.document if result is not None and result.ok else None
-    runtime_access = _obj(
-        _obj(_obj(document).get("decision_packet")).get("runtime_access")
+    runtime_access = mapping_or_empty(
+        mapping_or_empty(mapping_or_empty(document).get("decision_packet")).get(
+            "runtime_access"
+        )
     )
-    return _obj(runtime_access.get("plan")), _obj(runtime_access.get("verification"))
+    return mapping_or_empty(runtime_access.get("plan")), mapping_or_empty(
+        runtime_access.get("verification")
+    )
 
 
 def verification_status(result: ApiResult | None) -> str:
@@ -64,18 +68,18 @@ def _observed(verification: JsonObject) -> JsonObject:
     """The engine and image facts: the observation when the check passed, else the facts the
     blocked check carried. Nothing here is probed by the console."""
     return {
-        **_obj(verification.get("environment")),
-        **_obj(verification.get("evidence")),
+        **mapping_or_empty(verification.get("environment")),
+        **mapping_or_empty(verification.get("evidence")),
     }
 
 
 def _blocker_lines(verification: JsonObject, facts: JsonObject) -> list[str]:
     """Every reason the core gave, verbatim with its remedy; the console classifies none of them."""
     lines: list[str] = []
-    for item in _items(facts.get("blockers")):
+    for item in items_or_empty(facts.get("blockers")):
         reason, remedy = (
-            _text(_obj(item).get("reason")),
-            _text(_obj(item).get("remedy")),
+            _text(mapping_or_empty(item).get("reason")),
+            _text(mapping_or_empty(item).get("remedy")),
         )
         if reason:
             lines.append(f"{reason} — {remedy}" if remedy else reason)
@@ -89,9 +93,9 @@ def _blocker_lines(verification: JsonObject, facts: JsonObject) -> list[str]:
 
 
 def _check_state(verification: JsonObject, name: str) -> State:
-    if name in _items(verification.get("verified")):
+    if name in items_or_empty(verification.get("verified")):
         return State.OK
-    if name in _items(verification.get("unverified")):
+    if name in items_or_empty(verification.get("unverified")):
         return State.NOT_CHECKED
     return State.NOT_REPORTED
 
@@ -164,7 +168,8 @@ def preflight_view(result: ApiResult | None, selection: Selection) -> StageView:
     blockers = _blocker_lines(verification, facts)
     probed = _text(facts.get("engine_mode")) not in ("", "not-probed")
     engine = _text(
-        facts.get("engine"), _text(_obj(plan.get("container")).get("engine"))
+        facts.get("engine"),
+        _text(mapping_or_empty(plan.get("container")).get("engine")),
     )
     rows.append(
         Row(
@@ -221,8 +226,10 @@ def preflight_view(result: ApiResult | None, selection: Selection) -> StageView:
         )
     )
     requirements = [
-        _obj(item)
-        for item in _items(_obj(verification.get("required")).get("filesystem"))
+        mapping_or_empty(item)
+        for item in items_or_empty(
+            mapping_or_empty(verification.get("required")).get("filesystem")
+        )
     ]
     mounts = "\n".join(
         f"{_text(item.get('resource'))} {_text(item.get('access'))} {_text(item.get('path'))}"
@@ -237,7 +244,10 @@ def preflight_view(result: ApiResult | None, selection: Selection) -> StageView:
         )
     )
     hosts = [
-        str(item) for item in _items(_obj(verification.get("required")).get("hosts"))
+        str(item)
+        for item in items_or_empty(
+            mapping_or_empty(verification.get("required")).get("hosts")
+        )
     ]
     rows.append(
         Row(

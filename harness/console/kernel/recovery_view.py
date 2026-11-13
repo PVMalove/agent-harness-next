@@ -28,8 +28,8 @@ from .container_route.model import (
     _call_failure,
 )
 from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls
-from .json_fields import items as _items
-from .json_fields import mapping as _obj
+from .json_fields import items_or_empty
+from .json_fields import mapping_or_empty
 from .runner import CommandRunner, capturing_runner
 
 CHECK_STATES = {
@@ -137,16 +137,18 @@ def has_unknown_outcome(document: Mapping[str, object]) -> bool:
     """True when the runtime cannot say whether a worker runs: the core's `ambiguous-effect`
     diagnostic, or an observed execution whose state is `unknown`."""
     if any(
-        _obj(item).get("code") == "ambiguous-effect"
-        for item in _items(document.get("diagnostics"))
+        mapping_or_empty(item).get("code") == "ambiguous-effect"
+        for item in items_or_empty(document.get("diagnostics"))
     ):
         return True
-    for check in _items(document.get("checks")):
-        entry = _obj(check)
+    for check in items_or_empty(document.get("checks")):
+        entry = mapping_or_empty(check)
         if entry.get("check") != "operation":
             continue
-        for run in _items(_obj(entry.get("evidence")).get("executions")):
-            if _obj(run).get("execution") == "unknown":
+        for run in items_or_empty(
+            mapping_or_empty(entry.get("evidence")).get("executions")
+        ):
+            if mapping_or_empty(run).get("execution") == "unknown":
                 return True
     return False
 
@@ -154,8 +156,8 @@ def has_unknown_outcome(document: Mapping[str, object]) -> bool:
 def _boundary(document: Mapping[str, object]) -> tuple[str, State]:
     """The last check the core confirmed before the first one it did not."""
     last = ""
-    for check in _items(document.get("checks")):
-        entry = _obj(check)
+    for check in items_or_empty(document.get("checks")):
+        entry = mapping_or_empty(check)
         if _text(entry.get("status")) not in CONFIRMED:
             break
         last = _text(entry.get("check"))
@@ -165,16 +167,16 @@ def _boundary(document: Mapping[str, object]) -> tuple[str, State]:
 
 
 def _reason(document: Mapping[str, object]) -> tuple[str, State]:
-    hold = _obj(document.get("hold"))
+    hold = mapping_or_empty(document.get("hold"))
     if hold:
         return _text(
             hold.get("message"), _text(hold.get("reason"), "не сообщается")
         ), State.BLOCKED
-    for item in _items(document.get("diagnostics")):
-        data = _obj(item)
+    for item in items_or_empty(document.get("diagnostics")):
+        data = mapping_or_empty(item)
         if data.get("fatal") is not False:
             return _text(data.get("message"), "не сообщается"), State.BLOCKED
-    lifecycle = _obj(document.get("lifecycle"))
+    lifecycle = mapping_or_empty(document.get("lifecycle"))
     if lifecycle.get("attention_reason"):
         return _text(lifecycle["attention_reason"]), State.WARN
     if document.get("resumable") is True:
@@ -264,12 +266,14 @@ def _unknown_rows(document: Mapping[str, object]) -> list[Row]:
         ),
         Row("Состояние worker", NO_ENGINE_RESPONSE, State.UNKNOWN, group),
     ]
-    for check in _items(document.get("checks")):
-        entry = _obj(check)
+    for check in items_or_empty(document.get("checks")):
+        entry = mapping_or_empty(check)
         if entry.get("check") != "operation":
             continue
-        for run in _items(_obj(entry.get("evidence")).get("executions")):
-            item = _obj(run)
+        for run in items_or_empty(
+            mapping_or_empty(entry.get("evidence")).get("executions")
+        ):
+            item = mapping_or_empty(run)
             rows.append(
                 Row(
                     "Execution",
@@ -292,11 +296,11 @@ def _unknown_rows(document: Mapping[str, object]) -> list[Row]:
 
 def _core_actions(document: Mapping[str, object]) -> dict[str, tuple[bool, str]]:
     return {
-        _text(_obj(item).get("action")): (
-            _obj(item).get("available") is True,
-            _text(_obj(item).get("reason")),
+        _text(mapping_or_empty(item).get("action")): (
+            mapping_or_empty(item).get("available") is True,
+            _text(mapping_or_empty(item).get("reason")),
         )
-        for item in _items(document.get("actions"))
+        for item in items_or_empty(document.get("actions"))
     }
 
 
@@ -386,9 +390,9 @@ def build_recovery_view(
         )
     document = result.document
     diagnostics = tuple(
-        DiagnosticView.of(_obj(item))
-        for item in _items(document.get("diagnostics"))
-        if _text(_obj(item).get("id")) not in skipped
+        DiagnosticView.of(mapping_or_empty(item))
+        for item in items_or_empty(document.get("diagnostics"))
+        if _text(mapping_or_empty(item).get("id")) not in skipped
     )
     unknown = has_unknown_outcome(document)
     reason, reason_state = _reason(document)
@@ -408,13 +412,13 @@ def build_recovery_view(
             "Причина и граница",
         ),
     ]
-    rows.extend(_hold_rows(_obj(document.get("hold"))))
-    rows.extend(_lifecycle_rows(_obj(document.get("lifecycle"))))
-    rows.extend(_intent_rows(_obj(document.get("intent"))))
+    rows.extend(_hold_rows(mapping_or_empty(document.get("hold"))))
+    rows.extend(_lifecycle_rows(mapping_or_empty(document.get("lifecycle"))))
+    rows.extend(_intent_rows(mapping_or_empty(document.get("intent"))))
     if unknown:
         rows.extend(_unknown_rows(document))
-    for check in _items(document.get("checks")):
-        entry = _obj(check)
+    for check in items_or_empty(document.get("checks")):
+        entry = mapping_or_empty(check)
         status = _text(entry.get("status"), "—")
         text = status + (
             f": {_text(entry.get('detail'))}" if entry.get("detail") else ""
@@ -431,7 +435,7 @@ def build_recovery_view(
         rows.extend(diagnostic.rows(index))
     if not diagnostics:
         rows.append(Row("Диагностика", "замечаний нет", State.OK, "Диагностика"))
-    hidden = [str(item) for item in _items(document.get("skipped_advisories"))]
+    hidden = [str(item) for item in items_or_empty(document.get("skipped_advisories"))]
     if hidden or skipped:
         rows.append(
             Row(
@@ -610,7 +614,7 @@ class RecoverySession:
             )
         self._allowed("fix")
         result = self.api.call(("recovery", "fix"), {"batch": self.batch, "json": True})
-        diff = _text(_obj(result.document).get("diff")) if result.ok else ""
+        diff = _text(mapping_or_empty(result.document).get("diff")) if result.ok else ""
         self.preview = FixPreview(diff, result)
         self.last = ("fix", result)
         return self.preview
@@ -644,7 +648,7 @@ class RecoverySession:
     def resume_plan(self) -> ResumePlan:
         """The exact command and what it reconciles, shown before the confirmation."""
         document = self.view().document
-        lifecycle = _obj(document.get("lifecycle"))
+        lifecycle = mapping_or_empty(document.get("lifecycle"))
         stopped = lifecycle.get("stopped") is True
         argv = ["recovery", "resume", "--batch", self.batch, "--json"]
         if stopped:
@@ -657,10 +661,13 @@ class RecoverySession:
                 "<заметка>",
             ]
         steps = tuple(
-            (_text(_obj(item).get("check")), _text(_obj(item).get("status")))
-            for item in _items(document.get("checks"))
+            (
+                _text(mapping_or_empty(item).get("check")),
+                _text(mapping_or_empty(item).get("status")),
+            )
+            for item in items_or_empty(document.get("checks"))
         )
-        following = _obj(document.get("next"))
+        following = mapping_or_empty(document.get("next"))
         return ResumePlan(
             "coordinator.py " + shlex.join(argv),
             steps,
@@ -714,7 +721,7 @@ def _action_rows(name: str, result: ApiResult, preview: FixPreview | None) -> li
     group = f"Результат: {name}"
     if not result.documents:
         return [_call_failure(f"Результат {name}", result)]
-    document = _obj(result.document)
+    document = mapping_or_empty(result.document)
     outcome = _text(document.get("outcome"), "не сообщается")
     rows = [
         Row(
@@ -755,9 +762,9 @@ def _action_rows(name: str, result: ApiResult, preview: FixPreview | None) -> li
                 Row("Резервная копия", _text(document["backup_version"]), None, group)
             )
     if name == "reload":
-        runtime = _obj(document.get("runtime"))
+        runtime = mapping_or_empty(document.get("runtime"))
         if runtime:
-            problems = [str(item) for item in _items(runtime.get("problems"))]
+            problems = [str(item) for item in items_or_empty(runtime.get("problems"))]
             rows.append(
                 Row(
                     "Совместимость runtime",
@@ -769,8 +776,8 @@ def _action_rows(name: str, result: ApiResult, preview: FixPreview | None) -> li
                 )
             )
     if name == "resume":
-        for step in _items(document.get("steps")):
-            data = _obj(step)
+        for step in items_or_empty(document.get("steps")):
+            data = mapping_or_empty(step)
             rows.append(
                 Row(
                     "Шаг",
@@ -779,8 +786,8 @@ def _action_rows(name: str, result: ApiResult, preview: FixPreview | None) -> li
                     group,
                 )
             )
-        for refusal in _items(document.get("refusals")):
-            data = _obj(refusal)
+        for refusal in items_or_empty(document.get("refusals")):
+            data = mapping_or_empty(refusal)
             rows.append(
                 Row(
                     "Отказ",
@@ -789,6 +796,6 @@ def _action_rows(name: str, result: ApiResult, preview: FixPreview | None) -> li
                     group,
                 )
             )
-    for index, item in enumerate(_items(document.get("diagnostics")), start=1):
-        rows.extend(DiagnosticView.of(_obj(item)).rows(index))
+    for index, item in enumerate(items_or_empty(document.get("diagnostics")), start=1):
+        rows.extend(DiagnosticView.of(mapping_or_empty(item)).rows(index))
     return rows
