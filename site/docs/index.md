@@ -12,9 +12,9 @@ hide:
     <h1>Harness для coding-агентов</h1>
   </div>
   <div class="ah-hero-copy">
-    <p class="ah-lead">Agent Harness Next разворачивает в проект скиллы, hooks и контекстные
-      документы и ведёт оркестрацию через Rust runtime и локальный runtime-store, оставляя Python
-      policy-слоем.</p>
+    <p class="ah-lead">Agent Harness Next устанавливает в проект скиллы, hooks и контекстные
+      документы. Оркестрацию исполняет Rust runtime с локальным runtime store, а решения
+      принимает слой политик на Python.</p>
     <div class="ah-actions">
       <a class="md-button md-button--primary" href="getting-started/index.html">Начать</a>
       <a class="md-button" href="architecture/index.html">Архитектура</a>
@@ -60,7 +60,7 @@ hide:
         </div>
 
         <div class="ah-step-panel" id="ah-panel-task" role="tabpanel" aria-labelledby="ah-tab-task" tabindex="0" hidden>
-          <div class="ah-agent-prompt" id="ah-agent-prompt">Проверь этот проект и harness. Прочитай README, CONTEXT.md и .harness/project.json. Задай мне вопросы о цели, стеке и критериях готовности, затем предложи первую задачу и подготовь её спецификацию. Для нового проекта используй start-project, для существующего — integrate-project. Ничего не меняй без моего подтверждения.</div>
+          <div class="ah-agent-prompt" id="ah-agent-prompt">Проверь этот проект и harness. Прочитай README, CONTEXT.md и .harness/project.json. Задай мне вопросы о цели, стеке и критериях готовности, затем предложи первую задачу и подготовь её спецификацию. Для нового проекта используй start-project, для существующего используй integrate-project. Ничего не меняй без моего подтверждения.</div>
           <p class="ah-step-note">Вставьте промпт в чат агента.</p>
         </div>
       </div>
@@ -71,7 +71,7 @@ hide:
       <span class="ah-req"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M13 6l-2 12"></path></svg> Python 3.12+</span>
       <span class="ah-req" title="rust-version 1.89 в native/harness-runtime/Cargo.toml"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"></path></svg> Rust 1.89+</span>
       <span class="ah-req"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.2"></circle><circle cx="18" cy="6" r="2.2"></circle><circle cx="12" cy="18" r="2.2"></circle><path d="M8 7.5 11 16M16 7.5 13 16"></path></svg> Git</span>
-      <span>Подробнее — в <a href="getting-started/index.html">быстром старте</a>.</span>
+      <span>Подробности в <a href="getting-started/index.html">быстром старте</a>.</span>
     </p>
   </div>
 
@@ -123,8 +123,8 @@ hide:
   <h2>Соберите harness под задачу</h2>
   <p>Capability задаёт состав скиллов и поведение агента. Сборки взаимоисключающие:
     <code>engineering-suite</code> расширяет <code>mattpocock-suite</code>,
-    <code>backend-orchestration</code> — <code>engineering-suite</code>, а
-    <code>project-foundation</code> выбирается отдельно. Выберите сборку — команда установки
+    <code>backend-orchestration</code> расширяет <code>engineering-suite</code>, а
+    <code>project-foundation</code> выбирается отдельно. Когда вы выберете сборку, команда установки
     и демонстрация выше обновятся.</p>
 </div>
 
@@ -158,7 +158,7 @@ hide:
 <div class="ah-roles-route" id="ah-roles-route" hidden>
   <div class="ah-roles-head">
     <b>Маршрут ролей для backend-orchestration</b>
-    <span>Coordinator ведёт задачу через роли; этапы открывают соответствующие разделы документации.</span>
+    <span>Coordinator ведёт задачу через роли. Каждый этап открывает свой раздел документации.</span>
   </div>
   <div class="ah-role-steps" role="list">
     <div class="ah-role-step" role="listitem"><a href="skills/coordinator/"><span class="n">01</span><b>Coordinator</b><span>brief и dispatch</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
@@ -167,7 +167,7 @@ hide:
     <div class="ah-role-step" role="listitem"><a href="skills/qa/"><span class="n">04</span><b>QA</b><span>полный gate</span></a><span class="ah-role-arrow" aria-hidden="true">→</span></div>
     <div class="ah-role-step" role="listitem"><a href="guides/orchestration/publish/"><span class="n">05</span><b>Publish</b><span>PR после подтверждения</span></a></div>
   </div>
-  <p class="ah-roles-note">Worktree разделяет рабочие файлы и ветки; права процесса настраиваются отдельно. QA выполняет полный gate, PR открывается после отдельного подтверждения.</p>
+  <p class="ah-roles-note">Worktree разделяет рабочие файлы и ветки, но права процесса настраиваются отдельно. QA выполняет полный gate, PR открывается только после отдельного подтверждения.</p>
 </div>
 
 <p class="ah-note"><a href="getting-started/index.html">Как выбрать сборку и подключить её к проекту</a></p>
@@ -183,15 +183,15 @@ hide:
   <button class="ah-feature" type="button" data-feature="runtime" aria-haspopup="dialog">
     <span class="ah-feature-icon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M8 9h8M8 13h5M8 17h7"></path></svg></span>
     <b>Rust runtime и store</b>
-    <span>Единственный writer operational state: SQLite WAL, lease с fencing, audit-цепочка
+    <span>Только runtime пишет operational state: SQLite WAL, lease с fencing, audit-цепочка
       и идемпотентные IPC-операции.</span>
     <span class="ah-feature-more">Быстрый просмотр →</span>
   </button>
   <button class="ah-feature" type="button" data-feature="verification" aria-haspopup="dialog">
     <span class="ah-feature-icon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12l4 4L19 6"></path><path d="M5 20h14"></path></svg></span>
     <b>Инкрементальные проверки</b>
-    <span>ChangeImpact и VerificationPlan запускают только затронутые тесты; QA — полный
-      clean-room на финальном SHA.</span>
+    <span>ChangeImpact и VerificationPlan запускают только затронутые тесты. QA проводит полный
+      clean-room-прогон на финальном SHA.</span>
     <span class="ah-feature-more">Быстрый просмотр →</span>
   </button>
   <button class="ah-feature" type="button" data-feature="gate" aria-haspopup="dialog">
@@ -210,7 +210,7 @@ hide:
   <button class="ah-feature" type="button" data-feature="console" aria-haspopup="dialog">
     <span class="ah-feature-icon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 21h8M12 18v3"></path></svg></span>
     <b>Веб-консоль</b>
-    <span>TUI и браузер — клиенты одного Сервера консоли: задачи, оркестрация, отчёты
+    <span>TUI и браузер работают с одним Сервером консоли: задачи, оркестрация, отчёты
       и восстановление.</span>
     <span class="ah-feature-more">Быстрый просмотр →</span>
   </button>
@@ -227,7 +227,7 @@ hide:
   <h2 id="ah-task-title">Как выполняется задача</h2>
   <p>Python собирает контекст из Repo Map и включённой памяти RAG, готовит brief и получает
     подтверждение человека или политики auto. Rust принимает запросы через IPC, исполняет план
-    и возвращает наблюдения; Python передаёт результаты клиенту консоли.</p>
+    и возвращает наблюдения. Python передаёт результаты клиенту консоли.</p>
 </section>
 
 <div class="ah-flow ah-core-region" aria-labelledby="ah-task-title">
@@ -263,25 +263,25 @@ hide:
   (function () {
     const scenarios = {
       "project-foundation": {
-        bubble: "<b>Лёгкая база.</b> Пять ключевых скиллов, без оркестрации — быстрый старт.",
+        bubble: "<b>Лёгкая база.</b> Пять ключевых скиллов без оркестрации для быстрого старта.",
         done: "<b>Готово.</b> project-foundation: минимальная база без batch и coordinator.",
         lines: [
           ['dim', '== Skills =='],
           ['ok', '✓ project-foundation: 5 ключевых скиллов'],
           ['ok', '✓ snapshot: managed files на месте'],
-          ['info', 'ℹ orchestration: не выбран — coordinator не нужен'],
+          ['info', 'ℹ orchestration: backend-orchestration capability не выбрана'],
           ['dim', '== Итог =='],
           ['sum', '<span class="ah-t-ok">ok=12</span> <span class="ah-t-warn">warn=1</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=2</span>']
         ]
       },
       "mattpocock-suite": {
-        bubble: "<b>Upstream-набор.</b> Закреплённый snapshot и проверенный коммит — без лишних слоёв.",
+        bubble: "<b>Upstream-набор.</b> Закреплённый snapshot и проверенный коммит без лишних слоёв.",
         done: "<b>Готово.</b> mattpocock-suite: upstream-набор закреплён и проверен.",
         lines: [
           ['dim', '== Skills =='],
           ['ok', '✓ upstream: 25 skills pinned'],
           ['ok', '✓ snapshot: v1.2.3 · 6acc160'],
-          ['info', 'ℹ orchestration: не выбран — coordinator не нужен'],
+          ['info', 'ℹ orchestration: backend-orchestration capability не выбрана'],
           ['dim', '== Итог =='],
           ['sum', '<span class="ah-t-ok">ok=18</span> <span class="ah-t-warn">warn=2</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=3</span>']
         ]
@@ -321,13 +321,13 @@ hide:
     const features = {
       runtime: {
         title: "Rust runtime и store",
-        desc: "Единственный writer operational state: SQLite WAL, lease с fencing, audit-цепочка и идемпотентные IPC-операции.",
+        desc: "Только runtime пишет operational state: SQLite WAL, lease с fencing, audit-цепочка и идемпотентные IPC-операции.",
         code: "$ harness health .\n✓ ledger: authority=runtime-store schema_version=7\n✓ audit chain: 306 records · valid\nℹ runtime: protocol 1.7 · serving",
         href: "architecture/index.html"
       },
       verification: {
         title: "Инкрементальные проверки",
-        desc: "ChangeImpact и VerificationPlan запускают только затронутые тесты; QA — полный clean-room на финальном SHA.",
+        desc: "ChangeImpact и VerificationPlan запускают только затронутые тесты. QA проводит полный clean-room-прогон на финальном SHA.",
         code: "ChangeImpact → VerificationPlan\nfocused: tests/orchestration/test_runtime_client.py\nfull:    make verify (clean-room, final SHA)",
         href: "getting-started/index.html"
       },
@@ -345,7 +345,7 @@ hide:
       },
       console: {
         title: "Веб-консоль",
-        desc: "TUI и браузер — клиенты одного Сервера консоли: задачи, оркестрация, отчёты и восстановление.",
+        desc: "TUI и браузер работают с одним Сервером консоли: задачи, оркестрация, отчёты и восстановление.",
         code: "$ python3 harness/bin/harness.py console . --web\nСервер консоли: свободный порт · URL с токеном доступа\nЭкраны: Главная · Доска задач · Оркестрация · Отчёты",
         href: "demo/index.html"
       },

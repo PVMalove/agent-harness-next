@@ -19,7 +19,7 @@ repository at that path and copies a verifiable snapshot into it.
 | `health` | Diagnostics of the installation and the environment | only with `--fix` |
 | `ticket-status` | Moves a spec's ticket to a task-board column: replaces its `status::*` label on GitHub, GitLab or in the local tracker when the transition is allowed | only for the local `.scratch/` tracker |
 | `list` | List of installed skills | no |
-| `cleanup` | Plan and removal of disposable `.harness` data | only with `--apply` |
+| `cleanup` | Plan and removal of disposable `.harness` data and abandoned container resources | only with `--apply` |
 | `worktree-remove` | Removes a managed worktree and keeps the branch | yes |
 | `worktree-venv` | Links an issue worktree's `.harness/.venv` to the main checkout's venv when `uv.lock` and `pyproject.toml` match | yes |
 | `uninstall` | Plan and full removal of harness from the project | only with `--apply` |
@@ -40,26 +40,30 @@ repository at that path and copies a verifiable snapshot into it.
 | Exit code | `0` clean, `1` there is a divergence | `0` on success, otherwise an error |
 | Local edits | shows them as a divergence and does not touch them | refuses without a flag; `--force-managed-files` overwrites the snapshot, `--force` — the snapshot and seed files |
 
-The capability defines the content of the snapshot. The builds are mutually exclusive: `project-foundation`,
-`mattpocock-suite`, `engineering-suite`, `backend-orchestration`.
+The capability defines the content of the snapshot. The builds: `project-foundation`,
+`mattpocock-suite`, `engineering-suite`, `backend-orchestration`. Without `--capability`, `project-foundation`
+is installed. `engineering-suite` extends `mattpocock-suite`, and `backend-orchestration` extends
+`engineering-suite`.
 
 ## The `.harness/project.json` configuration
 
-The contract is strict: an unknown field is an error, not a warning. Each field is read by its own
+The contract is strict: an unknown field is an error, not a warning. `language`, `base_branch`,
+`branch_pattern`, and `qa_gate_commands` are required; the other fields are optional. Each field is read by its own
 consumer.
 
 | Field | Purpose |
 | --- | --- |
 | `$schema` | Link to the project configuration schema |
-| `language` | Language of reports, commits, and published texts |
-| `base_branch` | Release branch from which integration branches are created |
+| `language` | Output language (`ru` or `en`): code-review reports and the PR body template |
+| `base_branch` | Release branch: `/to-spec` creates epic integration branches from it; it is also the base for work without an epic |
 | `branch_pattern` | Regular expression for the issue branch name |
 | `qa_gate_commands` | Commands of the full local quality run |
 | `shell` | Shell for `qa_gate_commands`: `bash` or `powershell` |
 | `tracker` | Project tracker: `type` (`github`, `gitlab`, `local`), `host`, `project` |
 | `ci_required_checks` | Names of CI checks whose evidence is accepted instead of local QA |
-| `test_paths` | Project test directories |
-| `test_runner` | Command that runs a single test |
+| `test_paths` | Relative glob paths of tests: the only write zone of test-author; without the field, test-author is off |
+| `test_runner` | Command that runs a single test in isolation; together with `test_paths`, required for test-author |
+| `test_author` | Executor of the short test-author route: `runtime`, `model`, `effort` |
 | `hook_policy` | Hooks policy: `profile` (`minimal`, `standard`, `strict`) and `escalations` |
 | `story_points` | Estimation scale and thresholds for routing to `pipeline::fast` / `pipeline::full` |
 | `memory` | Enables the local project memory |
@@ -67,12 +71,13 @@ consumer.
 
 Inside `tracker`, only `type`, `host`, and `project` are allowed. Certificates, proxies, and credentials
 are not written here: they stay in the personal configuration of the tracker CLI. Inside `hook_policy`, escalations
-only raise the profile for paths and roles; the validator rejects a downgrade.
+only raise the profile for paths and roles; the validator rejects an escalation weaker than the base profile.
 
 ## CI evidence
 
-The `ci_required_checks` field is a list of unique non-empty names of CI checks whose evidence
-is accepted from the tracker.
+The `ci_required_checks` field is a list of unique non-empty names of CI checks. When all of them
+pass, the coordinator accepts the evidence from the tracker instead of a repeated full local QA run. An
+empty or missing field means that CI evidence is not configured and local QA is required.
 
 The names in `ci_required_checks` are full checks: `verify`, `rust` and the other jobs that
 `verify.yml` runs for a pull request into `master`. Do not list `-light` names there: the
@@ -106,7 +111,7 @@ python3 .harness/orchestration/coordinator.py --repo . integration next --ticket
 | --- | --- |
 | no flags | Files, directories, environment, and project graph |
 | `--fix` | Creates missing `.harness` directories and rebuilds a stale skill registry; does not touch worktrees |
-| `--online` | Adds tracker checks: CLI authorization, remote availability, permissions, and labels |
+| `--online` | Adds tracker checks: CLI authorization, remote availability, permissions, and labels (up to 10 s per check); without the flag, every `tracker.*` check except `tracker.project` is skipped |
 | `--json` | Machine-readable report for scripts and dashboards |
 
 The "Orchestration" group appears only when `backend-orchestration` is installed: it shows
@@ -130,8 +135,9 @@ is indexed.
 
 ## Repo Map
 
-`parsers status` shows the state of the parser bundle, and `parsers install --language <language>` downloads the
-pinned wheels and builds the bundle. Without parsers, the project graph degrades explicitly: checks
+Repo Map builds the project graph with tree-sitter parsers. `parsers status` shows the state of the parser
+bundle, and `parsers install --language <language>` downloads the pinned wheels and builds the bundle; the
+languages are `python`, `typescript`, `javascript`, `go`, `java`, `csharp`, and the flag is repeatable. Without parsers, the project graph degrades explicitly: checks
 show this on a separate line and do not silently narrow the impact of changes.
 
 ```bash
@@ -142,8 +148,9 @@ python3 harness/bin/harness.py parsers install /path/to/repository --language py
 ## Coordinator
 
 When `backend-orchestration` is installed, the project gets
-`.harness/orchestration/coordinator.py` — the orchestration CLI. All commands are read-only where this
-is declared; state is read only through them.
+`.harness/orchestration/coordinator.py` — the orchestration CLI. Orchestration state is read only through its
+commands; commands marked read-only change nothing. The `harness-runtime serve` process holds the state: while it
+is not running, orchestration commands refuse with `[runtime_unavailable]`.
 
 | Group | Purpose |
 | --- | --- |
@@ -156,6 +163,8 @@ is declared; state is read only through them.
 | `integration` | Integration record, CI evidence, next step |
 | `risk` | Change risk assessment |
 | `context-package` | Registration of a deterministic context package |
+| `report` | Intake of role reports (`report submit`) and the report policy steps (`report complete`) |
+| `recovery` | Status, reload, resume, fix, and abort of a stopped batch |
 
 The gate order and batch handling are described in the [`/implement`](../guides/implement.md) guide.
 
@@ -163,9 +172,9 @@ The gate order and batch handling are described in the [`/implement`](../guides/
 
 `harness console <repo>` starts the interactive console: tasks, orchestration, reports, and
 recovery. The console is beta. It needs `uv`, and the first run downloads dependencies, so network
-access is required.
+access is required. If `uv` is not in `PATH`, the command shows the `harness health` report.
 
-`--web` starts the console server, prints a URL with a token, and opens the browser; `--no-open` prints the
+`--web` starts the console server or finds a running one, prints a URL with a token, and opens the browser; `--no-open` prints the
 URL without opening it. The console server is the same interface as the TUI, but for the browser: thin
 endpoints and a React/TS client.
 

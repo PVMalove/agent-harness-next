@@ -1,5 +1,7 @@
 # CI-доказательство для комбинированного результата PR
 
+**Статус: ACCEPTED (2026-10-09).**
+
 ## Контекст системы
 
 После refresh (ADR 0014) и resolver (ADR 0015) новая пара candidate/target требует проверки, а
@@ -48,10 +50,13 @@
 ## Дополнение (#937): лёгкий и полный путь CI
 
 `.github/workflows/verify.yml` содержит два пути. Pull request в ветку `integration/**` запускает
-одно задание `verify-light`: `make lint`, `cargo fmt --check`, `cargo clippy`, тесты diff самого PR
+задание `verify-light`: `make lint`, `cargo fmt --check`, `cargo clippy`, тесты diff самого PR
 (`scripts/ci_light_tests.py`, выбор `ticket_diff_selection` из ADR 0023, раздел 7) и проверку
-публичных метаданных. Задания с тестами (`verify`, `diff-coverage`, `rust`, `repo-map-bundle`,
-`runtime-ipc-windows`, `docker-smoke`, `fault-injection`) на этом пути пропускаются. Pull request
+публичных метаданных. Кроме него любой pull request запускает группы pytest на Linux и Windows:
+`verify-linux-unit`, `verify-linux-integration`, `verify-windows-unit`, `verify-windows-integration`
+и их сводку `verify-test-groups` (#1132). Остальные задания с тестами (`verify`, `diff-coverage`,
+`rust`, `repo-map-bundle`, `verify-windows`, `runtime-ipc-windows`, `docker-smoke`,
+`fault-injection`) на этом пути пропускаются. Pull request
 в `master` и любую другую ветку, push в `master` и вызов из другого workflow запускают полные задания.
 `private-terms` и `parser-bundle` тестов не запускают и условия не меняют. Задания `console-spa`
 (typecheck, сборка, Vitest и Playwright SPA консоли, ADR 0029) и `docs` (строгая сборка сайта)

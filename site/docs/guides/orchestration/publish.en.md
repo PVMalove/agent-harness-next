@@ -146,7 +146,7 @@ shows a `qa_replacement` block (the source, repository, PR, pair SHAs, merge com
 If the integration ref has moved forward, `qa_replacement.applies` becomes `false`, and
 `re_refresh_required` becomes `true`: a new refresh and a new collection are needed. The fallback path is a full local
 QA. It is needed on `fallback` with the reason `unsupported_tracker`, `not_configured`, `unavailable`,
-`unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`,
+`wrong_repository`, `wrong_pull_request`, `wrong_base`, `unknown_checkout`, `head_only`, `stale_candidate`, `stale_target`, `missing_check`, `pending_check`,
 `inconclusive_check`, or `light_check`. In this case nothing is written. The `light_check` reason
 means that `ci_required_checks` contains a check whose name ends in `-light` (the `verify-light` job
 for PRs to `integration/**`), while the pair requires full QA: the saved pair selection is not

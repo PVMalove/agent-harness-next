@@ -31,6 +31,8 @@ No CI job checks macOS, so running on it is not confirmed. Rootless Docker is no
 | `fault-injection` | Fault and security boundary matrix: the coordinator against a debug build of `harness-runtime` |
 | `parser-bundle`, `repo-map-bundle` | Offline tree-sitter parser bundle and the Repo Map tests on it |
 | `verify-light` | Pull requests into `integration/**` only: `make lint`, `cargo fmt --check`, Clippy, tests selected by the pull request diff, and public Git metadata |
+| `verify-linux-unit`, `verify-linux-integration` | Pull requests only: the unit and integration test groups on Linux |
+| `verify-test-groups` | Pull requests only: a roll-up node that fails if one of the four Linux and Windows groups did not pass |
 | `private-terms` | Pull requests only: commits, branch, title, and body against the private term list |
 | `dashboard` | Summary page of the run: which jobs and tests failed and why. It checks nothing itself |
 
@@ -40,6 +42,7 @@ No CI job checks macOS, so running on it is not confirmed. Rootless Docker is no
 | --- | --- |
 | `verify-windows (tests)` | Full harness test suite |
 | `verify-windows (clean-room)` | Clean-room install |
+| `verify-windows-unit`, `verify-windows-integration` | Pull requests only: the unit and integration test groups on Windows |
 | `runtime-ipc-windows` | Runtime IPC contract tests over the named pipe in Python and Rust, and Rust tests of the Job Object supervisor |
 
 ### Fedora, SELinux, rootless Podman (self-hosted)
@@ -51,9 +54,12 @@ No CI job checks macOS, so running on it is not confirmed. Rootless Docker is no
 ## When jobs run
 
 - **A pull request into `integration/**`** gets the light path: `verify-light`, `docs`,
-  `console-spa`, `parser-bundle`, and `private-terms`.
+  `console-spa`, `parser-bundle`, `private-terms`, the four Linux and Windows test groups, and
+  `verify-test-groups`.
 - **A pull request into other branches and a push to `master`** get the full path: every Linux and
-  Windows job except `verify-light`. `diff-coverage` and `private-terms` run on pull requests only.
+  Windows job except `verify-light`. `diff-coverage`, `private-terms`, the test groups, and
+  `verify-test-groups` run on pull requests only.
+- **`dashboard`** runs after all jobs on any path, whatever their result.
 - **`podman-smoke`** never runs on a pull request: the repository is public, and the self-hosted
   runner accepts only a push that changes the container executor or the runtime, and a manual
   run. An offline runner does not hold pull request checks or a release.

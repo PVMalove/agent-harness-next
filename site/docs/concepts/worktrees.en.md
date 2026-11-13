@@ -28,7 +28,7 @@ branch and not the release branch.
 - The work runs in the ticket's own worktree; the main copy stays clean.
 - Unfinished worktrees are visible in `harness health` as a separate check, so an abandoned copy does not
   turn into invisible garbage.
-- `worktree-remove` removes a managed worktree and keeps the branch: removing the directory must not
+- `harness worktree-remove` removes a managed worktree and keeps the branch: removing the directory must not
   mean losing work.
 
 ## What goes into a worktree

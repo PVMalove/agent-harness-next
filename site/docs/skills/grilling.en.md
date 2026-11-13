@@ -20,15 +20,15 @@ description: Relentlessly interview the user about a plan, decision, or idea to 
 
 **Objective:** interview the user relentlessly to dismantle assumptions, stress-test their logic, and build a robust shared understanding. Map the entire process as a **design tree**, where every decision branches into subsequent dependencies.
 
-**Project memory (interactive sessions):** before the first design-tree round about code or
-architecture, with memory enabled, run `harness memory search . "<goal, decision, and module>"`.
-Without an external CLI, use the installed entry point from the shared contract.
-Repeat the search only when the subject changes after a settled decision. The shared contract
-`.harness/docs/project-memory.md` describes the main-checkout config, the search and source statuses,
-the hash check, and how to continue the ordinary interview without available memory. The pointers are
-candidate precedents: historical and unconfirmed sources are checked, superseded ones are excluded, and
-a source is opened only when necessary. The opt-in Live Artifact stays. In an orchestration dispatch,
-use the Context Package and escalate missing evidence instead of calling the search.
+**Project memory (interactive sessions):** before the first design-tree round about repository
+code or architecture, if project memory is enabled, run
+`harness memory search . "<goal, decision, and module>"` once for prior decisions.
+Repeat the search only when a newly settled decision changes the subject. Without an external CLI, use
+the installed entry point from `.harness/docs/project-memory.md`. That contract describes the
+configuration, the search and pointer statuses, source validation, and how to continue without memory.
+Treat hits as candidate precedents, and keep the Live Artifact's explicit path-approval rule. In an
+orchestration dispatch, use the supplied Context Package and escalate missing evidence instead of
+calling the search.
 
 **Core mechanics:**
 1. **Rounds and the frontier:** work through the tree in discrete rounds. The **frontier** consists of every decision whose prerequisites are currently settled.
@@ -37,20 +37,16 @@ use the Context Package and escalate missing evidence instead of calling the sea
    - Always wait for the user's response before computing the next round.
 2. **State tracking (the trunk):** at the start of each round, briefly summarize the decisions that have just been settled. This confirms alignment before pushing the frontier forward.
 3. **Tone and persona:** act as a sharp, analytical, and relentless interrogator. Be respectful but ruthless in identifying blind spots, unstated assumptions, and logical leaps.
-
-**Discovery Context (Live Artifact):** while you explore, keep a visible list of candidate paths
-that relate to the current decisions. A path must not be added to the `Live Artifact` without the user's
-explicit consent. At the start of each round, show the new candidates in one group and offer: "Add to
-the Live Artifact? — Yes, all / Choose individually / No". If the runtime can publish artifacts, create
-it at the first approved path and update that same artifact; otherwise warn once about the plain-text
-fallback and keep the list in the Trunk summary. This bookkeeping does not spend the frontier's
-four-question limit.
-
-**Repo Map first:** when the session's topic touches code, run the map on demand, once,
-immediately before the first search for candidate paths — not at session start:
-`python .harness/repo_map/repo_map.py --repo . --commit "$(git rev-parse HEAD)"`. Then find paths with
-targeted `rg` and reads. If the CLI is absent, skip the step. The map's output stays in this session: do
-not send its signatures to an external or cheap advisory model.
+4. **Live Artifact (Discovery Context):** as you explore the codebase, keep an internal list of candidate file paths relevant to the decisions being made. Never add a path to the artifact or list without explicit user consent (see the Opt-In rule below).
+   - **Repo Map first:** when the session's topic touches code, run the map on demand, once, immediately before the first search for candidate paths — not at session start: `python .harness/repo_map/repo_map.py --repo . --commit "$(git rev-parse HEAD)"`. Then find paths with targeted `rg` and reads. If the CLI is absent, skip the step. The map's output stays in this session: do not send its signatures to an external or cheap advisory model.
+   - **Persisted List:** on every approval, write or update the full approved-paths list in that spec's `artifacts/discovery-context.md`, inside its own folder under `docs/tasks/` (see `docs/agents/artifacts.md` for the folder and naming convention; use the descriptive slug if the issue ID is not known yet). This file is the persistent record regardless of runtime; `/to-spec` reads it back to fill the spec's own `## Relevant Files (Discovery Context)` section.
+   - **Artifact-based:** if the runtime can also publish artifacts, additionally create the Live Artifact once, when the first candidate path is approved, listing the approved paths. On every later approval, republish that same artifact (the same identifier or title means an update, not a new artifact).
+   - **Plain-text fallback:** if artifacts cannot be published, warn the user once and keep the approved-paths list visible in the chat as a section appended to the per-round Trunk summary (mechanic 2). The Persisted List already covers durable storage, so this section is only for round-to-round visibility.
+   - **Opt-In:** at the start of each round, alongside the Trunk summary, present the new candidate paths found since the last round in one grouped request: "Found files relevant to `<decision>`: `path/a`, `path/b`. Add to the Live Artifact?" with the options "Yes, add all" / "Choose individually" / "No, skip". Use `AskUserQuestion` if available, otherwise ask the same choice as plain text.
+     - This consent check does not count against the round's 4-question frontier limit (mechanic 1): it is artifact bookkeeping, not a design question.
+     - Only paths the user explicitly approves go into the artifact or list. There is no default yes.
+     - A declined path is not offered again every round by default. Offer it again only if it resurfaces in connection with a new decision.
+     - In this mechanic the list is append-only: do not remove or edit previously approved paths.
 
 **Question formats:**
 - **Tool-based categorical questions:** if `AskUserQuestion` is available in this runtime, ask each round through it instead of plain text.

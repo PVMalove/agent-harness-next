@@ -1,6 +1,6 @@
 # Skills
 
-The capability defines the set of skills. Some upstream skills are overridden for this workflow, some
+The capability (a named composition in `harness/CAPABILITIES.json`) defines the set of skills. Some upstream skills are overridden for this workflow, some
 are added as first-party, and the rest ship as they are. An override is a deliberate edit
 on top of upstream, not local drift: in a comparison with the locked snapshot such skills show up as
 changed, and this is expected.

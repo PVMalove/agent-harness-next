@@ -1,7 +1,7 @@
 # Переносимое ядро оркестрации
 
-> Harness Next (ADR 0020, ADR 0021): после cutover в релизе 2.0.0 operational state пишет только
-> Rust runtime store. Python-ядро остаётся владельцем решений lifecycle, approval и публикации.
+**Статус: ACCEPTED (2026-09-28). Частично заменён ADR 0020 и ADR 0021.** Operational state пишет
+только Rust runtime store. Python-ядро принимает решения lifecycle, approval и публикации.
 
 ## Контекст системы
 
