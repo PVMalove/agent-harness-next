@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+import subprocess
 import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -632,17 +633,39 @@ def check_adapters(context: HealthContext) -> CheckResult:
 _WORKER_BINARIES = ("claude", "codex")
 
 
-def _external_binaries(repo: Path) -> set[str]:
-    """The worker binaries the external roles run by default: the `default_runtime` of a role
-    whose transport is external, else every runtime it names."""
+_IMAGE_TIMEOUT_SECONDS = 10
+
+
+def _external_needs(repo: Path) -> tuple[set[str], dict[str, set[str]]]:
+    """What the external roles run by default: the worker binaries of the host roles (the
+    `default_runtime` of a role, else every runtime it names), and the images by engine of the
+    roles the container executor runs (#1125). A container role needs no host binary."""
+    from harness.orchestration.contract import role_access_authored
+
     try:
         config = read_config_json(repo / ".harness" / "orchestration.json")
     except (OSError, ValueError):
         config = None
-    plans = config.get("assignment_plans") if isinstance(config, dict) else None
-    needed: set[str] = set()
-    for plan in plans.values() if isinstance(plans, dict) else ():
+    if not isinstance(config, dict):
+        return set(), {}
+    plans = config.get("assignment_plans")
+    extensions = config.get("extensions")
+    policy = config.get("access_policy")
+    docker = isinstance(extensions, dict) and extensions.get("runtime_access") == "docker"
+    binaries: set[str] = set()
+    images: dict[str, set[str]] = {}
+    for role, plan in plans.items() if isinstance(plans, dict) else ():
         if not isinstance(plan, dict) or plan.get("transport") != "external":
+            continue
+        if docker and role_access_authored(policy, role):
+            container = _role_container(policy, role)
+            engine = container.get("engine", "docker")
+            tags = images.setdefault(str(engine), set())
+            tags.update(
+                str(container[key])
+                for key in ("worker_image", "proxy_image")
+                if isinstance(container.get(key), str)
+            )
             continue
         runtimes = plan.get("runtimes")
         default = plan.get("default_runtime")
@@ -653,13 +676,54 @@ def _external_binaries(repo: Path) -> set[str]:
             if isinstance(runtimes, dict)
             else []
         )
-        needed.update(name for name in names if name in _WORKER_BINARIES)
-    return needed
+        binaries.update(name for name in names if name in _WORKER_BINARIES)
+    return binaries, images
+
+
+def _role_container(policy: object, role: str) -> dict[str, object]:
+    """The `container` component of ``role``: its own override replaces the default whole."""
+    if not isinstance(policy, dict):
+        return {}
+    layers = [policy.get("defaults")]
+    roles = policy.get("roles")
+    if isinstance(roles, dict):
+        layers.append(roles.get(role))
+    container: dict[str, object] = {}
+    for layer in layers:
+        if isinstance(layer, dict) and isinstance(layer.get("container"), dict):
+            container = layer["container"]
+    return container
+
+
+def _find_binary(name: str, search_path: str) -> str | None:
+    """`name` on the serve PATH; `claude` also in `~/.local/bin`, as its adapter looks (#1123)."""
+    found = shutil.which(name, path=search_path)
+    if found is None and name == "claude":
+        found = shutil.which(name, path=str(Path.home() / ".local" / "bin"))
+    return found
+
+
+def _image_present(engine: str, tag: str) -> bool:
+    """Whether the local image store of ``engine`` holds ``tag``; the check pulls nothing."""
+    try:
+        result = subprocess.run(
+            [engine, "image", "inspect", "--format", "{{.Id}}", tag],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_IMAGE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
 
 
 def check_worker_binaries(context: HealthContext) -> CheckResult:
     """Whether `claude` and `codex` resolve on the PATH of the `harness-runtime serve` environment,
-    where the supervised adapters look them up. A binary an external role needs is a failure."""
+    where the supervised adapters look them up. A binary an external role needs is a failure.
+
+    A role the container executor runs needs the engine on that PATH and its images in the
+    engine's local store instead: the agent CLI lives in the worker image (#1125)."""
     check_id = "orchestration.worker_binaries"
     if not context.orchestration_enabled():
         return _skipped(check_id, context)
@@ -695,12 +759,32 @@ def check_worker_binaries(context: HealthContext) -> CheckResult:
             message="runtime не сообщает PATH: обновите и перезапустите serve",
             fix=_serve_fix(context),
         )
-    missing = [
-        name
-        for name in _WORKER_BINARIES
-        if shutil.which(name, path=search_path) is None
-    ]
-    required = sorted(_external_binaries(context.repo).intersection(missing))
+    missing = [name for name in _WORKER_BINARIES if _find_binary(name, search_path) is None]
+    binaries, images = _external_needs(context.repo)
+    required = sorted(binaries.intersection(missing))
+    container_problems: list[str] = []
+    for engine, tags in sorted(images.items()):
+        engine_path = _find_binary(engine, search_path)
+        if engine_path is None:
+            container_problems.append(f"в PATH окружения serve нет движка {engine}")
+            continue
+        container_problems.extend(
+            f"в {engine} нет образа {tag}"
+            for tag in sorted(tags)
+            if not _image_present(engine_path, tag)
+        )
+    if container_problems:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message="роли в контейнере не запустятся: " + "; ".join(container_problems),
+            fix=Fix(
+                text="установите движок в PATH окружения serve и соберите образы по "
+                ".harness/docs/container-executor.md; харнесс образы не собирает и не скачивает",
+                command=_serve_fix(context).command,
+            ),
+        )
     if required:
         return CheckResult(
             id=check_id,
