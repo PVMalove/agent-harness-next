@@ -206,6 +206,30 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "Test-author пишет тесты через защищённый адаптер; без него шаг Red в TDD недоступен или не изолирован.",
         "The test author writes tests through a protected adapter; without it the TDD Red step is unavailable or not isolated.",
     ),
+    "hooks.test_author_config": (
+        "Без блока test_author короткий маршрут /fast-implement не запускает тест-автора.",
+        "Without the test_author block the short /fast-implement route does not start the test author.",
+    ),
+    "hooks.test_author_root": (
+        "Preflight берёт корень проекта из Git; другой CLAUDE_PROJECT_DIR привязал бы автора к чужому checkout.",
+        "The preflight takes the project root from Git; another CLAUDE_PROJECT_DIR would bind the author to a different checkout.",
+    ),
+    "hooks.test_author_trust": (
+        "Тест-автор запускается без диалога доверия, поэтому нужно уже принятое доверие к checkout или к основному checkout его репозитория.",
+        "The test author starts without a trust dialog, so trust must already be accepted for the checkout or the main checkout of its repository.",
+    ),
+    "hooks.test_author_guard": (
+        "Guard не даёт тест-автору писать вне test_paths; без него автор не включается.",
+        "The guard keeps the test author out of everything but test_paths; without it the author stays off.",
+    ),
+    "hooks.test_author_runner": (
+        "Runner запускает выбранный тест в изоляции и подтверждает Red; без него автор не сдаёт тест.",
+        "The runner runs the selected test in isolation and confirms Red; without it the author cannot hand a test over.",
+    ),
+    "hooks.test_author_probe": (
+        "Probe проверяет песочницу runner до запуска теста; без изоляции тест-автор выключен.",
+        "The probe checks the runner sandbox before any test runs; without isolation the test author stays off.",
+    ),
     "tracker.project": (
         "Все операции с задачами идут в трекер, который определён здесь; ошибка направит их не в тот проект.",
         "Every issue operation goes to the tracker resolved here; a mistake sends them to the wrong project.",
@@ -326,6 +350,12 @@ TITLES: dict[str, tuple[str, str]] = {
     "environment.hook_bash": ("Bash для хуков", "Bash for hooks"),
     "hooks.policy": ("Политика хуков", "Hook policy"),
     "hooks.test_author": ("Хук автора тестов", "Test author hook"),
+    "hooks.test_author_config": ("Блок test_author", "test_author block"),
+    "hooks.test_author_root": ("Корень проекта тест-автора", "Test author project root"),
+    "hooks.test_author_trust": ("Доверие для тест-автора", "Test author trust"),
+    "hooks.test_author_guard": ("Guard тест-автора", "Test author guard"),
+    "hooks.test_author_runner": ("Runner тест-автора", "Test author runner"),
+    "hooks.test_author_probe": ("Probe изоляции runner", "Runner isolation probe"),
     "tracker.project": ("Проект в трекере", "Tracker project"),
     "tracker.auth": ("Вход в трекер", "Tracker sign-in"),
     "tracker.reachability": ("Доступность трекера", "Tracker reachability"),

@@ -203,6 +203,12 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
         "Политика hooks проекта требует внимания", "Diagnostics"
     ),
     "hooks.test_author": CheckRoute("Тест-автор недоступен", "Diagnostics"),
+    "hooks.test_author_config": CheckRoute("Нет блока test_author", "Diagnostics"),
+    "hooks.test_author_root": CheckRoute("Корень проекта не совпадает с Git", "Diagnostics"),
+    "hooks.test_author_trust": CheckRoute("Проект не доверен для тест-автора", "Diagnostics"),
+    "hooks.test_author_guard": CheckRoute("Guard тест-автора недоступен", "Diagnostics"),
+    "hooks.test_author_runner": CheckRoute("Runner тест-автора недоступен", "Diagnostics"),
+    "hooks.test_author_probe": CheckRoute("Изоляция runner недоступна", "Diagnostics"),
     "files.sandboxes": CheckRoute("Каталог .sandboxes настроен неверно", "Diagnostics"),
     "directories.harness": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
     "directories.sandboxes": CheckRoute("Каталог Harness недоступен", "Diagnostics"),

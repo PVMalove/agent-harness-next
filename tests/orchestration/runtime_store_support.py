@@ -1053,8 +1053,9 @@ sys.exit(int(code.read_text()) if code.exists() else 0)
 
 # The worker part of a fake `claude` or `codex app-server` behind a real adapter; it lives in the
 # control directory and follows ``worker.json`` there: ``hang`` sleeps until it is killed;
-# otherwise it waits ``delay`` seconds, with ``report`` runs the lifecycle the prompt asks for
-# (self-report from its Git top-level, heartbeat, report submit) and returns ``exit_code``.
+# otherwise it waits ``delay`` seconds, writes each ``writes`` path (absolute path -> text) as its
+# native filesystem policy ``may_write`` allows, with ``report`` runs the lifecycle the prompt asks
+# for (self-report from its Git top-level, heartbeat, report submit) and returns ``exit_code``.
 # ``worker.log`` holds one JSON line per event and per coordinator answer.
 FAKE_WORKER = """
 import json, os, subprocess, sys, time
@@ -1066,11 +1067,18 @@ def record(**fields):
     with open(control / "worker.log", "a", encoding="utf-8") as log:
         log.write(json.dumps(fields) + "\\n")
 
+def may_write(path):
+    return True
+
 def lifecycle():
     record(event="started", pid=os.getpid(), pgid=os.getpgid(0))
     while plan.get("hang"):
         time.sleep(0.05)
     time.sleep(plan.get("delay", 0))
+    for target, text in plan.get("writes", {}).items():
+        if may_write(target):
+            Path(target).write_text(text, encoding="utf-8")
+        record(event="write", path=target, written=may_write(target))
     if plan.get("report"):
         top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
                              text=True, check=True).stdout.strip()
@@ -1094,10 +1102,29 @@ sys.exit(lifecycle())
 """
 
 # A fake `codex app-server`: it answers the adapter's requests with the identity it was asked
-# for and, after turn/start, runs the worker and ends the turn (or exits with its code).
+# for and, after turn/start, runs the worker and ends the turn (or exits with its code). The worker
+# writes only where the adapter's ``--config`` permission profile grants ``write`` to the most
+# specific path entry, the way the native profile resolves a path.
 FAKE_CODEX = """
+import tomllib
 if sys.argv[1:2] != ["app-server"]:
     sys.exit(9)
+config = {}
+for flag, value in zip(sys.argv, sys.argv[1:]):
+    if flag == "--config":
+        config.update(tomllib.loads(value))
+filesystem = config["permissions"][config["default_permissions"]]["filesystem"]
+
+def may_write(path):
+    target = os.path.realpath(path)
+    matched, access = "", filesystem.get(":root", "none")
+    for root, mode in filesystem.items():
+        root = os.path.realpath(root) if not root.startswith(":") else ""
+        if root and len(root) > len(matched) and (
+            target == root or target.startswith(root + os.sep)
+        ):
+            matched, access = root, mode
+    return access == "write"
 for line in sys.stdin:
     request = json.loads(line)
     method, params = request.get("method"), request.get("params", {})

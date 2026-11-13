@@ -83,6 +83,12 @@ REGISTRY: list[tuple[str, CheckFn]] = [
     ("environment.hook_bash", windows_checks.check_hook_bash),
     ("hooks.policy", hooks_checks.check_policy),
     ("hooks.test_author", hooks_checks.check_test_author),
+    ("hooks.test_author_config", hooks_checks.check_test_author_config),
+    ("hooks.test_author_root", hooks_checks.check_test_author_root),
+    ("hooks.test_author_trust", hooks_checks.check_test_author_trust),
+    ("hooks.test_author_guard", hooks_checks.check_test_author_guard),
+    ("hooks.test_author_runner", hooks_checks.check_test_author_runner),
+    ("hooks.test_author_probe", hooks_checks.check_test_author_probe),
     ("tracker.project", tracker_checks.check_project),
     ("tracker.auth", tracker_checks.check_auth),
     ("tracker.reachability", tracker_checks.check_reachability),
@@ -107,6 +113,7 @@ FIXERS: dict[str, FixFn] = {
         for check_id in directory_checks.DIRECTORY_PATHS
     },
     "tracker.labels": tracker_checks.fix_labels,
+    "hooks.test_author_config": hooks_checks.fix_test_author_config,
 }
 
 

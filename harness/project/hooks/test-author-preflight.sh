@@ -6,7 +6,8 @@
 # developer route and does not create orchestration or ledger state.
 #
 # Usage: test-author-preflight.sh [--worktree <path>] [--brief <approved brief> | --planned]
-# --worktree must be this exact checkout. --brief selects the approved developer executor;
+# --worktree must be this exact checkout; the project root comes from Git, and CLAUDE_PROJECT_DIR is
+# optional but must name the same root when set. --brief selects the approved developer executor;
 # --planned diagnoses the orchestration developer plan (Health only). With neither context flag,
 # the explicit short-route project.test_author profile is required. No executor is implied.
 
@@ -70,45 +71,83 @@ else:
 ' 2>/dev/null || true)"
 [ "$SELECTION_REASON" = "ok" ] || disabled "${SELECTION_REASON:-selector_unavailable}"
 
-# Claude Code supplies this identity to scoped hooks and its Bash tool.  A matching canonical
-# path is required before this helper can enable the optional subagent.
-CLAUDE_REPO="${CLAUDE_PROJECT_DIR:-}"
-[ -n "$CLAUDE_REPO" ] || disabled project_untrusted
-CLAUDE_REPO="$(cd "$CLAUDE_REPO" 2>/dev/null && pwd -P || true)"
-[ "$CLAUDE_REPO" = "$REPO" ] || disabled project_untrusted
-[ "${CLAUDE_CODE_SIMPLE:-0}" = "1" ] && disabled claude_code_unsupported
-[ "${CLAUDE_CODE_SAFE_MODE:-0}" = "1" ] && disabled claude_code_unsupported
-
+# Git is the single source of the project root: the checkout that holds this hook must be its own
+# Git work tree (the main checkout or a linked worktree) in Claude Code and Codex alike.
 GIT_ROOT="$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$GIT_ROOT" ] || disabled project_untrusted
 GIT_ROOT="$(cd "$GIT_ROOT" 2>/dev/null && pwd -P || true)"
 [ "$GIT_ROOT" = "$REPO" ] || disabled project_untrusted
 [ "$(git -C "$REPO" rev-parse --is-inside-work-tree 2>/dev/null || true)" = "true" ] || disabled project_untrusted
 
+# Claude Code does not always pass CLAUDE_PROJECT_DIR to Bash, so its absence is not an error.
+# When it is passed, the scoped guard of a native Agent resolves this same variable, so another
+# path would bind the author to another checkout.
+CLAUDE_REPO="${CLAUDE_PROJECT_DIR:-}"
+if [ -n "$CLAUDE_REPO" ]; then
+  CLAUDE_REPO="$(cd "$CLAUDE_REPO" 2>/dev/null && pwd -P || true)"
+  [ "$CLAUDE_REPO" = "$REPO" ] || disabled project_dir_mismatch
+fi
+[ "${CLAUDE_CODE_SIMPLE:-0}" = "1" ] && disabled claude_code_unsupported
+[ "${CLAUDE_CODE_SAFE_MODE:-0}" = "1" ] && disabled claude_code_unsupported
+
 # Claude Code keeps workspace trust decisions in ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json).
 # The native --print mode skips the trust dialog, so the preflight must verify the decision itself
-# before enabling an agent whose safety depends on a frontmatter hook.  Only an entry for this exact
-# project path counts: Claude Code may also trust a directory through its parent or Git root, and
-# the preflight then answers project_untrusted, which is the safe direction.
+# before enabling an agent whose safety depends on a frontmatter hook.  An entry for this exact
+# checkout counts, and so does an entry for the repository's main checkout when that checkout
+# lists this one among its linked worktrees: a worktree of a trusted repository is trusted.  Trust
+# given only to a parent directory does not count (ADR 0033).
 TRUSTED_PROJECT="$("$PY" -c '
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
+
+def git(checkout, *arguments):
+    return subprocess.run(
+        ["git", "-C", str(checkout), *arguments],
+        capture_output=True, text=True, timeout=30, check=True,
+    ).stdout
+
+
+def accepted(projects, path):
+    entry = projects.get(str(path))
+    return isinstance(entry, dict) and entry.get("hasTrustDialogAccepted") is True
+
+
+def listed_worktree(main, project):
+    return any(
+        Path(line[len("worktree "):]).resolve() == project
+        for line in git(main, "worktree", "list", "--porcelain").splitlines()
+        if line.startswith("worktree ")
+    )
+
+
 try:
-    project = str(Path(os.environ["CLAUDE_PROJECT_DIR"]).resolve())
+    project = Path(sys.argv[1]).resolve()
     config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
     state_path = (
         Path(config_dir).expanduser() / ".claude.json"
         if config_dir
         else Path.home() / ".claude.json"
     )
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    entry = state.get("projects", {}).get(project)
-except (AttributeError, OSError, TypeError, ValueError, RecursionError):
-    entry = None
-print("ok" if isinstance(entry, dict) and entry.get("hasTrustDialogAccepted") is True else "disabled")
-' 2>/dev/null || true)"
+    projects = json.loads(state_path.read_text(encoding="utf-8")).get("projects", {})
+    trusted = accepted(projects, project)
+    if not trusted:
+        common = (project / git(project, "rev-parse", "--git-common-dir").strip()).resolve()
+        main = common.parent
+        trusted = (
+            common.name == ".git"
+            and main != project
+            and accepted(projects, main)
+            and Path(git(main, "rev-parse", "--show-toplevel").strip()).resolve() == main
+            and listed_worktree(main, project)
+        )
+except (AttributeError, OSError, TypeError, ValueError, RecursionError, subprocess.SubprocessError):
+    trusted = False
+print("ok" if trusted else "disabled")
+' "$REPO" 2>/dev/null || true)"
 [ "$TRUSTED_PROJECT" = "ok" ] || disabled project_untrusted
 
 AGENT="$REPO/.claude/agents/test-author.md"

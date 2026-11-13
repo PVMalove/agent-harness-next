@@ -87,21 +87,26 @@ Preflight проверяет условия и на первом нарушен�
 | Необязательный `--worktree <путь>` называет тот же checkout, где лежит preflight | `checkout_mismatch` |
 | Выбраны runtime/model/effort из brief developer или short-профиля проекта | `test_author_missing`, `test_author_config_invalid` |
 | Для выбранного runtime есть защищённый адаптер | `runtime_unsupported` |
-| `CLAUDE_PROJECT_DIR` совпадает с корнем Git checkout | `project_untrusted` |
+| Checkout, где лежит preflight, — корень своего рабочего дерева Git (`git rev-parse --show-toplevel`) | `project_untrusted` |
+| `CLAUDE_PROJECT_DIR`, если передан, совпадает с этим корнем Git | `project_dir_mismatch` |
 | Claude Code не запущен с `CLAUDE_CODE_SIMPLE=1` или `CLAUDE_CODE_SAFE_MODE=1` | `claude_code_unsupported` |
-| Пользователь принял диалог доверия для этого проекта | `project_untrusted` |
+| Пользователь принял диалог доверия для этого checkout или для основного checkout его репозитория | `project_untrusted` |
 | Установлен agent `test-author.md` | `agent_missing` |
 | В agent включён scoped `PreToolUse` hook | `scoped_hook_unsupported` |
 | Заданы `test_paths` и `test_runner`, зоны записи допустимы | `test_paths_missing`, `test_runner_missing`, `config_invalid`, `write_zone_rejected` |
 | Файл `test-author-guard.py` исполняемый и отвечает JSON | `guard_hook_unavailable` |
 | `run-test.sh --probe` подтверждает изоляцию | `isolation_unavailable`, `runner_unavailable` |
 
-Доверие проверяется по записи проекта в `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json`):
-для точного пути проекта должно стоять `hasTrustDialogAccepted: true`. Нативный режим
-`claude --print` диалог доверия пропускает, поэтому preflight проверяет решение сам. Если Claude
-Code считает проект доверенным через родительский каталог или корень Git, но записи для самого
-пути нет (например, в отдельном worktree), preflight отвечает `project_untrusted`: это
-безопасный отказ, а не ошибка. Откройте проект по этому пути в Claude Code и примите диалог.
+Корень проекта preflight берёт из Git, поэтому ни `export CLAUDE_PROJECT_DIR`, ни запись корня в
+настройках не нужны. Переданный Claude Code `CLAUDE_PROJECT_DIR` лишь сверяется с корнем Git.
+
+Доверие проверяется по записи в `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json`):
+`hasTrustDialogAccepted: true` должно стоять для точного пути checkout или для основного checkout
+репозитория, если checkout — его linked worktree из `git worktree list`. Нативный режим
+`claude --print` диалог доверия пропускает, поэтому preflight проверяет решение сам. Новый
+worktree доверенного репозитория отдельного диалога не требует. Доверие только к родительскому
+каталогу не считается: preflight отвечает `project_untrusted`, это безопасный отказ. Откройте
+основной checkout в Claude Code и примите диалог (ADR 0033).
 
 Проверки agent, hook и guard статические: preflight не запускает Claude Code и не доказывает,
 что hook сработает в живой сессии. Поэтому `guard_hook_unavailable` означает только отсутствие
@@ -217,8 +222,9 @@ fixtures, останавливается до ответа разработчи�
 с runtime/model/effort из его brief. Поддержанный адаптер запускает developer прямо в checkout
 из brief, поэтому runtime, scoped hook и runner относятся к тому же коду. Установите харнесс в worker checkout и включите там
 `test_paths` и `test_runner`; состояние оркестрации из основного checkout не копируется.
-Откройте этот точный путь в Claude Code и примите диалог доверия. Ни installer, ни developer,
-ни headless-запуск не создают решение доверия за пользователя.
+Worktree доверенного репозитория отдельного диалога доверия не требует; если основной checkout
+не доверен, откройте его в Claude Code и примите диалог. Ни installer, ни developer, ни
+headless-запуск не создают решение доверия за пользователя.
 
 External developer запускает общий preflight с `--repo <worker_worktree> --brief <путь brief>`.
 Для защищённого Claude-адаптера это `.claude/hooks/test-author-preflight.sh --worktree <worker_worktree> --brief <путь brief>`.
@@ -236,13 +242,15 @@ External developer запускает общий preflight с `--repo <worker_wo
 а scoped guard сохраняет прежние ограничения записи и Bash. Код, тесты и Git-статус основного
 checkout не меняются; общие runtime-логи сохраняются в его игнорируемой песочнице.
 
-In-process developer по-прежнему запускает preflight основного checkout с `--worktree` из brief.
-Отдельный worker даёт `checkout_mismatch`: этот транспорт использует обычный TDD. Любой отказ
-preflight и недоступность инструмента вызова автора также сохраняют обычный TDD в worker,
-с указанной причиной, без blocker и новых записей ledger. Выбор runtime берётся из developer;
-отсутствие защищённого адаптера для него сохраняет обычный TDD, без подмены исполнителя.
-Для /implement с in-process developer test-author не используется, и это штатно: health
-показывает доступность автора только для основного checkout.
+Preflight основного checkout с `--worktree` отдельного worker отвечает `checkout_mismatch`: его
+guard и runner обслуживают только основной checkout. Поэтому in-process developer вызывает автора
+через launcher своего worktree:
+`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <путь brief> --prompt-file <файл>`.
+Launcher проверяет preflight worker и запускает автора с guard и runner этого worktree; правило
+разрешения в brief то же. Любой отказ preflight и недоступность инструмента вызова автора
+сохраняют обычный TDD в worker, с указанной причиной, без blocker и новых записей ledger. Выбор
+runtime берётся из developer; отсутствие защищённого адаптера для него сохраняет обычный TDD, без
+подмены исполнителя.
 
 В этой поставке проверены Python-тесты через unittest и pytest. Rust-тесты
 `native/harness-runtime/crates/*/tests` этим решением не поддержаны: для них не добавлены
@@ -252,14 +260,38 @@ preflight и недоступность инструмента вызова ав
 
 ## 8. Диагностика и живая проверка
 
+### Как включить тест-автора
+
+1. Задайте `test_paths` и `test_runner` (раздел 2) и добавьте в `.harness/project.json` блок
+   `test_author` с runtime, model и effort. Если в `.harness/orchestration.json` есть план
+   developer, `harness health --fix` добавит блок из этого плана сам; существующий блок он не
+   меняет.
+2. Один раз откройте Claude Code в основном checkout репозитория и примите диалог доверия.
+   Worktree этого репозитория отдельного доверия не требуют.
+3. Запустите `harness health` и выполните шаг под каждой строкой `hooks.test_author_*` со статусом
+   warn. Строки проверяют условия по одному, поэтому повторяйте health, пока все не станут ok.
+
 `harness health` выводит отдельную проверку `hooks.test_author`: результат preflight для
 целевого checkout или санитизированную причину отказа, выбранные runtime/model/effort и
 источник. Health использует план developer из orchestration (пометка `planned`), а при отсутствии
 плана — short-профиль проекта. Плановая готовность не заменяет выбор из утверждённого brief.
-Для поддержанного Claude-адаптера Health отдельно проверяет точное решение доверия. Без opt-in проверка пропускается с причиной,
-недоступный необязательный автор даёт предупреждение и оставляет обычный маршрут рабочим.
-Результат preflight относится к основному checkout. Для /implement с in-process developer
-test-author не используется, и это штатно: developer в worker worktree работает обычным TDD.
+Без opt-in проверка пропускается с причиной, недоступный необязательный автор даёт
+предупреждение и оставляет обычный маршрут рабочим. Результат preflight относится к checkout,
+для которого запущен health; worker worktree проверяет свой preflight при вызове автора.
+
+Каждое условие автора health показывает отдельной строкой, и при отказе строка печатает шаг
+исправления — команду или фрагмент конфигурации:
+
+| Строка | Что проверяет | Шаг при отказе |
+| --- | --- | --- |
+| `hooks.test_author_config` | блок `test_author` в `.harness/project.json` | фрагмент блока из плана developer и `harness health --fix` |
+| `hooks.test_author_root` | корень проекта по Git и совпадение с ним `CLAUDE_PROJECT_DIR`, если переменная задана | оба пути при `project_dir_mismatch` и `unset CLAUDE_PROJECT_DIR` |
+| `hooks.test_author_trust` | доверие Claude Code к этому checkout или к основному checkout, который перечисляет его в `git worktree list` | путь, который нужно доверить, и `cd <основной checkout> && claude` |
+| `hooks.test_author_guard` | agent, исполняемый guard и его проверка конфигурации | `harness update` или исправление `test_paths` и `test_runner` |
+| `hooks.test_author_runner` | исполняемый `.claude/hooks/run-test.sh` | `harness update` |
+| `hooks.test_author_probe` | probe изоляции runner | шаг по причине: bubblewrap, user namespaces, расположение checkout |
+
+Guard и probe запускают скрипты проекта, поэтому до доверия их строки пропускаются.
 
 Health не запускает Claude, выбранный тест, сборку или БД и не меняет доверие. Probe изоляции
 создаёт и удаляет временную песочницу в общем `runs/`. Статический `preflight: ok` не доказывает,

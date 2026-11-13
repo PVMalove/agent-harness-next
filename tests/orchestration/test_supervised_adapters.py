@@ -109,6 +109,38 @@ def test_a_worker_that_reports_after_five_seconds_is_reported_and_never_blocked(
         assert call["stdin"] == ""
 
 
+def test_a_read_only_codex_worker_stages_and_submits_its_report_but_cannot_change_its_checkout(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    assert repo.brief["access"] == "read-only"
+    staged = architect_report_file(repo.repo, repo.dispatch, repo.brief)
+    assert str(staged) == repo.brief["report_staging_path"]
+    report = staged.read_text(encoding="utf-8")
+    staged.unlink()
+    source = Path(str(repo.brief["worktree"])) / "README.md"
+    original = source.read_text(encoding="utf-8")
+    repo.use_adapter(
+        "codex",
+        report=str(staged),
+        writes={str(staged): report, str(source): "# Changed\n"},
+    )
+
+    sent(repo.send())
+    status = settled(repo)
+
+    written = {
+        entry["path"]: entry["written"]
+        for entry in repo.worker_log()
+        if entry["event"] == "write"
+    }
+    assert written == {str(staged): True, str(source): False}
+    assert source.read_text(encoding="utf-8") == original
+    answers = {entry["event"]: entry for entry in repo.worker_log() if "code" in entry}
+    assert answers["report submit"]["code"] == 0, answers["report submit"]
+    assert status["state"] == "reported", status
+
+
 def test_a_worker_exit_code_is_the_execution_exit_code_and_the_runtime_failure_code(
     supervised: Factory,
 ) -> None:
