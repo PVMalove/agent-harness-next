@@ -57,7 +57,6 @@ LABELS = (
     "migration generation selection",
     "migration repeat",
     "duplicate resume",
-    "concurrent resume",
     "stale approval",
     "live worker",
     "ambiguous external effect",
