@@ -121,6 +121,26 @@ def test_write_outside_test_paths_is_softly_denied(
     assert "src/price.py" not in json.dumps(answer)
 
 
+def test_author_bound_to_a_worktree_cannot_write_tests_of_another_checkout(
+    tmp_path: Path,
+) -> None:
+    main = _project(tmp_path / "main")
+    worker = _project(tmp_path / "worker")
+
+    allowed = _run_guard(
+        worker,
+        _payload("Write", {"file_path": str(worker / "tests/unit/test_price.py")}),
+    )
+    assert (allowed.returncode, allowed.stdout) == (0, "")
+    # The same test_paths glob in the main checkout is outside the author's checkout.
+    _deny(
+        _run_guard(
+            worker,
+            _payload("Write", {"file_path": str(main / "tests/unit/test_price.py")}),
+        )
+    )
+
+
 def test_symlink_resolving_outside_test_paths_is_denied(tmp_path: Path) -> None:
     project = _project(tmp_path)
     (project / "tests" / "unit" / "link").symlink_to(

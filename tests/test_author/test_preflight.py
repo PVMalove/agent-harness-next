@@ -25,12 +25,25 @@ def _project(
 ) -> Path:
     """Create a trusted project with a controllable isolation probe."""
     project = tmp_path / name
-    (project / ".harness").mkdir(parents=True)
+    _install(project, test_paths=test_paths)
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    (tmp_path / ".claude.json").write_text(
+        json.dumps(
+            {"projects": {str(project.resolve()): {"hasTrustDialogAccepted": True}}}
+        ),
+        encoding="utf-8",
+    )
+    return project
+
+
+def _install(project: Path, *, test_paths: object = ["tests/**"]) -> None:
+    """Install the preflight, its guard, agent and selector into one checkout."""
+    (project / ".harness").mkdir(parents=True, exist_ok=True)
     hooks = project / ".claude" / "hooks"
     hooks.mkdir(parents=True)
     (project / ".claude" / "agents").mkdir()
-    (project / "tests").mkdir()
-    (project / "src").mkdir()
+    (project / "tests").mkdir(exist_ok=True)
+    (project / "src").mkdir(exist_ok=True)
     config = {
         "language": "en",
         "base_branch": "main",
@@ -63,14 +76,36 @@ def _project(
         (project / ".harness" / name).write_bytes(
             (ROOT / "harness" / name).read_bytes()
         )
-    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
-    (tmp_path / ".claude.json").write_text(
-        json.dumps(
-            {"projects": {str(project.resolve()): {"hasTrustDialogAccepted": True}}}
-        ),
-        encoding="utf-8",
+
+
+def _linked_worktree(tmp_path: Path) -> tuple[Path, Path]:
+    """A trusted main checkout and an installed linked worktree outside it, with no trust entry."""
+    main = _project(tmp_path, name="main")
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "init",
+        ],
+        cwd=main,
+        check=True,
     )
-    return project
+    worker = tmp_path / "worker"
+    subprocess.run(
+        ["git", "worktree", "add", "-q", "-b", "feature/issue-1-worker", str(worker)],
+        cwd=main,
+        check=True,
+    )
+    _install(worker)
+    _runner(worker, '{"status":"ok"}')
+    return main, worker
 
 
 def _runner(project: Path, answer: str) -> None:
@@ -169,11 +204,93 @@ def test_full_route_uses_the_approved_developer_instead_of_short_route_profile(
     }
 
 
-def test_preflight_requires_a_trusted_claude_project_identity(tmp_path: Path) -> None:
+def test_preflight_takes_the_project_root_from_git_without_claude_project_dir(
+    tmp_path: Path,
+) -> None:
     project = _project(tmp_path)
     _runner(project, '{"status":"ok"}')
 
-    assert _answer(_run(project, env_overrides={"CLAUDE_PROJECT_DIR": None})) == {
+    for value in (None, ""):
+        overrides: dict[str, str | None] = {"CLAUDE_PROJECT_DIR": value}
+        assert _answer(_run(project, env_overrides=overrides)) == {"status": "ok"}
+
+
+def test_claude_project_dir_other_than_the_git_root_is_a_project_dir_mismatch(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    _runner(project, '{"status":"ok"}')
+    other = tmp_path / "other-checkout"
+    other.mkdir()
+    link = tmp_path / "project-link"
+    link.symlink_to(project, target_is_directory=True)
+
+    for value in (str(other), str(tmp_path / "missing"), str(project / "src")):
+        result = _run(project, env_overrides={"CLAUDE_PROJECT_DIR": value})
+        assert _answer(result) == {
+            "status": "disabled",
+            "reason": "project_dir_mismatch",
+        }
+        assert value not in result.stdout
+    # The comparison is canonical: a symlink to the Git root names the same project.
+    assert _answer(_run(project, env_overrides={"CLAUDE_PROJECT_DIR": str(link)})) == {
+        "status": "ok"
+    }
+
+
+def test_linked_worktree_of_a_trusted_repository_needs_no_trust_entry_of_its_own(
+    tmp_path: Path,
+) -> None:
+    _, worker = _linked_worktree(tmp_path)
+    state = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
+    assert str(worker.resolve()) not in state["projects"]
+
+    result = _run(
+        worker,
+        env_overrides={"CLAUDE_PROJECT_DIR": None},
+        args=("--worktree", str(worker)),
+    )
+
+    assert _answer(result) == {"status": "ok"}
+
+
+def test_linked_worktree_of_an_untrusted_repository_stays_untrusted(
+    tmp_path: Path,
+) -> None:
+    main, worker = _linked_worktree(tmp_path)
+    (tmp_path / ".claude.json").write_text(
+        json.dumps(_trust_state(main, {"hasTrustDialogAccepted": False})),
+        encoding="utf-8",
+    )
+
+    assert _answer(_run(worker)) == {
+        "status": "disabled",
+        "reason": "project_untrusted",
+    }
+
+
+def test_directory_pointing_into_a_trusted_repository_is_not_its_worktree(
+    tmp_path: Path,
+) -> None:
+    main, worker = _linked_worktree(tmp_path)
+    # An unregistered directory borrows the worker's Git metadata: Git resolves the trusted
+    # repository for it, but that repository does not list it as one of its worktrees.
+    stranger = tmp_path / "stranger"
+    stranger.mkdir()
+    (stranger / ".git").write_bytes((worker / ".git").read_bytes())
+    _install(stranger)
+    _runner(stranger, '{"status":"ok"}')
+    resolved = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel", "--git-common-dir"],
+        cwd=stranger,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert Path(resolved[0]).resolve() == stranger.resolve()
+    assert (stranger / resolved[1]).resolve() == (main / ".git").resolve()
+
+    assert _answer(_run(stranger)) == {
         "status": "disabled",
         "reason": "project_untrusted",
     }
@@ -601,9 +718,83 @@ def test_full_generic_preflight_preserves_the_native_parent_checkout_identity(
     result = subprocess.run(
         command, cwd=worker, env=env, capture_output=True, text=True, check=False
     )
-    assert _answer(result) == {"status": "disabled", "reason": "checkout_mismatch"}
+    assert _answer(result) == {"status": "disabled", "reason": "project_dir_mismatch"}
     env["CLAUDE_PROJECT_DIR"] = str(worker)
     result = subprocess.run(
         command, cwd=worker, env=env, capture_output=True, text=True, check=False
     )
     assert _answer(result) == {"status": "ok"}
+    # A native parent that did not pass its identity is checked by the Git root alone.
+    del env["CLAUDE_PROJECT_DIR"]
+    result = subprocess.run(
+        command, cwd=worker, env=env, capture_output=True, text=True, check=False
+    )
+    assert _answer(result) == {"status": "ok"}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="native CLI fixture is a POSIX executable")
+def test_in_process_developer_launches_the_author_bound_to_its_worktree(
+    tmp_path: Path,
+) -> None:
+    main, worker = _linked_worktree(tmp_path)
+    (worker / ".harness/storage.py").write_bytes(
+        (ROOT / "harness/storage.py").read_bytes()
+    )
+    brief = tmp_path / "developer.json"
+    brief.write_text(
+        json.dumps(
+            {
+                "role": "developer",
+                "resolved_runtime": "claude",
+                "resolved_model": "developer-model",
+                "resolved_effort": "high",
+            }
+        )
+    )
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    binary = binary_dir / "claude"
+    binary.write_text(
+        f"#!{sys.executable}\nimport json, os, pathlib, sys\n"
+        "pathlib.Path('launched.json').write_text(json.dumps("
+        "{'argv': sys.argv[1:], 'project': os.environ.get('CLAUDE_PROJECT_DIR')}))\n"
+    )
+    binary.chmod(0o755)
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("one requirement")
+    # An in-process developer is a subagent of the main checkout's session.
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path),
+        "CLAUDE_PROJECT_DIR": str(main),
+        "PATH": str(binary_dir) + os.pathsep + os.environ["PATH"],
+    }
+    env.pop("CLAUDE_CONFIG_DIR", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-B",
+            str(worker / ".harness/health/test_author.py"),
+            "run",
+            "--repo",
+            str(worker),
+            "--brief",
+            str(brief),
+            "--prompt-file",
+            str(prompt),
+        ],
+        cwd=main,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (main / "launched.json").exists()
+    launched = json.loads((worker / "launched.json").read_text())
+    assert launched["project"] == str(worker.resolve())
+    argv = launched["argv"]
+    assert argv[argv.index("--agent") + 1] == "test-author"
+    assert argv[argv.index("--model") + 1] == "developer-model"
