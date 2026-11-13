@@ -41,7 +41,9 @@ SEED_CAPABILITIES = ("engineering-suite", BACKEND_ORCHESTRATION_CAPABILITY)
 
 
 def canonical_capability(name: str) -> str:
-    """Accept installed snapshots and CLI commands using the former suite name."""
+    """Accept installed snapshots and CLI commands using the former suite name.
+
+    The ``pvmalove-suite`` alias is kept through the 2.x releases and removed in 3.0.0."""
     return "engineering-suite" if name == "pvmalove-suite" else name
 
 
@@ -771,7 +773,9 @@ def hook_policy_problems(value: object) -> list[str]:
     return problems
 
 
-def _has_duplicates(items: list[object]) -> bool:
+def _repeats_an_entry(items: list[object]) -> bool:
+    """Whether a JSON list repeats a value. Entries may be unhashable (an object or a list in a
+    malformed config), so membership is checked by equality, not through a set."""
     seen: list[object] = []
     for item in items:
         if item in seen:
@@ -803,7 +807,7 @@ def _hook_escalation_problems(
         if not isinstance(paths, list) or not paths:
             problems.append(f"{prefix}.paths must be a non-empty list of glob strings")
         else:
-            if _has_duplicates(paths):
+            if _repeats_an_entry(paths):
                 problems.append(f"{prefix}.paths must not repeat an entry")
             problems.extend(
                 f"{prefix}.paths[{i}] must be a relative glob without '..' segments"
@@ -815,7 +819,7 @@ def _hook_escalation_problems(
         if not isinstance(roles, list) or not roles:
             problems.append(f"{prefix}.roles must be a non-empty list of role names")
         else:
-            if _has_duplicates(roles):
+            if _repeats_an_entry(roles):
                 problems.append(f"{prefix}.roles must not repeat an entry")
             problems.extend(
                 f"{prefix}.roles[{i}] must be one of: {', '.join(HOOK_POLICY_ROLES)}"
