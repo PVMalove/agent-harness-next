@@ -24,7 +24,7 @@ supported platforms are on the [Platforms](../project/platforms.md) page.
 
     - **[Required Rust runtime]:** Orchestration operational state lives in the runtime store `state/runtime.db`, and only `harness-runtime serve` writes to it. An unavailable runtime gives `runtime_unavailable` and exit code 2 (#792, #801, #807).
     - **[Ledger version 4]:** `harness-runtime migrate` moves ledger version 3 to the runtime store and writes `ledger.json` with `version: 4`; after that, a 1.x installation refuses with exit code 2 (#797).
-    - **[Coordinator requires store]:** On `ledger.json` versions 1–3, coordinator 2.0.0 exits with code 2 and names `harness-runtime migrate` in its remedy (#814).
+    - **[File epoch until migrate]:** Coordinator 2.0.0 runs on the file `ledger.json` version 3 until a human runs `harness-runtime migrate`, and on a project without orchestration state it creates a version 3 ledger. The container QA, the docker executor, the `recovery` commands and the operational hold run only on the runtime store and exit with code 2 in the file epoch (#814).
     - **[Migrate with approval]:** `harness-runtime migrate` and `rollback --to-legacy` require `--approved-by`, `--approved-at`, and `--reason`, and only a human runs them (#803, #826).
 
 The full list of additions, changes, and fixes is in the `[2.0.0]` section of

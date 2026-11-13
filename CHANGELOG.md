@@ -29,7 +29,7 @@
 
 - **[Обязательный Rust runtime]:** Operational state оркестрации хранит runtime store `state/runtime.db`, а пишет в него только `harness-runtime serve`. Недоступный runtime даёт `runtime_unavailable` и код 2 (#792, #801, #807).
 - **[Ledger версии 4]:** `harness-runtime migrate` переводит ledger версии 3 в runtime store и пишет `ledger.json` с `version: 4`, после чего установка 1.x отказывает с кодом 2 (#797).
-- **[Coordinator требует store]:** Coordinator 2.0.0 на `ledger.json` версий 1–3 завершается с кодом 2 и называет в remedy `harness-runtime migrate` (#814).
+- **[Файловая эпоха до migrate]:** Coordinator 2.0.0 работает на файловом `ledger.json` версии 3, пока человек не выполнит `harness-runtime migrate`, а на проекте без состояния оркестрации создаёт ledger версии 3. Контейнерный QA, docker-исполнитель, команды `recovery` и operational hold работают только на runtime store: в файловой эпохе они завершаются с кодом 2 и называют в remedy `harness-runtime migrate`. Ledger версий 1 и 2 сначала переводится командой `coordinator.py ledger migrate` (#814).
 - **[Migrate по approval]:** `harness-runtime migrate` и `rollback --to-legacy` требуют `--approved-by`, `--approved-at` и `--reason` и выполняются только человеком. Порядок перехода и отката — в [руководстве миграции на 2.0](https://pvmalove.github.io/agent-harness-next/guides/upgrade-2-0/) (#803, #826).
 
 ### Added
