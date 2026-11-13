@@ -7,6 +7,21 @@ import type { HomeActivityPayload, LinkActivityPayload } from "./protocol.gen";
 export type HomeActivity = HomeActivityPayload;
 export type LinkActivity = LinkActivityPayload;
 
+/** One orchestration event of the console's journal, as Home lists it. */
+export interface HomeEvent {
+  seq: number;
+  observed_at: string;
+  event: string;
+  batch_id: string | null;
+  ticket: string | null;
+  dispatch_id: string | null;
+  role: string | null;
+  from: string | null;
+  to: string | null;
+  decision: string | null;
+  outcome: string | null;
+}
+
 export interface HealthCounters {
   ok: number;
   warn: number;

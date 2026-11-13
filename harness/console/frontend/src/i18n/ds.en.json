@@ -41,5 +41,21 @@
   "Значки сессий и проверок": "Session and check icons",
   "Что консоль не делает без подтверждения": "What the console never does without confirmation",
   "Почему «пропущено» не успех и что такое stale": "Why \"skipped\" is not a success and what stale means",
-  "Команды CLI и файлы с подробностями": "CLI commands and files with details"
+  "Команды CLI и файлы с подробностями": "CLI commands and files with details",
+  "{rate}/мин · {age} с назад": "{rate}/min · {age} s ago",
+  "{rate}/мин · {age} мин назад": "{rate}/min · {age} min ago",
+  "нет событий в окне": "no events in the window",
+  "Активность контура": "Contour activity",
+  "Счётчики по звеньям считаются по событиям, которые увидела консоль (опрос раз в секунду); точность в пределах интервала опроса.": "Per-link counters come from the events the console observed (polled once a second); accuracy is within the poll interval.",
+  "по наблюдению консоли": "as observed by the console",
+  "Окно подсчёта": "Counting window",
+  "События в окне": "Events in the window",
+  "{count} с": "{count} s",
+  "Последние события": "Recent events",
+  "Событий с момента открытия консоли не было": "No events since the console was opened",
+  "Показатели Главной": "Home indicators",
+  "Проверки пройдено": "Checks passed",
+  "Ошибки и предупреждения": "Errors and warnings",
+  "Событий в минуту": "Events per minute",
+  "{count} с назад": "{count} s ago"
 }

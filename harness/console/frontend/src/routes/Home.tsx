@@ -6,10 +6,13 @@ import { groupLabel, useI18n } from "../i18n";
 import { href } from "../navigation";
 import { preRelease } from "../AppShell";
 import { useConsole } from "../useConsole";
+import { LINKS, eventLine, linkState } from "./homeActivity";
 import type {
   AreaCounters,
   HarnessInstall,
   HealthCounters,
+  HomeActivity,
+  HomeEvent,
   HomeSnapshot,
   Problem,
   RecentSession,
@@ -367,14 +370,115 @@ export function HealthStrip({ health }: { health: HealthCounters }) {
   );
 }
 
-/** The Harness 2.0.0 contour of the mockup (homeContour): the structure is fixed, every value
-    comes from the snapshot; the typed IPC edge moves only while a batch is active. */
-function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
+/** The events per minute over the counting window, rounded to a tenth. */
+export function eventsPerMinute(activity: HomeActivity): number {
+  return Math.round(((activity.events_total_window * 60) / activity.window_seconds) * 10) / 10;
+}
+
+/** The strip of the main numbers over the blocks: every value is a fact of the snapshot or of
+    the counted activity; one without a source reads "нет данных". */
+function KpiStrip({ snapshot, activity }: { snapshot: HomeSnapshot | null; activity: HomeActivity | null }) {
   const { t } = useI18n();
+  const health = snapshot?.health ?? null;
+  const install = snapshot?.harness ?? null;
+  const store = snapshot?.store ?? null;
+  const batches = snapshot?.active_batches ?? null;
+  const tiles: { label: string; icon: string; value: string | null; note: string | null; tone?: string }[] = [
+    {
+      label: t("Проверки пройдено"),
+      icon: "check",
+      value: health ? `${health.ok} / ${healthTotal(health)}` : null,
+      note: health ? `${t("пропущено")}: ${health.skipped}` : null,
+      tone: health && health.fail === 0 ? "ok" : "",
+    },
+    {
+      label: t("Ошибки и предупреждения"),
+      icon: "warning",
+      value: health ? `${health.fail} · ${health.warn}` : null,
+      note: health ? `${t("ошибки")} · ${t("внимание")}` : null,
+      tone: health && health.fail > 0 ? "err" : "",
+    },
+    { label: t("Активные batch"), icon: "orchestration", value: batches === null ? null : String(batches), note: null },
+    {
+      label: t("Событий в минуту"),
+      icon: "activity",
+      value: activity ? String(eventsPerMinute(activity)) : null,
+      note: activity
+        ? activity.last_event_age_seconds === null
+          ? t("нет событий в окне")
+          : t("{count} с назад", { count: Math.round(activity.last_event_age_seconds) })
+        : null,
+    },
+    { label: "Runtime store", icon: "store", value: store?.authority ?? null, note: store?.schema != null ? `schema ${store.schema}` : null },
+    {
+      label: t("Скиллы"),
+      icon: "skills",
+      value: install ? String(install.skills) : null,
+      note: install ? `${install.installed ? install.installed_version : t("не установлен")}` : null,
+    },
+  ];
+  return (
+    <div className="tiles home-kpis" role="group" aria-label={t("Показатели Главной")}>
+      {tiles.map((tile) => (
+        <div className="tile" key={tile.label}>
+          <div className="label">
+            <Icon name={tile.icon} /> {tile.label}
+          </div>
+          {tile.value === null ? <b className="muted no-data">{t("нет данных")}</b> : <b className={tile.tone ?? ""}>{tile.value}</b>}
+          <span>{tile.note ?? "\u00a0"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The last orchestration events the console saw since it opened, newest first. */
+function RecentEvents({ events }: { events: HomeEvent[] }) {
+  const { t, language } = useI18n();
+  const clock = new Intl.DateTimeFormat(language, { timeStyle: "medium", timeZone: "UTC" });
+  return (
+    <section id="home-events" className="panel events-panel">
+      <div className="panel-head">
+        <h2>
+          {t("Последние события")} <span className="small muted">{events.length}</span>
+        </h2>
+        <a className="small" href={href("agent-activity")}>
+          {t("Ход работы")} →
+        </a>
+      </div>
+      {events.length ? (
+        <ul className="home-event-list" tabIndex={0} aria-label={t("Последние события")}>
+          {events.map((event) => {
+            const line = eventLine(event, t);
+            const moment = Date.parse(event.observed_at);
+            return (
+              <li key={event.seq}>
+                <time dateTime={event.observed_at}>{Number.isNaN(moment) ? "—" : clock.format(moment)}</time>
+                <b>{line.title}</b>
+                <small>{line.detail}</small>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="body">
+          <p className="empty">{t("Событий с момента открытия консоли не было")}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The Harness 2.0.0 contour of the mockup (homeContour): the structure is fixed, every value
+    comes from the snapshot or from the activity the console counted for that reply; a link moves
+    only while events flow on it. */
+function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activity: HomeActivity | null }) {
+  const { t } = useI18n();
+  const states = Object.fromEntries(LINKS.map((link) => [link, linkState(activity, link, t)]));
+  const edge = (link: string) => `ct-edge flow${states[link].animated ? " live" : ""}`;
   const store = snapshot?.store ?? null;
   const value = (text: string | number | null | undefined) =>
     text === null || text === undefined ? <b className="muted">{t("нет данных")}</b> : <b>{text}</b>;
-  const live = (snapshot?.active_batches ?? 0) > 0 ? " live" : "";
   const fact = (text: string | number | null | undefined) => (text === null || text === undefined ? "—" : String(text));
   return (
     <section id="home-contour" className="panel contour-panel">
@@ -440,19 +544,28 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
               <text className="ct-title" x="693" y="311">Execution receipts</text>
               <text className="ct-sub" x="693" y="327">exit evidence · lost evidence</text>
             </g>
-            <path className="ct-edge" d="M280 74H342" markerEnd="url(#ct-arrow)" />
-            <path className={`ct-edge blue${live}`} d="M542 74H600V112H465V145" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M592 167H680" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M592 200H646V231H680" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M465 215V292" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M828 258V292" markerEnd="url(#ct-arrow)" />
+            <path className={edge("decision")} d="M280 74H342" markerEnd="url(#ct-arrow)" />
+            <path className={edge("typed")} d="M542 74H600V112H465V145" markerEnd="url(#ct-arrow)" />
+            <path className={edge("write")} d="M592 167H680" markerEnd="url(#ct-arrow)" />
+            <path className={edge("launch")} d="M592 200H646V231H680" markerEnd="url(#ct-arrow)" />
+            <path className={edge("audit")} d="M465 215V292" markerEnd="url(#ct-arrow)" />
+            <path className={edge("receipts")} d="M828 258V292" markerEnd="url(#ct-arrow)" />
             <text className="ct-edge-label" x="288" y="68">decision</text>
             <text className="ct-edge-label" x="552" y="68">typed</text>
             <text className="ct-edge-label" x="600" y="161">write</text>
             <text className="ct-edge-label" x="600" y="194">launch</text>
             <text className="ct-edge-label" x="472" y="284">audit</text>
+            <text className="ct-edge-label" x="836" y="284">receipts</text>
           </svg>
         </div>
+        <ul className="contour-links" aria-label={t("Активность контура")}>
+          {LINKS.map((link) => (
+            <li key={link} data-link={link} className={states[link].animated ? "live" : ""}>
+              <span>{link}</span>
+              <b className={activity ? "" : "muted"}>{states[link].label}</b>
+            </li>
+          ))}
+        </ul>
         <div className="contour-facts">
           <div>
             <span>authority</span>
@@ -483,6 +596,9 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
         <p className="contour-note">
           {t("Схема показывает устройство контура, а не поток конкретного batch. Python решает; Rust пишет состояние и исполняет.")}
         </p>
+        <p className="contour-note contour-observed">
+          {t("Счётчики по звеньям считаются по событиям, которые увидела консоль (опрос раз в секунду); точность в пределах интервала опроса.")}
+        </p>
       </div>
     </section>
   );
@@ -490,7 +606,7 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
 
 export function Home() {
   const { t, section, fact, language, state: stateText, plural } = useI18n();
-  const { state, client, replies, events } = useConsole();
+  const { state, client, replies, events, recentEvents } = useConsole();
   const [online, setOnline] = useState(false);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<"all" | "problem" | "skipped">("all");
@@ -588,10 +704,15 @@ export function Home() {
         </div>
       </div>
 
+      <KpiStrip snapshot={snapshot} activity={state.activity} />
+
       <div className="home-main">
         <section id="home-attention" className="panel home-attn">
           <div className="panel-head">
             <h2>{t("Требует внимания")}</h2>
+            <a className="small" href={href("diagnostics")}>
+              {t("Все проверки →")}
+            </a>
             <span id="problem-count" className="small muted">
               {snapshot
                 ? `${plural(fails, ["ошибка", "ошибки", "ошибок"], ["error", "errors"])} · ${plural(warns, ["предупреждение", "предупреждения", "предупреждений"], ["warning", "warnings"])} · ${shown.length} / ${snapshot.problems_total}`
@@ -705,6 +826,26 @@ export function Home() {
                 <p className="aside-note">{`${policy.problem} ${policy.inactive}`.trim()}</p>
               ) : null}
             </div>
+            <div className="context-section">
+              <h3>
+                <Icon name="activity" /> {t("Наблюдение")}
+              </h3>
+              <dl className="kv">
+                <Fact label={t("Окно подсчёта")} value={state.activity ? t("{count} с", { count: state.activity.window_seconds }) : null} />
+                <Fact label={t("События в окне")} value={state.activity ? String(state.activity.events_total_window) : null} />
+                <Fact
+                  label={t("Последнее событие")}
+                  value={
+                    state.activity
+                      ? state.activity.last_event_age_seconds === null
+                        ? "—"
+                        : t("{count} с назад", { count: Math.round(state.activity.last_event_age_seconds) })
+                      : null
+                  }
+                />
+              </dl>
+              <p className="aside-note">{t("по наблюдению консоли")}</p>
+            </div>
           </div>
         </section>
 
@@ -808,7 +949,9 @@ export function Home() {
           </div>
         </section>
 
-        <Contour snapshot={snapshot} />
+        <Contour snapshot={snapshot} activity={state.activity} />
+
+        <RecentEvents events={recentEvents} />
       </div>
     </div>
   );
