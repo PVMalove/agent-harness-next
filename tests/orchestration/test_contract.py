@@ -913,6 +913,56 @@ class ZoneFreeConfigHealthTests(unittest.TestCase):
         for path in ("", " ", "cache\x00bad"):
             self.assertIsNone(re.search(path_schema["pattern"], path))
 
+    def test_a_cache_variable_is_a_free_name_on_a_cache_item_only(self) -> None:
+        import re
+
+        def policy(*items: dict[str, object]) -> dict[str, object]:
+            return {"defaults": {"filesystem": list(items)}}
+
+        def cache(path: str, variable: object) -> dict[str, object]:
+            return {
+                "resource": "cache",
+                "access": "write",
+                "path": path,
+                "variable": variable,
+            }
+
+        self.assertEqual(
+            contract.access_policy_problems(policy(cache("/c", "CARGO_HOME")), set()),
+            [],
+        )
+        invalid = [
+            policy({"resource": "checkout", "access": "read", "variable": "SRC"}),
+            policy(cache("/a", "X"), cache("/b", "X")),
+            *(
+                policy(cache("/c", name))
+                for name in (
+                    None,
+                    "",
+                    "1X",
+                    "A=B",
+                    "HOME",
+                    "TMPDIR",
+                    "CARGO_TARGET_DIR",
+                    "HTTPS_PROXY",
+                    "HARNESS_VERIFY_COLD",
+                )
+            ),
+        ]
+        for value in invalid:
+            with self.subTest(policy=value):
+                self.assertTrue(contract.access_policy_problems(value, set()))
+        schema = json.loads(
+            (Path(contract.__file__).parent / "orchestration.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        variable = schema["definitions"]["accessComponent"]["properties"][
+            "filesystem"
+        ]["items"]["properties"]["variable"]
+        self.assertIsNotNone(re.fullmatch(variable["pattern"][1:-1], "CARGO_HOME"))
+        self.assertIsNone(re.fullmatch(variable["pattern"][1:-1], "A=B"))
+
     def _problems(self, config: dict[str, object]) -> list[str]:
         directory = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: shutil.rmtree(directory, ignore_errors=True))

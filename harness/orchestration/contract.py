@@ -1371,6 +1371,7 @@ def access_policy_problems(value: object, roles: set[str]) -> list[str]:
         ACCESS_RESOURCES,
         CONTAINER_ENGINES,
     )
+    from .container_executor import RUNTIME_SET_NAMES
 
     errors: list[str] = []
     host_pattern = re.compile(
@@ -1454,11 +1455,13 @@ def access_policy_problems(value: object, roles: set[str]) -> list[str]:
                 errors.append(f"{label}.filesystem must be a list")
                 return
             invalid = f"{label}.filesystem has an invalid resource/access requirement; cache needs an explicit path"
+            variables: list[object] = []
             for requirement in filesystem:
                 if not isinstance(requirement, dict) or set(requirement) - {
                     "resource",
                     "access",
                     "path",
+                    "variable",
                 }:
                     errors.append(invalid)
                     continue
@@ -1487,9 +1490,24 @@ def access_policy_problems(value: object, roles: set[str]) -> list[str]:
                             or "\x00" in requirement["path"]
                         )
                     )
-                    or (requirement["resource"] != "cache" and "path" in requirement)
+                    or (
+                        requirement["resource"] != "cache"
+                        and ("path" in requirement or "variable" in requirement)
+                    )
                 ):
                     errors.append(invalid)
+                if "variable" in requirement:
+                    variables.append(requirement["variable"])
+            if any(
+                not isinstance(name, str)
+                or ENVIRONMENT_NAME.fullmatch(name) is None
+                or name in RUNTIME_SET_NAMES
+                for name in variables
+            ) or len(set(map(str, variables))) != len(variables):
+                errors.append(
+                    f"{label}.filesystem cache variable must be a unique variable name that "
+                    f"the runtime does not set itself ({', '.join(sorted(RUNTIME_SET_NAMES))})"
+                )
 
     if not isinstance(value, dict) or set(value) - {"defaults", "roles", "operations"}:
         return [
