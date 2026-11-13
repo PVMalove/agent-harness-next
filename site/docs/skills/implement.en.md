@@ -124,12 +124,14 @@ starts the role subagent in the specified worktree. An external adapter is only 
 the same handoff, liveness, approval, and report contract.
 
 **The test author in the full route.** The test-author preflight serves only the checkout where it
-lives. A developer with the `in-process` transport runs
-`"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <send.worker_worktree>`;
-for a separate worker checkout, the answer is `disabled` with the reason `checkout_mismatch`.
-A developer with the `external` transport (headless `claude -p` in the worktree) does not enable the
-author and does not run the preflight: the reason is `transport_unsupported`. Any answer other than
-`{"status":"ok"}` leaves the ordinary TDD with the reason named in the output and never becomes a blocker.
+lives and takes the project root from Git; a worktree of a trusted repository needs no trust of its
+own (ADR 0033). A developer with the `external` transport runs its own worker checkout's
+`.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <brief path>`.
+Main-checkout preflight with `--worktree <send.worker_worktree>` answers `checkout_mismatch`, so a
+developer with the `in-process` transport calls the author through its worktree's launcher:
+`.harness/health/test_author.py run --repo <send.worker_worktree> --brief <brief path> --prompt-file <file>`.
+Any answer other than `{"status":"ok"}` leaves the ordinary TDD with the reason named in the output
+and never becomes a blocker.
 
 Before the first dispatch, the coordinator may register an immutable Context Package, built by
 `context_builder.py` without an LLM from the pinned `base_commit`/`candidate_commit`. It contains the exact diff,

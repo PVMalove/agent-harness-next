@@ -81,21 +81,26 @@ Preflight проверяет условия и на первом нарушен�
 | Проверка | Причина отказа |
 | --- | --- |
 | Необязательный `--worktree <путь>` называет тот же checkout, где лежит preflight | `checkout_mismatch` |
-| `CLAUDE_PROJECT_DIR` совпадает с корнем Git checkout | `project_untrusted` |
+| Checkout, где лежит preflight, — корень своего рабочего дерева Git (`git rev-parse --show-toplevel`) | `project_untrusted` |
+| `CLAUDE_PROJECT_DIR`, если передан, совпадает с этим корнем Git | `project_dir_mismatch` |
 | Claude Code не запущен с `CLAUDE_CODE_SIMPLE=1` или `CLAUDE_CODE_SAFE_MODE=1` | `claude_code_unsupported` |
-| Пользователь принял диалог доверия для этого проекта | `project_untrusted` |
+| Пользователь принял диалог доверия для этого checkout или для основного checkout его репозитория | `project_untrusted` |
 | Установлен agent `test-author.md` | `agent_missing` |
 | В agent включён scoped `PreToolUse` hook | `scoped_hook_unsupported` |
 | Заданы `test_paths` и `test_runner`, зоны записи допустимы | `test_paths_missing`, `test_runner_missing`, `config_invalid`, `write_zone_rejected` |
 | Файл `test-author-guard.py` исполняемый и отвечает JSON | `guard_hook_unavailable` |
 | `run-test.sh --probe` подтверждает изоляцию | `isolation_unavailable`, `runner_unavailable` |
 
-Доверие проверяется по записи проекта в `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json`):
-для точного пути проекта должно стоять `hasTrustDialogAccepted: true`. Нативный режим
-`claude --print` диалог доверия пропускает, поэтому preflight проверяет решение сам. Если Claude
-Code считает проект доверенным через родительский каталог или корень Git, но записи для самого
-пути нет (например, в отдельном worktree), preflight отвечает `project_untrusted`: это
-безопасный отказ, а не ошибка. Откройте проект по этому пути в Claude Code и примите диалог.
+Корень проекта preflight берёт из Git, поэтому ни `export CLAUDE_PROJECT_DIR`, ни запись корня в
+настройках не нужны. Переданный Claude Code `CLAUDE_PROJECT_DIR` лишь сверяется с корнем Git.
+
+Доверие проверяется по записи в `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json`):
+`hasTrustDialogAccepted: true` должно стоять для точного пути checkout или для основного checkout
+репозитория, если checkout — его linked worktree из `git worktree list`. Нативный режим
+`claude --print` диалог доверия пропускает, поэтому preflight проверяет решение сам. Новый
+worktree доверенного репозитория отдельного диалога не требует. Доверие только к родительскому
+каталогу не считается: preflight отвечает `project_untrusted`, это безопасный отказ. Откройте
+основной checkout в Claude Code и примите диалог (ADR 0033).
 
 Проверки agent, hook и guard статические: preflight не запускает Claude Code и не доказывает,
 что hook сработает в живой сессии. Поэтому `guard_hook_unavailable` означает только отсутствие
@@ -210,8 +215,9 @@ fixtures, останавливается до ответа разработчи�
 с runtime/model/effort из его brief. Поддержанный адаптер запускает developer прямо в checkout
 из brief, поэтому runtime, scoped hook и runner относятся к тому же коду. Установите харнесс в worker checkout и включите там
 `test_paths` и `test_runner`; состояние оркестрации из основного checkout не копируется.
-Откройте этот точный путь в Claude Code и примите диалог доверия. Ни installer, ни developer,
-ни headless-запуск не создают решение доверия за пользователя.
+Worktree доверенного репозитория отдельного диалога доверия не требует; если основной checkout
+не доверен, откройте его в Claude Code и примите диалог. Ни installer, ни developer, ни
+headless-запуск не создают решение доверия за пользователя.
 
 External developer запускает общий preflight с `--repo <worker_worktree> --brief <путь brief>`.
 Для защищённого Claude-адаптера это `.claude/hooks/test-author-preflight.sh --worktree <worker_worktree> --brief <путь brief>`.
@@ -229,10 +235,13 @@ External developer запускает общий preflight с `--repo <worker_wo
 а scoped guard сохраняет прежние ограничения записи и Bash. Код, тесты и Git-статус основного
 checkout не меняются; общие runtime-логи сохраняются в его игнорируемой песочнице.
 
-In-process developer по-прежнему запускает preflight основного checkout с `--worktree` из brief.
-Отдельный worker даёт `checkout_mismatch`: этот транспорт использует обычный TDD. Любой отказ
-preflight и недоступность инструмента вызова автора также сохраняют обычный TDD в worker,
-с указанной причиной, без blocker и новых записей ledger. Runtime берётся из brief developer;
+Preflight основного checkout с `--worktree` отдельного worker отвечает `checkout_mismatch`: его
+guard и runner обслуживают только основной checkout. Поэтому in-process developer вызывает автора
+через launcher своего worktree:
+`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <путь brief> --prompt-file <файл>`.
+Launcher проверяет preflight worker и запускает автора с guard и runner этого worktree; правило
+разрешения в brief то же. Любой отказ preflight и недоступность инструмента вызова автора
+сохраняют обычный TDD в worker, с указанной причиной, без blocker и новых записей ledger. Runtime берётся из brief developer;
 если для него нет защищённого адаптера, остаётся обычный TDD без подмены исполнителя.
 
 В этой поставке проверены Python-тесты через unittest и pytest. Rust-тесты

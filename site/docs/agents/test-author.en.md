@@ -80,21 +80,27 @@ fixed reason:
 | Check | Refusal reason |
 | --- | --- |
 | The optional `--worktree <path>` names the same checkout where preflight lives | `checkout_mismatch` |
-| `CLAUDE_PROJECT_DIR` matches the root of the Git checkout | `project_untrusted` |
+| The checkout where preflight lives is the root of its own Git work tree (`git rev-parse --show-toplevel`) | `project_untrusted` |
+| `CLAUDE_PROJECT_DIR`, when passed, matches that Git root | `project_dir_mismatch` |
 | Claude Code is not started with `CLAUDE_CODE_SIMPLE=1` or `CLAUDE_CODE_SAFE_MODE=1` | `claude_code_unsupported` |
-| The user accepted the trust dialog for this project | `project_untrusted` |
+| The user accepted the trust dialog for this checkout or for the main checkout of its repository | `project_untrusted` |
 | The agent `test-author.md` is installed | `agent_missing` |
 | The scoped `PreToolUse` hook is enabled in the agent | `scoped_hook_unsupported` |
 | `test_paths` and `test_runner` are set, and the write zones are valid | `test_paths_missing`, `test_runner_missing`, `config_invalid`, `write_zone_rejected` |
 | The file `test-author-guard.py` is executable and answers with JSON | `guard_hook_unavailable` |
 | `run-test.sh --probe` confirms isolation | `isolation_unavailable`, `runner_unavailable` |
 
-Trust is checked against the project entry in `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`):
-the exact project path must have `hasTrustDialogAccepted: true`. The native mode
-`claude --print` skips the trust dialog, so preflight checks the decision itself. If Claude
-Code treats the project as trusted through a parent directory or the Git root, but there is no entry for the
-path itself (for example, in a separate worktree), preflight answers `project_untrusted`. This is a
-safe refusal, not an error. Open the project at this path in Claude Code and accept the dialog.
+Preflight takes the project root from Git, so neither `export CLAUDE_PROJECT_DIR` nor a root
+entry in settings is needed. A `CLAUDE_PROJECT_DIR` passed by Claude Code is only compared with
+the Git root.
+
+Trust is checked against an entry in `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`):
+`hasTrustDialogAccepted: true` must be set for the exact checkout path or for the repository's
+main checkout when the checkout is its linked worktree from `git worktree list`. The native mode
+`claude --print` skips the trust dialog, so preflight checks the decision itself. A new worktree
+of a trusted repository needs no dialog of its own. Trust given only to a parent directory does
+not count: preflight answers `project_untrusted`, a safe refusal. Open the main checkout in
+Claude Code and accept the dialog (ADR 0033).
 
 The agent, hook, and guard checks are static: preflight does not start Claude Code and does not prove
 that the hook will fire in a live session. So `guard_hook_unavailable` means only that the
@@ -209,8 +215,9 @@ The author works beside an external developer in its worker worktree, using runt
 from the developer brief. The supported adapter starts the developer in that checkout, so the
 runtime, scoped hook and runner refer to the same code. Install the harness in the worker checkout
 and enable `test_paths` and `test_runner` there; do not copy main-checkout orchestration state.
-Open that exact path in Claude Code and accept trust yourself. Neither the installer, developer
-nor a headless launch makes that trust decision for you.
+A worktree of a trusted repository needs no trust dialog of its own; if the main checkout is not
+trusted, open it in Claude Code and accept the dialog. Neither the installer, developer nor a
+headless launch makes that trust decision for you.
 
 The external developer runs general preflight with `--repo <worker_worktree> --brief <brief path>`.
 For the protected Claude adapter this is `.claude/hooks/test-author-preflight.sh --worktree
@@ -228,10 +235,14 @@ specific test path within brief scope and the log root from the adapter prompt:
 scoped guard retains its write and Bash limits. Main-checkout code, tests and Git status stay
 unchanged; shared runtime logs remain in its ignored sandbox.
 
-An in-process developer still runs main-checkout preflight with the brief's `--worktree`.
-A separate worker gives `checkout_mismatch` and uses ordinary TDD. Any preflight refusal or
-unavailable author-calling tool likewise leaves ordinary TDD in the worker, with its reason and
-without a blocker or new ledger record. Runtime selection comes from the developer; lack of a
+Main-checkout preflight with a separate worker's `--worktree` answers `checkout_mismatch`: its
+guard and runner serve only the main checkout. An in-process developer therefore calls the author
+through its worktree's launcher:
+`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <brief path> --prompt-file <file>`.
+The launcher checks the worker's preflight and starts the author with that worktree's guard and
+runner; the brief permission rule is the same. Any preflight refusal or unavailable
+author-calling tool leaves ordinary TDD in the worker, with its reason and without a blocker or
+new ledger record. Runtime selection comes from the developer; lack of a
 protected adapter retains ordinary TDD, without substituting an executor.
 
 This release verifies Python tests through unittest and pytest. Rust tests in
