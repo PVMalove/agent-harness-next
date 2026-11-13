@@ -32,21 +32,21 @@ CLI_POLICY: JsonObject = {
         {
             "stage_id": "lint",
             "kind": "lint",
-            "argv": [sys.executable, "-c", "pass"],
+            "argv": ["python", "-c", "pass"],
             "timeout_seconds": 600,
         },
         {
             "stage_id": "tests",
             "kind": "pytest",
-            "argv": [sys.executable, "-c", "pass"],
+            "argv": ["python", "-c", "pass"],
             "timeout_seconds": 1800,
         },
     ],
 }
 
 
-# The command the plan records: the interpreter quoted as a shell would, as on Windows paths.
-PASS = shlex.join([sys.executable, "-c", "pass"])
+# A bare launcher lets the gate select the checkout's Python on either platform.
+PASS = shlex.join(["python", "-c", "pass"])
 
 class TicketDiffCliTests(TicketDiffFixture):
     def _on(self, **changes: object) -> JsonObject:

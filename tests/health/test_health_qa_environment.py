@@ -93,7 +93,8 @@ def test_a_qa_executable_missing_from_path_warns_with_its_name_and_a_remedy(
 def test_a_repository_relative_qa_executable_is_resolved_against_the_repository(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    repo = _repo(tmp_path / "repo", [".harness/.venv/bin/python -m pytest -q"])
+    executable = ".harness/.venv/bin/python" + (".cmd" if sys.platform == "win32" else "")
+    repo = _repo(tmp_path / "repo", [f"{executable} -m pytest -q"])
     _only_on_path(monkeypatch, tmp_path / "bin")
 
     missing = environment.check_qa_executables(_context(repo))
@@ -101,7 +102,7 @@ def test_a_repository_relative_qa_executable_is_resolved_against_the_repository(
     present = environment.check_qa_executables(_context(repo))
 
     assert missing.status == "warn"
-    assert ".harness/.venv/bin/python" in missing.message
+    assert executable in missing.message
     assert present.status == "ok"
 
 
