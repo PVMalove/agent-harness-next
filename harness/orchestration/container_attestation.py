@@ -37,7 +37,8 @@ from harness.orchestration.ledger.lifecycle import (
 SOURCE = "container-host"
 HEARTBEAT_NOTE = "container running"
 # The init event is the first record of a stream-json session; a bounded head finds it.
-INIT_SCAN_BYTES = 65536
+# The init event follows hook output at most; a bound keeps one read of a long stream small.
+INIT_SCAN_BYTES = 4 * 1024 * 1024
 
 
 def stream_root(root: Path) -> Path:
@@ -57,25 +58,40 @@ def stream_path(root: Path, execution: Mapping[str, object]) -> Path | None:
 
 
 def init_model(path: Path) -> str | None:
-    """The model of the first stream-json ``init`` event; output is data, never a command."""
+    """The model of the first stream-json ``init`` event; output is data, never a command.
+
+    Only complete lines within the first ``INIT_SCAN_BYTES`` count; hook output before the event
+    or one long line does not hide it (#1125)."""
     try:
         with path.open("rb") as stream:
-            head = stream.read(INIT_SCAN_BYTES)
+            scanned = 0
+            while scanned < INIT_SCAN_BYTES:
+                line = stream.readline(INIT_SCAN_BYTES - scanned)
+                scanned += len(line)
+                if not line.endswith(b"\n"):
+                    return None
+                model = _init_event_model(line)
+                if model is not None:
+                    return model or None
     except OSError:
         return None
-    for line in head[: head.rfind(b"\n") + 1].splitlines():
-        try:
-            record = json.loads(line)
-        except (ValueError, UnicodeDecodeError):
-            continue
-        if (
-            isinstance(record, dict)
-            and record.get("type") == "system"
-            and record.get("subtype") == "init"
-        ):
-            model = record.get("model")
-            return model.strip() if isinstance(model, str) and model.strip() else None
     return None
+
+
+def _init_event_model(line: bytes) -> str | None:
+    """The model of an ``init`` event line ("" for an event without one), ``None`` otherwise."""
+    try:
+        record = json.loads(line)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not (
+        isinstance(record, dict)
+        and record.get("type") == "system"
+        and record.get("subtype") == "init"
+    ):
+        return None
+    model = record.get("model")
+    return model.strip() if isinstance(model, str) else ""
 
 
 def _checkout(plan: Mapping[str, object]) -> str | None:
