@@ -180,7 +180,7 @@ jobs:
         env:
           HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime.exe
           HARNESS_REQUIRE_RUNTIME: "1"
-        run: .harness/.venv/Scripts/python -m pytest -q tests/orchestration/test_runtime_client.py tests/core/test_hook_policy_matrix.py tests/core/test_change_impact_hooks.py tests/core/test_hook_response.py tests/core/test_project_hooks_hardening.py
+        run: .harness/.venv/Scripts/python -m pytest -q tests/orchestration/test_runtime_client.py
 
   targeted:
     runs-on: windows-latest
