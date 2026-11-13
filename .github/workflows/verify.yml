@@ -290,7 +290,8 @@ jobs:
       - uses: ./.github/actions/verify-test-group
         with:
           group: unit
-          targets: >-
+          # verify-windows-unit runs the same targets through this anchor.
+          targets: &unit-targets >-
             --pytest-target tests/core --pytest-target tests/health
             --pytest-target tests/console --pytest-target tests/reporting
             --pytest-target tests/test_author
@@ -311,7 +312,8 @@ jobs:
       - uses: ./.github/actions/verify-test-group
         with:
           group: integration
-          targets: >-
+          # verify-windows-integration runs the same targets through this anchor.
+          targets: &integration-targets >-
             --pytest-target tests/memory --pytest-target tests/orchestration
             --pytest-target tests/repo_map --pytest-target tests/scripts
             --pytest-target tests/web
@@ -331,13 +333,16 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Configure Git for the test run
+      # verify-windows-integration and verify-windows reuse these two steps through their anchors.
+      - &windows-git-config
+        name: Configure Git for the test run
         run: |
           git config --global core.autocrlf false
           git config --global core.fscache true
           git config --global core.preloadindex true
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Disable Windows Defender for workspace and temp
+      - &windows-defender-off
+        name: Disable Windows Defender for workspace and temp
         shell: powershell
         run: |
           Set-MpPreference -DisableRealtimeMonitoring $true
@@ -345,10 +350,7 @@ jobs:
       - uses: ./.github/actions/verify-test-group
         with:
           group: unit
-          targets: >-
-            --pytest-target tests/core --pytest-target tests/health
-            --pytest-target tests/console --pytest-target tests/reporting
-            --pytest-target tests/test_author
+          targets: *unit-targets
           junit: .harness/.sandboxes/logs/junit-Windows-unit.xml
 
   verify-windows-integration:
@@ -364,24 +366,13 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Configure Git for the test run
-        run: |
-          git config --global core.autocrlf false
-          git config --global core.fscache true
-          git config --global core.preloadindex true
+      - *windows-git-config
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Disable Windows Defender for workspace and temp
-        shell: powershell
-        run: |
-          Set-MpPreference -DisableRealtimeMonitoring $true
-          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:TEMP
+      - *windows-defender-off
       - uses: ./.github/actions/verify-test-group
         with:
           group: integration
-          targets: >-
-            --pytest-target tests/memory --pytest-target tests/orchestration
-            --pytest-target tests/repo_map --pytest-target tests/scripts
-            --pytest-target tests/web
+          targets: *integration-targets
           junit: .harness/.sandboxes/logs/junit-Windows-integration.xml
 
   verify-test-groups:
@@ -834,18 +825,10 @@ jobs:
     steps:
       # Before checkout: the runner's autocrlf=true makes every repository the clean-room scenarios
       # create print "LF will be replaced by CRLF" warnings. fscache and preloadindex speed up the
-      # thousands of short git.exe runs on NTFS.
-      - name: Configure Git for the test run
-        run: |
-          git config --global core.autocrlf false
-          git config --global core.fscache true
-          git config --global core.preloadindex true
+      # thousands of short git.exe runs on NTFS. Both steps are defined in verify-windows-unit.
+      - *windows-git-config
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Disable Windows Defender for workspace and temp
-        shell: powershell
-        run: |
-          Set-MpPreference -DisableRealtimeMonitoring $true
-          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:TEMP
+      - *windows-defender-off
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"

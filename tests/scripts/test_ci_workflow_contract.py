@@ -259,8 +259,12 @@ class LightPathTests(unittest.TestCase):
                 self.assertIn("./.github/actions/verify-test-group", job)
                 self.assertIn("group: unit" if name.endswith("unit") else "group: integration", job)
                 self.assertIn("windows-latest" if "windows" in name else "ubuntu-latest", job)
-        self.assertIn("--pytest-target tests/core", jobs["verify-windows-unit"])
-        self.assertIn("--pytest-target tests/orchestration", jobs["verify-windows-integration"])
+        # Each group defines its targets once, in the Linux job; the Windows job reuses the anchor.
+        for group, target in (("unit", "tests/core"), ("integration", "tests/orchestration")):
+            with self.subTest(group=group):
+                self.assertIn(f"targets: &{group}-targets", jobs[f"verify-linux-{group}"])
+                self.assertIn(f"--pytest-target {target}", jobs[f"verify-linux-{group}"])
+                self.assertIn(f"targets: *{group}-targets", jobs[f"verify-windows-{group}"])
 
 
 class StageTests(unittest.TestCase):
