@@ -517,7 +517,7 @@ export function ActivityStats({
   const minutes = (seconds: number | undefined) => (seconds === undefined ? 0 : Math.round(seconds / 60));
   const maxAge = Math.max(1, ...roles.flatMap((role) => [minutes(open[role]), minutes(p95[role])]));
   return (
-    <section className="panel work-analytics" id="work-stats">
+    <section className="panel work-analytics" id="work-stats" tabIndex={0} role="region" aria-label={t("Статистика")}>
       <div className="panel-head">
         <h2>{t("Статистика")}</h2>
         <span className="small muted">{t("срез последнего часа · только события")}</span>

@@ -58,7 +58,7 @@ export function AgentActivity() {
     ["stats", t("Статистика")],
   ];
   return (
-    <div className="work-page" data-section="Ход работы">
+    <div className="work-page work-fit" data-section="Ход работы">
       <div className="page-title work-title">
         <div>
           <h1>{section("Ход работы")}</h1>

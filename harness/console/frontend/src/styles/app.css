@@ -471,32 +471,32 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .work-cluster-members li span { flex: none; color: var(--muted); font-family: var(--mono); }
 .work-stats { display: block; }
 @media (min-width: 981px) {
-  main#content:has(> .work-page) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 12px; }
-  .work-page { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-  .work-page > .page-title { flex: none; margin-bottom: 8px; }
-  .work-page > .page-title h1 { margin-bottom: 0; }
-  .work-page > .page-title p:not(.home-facts) { display: none; }
+  main#content:has(> .work-fit) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 12px; }
+  .work-fit { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  .work-fit > .page-title { flex: none; margin-bottom: 8px; }
+  .work-fit > .page-title h1 { margin-bottom: 0; }
+  .work-fit > .page-title p:not(.home-facts) { display: none; }
   .work-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; flex: none; margin-bottom: 8px; }
   .work-stats .work-summary, .work-stats .work-kpis { margin: 0; gap: 8px; }
   .work-stats .work-summary > div, .work-stats .work-kpis > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 8px; padding: 4px 8px; }
   .work-stats span { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .work-stats b { margin: 0; font-size: var(--fs-3); }
   .work-stats small { display: none; }
-  .work-page > .work-tabbar { flex: none; margin-bottom: 8px; }
-  .work-page > .work-panel { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1.1fr) minmax(0, 1fr); overflow: hidden; margin: 0; }
-  .work-page > .work-panel > * { min-width: 0; min-height: 0; margin: 0; }
-  .work-page .work-sources, .work-page .work-grid { grid-column: 1 / -1; }
-  .work-page .work-sources .panel-head { padding: 4px 16px; }
-  .work-page .work-sources .work-source-grid { padding: 8px 16px; gap: 8px; }
-  .work-page .work-sources .work-source { padding: 4px 12px; }
-  .work-page .work-grid { display: grid; gap: 12px; align-items: stretch; margin: 0; }
-  .work-page .work-grid > .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-  .work-page .work-sessions .work-list { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
-  .work-page .work-route-panel { overflow-y: auto; }
-  .work-page .work-events-panel { display: flex; flex-direction: column; overflow: hidden; }
-  .work-page .work-events-panel .work-events { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
-  .work-page > .work-panel > .decision-panel { grid-column: 1 / -1; max-height: 160px; overflow-y: auto; }
+  .work-fit > .work-tabbar { flex: none; margin-bottom: 8px; }
+  .work-fit > .work-panel { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1.1fr) minmax(0, 1fr); overflow: hidden; margin: 0; }
+  .work-fit > .work-panel > * { min-width: 0; min-height: 0; margin: 0; }
+  .work-fit .work-sources, .work-fit .work-grid { grid-column: 1 / -1; }
+  .work-fit .work-sources .panel-head { padding: 4px 16px; }
+  .work-fit .work-sources .work-source-grid { padding: 8px 16px; gap: 8px; }
+  .work-fit .work-sources .work-source { padding: 4px 12px; }
+  .work-fit .work-grid { display: grid; gap: 12px; align-items: stretch; margin: 0; }
+  .work-fit .work-grid > .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .work-fit .work-sessions .work-list { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+  .work-fit .work-route-panel { overflow-y: auto; }
+  .work-fit .work-events-panel { display: flex; flex-direction: column; overflow: hidden; }
+  .work-fit .work-events-panel .work-events { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+  .work-fit > .work-panel > .decision-panel { grid-column: 1 / -1; max-height: 160px; overflow-y: auto; }
   /* Timeline and Statistics hold the panel; their long parts scroll inside. */
-  .work-page > .work-panel > .work-analytics { grid-column: 1 / -1; grid-row: 1 / -1; display: flex; flex-direction: column; overflow-y: auto; }
-  .work-page .work-analytics .work-gantt { flex: 1 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
+  .work-fit > .work-panel > .work-analytics { grid-column: 1 / -1; grid-row: 1 / -1; display: flex; flex-direction: column; overflow-y: auto; }
+  .work-fit .work-analytics .work-gantt { flex: 1 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
 }
