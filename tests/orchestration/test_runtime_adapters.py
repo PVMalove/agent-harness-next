@@ -212,6 +212,121 @@ def test_claude_starts_detached_with_stdin_prompt_in_worker_checkout(
             os.kill(json.loads(evidence.read_text())["pid"], 15)
 
 
+SUPERVISED: dict[str, object] = {"execution": {"kind": "process"}}
+
+
+def run_in_own_group(
+    dispatch: tuple[Path, Path, dict[str, object]],
+    *args: str,
+    runtime: str = "claude",
+    changes: dict[str, object] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], int]:
+    """Run the adapter as a group leader, as the runtime does; return its result and pid."""
+    repo, worker, brief = dispatch
+    payload = dict(brief)
+    payload.update(changes or {})
+    path = repo / "brief.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            str(ROOT / f"harness/adapters/{runtime}_worker.py"),
+            "dispatch",
+            "--repo",
+            str(repo),
+            "--brief",
+            str(path),
+            *args,
+        ],
+        cwd=worker,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    stdout, stderr = process.communicate(timeout=30)
+    return (
+        subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr),
+        process.pid,
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_claude_supervised_runs_the_worker_in_the_foreground_and_returns_its_code(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    evidence = repo / "started.json"
+    body = (
+        "import json, os, sys\nfrom pathlib import Path\n"
+        f"Path({str(evidence)!r}).write_text(json.dumps(dict(pgid=os.getpgid(0), "
+        "cwd=os.getcwd(), stdin=sys.stdin.read(), args=sys.argv[1:])))\n"
+        'print(\'{"type":"system"}\', flush=True)\n'
+        "sys.exit(7)\n"
+    )
+    binary = fake_runtime(repo, body)
+    result, adapter_pid = run_in_own_group(
+        dispatch, "--claude-bin", str(binary), changes=SUPERVISED
+    )
+    assert result.returncode == 7, result.stderr
+    assert '{"type":"system"}' in result.stdout
+    data = json.loads(evidence.read_text())
+    assert data["pgid"] == adapter_pid
+    assert data["cwd"] == str(worker)
+    assert data["stdin"] == ""
+    args = data["args"]
+    assert args[0] == "-p"
+    assert "dispatch self-report" in args[1]
+    assert args[args.index("--output-format") + 1] == "stream-json"
+    assert "--verbose" in args
+    assert not (repo / ".harness/.sandboxes/scratch/worker-logs").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX signals")
+def test_claude_supervised_reports_a_signalled_worker_as_128_plus_signal(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    binary = fake_runtime(
+        dispatch[0], "import os, signal\nos.kill(os.getpid(), signal.SIGTERM)\n"
+    )
+    result, _ = run_in_own_group(
+        dispatch, "--claude-bin", str(binary), changes=SUPERVISED
+    )
+    assert result.returncode == 128 + signal.SIGTERM
+
+
+def test_claude_supervised_refuses_a_prompt_over_the_argument_bound(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    extra = dispatch[0] / "retry.txt"
+    extra.write_text("x" * 130000, encoding="utf-8")
+    result = invoke(
+        dispatch,
+        "--claude-bin",
+        "/fake/claude",
+        "--extra-prompt-file",
+        str(extra),
+        changes=SUPERVISED,
+    )
+    assert result.returncode == 1
+    assert "shorten --extra-prompt-file" in result.stderr
+
+
+def test_claude_supervised_dry_run_puts_the_prompt_right_after_print_flag(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    result = invoke(
+        dispatch, "--dry-run", "--claude-bin", "/fake/claude", changes=SUPERVISED
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    command = data["command"]
+    assert command[0:3] == ["/fake/claude", "-p", data["prompt"]]
+    assert command[command.index("--output-format") + 1] == "stream-json"
+    assert "--verbose" in command
+
+
 def test_claude_dispatch_help_lists_entrypoint_arguments(
     dispatch: tuple[Path, Path, dict[str, object]],
 ) -> None:

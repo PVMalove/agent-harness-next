@@ -6,8 +6,12 @@ parameter, a subagent starts in the main checkout, and `EnterWorktree` refuses i
 `external` transport can: `coordinator.py dispatch send --adapter <this file>` runs the adapter in
 `send.worker_worktree` as
 `claude_worker.py dispatch [--extra-prompt-file F] [--dry-run] --repo <main repo> --brief <brief>`.
-The adapter starts a detached `claude -p` there and returns; the worker's self-report, heartbeat and
-`report submit` prove its actual checkout. It runs on the brief's model and effort, with exactly the
+Under runtime supervision (a brief with an `execution` section) the adapter lives exactly as long as
+its worker: it runs `claude -p <prompt>` in the foreground in its own process group, never reads its
+own stdin, streams `--output-format stream-json --verbose` to the inherited stdout (the runtime's run
+log) and returns the worker's exit status. Without `execution` it starts a detached `claude -p` that
+reads the prompt from stdin and returns. The worker's self-report, heartbeat and `report submit`
+prove its actual checkout. It runs on the brief's model and effort, with exactly the
 brief's `allowed_tools` and `dontAsk`, so nothing outside the brief can prompt or run unattended.
 
 The installed copy is `.harness/adapters/claude_worker.py`, outside the hashed runtime package, so
@@ -18,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -26,6 +31,10 @@ from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
 STARTUP_CHECK_SECONDS = 3
+# One argv string is bounded by MAX_ARG_STRLEN (131072 bytes) on Linux; a Windows command line by
+# 32767 characters in all. Keep a margin for the other arguments.
+POSIX_PROMPT_BYTES = 120000
+WINDOWS_PROMPT_CHARS = 30000
 
 
 class Liveness(TypedDict):
@@ -45,6 +54,7 @@ class Brief(TypedDict):
     liveness: Liveness
     resolved_transport: str
     purpose: str
+    execution: NotRequired[dict[str, object]]
 
 
 PROMPT = """\
@@ -124,10 +134,36 @@ def build_prompt(
     return prompt
 
 
-def worker_command(brief: Brief, binary: str = "claude") -> list[str]:
-    command = [
-        binary,
-        "-p",
+def supervised(brief: Brief) -> bool:
+    """The runtime launches only briefs with an `execution` section."""
+    return bool(brief.get("execution"))
+
+
+def check_prompt_bound(prompt: str) -> None:
+    if os.name == "nt":
+        too_long = len(prompt) > WINDOWS_PROMPT_CHARS
+        bound = f"{WINDOWS_PROMPT_CHARS} characters"
+    else:
+        too_long = len(prompt.encode("utf-8")) > POSIX_PROMPT_BYTES
+        bound = f"{POSIX_PROMPT_BYTES} UTF-8 bytes"
+    if too_long:
+        raise ValueError(
+            f"the worker prompt exceeds the argument bound of {bound}; "
+            "shorten --extra-prompt-file"
+        )
+
+
+def worker_command(
+    brief: Brief, binary: str = "claude", *, prompt: str | None = None
+) -> list[str]:
+    """The `claude -p` command; a given `prompt` (supervised) is the positional after `-p`.
+
+    `--allowedTools` and `--add-dir` take variadic values, so the prompt must precede them.
+    """
+    command = [binary, "-p"]
+    if prompt is not None:
+        command.append(prompt)
+    command += [
         "--model",
         brief["resolved_model"],
         "--permission-mode",
@@ -138,8 +174,8 @@ def worker_command(brief: Brief, binary: str = "claude") -> list[str]:
         str(Path(brief["report_staging_path"]).parent),
         "--no-session-persistence",
         "--output-format",
-        "text",
     ]
+    command += ["stream-json", "--verbose"] if prompt is not None else ["text"]
     effort = brief.get("resolved_effort")
     if brief["role"] == "developer" and any(
         tool in brief["allowed_tools"] for tool in ("Agent", "Agent(test-author)")
@@ -198,10 +234,21 @@ def start(args: argparse.Namespace) -> int:
     prompt = build_prompt(brief, brief_path, repo, worktree, sha)
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
-    command = worker_command(brief, args.claude_bin)
+    if supervised(brief):
+        check_prompt_bound(prompt)
+        command = worker_command(brief, args.claude_bin, prompt=prompt)
+    else:
+        command = worker_command(brief, args.claude_bin)
     if args.dry_run:
         print(json.dumps({"cwd": str(worktree), "command": command, "prompt": prompt}))
         return 0
+    if supervised(brief):
+        # Foreground in the adapter's process group: the runtime's group stop reaches the
+        # worker, and the worker's exit is the supervised process's exit.
+        completed = subprocess.run(
+            command, cwd=worktree, stdin=subprocess.DEVNULL, check=False
+        )
+        return exit_status(completed.returncode)
     log = log_path(brief)
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("ab") as sink:
@@ -226,6 +273,11 @@ def start(args: argparse.Namespace) -> int:
         print(f"claude worker exited with {code} at startup: {tail}", file=sys.stderr)
         return 1
     return 0
+
+
+def exit_status(returncode: int) -> int:
+    """The worker's exit code; a signal N becomes 128 + N (shell convention)."""
+    return returncode if returncode >= 0 else 128 - returncode
 
 
 def main(argv: list[str]) -> int:
