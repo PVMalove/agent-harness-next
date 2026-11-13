@@ -227,7 +227,7 @@ docker build -f Dockerfile.worker -t harness-worker:local \
 | `access_policy.defaults.mode` | Для этого исполнителя `sandbox` или `inherit`; допустимый схемой `unsandboxed` исполнитель отклоняет. |
 | `access_policy.defaults.environment` | Уникальные имена переменных, никогда значения. Runtime должен иметь их в своём окружении. |
 | `access_policy.defaults.network.hosts` | Точные DNS-имена без схемы URL, порта и wildcard; `[]` отключает сеть. |
-| `access_policy.defaults.filesystem` | Ресурсы `checkout`, `git_common`, `shared_storage`, `cache`, с `read`/`write`. Поля элементов: `resource`, `access`, `path`; `path` обязателен только для `cache` и запрещён для остальных ресурсов. |
+| `access_policy.defaults.filesystem` | Ресурсы `checkout`, `git_common`, `shared_storage`, `cache`, с `read`/`write`. Поля элементов: `resource`, `access`, `path`, `variable`; `path` обязателен только для `cache` и запрещён для остальных ресурсов; необязательный `variable` допустим только у `cache`. |
 | `access_policy.operations.qa.container` | Явно включите контейнер QA. Одного `defaults.container` недостаточно: без override QA остаётся на хосте. |
 | `execution_policy.worker_execution_timeout_seconds` | Целое ≥ 1, default `14400`: срок worker. |
 | `execution_policy.qa_command_timeout_seconds` | Целое ≥ 1, default `3600`: срок одной команды контейнерного QA. |
@@ -241,7 +241,16 @@ Override роли или операции заменяет **весь назва
 
 Кэши сохраняются только как ресурсы `cache` плана, монтируемые по тому же абсолютному пути.
 Относительный путь считается от worktree dispatch, `~` раскрывается на хосте. Укажите инструменту
-этот путь через его настройки/переменную по имени. Контейнер не сохраняет свой HOME между запусками.
+этот путь через его настройки/переменную по имени или через поле `variable` элемента `cache`:
+исполнитель сам передаёт контейнеру `--env <variable>=<путь кэша>`, и окружение
+`harness-runtime serve` настраивать не нужно. Имя не совпадает с именами из `environment` и с
+именами, которые задаёт runtime (`HOME`, `TMPDIR`, `CARGO_TARGET_DIR`, имена прокси и другие).
+Для кэша cargo в QA укажите в `operations.qa.filesystem` абсолютный путь
+`.harness/.sandboxes/cache/cargo` основного checkout с `"variable": "CARGO_HOME"` и заранее
+создайте каталог (`mkdir -p`). Каждый QA-прогон сам задаёт `CARGO_TARGET_DIR` внутри своего run
+root: cargo-этапы одного прогона переиспользуют собранные зависимости, а каталог удаляется вместе с
+прогоном. Пример и процедура измерения — в разделе «Caches» `harness/docs/container-executor.md`.
+Контейнер не сохраняет свой HOME между запусками.
 Хостовый `~/.gitconfig` не монтируется; Git identity задаётся в конфиге репозитория или через
 разрешённые имена переменных. Worker получает artifacts на запись и shared storage на чтение;
 runtime socket ему недоступен.

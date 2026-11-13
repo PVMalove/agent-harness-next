@@ -252,8 +252,78 @@ approval is refused with `approval_mismatch`. After a rebuild, cancel the dispat
 The worker keeps nothing between containers. Only the `cache` resources of the plan give it
 persistent storage: each one is mounted at the same path with its own access. A relative `path`
 resolves against the dispatch worktree. The executor creates no named volume and no long-lived
-container. To use a cache from a tool, point the tool at that path, for example through a
-variable passed by name in `environment`.
+container. To use a cache from a tool, point the tool at that path through the item's `variable`
+(see below) or through a variable passed by name in `environment`.
+
+### Cache variable
+
+A `cache` item may name an environment variable in `variable`. The executor passes
+`--env <variable>=<resolved cache path>` to every container of the plan itself, so the path needs
+no setup of the `harness-runtime serve` environment. The value is the cache root that the plan and
+its digest already pin; it is not read from the serve environment and is not a secret.
+
+- Only a `cache` item takes `variable`. The name matches `[A-Za-z_][A-Za-z0-9_]*`, is unique among
+  the cache items of the component and is not also listed in `environment`.
+- The name is not one the runtime sets itself: `HOME`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_0`,
+  `GIT_CONFIG_VALUE_0`, `HARNESS_EXECUTOR`, `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`,
+  `https_proxy`, `NO_PROXY`, `no_proxy`, `TMPDIR`, `TMP`, `TEMP`, `GIT_CEILING_DIRECTORIES`,
+  `HARNESS_VERIFY_COLD` and `CARGO_TARGET_DIR`.
+- A cache item without `variable` keeps the plan shape and digest it had before the field existed.
+
+### Cargo cache for QA
+
+Keep the cargo download cache between QA runs with a `cache` item of `operations.qa` (ADR 0032):
+
+```json
+"operations": {
+  "qa": {
+    "container": {"worker_image": "harness-qa:local", "proxy_image": "harness-proxy:local"},
+    "network": {"hosts": ["github.com", "index.crates.io", "static.crates.io"]},
+    "filesystem": [
+      {
+        "resource": "cache",
+        "path": "/abs/path/to/project/.harness/.sandboxes/cache/cargo",
+        "access": "write",
+        "variable": "CARGO_HOME"
+      }
+    ]
+  }
+}
+```
+
+- Create the directory before the first run: `mkdir -p .harness/.sandboxes/cache/cargo`. The bind
+  mount and the write probe of the operation need an existing directory.
+- Use an absolute path in the main checkout. A relative path resolves against the dispatch
+  worktree, so every worktree would get its own cache.
+- `CARGO_HOME` replaces the image default `/usr/local/cargo` only for the registry and Git caches;
+  the toolchain stays in `RUSTUP_HOME` of the image, and `cargo` stays on `PATH`.
+- The crates.io hosts stay explicit in `network.hosts`: the cache adds no network access.
+- Repeat `dispatch propose` after you change the cache item: it is part of the plan digest.
+
+Every QA run also sets `CARGO_TARGET_DIR=<run root>/cargo-target`. All cargo stages and workspaces
+of one run share this build directory, so the second and later stages reuse the dependencies built
+by the first. The directory is removed with the run root, so compiled code of one candidate never
+reaches the run of another candidate. A plan `environment` name `CARGO_TARGET_DIR` never overrides
+the run's value. The launch evidence records only the names of these settings; their values appear
+only in the container argv.
+
+The download cache is writable by the candidate's commands. cargo verifies the checksums of the
+downloaded archives in `registry/cache`, but not of the unpacked sources in `registry/src`. Clear
+the directory if you suspect a candidate changed it: `rm -rf .harness/.sandboxes/cache/cargo/*`.
+
+### Measure QA time before and after the cache
+
+1. Pick a candidate whose ticket-diff plan has at least two cargo stages.
+2. "Before": run `harness-runtime serve` built from a commit without the cargo cache and no
+   `variable` in the QA cache item. "After": rebuild `harness-runtime` from a commit with the
+   cache, restart `harness-runtime serve` and add the cargo cache item above with an empty
+   directory.
+3. Run `qa run` twice in a row on the same candidate for each setup.
+4. Compare the stage durations of the `stage-evidence.v1` records of each run.
+5. Check the stderr of the cargo stages: in the second run with the cache, no line contains
+   `Downloaded` or `Downloading crates`, and `Compiling libsqlite3-sys` appears at most once per
+   run.
+6. Record the measured durations in the pull request.
 
 ## Environment by name
 
