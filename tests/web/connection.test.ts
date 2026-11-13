@@ -104,6 +104,7 @@ describe("the connection state", () => {
 describe("the contour activity of the connection state", () => {
   const activity = {
     window_seconds: 300,
+    events_per_minute: 1.2,
     links: [{ link: "typed" as const, events_per_minute: 1.2, last_event_age_seconds: 4.5 }],
     last_event_age_seconds: 4.5,
     events_total_window: 6,

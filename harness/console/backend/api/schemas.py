@@ -362,6 +362,7 @@ class LinkActivityPayload(_Strict):  # type: ignore[explicit-any]
 
 class HomeActivityPayload(_Strict):  # type: ignore[explicit-any]
     window_seconds: int
+    events_per_minute: float
     links: list[LinkActivityPayload]
     last_event_age_seconds: float | None
     events_total_window: int

@@ -47,6 +47,7 @@ describe("the console client", () => {
     socket.open();
     const activity = {
       window_seconds: 300,
+      events_per_minute: 1.2,
       links: [{ link: "typed", events_per_minute: 1.2, last_event_age_seconds: 4.5 }],
       last_event_age_seconds: 4.5,
       events_total_window: 6,

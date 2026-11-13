@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { translate } from "../../harness/console/frontend/src/i18n";
 import {
   CLUSTER_WINDOW_SECONDS,
   clusterSteps,
@@ -23,7 +24,6 @@ describe("clustering the steps of one source", () => {
     const [cluster, ...rest] = clusterSteps(steps);
     expect(rest).toEqual([]);
     expect(cluster!.members.map((member) => member.key)).toEqual(steps.map((step) => step.key));
-    expect(cluster!.spanSeconds).toBe(CLUSTER_WINDOW_SECONDS + 5);
     expect(cluster!.last).toBe(steps[2]);
   });
 
@@ -55,13 +55,16 @@ describe("clustering the steps of one source", () => {
   });
 });
 
+const ru = (text: string, values?: Readonly<Record<string, string | number>>) => translate("ru", text, values);
+const en = (text: string, values?: Readonly<Record<string, string | number>>) => translate("en", text, values);
+
 describe("the duration text", () => {
   test("seconds, minutes with seconds, hours; no value is a dash", () => {
-    expect(durationText(null, "ru")).toBe("—");
-    expect(durationText(0, "ru")).toBe("0 с");
-    expect(durationText(45, "ru")).toBe("45 с");
-    expect(durationText(125, "ru")).toBe("2 мин 5 с");
-    expect(durationText(125, "en")).toBe("2 min 5 s");
-    expect(durationText(3700, "ru")).toBe("1 ч 1 мин");
+    expect(durationText(null, ru)).toBe("—");
+    expect(durationText(0, ru)).toBe("0 с");
+    expect(durationText(45, ru)).toBe("45 с");
+    expect(durationText(125, ru)).toBe("2 мин 5 с");
+    expect(durationText(125, en)).toBe("2 min 5 s");
+    expect(durationText(3700, ru)).toBe("1 ч 1 мин");
   });
 });

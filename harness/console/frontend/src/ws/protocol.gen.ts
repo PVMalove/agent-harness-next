@@ -73,9 +73,10 @@ export type Id1 = string | number | null;
 export type Ok = false;
 export type Type1 = string | null;
 export type V = 1;
+export type EventsPerMinute = number;
 export type EventsTotalWindow = number;
 export type LastEventAgeSeconds = number | null;
-export type EventsPerMinute = number;
+export type EventsPerMinute1 = number;
 export type LastEventAgeSeconds1 = number | null;
 export type Link = "decision" | "typed" | "write" | "launch" | "audit" | "receipts";
 export type Links = LinkActivityPayload[];
@@ -582,6 +583,7 @@ export interface HomeSnapshotReply {
  * via the `definition` "HomeActivityPayload".
  */
 export interface HomeActivityPayload {
+  events_per_minute: EventsPerMinute;
   events_total_window: EventsTotalWindow;
   last_event_age_seconds: LastEventAgeSeconds;
   links: Links;
@@ -592,7 +594,7 @@ export interface HomeActivityPayload {
  * via the `definition` "LinkActivityPayload".
  */
 export interface LinkActivityPayload {
-  events_per_minute: EventsPerMinute;
+  events_per_minute: EventsPerMinute1;
   last_event_age_seconds: LastEventAgeSeconds1;
   link: Link;
 }

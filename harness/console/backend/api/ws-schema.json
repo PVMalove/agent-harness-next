@@ -1320,6 +1320,10 @@
     "HomeActivityPayload": {
       "additionalProperties": false,
       "properties": {
+        "events_per_minute": {
+          "title": "Events Per Minute",
+          "type": "number"
+        },
         "events_total_window": {
           "title": "Events Total Window",
           "type": "integer"
@@ -1349,6 +1353,7 @@
       },
       "required": [
         "window_seconds",
+        "events_per_minute",
         "links",
         "last_event_age_seconds",
         "events_total_window"

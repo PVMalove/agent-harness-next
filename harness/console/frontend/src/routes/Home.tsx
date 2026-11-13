@@ -6,13 +6,14 @@ import { groupLabel, useI18n } from "../i18n";
 import { href } from "../navigation";
 import { preRelease } from "../AppShell";
 import { useConsole } from "../useConsole";
-import { LINKS, eventLine, linkState } from "./homeActivity";
+import { KpiStrip, RecentEvents } from "./HomeBlocks";
+import { LINKS, ageText, linkState } from "./homeActivity";
+import { useAgedActivity } from "./useAgedActivity";
 import type {
   AreaCounters,
   HarnessInstall,
   HealthCounters,
   HomeActivity,
-  HomeEvent,
   HomeSnapshot,
   Problem,
   RecentSession,
@@ -370,105 +371,6 @@ export function HealthStrip({ health }: { health: HealthCounters }) {
   );
 }
 
-/** The events per minute over the counting window, rounded to a tenth. */
-export function eventsPerMinute(activity: HomeActivity): number {
-  return Math.round(((activity.events_total_window * 60) / activity.window_seconds) * 10) / 10;
-}
-
-/** The strip of the main numbers over the blocks: every value is a fact of the snapshot or of
-    the counted activity; one without a source reads "нет данных". */
-function KpiStrip({ snapshot, activity }: { snapshot: HomeSnapshot | null; activity: HomeActivity | null }) {
-  const { t } = useI18n();
-  const health = snapshot?.health ?? null;
-  const install = snapshot?.harness ?? null;
-  const store = snapshot?.store ?? null;
-  const batches = snapshot?.active_batches ?? null;
-  const tiles: { label: string; icon: string; value: string | null; note: string | null; tone?: string }[] = [
-    {
-      label: t("Проверки пройдено"),
-      icon: "check",
-      value: health ? `${health.ok} / ${healthTotal(health)}` : null,
-      note: health ? `${t("пропущено")}: ${health.skipped}` : null,
-      tone: health && health.fail === 0 ? "ok" : "",
-    },
-    {
-      label: t("Ошибки и предупреждения"),
-      icon: "warning",
-      value: health ? `${health.fail} · ${health.warn}` : null,
-      note: health ? `${t("ошибки")} · ${t("внимание")}` : null,
-      tone: health && health.fail > 0 ? "err" : "",
-    },
-    { label: t("Активные batch"), icon: "orchestration", value: batches === null ? null : String(batches), note: null },
-    {
-      label: t("Событий в минуту"),
-      icon: "activity",
-      value: activity ? String(eventsPerMinute(activity)) : null,
-      note: activity
-        ? activity.last_event_age_seconds === null
-          ? t("нет событий в окне")
-          : t("{count} с назад", { count: Math.round(activity.last_event_age_seconds) })
-        : null,
-    },
-    { label: "Runtime store", icon: "store", value: store?.authority ?? null, note: store?.schema != null ? `schema ${store.schema}` : null },
-    {
-      label: t("Скиллы"),
-      icon: "skills",
-      value: install ? String(install.skills) : null,
-      note: install ? `${install.installed ? install.installed_version : t("не установлен")}` : null,
-    },
-  ];
-  return (
-    <div className="tiles home-kpis" role="group" aria-label={t("Показатели Главной")}>
-      {tiles.map((tile) => (
-        <div className="tile" key={tile.label}>
-          <div className="label">
-            <Icon name={tile.icon} /> {tile.label}
-          </div>
-          {tile.value === null ? <b className="muted no-data">{t("нет данных")}</b> : <b className={tile.tone ?? ""}>{tile.value}</b>}
-          <span>{tile.note ?? "\u00a0"}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** The last orchestration events the console saw since it opened, newest first. */
-function RecentEvents({ events }: { events: HomeEvent[] }) {
-  const { t, language } = useI18n();
-  const clock = new Intl.DateTimeFormat(language, { timeStyle: "medium", timeZone: "UTC" });
-  return (
-    <section id="home-events" className="panel events-panel">
-      <div className="panel-head">
-        <h2>
-          {t("Последние события")} <span className="small muted">{events.length}</span>
-        </h2>
-        <a className="small" href={href("agent-activity")}>
-          {t("Ход работы")} →
-        </a>
-      </div>
-      {events.length ? (
-        <ul className="home-event-list" tabIndex={0} aria-label={t("Последние события")}>
-          {events.map((event) => {
-            const line = eventLine(event, t);
-            const moment = Date.parse(event.observed_at);
-            return (
-              <li key={event.seq}>
-                <time dateTime={event.observed_at}>{Number.isNaN(moment) ? "—" : clock.format(moment)}</time>
-                <b>{line.title}</b>
-                <small>{line.detail}</small>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <div className="body">
-          <p className="empty">{t("Событий с момента открытия консоли не было")}</p>
-        </div>
-      )}
-    </section>
-  );
-}
-
 /** The Harness 2.0.0 contour of the mockup (homeContour): the structure is fixed, every value
     comes from the snapshot or from the activity the console counted for that reply; a link moves
     only while events flow on it. */
@@ -612,6 +514,7 @@ export function Home() {
   const [filter, setFilter] = useState<"all" | "problem" | "skipped">("all");
   const firstEvents = useRef(events);
   const snapshot = state.snapshot;
+  const activity = useAgedActivity(state.activity);
   const unavailable = t("Недоступно в текущем снимке");
 
   // Offline mode re-reads Home 15 s after each reply; online refreshes only on request.
@@ -704,7 +607,7 @@ export function Home() {
         </div>
       </div>
 
-      <KpiStrip snapshot={snapshot} activity={state.activity} />
+      <KpiStrip snapshot={snapshot} activity={activity} />
 
       <div className="home-main">
         <section id="home-attention" className="panel home-attn">
@@ -831,17 +734,11 @@ export function Home() {
                 <Icon name="activity" /> {t("Наблюдение")}
               </h3>
               <dl className="kv">
-                <Fact label={t("Окно подсчёта")} value={state.activity ? t("{count} с", { count: state.activity.window_seconds }) : null} />
-                <Fact label={t("События в окне")} value={state.activity ? String(state.activity.events_total_window) : null} />
+                <Fact label={t("Окно подсчёта")} value={activity ? t("{count} с", { count: activity.window_seconds }) : null} />
+                <Fact label={t("События в окне")} value={activity ? String(activity.events_total_window) : null} />
                 <Fact
                   label={t("Последнее событие")}
-                  value={
-                    state.activity
-                      ? state.activity.last_event_age_seconds === null
-                        ? "—"
-                        : t("{count} с назад", { count: Math.round(state.activity.last_event_age_seconds) })
-                      : null
-                  }
+                  value={activity ? (activity.last_event_age_seconds === null ? "—" : ageText(activity.last_event_age_seconds, t)) : null}
                 />
               </dl>
               <p className="aside-note">{t("по наблюдению консоли")}</p>
@@ -949,7 +846,7 @@ export function Home() {
           </div>
         </section>
 
-        <Contour snapshot={snapshot} activity={state.activity} />
+        <Contour snapshot={snapshot} activity={activity} />
 
         <RecentEvents events={recentEvents} />
       </div>

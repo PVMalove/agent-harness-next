@@ -3,7 +3,7 @@ import { createContext, createElement, useContext, useEffect, useMemo, useReduce
 import type { ReactNode } from "react";
 import { INITIAL, reduce } from "./connection";
 import type { ConnectionState } from "./connection";
-import { parseHomeEvents } from "./routes/homeActivity";
+import { parseHomeEvents } from "./ws/homeEvents";
 import type { HomeEvent, HomeSnapshot } from "./ws/types";
 import { createConsoleClient } from "./ws/client";
 import type { ConsoleClient, SocketFactory } from "./ws/client";

@@ -262,6 +262,7 @@ describe("Home after the owner's review", () => {
 
 const ACTIVITY = {
   window_seconds: 300,
+  events_per_minute: 1.4,
   links: [
     { link: "decision", events_per_minute: 0, last_event_age_seconds: null },
     { link: "typed", events_per_minute: 1.2, last_event_age_seconds: 4.4 },
@@ -299,7 +300,7 @@ describe("Home contour activity", () => {
   beforeEach(() => {
     FakeSocket.reset();
     window.location.hash = "#/";
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
   });
   afterEach(() => vi.useRealTimers());
 
@@ -312,6 +313,18 @@ describe("Home contour activity", () => {
     }
     expect(document.getElementById("home-contour")!.textContent).not.toMatch(/\/мин|назад/);
     expect(document.getElementById("home")!.textContent).not.toMatch(/\/мин/);
+  });
+
+  test("a link stops moving by itself when no new reply comes", () => {
+    renderWithActivity(ACTIVITY);
+    expect(linkRow("typed").classList.contains("live")).toBe(true);
+    // The last typed event was 4.4 s old at the reply: one minute later it is past the threshold.
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(linkRow("typed").classList.contains("live")).toBe(false);
+    expect(edges().filter((edge) => edge.classList.contains("live"))).toHaveLength(0);
+    expect(linkRow("typed").textContent).toBe("typed1.2/мин · 64 с назад");
   });
 
   test("a link with fresh events moves; an old or empty one does not; values are the payload's", () => {

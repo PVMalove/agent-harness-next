@@ -93,9 +93,7 @@ class RouterConnection:
         router = self._router
         try:
             if job_type is not None:
-                async with contextlib.aclosing(
-                    job_replies(raw, router.jobs)
-                ) as replies:
+                async with contextlib.aclosing(job_replies(raw, router.jobs)) as replies:
                     await self._stream(replies)
             elif worker_request_type(raw) is not None:
                 async with contextlib.aclosing(
@@ -103,9 +101,7 @@ class RouterConnection:
                 ) as replies:
                     await self._stream(replies)
             elif is_orchestration_request(raw):
-                async with contextlib.aclosing(
-                    event_replies(raw, router.events)
-                ) as replies:
+                async with contextlib.aclosing(event_replies(raw, router.events)) as replies:
                     await self._stream(replies)
             elif is_steps_request(raw):
                 async with contextlib.aclosing(

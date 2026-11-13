@@ -203,18 +203,9 @@ def job_service(repo: Path, *, executor: JobExecutor | None = None) -> JobServic
         "configuration": CONFIGURATION_COMMANDS,
         "memory": MEMORY_COMMANDS,
         "decisions": tuple(
-            entry
-            for entry in COORDINATOR_COMMANDS
-            if entry.key
-            in {
-                "batch-approve",
-                "batch-decide",
-                "batch-attention-resolve",
-                "dispatch-propose",
-                "dispatch-create",
-            }
-        )
-        + NATIVE_PERMISSION_COMMANDS,
+            entry for entry in COORDINATOR_COMMANDS
+            if entry.key in {"batch-approve", "batch-decide", "batch-attention-resolve", "dispatch-propose", "dispatch-create"}
+        ) + NATIVE_PERMISSION_COMMANDS,
         # The Recovery page runs these behind a confirmation; `recovery-status` is its screen read.
         "recovery": tuple(
             entry for entry in COORDINATOR_COMMANDS if entry.key in RECOVERY_COMMANDS
@@ -339,15 +330,6 @@ def compose(
         screens,
         workers,
         steps,
-        RequestRouter(
-            snapshots,
-            jobs,
-            decisions,
-            events,
-            screens,
-            workers,
-            steps,
-            HomeActivityQuery(events, now=utc_now_iso),
-        ),
+        RequestRouter(snapshots, jobs, decisions, events, screens, workers, steps, HomeActivityQuery(events, now=utc_now_iso)),
         Discovery,
     )

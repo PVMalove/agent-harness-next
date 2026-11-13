@@ -23,20 +23,18 @@ class RecentEvents(Protocol):
 
 
 class HomeActivityQuery:
-    """Counts the events of the last window; `None` when the journal cannot be read."""
+    """Counts the events of the last window; `None` while the journal is not loaded. A failure to read
+    it raises: `respond` turns that into a null `activity`."""
 
     def __init__(self, events: RecentEvents, *, now: WallClock) -> None:
         self._events = events
         self._now = now
 
     def __call__(self) -> HomeActivity | None:
-        try:
-            events = self._events.recent(EVENTS_READ)
-            moment = datetime.fromisoformat(self._now())
-        except Exception:
-            return None
+        events = self._events.recent(EVENTS_READ)
         if events is None:
             return None
+        moment = datetime.fromisoformat(self._now())
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=timezone.utc)
         return build_activity(events, moment)

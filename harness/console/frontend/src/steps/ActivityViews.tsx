@@ -54,9 +54,10 @@ export function statusCounts(dispatches: readonly RosterDispatch[]): Record<"all
   return counts;
 }
 
-/** The mockup's list limits: the latest sessions, session events and steps shown at once. */
+/** The mockup's limit of the latest sessions shown at once. */
 export const SESSION_LIMIT = 5;
-/** The rows a list holds before it says how many it leaves out; the lists scroll in their block. */
+/** The rows the event and step lists hold before they say how many they leave out; the lists
+    scroll in their block. */
 export const EVENT_LIMIT = 50;
 export const STEP_LIMIT = 100;
 

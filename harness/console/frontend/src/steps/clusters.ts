@@ -11,8 +11,6 @@ export interface StepCluster {
   members: HeldStep[];
   /** The newest member; its text names the cluster. */
   last: HeldStep;
-  /** Seconds between the first and the last member. */
-  spanSeconds: number;
   /** Seconds from the first member to the first step of the next cluster of the same source; null
       for the newest cluster of a source, whose end is not known. */
   durationSeconds: number | null;
@@ -46,22 +44,21 @@ export function clusterSteps(steps: readonly HeldStep[]): StepCluster[] {
     const next = clusters.slice(index + 1).find((later) => later.source === cluster.source);
     const start = seconds(first.step);
     const end = next ? seconds(next.members[0]!.step) : Number.NaN;
-    const span = seconds(last.step) - start;
     return {
       key: first.key,
       members: cluster.members,
       last,
-      spanSeconds: Number.isFinite(span) ? Math.max(0, Math.round(span)) : 0,
       durationSeconds: Number.isFinite(end - start) ? Math.max(0, Math.round(end - start)) : null,
     };
   });
 }
 
+type Translate = (text: string, values?: Readonly<Record<string, string | number>>) => string;
+
 /** "45 с", "2 мин 5 с", "1 ч 1 мин"; a dash for an unknown duration. */
-export function durationText(value: number | null, language: string): string {
+export function durationText(value: number | null, t: Translate): string {
   if (value === null) return "—";
-  const [s, m, h] = language === "en" ? ["s", "min", "h"] : ["с", "мин", "ч"];
-  if (value < 60) return `${value} ${s}`;
-  if (value < 3600) return `${Math.floor(value / 60)} ${m} ${value % 60} ${s}`;
-  return `${Math.floor(value / 3600)} ${h} ${Math.floor((value % 3600) / 60)} ${m}`;
+  if (value < 60) return t("{seconds} с", { seconds: value });
+  if (value < 3600) return t("{minutes} мин {seconds} с", { minutes: Math.floor(value / 60), seconds: value % 60 });
+  return t("{hours} ч {minutes} мин", { hours: Math.floor(value / 3600), minutes: Math.floor((value % 3600) / 60) });
 }

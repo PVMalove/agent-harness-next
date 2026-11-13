@@ -119,7 +119,7 @@ def test_naive_times_are_read_as_utc() -> None:
     assert activity.last_event_age_seconds == 30
 
 
-def test_payload_round_trips_and_is_json_plain() -> None:
+def test_payload_is_json_plain() -> None:
     activity = build_activity([_event("qa.run", 12.34)], NOW)
     payload = activity.to_payload()
     assert payload["window_seconds"] == WINDOW_SECONDS
@@ -130,7 +130,18 @@ def test_payload_round_trips_and_is_json_plain() -> None:
         "events_per_minute": 0,
         "last_event_age_seconds": None,
     }
-    assert HomeActivity.from_payload(payload) == activity
+    assert payload["events_per_minute"] == 0.2
+    json.dumps(payload)
+
+
+def test_the_wire_schema_names_exactly_the_links_the_kernel_counts() -> None:
+    from typing import get_args
+
+    from harness.console.backend.api.schemas import LinkActivityPayload
+
+    assert (
+        get_args(LinkActivityPayload.model_fields["link"].annotation) == ACTIVITY_LINKS
+    )
 
 
 def test_old_client_still_parses_the_snapshot_without_activity() -> None:
@@ -246,9 +257,8 @@ def test_query_counts_against_the_wall_clock() -> None:
     assert activity.last_event_age_seconds == 20
 
 
-def test_query_without_a_journal_or_a_clock_has_no_data() -> None:
+def test_query_without_a_journal_has_no_data() -> None:
     assert HomeActivityQuery(_Recent(None), now=lambda: NOW.isoformat())() is None
-    assert HomeActivityQuery(_Recent([]), now=lambda: "garbage")() is None
 
 
 def test_recent_events_of_the_journal_are_bounded_and_oldest_first(

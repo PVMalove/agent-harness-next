@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
+  LINKS,
   LIVE_AGE_SECONDS,
+  ageActivity,
+  ageText,
   eventLine,
   linkState,
 } from "../../harness/console/frontend/src/routes/homeActivity";
@@ -12,6 +17,7 @@ const en = (text: string, values?: Readonly<Record<string, string | number>>) =>
 
 const activity = (links: HomeActivity["links"]): HomeActivity => ({
   window_seconds: 300,
+  events_per_minute: 1.2,
   links,
   last_event_age_seconds: 4,
   events_total_window: 6,
@@ -64,5 +70,43 @@ describe("the line of a recent event", () => {
     expect(
       eventLine({ seq: 4, observed_at: "t", event: "qa.run", batch_id: "b-1", ticket: null, dispatch_id: "d-9", role: null, from: null, to: null, decision: null, outcome: "passed" }, ru),
     ).toEqual({ title: "qa.run", detail: "passed" });
+  });
+});
+
+describe("the age of an event", () => {
+  test("seconds under two minutes, minutes after, in both languages", () => {
+    expect(ageText(4.4, ru)).toBe("4 с назад");
+    expect(ageText(119, ru)).toBe("119 с назад");
+    expect(ageText(150, ru)).toBe("3 мин назад");
+    expect(ageText(150, en)).toBe("3 min ago");
+  });
+
+  test("the ages grow with the time since the reply; no event stays no event; the rates stay", () => {
+    const counted = activity([
+      { link: "typed", events_per_minute: 1.2, last_event_age_seconds: 4 },
+      { link: "launch", events_per_minute: 0, last_event_age_seconds: null },
+    ]);
+    const later = ageActivity(counted, 30);
+    expect(later.last_event_age_seconds).toBe(34);
+    expect(later.links).toEqual([
+      { link: "typed", events_per_minute: 1.2, last_event_age_seconds: 34 },
+      { link: "launch", events_per_minute: 0, last_event_age_seconds: null },
+    ]);
+    expect(ageActivity(counted, 0)).toBe(counted);
+  });
+
+  test("a link that saw its last event a minute ago stops moving without a new reply", () => {
+    const counted = activity([{ link: "typed", events_per_minute: 1.2, last_event_age_seconds: 4 }]);
+    expect(linkState(ageActivity(counted, LIVE_AGE_SECONDS - 4), "typed", ru).animated).toBe(true);
+    expect(linkState(ageActivity(counted, LIVE_AGE_SECONDS - 3), "typed", ru).animated).toBe(false);
+  });
+});
+
+describe("the links of the contour", () => {
+  test("are exactly the links the server schema names", () => {
+    const schema = JSON.parse(
+      readFileSync(resolve(process.cwd(), "../backend/api/ws-schema.json"), "utf-8"),
+    ) as { $defs: { LinkActivityPayload: { properties: { link: { enum: string[] } } } } };
+    expect([...LINKS]).toEqual(schema.$defs.LinkActivityPayload.properties.link.enum);
   });
 });

@@ -38,56 +38,42 @@ function ClusterMark({
 }
 
 function StepRow({ step, cluster, open, onToggle }: { step: Step; cluster: StepCluster; open: boolean; onToggle: () => void }) {
-  const { t, section, language } = useI18n();
-  const duration = (
-    <span className="work-event-duration" title={t("Длительность")}>
-      {durationText(cluster.durationSeconds, language)}
-    </span>
-  );
-  const members = open ? (
-    <ul className="work-cluster-members">
-      {cluster.members.map((member) => (
-        <li key={member.key}>
-          <span>{clock(member.step.observed_at)}</span>
-          {member.step.origin === "agent" ? member.step.text : eventText(member.step, t)}
-        </li>
-      ))}
-    </ul>
-  ) : null;
-  if (step.origin === "agent") {
-    return (
-      <div className="work-event" data-origin="agent" data-source={step.source}>
-        <span className="work-event-time">{clock(step.observed_at)}</span>
-        <span className="work-event-role">{step.role}</span>
-        <span className="work-event-main">
-          <b>{step.text}</b>
-          <small>
-            {step.kind} · {step.dispatch_id}
-          </small>
-          {step.structure === "unavailable" ? (
-            <em className="orch-pill violet">{t(STRUCTURE_LABELS.unavailable)}</em>
-          ) : null}
-          <ClusterMark cluster={cluster} open={open} onToggle={onToggle} />
-        </span>
-        {duration}
-        {members}
-      </div>
-    );
-  }
-  const details = [step.ticket, step.batch_id].filter((part): part is string => Boolean(part));
-  if (step.next_role) details.push(t("дальше: {role}", { role: step.next_role }));
-  if (step.message) details.push(step.message);
+  const { t, section } = useI18n();
+  const details =
+    step.origin === "agent"
+      ? [`${step.kind} · ${step.dispatch_id}`]
+      : [step.ticket, step.batch_id, step.next_role ? t("дальше: {role}", { role: step.next_role }) : null, step.message].filter(
+          (part): part is string => Boolean(part),
+        );
   return (
-    <div className="work-event" data-origin="orchestration">
+    <div
+      className="work-event"
+      data-origin={step.origin}
+      data-source={step.origin === "agent" ? step.source : undefined}
+    >
       <span className="work-event-time">{clock(step.observed_at)}</span>
-      <span className="work-event-role">{step.role ?? section("Orchestration")}</span>
+      <span className="work-event-role">{step.origin === "agent" ? step.role : (step.role ?? section("Orchestration"))}</span>
       <span className="work-event-main">
-        <b>{eventText(step, t)}</b>
+        <b>{step.origin === "agent" ? step.text : eventText(step, t)}</b>
         <small>{details.join(" · ")}</small>
+        {step.origin === "agent" && step.structure === "unavailable" ? (
+          <em className="orch-pill violet">{t(STRUCTURE_LABELS.unavailable)}</em>
+        ) : null}
         <ClusterMark cluster={cluster} open={open} onToggle={onToggle} />
       </span>
-      {duration}
-      {members}
+      <span className="work-event-duration" title={t("Длительность")}>
+        {durationText(cluster.durationSeconds, t)}
+      </span>
+      {open ? (
+        <ul className="work-cluster-members">
+          {cluster.members.map((member) => (
+            <li key={member.key}>
+              <span>{clock(member.step.observed_at)}</span>
+              {member.step.origin === "agent" ? member.step.text : eventText(member.step, t)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

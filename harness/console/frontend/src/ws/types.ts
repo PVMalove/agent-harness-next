@@ -277,6 +277,7 @@ export function parseHomeSnapshot(value: unknown): HomeSnapshot | null {
 const rate: Check = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
 const ACTIVITY = fields({
   window_seconds: count,
+  events_per_minute: rate,
   links: list(
     fields({ link: string, events_per_minute: rate, last_event_age_seconds: nullable(rate) }),
   ),

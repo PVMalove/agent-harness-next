@@ -71,8 +71,8 @@ export const priorityLabel = (card: BoardCard): string =>
 export type ImplementationKind = "fast" | "full" | "guide";
 
 export function implementationKind(card: BoardCard): ImplementationKind {
-  if (card.command.includes("fast-implement")) return "fast";
-  if (card.command.includes("to-guide")) return "guide";
+  if (card.command === "/fast-implement") return "fast";
+  if (card.command === "/to-guide") return "guide";
   return "full";
 }
 
@@ -80,10 +80,13 @@ export function implementationLabel(t: Translate, kind: ImplementationKind): str
   return { fast: t("быстрая"), full: t("полная"), guide: t("с человеком") }[kind];
 }
 
-/** The blocker badges of a card: the open ones by id (at most `shown`), then how many more. */
-export function blockerBadges(card: BoardCard, shown = 3): { ids: string[]; more: number } {
+/** How many blocker ids a card shows before it says how many more are open. */
+const SHOWN_BLOCKERS = 3;
+
+/** The blocker badges of a card: the open ones by id (at most `SHOWN_BLOCKERS`), then how many more. */
+export function blockerBadges(card: BoardCard): { ids: string[]; more: number } {
   const open = card.blockers.filter((blocker) => blocker.state === "open").map((blocker) => blocker.id);
-  return { ids: open.slice(0, shown), more: Math.max(0, card.open_blockers - Math.min(shown, open.length)) };
+  return { ids: open.slice(0, SHOWN_BLOCKERS), more: Math.max(0, card.open_blockers - Math.min(SHOWN_BLOCKERS, open.length)) };
 }
 
 export interface BoardFilters {
