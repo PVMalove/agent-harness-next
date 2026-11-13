@@ -234,7 +234,9 @@ operator's terminal for transitions that still require human approval. When choo
 route for `retry` or `abandon`, show the decision packet's `route_preview` (with the
 `--reason-category` or `--retry-role` you intend to pass to `batch decide`) and follow the
 Recovery route table in `.harness/orchestration/playbook.md` (situation → route → who approves →
-evidence). Report each startup failure under its own classification (unsupported flag, missing
+evidence). When a route is `rebase` (`next_action: rebase`, also shown as `route_preview.accept`),
+create `dispatch create --role rebaser`; after its accepted report run the risk assessment and go
+to QA, never to a new code-review. Report each startup failure under its own classification (unsupported flag, missing
 or refused self-report, capacity, rate-limit, service-unavailable) together with its recovery
 route.
 
