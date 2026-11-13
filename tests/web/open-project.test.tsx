@@ -69,7 +69,7 @@ describe("the Open Project route", () => {
       expect(document.querySelector("#open-project-command")?.textContent).toBe(item.command);
     }
     expect(socket.sent.filter((body) => !SENT_TYPES.has(String(body.type)))).toEqual([]);
-    const current = document.querySelector('nav a[aria-current="page"]');
+    const current = document.querySelector('#navigation a[aria-current="page"]');
     expect(current?.getAttribute("href")).toBe("#/open-project");
   });
 

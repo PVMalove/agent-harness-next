@@ -50,3 +50,19 @@ describe("the mockup palette", () => {
     expect(contrast(tokens.selfg, background)).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe("the design system v3 palette", () => {
+  const ds = rootTokens(readFileSync(join(resolve(__dirname, "../.."), "harness/console/frontend/src/styles/ds-tokens.css"), "utf-8"));
+  for (const tone of ["ds-ok", "ds-warn", "ds-err", "ds-muted", "ds-faint", "ds-accent"]) {
+    for (const surface of ["ds-bg", "ds-surface", "ds-raised", "ds-rail"]) {
+      test(`--${tone} text reaches 4.5:1 on --${surface}`, () => {
+        expect(contrast(ds[tone]!, ds[surface]!)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+  for (const [tone, surface] of [["ds-ok", "ds-ok-bg"], ["ds-warn", "ds-warn-bg"], ["ds-err", "ds-err-bg"], ["ds-accent", "ds-accent-bg"]] as const) {
+    test(`--${tone} on its own tint --${surface} reaches 4.5:1`, () => {
+      expect(contrast(ds[tone]!, ds[surface]!)).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
