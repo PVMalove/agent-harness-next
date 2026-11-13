@@ -179,7 +179,7 @@ jobs:
         env:
           HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime.exe
           HARNESS_REQUIRE_RUNTIME: "1"
-        run: .harness/.venv/Scripts/python -m pytest -q tests/orchestration/test_runtime_client.py
+        run: .harness/.venv/Scripts/python -m pytest -q tests/orchestration/test_runtime_client.py tests/core/test_hook_policy_matrix.py tests/core/test_change_impact_hooks.py tests/core/test_hook_response.py tests/core/test_project_hooks_hardening.py
 
   targeted:
     runs-on: windows-latest
@@ -194,4 +194,4 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
       - run: make bootstrap
       - run: echo "C:\\Program Files\\Git\\bin" >> "$GITHUB_PATH"
-      - run: .harness/.venv/Scripts/python -m pytest -q tests/console/test_web_fixture_project_update_config_help.py tests/health/test_health_qa_environment.py::test_a_repository_relative_qa_executable_is_resolved_against_the_repository tests/orchestration/test_ticket_diff_cli.py::TicketDiffCliTests::test_qa_run_records_the_selection_and_explicit_nodeids_in_stage_evidence tests/orchestration/test_runtime_client.py
+      - run: .harness/.venv/Scripts/python -m pytest -q tests/console/test_web_fixture_project_update_config_help.py tests/health/test_health_qa_environment.py::test_a_repository_relative_qa_executable_is_resolved_against_the_repository tests/orchestration/test_ticket_diff_cli.py::TicketDiffCliTests::test_qa_run_records_the_selection_and_explicit_nodeids_in_stage_evidence tests/orchestration/test_runtime_client.py tests/core/test_hook_policy_matrix.py tests/core/test_change_impact_hooks.py tests/core/test_hook_response.py tests/core/test_project_hooks_hardening.py
