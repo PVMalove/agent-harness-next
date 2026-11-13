@@ -405,3 +405,255 @@ def test_an_unusable_exec_command_workdir_blocks_a_commit(
     result = _direct_master(payload, main)
 
     assert result.returncode == 2, result.stderr
+
+
+DELETED_BRANCH = "feature/issue-7-cleanup"
+
+
+def _merged_repo(tmp_path: Path) -> tuple[Path, str]:
+    """A checkout on `integration/epic` whose origin has DELETED_BRANCH; returns its SHA."""
+    repo = _repo(tmp_path, "integration/epic")
+    remote = tmp_path / "origin.git"
+    _git(tmp_path, "init", "-q", "--bare", str(remote))
+    _git(repo, "remote", "add", "origin", str(remote))
+    for branch in (DELETED_BRANCH, "integration/epic", "other-branch"):
+        _git(repo, "push", "-q", "origin", f"HEAD:refs/heads/{branch}")
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return repo, sha
+
+
+@pytest.fixture
+def proof(
+    direct_commits: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> list[tuple[str, str]]:
+    """Record merge-proof requests; DELETED_BRANCH is proven, any other branch is not."""
+    asked: list[tuple[str, str]] = []
+
+    def merge_block_reason(project: Path, branch: str, sha: str) -> str:
+        asked.append((branch, sha))
+        return "" if branch == DELETED_BRANCH else f"нет слитого PR у {branch}"
+
+    monkeypatch.setattr(direct_commits, "_merge_block_reason", merge_block_reason)
+    return asked
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"git push origin --delete {DELETED_BRANCH}",
+        f"git push origin :{DELETED_BRANCH}",
+        f"git push -d origin {DELETED_BRANCH}",
+        f"git push origin :refs/heads/{DELETED_BRANCH}",
+    ],
+)
+def test_a_merged_issue_branch_is_deleted_from_a_protected_checkout(
+    direct_commits: ModuleType,
+    tmp_path: Path,
+    proof: list[tuple[str, str]],
+    command: str,
+) -> None:
+    repo, sha = _merged_repo(tmp_path)
+    assert direct_commits.block_reason(command, repo, repo) == ""
+    assert proof == [(DELETED_BRANCH, sha)]
+
+
+def test_an_unproven_issue_branch_deletion_is_blocked(
+    direct_commits: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo, _ = _merged_repo(tmp_path)
+    monkeypatch.setattr(
+        direct_commits, "_merge_block_reason", lambda *args: "PR не слит"
+    )
+    reason = direct_commits.block_reason(
+        f"git push origin --delete {DELETED_BRANCH}", repo, repo
+    )
+    assert "PR не слит" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git push origin --delete integration/epic",
+        "git push origin --delete master",
+        "git push origin :main",
+        "git push -d origin integration/epic",
+    ],
+)
+def test_deleting_a_protected_branch_is_blocked_without_the_tracker(
+    direct_commits: ModuleType,
+    tmp_path: Path,
+    proof: list[tuple[str, str]],
+    command: str,
+) -> None:
+    repo, _ = _merged_repo(tmp_path)
+    assert "удаление защищённой ветки" in direct_commits.block_reason(
+        command, repo, repo
+    )
+    assert proof == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git push origin --delete other-branch",
+        f"git push origin :{DELETED_BRANCH} HEAD:master",
+        f"git push origin :{DELETED_BRANCH} HEAD:{DELETED_BRANCH}-2",
+        "git push origin --delete feature/issue-9-absent",
+        "git push --delete --all origin",
+        "git push origin --delete",
+    ],
+)
+def test_an_unproven_or_mixed_deletion_is_blocked(
+    direct_commits: ModuleType,
+    tmp_path: Path,
+    proof: list[tuple[str, str]],
+    command: str,
+) -> None:
+    repo, _ = _merged_repo(tmp_path)
+    assert direct_commits.block_reason(command, repo, repo)
+
+
+STUB_TRACKER = """\
+from types import SimpleNamespace
+
+
+def resolve_project_tracker(repo):
+    return SimpleNamespace(
+        effective=SimpleNamespace(type="github", host="example.test", project="o/r")
+    )
+"""
+STUB_PROCESS = """\
+import subprocess
+
+
+def run_tool(argv, timeout, cwd):
+    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+"""
+
+
+class LocalDelete:
+    """A checkout on `integration/epic` with DELETED_BRANCH and a stubbed GitHub tracker."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.repo = _repo(tmp_path, "integration/epic")
+        for branch in (DELETED_BRANCH, "feature/issue-8-other", "other"):
+            _git(self.repo, "branch", branch)
+        self.sha = subprocess.run(
+            ["git", "-C", str(self.repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        harness = self.repo / ".harness"
+        (harness / "health").mkdir(parents=True)
+        (harness / "project.json").write_text(
+            json.dumps(
+                {"base_branch": "master", "branch_pattern": "^feature/issue-[0-9]+-.+"}
+            ),
+            encoding="utf-8",
+        )
+        (harness / "health" / "project_tracker.py").write_text(STUB_TRACKER)
+        (harness / "health" / "process.py").write_text(STUB_PROCESS)
+        self.bin = tmp_path / "fake-bin"
+        self.bin.mkdir()
+        self.answer = tmp_path / "gh-answer.json"
+
+    def tracker(self, prs: list[dict[str, object]] | None, code: int = 0) -> None:
+        """Install a fake gh that prints `prs` for DELETED_BRANCH; None — unparsable output."""
+        gh = self.bin / "gh"
+        answer = "not json" if prs is None else json.dumps(prs)
+        self.answer.write_text(answer, encoding="utf-8")
+        gh.write_text(
+            f"#!{sys.executable}\n"
+            "import sys\n"
+            f"answer = open({str(self.answer)!r}).read()\n"
+            f"print(answer if {DELETED_BRANCH!r} in sys.argv else '[]')\n"
+            f"sys.exit({code})\n"
+        )
+        gh.chmod(0o755)
+
+    def run(self, command: str) -> subprocess.CompletedProcess[str]:
+        bash = shutil.which("bash")
+        if not bash:
+            pytest.skip("the hook is a bash script")
+        return subprocess.run(
+            [bash, str(HOOKS / "block-dangerous-git.sh")],
+            input=json.dumps(
+                {"tool_input": {"command": command}, "cwd": str(self.repo)}
+            ),
+            env={
+                **os.environ,
+                "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
+                "CLAUDE_PROJECT_DIR": str(self.repo),
+                "HARNESS_HOOK_ENVELOPE": "1",
+            },
+            capture_output=True,
+            text=True,
+        )
+
+
+@pytest.fixture
+def local_delete(tmp_path: Path) -> LocalDelete:
+    if sys.platform == "win32":
+        pytest.skip("the fake tracker CLI is a POSIX script")
+    return LocalDelete(tmp_path)
+
+
+def test_a_merged_issue_branch_is_deleted_locally(local_delete: LocalDelete) -> None:
+    local_delete.tracker(
+        [{"number": 3, "state": "MERGED", "headRefOid": local_delete.sha}]
+    )
+    result = local_delete.run(f"git branch -D {DELETED_BRANCH}")
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("prs", "code"),
+    [
+        ([], 0),
+        ([{"number": 3, "state": "MERGED", "headRefOid": "b" * 40}], 0),
+        ([{"number": 3, "state": "MERGED", "headRefOid": "SHA"}], 1),
+        (None, 0),
+    ],
+    ids=["no-merged-pr", "other-head", "tracker-error", "unparsed-answer"],
+)
+def test_an_unproven_local_deletion_is_blocked(
+    local_delete: LocalDelete, prs: list[dict[str, object]] | None, code: int
+) -> None:
+    if prs and prs[0]["headRefOid"] == "SHA":
+        prs[0]["headRefOid"] = local_delete.sha
+    local_delete.tracker(prs, code)
+    result = local_delete.run(f"git branch -D {DELETED_BRANCH}")
+    assert result.returncode == 2
+    assert "Удаление ветки" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git branch -D master",
+        "git branch -D integration/epic",
+        "git branch -D other",
+        f"git branch -D {DELETED_BRANCH} feature/issue-8-other",
+        f"git branch -D {DELETED_BRANCH} && echo ok",
+        "git branch -D $B",
+        f"bash -c 'git branch -D {DELETED_BRANCH}'",
+        f"git branch -D {DELETED_BRANCH}\ngit reset --hard",
+        "git reset --hard",
+        "git clean -f",
+    ],
+)
+def test_other_destructive_commands_stay_blocked(
+    local_delete: LocalDelete, command: str
+) -> None:
+    local_delete.tracker(
+        [{"number": 3, "state": "MERGED", "headRefOid": local_delete.sha}]
+    )
+    assert local_delete.run(command).returncode == 2

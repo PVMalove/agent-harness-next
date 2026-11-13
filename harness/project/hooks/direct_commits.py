@@ -5,7 +5,9 @@
 вызов commit/push не идёт из защищённой ветки (`master`, `main`, `base_branch`, `integration/*`)
 и ни один push не обновляет защищённый реф. Иначе причина выводится в stderr, код — 2.
 Исключения для /to-spec: push, который только создаёт отсутствующие на remote `integration/*`,
-и отдельный коммит документов прожарки в ещё не опубликованную `integration/*`.
+и отдельный коммит документов прожарки в ещё не опубликованную `integration/*`. Push, который
+только удаляет ветки (`--delete`, `-d`, `:<ветка>`), разрешён из любой ветки, если каждая
+удаляемая ветка не защищена и её слияние доказал `merged_branch.py` (состояние PR в трекере).
 
 Вызовы находит разбор `pr_commands.parse`: упоминание commit/push в аргументах печатающих
 команд, в кавычках и в теле heredoc вызовом не считается. Checkout вызова — каталог запуска
@@ -352,6 +354,70 @@ def _push_block_reason(call: Call, base_branch: str) -> str:
     return ""
 
 
+def _merge_block_reason(project: Path, branch: str, sha: str) -> str:
+    """Доказательство слияния из `merged_branch.py`; модуль не загрузился — отказ (fail closed)."""
+    try:
+        if TYPE_CHECKING:
+            from harness.project.hooks import merged_branch
+        else:
+            import merged_branch  # sibling in the installed hooks directory (sys.path[0])
+    except Exception:
+        return (
+            f"Zero Direct Commits: merged_branch.py не загрузился, слияние '{branch}' не "
+            "проверить — удаление заблокировано."
+        )
+    reason: str = merged_branch.merge_block_reason(project, branch, sha)
+    return reason
+
+
+def _delete_block_reason(call: Call, base_branch: str, project: Path) -> str | None:
+    """Удаление веток push-вызовом: None — push ничего не удаляет, "" — удаление доказано.
+
+    Удаляет push с `--delete`/`-d` и refspec `:<ветка>`. Разрешено удалять только ветки, слияние
+    которых доказал `merged_branch.py`; защищённые ветки и смешанный push блокируются.
+    """
+    remote, destinations = _push_destinations(call)
+    refspecs = [arg for arg in call.args if not arg.startswith("-")][1:]
+    flag = any(
+        arg == "--delete" or re.fullmatch(r"-[a-zA-Z]*d[a-zA-Z]*", arg)
+        for arg in call.args
+    )
+    deleted = [
+        dest
+        for spec, dest in zip(refspecs, destinations)
+        if flag or spec.lstrip("+").startswith(":")
+    ]
+    if not flag and not deleted:
+        return None
+    if (
+        not deleted
+        or len(deleted) != len(refspecs)
+        or any(arg in PUSH_EVERY_BRANCH_OPTIONS for arg in call.args)
+    ):
+        return (
+            "Zero Direct Commits: push удаляет ветку вместе с другими рефами или без явной "
+            "ветки — запрещён; удаляй ветку отдельной командой `git push <remote> --delete "
+            "<ветка>`."
+        )
+    for branch in deleted:
+        if _protected(branch, base_branch):
+            return (
+                f"Zero Direct Commits: удаление защищённой ветки '{branch}' запрещено — "
+                "base_branch и integration/* удаляет только разработчик."
+            )
+    for branch in deleted:
+        result = _git(call, "ls-remote", "--exit-code", remote, "refs/heads/" + branch)
+        if result is None or result.returncode != 0 or not result.stdout.split():
+            return (
+                f"Zero Direct Commits: ветку '{branch}' не найти на remote '{remote}' или "
+                "remote не ответил — удаление заблокировано."
+            )
+        reason = _merge_block_reason(project, branch, result.stdout.split()[0])
+        if reason:
+            return reason
+    return ""
+
+
 def _creates_integration_only(call: Call) -> bool:
     """Push только создаёт `integration/*`: его можно выполнить из защищённой ветки (/to-spec).
 
@@ -430,6 +496,12 @@ def block_reason(command: str, start: Path, project: Path) -> str:
         if call.cwd is None:
             return UNRESOLVED
         if call.action == "push":
+            deletion = _delete_block_reason(call, base_branch, project)
+            if deletion is not None:
+                if deletion:
+                    return deletion
+                # Deletion publishes no commit of the current branch: HEAD is not checked.
+                continue
             reason = _push_block_reason(call, base_branch)
             if reason:
                 return reason

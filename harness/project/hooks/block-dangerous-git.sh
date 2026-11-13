@@ -3,7 +3,8 @@
 # mattpocock/skills "git-guardrails-claude-code" skill (skills/misc/, not part of the vendored
 # mattpocock-suite capability). Deliberately does NOT block `git push` outright, unlike upstream —
 # docs/agents/git-workflow.md requires pushing issue branches; push-to-base/integration is already
-# covered by block-direct-master.sh.
+# covered by block-direct-master.sh. One exception: `git branch -D <issue-branch>...` as a single
+# plain command passes when merged_branch.py proves the merge by the PR state (fail closed).
 # Verdict envelope (hook_response.py): reruns this script, answers with the JSON verdict and the
 # exit code of the hook policy. Without Python or the helper the script below decides alone.
 if [ -z "${HARNESS_HOOK_ENVELOPE:-}" ]; then
@@ -270,6 +271,20 @@ if isinstance(command, str) and command:
 PY_EOF
 
 PATTERN="$(printf '%s' "$INPUT" | "$PY" -c "$CHECK")"
+if [ "$PATTERN" = "git branch -D" ]; then
+  # Exception: a plain `git branch -D <issue-branch>...` whose merge merged_branch.py proved by
+  # the PR state. Its only allow is exit 0 with the word `allow`; any other answer blocks.
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  VERDICT="$(printf '%s' "$INPUT" | "$PY" "$SCRIPT_DIR/merged_branch.py")"
+  CODE=$?
+  if [ "$CODE" -eq 0 ] && [ "$VERDICT" = "allow" ]; then
+    exit 0
+  fi
+  if [ -n "$VERDICT" ]; then
+    echo "Заблокировано: $VERDICT" >&2
+    exit 2
+  fi
+fi
 if [ -n "$PATTERN" ]; then
   echo "Заблокировано: команда матчит деструктивный паттерн '$PATTERN' — такие операции требуют явного запроса пользователя." >&2
   exit 2
