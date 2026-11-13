@@ -1,0 +1,69 @@
+/* Design system v3: the layout of the three moved screens (Repo Map, Harness, Help). General rules
+   live in ds-components.css; nothing here restyles a shared component. */
+.ds-tabpanel { display: flex; flex-direction: column; flex: 1; gap: 12px; min-height: 0; }
+.ds-tabpanel[hidden] { display: none; }
+.ds-foot-note { display: flex; align-items: center; gap: 8px; padding: 0; }
+
+/* Repo Map */
+.ds-files { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
+.ds-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1; min-height: 0; }
+.ds-tree { padding: 4px 0; }
+.ds-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 12px;
+  border: 0;
+  background: none;
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-2);
+  text-align: left;
+  cursor: pointer;
+}
+.ds-tree-row:hover { background: var(--ds-hover); }
+.ds-tree-file { font-family: var(--ds-mono); color: var(--ds-muted); }
+.ds-tree-file[aria-pressed="true"] { background: var(--ds-accent-bg); color: var(--ds-fg); box-shadow: inset 2px 0 0 var(--ds-accent); }
+.ds-tree-indent { display: inline-block; flex: none; }
+.ds-tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-tree-status { color: var(--ds-muted); font-size: var(--ds-fs-1); font-style: normal; }
+.ds-file-path { padding: 8px 12px; border-bottom: 1px solid var(--ds-line); color: var(--ds-muted); }
+.ds-file-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); min-height: 0; }
+.ds-file-code,
+.ds-file-rel { min-width: 0; padding: 8px 12px; }
+.ds-file-rel { border-left: 1px solid var(--ds-line); }
+.ds-rel-title { margin: 0 0 4px; color: var(--ds-muted); font-size: var(--ds-fs-2); font-weight: 600; }
+.ds-rel-group { margin-bottom: 8px; }
+.ds-rel-empty { margin: 0; color: var(--ds-faint); }
+.ds-rel-item { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.ds-rel-item code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-rel-item small { color: var(--ds-faint); font-size: var(--ds-fs-1); }
+.ds-line { display: block; }
+.ds-line i { display: inline-block; width: 32px; padding-right: 12px; color: var(--ds-faint); font-style: normal; text-align: right; }
+.ds-toolbar-flat { border: 0; border-bottom: 1px solid var(--ds-line); border-radius: 0; background: none; flex-wrap: wrap; }
+.ds-toolbar-flat .ds-input { flex: 1; min-width: 120px; }
+.ds-symbol-row { min-height: 44px; }
+.ds-kind { min-width: 64px; text-align: center; }
+.ds-symbol-name { display: block; font-size: var(--ds-fs-3); font-weight: 600; }
+.ds-graph-scroll { padding: 8px 12px; overflow: auto; }
+.ds-graph { width: 100%; max-width: 800px; height: auto; }
+.ds-edge { fill: none; stroke: var(--ds-line-strong); stroke-width: 1.5; }
+.ds-node rect { fill: var(--ds-raised); stroke: var(--ds-line-strong); }
+.ds-node:hover rect,
+.ds-node:focus rect { stroke: var(--ds-accent); }
+.ds-node-title { fill: var(--ds-fg); font-family: var(--ds-mono); font-size: var(--ds-fs-1); }
+.ds-link-table { padding: 0 12px 8px; overflow: auto; font-size: var(--ds-fs-2); }
+.ds-link-head,
+.ds-link-row { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--ds-line); }
+.ds-link-head { color: var(--ds-muted); font-weight: 600; }
+.ds-link-row b { font-weight: 500; overflow-wrap: anywhere; }
+.ds-link-row span { overflow-wrap: anywhere; }
+.ds-empty-state { align-items: center; justify-content: center; }
+
+@media (max-width: 900px) {
+  .ds-files,
+  .ds-split,
+  .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
+  .ds-file-rel { border-left: 0; }
+}

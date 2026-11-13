@@ -1,1 +1,10 @@
-{}
+{
+  "Сводка Repo Map": "Repo Map summary",
+  "HEAD индекса": "Index HEAD",
+  "Счётчики сверху — весь снимок. В просмотре: {files} файлов, {symbols} символов и {edges} связей.": "Counters above cover the whole snapshot. In view: {files} files, {symbols} symbols and {edges} links.",
+  "Поиск файла или пути": "Search a file or path",
+  "Модуль": "Module",
+  "Все модули": "All modules",
+  "Модули": "Modules",
+  "Файлы в снимке": "Files in the snapshot"
+}

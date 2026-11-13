@@ -91,8 +91,8 @@ const PAGES: PageSpec[] = [
   {
     route: "repo-map",
     title: "Repo Map",
-    blocks: [".repo-kpis", ".repo-tabbar", ".repo-index", ".repo-coverage", ".repo-files-panel"],
-    tabs: ["Обзор", "Символы", "Связи", "Настройки"],
+    blocks: ["#repo-facts", "#repo-tabs", ".ds-toolbar", "#repo-files"],
+    tabs: ["1Файлы", "2Символы", "3Связи"],
   },
   {
     route: "configuration",
@@ -205,11 +205,9 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "repo-map", width);
-    const coverage = page.locator(".repo-coverage");
-    await expect(coverage.locator(".orch-legend [data-kind='excluded'] b")).toHaveText("2");
-    await page.getByRole("tab", { name: "Символы" }).click();
-    await expect(page.locator("#repo-kind-chips .chip")).toHaveText(["Все 3", "Functions 2", "Modules 1"]);
-    await expect(page.locator(".repo-symbol-row .repo-kind").first()).toHaveText("function");
+    await page.getByRole("tab", { name: /Символы/ }).click();
+    await expect(page.locator("#repo-kind-chips button")).toHaveText(["Все 3", "Functions 2", "Modules 1"]);
+    await expect(page.locator(".ds-symbol-row .ds-kind").first()).toHaveText("function");
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "orchestration", width);

@@ -104,7 +104,7 @@ for (const width of [1440, 390]) {
     that leaves its frame. A scrolling region (overflow-x auto/scroll) is an intended scroll. */
 const leaking = (page: Page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll("main .panel, main [class*='-kpis']")]
+    [...document.querySelectorAll("main .panel, main .ds-panel, main [class*='-kpis']")]
       .filter((element) => {
         const box = element as HTMLElement;
         if (box.offsetParent === null) return false;

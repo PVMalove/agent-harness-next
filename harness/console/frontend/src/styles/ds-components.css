@@ -333,6 +333,10 @@
 }
 
 @media (max-width: 900px) {
+  /* On a phone the page scrolls; nested scroll areas would trap focus-less scrolling. */
+  .ds-fit { height: auto; }
+  .ds-panel-fill { flex: none; }
+  .ds-panel-body { overflow: visible; }
   .ds-grid-2,
   .ds-grid-3,
   .ds-tiles { grid-template-columns: minmax(0, 1fr); }
