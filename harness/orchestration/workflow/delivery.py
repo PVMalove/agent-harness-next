@@ -1036,6 +1036,14 @@ def _status_records(
         yield status, dispatch, batch
 
 
+def _by_dispatch(records: list[JsonObject]) -> dict[object, list[JsonObject]]:
+    """The records of a batch grouped by their ``dispatch_id``, each group in batch order."""
+    grouped: dict[object, list[JsonObject]] = {}
+    for record in records:
+        grouped.setdefault(record.get("dispatch_id"), []).append(record)
+    return grouped
+
+
 def dispatch_status(args: argparse.Namespace) -> JsonObject:
     """Liveness view the coordinator session polls; a stale entry is a blocker to surface, never a
     reason for the coordinator to change state on its own.
@@ -1102,22 +1110,24 @@ def dispatch_status(args: argparse.Namespace) -> JsonObject:
 
         lane = qa_lane.lane_summary(ledger)
         entries = []
+        # The telemetry and context pressure of each batch, grouped once by dispatch.
+        grouped: dict[
+            str, tuple[dict[object, list[JsonObject]], dict[object, list[JsonObject]]]
+        ] = {}
         for status, dispatch, batch in _status_records(
             args, root, from_store=from_store
         ):
-            telemetry = [
-                record
-                for record in batch.get("telemetry", [])
-                if record.get("dispatch_id") == dispatch["dispatch_id"]
-            ]
+            if dispatch["batch_id"] not in grouped:
+                grouped[dispatch["batch_id"]] = (
+                    _by_dispatch(batch.get("telemetry", [])),
+                    _by_dispatch(batch.get("context_pressure", [])),
+                )
+            by_telemetry, by_pressure = grouped[dispatch["batch_id"]]
+            telemetry = by_telemetry.get(dispatch["dispatch_id"], [])
             latest_telemetry = max(
                 telemetry, key=lambda record: record["recorded_at"], default=None
             )
-            pressure = [
-                item
-                for item in batch.get("context_pressure", [])
-                if item.get("dispatch_id") == dispatch["dispatch_id"]
-            ]
+            pressure = by_pressure.get(dispatch["dispatch_id"], [])
             execution = (
                 (
                     executions[dispatch["dispatch_id"]]
