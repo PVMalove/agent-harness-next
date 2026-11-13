@@ -11,6 +11,7 @@ infrastructure ending leaves no report but a new attempt of the same dispatch.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 import sys
@@ -22,6 +23,11 @@ from typing import Protocol
 import pytest
 
 from harness.json_types import JsonObject
+from harness.orchestration import qa_lane
+from harness.orchestration.core.utils import CoordinatorError
+from harness.orchestration.ledger import ledger_ops
+from harness.orchestration.ledger.ledger_ops import LedgerBusyError
+from harness.orchestration.workflow import qa_integration
 from tests.orchestration import test_coordinator as coordinator_tests
 from tests.orchestration.fake_clock import FakeClock
 from tests.orchestration.runtime_store_support import (
@@ -631,3 +637,56 @@ def test_a_rebuilt_image_or_a_missing_variable_blocks_the_run_before_any_command
     assert repo.status()["state"] == "approved"
     lane = repo.lane()
     assert (lane["lease"], lane["queue"]) == (None, [])
+
+
+def test_evidence_a_busy_store_refused_at_acceptance_is_kept_and_a_rerun_accepts_it(
+    qa: Make, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = qa()
+    for stage in ("gate-1", "gate-2", "gate-3"):
+        repo.engine.script(stage, stdout=f"{stage} ok\n", exit_code=0)
+    real = qa_integration._ops()
+    validations: list[str] = []
+
+    class BusyAtAcceptance:
+        """The coordinator's ops; every read of the acceptance, after the QA run, is refused
+        as a read snapshot the runtime no longer holds."""
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(real, name)
+
+        @staticmethod
+        def _validate_batch_integrity(root: Path, batch: JsonObject) -> None:
+            validations.append("validated")
+            if len(validations) > 1:
+                raise LedgerBusyError(
+                    "the read snapshot cannot answer: the snapshot is closed or expired",
+                    remedy="[store_busy] read again from a new snapshot",
+                )
+            real._validate_batch_integrity(root, batch)
+
+    args = argparse.Namespace(
+        repo=str(repo.repo), state_dir=None, dispatch=repo.dispatch, lease_seconds=None
+    )
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(getattr(repo.runtime, "xdg")))
+    monkeypatch.setattr(qa_lane, "ACCEPT_BUSY_WAIT_SECONDS", 0.0)
+
+    with pytest.raises(CoordinatorError) as refused, ledger_ops.command_state(args):
+        qa_lane.run(args, BusyAtAcceptance())  # type: ignore[arg-type]
+
+    assert f"qa run --dispatch {repo.dispatch}" in refused.value.remedy
+    kept = store_call(
+        repo.repo, repo.runtime, "state.read", {"collections": ["unaccepted-evidence"]}
+    )["records"]
+    assert isinstance(kept, dict)
+    assert [path for path in kept if repo.dispatch in path], kept
+    assert repo.status()["state"] == "approved"
+    containers = len(repo.engine.runs())
+    assert containers == 3
+
+    code, result, err = repo.qa_run()
+
+    assert code == 0 and result is not None, err
+    assert result["state"] == "reported"
+    assert repo.report()["outcome"] == "completed"
+    assert len(repo.engine.runs()) == containers
