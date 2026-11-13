@@ -253,6 +253,44 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertEqual(command[command.index("--permission-mode") + 1], "dontAsk")
         self.assertEqual(command[command.index("--allowedTools") + 1], "Read,Bash,Edit")
 
+    def test_container_worker_is_asked_only_for_the_staged_report(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["execution"] = {"kind": "container"}
+        self.brief.write_text(json.dumps(brief))
+        env = {**os.environ, "HARNESS_EXECUTOR": "docker"}
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ADAPTER),
+                "dispatch",
+                "--dry-run",
+                "--repo",
+                str(self.repo),
+                "--brief",
+                str(self.brief),
+            ],
+            cwd=self.worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        plan = json.loads(result.stdout)
+        prompt = plan["prompt"]
+        self.assertIn("running in a container", prompt)
+        self.assertIn(f"Report staging path: {brief['report_staging_path']}", prompt)
+        self.assertIn("never run dispatch self-report", prompt)
+        self.assertNotIn("coordinator.py", prompt)
+        self.assertNotIn("report submit --file", prompt)
+        command = plan["command"]
+        self.assertEqual(command[2], prompt)
+        self.assertEqual(
+            command[command.index("--output-format") + 1 :][:2],
+            ["stream-json", "--verbose"],
+        )
+
     @POSIX_ONLY
     def test_worker_runs_in_the_worktree_and_receives_the_prompt(self) -> None:
         self.fake_claude(0)

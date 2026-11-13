@@ -7,7 +7,8 @@ what the runtime observed:
 - ``launching``, ``running``, ``stopping``, ``unknown``: no transition. A report submitted now is
   recorded on the status (``pending_report``) and waits for the exit, because the store refuses a
   terminal dispatch state while the execution may still run. A ``running`` container worker gets
-  its host-side self-report and heartbeat (``container_attestation``, #1014).
+  its host-side self-report and heartbeat (``container_attestation``, #1014); an exited one is
+  proven from its saved stream before the reaction (#1125).
 - ``exited`` with a recorded report: ``reported``, through the transition code of ``report
   submit``. A refusal of that code keeps the report pending, and ``dispatch status --dispatch``
   shows it as ``reaction_error``.
@@ -63,17 +64,16 @@ def observe(repo: Path, root: Path, dispatch_id: str) -> JsonObject | None:
     if not supervised(root, dispatch):
         return None
     execution = observed_execution(repo, dispatch_id)
-    if (
-        execution is not None
-        and execution.get("state") not in UNSETTLED_EXECUTION_STATES
-    ):
-        react(repo, root, dispatch, execution)
-    elif execution is not None:
-        from harness.orchestration import container_attestation
+    if execution is None:
+        return None
+    from harness.orchestration import container_attestation
 
-        # A running container worker cannot reach the ledger: the host records its self-report
-        # and heartbeat (#1014, ADR 0025).
-        container_attestation.attest(repo, root, dispatch, execution)
+    # A container worker cannot reach the ledger: the host records its self-report and the
+    # heartbeat of a running one (#1014, ADR 0025), and proves an exited one from its saved
+    # stream before the reaction (#1125).
+    container_attestation.attest(repo, root, dispatch, execution)
+    if execution.get("state") not in UNSETTLED_EXECUTION_STATES:
+        react(repo, root, dispatch, execution)
     return execution
 
 

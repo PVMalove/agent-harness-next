@@ -53,7 +53,8 @@ These environments are not supported. `dispatch preflight` reports each one as a
   [Container QA with in-process roles](#container-qa-with-in-process-roles)).
 - The worker image, and the proxy image when `network.hosts` is not empty, present in the engine
   under the tags that the configuration names.
-- A project-owned agent adapter that can run inside the worker image (see the example below).
+- An agent adapter that can run inside the worker image: the shipped `claude_worker.py` (see
+  [Agent adapter in a container](#agent-adapter-in-a-container)) or a project-owned one.
 - A C linker (`cc`) in the QA environment when the gate builds Rust with `cargo`, and a runtime
   socket path of at most 100 bytes: set a short absolute `XDG_RUNTIME_DIR` (or `TMPDIR`). Without
   either, the gate stops as `qa-environment-failure` instead of a developer retry. `harness health`
@@ -409,8 +410,10 @@ and the runtime socket is not mounted. So `dispatch self-report`, `dispatch hear
 for the worker:
 
 - **Self-report.** The architect, developer and code-review roles need a model self-report and a
-  worktree attestation before their report is accepted. While the container runs, `dispatch
-  wait`, `dispatch status --dispatch` and `report submit` read the snapshot of the worker's stdout.
+  worktree attestation before their report is accepted. `dispatch wait`, `dispatch status
+  --dispatch` and `report submit` read the snapshot of the worker's stdout while the container
+  runs, and its saved stdout after it exits, so a short worker that exits before any of them runs
+  is proven too. Only complete lines in the first 4 MiB of the stream count.
   The model comes from the first stream-json event `{"type": "system", "subtype": "init",
   "model": ...}`, and the checkout from the `checkout` resource of the approved plan, never from
   the worker. The coordinator records them through the same checks as `dispatch self-report`,
@@ -437,53 +440,57 @@ or a human records that report on the host with `report submit --file <path>`:
 - If the worker exits with no staged report, the dispatch becomes `blocked` with
   `worker-exited-without-report`.
 
-## Example project-owned agent adapter
+## Agent adapter in a container
 
-The harness ships no adapter for a specific agent. The script below is an example that a project
-adapts and keeps as its own file. It runs Claude Code under the container executor and keeps the
-agent's native approval: it passes the tool allowlist of the brief and sets no auto-approve or
-permission-skipping option. The agent's own sandbox stays as the agent configures it. Whether to
-turn that sandbox off inside the container is the project's own decision, outside this example.
+Use the shipped Claude Code adapter:
 
-`dispatch send --adapter <path>` runs the adapter as the container entrypoint with the arguments
-`dispatch --repo <repo> --brief <brief>`. The adapter must be an executable file inside a plan
-root at the same absolute path, for example a tracked file in the dispatch worktree or a file
-under the main checkout's `.harness/` (the read-only `shared_storage` root). A `.py` adapter does
-not work, because the coordinator passes the host's Python interpreter as its entrypoint.
-
-```sh
-#!/bin/sh
-# Project-owned runtime adapter (example). The harness does not ship this file.
-set -eu
-[ "${1:-}" = dispatch ] || { echo "usage: $0 dispatch --repo <repo> --brief <brief>" >&2; exit 2; }
-shift
-brief=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --repo) shift 2 ;;
-        --brief) brief=$2; shift 2 ;;
-        *) echo "unsupported argument: $1" >&2; exit 2 ;;
-    esac
-done
-if [ "${HARNESS_EXECUTOR:-}" != docker ]; then
-    echo "this adapter runs only under the container executor" >&2
-    exit 2
-fi
-# The container's working directory is the dispatch checkout; HOME is a tmpfs.
-tools=$(jq -r '.allowed_tools | join(",")' "$brief")
-model=$(jq -r '.resolved_model' "$brief")
-staging=$(jq -r '.report_staging_path' "$brief")
-exec claude --print --output-format stream-json --verbose --model "$model" --allowedTools "$tools" \
-    "Work on the brief $brief. You cannot run coordinator commands in this container. \
-Write the completion report JSON to $staging and stop."
+```bash
+python .harness/orchestration/coordinator.py --repo <repo> dispatch send --dispatch <dispatch-id> \
+    --adapter <repo>/.harness/adapters/claude_worker.py
 ```
 
-The configuration of this example lists `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) in
-`environment` and `api.anthropic.com` in `network.hosts`, and the worker image contains `jq` and
-the agent CLI. `--output-format stream-json --verbose` prints the `init` event and the steps that
-the host-side self-report and `dispatch observe` read. An action that needs approval and is
-outside the brief's `allowed_tools` is denied, because a non-interactive session cannot ask a
-human.
+`dispatch send --adapter <path>` runs the adapter as the container entrypoint with the arguments
+`dispatch --repo <repo> --brief <brief>`. The adapter must be inside a plan root at the same
+absolute path: a file under the main checkout's `.harness/` (the read-only `shared_storage` root)
+or a tracked file in the dispatch worktree. A `.py` adapter runs with the image's `python3`;
+any other adapter must be an executable file.
+
+With `HARNESS_EXECUTOR=docker`, which the executor sets, `claude_worker.py`:
+
+- runs `claude -p <prompt>` in the foreground with `--output-format stream-json --verbose`, so
+  the host reads the `init` event and the steps;
+- passes the brief's `allowed_tools` with `--permission-mode dontAsk` and the incoming reports
+  directory with `--add-dir`; a read-only role also gets `Edit(//<report_staging_path>)` and can
+  write only its report;
+- asks the worker to write the report to `report_staging_path` and stop, and never to run
+  `dispatch self-report`, `dispatch heartbeat` or `report submit`, which cannot run in the
+  container.
+
+The worker image needs `python3`, `git` and the `claude` CLI on its `PATH`. The configuration
+lists `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) in `environment` and `api.anthropic.com`
+in `network.hosts`. An action that needs approval and is outside the brief's `allowed_tools` is
+denied, because a non-interactive session cannot ask a human.
+
+An adapter for another agent follows the same rules: print stream-json with the `init` event,
+put the prompt before variadic options, write the report to `report_staging_path`, run no
+coordinator command and exit with the agent's exit code.
+
+### Credentials in the logs
+
+The runtime saves the worker's stdout and stderr under `.harness`, which every container worker
+mounts read-only. In those logs it replaces the value of each `environment` name of the plan
+that is at least 8 bytes long with `[redacted:<name>]`, in the snapshot of a running worker and
+in the logs saved at its exit.
+
+### Project hooks
+
+Managed hooks (`.claude/settings.local.json` and `.claude/hooks/`) are not tracked by Git, so
+an issue worktree does not have them, on the host or in a container. Only hooks in tracked
+files run. Delivering hooks to a worktree is a separate open task.
+
+`harness health` (`orchestration.worker_binaries`) checks, for each role in a container, that
+the engine is on the `PATH` of `harness-runtime serve` and that the worker and proxy images are
+in the engine's local image store.
 
 ## Running inside distrobox
 

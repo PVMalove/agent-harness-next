@@ -12,7 +12,7 @@ import sys
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 import pytest
 
@@ -734,3 +734,83 @@ def test_worker_binaries_skip_on_a_file_ledger_or_an_unavailable_runtime(
     assert file_ledger.status == "skipped"
     assert unavailable.status == "skipped"
     assert "orchestration.runtime" in unavailable.message
+
+
+def _container_repo(repo: Path, roles: Mapping[str, object]) -> HealthContext:
+    context = _store_repo(
+        repo,
+        {
+            "developer": {"transport": "external", "runtimes": {"claude": _RUNTIME}},
+            "code-review": {"transport": "external", "runtimes": {"claude": _RUNTIME}},
+        },
+    )
+    path = repo / ".harness" / "orchestration.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["extensions"] = {"runtime_access": "docker"}
+    config["access_policy"] = {
+        "defaults": {"container": {"engine": "podman", "worker_image": "worker:local"}},
+        "roles": roles,
+    }
+    path.write_text(json.dumps(config), encoding="utf-8")
+    return context
+
+
+def test_worker_binaries_need_no_host_agent_for_a_container_role(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1125: the agent CLI of a container role lives in its image, not on the serve PATH."""
+    context = _container_repo(tmp_path, {})
+    bin_dir = tmp_path / "serve-bin"
+    _binary(bin_dir, "podman")
+    monkeypatch.setattr(RuntimeClient, "call", _status({"search_path": str(bin_dir)}))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    seen: list[tuple[str, str]] = []
+
+    def present(engine: str, tag: str) -> bool:
+        seen.append((engine, tag))
+        return True
+
+    monkeypatch.setattr(checks, "_image_present", present)
+
+    result = checks.check_worker_binaries(context)
+
+    assert result.status == "ok", result.message
+    assert seen == [(str(bin_dir / "podman"), "worker:local")]
+
+
+def test_worker_binaries_fail_for_a_container_role_without_its_engine_or_image(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roles = {"code-review": {"container": {"engine": "docker", "worker_image": "review:1"}}}
+    context = _container_repo(tmp_path, roles)
+    bin_dir = tmp_path / "serve-bin"
+    _binary(bin_dir, "podman")
+    monkeypatch.setattr(RuntimeClient, "call", _status({"search_path": str(bin_dir)}))
+    monkeypatch.setattr(checks, "_image_present", lambda engine, tag: False)
+
+    result = checks.check_worker_binaries(context)
+
+    assert result.status == "fail"
+    assert "движка docker" in result.message
+    assert "в podman нет образа worker:local" in result.message
+    assert result.fix is not None
+
+
+def test_worker_binaries_find_claude_in_user_local_bin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1123: the adapter falls back to ``~/.local/bin``; the check looks there too."""
+    context = _store_repo(
+        tmp_path,
+        {"developer": {"transport": "external", "runtimes": {"claude": _RUNTIME}}},
+    )
+    home = tmp_path / "home"
+    _binary(home / ".local" / "bin", "claude")
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(
+        RuntimeClient, "call", _status({"search_path": str(tmp_path / "empty")})
+    )
+
+    result = checks.check_worker_binaries(context)
+
+    assert result.status == "ok", result.message

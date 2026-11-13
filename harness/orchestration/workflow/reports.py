@@ -2078,6 +2078,9 @@ def submit_report(args: argparse.Namespace) -> JsonObject:
     else:
         report = _read_object(path, "completion report")
     root = _state_root(args, repo)
+    from harness.orchestration import container_attestation
+
+    container_attestation.attest_before_submit(repo, root, report.get("dispatch_id"))
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         dispatch = _load_dispatch(root, cast(str, report.get("dispatch_id")))

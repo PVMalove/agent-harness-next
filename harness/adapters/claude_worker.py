@@ -11,8 +11,11 @@ its worker: it runs `claude -p <prompt>` in the foreground in its own process gr
 own stdin, streams `--output-format stream-json --verbose` to the inherited stdout (the runtime's run
 log) and returns the worker's exit status. Without `execution` it starts a detached `claude -p` that
 reads the prompt from stdin and returns. The worker's self-report, heartbeat and `report submit`
-prove its actual checkout. It runs on the brief's model and effort, with exactly the
-brief's `allowed_tools` and `dontAsk`, so nothing outside the brief can prompt or run unattended.
+prove its actual checkout. In a container (`HARNESS_EXECUTOR=docker`, ADR 0025) no coordinator
+command can run: the prompt asks only for the staged report, and the host records the self-report
+and heartbeat from the stream and submits the report. It runs on the brief's model and effort, with
+exactly the brief's `allowed_tools` and `dontAsk`, so nothing outside the brief can prompt or run
+unattended.
 A read-only role (no file-writing tool, not `developer`) also gets `Edit(//<report_staging_path>)`,
 so it can write its report and nothing else.
 
@@ -62,7 +65,7 @@ class Brief(TypedDict):
     execution: NotRequired[dict[str, object]]
 
 
-PROMPT = """\
+HOST_START = """\
 You are the {role} worker for dispatch {dispatch_id}.
 Brief: {brief}
 Report staging path: {staging}
@@ -77,6 +80,23 @@ another checkout as your actual directory. Confirm your active model and the pro
 Proceed only after a successful self-report; escalate a mismatch or unavailable model identity.
 Immediately after self-report and at least every {heartbeat} seconds while working, run:
 {cli} dispatch heartbeat --dispatch {dispatch_id}
+"""
+
+CONTAINER_START = """\
+You are the {role} worker for dispatch {dispatch_id}, running in a container.
+Brief: {brief}
+Report staging path: {staging}
+Expected worker checkout: {worktree}
+Expected startup SHA: {sha}
+Before task work, run git rev-parse --show-toplevel, git branch --show-current and git rev-parse HEAD
+in your current directory. Compare them with the expected values above and the branch with the
+brief. Stop on any mismatch; do not reset Git history.
+The coordinator on the host records your model and your heartbeat from your output stream. No
+coordinator command runs in this container: never run dispatch self-report, dispatch heartbeat or
+report submit.
+"""
+
+WORK = """\
 Context Package {package}: start from its starting_files, symbol_graph and
 related_tests. For a starting file with non-empty sections, read only the start_line-end_line
 ranges the task needs.
@@ -88,6 +108,9 @@ Set blockers and risks (also in every review axis) to {{"status": "none", "detai
 or {{"status": "present", "details": "<Russian description>"}} when present. A none status requires empty
 details; present requires a non-empty description. Put other explanations in output. Strings, translated
 statuses, passed and not-run are invalid; no aliases or old report formats are accepted.
+"""
+
+HOST_END = """\
 Then run:
 {cli} report submit --file "{staging}"
 Completion means the report is recorded in the ledger. Include the submit result in your final reply.
@@ -96,6 +119,14 @@ recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
 already recorded, so submit it only once. Chat text alone does not complete the dispatch.
 """
+
+CONTAINER_END = """\
+Then stop. The coordinator submits the staged report on the host; your final reply names the
+report staging path.
+"""
+
+PROMPT = HOST_START + WORK + HOST_END
+CONTAINER_PROMPT = CONTAINER_START + WORK + CONTAINER_END
 
 
 def build_prompt(
@@ -110,7 +141,8 @@ def build_prompt(
             str(repo),
         )
     )
-    prompt = PROMPT.format(
+    template = CONTAINER_PROMPT if in_container() else PROMPT
+    prompt = template.format(
         role=brief["role"],
         dispatch_id=brief["dispatch_id"],
         brief=brief_path,
@@ -137,6 +169,11 @@ def build_prompt(
             "Wait for the author and verify its behavioral assertion before writing production code.\n"
         )
     return prompt
+
+
+def in_container() -> bool:
+    """The container executor sets ``HARNESS_EXECUTOR=docker`` (ADR 0025)."""
+    return os.environ.get("HARNESS_EXECUTOR") == "docker"
 
 
 def supervised(brief: Brief) -> bool:
