@@ -684,6 +684,35 @@ def test_a_batch_planned_before_the_approval_policy_passes_both_commands(
     assert migrate(tmp_path).returncode == 0
 
 
+def test_a_batch_carrying_a_confirmed_architect_report_passes_both_commands(
+    tmp_path: Path,
+) -> None:
+    rich_state(tmp_path)
+    link: JsonObject = {
+        "batch_id": "batch-00000000-0000-4000-8000-000000000001",
+        "approved_by": "Malove",
+        "approved_at": MOMENT,
+        "last_accepted": None,
+        "definition_of_done_matches": True,
+        "architect": {
+            "batch_id": "batch-00000000-0000-4000-8000-000000000001",
+            "dispatch_id": "dispatch-00000000-0000-4000-8000-000000000001",
+            "report": "reports/dispatch-00000000-0000-4000-8000-000000000001.json",
+            "report_sha256": "a" * 64,
+            "commit_plan_sha256": None,
+            "confirmed_by": "Reviewer",
+            "confirmed_at": MOMENT,
+        },
+        "start_commit": None,
+        "rebase_target_commit": None,
+    }
+    for edit in (edit_batch, edit_plan):
+        edit(tmp_path, lambda record: record.update(supersedes=link))
+
+    assert _validate(tmp_path) == 0
+    assert migrate(tmp_path).returncode == 0
+
+
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_a_state_ledger_validate_rejects_is_refused_by_migrate_and_nothing_changes(
     case: str, tmp_path: Path

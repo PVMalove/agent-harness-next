@@ -336,6 +336,28 @@ and operator decisions are never copied: they stay with the abandoned batch and 
 `supersedes.batch_id`, and risk assessment, review and QA run again on the new candidate. The
 `supersede` decision spends no developer retry.
 
+An abandoned batch whose architect reported but was never accepted has no `abandoned.last_accepted`
+record. Its report can still be carried into the superseding batch, so the architect does not run
+again, only after a human confirms that exact report: `batch create --supersedes <batch>
+--carry-architect <dispatch> --architect-report-sha256 <sha256> --architect-confirmed-by <human>
+--architect-confirmed-at <time>`, beside the `--approved-by` and `--approved-at` of the supersede.
+The confirmation is a separate human decision bound to the report bytes; a `policy:` confirmer is
+refused. `batch create` refuses, with a remedy and without writing anything, a missing or partial
+confirmation, a dispatch that is not a `reported` architect of the abandoned batch with outcome
+`completed`, a SHA-256 that is not the recorded `report_sha256`, another Definition of Done, and a
+source with an `abandoned.last_accepted` record (the ordinary supersede resumes from it). The report
+may carry any decision, `retry` or `reject` included: the human confirms its bytes. Under
+`human_approval_gate: tty` the confirmation is asked for separately from the supersede approval. A
+source that itself carried a confirmed report hands it on: `--carry-architect` names the same
+dispatch, and the reference keeps the batch that holds the report. The
+`supersedes` link records `last_accepted: null`, no `start_commit`, and the carried architect as
+`dispatch_id`, `report`, `report_sha256`, `commit_plan_sha256`, `confirmed_by` and
+`confirmed_at`; the batch starts at the developer stage. A `commit_plan` in the carried report is
+validated against the new batch, its Definition of Done and its `allowed_paths`, and pinned as on an
+architect accept; a plan path outside the new `allowed_paths` refuses the create. The superseding
+batch may therefore be planned with a wider scope than the abandoned one and keep its architect
+report; widening the scope of a live batch without a new batch is a separate route (#1017).
+
 ## Recovery route table
 
 Every `retry` and `abandon` decision of `batch decide` records its recovery route as
@@ -387,7 +409,7 @@ that stage. The coordinator chooses a route by this table:
 | A proven worktree/model/adapter startup failure resumes in the same batch, with a new same-contract dispatch | `environmental-restart` | Human `batch resume-stop`; fresh human dispatch approval; bounded infrastructure attempts and `manual_all` afterward | Sealed recovery event, immutable source dispatch/snapshot/digest, clean checkout proof, retired dispatch IDs; unchanged handoff and developer counter |
 | A stage report is `blocked` by an infrastructure failure although the work looks complete (commits match the plan) | `accept-conditional` | Human `batch decide --decision accept-conditional --infrastructure-failure` with a note; a later code-review or qa independently covers it | Decision with `routing.route`, the stage and candidate, and an open condition closed by the covering accept; publish refused while open; unchanged developer counter |
 | A human selects a reached earlier gate, or resumes the pending report boundary of a no-route pause | `rewind` | Human `batch rewind --to` or `resume-stop`; fresh approvals; no budget reset and a new writing attempt spends developer retry budget | Sealed event binds before/after state, target, preserved writer SHA, superseded evidence and human approval; unchanged Git history |
-| After a forced abandon (a dead end), the work resumes in a new batch for the same ticket and issue branch from the abandoned batch's `abandoned.last_accepted` record: `batch create --supersedes <batch>` | `supersede` | A human only, with `--approved-by` and `--approved-at` on `batch create`; a `policy:` approver is refused. The new batch still needs `batch approve`, its dispatches are approved under `approval_policy`, and a first developer-retry that carries a rebase target always needs an explicit approval except under `auto`; no `retry_policy.max_developer_retries` is spent | The superseded batch ID and its `abandoned.last_accepted`; for the same Definition of Done, the carried architect reference (`dispatch_id`, `report`, `report_sha256`, `commit_plan_sha256`); the `start_commit` and the `rebase_target_commit`. No risk, review, QA or operator decision evidence is copied |
+| After a forced abandon (a dead end), the work resumes in a new batch for the same ticket and issue branch from the abandoned batch's `abandoned.last_accepted` record: `batch create --supersedes <batch>` | `supersede` | A human only, with `--approved-by` and `--approved-at` on `batch create`; a `policy:` approver is refused. The new batch still needs `batch approve`, its dispatches are approved under `approval_policy`, and a first developer-retry that carries a rebase target always needs an explicit approval except under `auto`; no `retry_policy.max_developer_retries` is spent | The superseded batch ID and its `abandoned.last_accepted`; for the same Definition of Done, the carried architect reference (`dispatch_id`, `report`, `report_sha256`, `commit_plan_sha256`, and for a `--carry-architect` report never accepted, the human `confirmed_by` and `confirmed_at`); the `start_commit` and the `rebase_target_commit`. No risk, review, QA or operator decision evidence is copied |
 | `report submit` recorded the report but its policy chain stopped (`completion.failed_step`: `policy-decide`, `risk-assess` or `next-dispatch`) | `report-completion` | No human approval: the coordinator runs `report complete` itself; it replays only the `auto_accept_policy` decision recorded at submit, and a step that needs a human stops with that step's remedy | Dispatch ID, `report_sha256`, the submit `completion` object and the `report complete` steps |
 | Ledger busy: `ledger is locked by another operation`, or a `ledger_busy` answer from `dispatch status`, or a `qa run` failure `QA dispatch <id> was not released` | `report-completion` | No approval: repeat `dispatch wait`/`dispatch status`, run `report complete` when a recorded report's chain stopped, and never remove the lock by hand; a lock that stays held goes to `ledger release-lock`, which refuses a live owner. In the runtime-store epoch an expired QA lease of a dead owner (`owner-dead`) needs no `--force`: the next `qa run` or `ledger release-lock` reaps it; `[lease_held]` means the owner may live and only an operator clears it. `qa run` waits up to 30 seconds for a busy lock before it releases its own QA lease and queue entry. If the lock frees after a failure, the dispatch is `approved` again: run `qa run` for it again. If the lock stays held, the dispatch stays `working`: after the lease expires, a coordinator runs `qa clear-stale-lease`, which also returns that dispatch to `approved`, and then runs `qa run` again | Lock owner (`pid`, `host`, `acquired_at`, `held_seconds`) and the `ledger release-lock` verdict; after a released `qa run` failure, its QA attempt record; after `was not released`, the lease owner and `expires_at` in the error and `restored_dispatch_state` in the `qa clear-stale-lease` answer and recovery record |
 

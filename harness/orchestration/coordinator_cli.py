@@ -212,12 +212,31 @@ def build_parser(
     create.add_argument(
         "--supersedes",
         help="abandoned batch of the same ticket and issue branch this batch resumes from its "
-        "abandoned.last_accepted record; requires --approved-by and --approved-at",
+        "abandoned.last_accepted record, or whose confirmed architect report it carries with "
+        "--carry-architect; requires --approved-by and --approved-at",
     )
     create.add_argument(
         "--approved-by", help="human who approved --supersedes; never a policy"
     )
     create.add_argument("--approved-at", help="time of the --supersedes approval")
+    create.add_argument(
+        "--carry-architect",
+        help="architect dispatch of the --supersedes batch whose never-accepted report this "
+        "batch carries instead of running the architect again; same Definition of Done only; "
+        "requires --architect-report-sha256, --architect-confirmed-by and "
+        "--architect-confirmed-at",
+    )
+    create.add_argument(
+        "--architect-report-sha256",
+        help="report_sha256 of the --carry-architect report the human confirmed",
+    )
+    create.add_argument(
+        "--architect-confirmed-by",
+        help="human who confirmed the --carry-architect report; never a policy",
+    )
+    create.add_argument(
+        "--architect-confirmed-at", help="time of the --carry-architect confirmation"
+    )
     create.set_defaults(handler=handlers.create_batch)
     batch_preflight = batch_commands.add_parser(
         "preflight", help="reject an oversized ticket before creating a batch"

@@ -6339,6 +6339,313 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self._decide(batch_id, "abandon", reason="review dead end")
         return batch_id, candidate, entries
 
+    # -- a confirmed architect report that was never accepted (issue #1052) ----------------------
+
+    def _abandoned_with_unaccepted_architect(
+        self,
+        allowed: list[str] | None = None,
+        entries: list[JsonObject] | None = None,
+    ) -> tuple[str, JsonObject, list[JsonObject]]:
+        """A batch abandoned after its architect reported a commit plan nobody accepted.
+        Returns the batch, its architect dispatch entry and the reported plan."""
+        items = self._batch_plan()["definition_of_done"]
+        batch_id = cast(str, self._plan_batch(items, allowed)["batch_id"])
+        brief = self._dispatch(batch_id, "architect")["brief"]
+        self._start(brief["dispatch_id"])
+        entries = entries or [self._plan_entry("route-retries", [1])]
+        self._submit(
+            brief["dispatch_id"],
+            {**self._base_report(brief, "architect"), "commit_plan": entries},
+        )
+        self._decide(batch_id, "abandon", reason="the architect plan left the scope")
+        architect = next(
+            item
+            for item in self._batch_record(batch_id)["dispatches"]
+            if item["role"] == "architect"
+        )
+        return batch_id, architect, entries
+
+    def _architect_confirmation(
+        self, architect: JsonObject, **overrides: object
+    ) -> JsonObject:
+        return {
+            "carry_architect": architect["dispatch_id"],
+            "architect_report_sha256": architect["report_sha256"],
+            "architect_confirmed_by": "Reviewer",
+            "architect_confirmed_at": self.APPROVED_AT,
+            **overrides,
+        }
+
+    def test_a_confirmed_architect_report_never_accepted_is_carried_without_a_new_architect(
+        self,
+    ) -> None:
+        source, architect, entries = self._abandoned_with_unaccepted_architect()
+        self.assertIsNone(self._batch_record(source)["abandoned"]["last_accepted"])
+
+        batch = self._supersede(source, **self._architect_confirmation(architect))
+        coordinator.approve_batch(
+            self._args(batch=batch["batch_id"], **self._approval())
+        )
+
+        reference = {
+            "batch_id": source,
+            "dispatch_id": architect["dispatch_id"],
+            "report": architect["report"],
+            "report_sha256": architect["report_sha256"],
+            "commit_plan_sha256": commit_plan.plan_sha256(entries),
+            "confirmed_by": "Reviewer",
+            "confirmed_at": self.APPROVED_AT,
+        }
+        link = batch["supersedes"]
+        self.assertEqual(
+            (
+                link["architect"],
+                link["last_accepted"],
+                link["start_commit"],
+                link["rebase_target_commit"],
+            ),
+            (reference, None, None, None),
+        )
+        self.assertEqual(
+            (batch["commit_plan"], batch["next_action"]), (entries, "developer")
+        )
+        (audit,) = self._decision_audits(batch["batch_id"])
+        self.assertEqual(audit["evidence"]["architect"], reference)
+
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+
+        self.assertEqual(brief["commit_plan"], entries)
+        stored = self._batch_record(batch["batch_id"])
+        self.assertEqual([item["role"] for item in stored["dispatches"]], ["developer"])
+
+    def test_an_architect_report_is_not_carried_without_a_human_confirmation_of_its_bytes(
+        self,
+    ) -> None:
+        source, architect, _ = self._abandoned_with_unaccepted_architect()
+        before = self._ledger_bytes()
+
+        for label, plan, message in (
+            (
+                "no confirmer",
+                self._superseding_plan(
+                    source,
+                    **self._architect_confirmation(
+                        architect, architect_confirmed_by=None
+                    ),
+                ),
+                "requires a human confirmation",
+            ),
+            (
+                "no report digest",
+                self._superseding_plan(
+                    source,
+                    **self._architect_confirmation(
+                        architect, architect_report_sha256=None
+                    ),
+                ),
+                "requires a human confirmation",
+            ),
+            (
+                "a policy confirmer",
+                self._superseding_plan(
+                    source,
+                    **self._architect_confirmation(
+                        architect, architect_confirmed_by="policy:auto"
+                    ),
+                ),
+                "--architect-confirmed-by is a human, never a policy",
+            ),
+            (
+                "a dispatch the abandoned batch does not hold",
+                self._superseding_plan(
+                    source,
+                    **self._architect_confirmation(
+                        architect, carry_architect="dispatch-unknown"
+                    ),
+                ),
+                "not a reported architect dispatch",
+            ),
+            (
+                "another report digest",
+                self._superseding_plan(
+                    source,
+                    **self._architect_confirmation(
+                        architect, architect_report_sha256="0" * 64
+                    ),
+                ),
+                "does not match the report_sha256",
+            ),
+            (
+                "a confirmation without --supersedes",
+                self._superseding_plan(
+                    None,
+                    approved_by=None,
+                    approved_at=None,
+                    **self._architect_confirmation(architect),
+                ),
+                "--carry-architect",
+            ),
+        ):
+            with self.subTest(label):
+                with self.assertRaises(coordinator.CoordinatorError) as refused:
+                    coordinator.create_batch(self._args(**plan))
+
+                self.assertIn(message, refused.exception.message)
+                self.assertTrue(refused.exception.remedy)
+                self.assertEqual(self._ledger_bytes(), before)
+
+    def test_a_blocked_architect_report_is_not_carried(self) -> None:
+        source = cast(str, self._create_batch()["batch_id"])
+        brief = self._dispatch(source, "architect")["brief"]
+        self._start(brief["dispatch_id"])
+        self._submit(
+            brief["dispatch_id"],
+            self._base_report(
+                brief,
+                "architect",
+                outcome="blocked",
+                blockers={"status": "present", "details": "the plan needs a decision"},
+            ),
+        )
+        self._decide(source, "abandon", reason="the architect stopped")
+        architect = next(
+            item
+            for item in self._batch_record(source)["dispatches"]
+            if item["role"] == "architect"
+        )
+        before = self._ledger_bytes()
+
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            coordinator.create_batch(
+                self._args(
+                    **self._superseding_plan(
+                        source, **self._architect_confirmation(architect)
+                    )
+                )
+            )
+
+        self.assertIn("not completed", refused.exception.message)
+        self.assertIn("without --carry-architect", refused.exception.remedy)
+        self.assertEqual(self._ledger_bytes(), before)
+
+    def test_a_carried_architect_report_is_carried_again_from_the_batch_that_carried_it(
+        self,
+    ) -> None:
+        first, architect, entries = self._abandoned_with_unaccepted_architect()
+        second = cast(
+            str,
+            self._supersede(first, **self._architect_confirmation(architect))[
+                "batch_id"
+            ],
+        )
+        coordinator.approve_batch(self._args(batch=second, **self._approval()))
+        coordinator.abandon_batch(
+            self._args(batch=second, reason="the developer cannot start", **self._approval())
+        )
+
+        third = self._supersede(second, **self._architect_confirmation(architect))
+
+        carried = third["supersedes"]["architect"]
+        self.assertEqual(
+            (
+                third["supersedes"]["batch_id"],
+                carried["batch_id"],
+                carried["dispatch_id"],
+                carried["report_sha256"],
+            ),
+            (second, first, architect["dispatch_id"], architect["report_sha256"]),
+        )
+        self.assertEqual(
+            (third["commit_plan"], third["next_action"]), (entries, "developer")
+        )
+
+    def test_an_architect_report_is_not_carried_into_another_definition_of_done(
+        self,
+    ) -> None:
+        source, architect, _ = self._abandoned_with_unaccepted_architect()
+        before = self._ledger_bytes()
+
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            coordinator.create_batch(
+                self._args(
+                    **self._superseding_plan(
+                        source,
+                        definition_of_done=["route retries by cause", "log the route"],
+                        **self._architect_confirmation(architect),
+                    )
+                )
+            )
+
+        self.assertIn("Definition of Done", refused.exception.message)
+        self.assertIn("without --carry-architect", refused.exception.remedy)
+        self.assertEqual(self._ledger_bytes(), before)
+
+    def test_a_source_with_an_accepted_stage_resumes_only_by_the_ordinary_supersede(
+        self,
+    ) -> None:
+        source, _ = self._abandoned_batch()
+        architect = next(
+            item
+            for item in self._batch_record(source)["dispatches"]
+            if item["role"] == "architect"
+        )
+        before = self._ledger_bytes()
+
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            coordinator.create_batch(
+                self._args(
+                    **self._superseding_plan(
+                        source, **self._architect_confirmation(architect)
+                    )
+                )
+            )
+
+        self.assertIn("abandoned.last_accepted", refused.exception.message)
+        self.assertIn("drop --carry-architect", refused.exception.remedy)
+        self.assertEqual(self._ledger_bytes(), before)
+
+    def test_a_carried_plan_must_fit_the_scope_of_the_superseding_batch(self) -> None:
+        entries = [
+            {
+                "id": "route-retries",
+                "summary": "implement route-retries",
+                "expected_paths": ["services/x.py", "docs/routes.md"],
+                "covers": [1],
+            }
+        ]
+        source, architect, _ = self._abandoned_with_unaccepted_architect(
+            allowed=["services/**", "docs/**"], entries=entries
+        )
+        before = self._ledger_bytes()
+
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            coordinator.create_batch(
+                self._args(
+                    **self._superseding_plan(
+                        source,
+                        allowed_path=["services/**"],
+                        **self._architect_confirmation(architect),
+                    )
+                )
+            )
+
+        self.assertIn("docs/routes.md", refused.exception.message)
+        self.assertIn("--allowed-path", refused.exception.remedy)
+        self.assertEqual(self._ledger_bytes(), before)
+
+        batch = self._supersede(
+            source,
+            allowed_path=["services/**", "docs/**", "tests/**"],
+            **self._architect_confirmation(architect),
+        )
+
+        self.assertEqual(
+            (batch["commit_plan"], batch["next_action"]), (entries, "developer")
+        )
+        self.assertEqual(
+            batch["supersedes"]["architect"]["dispatch_id"], architect["dispatch_id"]
+        )
+
     def test_the_same_definition_of_done_carries_the_architect_and_its_pinned_plan(
         self,
     ) -> None:
