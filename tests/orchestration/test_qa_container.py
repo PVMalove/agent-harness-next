@@ -77,6 +77,7 @@ class ContainerQa:
         tmp: Path,
         *,
         preparation: list[str] | None = None,
+        file_checks: bool = True,
         timeout: int = 600,
         hosts: list[str] | None = None,
         cache: Path | None = None,
@@ -135,7 +136,8 @@ class ContainerQa:
         if preparation is not None:
             config["qa_preparation"] = preparation
             config["qa_environment_probes"] = ["probe registry"]
-            config["qa_project_file_checks"] = ["check lock"]
+            if file_checks:
+                config["qa_project_file_checks"] = ["check lock"]
         (repo / ".harness/orchestration.json").write_text(
             json.dumps(config), encoding="utf-8"
         )
@@ -234,6 +236,7 @@ class Make(Protocol):
         self,
         *,
         preparation: list[str] | None = ...,
+        file_checks: bool = ...,
         timeout: int = ...,
         hosts: list[str] | None = ...,
         cache: Path | None = ...,
@@ -251,6 +254,7 @@ def qa(tmp_path: Path) -> Iterator[Make]:
     def make(
         *,
         preparation: list[str] | None = None,
+        file_checks: bool = True,
         timeout: int = 600,
         hosts: list[str] | None = None,
         cache: Path | None = None,
@@ -274,6 +278,7 @@ def qa(tmp_path: Path) -> Iterator[Make]:
             ContainerQa(
                 root,
                 preparation=preparation,
+                file_checks=file_checks,
                 clock=FakeClock(clock_dir) if clocked else None,
                 **options,  # type: ignore[arg-type]
             )
@@ -644,6 +649,44 @@ def test_a_gate_executable_missing_from_the_image_stops_before_any_gate_command(
     [attempt] = repo.attempts()
     assert attempt["domain"] == "environment_preparation"
     assert repo.status()["state"] == "approved"
+
+
+def test_a_missing_gate_executable_without_project_file_checks_blocks_the_report_before_the_gate(
+    qa: Make,
+) -> None:
+    # Without project-file checks a failed probe proves no environment cause: the pinned
+    # `command -v cargo` check still stops QA before any gate command, but as a blocked report.
+    repo = qa(
+        preparation=PREPARATION, file_checks=False, gate=["make lint", "cargo test --locked"]
+    )
+    repo.engine.script("preparation-3", stderr="no cargo\n", exit_code=1)
+    repo.engine.script("environment-probe-3", stderr="no cargo\n", exit_code=1)
+
+    code, result, err = repo.qa_run()
+
+    assert code == 0 and result is not None, err
+    stages = [
+        call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
+        for call in repo.engine.runs()
+    ]
+    assert not any(stage.startswith("gate") for stage in stages), stages
+    report = repo.report()
+    assert report["outcome"] == "blocked"
+    assert [c["result"] for c in report["checks_run"]] == ["not_run", "not_run"]
+    qa_stages = report["qa_stages"]
+    assert qa_stages["failed_stage"] == "preparation"
+    assert qa_stages["diagnosis"]["category"] == "unknown"
+    check = executable_check("cargo")
+    failed = [
+        (entry["stage"], entry["command"], entry["exit_code"])
+        for entry in qa_stages["stages"]
+        if entry["result"] == "fail"
+    ]
+    assert failed == [("preparation", check, 1), ("environment-probe", check, 1)]
+    assert f"environment-probe-failed:{check}" in qa_stages["diagnosis"]["signals"]
+    # No environment cause is confirmed: triage, no new attempt and no image remedy.
+    assert report["blockers"]["details"] == "coordinator triage required; no automatic retry"
+    assert repo.attempts() == []
 
 
 @pytest.mark.fault_injection
