@@ -6,5 +6,19 @@
   "Модуль": "Module",
   "Все модули": "All modules",
   "Модули": "Modules",
-  "Файлы в снимке": "Files in the snapshot"
+  "Файлы в снимке": "Files in the snapshot",
+  "Расхождение навыков · {count}": "Skill drift · {count}",
+  "Файлы пакета отличаются от установленных.": "Package files differ from the installed ones.",
+  "Доступна другая версия пакета.": "A different package version is available.",
+  "Файлы Harness": "Harness files",
+  "Всё в порядке": "All good",
+  "Состав системы": "System components",
+  "Сводка Harness": "Harness summary",
+  "Связанные разделы": "Related sections",
+  "Отчёт harness health, онлайн-проверки, исправление --fix и экспорт в Markdown.": "The harness health report, online checks, --fix repairs and Markdown export.",
+  "Установленная и доступная версии, дрейф, diff, режим обновления и подтверждённый запуск.": "Installed and available versions, drift, diff, update mode and a confirmed run.",
+  "Путь, проверка Git-проекта и план init/adopt/update перед подтверждением.": "The path, the Git project check and the init/adopt/update plan before confirmation.",
+  "Статистика пайплайна, история batch по состояниям и команды coordinator.": "Pipeline statistics, batch history by state and coordinator commands.",
+  "Карта для HEAD: сводка, файлы со статусом парсера, символы, связи и хабы.": "The map for HEAD: summary, files with parser status, symbols, links and hubs.",
+  "Шаги project.json и orchestration.json, черновик, проверка и diff, версии и откат.": "project.json and orchestration.json steps, draft, check and diff, versions and rollback."
 }

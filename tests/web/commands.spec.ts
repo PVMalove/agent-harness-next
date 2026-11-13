@@ -66,7 +66,7 @@ async function open(page: Page, width: number) {
   await page.clock.setFixedTime(new Date("2026-11-05T10:41:00Z"));
   await page.goto(`${base()}/#/harness`);
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
-  await page.getByRole("tab", { name: "Команды" }).click();
+  await page.getByRole("tab", { name: /Команды/ }).click();
   await expect(page.locator('[data-command="diff"]')).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }

@@ -85,8 +85,8 @@ const PAGES: PageSpec[] = [
   {
     route: "harness",
     title: "Harness",
-    blocks: ["#harness-kpis", "#harness-install", "#harness-runtime", "#harness-adapters", "#harness-maintenance"],
-    tabs: ["Обзор", "Runtime", "Адаптеры", "Контейнеры", "Команды"],
+    blocks: ["#harness-kpis", "#harness-tabs", "#harness-install", "#harness-attention", "#harness-loop", "#harness-related"],
+    tabs: ["1Обзор", "2Runtime", "3Адаптеры", "4Контейнеры", "5Команды"],
   },
   {
     route: "repo-map",
@@ -179,7 +179,7 @@ for (const width of [1440, 390]) {
 test("a mockup tab without a source shows an explicit no-data state", async ({ page }) => {
   await mockSocket(page);
   await open(page, "harness", 1440);
-  await page.getByRole("tab", { name: "Контейнеры" }).click();
+  await page.getByRole("tab", { name: /Контейнеры/ }).click();
   // Running and Disk have no source; the fixture's volume probe failed with its reason.
   await expect(page.locator("#harness-containers .harness-container-summary .no-data")).toHaveCount(3);
   await expect(page.locator("[data-fact='images-volumes'] .no-data")).toHaveAttribute("title", /docker volume ls/);
@@ -199,7 +199,7 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "harness", width);
-    await page.getByRole("tab", { name: "Контейнеры" }).click();
+    await page.getByRole("tab", { name: /Контейнеры/ }).click();
     await expect(page.locator("#harness-engine-line")).toHaveText("docker · 27.4.1 · rootless · cgroup v2 · systemd");
     await expect(page.locator("#harness-engine")).toContainText("SELinux выключен");
     expect(await noOverflow(page)).toBe(true);

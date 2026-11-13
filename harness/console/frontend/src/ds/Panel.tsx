@@ -13,12 +13,15 @@ export interface PanelProps {
   actions?: ReactNode;
   id?: string;
   className?: string;
+  /** Accessible name of a scrolling body; defaults to a text title. */
+  label?: string;
   /** Take the free height of the parent column; the body scrolls. */
   fill?: boolean;
   children?: ReactNode;
 }
 
-export function Panel({ title, count, meta, actions, id, className, fill = false, children }: PanelProps) {
+export function Panel({ title, count, meta, actions, id, className, fill = false, label, children }: PanelProps) {
+  const name = label ?? (typeof title === "string" ? title : undefined);
   const classes = ["ds-panel", fill ? "ds-panel-fill" : "", className ?? ""].filter(Boolean).join(" ");
   return (
     <section id={id} className={classes}>
@@ -30,7 +33,10 @@ export function Panel({ title, count, meta, actions, id, className, fill = false
           {actions}
         </div>
       </div>
-      <div className="ds-panel-body">{children}</div>
+      {/* A body that can scroll is a focusable region, so the keyboard reaches its overflow (WCAG 2.1.1). */}
+      <div className="ds-panel-body" {...(fill && name ? { role: "region", tabIndex: 0, "aria-label": name } : {})}>
+        {children}
+      </div>
     </section>
   );
 }

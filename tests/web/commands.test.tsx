@@ -40,7 +40,7 @@ function renderHarness(
   );
   const list = socket.request("job.list");
   act(() => answerHarness(socket, HARNESS_OVERVIEW, maintenance));
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Команды" })));
+  act(() => fireEvent.click(screen.getByRole("tab", { name: /Команды/ })));
   return { client, clock, socket, list };
 }
 
@@ -57,7 +57,7 @@ describe("the Harness commands panel", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Harness");
     expect(within(row("diff")).getByText("✔ обратимо")).toBeTruthy();
     expect(within(row("uninstall-apply")).getByText("✖ удаление")).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Команды" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Команды/ }).getAttribute("aria-selected")).toBe("true");
   });
 
   test("a reversible command starts at once and its output grows with the subscription", () => {
