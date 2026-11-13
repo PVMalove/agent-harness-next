@@ -352,3 +352,4 @@
   .ds-stat + .ds-stat { border-left: 0; border-top: 1px solid var(--ds-line); }
   .ds-page-head { flex-wrap: wrap; }
 }
+.ds-table-wrap { overflow-x: auto; margin-bottom: 8px; }

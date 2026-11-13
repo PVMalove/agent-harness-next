@@ -5,8 +5,8 @@
 .ds-foot-note { display: flex; align-items: center; gap: 8px; padding: 0; }
 
 /* Repo Map */
-.ds-files { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
-.ds-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1; min-height: 0; }
+.ds-files { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
 .ds-tree { padding: 4px 0; }
 .ds-tree-row {
   display: flex;
@@ -90,3 +90,16 @@
 .ds-container-stats small { color: var(--ds-faint); font-size: var(--ds-fs-1); }
 .ds-engine { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 8px 12px; border-bottom: 1px solid var(--ds-line); color: var(--ds-muted); }
 .ds-adapter .ds-row-sub { white-space: normal; }
+
+/* Help */
+.ds-pillars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0 16px 8px; }
+.ds-pillars div { display: flex; flex-direction: column; padding: 8px 12px; border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-raised); }
+.ds-pillars span { color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-app .ds-quick { color: var(--ds-fg); }
+.ds-app a.ds-quick:hover { background: var(--ds-hover); }
+.ds-key-grid { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 8px 12px; }
+.ds-key-grid div { display: flex; align-items: center; gap: 8px; }
+.ds-faq { padding: 4px 12px; }
+.ds-faq details { padding: 8px 0; border-bottom: 1px solid var(--ds-line); }
+.ds-faq summary { font-weight: 600; cursor: pointer; }
+.ds-faq p { margin: 4px 0 0; color: var(--ds-muted); }

@@ -103,8 +103,8 @@ const PAGES: PageSpec[] = [
   {
     route: "help",
     title: "Справка",
-    blocks: [".help-kpis", ".help-tabbar", "#help-intro", ".help-quick", "#help-faq"],
-    tabs: ["Начало", "Экраны", "Команды", "Горячие клавиши", "Границы"],
+    blocks: ["#help-kpis", ".ds-toolbar", "#help-tabs", "#help-intro", "#help-next"],
+    tabs: ["1Начало", "13Разделы", "4Клавиши", "6Статусы", "12Безопасность", "4Вопросы", "3Документация"],
   },
   {
     route: "agent-activity",

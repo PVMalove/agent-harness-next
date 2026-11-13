@@ -81,4 +81,4 @@ export const href = (route: string): string => `#/${route}`;
 
 /** Routes already built on the design system v3. The other screens render into a main area that
     keeps the old page style (`ds-main--legacy`) until their slice of epic #1090 moves them. */
-export const DS_ROUTES: ReadonlySet<string> = new Set<string>(["repo-map", "harness"]);
+export const DS_ROUTES: ReadonlySet<string> = new Set<string>(["repo-map", "harness", "help"]);
