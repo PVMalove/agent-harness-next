@@ -34,6 +34,7 @@ table below. Network/environment values describe the selected plan; without a po
 | `access_policy.defaults.network.hosts` | Array of explicit DNS names, without URL, port or wildcard; up to 253 characters, with labels up to 63. Required inside an authored `network`. Without a network component, the resolver uses `[]`. |
 | `access_policy.defaults.filesystem[].resource` | Required in each entry: `checkout`, `git_common`, `shared_storage`, `cache`. The `filesystem` array is optional; the selected plan defaults to `[]`. |
 | `access_policy.defaults.filesystem[].path` | Non-empty string without NUL. Required only for `cache` and forbidden for other resources. Relative paths resolve against the worktree; the resolver expands `~`. |
+| `access_policy.defaults.filesystem[].variable` | Environment variable name for a `cache` path; forbidden for other resources. The name must be unique in the component and cannot override runtime environment variables. |
 | `access_policy.defaults.filesystem[].access` | Required in each entry: `read` or `write`. Actual environment permissions are checked separately, not inferred from configuration text. |
 
 `checkout`, `git_common` and `shared_storage` roots are resolved from the worktree and project
@@ -52,7 +53,7 @@ The field formats and restrictions are the same as above:
 - `access_policy.roles.<ключ>.container.engine`, `access_policy.roles.<ключ>.container.worker_image`, `access_policy.roles.<ключ>.container.proxy_image`.
 - `access_policy.roles.<ключ>.environment`.
 - `access_policy.roles.<ключ>.network.hosts`.
-- `access_policy.roles.<ключ>.filesystem[].resource`, `access_policy.roles.<ключ>.filesystem[].path`, `access_policy.roles.<ключ>.filesystem[].access`.
+- `access_policy.roles.<ключ>.filesystem[].resource`, `access_policy.roles.<ключ>.filesystem[].path`, `access_policy.roles.<ключ>.filesystem[].variable`, `access_policy.roles.<ключ>.filesystem[].access`.
 
 For example, a `filesystem` with just `checkout: read` replaces the defaults array instead of
 extending it. `container` is not deep-merged either: repeating only `worker_image` drops the
@@ -69,7 +70,7 @@ override**. Its own entries have the same format:
 - `access_policy.operations.<ключ>.container.engine`, `access_policy.operations.<ключ>.container.worker_image`, `access_policy.operations.<ключ>.container.proxy_image`.
 - `access_policy.operations.<ключ>.environment`.
 - `access_policy.operations.<ключ>.network.hosts`.
-- `access_policy.operations.<ключ>.filesystem[].resource`, `access_policy.operations.<ключ>.filesystem[].path`, `access_policy.operations.<ключ>.filesystem[].access`.
+- `access_policy.operations.<ключ>.filesystem[].resource`, `access_policy.operations.<ключ>.filesystem[].path`, `access_policy.operations.<ключ>.filesystem[].variable`, `access_policy.operations.<ключ>.filesystem[].access`.
 
 A read-only QA role does not mean the coordinator operation cannot write its clean-room
 checkout, Git metadata or shared storage. Operational requirements are checked separately.
