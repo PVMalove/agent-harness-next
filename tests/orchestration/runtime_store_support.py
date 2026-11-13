@@ -1051,6 +1051,76 @@ code = control / "exit_code"
 sys.exit(int(code.read_text()) if code.exists() else 0)
 """
 
+# The worker part of a fake `claude` or `codex app-server` behind a real adapter; it lives in the
+# control directory and follows ``worker.json`` there: ``hang`` sleeps until it is killed;
+# otherwise it waits ``delay`` seconds, with ``report`` runs the lifecycle the prompt asks for
+# (self-report from its Git top-level, heartbeat, report submit) and returns ``exit_code``.
+# ``worker.log`` holds one JSON line per event and per coordinator answer.
+FAKE_WORKER = """
+import json, os, subprocess, sys, time
+from pathlib import Path
+control = Path(__file__).resolve().parent
+plan = json.loads((control / "worker.json").read_text(encoding="utf-8"))
+
+def record(**fields):
+    with open(control / "worker.log", "a", encoding="utf-8") as log:
+        log.write(json.dumps(fields) + "\\n")
+
+def lifecycle():
+    record(event="started", pid=os.getpid(), pgid=os.getpgid(0))
+    while plan.get("hang"):
+        time.sleep(0.05)
+    time.sleep(plan.get("delay", 0))
+    if plan.get("report"):
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+                             text=True, check=True).stdout.strip()
+        cli = [sys.executable, plan["coordinator"], "--repo", plan["repo"]]
+        path = os.pathsep.join(p for p in (os.environ.get("PYTHONPATH"), plan["root"]) if p)
+        for step in (
+            ["dispatch", "self-report", "--dispatch", plan["dispatch"], "--model",
+             plan["model"], "--worktree", top],
+            ["dispatch", "heartbeat", "--dispatch", plan["dispatch"]],
+            ["report", "submit", "--file", plan["report"]],
+        ):
+            done = subprocess.run(cli + step, capture_output=True, text=True,
+                                  stdin=subprocess.DEVNULL, env={**os.environ, "PYTHONPATH": path})
+            record(event=" ".join(step[:2]), code=done.returncode, stderr=done.stderr[-2000:])
+    return plan.get("exit_code", 0)
+"""
+
+FAKE_CLAUDE = """
+record(event="claude", argv=sys.argv[1:], stdin=sys.stdin.read())
+sys.exit(lifecycle())
+"""
+
+# A fake `codex app-server`: it answers the adapter's requests with the identity it was asked
+# for and, after turn/start, runs the worker and ends the turn (or exits with its code).
+FAKE_CODEX = """
+if sys.argv[1:2] != ["app-server"]:
+    sys.exit(9)
+for line in sys.stdin:
+    request = json.loads(line)
+    method, params = request.get("method"), request.get("params", {})
+    if method == "initialize":
+        result = {}
+    elif method == "thread/start":
+        result = {"thread": {"id": "thread-supervised"}, "model": params["model"],
+                  "cwd": params["cwd"],
+                  "reasoningEffort": params.get("config", {}).get("model_reasoning_effort"),
+                  "activePermissionProfile": {"id": params["permissions"]}}
+    elif method == "turn/start":
+        result = {"turn": {"id": "turn-supervised", "status": "inProgress"}}
+    else:
+        continue
+    print(json.dumps({"id": request["id"], "result": result}), flush=True)
+    if method == "turn/start":
+        code = lifecycle()
+        if code:
+            sys.exit(code)
+        print(json.dumps({"method": "turn/completed",
+                          "params": {"turn": {"status": "completed"}}}), flush=True)
+"""
+
 
 def _supervised_config(execution_policy: JsonObject) -> JsonObject:
     runtime: JsonObject = {
@@ -1169,6 +1239,7 @@ class Supervised:
         self.adapter.write_text(
             FAKE_ADAPTER.format(control=str(self.control)), encoding="utf-8"
         )
+        self.adapter_args: list[str] = []
         self.runtime = ServingRuntime(
             repo, env=env, host_runtime_dir=host_runtime_dir, clock=clock
         )
@@ -1219,7 +1290,38 @@ class Supervised:
             self.dispatch,
             "--adapter",
             str(self.adapter),
+            *(f"--adapter-arg={argument}" for argument in self.adapter_args),
         ]
+
+    def use_adapter(self, runtime: str, **plan: object) -> None:
+        """Send through the real ``harness/adapters/<runtime>_worker.py`` (claude or codex)
+        with a fake binary that follows ``plan`` (``FAKE_WORKER``)."""
+        binary = self.control / f"fake-{runtime}"
+        script = FAKE_CLAUDE if runtime == "claude" else FAKE_CODEX
+        binary.write_text(
+            f"#!{sys.executable}\n{FAKE_WORKER}{script}", encoding="utf-8"
+        )
+        binary.chmod(0o755)
+        defaults = {
+            "repo": str(self.repo),
+            "root": str(ROOT),
+            "coordinator": str(ROOT / "harness/orchestration/coordinator.py"),
+            "dispatch": self.dispatch,
+            "model": self.brief["resolved_model"],
+        }
+        (self.control / "worker.json").write_text(
+            json.dumps({**defaults, **plan}), encoding="utf-8"
+        )
+        self.adapter = ROOT / "harness" / "adapters" / f"{runtime}_worker.py"
+        self.adapter_args = [f"--{runtime}-bin={binary}"]
+
+    def worker_log(self) -> list[JsonObject]:
+        """The events the fake binary of ``use_adapter`` logged."""
+        log = self.control / "worker.log"
+        if not log.exists():
+            return []
+        lines = log.read_text(encoding="utf-8").splitlines()
+        return [json.loads(line) for line in lines]
 
     def send(self) -> subprocess.CompletedProcess[str]:
         return self.run(*self.send_command())
