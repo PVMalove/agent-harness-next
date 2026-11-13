@@ -14,11 +14,11 @@ from harness.orchestration.core.utils import JsonObject
 from harness.orchestration.ledger.ledger_ops import _read_store_record
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from harness.orchestration.operational_hold import sanitize_detail
-from harness.orchestration.recovery.model import RecoveryDiagnostic
-from harness.orchestration.recovery.runtime import runtime_hello
+from harness.orchestration.recovery_status.model import RecoveryDiagnostic
+from harness.orchestration.recovery_status.runtime import runtime_hello
 
 if TYPE_CHECKING:
-    from harness.orchestration.recovery.survey import Survey
+    from harness.orchestration.recovery_status.survey import Survey
 
 
 def read_config(survey: Survey) -> None:

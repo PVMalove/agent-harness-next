@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 from harness.errors import HarnessError
 from harness.orchestration.core.constants import LIVE_DISPATCH_STATES
 from harness.orchestration.core.utils import JsonObject, _moment, _silent_seconds
-from harness.orchestration.recovery.model import RecoveryDiagnostic
+from harness.orchestration.recovery_status.model import RecoveryDiagnostic
 
 if TYPE_CHECKING:
-    from harness.orchestration.recovery.survey import Survey
+    from harness.orchestration.recovery_status.survey import Survey
 
 
 def check_operation(survey: Survey) -> None:

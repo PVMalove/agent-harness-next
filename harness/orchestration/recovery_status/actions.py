@@ -12,16 +12,16 @@ from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger.ledger_ops import read_state, store_is_authority
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from harness.orchestration.operational_hold import FILE_EPOCH_REMEDY
-from harness.orchestration.recovery.batch_state import lifecycle_view
-from harness.orchestration.recovery.intent import read_intent, tracked
-from harness.orchestration.recovery.model import (
+from harness.orchestration.recovery_status.batch_state import lifecycle_view
+from harness.orchestration.recovery_status.intent import read_intent, tracked
+from harness.orchestration.recovery_status.model import (
     ADVISORIES,
     RECOVERY_CONTRACT,
     RecoveryDiagnostic,
     RecoverySession,
 )
-from harness.orchestration.recovery.runtime import runtime_hello, runtime_problems
-from harness.orchestration.recovery.survey import Survey
+from harness.orchestration.recovery_status.runtime import runtime_hello, runtime_problems
+from harness.orchestration.recovery_status.survey import Survey
 
 
 def _require_store_epoch(root: Path) -> None:

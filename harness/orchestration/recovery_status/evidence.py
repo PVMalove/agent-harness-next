@@ -8,15 +8,15 @@ from typing import TYPE_CHECKING, cast
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from harness.orchestration.core.utils import JsonObject, _canonical
-from harness.orchestration.recovery.model import RecoveryDiagnostic
-from harness.orchestration.recovery.runtime import (
+from harness.orchestration.recovery_status.model import RecoveryDiagnostic
+from harness.orchestration.recovery_status.runtime import (
     RECOVERY_FEATURES,
     RECOVERY_PROTOCOL,
     runtime_problems,
 )
 
 if TYPE_CHECKING:
-    from harness.orchestration.recovery.survey import Survey
+    from harness.orchestration.recovery_status.survey import Survey
 
 
 def check_runtime(survey: Survey) -> None:

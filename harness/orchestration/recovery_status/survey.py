@@ -16,10 +16,10 @@ from typing import cast
 from harness.configuration import Bundle
 from harness.orchestration import operational_hold
 from harness.orchestration.core.utils import JsonObject, _now
-from harness.orchestration.recovery import batch_state, dispatches, evidence, inputs
-from harness.orchestration.recovery.batch_state import lifecycle_view
-from harness.orchestration.recovery.intent import read_intent
-from harness.orchestration.recovery.model import (
+from harness.orchestration.recovery_status import batch_state, dispatches, evidence, inputs
+from harness.orchestration.recovery_status.batch_state import lifecycle_view
+from harness.orchestration.recovery_status.intent import read_intent
+from harness.orchestration.recovery_status.model import (
     CHECKS,
     RECOVERY_CONTRACT,
     CheckResult,

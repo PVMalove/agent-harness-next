@@ -6,13 +6,15 @@ from typing import TYPE_CHECKING, cast
 
 from harness.orchestration.core.constants import TERMINAL_BATCH_STATES
 from harness.orchestration.core.utils import JsonObject
-from harness.orchestration.recovery.model import RecoveryDiagnostic
+from harness.orchestration.recovery_status.model import RecoveryDiagnostic
 
 if TYPE_CHECKING:
-    from harness.orchestration.recovery.survey import Survey
+    from harness.orchestration.recovery_status.survey import Survey
 
 
 def check_lifecycle(survey: Survey) -> None:
+    """The batch's lifecycle state: a terminal batch is refused, a recorded stop waits for the
+    audited route that resumes it with a human approval."""
     batch = cast(JsonObject, survey.batch)
     check = survey.checks["lifecycle"]
     check.evidence = lifecycle_view(batch)
@@ -49,6 +51,7 @@ def check_lifecycle(survey: Survey) -> None:
 
 
 def check_attention(survey: Survey) -> None:
+    """The batch's open attention: recovery never resolves it, so an open one is refused."""
     batch = cast(JsonObject, survey.batch)
     check = survey.checks["attention"]
     if batch.get("needs_attention") is True:

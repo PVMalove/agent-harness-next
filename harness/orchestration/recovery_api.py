@@ -19,32 +19,31 @@ cancelled, reaches end of input or is interrupted shows the same status after a 
 and the intent are recovery records of the runtime store (``recovery/hold/<batch_id>.json``,
 ``recovery/intent/<batch_id>.json``, ADR 0026): Python decides them, the Rust store writes them
 through ``state.write``, and the file-ledger epoch keeps neither, so there every command refuses
-with the ``harness-runtime migrate`` remedy.  Nothing
-here reads standard input, waits for a terminal or imports a UI toolkit.  An exception that is not
-a refusal is never shown as a configuration problem: it is an ``internal-error`` diagnostic with a
-correlation ID.
+with the ``harness-runtime migrate`` remedy.  Nothing here reads standard input, waits for a
+terminal or imports a UI toolkit.  An exception that is not a refusal is never shown as a
+configuration problem: it is an ``internal-error`` diagnostic with a correlation ID.
 
-The parts live in the ``harness.orchestration.recovery`` package; this module re-exports
+The parts live in the ``harness.orchestration.recovery_status`` package; this module re-exports
 them, so its importers keep one name.
 """
 
 from __future__ import annotations
 
-from harness.orchestration.recovery.actions import (
+from harness.orchestration.recovery_status.actions import (
     abort as abort,
     fix as fix,
     reload as reload,
     skip as skip,
     status as status,
 )
-from harness.orchestration.recovery.batch_state import (
+from harness.orchestration.recovery_status.batch_state import (
     lifecycle_view as lifecycle_view,
     stopped_route as stopped_route,
 )
-from harness.orchestration.recovery.inputs import (
+from harness.orchestration.recovery_status.inputs import (
     hold_reason_of as hold_reason_of,
 )
-from harness.orchestration.recovery.intent import (
+from harness.orchestration.recovery_status.intent import (
     INTENT_CONTRACT as INTENT_CONTRACT,
     INTENT_DIRECTORY as INTENT_DIRECTORY,
     Intent as Intent,
@@ -52,7 +51,7 @@ from harness.orchestration.recovery.intent import (
     read_intent as read_intent,
     tracked as tracked,
 )
-from harness.orchestration.recovery.model import (
+from harness.orchestration.recovery_status.model import (
     ACTIONS as ACTIONS,
     ADVISORIES as ADVISORIES,
     CHECK_STATUSES as CHECK_STATUSES,
@@ -67,16 +66,16 @@ from harness.orchestration.recovery.model import (
     RecoveryInterrupted as RecoveryInterrupted,
     RecoverySession as RecoverySession,
 )
-from harness.orchestration.recovery.resume import (
+from harness.orchestration.recovery_status.resume import (
     resume as resume,
 )
-from harness.orchestration.recovery.runtime import (
+from harness.orchestration.recovery_status.runtime import (
     RECOVERY_FEATURES as RECOVERY_FEATURES,
     RECOVERY_PROTOCOL as RECOVERY_PROTOCOL,
     runtime_hello as runtime_hello,
     runtime_problems as runtime_problems,
 )
-from harness.orchestration.recovery.survey import (
+from harness.orchestration.recovery_status.survey import (
     Survey as Survey,
     open_entries as open_entries,
 )

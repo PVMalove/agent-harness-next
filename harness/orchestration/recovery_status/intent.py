@@ -20,13 +20,13 @@ from harness.orchestration.ledger.ledger_ops import (
 )
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from harness.orchestration.operational_hold import FILE_EPOCH_REMEDY, sanitize_detail
-from harness.orchestration.recovery.model import (
+from harness.orchestration.recovery_status.model import (
     ACTIONS,
     INTENT_STATUSES,
     RecoveryInternalError,
     RecoveryInterrupted,
 )
-from harness.orchestration.recovery.runtime import runtime_hello, runtime_problems
+from harness.orchestration.recovery_status.runtime import runtime_hello, runtime_problems
 
 INTENT_CONTRACT = "recoveryIntent.v1"
 INTENT_DIRECTORY = "recovery/intent"
