@@ -39,11 +39,25 @@ class ContainerGuideTests(unittest.TestCase):
         text = SOURCE.read_text(encoding="utf-8")
 
         for engine in ("docker", "podman"):
-            for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy"):
+            for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy", "Dockerfile.qa"):
                 with self.subTest(engine=engine, dockerfile=dockerfile):
                     self.assertIn(
                         f"{engine} build -f .harness/container/{dockerfile}", text
                     )
+
+    def test_the_qa_image_ships_a_rust_toolchain_and_the_guide_names_the_chosen_behavior(
+        self,
+    ) -> None:
+        dockerfile = (SOURCE.parent.parent / "container/Dockerfile.qa").read_text(
+            encoding="utf-8"
+        )
+        text = SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("FROM harness-sandbox:local", dockerfile)
+        self.assertIn("--default-toolchain", dockerfile)
+        self.assertIn("build-essential", dockerfile)
+        self.assertIn("there is no stage filter by executor", text)
+        self.assertIn("qa-environment-failure", text)
 
     def test_the_guide_marks_rootless_podman_on_selinux_as_verified_and_the_rest_as_unverified(
         self,

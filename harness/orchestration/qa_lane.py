@@ -15,7 +15,7 @@ import re
 import socket
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,7 +25,14 @@ from ..errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from ..storage import storage_path
 from . import hook_policy, operation_access, operational_guards, operational_hold, qa_lease
 from . import verification_plan
-from .qa_execution import NO_REPORT_DOMAINS, RuntimeQaPolicy, container_brief, next_attempt
+from .qa_execution import (
+    NO_REPORT_DOMAINS,
+    RuntimeQaPolicy,
+    container_brief,
+    executable_check,
+    gate_executables,
+    next_attempt,
+)
 from .core import state_view
 from .pinned_configuration import read_snapshot, capture_unaccepted
 from .core.config import _execution_policy, _lease_ttl, _qa_preparation_commands
@@ -797,6 +804,25 @@ def _container_domain(
     return None
 
 
+def _missing_executable(
+    stages: JsonObject | None, executables: Mapping[str, tuple[str, str]]
+) -> tuple[str, str] | None:
+    """The executable and the gate command that needs it, when the failed preparation command is
+    a generated ``executable_check``; ``None`` otherwise."""
+    entries = stages.get("stages") if stages is not None else None
+    failed = next(
+        (
+            entry
+            for entry in (entries if isinstance(entries, list) else [])
+            if isinstance(entry, dict)
+            and entry.get("stage") == "preparation"
+            and entry.get("result") == "fail"
+        ),
+        None,
+    )
+    return None if failed is None else executables.get(str(failed.get("command")))
+
+
 def _blocked_by(report: JsonObject, domain: FailureDomain) -> None:
     """A container QA whose command ended with a tooling, timeout or unknown failure: the code
     was not judged, so the report is ``blocked`` with that domain and no developer retry."""
@@ -1301,6 +1327,7 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
             str(evidence["sha256"]),
             ops,
         )
+    executables: dict[str, tuple[str, str]] = {}
     try:
         with qa_lease.heartbeat(ledger, lease, lease_seconds):
             # The first failed deterministic gate is sufficient evidence for a developer retry.  Do
@@ -1317,6 +1344,13 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
             if pinned_commands is not None:
                 config = {**config, **pinned_commands}
             preparation = _qa_preparation_commands(config)
+            if isinstance(policy, RuntimeQaPolicy):
+                # The brief pins a check of every bare gate executable after the preparation and
+                # as a probe (``with_executable_checks``): a failed one names its executable.
+                executables = {
+                    executable_check(name): (name, command)
+                    for name, command in gate_executables(dispatch["verification_commands"])
+                }
             context = evidence_context(repo, dispatch["candidate_commit"], dispatch)
             if preparation:
                 staged = run_qa_stages(
@@ -1433,13 +1467,43 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
             )
             raise
     domain = _container_domain(policy, stages)
-    if domain in NO_REPORT_DOMAINS:
-        failure = CoordinatorError(
-            f"QA attempt {attempt} of {dispatch['dispatch_id']} ended with a {domain} failure; "
-            f"its evidence is {artifact.name}",
-            remedy=f"restore the QA environment, then run qa run for {dispatch['dispatch_id']} "
+    from .workflow.failure_domains import qa_report_outcome
+
+    # The runner and the report validator share one outcome rule: a run-level domain that no
+    # recorded stage carries (a backstop timeout, for one) would be a report with a mismatched
+    # outcome, so the run is a new attempt instead.
+    unrecorded = (
+        domain is not None
+        and stages is not None
+        and qa_report_outcome(stages) != "blocked"
+    )
+    if domain in NO_REPORT_DOMAINS or unrecorded:
+        cause = (
+            f"a {domain} failure that no recorded QA stage carries"
+            if unrecorded
+            else f"a {domain} failure"
+        )
+        remedy = (
+            f"restore the QA environment, then run qa run for {dispatch['dispatch_id']} "
             f"again: it is attempt {(attempt or 0) + 1} with a new operation id and spends no "
-            "developer retry",
+            "developer retry"
+        )
+        missing = _missing_executable(stages, executables)
+        if missing is not None:
+            name, command = missing
+            cause += (
+                f": the QA image has no executable {name} on PATH, which the gate command "
+                f"`{command}` needs"
+            )
+            remedy = (
+                f"install {name} in the QA image (access_policy.operations.qa.container."
+                "worker_image; for cargo, build it from .harness/container/Dockerfile.qa), "
+                "rebuild it, repeat dispatch propose (the image id is pinned), then " + remedy
+            )
+        failure = CoordinatorError(
+            f"QA attempt {attempt} of {dispatch['dispatch_id']} ended with {cause}; "
+            f"its evidence is {artifact.name}",
+            remedy=remedy,
         )
         _recover_transient_failure(
             ledger,
@@ -1466,6 +1530,8 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
         report = _qa_report(dispatch, checks, artifact, checksum, stages)
         if domain is not None:
             _blocked_by(report, domain)
+        if stages is not None:
+            report["outcome"] = qa_report_outcome(stages)
         return report
 
     return _accept_and_release(

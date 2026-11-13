@@ -206,6 +206,42 @@ docker build -f .harness/container/Dockerfile.proxy -t harness-proxy:local .harn
 podman build -f .harness/container/Dockerfile.proxy -t harness-proxy:local .harness/container
 ```
 
+### QA image with Rust
+
+A ticket-diff QA plan always selects the `cargo` stages of a change under `native/`, whatever the
+executor: there is no stage filter by executor. Build the optional QA image
+`.harness/container/Dockerfile.qa` on top of `harness-sandbox:local`. It adds `make`, a C
+toolchain (`build-essential`) and a pinned minimal Rust toolchain whose `CARGO_HOME` is writable
+for the arbitrary uid of the container:
+
+```bash
+docker build -f .harness/container/Dockerfile.qa -t harness-qa:local .harness/container
+podman build -f .harness/container/Dockerfile.qa -t harness-qa:local .harness/container
+```
+
+Name `harness-qa:local` in `access_policy.operations.qa.container.worker_image` and repeat
+`dispatch propose`. Allow `index.crates.io` and `static.crates.io` in `network.hosts` when the
+gate downloads crates.
+
+An image without a gate executable stops the QA with an explicit environment reason:
+
+- With `qa_preparation` declared, a container QA brief pins a `command -v <name>` check of every
+  bare executable that a gate command starts with, after the project's preparation and again as an
+  environment probe. A missing `cargo` fails that check, so the QA stops before any gate command.
+  The outcome depends on the declared diagnosis facts:
+  - With `qa_environment_probes` and `qa_project_file_checks` both declared and every project-file
+    check passing, the failed probe confirms an environment cause. The QA stops as a new attempt
+    without a report; the error names the executable, the gate command and the image remedy.
+  - Without `qa_environment_probes` or without `qa_project_file_checks`, a failed probe confirms no
+    cause: the diagnosis is `unknown`. `qa run` records a `blocked` report whose failed
+    `preparation` stage is the `command -v cargo` check, with the blocker
+    `coordinator triage required; no automatic retry` and no image remedy. The missing executable
+    appears only in the failed check command and its diagnostics.
+- Without `qa_preparation`, the gate command ends with exit 127 (or 126), which the runtime
+  classifies as `tooling`. The QA report is recorded as `blocked`, a retry reruns QA on the same
+  candidate without spending a developer retry, and `batch auto-decide` stops with
+  `qa-environment-failure` and the image remedy.
+
 `dispatch propose` pins the image id of each tag in the brief field `runtime_images`, and
 `dispatch create` observes the images again. A send or QA run whose image changed after the
 approval is refused with `approval_mismatch`. After a rebuild, cancel the dispatch and repeat

@@ -1847,6 +1847,30 @@ class QaLaneRunTests(QaLaneTestCase):
         )
         refused(lambda r: r.update(role="qa", qa_stages="not a mapping"))
 
+    def test_a_failing_stage_with_a_runtime_domain_is_a_blocked_report(self) -> None:
+        # The runner and the validator share one outcome rule: a stage whose ending the runtime
+        # classified (exit 127, tooling) did not judge the code, so the report is blocked.
+        self.dispatch["verification_commands"] = list(self.GATE)
+        gate = self._staged(gate_exits=(0, 127))
+        gate.stages[-1]["domain"] = "tooling"
+        defect = self._staged(
+            prep_exit=127,
+            diagnosis=Diagnosis("project-defect", ("exit-code:127",), "lock"),
+            probe_exit=0,
+            check_exit=1,
+        )
+        defect.stages[0]["domain"] = "tooling"
+        for staged in (gate, defect):
+            report = qa_lane._qa_report(
+                self.dispatch, staged.gate_checks, Path("a"), "0" * 64, staged.record()
+            )
+            with self.subTest(staged.failed_stage):
+                reports._validate_qa_stages({**report, "outcome": "blocked"}, self.dispatch)
+                with self.assertRaisesRegex(
+                    coordinator.CoordinatorError, "requires outcome blocked"
+                ):
+                    reports._validate_qa_stages({**report, "outcome": "failed"}, self.dispatch)
+
     def test_qa_stages_belong_only_to_a_qa_report(self) -> None:
         with self.assertRaises(coordinator.CoordinatorError):
             reports._validate_qa_stages(

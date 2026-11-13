@@ -27,6 +27,7 @@ from harness.orchestration import qa_lane
 from harness.orchestration.core.utils import CoordinatorError
 from harness.orchestration.ledger import ledger_ops
 from harness.orchestration.ledger.ledger_ops import LedgerBusyError
+from harness.orchestration.qa_execution import executable_check, gate_executables, with_executable_checks
 from harness.orchestration.workflow import qa_integration
 from tests.orchestration import test_coordinator as coordinator_tests
 from tests.orchestration.fake_clock import FakeClock
@@ -76,6 +77,7 @@ class ContainerQa:
         tmp: Path,
         *,
         preparation: list[str] | None = None,
+        file_checks: bool = True,
         timeout: int = 600,
         hosts: list[str] | None = None,
         cache: Path | None = None,
@@ -134,7 +136,8 @@ class ContainerQa:
         if preparation is not None:
             config["qa_preparation"] = preparation
             config["qa_environment_probes"] = ["probe registry"]
-            config["qa_project_file_checks"] = ["check lock"]
+            if file_checks:
+                config["qa_project_file_checks"] = ["check lock"]
         (repo / ".harness/orchestration.json").write_text(
             json.dumps(config), encoding="utf-8"
         )
@@ -233,12 +236,14 @@ class Make(Protocol):
         self,
         *,
         preparation: list[str] | None = ...,
+        file_checks: bool = ...,
         timeout: int = ...,
         hosts: list[str] | None = ...,
         cache: Path | None = ...,
         lease_ttl: int | None = ...,
         selinux: bool = ...,
         clocked: bool = ...,
+        gate: list[str] | None = ...,
     ) -> ContainerQa: ...
 
 
@@ -249,12 +254,14 @@ def qa(tmp_path: Path) -> Iterator[Make]:
     def make(
         *,
         preparation: list[str] | None = None,
+        file_checks: bool = True,
         timeout: int = 600,
         hosts: list[str] | None = None,
         cache: Path | None = None,
         lease_ttl: int | None = None,
         selinux: bool = False,
         clocked: bool = False,
+        gate: list[str] | None = None,
     ) -> ContainerQa:
         root = tmp_path / f"q{len(made)}"
         clock_dir = tmp_path / f"clock{len(made)}"
@@ -265,11 +272,13 @@ def qa(tmp_path: Path) -> Iterator[Make]:
             "cache": cache,
             "lease_ttl": lease_ttl,
             "selinux": selinux,
+            "gate": gate,
         }
         made.append(
             ContainerQa(
                 root,
                 preparation=preparation,
+                file_checks=file_checks,
                 clock=FakeClock(clock_dir) if clocked else None,
                 **options,  # type: ignore[arg-type]
             )
@@ -523,6 +532,34 @@ def test_tooling_and_timeout_endings_block_the_report_with_their_domain(
     assert (lane["lease"], lane["queue"]) == (None, [])
 
 
+def test_a_tooling_gate_ending_after_a_declared_preparation_records_a_blocked_report(
+    qa: Make,
+) -> None:
+    # The runner and the report validator decide the outcome by one rule: a gate command the
+    # runtime classified as tooling (exit 127) is a recorded blocked report, never a refusal.
+    repo = qa(preparation=PREPARATION)
+    repo.engine.script("gate-2", stderr="sh: cargo: not found\n", exit_code=127)
+
+    status, result, err = repo.qa_run()
+
+    assert status == 0 and result is not None, err
+    report = repo.report()
+    assert report["outcome"] == "blocked"
+    assert "tooling" in report["blockers"]["details"]
+    assert [c["result"] for c in report["checks_run"]] == ["pass", "fail", "not_run"]
+    stages = report["qa_stages"]
+    assert stages["failed_stage"] == "gate"
+    [failed] = [e for e in stages["stages"] if e["result"] == "fail"]
+    assert (failed["stage"], failed["exit_code"], failed["domain"]) == (
+        "gate",
+        127,
+        "tooling",
+    )
+    assert repo.attempts() == []
+    lane = repo.lane()
+    assert (lane["lease"], lane["queue"]) == (None, [])
+
+
 @pytest.mark.fault_injection
 def test_an_selinux_permission_denied_command_blocks_the_report_as_tooling_without_a_new_attempt(
     qa: Make,
@@ -548,6 +585,110 @@ def test_an_selinux_permission_denied_command_blocks_the_report_as_tooling_witho
     assert (lane["lease"], lane["queue"]) == (None, [])
 
 
+def test_the_gate_executables_are_bare_names_once_and_checked_after_the_preparation() -> None:
+    commands: list[str | list[str]] = [
+        "make lint",
+        "RUSTFLAGS=-Dwarnings env CARGO_TERM_COLOR=never cargo test --locked",
+        ".venv/bin/python -m pytest",
+        ["cargo", "clippy"],
+        "make test",
+        "echo 'unclosed",
+    ]
+
+    assert gate_executables(commands) == [
+        ("make", "make lint"),
+        ("cargo", "RUSTFLAGS=-Dwarnings env CARGO_TERM_COLOR=never cargo test --locked"),
+    ]
+    policy: JsonObject = {
+        "enabled": False,
+        "max_infrastructure_retries": 1,
+        "qa_preparation": ["make bootstrap"],
+        "qa_environment_probes": ["probe registry"],
+        "qa_project_file_checks": ["check lock"],
+    }
+    checked = with_executable_checks(policy, commands)
+    checks = [executable_check("make"), executable_check("cargo")]
+    assert checked["qa_preparation"] == ["make bootstrap", *checks]
+    assert checked["qa_environment_probes"] == ["probe registry", *checks]
+    assert checked["qa_project_file_checks"] == ["check lock"]
+    # Without a declared preparation the brief pins no check.
+    assert with_executable_checks({**policy, "qa_preparation": []}, commands)[
+        "qa_environment_probes"
+    ] == ["probe registry"]
+
+
+def test_a_gate_executable_missing_from_the_image_stops_before_any_gate_command(
+    qa: Make,
+) -> None:
+    repo = qa(preparation=PREPARATION, gate=["make lint", "cargo test --locked"])
+    # The image has make but no cargo: the generated check fails in preparation and as a probe.
+    repo.engine.script("preparation-3", stderr="no cargo\n", exit_code=1)
+    repo.engine.script("environment-probe-3", stderr="no cargo\n", exit_code=1)
+
+    code, _, err = repo.qa_run()
+
+    assert code == 2, err
+    assert "cargo" in err and "cargo test --locked" in err, err
+    assert "QA image" in err, err
+    stages = [
+        call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
+        for call in repo.engine.runs()
+    ]
+    assert stages == [
+        "preparation-1",
+        "preparation-2",
+        "preparation-3",
+        "environment-probe-1",
+        "environment-probe-2",
+        "environment-probe-3",
+        "project-file-check-1",
+    ]
+    commands = [call[-1] for call in repo.engine.runs()]
+    assert commands[1].startswith("command -v make ")
+    assert commands[2].startswith("command -v cargo ")
+    [attempt] = repo.attempts()
+    assert attempt["domain"] == "environment_preparation"
+    assert repo.status()["state"] == "approved"
+
+
+def test_a_missing_gate_executable_without_project_file_checks_blocks_the_report_before_the_gate(
+    qa: Make,
+) -> None:
+    # Without project-file checks a failed probe proves no environment cause: the pinned
+    # `command -v cargo` check still stops QA before any gate command, but as a blocked report.
+    repo = qa(
+        preparation=PREPARATION, file_checks=False, gate=["make lint", "cargo test --locked"]
+    )
+    repo.engine.script("preparation-3", stderr="no cargo\n", exit_code=1)
+    repo.engine.script("environment-probe-3", stderr="no cargo\n", exit_code=1)
+
+    code, result, err = repo.qa_run()
+
+    assert code == 0 and result is not None, err
+    stages = [
+        call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
+        for call in repo.engine.runs()
+    ]
+    assert not any(stage.startswith("gate") for stage in stages), stages
+    report = repo.report()
+    assert report["outcome"] == "blocked"
+    assert [c["result"] for c in report["checks_run"]] == ["not_run", "not_run"]
+    qa_stages = report["qa_stages"]
+    assert qa_stages["failed_stage"] == "preparation"
+    assert qa_stages["diagnosis"]["category"] == "unknown"
+    check = executable_check("cargo")
+    failed = [
+        (entry["stage"], entry["command"], entry["exit_code"])
+        for entry in qa_stages["stages"]
+        if entry["result"] == "fail"
+    ]
+    assert failed == [("preparation", check, 1), ("environment-probe", check, 1)]
+    assert f"environment-probe-failed:{check}" in qa_stages["diagnosis"]["signals"]
+    # No environment cause is confirmed: triage, no new attempt and no image remedy.
+    assert report["blockers"]["details"] == "coordinator triage required; no automatic retry"
+    assert repo.attempts() == []
+
+
 @pytest.mark.fault_injection
 def test_an_offline_dependency_install_is_environment_preparation_and_a_new_attempt(
     qa: Make,
@@ -570,7 +711,13 @@ def test_an_offline_dependency_install_is_environment_preparation_and_a_new_atte
         call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
         for call in repo.engine.runs()
     ]
-    assert stages == ["preparation-1", "environment-probe-1", "project-file-check-1"]
+    # The brief pins a probe of the gate executable (make) after the project's own probe.
+    assert stages == [
+        "preparation-1",
+        "environment-probe-1",
+        "environment-probe-2",
+        "project-file-check-1",
+    ]
     assert repo.status()["state"] == "approved"
 
 
