@@ -24,7 +24,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 import uuid
 from collections.abc import Iterator
