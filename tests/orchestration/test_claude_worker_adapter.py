@@ -7,11 +7,12 @@ import json
 import os
 import stat
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
 ADAPTER = Path(__file__).resolve().parents[2] / "harness/adapters/claude_worker.py"
@@ -152,6 +153,78 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         command = claude_worker.worker_command(brief)
 
         self.assertNotIn(str(self.repo / ".harness/.sandboxes/runs"), command)
+
+    def test_read_only_role_may_write_only_its_report_file(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        staging = Path(brief["report_staging_path"])
+        for role in ("architect", "code-review"):
+            with self.subTest(role=role):
+                brief["role"] = role
+                brief["allowed_tools"] = ["Read", "Grep", "Bash(git diff:*)"]
+
+                command = claude_worker.worker_command(brief)
+
+                self.assertEqual(
+                    command[command.index("--allowedTools") + 1],
+                    "Read,Grep,Bash(git diff:*),"
+                    + claude_worker.report_write_rule(staging),
+                )
+
+    def test_report_write_rule_is_one_absolute_path(self) -> None:
+        self.assertEqual(
+            claude_worker.report_write_rule(PurePosixPath("/repo/inbox/d-1.json")),
+            "Edit(//repo/inbox/d-1.json)",
+        )
+        self.assertEqual(
+            claude_worker.report_write_rule(PureWindowsPath(r"C:\repo\inbox\d-1.json")),
+            "Edit(//c/repo/inbox/d-1.json)",
+        )
+
+    def test_developer_and_writing_roles_keep_their_tools(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        cases = (
+            ("developer", ["Read", "Bash"]),
+            ("architect", ["Read", "Write"]),
+            ("code-review", ["Read", "Edit(//repo/docs/**)"]),
+        )
+        for role, tools in cases:
+            with self.subTest(role=role, tools=tools):
+                brief["role"] = role
+                brief["allowed_tools"] = tools
+
+                command = claude_worker.worker_command(brief)
+
+                self.assertEqual(
+                    command[command.index("--allowedTools") + 1], ",".join(tools)
+                )
+
+    @POSIX_ONLY
+    def test_claude_outside_path_is_found_in_user_local_bin(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["execution"] = {"kind": "process"}
+        self.brief.write_text(json.dumps(brief))
+        home = self.repo.parent / "home"
+        local_bin = home / ".local" / "bin"
+        local_bin.mkdir(parents=True)
+        script = local_bin / "claude"
+        script.write_text(f'#!/bin/sh\npwd > "{self.cwd_dump}"\nexit 7\n')
+        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        git_dir = str(Path(shutil.which("git") or "git").parent)
+        self.assertIsNone(shutil.which("claude", path=git_dir))
+        cwd = Path.cwd()
+        os.chdir(self.worktree)
+        try:
+            with mock.patch.dict(
+                os.environ, {"PATH": git_dir, "HOME": str(home)}, clear=True
+            ):
+                code = claude_worker.main(
+                    ["dispatch", "--repo", str(self.repo), "--brief", str(self.brief)]
+                )
+        finally:
+            os.chdir(cwd)
+
+        self.assertEqual(code, 7)
+        self.assertEqual(self.cwd_dump.read_text().strip(), str(self.worktree))
 
     def test_dry_run_starts_nothing_and_targets_the_selected_checkout(self) -> None:
         result = subprocess.run(
