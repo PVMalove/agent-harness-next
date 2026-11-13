@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shlex
 import shutil
 import subprocess
 import sys
@@ -206,7 +207,7 @@ def test_an_advisory_hook_body_runs_only_in_its_active_profiles(
         project = _project(tmp_path / profile, {"profile": profile})
         marker = project / "ran"
 
-        done = _wrapper(project, hook_id, f"touch {marker}; echo '[x] noise' >&2")
+        done = _wrapper(project, hook_id, f"touch {shlex.quote(marker.as_posix())}; echo '[x] noise' >&2")
 
         assert done.returncode == 0
         verdict = parse_hook_response(done.stderr)
