@@ -63,5 +63,7 @@
   "с человеком": "human in the loop",
   "Story points": "Story points",
   "Тип реализации": "Implementation type",
-  "Открытый блокер": "Open blocker"
+  "Открытый блокер": "Open blocker",
+  "Соседние события одного источника": "Adjacent events of one source",
+  "Длительность": "Duration"
 }

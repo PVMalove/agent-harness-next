@@ -56,8 +56,9 @@ export function statusCounts(dispatches: readonly RosterDispatch[]): Record<"all
 
 /** The mockup's list limits: the latest sessions, session events and steps shown at once. */
 export const SESSION_LIMIT = 5;
-export const EVENT_LIMIT = 10;
-export const STEP_LIMIT = 10;
+/** The rows a list holds before it says how many it leaves out; the lists scroll in their block. */
+export const EVENT_LIMIT = 50;
+export const STEP_LIMIT = 100;
 
 /** Whole minutes between an ISO time and `now`; null for an unknown time. */
 export function ageMinutes(iso: string, now: number): number | null {
