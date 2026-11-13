@@ -17,7 +17,7 @@
   "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
   "docs/adr/0003-orchestration-core.md": "3e4e61af72ab7701013cba42f1faa8cdc2b3f4b9c23e7f2d0fc884f03f957854",
   "docs/adr/0004-role-assignments.md": "3721543a888daea209f74e3ca92ea920074213b0b758cbc6c1497b53ba782bd0",
-  "docs/adr/0005-implement-pipeline.md": "37819c5ce6a65dbeeba2046d27501814dedc57161fdfa171e5713ceb68e01e1c",
+    "docs/adr/0005-implement-pipeline.md": "1540bda6c99d91240d5cf6553bcc14afdc684a0377a548afa44fb7d9dd74202b",
   "docs/adr/0006-scratch-artifacts.md": "67fea598a768ec5513a0818654e98b7e9c3bc9605161a33d85b2e66ab98c870f",
   "docs/adr/0007-python-quality.md": "866c0aa5cddae54238750e54733e281d0ed8cdd5e4c4336713c82ca4f30a6677",
   "docs/adr/0008-repo-map.md": "a1efc331e1f698c964b04593c8665595e667a0f24acc5a3bc8d0b447ccdc329e",

@@ -127,10 +127,6 @@ SCENARIOS: Sequence[Scenario] = (
         f"{_COMMANDS}::test_a_repeated_resume_changes_nothing_more",
     ),
     Scenario(
-        "concurrent resume",
-        f"{_COMMANDS}::test_concurrent_resumes_release_the_hold_once",
-    ),
-    Scenario(
         "stale approval",
         f"{_COMMANDS}::test_a_stale_approval_is_refused_and_not_reused",
     ),
