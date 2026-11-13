@@ -479,6 +479,63 @@ def test_a_container_writer_that_exits_before_report_submit_keeps_its_staged_rep
     assert repo.status()["state"] == "reported"
 
 
+def _exit_before_any_observe(podman: Podman) -> tuple[Supervised, Path]:
+    """A short worker: it prints its init event, stages its report and exits before any
+    coordinator command observes it running."""
+    from tests.orchestration.runtime_store_support import architect_report_file
+
+    repo, engine = podman()
+    _script_stream(
+        engine, _stream({"type": "system", "subtype": "init", "model": "sonnet"})
+    )
+    answer(repo.send())
+    repo.wait_execution("running")
+    staged = Path(str(repo.brief["report_staging_path"]))
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_bytes(
+        architect_report_file(repo.repo, repo.dispatch, repo.brief).read_bytes()
+    )
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+    assert "model_self_report" not in repo.status()
+    return repo, staged
+
+
+def test_a_container_writer_unobserved_until_its_exit_keeps_its_staged_report(
+    podman: Podman,
+) -> None:
+    """#1125: the host proves the worker from its saved stream after the exit, so a worker that
+    no command saw running is not blocked as ``worker-exited-without-report``."""
+    repo, staged = _exit_before_any_observe(podman)
+
+    waited = answer(
+        repo.run("dispatch", "wait", "--dispatch", repo.dispatch, "--timeout", "5")
+    )
+
+    assert waited["event"] == "report_staged", waited
+    status = repo.status()
+    assert status["state"] == "working", status
+    assert dig(status, "model_self_report", "source") == "container-host"
+    answer(repo.run("report", "submit", "--file", str(staged)))
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+    assert repo.status()["state"] == "reported"
+
+
+def test_report_submit_proves_a_container_writer_no_command_saw_running(
+    podman: Podman,
+) -> None:
+    """#1125: ``report submit`` is the first command after the exit; it records the host
+    self-report from the saved stream before it checks the model confirmation."""
+    repo, staged = _exit_before_any_observe(podman)
+
+    answer(repo.run("report", "submit", "--file", str(staged)))
+    answer(repo.run("dispatch", "status", "--dispatch", repo.dispatch))
+
+    assert repo.status()["state"] == "reported"
+
+
 def test_a_container_that_exits_without_a_staged_report_is_blocked(
     podman: Podman,
 ) -> None:

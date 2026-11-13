@@ -114,12 +114,16 @@ def attest(
     dispatch: Mapping[str, object],
     execution: Mapping[str, object],
 ) -> None:
-    """Record the self-report of a running container worker once, and its heartbeat."""
+    """Record the self-report of a container worker once, and the heartbeat of a running one.
+
+    An exited worker is proven from its saved stream: a short worker can stage its report and
+    exit before any command observes it running (#1125)."""
     from harness.orchestration.workflow.reports import record_self_report
 
     plan = dispatch.get("runtime_access")
+    running = execution.get("state") == "running"
     if not (
-        execution.get("state") == "running"
+        (running or execution.get("state") == "exited")
         and isinstance(plan, dict)
         and plan.get("runtime_extension") == container_executor.EXTENSION_NAME
     ):
@@ -135,7 +139,8 @@ def attest(
         return
     model = None if status.get("model_self_report") else init_model(path)
     if model is None:
-        _heartbeat(ledger, root, dispatch_id)
+        if running:
+            _heartbeat(ledger, root, dispatch_id)
         return
     checkout = _checkout(plan)
     evidence: JsonObject = {
@@ -160,6 +165,32 @@ def attest(
         # A mismatch is recorded on the status; dispatch wait reports it, and the exit of the
         # execution blocks the dispatch. Stopping the worker stays the operator's command.
         return
+
+
+def attest_before_submit(repo: Path, root: Path, dispatch_id: object) -> None:
+    """Prove a container worker before ``report submit`` checks its model confirmation.
+
+    ``report submit`` may be the first command after the worker exits; without this the
+    submit refuses the worker's report for a missing self-report (#1125)."""
+    from harness.orchestration.ledger.ledger_ops import _load_dispatch
+    from harness.orchestration.workflow.delivery import observed_execution
+
+    if not isinstance(dispatch_id, str) or not dispatch_id:
+        return
+    try:
+        dispatch = _load_dispatch(root, dispatch_id)
+    except CoordinatorError:
+        # The submit itself reports an unknown dispatch.
+        return
+    plan = dispatch.get("runtime_access")
+    if not (
+        isinstance(plan, dict)
+        and plan.get("runtime_extension") == container_executor.EXTENSION_NAME
+    ):
+        return
+    execution = observed_execution(repo, dispatch_id)
+    if execution is not None:
+        attest(repo, root, dispatch, execution)
 
 
 def staged_report(
