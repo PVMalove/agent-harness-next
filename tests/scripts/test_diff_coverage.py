@@ -373,9 +373,12 @@ class StepSummaryTests(unittest.TestCase):
         "pkg/b.py": _file(executed=[], missing=[1, 2]),
     }
 
-    def test_each_file_has_its_share_a_bar_and_its_uncovered_lines(self) -> None:
+    def test_the_summary_groups_by_directory_and_collapses_file_details(self) -> None:
         text = diff_coverage.render_summary(self.CHANGED, self.FILES)
 
+        self.assertIn("| `pkg/` | 4/6 (66.7%) | 2 | 2 |", text)
+        self.assertIn("<details>", text)
+        self.assertIn("<summary>Разбивка по файлам (2)</summary>", text)
         self.assertIn("| `pkg/a.py` | 4/4 | `██████████` 100% | — |", text)
         self.assertIn("| `pkg/b.py` | 0/2 | `░░░░░░░░░░` 0% | 1-2 |", text)
         self.assertIn("**4/6** изменённых строк покрыто (66.7%)", text)
