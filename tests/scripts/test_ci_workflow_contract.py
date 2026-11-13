@@ -329,6 +329,18 @@ class StageTests(unittest.TestCase):
         light = jobs[LIGHT_JOB]
         self.assertLess(light.index("- *mypy-cache"), light.index("run: make lint"))
 
+    def test_the_jobs_that_build_rust_keep_only_line_tables(self) -> None:
+        jobs = _jobs()
+
+        # Set per CI job, never in Cargo.toml: a local debug build keeps full debug info.
+        self.assertIn("CARGO_PROFILE_DEV_DEBUG: line-tables-only", jobs["rust"])
+        self.assertIn("CARGO_PROFILE_TEST_DEBUG: line-tables-only", jobs["rust"])
+        for name in (BUILD_JOB, LIGHT_JOB, "runtime-ipc-windows"):
+            with self.subTest(job=name):
+                self.assertIn("    env: *rust-line-tables\n", jobs[name])
+        manifest = (ROOT / "native/harness-runtime/Cargo.toml").read_text(encoding="utf-8")
+        self.assertNotIn("line-tables-only", manifest)
+
     def test_the_failed_tests_of_each_suite_become_annotations(self) -> None:
         jobs = _jobs()
 

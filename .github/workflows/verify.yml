@@ -163,6 +163,12 @@ jobs:
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Line tables keep the file and line of a panic backtrace; full debug info only makes the build,
+    # the Rust cache and the uploaded binary bigger. Local builds keep the profile of Cargo.toml.
+    # runtime-build, verify-light and runtime-ipc-windows reuse this env through its anchor.
+    env: &rust-line-tables
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
     defaults:
       run:
         working-directory: native/harness-runtime
@@ -181,6 +187,7 @@ jobs:
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env: *rust-line-tables
     defaults:
       run:
         working-directory: native/harness-runtime
@@ -246,6 +253,7 @@ jobs:
     if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env: *rust-line-tables
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -941,6 +949,7 @@ jobs:
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: windows-latest
     timeout-minutes: 30
+    env: *rust-line-tables
     defaults:
       run:
         shell: bash
