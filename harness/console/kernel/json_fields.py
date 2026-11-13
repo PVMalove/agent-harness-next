@@ -14,3 +14,13 @@ def strings(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+def mapping(value: object) -> dict[str, object]:
+    """Возвращает объект JSON, если значение является объектом, иначе пустой объект."""
+    return value if isinstance(value, dict) else {}
+
+
+def items(value: object) -> list[object]:
+    """Возвращает список JSON, если значение является списком, иначе пустой список."""
+    return value if isinstance(value, list) else []

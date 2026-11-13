@@ -24,12 +24,12 @@ from .container_route import (
     JsonObject,
     Row,
     State,
-    _items,
-    _obj,
     _text,
     _call_failure,
 )
 from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls
+from .json_fields import items as _items
+from .json_fields import mapping as _obj
 from .runner import CommandRunner, capturing_runner
 
 CHECK_STATES = {

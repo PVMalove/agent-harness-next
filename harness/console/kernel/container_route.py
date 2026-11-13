@@ -19,17 +19,11 @@ from pathlib import Path
 from typing import Callable
 
 from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls, Outcome
+from .json_fields import items as _items
+from .json_fields import mapping as _obj
 from .runner import CommandRunner, capturing_runner
 
 JsonObject = dict[str, object]
-
-
-def _obj(value: object) -> JsonObject:
-    return value if isinstance(value, dict) else {}
-
-
-def _items(value: object) -> list[object]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: object, default: str = "") -> str:
