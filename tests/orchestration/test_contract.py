@@ -58,10 +58,10 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         self.assertNotRegex(workflow, r"(?<!uv )\bpip install|-m pip\b")
         self.assertNotIn("run: python scripts/verify.py", workflow)
-        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 12)
+        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 11)
         # Each bootstrap runs in a folded group of the log.
         self.assertEqual(workflow.count('echo "::group::make bootstrap"\n          make bootstrap\n'), 10)
-        self.assertEqual(workflow.count("make verify"), 3)
+        self.assertEqual(workflow.count("make verify"), 2)
 
     @staticmethod
     def _jobs() -> tuple[str, dict[str, str]]:

@@ -253,6 +253,13 @@ jobs:
       - name: Build harness-runtime for the selected tests
         working-directory: native/harness-runtime
         run: cargo build --locked
+      - name: Upload the debug harness-runtime for Linux test groups
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: harness-runtime-linux-debug
+          path: native/harness-runtime/target/debug/harness-runtime
+          if-no-files-found: error
+          retention-days: 1
       - name: Tests of the pull request's own diff
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -269,84 +276,137 @@ jobs:
           printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
           .harness/.venv/bin/python scripts/check_public_metadata.py --commit-range "$COMMIT_RANGE" --exclude-reachable-from "$DEFAULT_BRANCH" --pr-body-file "$RUNNER_TEMP/pr-body.md"
 
-  verify-test-groups:
-    # Integration PRs get Python unit/integration groups on both operating systems. Browser E2E
-    # stays in the dedicated console-spa/dashboard jobs below.
-    if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')
-    needs: docs
-    name: ${{ matrix.os-label }} / ${{ matrix.group }}
-    runs-on: ${{ matrix.os }}
+  verify-linux-unit:
+    name: Linux / Unit
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.rust.result == 'success'))
+    needs: [docs, lint, verify-light, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            os-label: Linux
-            group: unit
-            targets: --pytest-target tests/core --pytest-target tests/health --pytest-target tests/console --pytest-target tests/reporting --pytest-target tests/test_author
-          - os: windows-latest
-            os-label: Windows
-            group: unit
-            targets: --pytest-target tests/core --pytest-target tests/health --pytest-target tests/console --pytest-target tests/reporting --pytest-target tests/test_author
-          - os: ubuntu-latest
-            os-label: Linux
-            group: integration
-            targets: --pytest-target tests/memory --pytest-target tests/orchestration --pytest-target tests/repo_map --pytest-target tests/scripts --pytest-target tests/web
-          - os: windows-latest
-            os-label: Windows
-            group: integration
-            targets: --pytest-target tests/memory --pytest-target tests/orchestration --pytest-target tests/repo_map --pytest-target tests/scripts --pytest-target tests/web
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/verify-test-group
+        with:
+          group: unit
+          targets: >-
+            --pytest-target tests/core --pytest-target tests/health
+            --pytest-target tests/console --pytest-target tests/reporting
+            --pytest-target tests/test_author
+          junit: .harness/.sandboxes/logs/junit-Linux-unit.xml
+          requires-runtime: "true"
+
+  verify-linux-integration:
+    name: Linux / Integration
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.rust.result == 'success'))
+    needs: [docs, lint, verify-light, rust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/verify-test-group
+        with:
+          group: integration
+          targets: >-
+            --pytest-target tests/memory --pytest-target tests/orchestration
+            --pytest-target tests/repo_map --pytest-target tests/scripts
+            --pytest-target tests/web
+          junit: .harness/.sandboxes/logs/junit-Linux-integration.xml
+          requires-runtime: "true"
+
+  verify-windows-unit:
+    name: Windows / Unit
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success'))
+    needs: [docs, lint, verify-light]
+    runs-on: windows-latest
+    timeout-minutes: 180
     defaults:
       run:
         shell: bash
     steps:
       - name: Configure Git for the test run
-        if: runner.os == 'Windows'
         run: |
           git config --global core.autocrlf false
           git config --global core.fscache true
           git config --global core.preloadindex true
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Disable Windows Defender for workspace and temp
-        if: runner.os == 'Windows'
         shell: powershell
         run: |
           Set-MpPreference -DisableRealtimeMonitoring $true
           Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:TEMP
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: ./.github/actions/verify-test-group
         with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+          group: unit
+          targets: >-
+            --pytest-target tests/core --pytest-target tests/health
+            --pytest-target tests/console --pytest-target tests/reporting
+            --pytest-target tests/test_author
+          junit: .harness/.sandboxes/logs/junit-Windows-unit.xml
+
+  verify-windows-integration:
+    name: Windows / Integration
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success'))
+    needs: [docs, lint, verify-light]
+    runs-on: windows-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Configure Git for the test run
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.fscache true
+          git config --global core.preloadindex true
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Disable Windows Defender for workspace and temp
+        shell: powershell
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:TEMP
+      - uses: ./.github/actions/verify-test-group
         with:
-          enable-cache: true
-          cache-dependency-glob: |
-            **/pyproject.toml
-            **/uv.lock
-      - name: Configure Windows Git Bash
-        if: runner.os == 'Windows'
-        run: |
-          git_bash='C:\Program Files\Git\bin'
-          test -f "$(cygpath -u "$git_bash")/bash.exe"
-          echo "$git_bash" >> "$GITHUB_PATH"
-      - name: Bootstrap harness environment
-        run: make bootstrap
-      - name: Run ${{ matrix.group }} tests
+          group: integration
+          targets: >-
+            --pytest-target tests/memory --pytest-target tests/orchestration
+            --pytest-target tests/repo_map --pytest-target tests/scripts
+            --pytest-target tests/web
+          junit: .harness/.sandboxes/logs/junit-Windows-integration.xml
+
+  verify-test-groups:
+    # One visible roll-up node for the four platform/type test jobs.
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      [verify-linux-unit, verify-linux-integration, verify-windows-unit, verify-windows-integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm all four test groups passed
         env:
-          PYTHONUTF8: "1"
-          PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
-          PYTHONUNBUFFERED: "1"
-          VERIFY_ARGS: --only pytest ${{ matrix.targets }} --junit-xml .harness/.sandboxes/logs/junit-${{ matrix.os-label }}-${{ matrix.group }}.xml
+          GROUP_RESULTS: ${{ toJSON(needs) }}
         run: |
-          mkdir -p .harness/.sandboxes/logs
-          make verify
-      - name: Test summary
-        if: ${{ !cancelled() }}
-        env:
-          PYTHONUTF8: "1"
-        run: |
-          python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-${{ matrix.os-label }}-${{ matrix.group }}.xml --title "${{ matrix.os-label }}: ${{ matrix.group }}" >> "$GITHUB_STEP_SUMMARY"
-          python scripts/ci_summary.py annotate .harness/.sandboxes/logs/junit-${{ matrix.os-label }}-${{ matrix.group }}.xml
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["GROUP_RESULTS"])
+          failed = [name for name, result in results.items() if result["result"] != "success"]
+          if failed:
+              print("Test groups not successful: " + ", ".join(sorted(failed)))
+              sys.exit(1)
+          print("Linux/Windows unit and integration groups passed.")
+          PY
   # ============================================================================
   # STAGE 2B: Web suite (both paths)
   # ============================================================================
@@ -429,8 +489,10 @@ jobs:
   # ============================================================================
 
   verify:
-    needs: [docs, rust]
-    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    needs: [docs, rust, verify-linux-unit, verify-linux-integration]
+    if: >-
+      always() && (github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')) &&
+      needs.docs.result == 'success' && needs.rust.result == 'success'
     runs-on: ubuntu-latest
     # The complete suite reached 81% after almost an hour on a hosted runner (#943).
     timeout-minutes: 120
@@ -486,35 +548,51 @@ jobs:
           HARNESS_REQUIRE_TEST_SANDBOX: "1"
           HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime
           HARNESS_REQUIRE_RUNTIME: "1"
-          # A pull request stops at the first failing test; `master` and releases run everything.
-          VERIFY_ARGS: >-
-            --junit-xml .harness/.sandboxes/logs/junit-verify.xml
-            --failed-first .harness/.sandboxes/pytest-cache
-            ${{ github.event_name == 'pull_request' && '--fail-fast' || '' }}
+          # Pull requests run Python tests in named platform/type jobs; keep their clean-room gate
+          # here. Pushes run the complete legacy selection.
+          VERIFY_ARGS: ${{ github.event_name == 'pull_request' && '--only clean-room' || '--junit-xml .harness/.sandboxes/logs/junit-verify.xml --failed-first .harness/.sandboxes/pytest-cache' }}
         run: |
           mkdir -p .harness/.sandboxes/logs
           make verify
       - name: Save the pytest cache
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: .harness/.sandboxes/pytest-cache
           key: pytest-${{ runner.os }}-verify-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
       - name: Test summary and annotations of the failed tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         env:
           PYTHONUTF8: "1"
         run: |
           python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-verify.xml --title "Linux: тесты" >> "$GITHUB_STEP_SUMMARY"
           python scripts/ci_summary.py annotate .harness/.sandboxes/logs/junit-verify.xml
       - name: Keep the test report for the dashboard
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: junit-verify
           path: .harness/.sandboxes/logs/junit-verify.xml
           if-no-files-found: ignore
           retention-days: 3
+      - name: Check Linux test groups
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        env:
+          GROUP_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["GROUP_RESULTS"])
+          required = ("verify-linux-unit", "verify-linux-integration")
+          failed = [name for name in required if results[name]["result"] != "success"]
+          if failed:
+              print("Linux test groups not successful: " + ", ".join(failed))
+              sys.exit(1)
+          print("Linux unit and integration groups passed.")
+          PY
 
   diff-coverage:
     # Measures its own pytest run under coverage, so it runs beside `verify` instead of after it:
@@ -729,8 +807,11 @@ jobs:
     # Two parallel parts so a slow pytest run cannot starve the clean-room install run of its time
     # budget. A pull request into a branch other than `integration/**` runs the full suite of the tests
     # too, so the job gets a long timeout (ADR 0018).
-    needs: [lint, docs]
-    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    needs: [lint, docs, verify-windows-unit, verify-windows-integration]
+    if: >-
+      always() && (github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')) &&
+      needs.docs.result == 'success' &&
+      (github.event_name != 'pull_request' || needs.lint.result == 'success')
     name: verify-windows (${{ matrix.part }})
     runs-on: windows-latest
     timeout-minutes: ${{ matrix.timeout }}
@@ -798,6 +879,7 @@ jobs:
           # What a hook sees from Git Bash: shown here because a failing hook reports only a verdict.
           PATH="$(cygpath -u "$git_bash"):$PATH" bash -c 'command -v bash python3 python; python3 --version || true'
       - name: Verify harness and clean-room install
+        if: ${{ github.event_name != 'pull_request' || matrix.part == 'clean-room' }}
         env:
           PYTHONUTF8: "1"
           PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
@@ -810,21 +892,39 @@ jobs:
           set -o pipefail
           mkdir -p .harness/.sandboxes/logs
           make verify 2>&1 | tee .harness/.sandboxes/logs/verify-windows-${{ matrix.part }}.log
+      - name: Check Windows test groups
+        if: ${{ github.event_name == 'pull_request' && matrix.part == 'tests' }}
+        env:
+          GROUP_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["GROUP_RESULTS"])
+          required = ("verify-windows-unit", "verify-windows-integration")
+          failed = [name for name in required if results[name]["result"] != "success"]
+          if failed:
+              print("Windows test groups not successful: " + ", ".join(failed))
+              sys.exit(1)
+          print("Windows unit and integration groups passed.")
+          PY
       - name: Save the pytest cache
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: .harness/.sandboxes/pytest-cache
           key: pytest-${{ runner.os }}-${{ matrix.part }}-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
       - name: Test summary
-        if: ${{ !cancelled() && matrix.part == 'tests' }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' && matrix.part == 'tests' }}
         env:
           PYTHONUTF8: "1"
         run: |
           python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-windows-tests.xml --title "Windows: тесты" >> "$GITHUB_STEP_SUMMARY"
           python scripts/ci_summary.py annotate .harness/.sandboxes/logs/junit-windows-tests.xml
       - name: Keep the test report for the dashboard
-        if: ${{ !cancelled() && matrix.part == 'tests' }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' && matrix.part == 'tests' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: junit-windows-tests

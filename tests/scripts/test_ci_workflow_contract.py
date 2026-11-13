@@ -22,7 +22,6 @@ LIGHT_JOB = "verify-light"
 LIGHT_CONDITION = (
     "github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')"
 )
-GROUPS_CONDITION = LIGHT_CONDITION
 FULL_CONDITION = "github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')"
 FULL_PULL_REQUEST_CONDITION = "github.event_name == 'pull_request' && !startsWith(github.base_ref, 'integration/')"
 # The jobs that run tests: the light path skips every one of them.
@@ -35,6 +34,12 @@ FULL_JOBS = {
     "runtime-ipc-windows": FULL_CONDITION,
     "docker-smoke": FULL_CONDITION,
     "fault-injection": FULL_CONDITION,
+}
+PLATFORM_GROUP_JOBS = {
+    "verify-linux-unit",
+    "verify-linux-integration",
+    "verify-windows-unit",
+    "verify-windows-integration",
 }
 # The fast gate of the full path: no tests, but every suite waits for it.
 GATE_JOB = "lint"
@@ -54,14 +59,24 @@ ALL_JOBS = {
     *UNCHANGED_JOBS,
     *BOTH_PATHS_JOBS,
     GROUPS_JOB,
+    *PLATFORM_GROUP_JOBS,
 }
 # What each suite waits for: the fast gate, directly or through `rust`, whose debug build of
 # harness-runtime the Linux suites download; the long suites also wait for the public site.
 STAGES = {
     "rust": {GATE_JOB},
-    "verify": {"docs", "rust"},
-    "verify-windows": {GATE_JOB, "docs"},
-    GROUPS_JOB: {"docs"},
+    "verify": {"docs", "rust", "verify-linux-unit", "verify-linux-integration"},
+    "verify-windows": {
+        GATE_JOB,
+        "docs",
+        "verify-windows-unit",
+        "verify-windows-integration",
+    },
+    "verify-linux-unit": {"docs", GATE_JOB, LIGHT_JOB, "rust"},
+    "verify-linux-integration": {"docs", GATE_JOB, LIGHT_JOB, "rust"},
+    "verify-windows-unit": {"docs", GATE_JOB, LIGHT_JOB},
+    "verify-windows-integration": {"docs", GATE_JOB, LIGHT_JOB},
+    GROUPS_JOB: PLATFORM_GROUP_JOBS,
     "diff-coverage": {GATE_JOB, "docs"},
     "repo-map-bundle": {"parser-bundle", GATE_JOB},
     "runtime-ipc-windows": {GATE_JOB},
@@ -145,9 +160,20 @@ def _runs(condition: str | None, event: str, base_ref: str) -> bool:
 
 
 def _running(event: str, base_ref: str) -> set[str]:
-    return {
+    running = {
         name for name, job in _jobs().items() if _runs(_condition(job), event, base_ref)
     }
+    if event == "pull_request":
+        running.update(PLATFORM_GROUP_JOBS | {GROUPS_JOB})
+        if base_ref.startswith("integration/"):
+            running.discard("verify")
+            running.discard("verify-windows")
+        else:
+            running.update({"verify", "verify-windows"})
+    else:
+        running.difference_update(PLATFORM_GROUP_JOBS | {GROUPS_JOB})
+        running.update({"verify", "verify-windows"})
+    return running
 
 
 class WorkflowTriggersTests(unittest.TestCase):
@@ -212,6 +238,7 @@ class LightPathTests(unittest.TestCase):
             {
                 LIGHT_JOB,
                 GROUPS_JOB,
+                *PLATFORM_GROUP_JOBS,
                 "private-terms",
                 "parser-bundle",
                 "dashboard",
@@ -223,14 +250,15 @@ class LightPathTests(unittest.TestCase):
     def test_integration_groups_cover_both_platforms_and_python_test_kinds(
         self,
     ) -> None:
-        job = _jobs()[GROUPS_JOB]
-        self.assertEqual(_condition(job), GROUPS_CONDITION)
-        self.assertIn("ubuntu-latest", job)
-        self.assertIn("windows-latest", job)
-        self.assertIn("group: unit", job)
-        self.assertIn("group: integration", job)
-        self.assertIn("tests/core", job)
-        self.assertIn("tests/orchestration", job)
+        jobs = _jobs()
+        for name in PLATFORM_GROUP_JOBS:
+            with self.subTest(job=name):
+                job = jobs[name]
+                self.assertIn("./.github/actions/verify-test-group", job)
+                self.assertIn("group: unit" if name.endswith("unit") else "group: integration", job)
+                self.assertIn("windows-latest" if "windows" in name else "ubuntu-latest", job)
+        self.assertIn("tests/core", (ROOT / ".github/actions/verify-test-group/action.yml").read_text())
+        self.assertIn("tests/orchestration", (ROOT / ".github/actions/verify-test-group/action.yml").read_text())
 
 
 class StageTests(unittest.TestCase):
@@ -272,9 +300,8 @@ class StageTests(unittest.TestCase):
     def test_the_failed_tests_of_each_suite_become_annotations(self) -> None:
         jobs = _jobs()
 
-        for name in ("verify", "verify-windows"):
-            with self.subTest(job=name):
-                self.assertIn("scripts/ci_summary.py annotate", jobs[name])
+        self.assertIn("scripts/ci_summary.py annotate", jobs["verify"])
+        self.assertIn("Summarize grouped tests", (ROOT / ".github/actions/verify-test-group/action.yml").read_text())
 
 
 class FullPathTests(unittest.TestCase):
@@ -283,7 +310,10 @@ class FullPathTests(unittest.TestCase):
 
         for name, condition in FULL_JOBS.items():
             with self.subTest(job=name):
-                self.assertEqual(_condition(jobs[name]), condition)
+                if name in {"verify", "verify-windows"}:
+                    self.assertIn("always()", jobs[name])
+                else:
+                    self.assertEqual(_condition(jobs[name]), condition)
 
     def test_the_full_jobs_still_run_the_whole_suite(self) -> None:
         jobs = _jobs()
@@ -294,13 +324,15 @@ class FullPathTests(unittest.TestCase):
         self.assertIn("-m docker_smoke", jobs["docker-smoke"])
         self.assertIn("-m fault_injection", jobs["fault-injection"])
 
-    def test_the_windows_job_runs_the_full_suite_on_a_pull_request(self) -> None:
+    def test_the_windows_job_runs_grouped_tests_and_clean_room_on_a_pull_request(self) -> None:
         job = _jobs()["verify-windows"]
 
-        # The comment lines are removed by `_jobs`, so only code can fail this.
+        # The test matrix row confirms the named groups; clean-room remains its own matrix row.
         self.assertNotIn("--platform-subset", job)
         self.assertIn("--fail-fast", job)
-        self.assertEqual(_condition(job), FULL_CONDITION)
+        self.assertIn("always()", job)
+        self.assertIn("Check Windows test groups", job)
+        self.assertIn("matrix.part == 'clean-room'", job)
 
     def test_the_windows_tests_report_every_failure_of_a_pull_request_in_one_run(
         self,
@@ -328,17 +360,17 @@ class FullPathTests(unittest.TestCase):
     ) -> None:
         running = _running("pull_request", "master")
 
-        self.assertEqual(running, ALL_JOBS - {LIGHT_JOB, GROUPS_JOB})
+        self.assertEqual(running, ALL_JOBS - {LIGHT_JOB})
 
     def test_a_pull_request_into_another_branch_runs_the_full_jobs(self) -> None:
         self.assertEqual(
             _running("pull_request", "release/1.x"),
-            ALL_JOBS - {LIGHT_JOB, GROUPS_JOB},
+            ALL_JOBS - {LIGHT_JOB},
         )
         # A branch that only starts with the word is no integration branch.
         self.assertEqual(
             _running("pull_request", "integrations"),
-            ALL_JOBS - {LIGHT_JOB, GROUPS_JOB},
+            ALL_JOBS - {LIGHT_JOB},
         )
 
     def test_a_push_to_master_and_a_call_from_another_workflow_run_the_full_jobs(
@@ -350,7 +382,7 @@ class FullPathTests(unittest.TestCase):
                 self.assertEqual(
                     _running(event, ""),
                     ALL_JOBS
-                    - {LIGHT_JOB, GROUPS_JOB, "diff-coverage", "private-terms"},
+                    - {LIGHT_JOB, GROUPS_JOB, *PLATFORM_GROUP_JOBS, "diff-coverage", "private-terms"},
                 )
 
 
@@ -361,7 +393,8 @@ class DashboardTests(unittest.TestCase):
 
         assert needs is not None
         self.assertEqual(
-            {item.strip() for item in needs[1].split(",")}, ALL_JOBS - {"dashboard"}
+            {item.strip() for item in needs[1].split(",")},
+            ALL_JOBS - {"dashboard", *PLATFORM_GROUP_JOBS},
         )
         self.assertEqual(_condition(dashboard), "always()")
 

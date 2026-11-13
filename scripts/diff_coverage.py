@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 THRESHOLD_PERCENT = 70.0
@@ -218,8 +218,7 @@ def _ranges(uncovered: Sequence[str]) -> list[tuple[str, int, int]]:
 def render_summary(
     changed: Mapping[str, set[int]], files: Mapping[str, Mapping[str, Sequence[int]]]
 ) -> str:
-    """Markdown for ``$GITHUB_STEP_SUMMARY``: the verdict, then each changed file with its share
-    of covered lines, a bar and its uncovered lines, so nobody opens the job log for them."""
+    """Compact directory rollup with per-file coverage available in collapsed details."""
     covered, total, _ = summarize_coverage(changed, files)
     percent = 100.0 * covered / total if total else 100.0
     passed = meets_threshold(covered, total)
@@ -234,15 +233,45 @@ def render_summary(
         "> [!TIP]" if passed else "> [!WARNING]",
         f"> **{covered}/{total}** изменённых строк покрыто ({percent:.1f}%) — {verdict}.",
         "",
-        "| Файл | Покрыто | Доля | Непокрытые строки |",
-        "|---|---:|---|---|",
+        "| Каталог | Покрытие | Файлы | Непокрытые строки |",
+        "|---|---:|---:|---:|",
     ]
+    file_rows: list[tuple[str, int, int, list[str]]] = []
+    directories: dict[str, list[int]] = {}
     for path in sorted(changed):
         file_covered, file_total, file_uncovered = summarize_coverage(
             {path: changed[path]}, files
         )
         if not file_total:
             continue
+        directory = PurePosixPath(path).parent.as_posix()
+        totals = directories.setdefault(directory, [0, 0, 0, 0])
+        totals[0] += file_covered
+        totals[1] += file_total
+        totals[2] += 1
+        totals[3] += len(file_uncovered)
+        file_rows.append((path, file_covered, file_total, file_uncovered))
+
+    for directory, (dir_covered, dir_total, file_count, missing_count) in sorted(
+        directories.items()
+    ):
+        lines.append(
+            f"| `{directory}/` | {dir_covered}/{dir_total} "
+            f"({100.0 * dir_covered / dir_total:.1f}%) | {file_count} | {missing_count} |"
+        )
+
+    if file_rows:
+        lines.extend(
+            [
+                "",
+                "<details>",
+                f"<summary>Разбивка по файлам ({len(file_rows)})</summary>",
+                "",
+                "| Файл | Покрыто | Доля | Непокрытые строки |",
+                "|---|---:|---|---|",
+            ]
+        )
+    for path, file_covered, file_total, file_uncovered in file_rows:
         missing = ", ".join(
             str(first) if first == last else f"{first}-{last}"
             for _, first, last in _ranges(file_uncovered)
@@ -251,6 +280,8 @@ def render_summary(
             f"| `{path}` | {file_covered}/{file_total} "
             f"| {bar(100.0 * file_covered / file_total)} | {missing or '—'} |"
         )
+    if file_rows:
+        lines.extend(["", "</details>"])
     return "\n".join([*lines, ""])
 
 
