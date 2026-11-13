@@ -2820,6 +2820,22 @@ EN.update(
     }
 )
 
+# The step feed of an in-process worker (#1108).
+EN.update(
+    {
+        "Heartbeat": "Heartbeat",
+        "Self-report модели": "Model self-report",
+        "Нет потока событий": "No event stream",
+        "Показаны последние {shown} из {count}.": "Showing the latest {shown} of {count}.",
+        "Чекпоинтов пока нет.": "No checkpoints yet.",
+        "Чекпоинты": "Checkpoints",
+        "данные ledger": "ledger data",
+        "ещё не отправлен": "not sent yet",
+        "не совпадает с назначенной": "differs from the assigned model",
+        "совпадает с назначенной": "matches the assigned model",
+        "In-process воркер работает внутри сессии coordinator и не отдаёт поток событий. Ход работы виден по heartbeat, self-report модели и чекпоинтам.": "An in-process worker runs inside the coordinator session and has no event stream. Follow its progress through the heartbeat, the model self-report and the checkpoints.",
+    }
+)
 
 STATE_LABELS: dict[str, tuple[str, str]] = {
     "abandoned": ("Брошен", "Abandoned"),
