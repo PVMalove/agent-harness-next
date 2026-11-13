@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from harness.json_types import JsonObject
 
-from ..context import HealthContext
+from ..context import HealthContext, shell_join
 from ..hook_settings import (
     ADAPTERS,
     HOOK_CATALOG,
@@ -28,7 +29,14 @@ from ..hook_settings import (
 from ..model import CheckResult, Fix, Status
 from ..process import run_tool
 from ..test_author import ADAPTERS as AUTHOR_ADAPTERS
-from ..test_author import AuthorUnavailable, adapter_for, read_author, preflight_reason
+from ..test_author import (
+    PREFLIGHT_REASONS,
+    AuthorUnavailable,
+    adapter_for,
+    preflight_reason,
+    profile_problems,
+    read_author,
+)
 from ..project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
     HOOK_POLICY_REL,
@@ -70,18 +78,494 @@ def check_test_author(context: HealthContext) -> CheckResult:
         if reason == "runtime_unsupported"
         else ""
     )
+    line = REASON_LINES.get(reason)
     return CheckResult(
         id="hooks.test_author",
         group=GROUP,
         status=status,
         message=(
-            f"Тест-автор {executor} — preflight: {reason} (основной checkout){hint}; "
-            "/implement: external в доверенном worker checkout, "
-            "in-process developer в worker worktree — обычный TDD (штатно); "
+            f"Тест-автор {executor} — preflight: {reason} (этот checkout){hint}; "
+            "/implement: субагент developer в его worktree — external через Agent(test-author), "
+            "in-process developer — launcher своего worktree (python3 -I -B "
+            "<worktree>/.harness/health/test_author.py run --repo <worktree> --brief <brief> "
+            "--prompt-file <файл>); "
             "/fast-implement: текущий checkout; "
             "live-срабатывание hook проверяет make test-author-probe. "
             "Неподдерживаемый защищённый адаптер даёт runtime_unsupported; Rust этим решением не поддержан"
         ),
+        fix=Fix(text=f"выполните шаг строки {line}")
+        if status == "warn" and line
+        else None,
+    )
+
+
+# Each condition of the test author is its own Health line with its own fix step (#1122).
+CONFIG_ID = "hooks.test_author_config"
+ROOT_ID = "hooks.test_author_root"
+TRUST_ID = "hooks.test_author_trust"
+GUARD_ID = "hooks.test_author_guard"
+RUNNER_ID = "hooks.test_author_runner"
+PROBE_ID = "hooks.test_author_probe"
+GUARD_REL = f"{HOOKS_DIR}/test-author-guard.py"
+RUNNER_REL = f"{HOOKS_DIR}/run-test.sh"
+REASON_LINES = {
+    "test_author_missing": CONFIG_ID,
+    "test_author_config_invalid": CONFIG_ID,
+    "project_dir_mismatch": ROOT_ID,
+    "project_untrusted": f"{ROOT_ID} и {TRUST_ID}",
+    "agent_missing": GUARD_ID,
+    "scoped_hook_unsupported": GUARD_ID,
+    "guard_hook_unavailable": GUARD_ID,
+    "config_invalid": GUARD_ID,
+    "write_zone_rejected": GUARD_ID,
+    "runner_unavailable": RUNNER_ID,
+    "isolation_unavailable": PROBE_ID,
+}
+CONFIG_STEP = (
+    "исправьте test_paths и test_runner в .harness/project.json: ошибку показывает строка "
+    "files.project_json; test_paths принимает только зоны вида <каталог>/**"
+)
+CONFIG_REASONS = (
+    "config_invalid",
+    "write_zone_rejected",
+    "test_paths_missing",
+    "test_runner_missing",
+)
+AGENT_STEP = "после просмотра верните агент: harness update --force-seed-file .claude/agents/test-author.md"
+GUARD_STEPS = {
+    "scoped_hook_unsupported": f"агент {TEST_AUTHOR_AGENT} изменён: {AGENT_STEP}",
+    "test_author_config_invalid": f"агент {TEST_AUTHOR_AGENT} задаёт свои model или effort: "
+    f"{AGENT_STEP}",
+    **dict.fromkeys(CONFIG_REASONS, CONFIG_STEP),
+}
+ISOLATION_STEPS = {
+    "platform": "runner изолирует тесты только в Linux с bubblewrap: запускайте проект в Linux "
+    "или WSL2",
+    "bwrap_missing": "установите bubblewrap 0.9.0+ (Debian и Ubuntu: sudo apt-get install "
+    "bubblewrap)",
+    "checkout_masked": "перенесите checkout из /tmp, /run, /dev или /proc: песочница подменяет "
+    "эти каталоги",
+    "sandbox_failed": "bwrap не поднял песочницу: проверьте bwrap --ro-bind / / true и включите "
+    "непривилегированные user namespaces",
+    "probe_failed": "/var/run должен быть ссылкой на /run или пустым; вывод probe — в log.txt "
+    "последнего каталога .harness/.sandboxes/runs/isolated-test-*",
+}
+
+
+def _line(
+    check_id: str, status: Status, message: str, fix: Fix | None = None
+) -> CheckResult:
+    return CheckResult(
+        id=check_id, group=GROUP, status=status, message=message, fix=fix
+    )
+
+
+def _opted_in(
+    context: HealthContext, check_id: str
+) -> tuple[JsonObject, CheckResult | None]:
+    """The project config of a project that opted in to the author, or the skipped line."""
+    if context.lock is None:
+        return {}, _line(check_id, "skipped", context.no_lock_message())
+    try:
+        config = json.loads(
+            (context.repo / PROJECT_JSON_SOURCE).read_text(encoding="utf-8")
+        )
+    except FileNotFoundError:
+        config = {}
+    except JSON_READ_ERRORS:
+        config = None
+    if not isinstance(config, dict):
+        return {}, _line(
+            check_id,
+            "skipped",
+            ".harness/project.json не читается — см. files.project_json",
+        )
+    missing = [field for field in ("test_paths", "test_runner") if field not in config]
+    if missing:
+        return config, _line(
+            check_id,
+            "skipped",
+            f"Тест-автор не включён: нет {' и '.join(missing)} в .harness/project.json",
+        )
+    return config, None
+
+
+def _update_fix(context: HealthContext, what: str) -> Fix:
+    return Fix(
+        text=f"верните {what}: harness update восстановит managed-файлы тест-автора",
+        command=context.harness_command("update", str(context.repo)),
+    )
+
+
+def _git(checkout: Path, *arguments: str) -> str | None:
+    result = run_tool(["git", "-C", str(checkout), *arguments], timeout=30)
+    if result is None or result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def _main_checkout(repo: Path) -> Path | None:
+    """The main checkout of the repository when `repo` is its linked worktree (ADR 0033)."""
+    common = _git(repo, "rev-parse", "--git-common-dir")
+    if not common:
+        return None
+    directory = (repo / common).resolve()
+    main = directory.parent
+    return main if directory.name == ".git" and main != repo else None
+
+
+def _trusted_by(repo: Path) -> Path | None:
+    """The trusted checkout that vouches for `repo`, the same rule as the preflight (ADR 0033).
+
+    An entry for the exact path counts, and so does an entry for the main checkout when that
+    checkout lists `repo` in `git worktree list --porcelain`. A parent directory does not count.
+    """
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    state = (
+        Path(config_dir).expanduser() / ".claude.json"
+        if config_dir
+        else Path.home() / ".claude.json"
+    )
+    try:
+        document = json.loads(state.read_text(encoding="utf-8"))
+    except JSON_READ_ERRORS:
+        return None
+    projects = document.get("projects") if isinstance(document, dict) else None
+    if not isinstance(projects, dict):
+        return None
+
+    def accepted(path: Path) -> bool:
+        entry = projects.get(str(path))
+        return isinstance(entry, dict) and entry.get("hasTrustDialogAccepted") is True
+
+    if accepted(repo):
+        return repo
+    main = _main_checkout(repo)
+    if main is None or not accepted(main):
+        return None
+    top = _git(main, "rev-parse", "--show-toplevel")
+    listing = _git(main, "worktree", "list", "--porcelain") or ""
+    listed = any(
+        Path(line[len("worktree ") :]).resolve() == repo
+        for line in listing.splitlines()
+        if line.startswith("worktree ")
+    )
+    return main if top is not None and Path(top).resolve() == main and listed else None
+
+
+def _block(profile: dict[str, object]) -> str:
+    return '"test_author": ' + json.dumps(
+        {field: profile[field] for field in ("runtime", "model", "effort")},
+        ensure_ascii=False,
+    )
+
+
+def _planned_profile(repo: Path) -> dict[str, object] | None:
+    """runtime, model and effort of the developer plan in .harness/orchestration.json, if any."""
+    try:
+        selection = read_author(repo, planned=True)
+    except AuthorUnavailable:
+        return None
+    return (
+        selection
+        if selection.get("source") == "orchestration.developer (planned)"
+        else None
+    )
+
+
+def check_test_author_config(context: HealthContext) -> CheckResult:
+    """The short-route `test_author` block; the fix fragment comes from the developer plan."""
+    config, skipped = _opted_in(context, CONFIG_ID)
+    if skipped is not None:
+        return skipped
+    repo = context.repo.resolve()
+    plan = _planned_profile(repo)
+    if plan is not None:
+        fragment = _block(plan)
+        source = "из плана developer в .harness/orchestration.json"
+    else:
+        fragment = _block(
+            {"runtime": "claude", "model": "<модель>", "effort": "<усилие>"}
+        )
+        source = (
+            "плана developer в .harness/orchestration.json нет — подставьте значения"
+        )
+    if "test_author" in config:
+        problems = profile_problems(config["test_author"])
+        if not problems:
+            return _line(
+                CONFIG_ID,
+                "ok",
+                f"Блок test_author: {_block(config['test_author'])} "
+                "(/fast-implement; /implement берёт исполнителя developer из brief)",
+            )
+        return _line(
+            CONFIG_ID,
+            "warn",
+            f"Блок test_author неверен (test_author_config_invalid): {problems[0]}",
+            Fix(text=f"замените блок в .harness/project.json на {fragment} ({source})"),
+        )
+    return _line(
+        CONFIG_ID,
+        "warn",
+        "В .harness/project.json нет блока test_author (test_author_missing): "
+        "/fast-implement не запускает тест-автора",
+        Fix(
+            text=f"добавьте в .harness/project.json {fragment} ({source})"
+            + ("; это делает harness health --fix" if plan is not None else ""),
+            command=context.harness_command("health", "--fix", str(context.repo))
+            if plan is not None
+            else None,
+        ),
+    )
+
+
+def fix_test_author_config(context: HealthContext, result: CheckResult) -> str | None:
+    """`harness health --fix`: add a missing `test_author` block from the developer plan.
+
+    An existing block, valid or not, is never overwritten; without a plan nothing is written.
+    """
+    if result.status != "warn":
+        return None
+    path = context.repo / PROJECT_JSON_SOURCE
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except JSON_READ_ERRORS:
+        return None
+    if not isinstance(config, dict) or "test_author" in config:
+        return None
+    plan = _planned_profile(context.repo.resolve())
+    if plan is None:
+        return None
+    config["test_author"] = {
+        field: plan[field] for field in ("runtime", "model", "effort")
+    }
+    path.write_text(
+        json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return f"в {PROJECT_JSON_SOURCE} добавлен {_block(plan)} из плана developer"
+
+
+def check_test_author_root(context: HealthContext) -> CheckResult:
+    """The project root comes from Git; a set CLAUDE_PROJECT_DIR must name the same root."""
+    _, skipped = _opted_in(context, ROOT_ID)
+    if skipped is not None:
+        return skipped
+    repo = context.repo.resolve()
+    top = _git(repo, "rev-parse", "--show-toplevel")
+    if top is None:
+        return _line(
+            ROOT_ID,
+            "warn",
+            f"Корень проекта: {repo} — не рабочее дерево Git (project_untrusted)",
+            Fix(
+                text="установите harness в checkout Git и запустите health в его корне; "
+                "проверка:",
+                command=shell_join(
+                    ["git", "-C", str(repo), "rev-parse", "--show-toplevel"]
+                ),
+            ),
+        )
+    root = Path(top).resolve()
+    if root != repo:
+        return _line(
+            ROOT_ID,
+            "warn",
+            f"Корень проекта по Git — {root}, а не {repo} (project_untrusted)",
+            Fix(
+                text="запустите health для корня Git",
+                command=context.harness_command("health", str(root)),
+            ),
+        )
+    variable = os.environ.get("CLAUDE_PROJECT_DIR")
+    if variable:
+        named = Path(variable).resolve()
+        if named != root:
+            return _line(
+                ROOT_ID,
+                "warn",
+                f"CLAUDE_PROJECT_DIR={named} не совпадает с корнем Git {root} "
+                "(project_dir_mismatch): Agent(test-author) этой сессии привязан к другому checkout",
+                Fix(
+                    text=f"запустите сессию Claude Code в {root} или уберите переменную: "
+                    "unset CLAUDE_PROJECT_DIR"
+                ),
+            )
+    return _line(ROOT_ID, "ok", f"Корень проекта по Git: {root}")
+
+
+def check_test_author_trust(context: HealthContext) -> CheckResult:
+    """Claude Code trust for this checkout: the exact path or the main checkout of its repository."""
+    _, skipped = _opted_in(context, TRUST_ID)
+    if skipped is not None:
+        return skipped
+    repo = context.repo.resolve()
+    trusted = _trusted_by(repo)
+    if trusted == repo:
+        return _line(TRUST_ID, "ok", f"Доверие Claude Code: {repo}")
+    if trusted is not None:
+        return _line(
+            TRUST_ID, "ok", f"Доверие Claude Code: через основной checkout {trusted}"
+        )
+    target = _main_checkout(repo) or repo
+    return _line(
+        TRUST_ID,
+        "warn",
+        f"Claude Code не доверяет {repo} (project_untrusted): нет hasTrustDialogAccepted "
+        f"для {target} в ~/.claude.json",
+        Fix(
+            text=f"один раз откройте Claude Code в {target} и примите диалог доверия; "
+            "worktree доверенного репозитория отдельного доверия не требуют",
+            command=f"cd {shell_join([str(target)])} && claude",
+        ),
+    )
+
+
+def check_test_author_guard(context: HealthContext) -> CheckResult:
+    """The test-author agent, its scoped guard and the guard's view of the project config."""
+    _, skipped = _opted_in(context, GUARD_ID)
+    if skipped is not None:
+        return skipped
+    repo = context.repo.resolve()
+    agent, guard = repo / TEST_AUTHOR_AGENT, repo / GUARD_REL
+    if agent.is_symlink() or not agent.is_file():
+        return _line(
+            GUARD_ID,
+            "warn",
+            f"Нет агента {TEST_AUTHOR_AGENT} (agent_missing)",
+            _update_fix(context, TEST_AUTHOR_AGENT),
+        )
+    if not guard.is_file() or not os.access(guard, os.X_OK):
+        return _line(
+            GUARD_ID,
+            "warn",
+            f"Guard {GUARD_REL} отсутствует или не исполняемый (guard_hook_unavailable)",
+            _update_fix(context, GUARD_REL),
+        )
+    if _trusted_by(repo) is None:
+        return _line(
+            GUARD_ID,
+            "skipped",
+            f"Guard {GUARD_REL} на месте; его конфигурацию health проверит после доверия — "
+            f"см. {TRUST_ID}",
+        )
+    result = run_tool(
+        [sys.executable, str(guard), "--validate-config"],
+        cwd=repo,
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)},
+        timeout=30,
+    )
+    answer = _answer(result.stdout if result is not None else "")
+    if answer == ("ok", None):
+        return _line(
+            GUARD_ID, "ok", f"Guard {GUARD_REL}: конфигурация тест-автора принята"
+        )
+    reason = answer[0]
+    if reason not in GUARD_STEPS and reason != "agent_missing":
+        return _line(
+            GUARD_ID,
+            "warn",
+            f"Guard {GUARD_REL} не ответил на --validate-config (guard_hook_unavailable)",
+            _update_fix(context, GUARD_REL),
+        )
+    return _line(
+        GUARD_ID,
+        "warn",
+        f"Guard {GUARD_REL} отклонил конфигурацию: {reason}",
+        Fix(text=GUARD_STEPS[reason])
+        if reason in GUARD_STEPS
+        else _update_fix(context, TEST_AUTHOR_AGENT),
+    )
+
+
+def check_test_author_runner(context: HealthContext) -> CheckResult:
+    """The protected runner entry point and its module, without running a test."""
+    _, skipped = _opted_in(context, RUNNER_ID)
+    if skipped is not None:
+        return skipped
+    repo = context.repo.resolve()
+    runner = repo / RUNNER_REL
+    if not runner.is_file() or not os.access(runner, os.X_OK):
+        return _line(
+            RUNNER_ID,
+            "warn",
+            f"Runner {RUNNER_REL} отсутствует или не исполняемый (runner_unavailable)",
+            _update_fix(context, RUNNER_REL),
+        )
+    return _line(RUNNER_ID, "ok", f"Runner: {RUNNER_REL}")
+
+
+def check_test_author_probe(context: HealthContext) -> CheckResult:
+    """The runner's isolation probe; it creates and removes a disposable sandbox."""
+    _, skipped = _opted_in(context, PROBE_ID)
+    if skipped is not None:
+        return skipped
+    repo = context.repo.resolve()
+    runner = repo / RUNNER_REL
+    if not runner.is_file() or not os.access(runner, os.X_OK):
+        return _line(
+            PROBE_ID, "skipped", f"Probe не запускается без runner — см. {RUNNER_ID}"
+        )
+    if _trusted_by(repo) is None:
+        return _line(
+            PROBE_ID,
+            "skipped",
+            f"Probe запускается только после доверия — см. {TRUST_ID}",
+        )
+    bash = shutil.which("bash")
+    result = (
+        run_tool(
+            [bash, str(runner), "--probe"],
+            cwd=repo,
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)},
+            timeout=135,
+        )
+        if bash is not None
+        else None
+    )
+    reason, detail = _answer(result.stdout if result is not None else "", "unavailable")
+    if reason == "ok":
+        return _line(PROBE_ID, "ok", "Probe изоляции runner: ok")
+    manual = Fix(
+        text="ответ probe не разобран: запустите его вручную",
+        command=shell_join([str(runner), "--probe"]),
+    )
+    if reason == "runner_unavailable":
+        step: Fix = _update_fix(context, RUNNER_REL)
+    elif reason in CONFIG_REASONS:
+        step = Fix(text=CONFIG_STEP)
+    elif reason == "isolation_unavailable" and detail in ISOLATION_STEPS:
+        step = Fix(text=ISOLATION_STEPS[detail])
+    else:
+        reason, detail, step = "isolation_unavailable", None, manual
+    return _line(
+        PROBE_ID,
+        "warn",
+        f"Probe изоляции runner: {reason}" + (f" ({detail})" if detail else ""),
+        step,
+    )
+
+
+def _answer(text: str, refusal: str = "disabled") -> tuple[str | None, str | None]:
+    """(reason, isolation detail) of a fixed-shape answer; ("ok", None) for an ok answer.
+
+    Only reasons and details from the fixed sets pass, so no free text reaches the report.
+    """
+    try:
+        value = json.loads(text) if len(text) <= 512 else None
+    except (ValueError, RecursionError):
+        value = None
+    if value == {"status": "ok"}:
+        return "ok", None
+    if not isinstance(value, dict) or value.get("status") != refusal:
+        return None, None
+    reason = value.get("reason")
+    detail = value.get("detail")
+    return (
+        reason if isinstance(reason, str) and reason in PREFLIGHT_REASONS else None,
+        detail if isinstance(detail, str) and detail in ISOLATION_STEPS else None,
     )
 
 
@@ -115,20 +599,8 @@ def _test_author_readiness(
     except AuthorUnavailable as exc:
         return exc.reason, "warn", selection
     # A readiness check targets this checkout, even when health is called from another runtime.
-    # Setting its identity is not granting trust: the exact path must already be accepted.
-    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
-    state = (
-        Path(config_dir).expanduser() / ".claude.json"
-        if config_dir
-        else Path.home() / ".claude.json"
-    )
-    try:
-        document = json.loads(state.read_text(encoding="utf-8"))
-        projects = document.get("projects") if isinstance(document, dict) else None
-        entry = projects.get(str(repo)) if isinstance(projects, dict) else None
-    except JSON_READ_ERRORS:
-        entry = None
-    if not isinstance(entry, dict) or entry.get("hasTrustDialogAccepted") is not True:
+    # Setting its identity is not granting trust: the checkout or its main checkout must be trusted.
+    if _trusted_by(repo) is None:
         return "project_untrusted", "warn", selection
     if shutil.which(str(selection["runtime"])) is None:
         return "runtime_unavailable", "warn", selection

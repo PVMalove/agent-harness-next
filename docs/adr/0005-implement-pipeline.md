@@ -79,3 +79,5 @@ brief architect, получает один тест и санитизирова�
 worker worktree после точного trust, preflight `ok` и разрешения вызова автора в утверждённом
 brief. In-process сохраняет обычный TDD с `checkout_mismatch`. Границы, диагностика и live-evidence
 определены в ADR 0014, разделе «Автор в worker worktree»; Rust authority не меняется.
+Уточнение #1122 (ADR 0033): worktree доверенного репозитория не требует отдельного trust, а
+in-process developer вызывает автора через launcher своего worktree.

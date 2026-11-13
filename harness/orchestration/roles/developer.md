@@ -28,7 +28,8 @@ the repository; a failing test is re-run by its node id through the bounded wrap
 When `python3 -I -B .harness/health/test_author.py preflight --repo <worker_worktree>
 --brief <approved brief path>` returns `{"status":"ok"}`, the developer runs each
 implementation step as one test-first cycle with the in-session `test-author`; any other preflight
-answer keeps the ordinary route. The cycle is prose for the developer, not a new dispatch, role, state or
+answer keeps the ordinary route. An `in-process` developer uses the worker's launcher instead (see
+"Full `/implement` route" below). The cycle is prose for the developer, not a new dispatch, role, state or
 ledger record. Per step, in order:
 
 1. **Handoff.** Before implementing a step, call the author with the requirement and the seam taken
@@ -69,10 +70,12 @@ ADR 0012.
 project settings never override it. A selected runtime without a protected adapter returns
 `runtime_unsupported`, preserving ordinary TDD without a provider substitution. The current
 protected adapter supports an `external` Claude Code developer: its
-process, `CLAUDE_PROJECT_DIR`, preflight, guard and runner must all serve the brief's canonical
-`worker_worktree`. Install the project harness in that worker checkout before dispatch; the human
-must accept Claude Code trust for that exact path. Do not copy state or trust from the main checkout.
-Run `"$CLAUDE_PROJECT_DIR/.claude/hooks/test-author-preflight.sh" --worktree <brief worker_worktree> --brief <approved brief path>`.
+process, preflight, guard and runner must all serve the brief's canonical `worker_worktree`.
+Install the project harness in that worker checkout before dispatch. Preflight takes the project
+root from Git; `CLAUDE_PROJECT_DIR` is optional, and a different value gives `project_dir_mismatch`.
+A linked worktree of a repository whose main checkout is trusted in Claude Code needs no trust
+entry of its own. Do not copy state or trust from the main checkout.
+Run `<brief worker_worktree>/.claude/hooks/test-author-preflight.sh --worktree <brief worker_worktree> --brief <approved brief path>`.
 Only exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent` permission in the approved
 brief allow calling the named author without model/effort overrides (`model: inherit`). Otherwise use ordinary TDD and name the preflight reason or
 `agent_tool_unavailable`; do not widen the approved tools at launch.
@@ -81,9 +84,13 @@ Give the author one test path within the brief's allowed scope, the requirement 
 root from the adapter prompt. Linked worktrees share `<main>/.harness/.sandboxes/runs/`; the author
 reads `isolated-test-<run_id>/log.txt` there. The adapter exposes that evidence directory without
 changing the brief's tool list. Test writes and runner execution remain in the worker checkout.
-An `in-process` developer continues calling the main preflight with `--worktree <worker_worktree>`:
-a separate worker answers `checkout_mismatch`, so this transport keeps ordinary TDD. Other runtimes
-are unsupported. A refusal never creates a blocker, another dispatch or ledger state. The optional
+An `in-process` developer does not call the native author: the main checkout's preflight with
+`--worktree <worker_worktree>` answers `checkout_mismatch`, because its guard and runner serve the
+main checkout. For each handoff it runs `python3 -I -B <worker_worktree>/.harness/health/test_author.py
+run --repo <worker_worktree> --brief <approved brief path> --prompt-file <path>`, which checks the
+worker's preflight and starts the author bound to the worker's guard and runner; the same brief
+permission rule applies, and a refusal keeps ordinary TDD with its reason. Other runtimes are
+unsupported. A refusal never creates a blocker, another dispatch or ledger state. The optional
 author does not change independent QA or the Rust runtime authority.
 
 The `/fast-implement` short route runs this same cycle in its single session, with the seam agreed

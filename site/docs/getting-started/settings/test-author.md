@@ -5,6 +5,22 @@
 рефакторинг и orchestration остаются у developer. Это in-session субагент, а не отдельная роль
 ledger. Если защита недоступна, developer продолжает обычный TDD без незащищённого автора.
 
+## Как включить тест-автора {#enable}
+
+1. Задайте [`test_paths` и `test_runner`](#configuration) и добавьте в `.harness/project.json` блок
+   `test_author` с runtime, model и effort. Если в `.harness/orchestration.json` есть план
+   developer, блок из этого плана добавит `harness health --fix`; существующий блок он не меняет.
+2. Один раз откройте Claude Code в основном checkout репозитория и примите диалог доверия.
+   Worktree этого репозитория отдельного доверия не требуют.
+3. Запустите `harness health` и выполните шаг под каждой строкой `hooks.test_author_*` со статусом
+   warn: строки проверяют блок `test_author`, корень проекта по Git, доверие, guard, runner и probe
+   изоляции. Повторяйте health, пока все строки не станут ok. Guard и probe запускают скрипты
+   проекта, поэтому до доверия их строки пропускаются.
+
+```bash {.ah-code-wrap}
+harness health --fix
+```
+
 ## Поля project.json {#configuration}
 
 Настройки находятся в `.harness/project.json`. Для активации нужны `test_paths` и `test_runner`;
@@ -78,7 +94,8 @@ developer**. Short-профиль и более поздние изменени�
 developer вызывает `Agent(test-author)` без переопределения model/effort.
 
 Для external developer харнесс и защита должны быть установлены **в worker worktree**.
-Откройте этот точный путь в Claude Code и примите диалог доверия сами. Состояние orchestration
+Worktree доверенного репозитория отдельного диалога доверия не требует; если основной checkout не
+доверен, откройте его в Claude Code и примите диалог сами. Состояние orchestration
 из основного checkout туда не копируется. В сессии developer, запущенной в этом worktree:
 
 ```bash {.ah-code-wrap}
@@ -97,8 +114,10 @@ python3 -I -B .harness/health/test_author.py preflight --repo . \
 `<main>/.harness/.sandboxes/runs/isolated-test-<run_id>/log.txt`. Developer передаёт путь к этому
 evidence, не разрешение писать production-код основного checkout.
 
-In-process developer с защитой основного checkout и отдельным worker worktree получает
-`checkout_mismatch` и продолжает обычный TDD. Отказ автора не создаёт новый dispatch, blocker
+Защита основного checkout с отдельным worker worktree отвечает `checkout_mismatch`, поэтому
+in-process developer вызывает автора через launcher своего worktree:
+`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <brief> --prompt-file <файл>`.
+Отказ оставляет обычный TDD с причиной. Отказ автора не создаёт новый dispatch, blocker
 или запись ledger. Полный [контракт test-author](../../agents/test-author.md) описывает цикл
 и требования к независимому ожиданию теста.
 
@@ -112,9 +131,11 @@ In-process developer с защитой основного checkout и отдел
   hard links и вложенных друг в друга зон. Первый сегмент не `.git`, `.harness`, `.claude`, `.agents`
   или `.codex`; остальные сегменты без `*?[]{}` и обратного слеша. Например, `tests/*.py` может пройти
   схему, но не активацию автора.
-- `CLAUDE_PROJECT_DIR` соответствует checkout. Claude Code не запущен с `CLAUDE_CODE_SIMPLE=1`
-  или `CLAUDE_CODE_SAFE_MODE=1`. Для **точного пути** есть принятое человеком решение доверия.
-  Не исправляйте его ручной записью в auth/trust-файл; откройте проект и примите диалог.
+- Checkout — корень своего рабочего дерева Git; `CLAUDE_PROJECT_DIR` не обязателен, но если задан,
+  совпадает с этим корнем. Claude Code не запущен с `CLAUDE_CODE_SIMPLE=1` или
+  `CLAUDE_CODE_SAFE_MODE=1`. Человек принял решение доверия для **этого checkout или основного
+  checkout его репозитория**. Не исправляйте его ручной записью в auth/trust-файл; откройте проект
+  и примите диалог.
 - Выбран runtime с защищённым адаптером. Сейчас это Claude Code; минимальная версия CLI в харнессе
   не закреплена. Preflight проверяет agent/hook статически, живое срабатывание подтверждается отдельно.
 
@@ -132,8 +153,9 @@ Preflight останавливается на первом отказе. Исп�
 | `test_author_missing` | Нет short-профиля → для короткого маршрута задайте runtime/model/effort; для полного передайте approved brief. |
 | `test_author_config_invalid` | Некорректный профиль/brief или устаревший fixed model/effort в agent → сверяйте выбранный источник и шаблон, не подставляйте другой runtime. Локальный seed заменяйте только после просмотра diff. |
 | `runtime_unsupported` | Нет защищённого адаптера runtime → обычный TDD; поддержка другого CLI автоматически не включается. |
-| `checkout_mismatch` | Проверяется другой checkout или не совпала идентичность full-route сессии → запускайте защиту в worker с его brief; не подменяйте идентичность переменной. |
-| `project_untrusted` | Не подтверждены Git root/идентичность/доверие к точному пути → откройте нужный checkout в Claude Code и примите диалог. |
+| `checkout_mismatch` | Проверяется другой checkout → запускайте защиту в worker с его brief. |
+| `project_dir_mismatch` | Переданный `CLAUDE_PROJECT_DIR` указывает не на корень Git checkout → запускайте автора из сессии этого worktree или через его launcher; не подменяйте идентичность переменной. |
+| `project_untrusted` | Checkout не корень Git или нет доверия ни к нему, ни к основному checkout репозитория → откройте основной checkout в Claude Code и примите диалог. |
 | `claude_code_unsupported` | Режим CLI отключает нужные hooks → используйте поддержанное окружение, не обходите проверку. |
 | `agent_missing` | Нет корректного `.claude/agents/test-author.md` → проверьте установку в нужном checkout. |
 | `scoped_hook_unsupported` | В frontmatter нет ожидаемого scoped PreToolUse hook → сравните с текущим шаблоном, сохраните защиту. |
@@ -226,7 +248,8 @@ exit code, время и сообщённые runtime usage/стоимость. 
 
     Read the approved developer brief in its worker checkout. Inherit resolved_runtime/model/effort,
     never the short profile or later live orchestration settings. Confirm worker-local installation,
-    exact-path user trust and approved Agent(test-author) permission; never spoof trust or widen
+    user trust of the worker or its repository's main checkout and approved Agent(test-author)
+    permission; never spoof trust or widen
     approved tools. Keep model: inherit without effort override. Use preflight with the brief in
     the correct checkout; refusal leaves ordinary TDD, not an unprotected or substituted author.
 
