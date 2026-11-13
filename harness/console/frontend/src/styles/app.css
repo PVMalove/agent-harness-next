@@ -1,6 +1,4 @@
 /* Only what docs/design/web-console-mockups/execution-console.css lacks; never overrides it. */
-.lang-switch button { min-width: 34px; padding: 4px 8px; font-size: var(--fs-1); }
-.lang-switch button:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
 /* Harness · Commands: the run panel over the mockup's harness-command rows and board dialog. */
 .command-panel { display: flex; flex-direction: column; gap: 12px; }
 .command-busy { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-color: var(--warn); color: var(--warn); font: var(--fs-1) var(--mono); }
@@ -23,19 +21,6 @@
 /* Agent activity: the mockup's .work-* rows hold the live step list; a Codex step's pill sits
    under its details. */
 .work-event-main .orch-pill { margin-top: 4px; }
-/* Live Repo Map facts include long hashes and paths absent from the demonstration values. */
-.repo-page .repo-index-row > b { min-width: 0; overflow-wrap: anywhere; }
-.repo-page .repo-index-row > span { flex-shrink: 0; }
-.repo-page .repo-index-body > p { overflow-wrap: anywhere; }
-/* Repo Map: the tree, the code and the symbol rows read at the body size of the type scale; the
-   stale-map banner and the empty state carry the Rebuild action. */
-.repo-page .repo-dir, .repo-page .repo-file, .repo-page .repo-code, .repo-page .repo-symbol-row,
-.repo-page .repo-index-row, .repo-page .repo-file-head b { font-size: var(--fs-2); }
-.repo-page .repo-dir .hi, .repo-page .repo-file .hi { width: 13px; height: 13px; }
-.repo-page .repo-stale { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.repo-page .repo-stale > div { flex: 1; min-width: 0; }
-.repo-page .repo-stale p { margin: 4px 0 0; overflow-wrap: anywhere; }
-.repo-page .repo-empty-state { display: grid; gap: 8px; justify-items: start; padding: 16px; }
 /* Pending decisions reuse the mockup's work panels, pills, fields and confirmation dialog. */
 .decision-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .decision-panel > p { margin: 0; font-size: var(--fs-1); color: var(--muted); }
@@ -82,7 +67,6 @@
 .worktree-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px solid #2b3440; font: var(--fs-1) var(--mono); }
 .worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
 .worktree-row .btn { flex: none; padding: 4px 8px; font-size: var(--fs-1); }
-.harness-component > em:empty { display: none; }
 /* Reports: the mockup's report rows and one status/search row; the TUI's text filters fold under
    «Ещё фильтры», the report sections and the QA log keep the untrusted text wrapped. */
 .reports-page > .command-refusal { margin-bottom: 12px; }
@@ -186,14 +170,6 @@
 .route-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px 16px 0; }
 .route-tab-state { margin: 8px 16px 0; color: var(--muted); font-size: var(--fs-1); overflow-wrap: anywhere; }
 #route-context { overflow-wrap: anywhere; }
-/* Help: the guide's Markdown (headings, lists, tables, code) inside the mockup's help panels. */
-.help-markdown { padding: 12px 16px; font-size: var(--fs-1); line-height: 1.55; overflow-wrap: anywhere; }
-.help-markdown h2, .help-markdown h3 { margin: 4px 0 8px; }
-.help-markdown ul { margin: 8px 0; padding-left: 20px; }
-.help-markdown .table-wrap { overflow-x: auto; max-width: 100%; }
-.help-markdown table { width: 100%; border-collapse: collapse; font-size: var(--fs-1); }
-.help-markdown th, .help-markdown td { padding: 4px 8px; border-top: 1px solid var(--rule); text-align: left; vertical-align: top; }
-.help-section { margin-top: 12px; }
 /* Update Harness and Open Project: the diff rows and the option cards are buttons and labels here. */
 button.diff-file { width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: transparent; font: inherit; font-size: var(--fs-1); text-align: left; }
 .diff-kind.fail { color: var(--err); } .diff-kind.warn { color: var(--warn); }
@@ -228,9 +204,6 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .gate-trend { margin: 0 16px 12px; }
 .orch-line-avg-dot { fill: var(--orch-cyan); }
 .orch-line-p95-dot { fill: var(--orch-lav); }
-/* Repo Map: the kind of a symbol the kernel derives from its signature. */
-.repo-kind.method { color: var(--orch-mint); }
-.repo-kind.class, .repo-kind.struct, .repo-kind.interface { color: var(--orch-blue); }
 /* Task Board: the mint "Agent prompt" button and the updating overlay over a kept board (#1045). */
 .board-modal-tabs .btn.board-agent-prompt { display: inline-flex; align-items: center; gap: 4px; border-color: var(--orch-mint); background: var(--orch-mint); color: #10221c; font-weight: 600; }
 .board-modal-tabs .btn.board-agent-prompt:hover { background: #8ad8c1; }
@@ -243,12 +216,10 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 @media (prefers-reduced-motion: reduce) { .board-mascot { animation: none; } }
 .board-modal-tablist { display: flex; align-items: center; gap: 4px; }
 
-/* WCAG 2.1 AA (#1066): skip link, a visible focus ring on every surface, 24px targets. */
-.skip-link { position: absolute; left: 8px; top: -48px; z-index: 100; padding: 4px 12px; border-radius: 4px; background: var(--sel); color: var(--selfg); }
-.skip-link:focus { top: 8px; }
+/* WCAG 2.1 AA (#1066): a visible focus ring on every surface, 24px targets. */
 main:focus { outline: none; }
 main input:focus-visible, main select:focus-visible, main textarea:focus-visible, header input:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
-.chip, .orch-tab, [role="tab"], .lang-switch button { min-height: 24px; }
+.chip, .orch-tab, [role="tab"] { min-height: 24px; }
 
 /* Home after the owner's review (#1066): task search, stale Repo Map, session route across the
    panel with an animated running step, spaced area counters. */
@@ -355,17 +326,8 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .orch-heartbeat { white-space: nowrap; }
 .board-open { display: inline-flex; align-items: center; gap: 4px; }
 .board-open .hi { width: 12px; height: 12px; }
-/* Harness (#1066): the installation rows keep one line (a lock time or schema fits its value
-   column), the KPI captions wrap instead of cutting the generation id, and the maintenance panel
-   follows the command panel on the Commands tab. */
-.harness-component { grid-template-columns: minmax(100px, 1.2fr) minmax(70px, max-content) minmax(100px, 1.4fr) auto; }
-.harness-component > b { white-space: nowrap; }
-.harness-kpis small { display: block; overflow-wrap: anywhere; }
+/* Harness · Commands: the maintenance panel follows the command panel inside the legacy island. */
 #harness-tab-commands .harness-maintenance { margin-top: 16px; }
-/* Repo Map: «medium» needs more than the mockup's 34px weight column (it touches the path there
-   too), and the localized confidence header is wider than the mockup's 60px column. */
-.repo-rel-item { grid-template-columns: 48px minmax(0, 1fr) 64px; gap: 8px; }
-.repo-link-head, .repo-link-row { grid-template-columns: 1fr 1fr 1fr 96px; }
 /* Settings: the adapter plan text and the per-file change list sit inside mockup panels; the
    type scale is the mockup's (the page used to inherit a larger body font). */
 .settings-page { font-size: var(--fs-1); }
@@ -382,12 +344,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
    takes the hero's own type (eyebrow, h2 at --fs-4, muted paragraph) without the section padding. */
 #branch { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 #branch .hi { width: 13px; height: 13px; }
-.help-hero-head .help-markdown { padding: 0; }
-.help-hero-head .help-markdown h1, .help-hero-head .help-markdown h2 { margin: 4px 0; font-size: var(--fs-4); }
-.help-hero-head .help-markdown p { margin: 0; max-width: 72ch; color: var(--muted); }
-/* Sweep fixes: the selected symbol's caption keeps AA contrast on the selection background; the
-   JSON editor and its file line fit a 390 px panel. */
-.repo-symbol-row.on .repo-symbol-main small { color: var(--fg); }
+/* Sweep fixes: the JSON editor and its file line fit a 390 px panel. */
 .settings-editor .field { display: block; min-width: 0; }
 .settings-editor .settings-textarea { max-width: 100%; }
 .settings-file-line { flex-wrap: wrap; min-width: 0; }

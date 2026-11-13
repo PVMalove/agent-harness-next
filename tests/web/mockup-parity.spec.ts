@@ -181,9 +181,9 @@ test("a mockup tab without a source shows an explicit no-data state", async ({ p
   await open(page, "harness", 1440);
   await page.getByRole("tab", { name: /Контейнеры/ }).click();
   // Running and Disk have no source; the fixture's volume probe failed with its reason.
-  await expect(page.locator("#harness-containers .harness-container-summary .no-data")).toHaveCount(3);
-  await expect(page.locator("[data-fact='images-volumes'] .no-data")).toHaveAttribute("title", /docker volume ls/);
-  await page.getByRole("tab", { name: "Runtime" }).click();
+  await expect(page.locator("#harness-containers #harness-container-summary .ds-nodata")).toHaveCount(3);
+  await expect(page.locator("[data-fact='images-volumes'] .ds-nodata")).toHaveAttribute("title", /docker volume ls/);
+  await page.getByRole("tab", { name: /Runtime/ }).click();
   await expect(page.locator("#harness-tab-runtime")).toContainText("нет данных");
 });
 
