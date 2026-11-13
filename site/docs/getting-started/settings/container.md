@@ -255,55 +255,37 @@ root: cargo-этапы одного прогона переиспользуют 
 разрешённые имена переменных. Worker получает artifacts на запись и shared storage на чтение;
 runtime socket ему недоступен.
 
-### Проектный адаптер агента
+### Адаптер агента {#agent-adapter}
 
-Готовый адаптер конкретного агента харнесс не поставляет. Ниже полный shell-пример из руководства
-для Claude Code, а не универсальный адаптер для любого runtime. Убедитесь, что назначение
-роли, model и инструменты brief соответствуют этому CLI. Сохраните скрипт, например, как
-`scripts/container-agent.sh`, сделайте исполняемым и держите внутри корня плана по тому же пути,
-который увидит контейнер. `.py`-адаптер здесь не подходит: coordinator передаст путь Python хоста.
+Используйте поставляемый адаптер Claude Code `.harness/adapters/claude_worker.py`. Coordinator
+запускает `.py`-адаптер контейнерного плана через `python3` образа, а адаптер лежит в `.harness/`,
+который контейнер видит по тому же пути. Под `HARNESS_EXECUTOR=docker` адаптер:
 
-```sh {.ah-code-wrap}
-#!/bin/sh
-# Project-owned runtime adapter (example). The harness does not ship this file.
-set -eu
-[ "${1:-}" = dispatch ] || { echo "usage: $0 dispatch --repo <repo> --brief <brief>" >&2; exit 2; }
-shift
-brief=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --repo) shift 2 ;;
-        --brief) brief=$2; shift 2 ;;
-        *) echo "unsupported argument: $1" >&2; exit 2 ;;
-    esac
-done
-if [ "${HARNESS_EXECUTOR:-}" != docker ]; then
-    echo "this adapter runs only under the container executor" >&2
-    exit 2
-fi
-# The container's working directory is the dispatch checkout; HOME is a tmpfs.
-tools=$(jq -r '.allowed_tools | join(",")' "$brief")
-model=$(jq -r '.resolved_model' "$brief")
-staging=$(jq -r '.report_staging_path' "$brief")
-exec claude --print --model "$model" --allowedTools "$tools" \
-    "Work on the brief $brief. You cannot run coordinator commands in this container. \
-Write the completion report JSON to $staging and stop."
-```
+- запускает `claude -p <промпт>` на переднем плане с `--output-format stream-json --verbose`,
+  поэтому хост читает событие `init` и шаги worker;
+- передаёт `allowed_tools` brief с `--permission-mode dontAsk` и каталог входящих отчётов через
+  `--add-dir`; read-only роль получает `Edit(//<report_staging_path>)` и может записать только
+  свой отчёт;
+- просит записать отчёт в `report_staging_path` и остановиться; `dispatch self-report`,
+  `dispatch heartbeat` и `report submit` в контейнере не выполняются, их делает хост.
 
-Скрипт сохраняет native approval и передаёт allowlist brief. В неинтерактивном режиме действие
-вне allowlist не получит подтверждения человека. Завершённый JSON-отчёт лежит в
-`report_staging_path` внутри `.harness/.sandboxes/scratch`; coordinator/человек регистрирует его
-на хосте. Worker не выполняет `dispatch self-report`, `dispatch heartbeat` или `report submit`.
-
-Параметр `--adapter` передают при отправке **уже утверждённого** dispatch:
+В образе worker нужны `python3`, `git` и `claude` в `PATH`. В неинтерактивном режиме действие вне
+allowlist не получит подтверждения человека.
 
 ```bash {.ah-code-wrap}
-chmod +x scripts/container-agent.sh
 python .harness/orchestration/coordinator.py --repo . dispatch send \
-  --dispatch '<approved-dispatch-id>' --adapter scripts/container-agent.sh
+  --dispatch '<approved-dispatch-id>' --adapter "$PWD/.harness/adapters/claude_worker.py"
 ```
 
 Эта команда запускает worker; для проверки конфигурации ниже используйте preflight, а не send.
+Собственный адаптер другого агента выполняет те же правила: печатает stream-json с событием
+`init`, ставит промпт перед variadic-флагами, пишет отчёт в `report_staging_path`, не вызывает
+команды coordinator и выходит с кодом агента.
+
+Runtime заменяет значения переменных из `environment` (от 8 байт) на `[redacted:<имя>]` в логах
+worker, потому что эти логи лежат в `.harness` и доступны на чтение другим контейнерным worker.
+Управляемые hooks (`.claude/settings.local.json`, `.claude/hooks/`) не отслеживаются Git и не
+попадают в issue worktree, поэтому в контейнере работают только hooks из отслеживаемых файлов.
 
 ## Сеть {#network}
 
