@@ -6,6 +6,7 @@
   <a href="https://github.com/PVMalove/agent-harness-next/releases"><img src="https://img.shields.io/github/v/release/PVMalove/agent-harness-next?label=Version&labelColor=34312E&color=D97757" alt="Version"></a>
   <img src="https://img.shields.io/badge/Runtime-Claude%20Code%20%7C%20Codex-E5A04B?labelColor=34312E" alt="Runtime: Claude Code | Codex">
   <img src="https://img.shields.io/badge/Python-3.12%2B-8FB573?labelColor=34312E" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/Rust-1.89%2B-CE6F45?labelColor=34312E" alt="Rust 1.89+">
   <a href="https://github.com/PVMalove/agent-harness-next/actions/workflows/verify.yml"><img src="https://github.com/PVMalove/agent-harness-next/actions/workflows/verify.yml/badge.svg" alt="CI"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BSL%201.1-9C958C?labelColor=34312E" alt="License: BSL 1.1"></a>
 </p>
