@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -76,7 +77,7 @@ def test_a_runtime_that_does_not_answer_fails_with_the_serve_command(
     result = checks.check_runtime(context)
     summary = checks.check_ledger_summary(context)
 
-    expected = f"harness-runtime serve --repo {tmp_path.resolve()}"
+    expected = f"harness-runtime serve --repo {shlex.quote(str(tmp_path.resolve()))}"
     assert result.status == "fail"
     assert result.fix is not None and result.fix.command == expected
     assert summary.status == "fail"
