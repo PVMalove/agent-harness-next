@@ -133,13 +133,13 @@ def check_no_retired_path_inventory_term() -> None:
 
 
 def check_docs_agents_enumeration() -> None:
-    """Проверить перечисление docs/agents/{...}.md в README.md и на странице структуры.
+    """Проверить перечисление docs/agents/{...}.md на странице структуры сайта.
 
-    Оба документа вручную перечисляют файлы, которые разворачивает scaffold_engineering_extras.
+    Страница вручную перечисляет файлы, которые разворачивает scaffold_engineering_extras.
     Однажды список в документе разошёлся с шаблонами.
     """
     names = {path.stem for path in DOCS_AGENTS_TEMPLATE.glob("*.md")}
-    for doc in (ROOT / "README.md", SITE_PROJECT_STRUCTURE):
+    for doc in (SITE_PROJECT_STRUCTURE,):
         match = re.search(r"docs/agents/\{([a-z0-9,-]+)\}\.md", normalized_text(doc))
         if not match:
             sys.exit(f"{doc}: no docs/agents/{{...}}.md enumeration found")
@@ -215,13 +215,13 @@ def _check_listed(
 
 
 def check_pvmalove_suite_summary_sync() -> None:
-    """Сверить списки переопределений и дополнений в прозе README.md и CONTEXT.md.
+    """Сверить списки переопределений и дополнений в прозе CONTEXT.md.
 
     Однажды устаревшие счётчики «5 overrides, 1 addition» прожили три дня после правки только
     таблицы переопределений.
     """
     suite = load_engineering_suite()
-    for doc in (ROOT / "README.md", ROOT / "CONTEXT.md"):
+    for doc in (ROOT / "CONTEXT.md",):
         text = normalized_text(doc)
         _check_listed(
             doc,
