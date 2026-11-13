@@ -403,6 +403,42 @@ class IntegrationPrepareTests(unittest.TestCase):
         self.branch = PublishedBranch()
         self.addCleanup(self.branch.close)
 
+    def test_prepare_records_a_batch_whose_moved_base_the_rebaser_carried(
+        self,
+    ) -> None:
+        fx = self.branch.fixture
+        candidate = fx._reviewed_candidate()
+        batch_id = fx.batch_id
+        upstream = fx._push_upstream()
+        fx._decide(batch_id, "accept")
+        brief = fx._dispatch(batch_id, "rebaser")["brief"]
+        fx._start(brief["dispatch_id"])
+        head = fx._rebased(brief, conflict=False)
+        fx._submit(brief["dispatch_id"], fx._rebaser_report(brief, head))
+        fx._decide(batch_id, "accept")
+        fx._assess(
+            batch_id,
+            head,
+            git_utils._changed_files_between(self.branch.repo, upstream, head),
+        )
+        fx._reported_qa(batch_id, head)
+        fx._decide(batch_id, "accept")
+        publish = fx._dispatch(
+            batch_id, "developer", purpose="publish", candidate=head
+        )["brief"]
+        coordinator.publish_dispatch(
+            self.branch.args(dispatch=publish["dispatch_id"], remote="origin")
+        )
+        fx._decide(batch_id, "accept")
+
+        result = self.branch.prepare()
+
+        self.assertNotEqual(candidate, head)
+        self.assertTrue(result["created"])
+        self.assertEqual(
+            (result["candidate_sha"], result["target_sha"]), (head, upstream)
+        )
+
     def test_prepare_links_ticket_branch_batch_candidate_and_target(self) -> None:
         published = self.branch.publish()
         target = _git(self.branch.repo, "rev-parse", "origin/master")

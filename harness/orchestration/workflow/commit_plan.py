@@ -808,3 +808,14 @@ def not_covered(report: JsonObject) -> list[JsonObject]:
         for record in coverage
         if isinstance(record, dict) and "not_covered" in record
     ]
+
+
+def check_rebase_copies(
+    commit_map: list[object],
+    created: list[str],
+    previous: list[str],
+    resolve: Callable[[str], str],
+) -> None:
+    """The rebase mapping of a report that may add no commit of its own (the rebaser, ADR 0034):
+    every previous commit is carried or dropped exactly once, and every created commit is a copy."""
+    _check_rebase_mapping(commit_map, created, previous, [], resolve)

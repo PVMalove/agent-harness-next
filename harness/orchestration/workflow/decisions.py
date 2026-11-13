@@ -84,6 +84,7 @@ from harness.orchestration.workflow import carried_items, conditions, failure_do
 from harness.orchestration.workflow.failure_domains import Failure
 from harness.orchestration.workflow import commit_plan as plan_rules
 from harness.orchestration.workflow import rebase
+from harness.orchestration.workflow import rebaser
 from harness.orchestration.workflow import resolver_state
 from harness.orchestration.workflow import supersede
 from harness.orchestration.workflow.attention import (
@@ -306,6 +307,17 @@ def decision_packet(args: argparse.Namespace) -> JsonObject:
                 if isinstance(exc, UnprovenFailureError):
                     retry_preview["failure"] = exc.failure.to_json()
             route_preview = {"retry": retry_preview, "abandon": {"route": "abandon"}}
+            if (
+                getattr(args, "findings_file", None) is None
+                and not report.get("incomplete_items")
+                and report.get("outcome") == "completed"
+            ):
+                # What an accept records when the integration base moved (issue #1010).
+                accept_rebase = _accept_rebase_routing(
+                    repo, core_config._config(repo), batch, dispatch, report
+                )
+                if accept_rebase is not None:
+                    route_preview["accept"] = accept_rebase
         if getattr(args, "findings_file", None) is not None:
             route_preview = {
                 **(route_preview or {}),
@@ -882,7 +894,13 @@ def _retry_routing(
             "no structured evidence classifies the cause", "report"
         )
     if category == TOOLING_REASON_CATEGORY:
-        next_action = "developer-retry" if stage == "developer" else stage
+        next_action = (
+            "developer-retry"
+            if stage == "developer"
+            else rebaser.REBASE_NEXT_ACTION
+            if stage == rebaser.REBASER_ROLE
+            else stage
+        )
         route = RecoveryRoute.TOOLING_RETRY
         restart = (
             "continues from the developer's last commit"
@@ -913,6 +931,16 @@ def _retry_routing(
             RecoveryRoute.SAME_CANDIDATE_RERUN,
         )
         outcome_sentence = "a new conflict-resolver dispatch retries the same target; it is a fix on that target and spends no cycle"
+    elif stage == rebaser.REBASER_ROLE and category in OPERATIONAL_REASON_CATEGORIES:
+        # An operational failure of the rebaser repeats the same rebase (issue #1010).
+        next_action, route = (
+            rebaser.REBASE_NEXT_ACTION,
+            RecoveryRoute.SAME_CANDIDATE_RERUN,
+        )
+        outcome_sentence = (
+            "a new rebaser dispatch carries the same accepted candidate onto the same target; "
+            "it spends no developer retry"
+        )
     elif candidate_bound and category in OPERATIONAL_REASON_CATEGORIES:
         next_action, route = stage, RecoveryRoute.SAME_CANDIDATE_RERUN
         outcome_sentence = (
@@ -947,6 +975,7 @@ def _retry_routing(
         "next_role": {
             "developer-retry": "developer",
             resolver_state.RESOLVER_NEXT_ACTION: resolver_state.RESOLVER_ROLE,
+            rebaser.REBASE_NEXT_ACTION: rebaser.REBASER_ROLE,
         }.get(next_action, next_action),
         "next_action": next_action,
         "rationale": f"{stage} reported outcome={outcome}: {basis}; {outcome_sentence}.",
@@ -1049,7 +1078,7 @@ def _record_condition(
     A work stage must name a real candidate commit. A publish is an external effect, so the remote
     branch tip must already be the candidate; that evidence closes its condition at once.
     """
-    work = stage in {"developer", "conflict-resolver"}
+    work = stage in {"developer", "conflict-resolver", "rebaser"}
     candidate = (
         _candidate_commit(repo, report["commit_sha"])
         if work or stage == "publish"
@@ -1668,6 +1697,18 @@ def decide_batch(args: argparse.Namespace) -> JsonObject:
                     "developer retry budget is exhausted for this batch; block, fail, or abandon it instead of starting another worker",
                     remedy="block, fail, or abandon (with --reason) this batch, then split or re-plan the work",
                 )
+        if (
+            routing is None
+            and args.decision in {"accept", "override-warning"}
+            and not conditional
+            and not findings
+            and incomplete_carry is None
+        ):
+            # A moved integration base after an accepted review or QA is carried by the rebaser
+            # instead of a QA or publish on the old base (issue #1010).
+            routing = _accept_rebase_routing(repo, config, batch, dispatch, report)
+            if routing is not None:
+                routing["decided_at"] = utils._now()
         abandon_reason = ""
         abandon_routing: JsonObject | None = None
         if args.decision == "abandon":
@@ -1770,7 +1811,9 @@ def decide_batch(args: argparse.Namespace) -> JsonObject:
                 decision["carried_items_gap"] = gap
             if scope_warnings:
                 decision["scope_warnings"] = scope_warnings
-            check = rebase.rebase_check(repo, report, dispatch)
+            check = rebase.rebase_check(repo, report, dispatch) or report.get(
+                rebaser.REPORT_FIELD
+            )
             if check is not None:
                 # Audit evidence for a later delta-review of the rebased copies (issue #504).
                 decision["rebase_check"] = check
@@ -1861,6 +1904,11 @@ def decide_batch(args: argparse.Namespace) -> JsonObject:
                     batch["state"] = "completed"
                 else:
                     batch["next_action"] = "risk-assessment"
+            elif report["role"] == rebaser.REBASER_ROLE:
+                # Narrow route (issue #1010): the rebased candidate is assessed against the new
+                # base, and the accepted review of its origin covers it, so QA follows.
+                rebaser.record(repo, batch, dispatch, report, decision["approved_at"])
+                batch["next_action"] = "risk-assessment"
             elif report["role"] == resolver_state.RESOLVER_ROLE:
                 # Narrow route: the resolution is assessed like a candidate, but its review is
                 # waived and QA of the new pair still runs (see ``assess_risk``).
@@ -2114,12 +2162,51 @@ def _decide_retry_route(
                 f"the candidate close the carried items {', '.join(item_ids)} without rewriting "
                 "history.",
             }
+    if routing["next_action"] == rebaser.REBASE_NEXT_ACTION:
+        # A repeated rebase keeps the target its retried brief carried (issue #1010).
+        routing = {
+            **routing,
+            "rebase_target_commit": dispatch.get("rebase_target_commit"),
+            "integration_base_commit": batch.get("integration_base_commit"),
+        }
     if routing["route"] in {"developer-retry", "fix-forward"}:
         routing = _rebase_routing(
-            repo, batch, routing, stage, report, current_candidate
+            repo,
+            batch,
+            routing,
+            stage,
+            report,
+            current_candidate,
+            developer_forced=forced == "developer",
         )
     _require_route(routing["route"])
     return routing
+
+
+def _accept_rebase_routing(
+    repo: Path,
+    config: JsonObject,
+    batch: JsonObject,
+    dispatch: JsonObject,
+    report: JsonObject,
+) -> JsonObject | None:
+    """The ``rebase`` routing record an accept of a code-review or QA report takes when
+    ``origin/<integration_ref>`` moved past the reviewed candidate (issue #1010), else ``None``."""
+    stage = _reporting_stage(dispatch, report)
+    candidate = dispatch.get("candidate_commit")
+    if stage not in {"code-review", "qa"} or not isinstance(candidate, str):
+        return None
+    instead = "QA" if stage == "code-review" else "publish"
+    return rebaser.routing(
+        repo,
+        config,
+        batch,
+        previous_role=stage,
+        candidate=candidate,
+        reason_category=None,
+        rationale=f"{stage} accepted the candidate; instead of {instead} on the old "
+        "integration base,",
+    )
 
 
 def _rebase_routing(
@@ -2129,10 +2216,34 @@ def _rebase_routing(
     stage: str,
     report: JsonObject,
     current_candidate: str | None,
+    *,
+    developer_forced: bool = False,
 ) -> JsonObject:
     """A developer-retry whose integration base moved ahead becomes ``rebase-fix-forward`` (issue
     #504): the routing record proposes the fetched tip as the rebase target. The candidate the
-    retry continues is a retried developer report's own, else the latest accepted one."""
+    retry continues is a retried developer report's own, else the latest accepted one.
+
+    A ``candidate-change`` retry of an accepted candidate's read-only stage that carries no item
+    and forces no developer has nothing to fix: it becomes ``rebase`` (issue #1010), and the
+    rebaser carries the candidate onto the tip without spending a developer retry."""
+    if (
+        stage in {"code-review", "qa", "publish"}
+        and not developer_forced
+        and not routing.get("retry_item_ids")
+        and routing.get("reason_category") == RetryReason.CANDIDATE_CHANGE
+        and current_candidate is not None
+    ):
+        carried = rebaser.routing(
+            repo,
+            core_config._config(repo),
+            batch,
+            previous_role=stage,
+            candidate=current_candidate,
+            reason_category=routing["reason_category"],
+            rationale=routing["rationale"],
+        )
+        if carried is not None:
+            return {**carried, "failure": routing.get("failure")}
     snapshot = (
         _candidate_commit(repo, report["commit_sha"])
         if stage == "developer"

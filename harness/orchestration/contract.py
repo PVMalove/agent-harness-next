@@ -955,7 +955,7 @@ def role_verification_commands(
 ) -> object:
     """Вернуть список проверок, положенный роли в brief.
 
-    ``source`` — конфиг оркестрации или замороженный batch: developer и code-review получают свои
+    ``source`` — конфиг оркестрации или замороженный batch: developer, rebaser и code-review получают свои
     фокусные списки с откатом на ``verification_commands``, architect — пустой список, остальные
     роли и не-``work`` цели — полный ``verification_commands``.
     """
@@ -964,7 +964,8 @@ def role_verification_commands(
         return fallback
     if role in NO_GATE_WORK_ROLES:
         return []
-    if role == "developer":
+    if role in {"developer", "rebaser"}:
+        # The rebaser adds no behaviour: the developer's focused proof is enough (ADR 0034).
         return source.get("developer_verification_commands", fallback)
     if role == "code-review":
         return source.get("review_verification_commands", fallback)

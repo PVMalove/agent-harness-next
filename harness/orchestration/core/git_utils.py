@@ -279,13 +279,17 @@ def _merge_base(repo: Path, first: str, second: str) -> str:
     return _git(repo, "merge-base", "--", first, second)
 
 
-def _patch_id(repo: Path, commit: str) -> str | None:
+def _patch_id(repo: Path, commit: str, path: str | None = None) -> str | None:
     """The stable ``git patch-id`` of one commit's own diff, or ``None`` when it has no textual
     diff (an empty commit or any merge). Equal ids mean the same change, whatever its parent.
+    With ``path``, only that file's part of the diff is compared.
 
     The diff comes from plumbing ``git diff-tree``, which ignores the user's diff and log
     configuration and prints nothing for a merge."""
-    diff = _run_git(repo, ("diff-tree", "-p", "--root", "--no-commit-id", commit, "--"))
+    paths = (path,) if path is not None else ()
+    diff = _run_git(
+        repo, ("diff-tree", "-p", "--root", "--no-commit-id", commit, "--", *paths)
+    )
     if diff.returncode != 0:
         raise CoordinatorError(
             f"git diff-tree failed for {commit}: "

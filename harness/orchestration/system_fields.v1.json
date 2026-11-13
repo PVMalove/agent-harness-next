@@ -42,6 +42,7 @@
         "qa": "Dispatch the qa role on the reviewed candidate.",
         "publish": "Dispatch the developer role with purpose publish to push the accepted candidate.",
         "resolve-conflict": "Dispatch the conflict-resolver role for a textual conflict with the integration target.",
+        "rebase": "Dispatch the rebaser role to carry the accepted candidate onto the moved integration tip.",
         "developer": "Dispatch the first developer after an accepted architect report.",
         "risk-assessment": "Run the risk assessment of the candidate before any further role."
       }
@@ -94,6 +95,7 @@
         "developer": "Writer that implements the plan, retries a candidate or publishes it.",
         "messaging-integration": "Writer specialised in messaging integrations.",
         "qa": "Read-only independent quality gate on the reviewed candidate.",
+        "rebaser": "Writer that carries the accepted candidate onto the moved integration tip without new code.",
         "verification": "Read-only verification of a registered blocked developer candidate."
       }
     },
@@ -227,6 +229,7 @@
         "narrowed-retry": "A read-only stage re-runs on the same candidate for its incomplete items only.",
         "fix-forward": "A developer-retry whose brief carries a closed list of carried items closed by new commits.",
         "rebase-fix-forward": "A fix-forward that first rebases the candidate onto the approved moved integration tip.",
+        "rebase": "The rebaser carries the accepted candidate onto the moved integration tip; no developer retry is spent and QA follows without a new review.",
         "supersede": "A new batch resumes from the last accepted record of an abandoned batch.",
         "environmental-restart": "A proven startup failure resumes in the same batch with a new same-contract dispatch.",
         "rewind": "A human selects an earlier reached gate.",
