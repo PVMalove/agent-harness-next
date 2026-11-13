@@ -11,9 +11,9 @@
 
 ## 2. Full description
 
-Messaging Integration is a write role for outbox boundaries, message schema/routing, retry, and dead-letter queue. It starts only when the matching risk trigger is declared in the brief; it does not absorb unrelated service changes.
+Messaging Integration is a write role for outbox boundaries, message schema/routing, retry, and dead-letter queue. It starts only when the brief declares one of its risk triggers: `outbox`, `message-schema-routing`, or `retry-dlq`; it does not absorb unrelated service changes.
 
-The role implements a compatible change inside the brief's allowed paths for messaging/infrastructure and describes the delivery and failure consequences explicitly. Before the handoff, it runs contract, routing, and failure-path checks, and the required risk review. Unclear scope or missing evidence means escalation, not a wider scope.
+The role implements a compatible change inside the brief's allowed paths for messaging/infrastructure and describes the delivery and failure consequences explicitly. Before the handoff, it runs the project-required contract, routing, and failure-path checks, and the required risk review. Unclear scope or missing evidence means escalation, not a wider scope.
 
 ## 3. Contracts
 

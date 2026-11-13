@@ -20,7 +20,7 @@ tool parameters do not affect the profile choice.
 
 Without the `hook_policy` key, `standard` applies: the blocking set matches the familiar behavior,
 so an existing project does not change mode without an explicit decision. Escalations only raise the profile
-for the specified paths or roles — the validator rejects a downgrade.
+for the specified paths or roles — the validator rejects an escalation weaker than the base profile.
 
 ## Critical guards
 
@@ -38,7 +38,7 @@ These checks block in every profile, including `minimal`:
 
 | Hook | Event | What it blocks |
 | --- | --- | --- |
-| `protect-hook-policy.sh` | `PreToolUse` — Bash, Write, Edit | Edits to the hooks settings and directories and changes to the policy key |
+| `protect-hook-policy.sh` | `PreToolUse(Bash, Write, Edit, MultiEdit, NotebookEdit)` | Edits to the hooks settings and directories and changes to the policy key |
 | `block-direct-master.sh` | `PreToolUse(Bash)` | A commit and push to a protected branch; allows only the creation of a new integration branch |
 | `block-pr-merge.sh` | `PreToolUse(Bash)` | Any PR/MR merge command; if the command cannot be parsed, the refusal also fires |
 | `block-public-attribution.sh` | `PreToolUse(Bash)` | Forbidden information in commit messages, in PR/MR titles and bodies, and in files passed as the body |
@@ -47,7 +47,7 @@ These checks block in every profile, including `minimal`:
 | `block-scratch-outside-docs-tasks.sh` | `PreToolUse(Write, Edit)` | Temporary artifacts outside the allowed directories; the PR title and comments — only through a file in an allowed location |
 | `require-qa-gate.sh` | `PreToolUse(Bash)` | PR/MR creation if QA did not run or failed for the current tree |
 | `require-bounded-check.sh` | `PreToolUse(Bash)` | A full run of the check suite without a summary wrapper; a targeted test is not blocked |
-| `block-dangerous-git.sh` | `PreToolUse(Bash)` | Destructive operations: `reset --hard`, `clean -f`, branch deletion, `restore .` |
+| `block-dangerous-git.sh` | `PreToolUse(Bash)` | Destructive operations: `reset --hard`, `clean -f`, `branch -D`, `checkout .`, `restore .` |
 | `impact-first-touch.sh` | `PreToolUse(Write, Edit)` | Nothing: warns about the first touch of a path whose impact is not computed from the graph |
 | `sensitive-path-recheck.sh` | `PreToolUse(Write, Edit)` | Nothing: in `strict`, reports every edit of a sensitive path and writes an evidence record |
 | `targeted-check-reminder.sh` | `PreToolUse(Write, Edit)`, `Stop`, `SubagentStop` | Nothing: in `standard` and `strict`, reminds to report targeted checks if files changed after the report |
@@ -55,12 +55,12 @@ These checks block in every profile, including `minimal`:
 | `count-skill-usage.sh` | `PreToolUse(Skill)` | Nothing: counts how often skills are called |
 | `mark-qa-gate-passed.sh` | `PostToolUse(Bash)` | Nothing: records a QA pass marker for direct command runs |
 
-Separately, a project with the test-author role enabled gets a scoped guard for the test zone: it does not allow
-changing tests from the implementing role. It is not part of the standard installation.
+Separately, a project with the test-author role enabled gets a guard for the test zone
+(`test-author-guard.py`, wired in the agent frontmatter): it does not allow changing tests from the implementing role. It is not part of the standard installation.
 
 ## Policy and audit
 
-At approval, the digest of the hooks policy is pinned. So a profile change is visible as a change of the
+At approval, the coordinator pins the digest of the hooks policy. So a profile change is visible as a change of the
 contract: a reviewed plan describes one policy while execution runs under another, and this is noticed before
 publication, not after.
 

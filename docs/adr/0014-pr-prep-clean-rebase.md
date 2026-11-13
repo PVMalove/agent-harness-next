@@ -1,5 +1,7 @@
 # Clean rebase при подготовке PR вместо перезапуска developer
 
+**Статус: ACCEPTED (2026-10-09). Частично заменён ADR 0015, ADR 0016 и ADR 0017.**
+
 ## Контекст системы
 
 Integration base уходит вперёд, пока batch проходит review, QA и publish. Раньше coordinator
@@ -35,16 +37,17 @@ ADR 0012 сохраняет маршрут rebase для developer-retry; это
   и новый candidate, прежний и новый target, коммиты до и после, отметки «resolver не вызывался».
   Последовательные refresh образуют цепочку от исходной пары записи.
 - Старое QA остаётся историческим evidence и новый candidate не подтверждает. `integration status`
-  показывает текущую пару после refresh и требует `verification` — зелёный CI или local-QA именно
-  этой пары (`integration link-evidence`); resolver-evidence подтверждением не считается.
+  показывает текущую пару после refresh и требует `verification`: CI, принятый
+  `integration collect-ci`, или local-QA именно этой пары (ADR 0016). Resolver-evidence
+  подтверждением не считается.
 - Повторный review не нужен только из-за этого маршрута. Новая функциональная работа вне scope
   интеграции проходит обычные review и QA.
 
 ## Операционные последствия
 
 - Подготовка PR (`/to-pull-requests`) при `stale` вызывает `integration refresh`, а при
-  `state: conflict` передаёт данные resolver-у по маршруту rebase из ADR 0012; завершённый refresh
-  требует нового CI или local-QA пары до открытия PR.
+  `state: conflict` вызывает `integration resolve` (ADR 0015). Завершённый refresh требует нового
+  CI или local-QA пары. Пару проверяют после открытия PR (ADR 0017).
 - Маршрут не зависит от developer-retry и от его бюджета `max_developer_retries`.
 - `base_rebase_required` и `rebase_target_commit` остаются только для чтения старых записей:
   новые batch их не получают.

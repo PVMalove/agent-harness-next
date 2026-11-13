@@ -1,7 +1,7 @@
 # Diagrams
 
 The Harness Next diagrams, built with Archify. The interactive versions open in a separate
-window and work offline; below are the two new diagrams and a gallery of previews.
+window and work offline; below are two interactive diagrams and a gallery of previews.
 
 The preview images are in Russian; the interactive diagrams are translated.
 

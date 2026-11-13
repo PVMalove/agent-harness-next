@@ -15,8 +15,11 @@ does the work: a ticket can be `status::ready` and `hitl`, and these are two dif
 | Wayfinder | `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, `wayfinder:task` | `/wayfinder` |
 
 `hitl` means that a human does the work following a guide; `afk` means that the task can be handed to an agent.
-`pipeline::fast` and `pipeline::full` are derived from the scope estimate: a small task takes the short path,
-a significant one takes the full cycle with gates.
+`/to-tickets` derives `pipeline::fast` or `pipeline::full` from the scope estimate in story points: a small
+task takes the short path, a large one takes the full cycle with gates.
+
+The optional informational axes `priority::*`, `severity::*`, and `env::*` (target project only) are
+described in the target project's `docs/agents/triage-labels.md`.
 
 ## The single-label rule
 
@@ -34,15 +37,16 @@ will do the work. The `pipeline::*` route is not set on `hitl` tickets: the shor
    not taken into work.
 3. **`status::ready`.** The ticket is fully described and can be taken. This is the state that the automatic pick
    selects.
-4. **`status::in-progress`.** An active session is working on the ticket. The label is set before the branch is created and
-   before any edits, not after.
+4. **`status::in-progress`.** An active session is working on the ticket. `/implement` and `/fast-implement` set the
+   label before the branch is created and before the first edit.
 5. **`status::blocked`.** The ticket waits for a dependency or for a human answer. A block is set for a
    dependency on a result, not for an overlap of files.
-6. **Back to `status::ready`.** The label is removed by whoever closed the blocker: a confirmed merge and the
-   closing of the predecessor. An open PR, accepted QA, and a push do not remove the blocker.
+6. **Back to `status::ready`.** The blocker clears when the predecessor is closed, and the predecessor is closed only
+   after its merge is confirmed. An open PR, accepted QA, and a push do not remove the blocker.
 
-A ticket closed as not doable leaves no state axis behind: `status::*` is removed from it and
-`resolution::wontfix` is set.
+After the merge and closing, the ticket keeps `status::in-progress`: the closed state itself means "done".
+
+A rejected ticket loses its `status::*` label, gets `resolution::wontfix`, and is closed.
 
 ## Where each label is applied
 

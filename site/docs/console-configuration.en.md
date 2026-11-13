@@ -15,7 +15,7 @@ describe the layout of the web console.
    and conflicts. Local diagnostics start automatically.
 3. Review the installation plan. Changing capabilities replaces the managed capability set.
    Resolve conflicts and local edits before confirmation; this screen does not enable force.
-4. Confirm the displayed installation command, then open "Configure".
+4. Confirm the displayed installation command, then open "Configuration".
 5. After configuration, review the repeated diagnostics. "Open project" makes the selected
    repository the target of the other console sections.
 
@@ -56,8 +56,8 @@ It does not change transport or add `backend-orchestration` automatically.
 2. Visit the fields you need. Each step describes its purpose, current answer and recommendation
    with a reason. Enter strings without quotes; enter numbers, lists and objects as JSON.
 3. For `provider_profiles`, `assignment_plans` and lists, choose menu or JSON editing.
-   Both update the same draft. "Back" and "Next" preserve answers.
-4. Choose "Review summary". Inspect JSON, the diff, schema checks and validator diagnostics.
+   Both update the same draft. "Previous step" and "Next" preserve answers.
+4. Choose "Review". Inspect JSON, the diff, schema checks and validator diagnostics.
    The error list links to the relevant field.
 5. Choose "Apply" and confirm the target. Working files stay unchanged until this action.
 
@@ -65,7 +65,7 @@ If a file changes externally, writing stops. "Load external changes" merges the 
 your draft and lists conflicting fields; your answers win in those fields.
 Review the diff again before applying. Closing an unsaved draft requires confirmation.
 
-`approval_policy=auto` requires `trusted` and `worker_attestation_required=true`.
+`approval_policy=auto` requires `human_approval_gate=trusted` and `worker_attestation_required=true`.
 Setting `access_policy` does not itself grant runtime access.
 
 The clipboard uses an available system utility; without one, the application clipboard remains.
@@ -75,7 +75,7 @@ available through Ctrl+Shift+V.
 ## Versions and recovery
 
 "Save version" in the configuration menu saves the working configuration.
-The same button on the summary screen saves the draft without applying it.
+The same button on the "Review" screen saves the draft without applying it.
 A snapshot includes both files, including file absence, description, date, Harness version and hashes.
 It stays local in `.harness/config_versions/` and survives cleanup. It excludes the ledger and worktrees.
 
@@ -96,7 +96,7 @@ Detection does not cover all secrets. Keep authentication in the standard CLI st
 
 AI is off by default. "Check CLI" determines whether `codex` and `claude` are present, support the
 required flags and are authenticated, without asking a model. To make a request, select an available
-CLI and choose "Suggest with AI". The wizard uses existing CLI authentication and does not ask for keys.
+CLI and choose "Ask AI". The wizard uses existing CLI authentication and does not ask for keys.
 
 The request includes the field description, up to four choices, stack traits, OS and recommendation.
 Commands, the project path and configuration values are not sent. The CLI runs in a temporary directory
@@ -105,7 +105,7 @@ and tools disabled; Claude Code uses `-p --safe-mode --tools "" --strict-mcp-con
 The session is neither saved nor continued. Requests have a 90-second limit and a response-size limit.
 Moving to another step cancels the pending result.
 
-Taking the answer into the draft is a separate action. Checks and write confirmation remain required.
+Taking the answer into the draft is a separate action ("Use AI advice"). Checks and write confirmation remain required.
 Unsupported CLI versions, network, authentication or response errors leave plain hints available.
 
 ## What is not checked automatically

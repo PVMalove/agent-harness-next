@@ -11,7 +11,7 @@
 
 ## Действующий контракт
 
-Вводится в 1.3.0. `.harness/project.json` принимает необязательное поле
+`.harness/project.json` принимает необязательное поле
 `tracker: {type, host, project}`: `type` — `github`, `gitlab` или `local`; `host` включает порт
 (`gitlab.example.test:4443`); `project` — полный путь с подгруппами (`group/sub/project`).
 `project.schema.json`, `project.json.tmpl` и `validate_project_json` меняются как один контракт.

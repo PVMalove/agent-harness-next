@@ -29,7 +29,7 @@ By default, Wayfinder **plans**. Each ticket defines a decision, and the map is 
 
 #### Address by name
 
-Every map and ticket is an issue, so each has a **name**: its title. In everything a human reads (the narrative, the Decisions on the map), refer to it by this name, not by a bare ID, number, or pool. A wall of `#42, #43, #44` is unreadable. Names read at a glance. The ID and the URL do not disappear: the name wraps the link. They live _inside_ the name and never replace it.
+Every map and ticket is an issue, so each has a **name**: its title. In everything a human reads (the narrative, the Decisions on the map), refer to it by this name, not by a bare ID, number, or slug. A wall of `#42, #43, #44` is unreadable. Names read at a glance. The ID and the URL do not disappear: the name wraps the link. They live _inside_ the name and never replace it.
 
 #### The map
 
@@ -56,7 +56,7 @@ The whole map at low resolution, loaded once per session. Open tickets are **not
 
 <!-- the index — one line per closed ticket: enough to judge relevance, then zoom the link for the detail the ticket holds -->
 
-- `<closed ticket title> — <ticket URL>` — <one-line gist of the answer>
+- [<closed ticket title>](<ticket URL>) — <one-line gist of the answer>
 
 ## Not yet specified
 
@@ -125,7 +125,7 @@ The user invokes the skill with a vague idea.
 2. **Map the frontier.** Grill again, this time **breadth-first**: spread across the whole space instead of going deep on any one thread. Surface the open decisions and the first steps that can be taken right now. **If no fog surfaces**, the path to the destination is already clear and the whole path is small enough for one session, so you do not need a map. Stop and ask the user how they want to proceed.
 3. **Create the map** (label `wayfinder:map`): the destination and notes are filled in, the decisions are empty for now, and the fog is drawn as **Not yet specified**.
 4. **Create the tickets you can specify now** as child issues of the map. Give each one its `wayfinder:<type>` label, the matching `hitl`/`afk` label, and `status::ready` (see [Tickets](#tickets)). Then connect the edges in a **second pass** (the tickets need IDs before they can refer to each other). The wiring sorts them into frontier and blocked. Anything you still cannot specify stays in the fog, in the **Not yet specified** section.
-5. **Launch research subagents.** For each newly created `research` ticket, deploy a `/research` subagent to resolve it in parallel. It records its results in the issue branch of that research ticket (the name follows `branch_pattern` from `.harness/project.json`), with a context pointer from the ticket.
+5. **Launch research subagents.** For each newly created `research` ticket, deploy a `/research` subagent to resolve it in parallel. It records its results in the issue branch of that research ticket (the name follows `branch_pattern` from `.harness/project.json`, see `docs/agents/git-workflow.md`), with a context pointer from the ticket.
 6. Stop. Charting is the work of one session. It resolves nothing by hand.
 
 ##### Working the map { #work-the-map }

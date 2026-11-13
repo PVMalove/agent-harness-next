@@ -78,6 +78,11 @@ noise stays at 0.61, all 20 query results are identical to version 8 and the gat
 `baseline_fts5_initial.json` stays unchanged. From #1061 on, the light CI job runs this test for
 any pull request that changes, removes or renames `CONTEXT.md` or `docs/adr/*.md`, so a stale
 hash fails there.
+Version 10 (#1142) re-evaluates the corpus after the ADR audit edits ADR 0003, 0004, 0005, 0009
+and 0010. Recall@1/@3/@5 stay at 0.95, noise stays at 0.61 and the gate passes; per-query recall
+and noise are unchanged, and only the ranked top-5 paths of queries 345, 394, 422, 423 and 459 change.
+`fixtures/initial-corpus.json` now also keeps the original bytes of ADR 0004, 0009 and 0010, so
+`baseline_fts5_initial.json` stays unchanged.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 

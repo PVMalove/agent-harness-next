@@ -6,19 +6,19 @@ toc_depth: 2
 
 # Релизы
 
-Короткая история изменений: у каждого релиза — дата, состав изменений и свёрнутые полные
-заметки. Канонический список с assets — в [GitHub Releases](https://github.com/PVMalove/agent-harness-next/releases).
+Короткая история изменений. У каждого релиза указаны дата и состав изменений, полные заметки
+свёрнуты. Канонический список с assets ведёт [GitHub Releases](https://github.com/PVMalove/agent-harness-next/releases).
 
 <div class="ah-releases" markdown="1">
 
 ## v2.0.0 {.ah-release-title}
 
-<p class="ah-release-meta">Несовместимых: 4 · Добавлено: 61 · Изменено: 26 · Исправлено: 40</p>
+<p class="ah-release-meta">Несовместимых: 4 · Добавлено: 63 · Изменено: 26 · Исправлено: 44</p>
 
 <p class="ah-release-summary">Главное: обязательный Rust runtime и runtime store · ledger версии 4 · migrate и откат по human approval · веб-консоль.</p>
 
 Переход с 1.x и откат описаны в [руководстве миграции на 2.0](../guides/upgrade-2-0.md), поддерживаемые
-платформы — на странице [Платформы](../project/platforms.md).
+платформы перечислены на странице [Платформы](../project/platforms.md).
 
 ???+ note "Несовместимые изменения"
 
@@ -27,10 +27,10 @@ toc_depth: 2
     - **[Coordinator требует store]:** Coordinator 2.0.0 на `ledger.json` версий 1–3 завершается с кодом 2 и называет в remedy `harness-runtime migrate` (#814).
     - **[Migrate по approval]:** `harness-runtime migrate` и `rollback --to-legacy` требуют `--approved-by`, `--approved-at` и `--reason` и выполняются только человеком (#803, #826).
 
-Полный список добавленного, изменённого и исправленного — в разделе `[2.0.0]`
+Полный список добавленного, изменённого и исправленного приведён в разделе `[2.0.0]`
 [CHANGELOG.md](https://github.com/PVMalove/agent-harness-next/blob/master/CHANGELOG.md).
 
-## v1.5.1 — 18 октября 2026 {.ah-release-title}
+## v1.5.1, 18 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 4 · Изменено: 2 · Исправлено: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.5.1">Открыть на GitHub</a></p>
 
@@ -57,7 +57,7 @@ toc_depth: 2
     - **[Проверка метаданных в PR интеграционной ветки]:** CI больше не проверяет сообщения коммитов, которые уже есть в default branch. Раньше PR, вливающий свежий `master` в интеграционную ветку, падал на чужом опубликованном коммите, а исправить его сообщение уже нельзя. Новые коммиты PR проверяются, как раньше (#753).
     - **[Конфигурация консоли без `project.json`]:** Раздел конфигурации консоли снова строит документ `project.json` по умолчанию. С 1.5.0 шаблон содержит плейсхолдер полей тестов, консоль его не заполняла и отказывала с ошибкой «требуется корректный JSON» (#753).
 
-## v1.5.0 — 18 октября 2026 {.ah-release-title}
+## v1.5.0, 18 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 7 · Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.5.0">Открыть на GitHub</a></p>
 
@@ -75,14 +75,14 @@ toc_depth: 2
     - **[Цикл Red→Green→Refactor с тест-автором]:** Пока `test-author-preflight.sh` возвращает `ok`, developer ведёт каждый шаг реализации циклом с тест-автором: передаёт требование, seam, публичные сигнатуры и fixtures, проверяет ожидание по требованию до реализации и не ослабляет принятое ожидание ради Green. Статусы `red`, `needs_skeleton` и `contract_gap` обрабатываются явно; ошибки компиляции, импорта, fixture и окружения не считаются Red, а сразу зелёный тест не засчитывается. После трёх подряд неудачных вызовов по одному тесту действует обычный blocker, новых dispatch и состояний ledger нет. Clean-room сценарий со скриптованной моделью-заглушкой проверяет цикл (#555).
     - **[Внешние runtime-адаптеры]:** Claude Code и Codex запускают отдельный worker в назначенном checkout по параметрам брифа. CLI устанавливает и обновляет адаптеры вместе с `backend-orchestration`, а настройки консоли показывают их состояние и требуют просмотра с подтверждением. Локальные файлы защищены от неявной замены; общий seed добавляет шесть разрешений для наблюдения за оркестрацией (#715).
 
-    - **[Запуск Claude worker в issue-worktree]:** Установка `backend-orchestration` добавляет `.harness/adapters/claude_worker.py` — runtime adapter для `transport: external`. Инструмент Agent не умеет стартовать subagent в существующем checkout (subagent стартует в основном checkout, `EnterWorktree` его там отклоняет), поэтому Claude in-process worker не может стартовать в `worker_worktree`. `dispatch send --adapter` запускает адаптер в `worker_worktree`, а он стартует отделённый headless `claude -p` на модели, effort и `allowed_tools` из брифа с `dontAsk`. Адаптер лежит вне хешируемого runtime-пакета, поэтому его установка не меняет пин открытого batch. Skill `implement` и руководство `worktrees.md` описывают оба пути: адаптер даёт настоящий cwd, а in-process subagent работает по абсолютным путям и `git -C`, и его self-report доказывает checkout, в котором он работает, а не cwd (#718).
+    - **[Запуск Claude worker в issue-worktree]:** Установка `backend-orchestration` добавляет `.harness/adapters/claude_worker.py`: runtime adapter для `transport: external`. Инструмент Agent не умеет стартовать subagent в существующем checkout (subagent стартует в основном checkout, `EnterWorktree` его там отклоняет), поэтому Claude in-process worker не может стартовать в `worker_worktree`. `dispatch send --adapter` запускает адаптер в `worker_worktree`, а он стартует отделённый headless `claude -p` на модели, effort и `allowed_tools` из брифа с `dontAsk`. Адаптер лежит вне хешируемого runtime-пакета, поэтому его установка не меняет пин открытого batch. Skill `implement` и руководство `worktrees.md` описывают оба пути: адаптер даёт настоящий cwd, а in-process subagent работает по абсолютным путям и `git -C`, и его self-report доказывает checkout, в котором он работает, а не cwd (#718).
 
     **Исправлено**
 
     - **[Восстановление незавершённой разработки]:** `batch rewind --preserved-commit` сохраняет явно подтверждённые коммиты и перечисленные через `--preserved-file` незакоммиченные файлы остановленного writer без отчёта или checkpoint. Следующий запуск проверяет сохранённый checkout; история, ручные согласования и бюджеты повторов сохраняются (#733).
     - **[Кандидат после rewind]:** История и проверка ledger используют `source_dispatch_id` регистрации кандидата, поэтому повторный rewind после регистрации сохраняет читаемый ledger (#715).
 
-## v1.4.6 — 14 октября 2026 {.ah-release-title}
+## v1.4.6, 14 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.6">Открыть на GitHub</a></p>
 
@@ -95,7 +95,7 @@ toc_depth: 2
     - **[База повторного batch]:** Batch, созданный на ветке с коммитами более раннего batch того же тикета, считает свои изменения от `branch_start_commit`, а не от `integration_base_commit`. Отчёты developer и publish, `scope_warnings`, checkpoint и оценка риска больше не включают чужие коммиты в `changed_files`, `commit_map` и `review_scope`. `risk assess --base-commit` принимает эту базу; замещающий batch и бриф считают, как раньше (#686).
     - **[Context Package]:** Крупный Python-файл среди стартовых входит в пакет индексом символов с диапазонами строк, а не целиком. Если пакет не помещается в лимит токенов, самые тяжёлые стартовые файлы заменяются индексом вместо отказа `dispatch create` и `dispatch propose` (#687).
 
-## v1.4.5 — 13 октября 2026 {.ah-release-title}
+## v1.4.5, 13 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 6 · Исправлено: 3 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.5">Открыть на GitHub</a></p>
 
@@ -118,7 +118,7 @@ toc_depth: 2
     - **[Преждевременный abandon]:** Предупреждение о молчащем dispatch и сообщения о восстановлении называют read-only команды `batch auto-report`, `batch decision-packet`, `dispatch status` и `ledger validate` и предлагают ожидание, `resume-stop` или `rewind`, а `batch abandon` остаётся отдельным решением человека. Исчерпанный бюджет инфраструктурных повторов оставляет batch в состоянии остановки до выбора человека, счётчики не сбрасываются (#679).
     - **[Перезапуск неизвестного worker]:** `batch resume-stop` отказывает, если `dispatch status` показывает worker в состоянии `live` или `unknown`, пока оператор не остановит worker через runtime и не повторит команду с `--runtime-stopped`. Прежний путь для отклонённого self-report, отчёта и сбоя запуска не меняется (#679).
 
-## v1.4.4 — 12 октября 2026 {.ah-release-title}
+## v1.4.4, 12 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Исправлено: 1 · Изменено: 1 · Ломающие изменения: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.4">Открыть на GitHub</a></p>
 
@@ -136,9 +136,9 @@ toc_depth: 2
 
     **Ломающие изменения**
 
-    - **[Строгие enum отчёта]:** `blockers` и `risks` требуют объект `{"status": "none", "details": ""}` либо `{"status": "present", "details": "описание"}`, а результат проверки — ровно `pass`, `fail` или `not_run`. Старые строки, `passed`, `not-run` и `not_run_architect_read_only` больше не принимаются; сохранённые отчёты не переписываются (#672, #674).
+    - **[Строгие enum отчёта]:** `blockers` и `risks` требуют объект `{"status": "none", "details": ""}` либо `{"status": "present", "details": "описание"}`, а результат проверки должен быть ровно `pass`, `fail` или `not_run`. Старые строки, `passed`, `not-run` и `not_run_architect_read_only` больше не принимаются; сохранённые отчёты не переписываются (#672, #674).
 
-## v1.4.2 — 12 октября 2026 {.ah-release-title}
+## v1.4.2, 12 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Исправлено: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.2">Открыть на GitHub</a></p>
 
@@ -148,9 +148,9 @@ toc_depth: 2
 
     **Исправлено**
 
-    - **[Результаты проверок отчёта]:** `report submit` принимает равнозначные `pass` и `passed`, сохраняет успех как `pass`, а незапущенную проверку — как `not_run`. Старое `not-run` принимается для совместимости; сохранённые отчёты читаются без перезаписи. Неизвестные результаты отклоняются с подсказкой до записи отчёта и больше не запускают остановку автоматического пути после отправки (#669).
+    - **[Результаты проверок отчёта]:** `report submit` принимает равнозначные `pass` и `passed`, сохраняет успех как `pass`, а незапущенную проверку как `not_run`. Старое `not-run` принимается для совместимости; сохранённые отчёты читаются без перезаписи. Неизвестные результаты отклоняются с подсказкой до записи отчёта и больше не запускают остановку автоматического пути после отправки (#669).
 
-## v1.4.1 — 12 октября 2026 {.ah-release-title}
+## v1.4.1, 12 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 6 · Изменено: 2 · Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.1">Открыть на GitHub</a></p>
 
@@ -179,7 +179,7 @@ toc_depth: 2
     - **[Копирование и вставка в консоли]:** Ctrl+C и Ctrl+V работают с системным буфером обмена (Wayland, X11, macOS, Windows, WSL), а не только с буфером приложения (#668).
     - **[Ответ ИИ-подсказки]:** Ответ CLI в блоке кода или с закодированным значением принимается, а отказ называет причину вместо общего «неподходящая рекомендация» (#668).
 
-## v1.4.0 — 11 октября 2026 {.ah-release-title}
+## v1.4.0, 11 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 5 · Изменено: 3 · Исправлено: 3 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.4.0">Открыть на GitHub</a></p>
 
@@ -207,7 +207,7 @@ toc_depth: 2
     - **[Резервная копия перед записью]:** Ссылки на переменные окружения вида `TOKEN=$CI_TOKEN` не считаются секретом, а отказ из-за секрета называет файл (#663).
     - **[Ответ CLI-помощника]:** Предупреждения CLI в stderr больше не портят структурированный ответ, а строка «Not logged in» больше не считается входом в Codex CLI (#663).
 
-## v1.3.2 — 11 октября 2026 {.ah-release-title}
+## v1.3.2, 11 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 3 · Изменено: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.3.2">Открыть на GitHub</a></p>
 
@@ -217,7 +217,7 @@ toc_depth: 2
 
     **Добавлено**
 
-    - **[Ручное восстановление оркестрации]:** Остановленный `auto`-batch можно возобновить командой `batch resume-stop`, а вернуться на предыдущий этап — командой `batch rewind --to`. Принятые отчёты и решения сохраняются, `ledger validate` проверяет журнал без записи, а ранний сбой с кодом 429 больше не требует checkpoint (#662).
+    - **[Ручное восстановление оркестрации]:** Остановленный `auto`-batch можно возобновить командой `batch resume-stop`, а вернуться на предыдущий этап можно командой `batch rewind --to`. Принятые отчёты и решения сохраняются, `ledger validate` проверяет журнал без записи, а ранний сбой с кодом 429 больше не требует checkpoint (#662).
     - **[Условное принятие стадии]:** Если report остановлен только сбоем инфраструктуры, а работа выглядит завершённой, человек принимает стадию командой `batch decide --decision accept-conditional --infrastructure-failure`. Пайплайн идёт дальше, а publish ждёт, пока более поздний gate независимо подтвердит стадию. `batch resume-stop` теперь распознаёт и инфраструктурную причину в тексте blocked report; решение остаётся за человеком (#662).
     - **[Порог повтора по замечаниям review]:** Параметр `auto_retry_min_severity` и флаг `batch create --auto-retry-min-severity` задают, с какой серьёзности замечаний review `auto` отправляет работу на повтор. По умолчанию `info`: прежнее поведение не меняется (#662).
 
@@ -228,7 +228,7 @@ toc_depth: 2
     - **[Проверка каталога воркера]:** Для architect, developer, conflict-resolver, database-migrations, messaging-integration и code-review проверка рабочего каталога обязательна независимо от `worker_attestation_required`. Явный `--worktree` проверяется в `dispatch preflight` и `dispatch send` (#662).
     - **[Строже batch resume]:** Команда `batch resume` отказывает для batch с `approval_policy: auto`, записанной остановкой или ручным восстановлением. Для них используется `batch resume-stop` (#662).
 
-## v1.3.1 — 9 октября 2026 {.ah-release-title}
+## v1.3.1, 9 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 18 · Изменено: 13 · Исправлено: 26 · Безопасность: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.3.1">Открыть на GitHub</a></p>
 
@@ -309,7 +309,7 @@ toc_depth: 2
     - **[Каталог поколений ledger]:** Ledger отклоняет имя поколения с разделителями пути. Указатель больше не выходит за каталог ledger.
     - **[Список vendor snapshot]:** Проверка vendor snapshot сверяет список файлов в `SHA256SUMS`, а не только их число. Лишняя или повторная строка больше не скрывает непроверенный файл.
 
-## v1.2.0 — 2 октября 2026 {.ah-release-title}
+## v1.2.0, 2 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 8 · Изменено: 1 · Исправлено: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.2.0">Открыть на GitHub</a></p>
 
@@ -336,7 +336,7 @@ toc_depth: 2
 
     - Предотвращено зависание завершения цикла asyncio в тестах консоли и добавлена ограниченная диагностика Windows verify.
 
-## v1.1.1 — 2 октября 2026 {.ah-release-title}
+## v1.1.1, 2 октября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Исправлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.1.1">Открыть на GitHub</a></p>
 
@@ -349,24 +349,24 @@ toc_depth: 2
     - Backend-оркестрация: retry developer-отчёта без `accept` больше не заводит batch в тупик. Следующий developer dispatch пинит `snapshot_commit` на кандидат этого отчёта, создаётся и отправляется, а его коммиты продолжают историю кандидата: `commit_map` считает только новые коммиты. Для такого кандидата можно зарегистрировать risk assessment, и code-review/QA он не открывает. Retry после принятого кандидата работает как раньше.
     - Backend-оркестрация: `dispatch create` выполняет те же проверки brief, что `dispatch send`, включая связь кандидата с risk assessment. Brief, который send гарантированно отклонит, больше не выдаётся, а remedy называет нужную команду.
 
-## v1.1.0 — 28 сентября 2026 {.ah-release-title}
+## v1.1.0, 28 сентября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.1.0">Открыть на GitHub</a></p>
 
-<p class="ah-release-summary">Главное: harness uninstall <repo>: полное удаление харнесса из проекта —  · harness console, раздел Harness: план и применение удаления харнесса (ввод UNINSTALL).</p>
+<p class="ah-release-summary">Главное: <code>harness uninstall</code> полностью удаляет харнесс из проекта · раздел Harness в <code>harness console</code>: план и применение удаления (ввод UNINSTALL).</p>
 
 ??? note "Полные заметки"
 
     **Добавлено**
 
-    - `harness uninstall <repo>`: полное удаление харнесса из проекта — `.harness/`, discovery-ссылок, seed-файлов, `AGENTS.md`, `CLAUDE.md` и строк харнесса в `.gitignore`. Без `--apply` выводится план; `--apply --confirm UNINSTALL` применяет его, предварительно копируя изменённые проектом файлы и проектные данные `.harness/` в `.harness-uninstall-backup/<время>/`. При активных batch оркестрации удаление отклоняется.
+    - `harness uninstall <repo>` полностью удаляет из проекта харнесс: `.harness/`, discovery-ссылки, seed-файлы, `AGENTS.md`, `CLAUDE.md` и строки харнесса в `.gitignore`. Без `--apply` выводится план; `--apply --confirm UNINSTALL` применяет его, предварительно копируя изменённые проектом файлы и проектные данные `.harness/` в `.harness-uninstall-backup/<время>/`. При активных batch оркестрации удаление отклоняется.
     - `harness console`, раздел Harness: план и применение удаления харнесса (ввод `UNINSTALL`).
 
-## v1.0.1 — 28 сентября 2026 {.ah-release-title}
+## v1.0.1, 28 сентября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 1 · Изменено: 3 · Исправлено: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.0.1">Открыть на GitHub</a></p>
 
-<p class="ah-release-summary">Главное: harness console, раздел Harness: команды update --force-managed-files и update --force-seed-files, предпросмотр hard-очистки; команды очистки soft/hard (план и применение) сгруппированы после команд установки · harness console: фон задан только у экрана — остальные элементы прозрачны и разделены рамками с заголовками (верхняя полоса со значком меню ☰, «Вывод» команд, Diagnostics, Reports, отчёт, хронология, QA-логи, Help, Repo Map); выбранный элемент списков, дерева и вкладок и кнопка под курсором выделяются цветом, без заливки · harness console, Dashboard: в «Состоянии» перечислены ошибки и предупреждения health, факты Repo Map выводятся по одному на строку; панель прокручивается внутри рамки.</p>
+<p class="ah-release-summary">Главное: harness console, раздел Harness: команды update --force-managed-files и update --force-seed-files, предпросмотр hard-очистки; команды очистки soft/hard (план и применение) сгруппированы после команд установки · harness console: фон задан только у экрана, остальные элементы прозрачны и разделены рамками с заголовками (верхняя полоса со значком меню ☰, «Вывод» команд, Diagnostics, Reports, отчёт, хронология, QA-логи, Help, Repo Map); выбранный элемент списков, дерева и вкладок и кнопка под курсором выделяются цветом, без заливки · harness console, Dashboard: в «Состоянии» перечислены ошибки и предупреждения health, факты Repo Map выводятся по одному на строку; панель прокручивается внутри рамки.</p>
 
 ??? note "Полные заметки"
 
@@ -376,19 +376,19 @@ toc_depth: 2
 
     **Изменено**
 
-    - `harness console`: фон задан только у экрана — остальные элементы прозрачны и разделены рамками с заголовками (верхняя полоса со значком меню `☰`, «Вывод» команд, Diagnostics, Reports, отчёт, хронология, QA-логи, Help, Repo Map); выбранный элемент списков, дерева и вкладок и кнопка под курсором выделяются цветом, без заливки.
+    - `harness console`: фон задан только у экрана, остальные элементы прозрачны и разделены рамками с заголовками (верхняя полоса со значком меню `☰`, «Вывод» команд, Diagnostics, Reports, отчёт, хронология, QA-логи, Help, Repo Map); выбранный элемент списков, дерева и вкладок и кнопка под курсором выделяются цветом, без заливки.
     - `harness console`, Dashboard: в «Состоянии» перечислены ошибки и предупреждения health, факты Repo Map выводятся по одному на строку; панель прокручивается внутри рамки.
     - `harness console`: кнопка «Offline checks» на Dashboard и в Diagnostics повторно запускает офлайн-проверки.
 
     **Исправлено**
 
-    - `harness console`: в невысоком окне панели Harness и Orchestration больше не наезжают друг на друга — списки состояний и команд прокручиваются внутри своих рамок.
+    - `harness console`: в невысоком окне панели Harness и Orchestration больше не наезжают друг на друга: списки состояний и команд прокручиваются внутри своих рамок.
 
-## v1.0.0 — 28 сентября 2026 {.ah-release-title}
+## v1.0.0, 28 сентября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 10 · Изменено: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.0.0">Открыть на GitHub</a></p>
 
-<p class="ah-release-summary">Главное: Первый стабильный выпуск переносимого Agent Harness с capability-снимками, CLI установки, оркестрацией и Repo Map · GitHub Release с архивом установки, SHA-256 и заметками из этого раздела; публикуется автоматически после merge в master, если тега версии из harness/VERSION ещё нет · Управляемый пример .</p>
+<p class="ah-release-summary">Главное: Первый стабильный выпуск переносимого Agent Harness с capability-снимками, CLI установки, оркестрацией и Repo Map · GitHub Release с архивом установки, SHA-256 и заметками из этого раздела; публикуется автоматически после merge в master, если тега версии из harness/VERSION ещё нет · Управляемый пример <code>.harness/orchestration.example.json</code>.</p>
 
 ??? note "Полные заметки"
 
@@ -401,13 +401,13 @@ toc_depth: 2
     - README: каталог всех скилов с описаниями на русском, инструкции `harness health` и `harness console`.
     - Русские описания проектных агентов в `docs/agents/` с полным переводом манифестов и `docs/agents/README.md`.
     - `harness console`: тёплая тема в палитре терракоты и янтаря, знак харнесса с описанием установки на главном экране, раскраска статусов в Diagnostics и раздел `Help` (также `F1`).
-    - `harness console`: в разделе Harness — состояние установки и использование пайплайна, в Orchestration — статистика пайплайна и история batch с фильтром по состоянию и переходом к хронологии.
+    - `harness console`: раздел Harness показывает состояние установки и использование пайплайна, раздел Orchestration показывает статистику пайплайна и историю batch с фильтром по состоянию и переходом к хронологии.
     - Переписан справочник `harness-guide.md`: навигация по задачам, таблицы-шпаргалки, примеры команд и вывода, восемь новых диаграмм Archify (выбор команды установки, `/to-spec`, `/wayfinder`, `/fast-implement`, `/tdd`, метки `status::*`, два сквозных примера).
     - Все 23 диаграммы в `docs/diagrams/` проходят `archify finalize` (validate, deliver, check, browser-check); превью перегенерированы, картинки справочника поставляются рядом с ним в `harness/docs/diagrams/`, а `scripts/verify.py` сверяет их с `docs/diagrams/previews/`.
 
     **Изменено**
 
     - Установщик глобального слоя переименован в `bin/install-global.py`: запуск `python3 bin/install-global.py ...`.
-    - Справочник харнесса и руководство по backend-оркестрации перенесены из `docs/agents/` в управляемый снимок `.harness/docs/{harness-guide,backend-orchestration}.md` (источник — `harness/docs/`) и обновляются командой `harness update`; прежние копии в `docs/agents/` целевого проекта больше не используются и удаляются вручную.
+    - Справочник харнесса и руководство по backend-оркестрации перенесены из `docs/agents/` в управляемый снимок `.harness/docs/{harness-guide,backend-orchestration}.md` (источник: `harness/docs/`) и обновляются командой `harness update`; прежние копии в `docs/agents/` целевого проекта больше не используются и удаляются вручную.
 
 </div>

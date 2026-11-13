@@ -142,8 +142,8 @@ harness health .
 ```
 
 From the harness source checkout, use `python3 harness/bin/harness.py health <repo>`.
-Health checks individual environment properties; a green report does not mean all project QA
-commands have already run.
+Health checks individual environment properties; a green report does not mean the project QA
+commands will succeed: health does not run them.
 
 ## Rust runtime and the service environment
 

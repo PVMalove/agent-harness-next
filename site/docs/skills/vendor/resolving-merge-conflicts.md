@@ -1,15 +1,15 @@
-# resolving-merge-conflicts — Разрешение конфликтов Git
+# resolving-merge-conflicts: разрешение конфликтов Git
 
 ## 1. Название и локализация
 
 - **Английское название:** `resolving-merge-conflicts`
 - **Русский перевод:** Разрешение конфликтов Git.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/resolving-merge-conflicts/SKILL.md)
+- **Исходный скилл:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/resolving-merge-conflicts/SKILL.md)
 
 ## 2. Русское описание
 
-Разбирает конфликт во время merge или rebase и проверяет согласованность итогового состояния.
+Разрешает конфликт незавершённого merge или rebase: выясняет намерение каждой стороны, запускает проверки проекта и завершает merge или rebase.
 
 ## 3. Применение
 
-Точный порядок шагов, входные условия и ограничения задаёт исходный `SKILL.md`. Эта страница служит русским указателем на закреплённую upstream-версию.
+Порядок шагов, входные условия и ограничения задаёт исходный `SKILL.md`. Эта страница только кратко описывает по-русски закреплённую upstream-версию.

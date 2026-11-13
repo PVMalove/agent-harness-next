@@ -513,7 +513,7 @@ baseline from `playbook.md` ("Baseline metrics") stays, in the same way, a guide
 
 A write role (developer, database-migrations, messaging-integration, conflict-resolver) may stretch one dispatch
 over several worker sessions if the whole TDD cycle in one session inflates its context. A read-only role
-(architect, qa, code-review) may not: a checkpoint attempt for it is rejected at once.
+(architect, verification, qa, code-review) may not: a checkpoint attempt for it is rejected at once.
 
 Instead of a completion report, the current worker session records a non-final checkpoint: a separate, hashed
 ledger record that cannot be mistaken for a report:
@@ -551,7 +551,10 @@ A `--termination-reason` recognized as a rate limit (`rate_limit`/`rate-limit`/`
 automatically. No new human or coordinator decision is required. Any other reason, including a missing or
 unrecognized one, is treated as a planned trigger. This is a safe default toward approval, not away from it:
 
-- `--trigger` is required and must be one of `context-limit`, `tdd-cycles`, `failure-log`, `vertical-slice`.
+- `--trigger` is required. The planned triggers are `context-limit`, `tdd-cycles`, `failure-log`, `vertical-slice`, and
+  `human-decision` (a human answer to a resolver, see
+  ["Publish and PR"](publish.md#integration-accounting-after-publish)). A separate `startup-failure` trigger follows
+  its own rules (see ["Recovery"](recovery.md#manual-recovery-and-stage-repeat)).
 - for `context-limit`/`tdd-cycles`/`failure-log`, `--measured-value` must be not less than its
   `adaptive_continuation_policy` threshold (`context_limit`/`tdd_cycle_count`/`failure_log_bytes`) from
   `.harness/orchestration.json`. Without an explicit configuration, the documented default values are used

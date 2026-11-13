@@ -56,8 +56,9 @@ Review these decisions before publication. The agent does not reset an existing 
 Each ticket must deliver a verifiable result. A dependency is needed when work requires another
 ticket's result; overlapping files alone do not establish a blocker.
 
-`/to-tickets` agrees on slices and estimates, then publishes tasks. Labels `pipeline::fast` and
-`pipeline::full` choose the route; `hitl` and `afk` choose the implementer. A ready task receives
+`/to-tickets` agrees on slices and estimates, then publishes tasks. Labels `hitl` and `afk`
+choose the implementer. An `afk` ticket also gets `pipeline::fast` or `pipeline::full`: that label
+chooses the route. A ready task receives
 `status::ready`; a task with an open blocker receives `status::blocked`.
 
 <figure class="ah-diagram">

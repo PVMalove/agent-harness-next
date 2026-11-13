@@ -10,7 +10,7 @@ GitHub workflow [release.yml](https://github.com/PVMalove/agent-harness-next/blo
 и при push тега строго вида `vMAJOR.MINOR.PATCH`. Для push в `master` тег выводится из
 `harness/VERSION`; если такой тег уже существует, workflow завершается без публикации. Затем job
 `preflight` за секунды проверяет равенство тега и `harness/VERSION`, наличие секции и её категорий в
-`CHANGELOG.md` (`python scripts/build_release.py --tag vX.Y.Z --check` — ту же проверку можно
+`CHANGELOG.md` (`python scripts/build_release.py --tag vX.Y.Z --check`; ту же проверку можно
 выполнить локально до merge). После этого вызываются все проверки
 [verify.yml](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/verify.yml), и только затем собирается архив. При ошибке Release
 и тег не создаются. Успешный запуск создаёт тег на проверенном коммите (если его ещё нет) и
@@ -72,7 +72,7 @@ CD релизов реализован только для GitHub. Устана�
 - repo-local PreToolUse hook из `.claude/settings.json`
   ([scripts/hooks/check-private-terms.sh](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/hooks/check-private-terms.sh)) перед
   `git commit`, `git push` и `gh issue|pr create|edit|comment` проверяет текст команды и её
-  body-файлы (`-F`/`--file`/`--body-file`), а также staged diff (при `-a` — `git diff HEAD`)
+  body-файлы (`-F`/`--file`/`--body-file`), а также staged diff (при `-a` это `git diff HEAD`)
   для commit, непубликованные коммиты для push и имя ветки. При совпадении команда
   блокируется. Hook начинает работать в сессиях, начатых после того, как изменение попало в
   текущую ветку;
@@ -129,22 +129,22 @@ job печатает `::notice` о пропуске и завершается у
 
 ### Вывод и ручной запуск
 
-Коды выхода: 0 — совпадений нет или проверка пропущена; 1 — есть совпадения; 2 — ошибка (в hook
-код 2 блокирует команду). Каждая находка печатается как `<место>: term #N`, без самого термина
-и без текста строки:
+Коды выхода: 0, если совпадений нет или проверка пропущена; 1, если есть совпадения; 2 при ошибке
+(в hook код 2 блокирует команду). Каждую находку скрипт печатает как `<место>: term #N`, без самого
+термина и без текста строки:
 
-- `notes.md:3` — добавленная строка staged diff, `path:line` — строка body-файла;
-- `commit <sha12>:3` — строка 3 сообщения коммита (строка 1 — subject),
-  `commit <sha12> path:line` — добавленная строка этого коммита;
-- `branch:1` — имя ветки, `command:4` — строка текста команды в hook;
-- `staged file #k`, `commit <sha12> file #k`, `commit #j`, `body file #k` — порядковые
-  метки вместо пути, sha или пути body-файла, в которых есть термин; `(name)` — термин в имени
+- `notes.md:3`: добавленная строка staged diff; `path:line`: строка body-файла;
+- `commit <sha12>:3`: строка 3 сообщения коммита (строка 1 содержит subject);
+  `commit <sha12> path:line`: добавленная строка этого коммита;
+- `branch:1`: имя ветки; `command:4`: строка текста команды в hook;
+- `staged file #k`, `commit <sha12> file #k`, `commit #j`, `body file #k`: порядковые
+  метки вместо пути, sha или пути body-файла, в которых есть термин; `(name)`: термин в имени
   файла. Путь в кавычках git тоже заменяется меткой.
 
 Метку раскрывают только локально, не в CI:
 `git diff --cached --name-only --no-renames | sed -n 'kp'` для `staged file #k`,
 `git show --format= --name-only --no-renames <sha> | sed -n 'kp'` для `commit <sha12> file #k` и
-`git log --format=%H <range> | sed -n 'jp'` для `commit #j`; `body file #k` — k-й аргумент
+`git log --format=%H <range> | sed -n 'jp'` для `commit #j`; `body file #k` означает k-й аргумент
 `--body-file`.
 
 ```bash

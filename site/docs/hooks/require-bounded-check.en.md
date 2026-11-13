@@ -11,7 +11,7 @@ The `PreToolUse(Bash)` hook reads the command from the input JSON. If the projec
 `.harness/project.json`, the hook blocks nothing. If the config exists, the hook checks the commands from
 `qa_gate_commands`, a full `pytest`, and a full `python -m unittest`. Such a run requires the
 `qa-gate/scripts/test_summary.py` wrapper, which shortens and cleans the output before it enters the
-session history. A targeted `pytest` with a `::` node ID and `unittest` with the full dotted path of the test
+session history. A command whose text contains `test_summary.py` passes. A targeted `pytest` with a `::` node ID and `unittest` with the full dotted path of the test
 pass without the wrapper.
 
 Mentioning the name does not count as a run. The shared shell parser `pr_commands.py` keeps argument
@@ -21,6 +21,9 @@ boundaries and parses simple commands, nested shells, and executable substitutio
 heredoc are also skipped. A real run through `bash -c`, `eval`, `timeout`, `find -exec`,
 `$(...)`, backticks, process substitution, or a shell heredoc is blocked. Unparseable
 executable text and interpreter code are checked conservatively by substring.
+
+The hook is a behavioral hook: in the `minimal` profile the [hook-response envelope](hook-response.md) lowers its
+block to a warning.
 
 ## 3. Contract
 

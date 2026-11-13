@@ -1,7 +1,7 @@
 # Платформы
 
-Страница перечисляет платформы Agent Harness Next 2.0 и задания CI, которые их проверяют. Источник — файлы `.github/workflows/verify.yml` и
-`.github/workflows/podman-smoke.yml`. Имена заданий совпадают с именами в GitHub Actions.
+CI проверяет Agent Harness Next 2.0 на платформах из таблицы ниже. Данные и имена заданий взяты из
+файлов `.github/workflows/verify.yml` и `.github/workflows/podman-smoke.yml`.
 
 ## Поддерживаемые платформы
 
@@ -12,8 +12,8 @@
 | Docker (rootful) | Сквозной smoke: dispatch worker и QA в контейнерах |
 | Fedora, SELinux enforcing, rootless Podman | Сквозной smoke контейнерного исполнителя на self-hosted runner |
 
-macOS ни одно задание CI не проверяет, поэтому работа на ней не подтверждена. Rootless Docker не
-покрыт: `docker-smoke` проверяет только rootful Docker.
+Ни одно задание CI не проверяет macOS, поэтому работа на ней не подтверждена. Rootless Docker тоже
+не покрыт: `docker-smoke` проверяет только rootful Docker.
 
 ## Задания CI
 
@@ -31,8 +31,10 @@ macOS ни одно задание CI не проверяет, поэтому р
 | `fault-injection` | Матрица сбоев и границ безопасности: coordinator против debug-сборки `harness-runtime` |
 | `parser-bundle`, `repo-map-bundle` | Офлайн-пакет парсеров tree-sitter и тесты Repo Map на нём |
 | `verify-light` | Только для pull request в `integration/**`: `make lint`, `cargo fmt --check`, Clippy, тесты по diff pull request и публичные метаданные Git |
+| `verify-linux-unit`, `verify-linux-integration` | Только для pull request: группы тестов unit и integration на Linux |
+| `verify-test-groups` | Только для pull request: сводный узел, падает, если не прошла одна из четырёх групп Linux и Windows |
 | `private-terms` | Только для pull request: коммиты, ветка, заголовок и тело против списка закрытых терминов |
-| `dashboard` | Сводная страница прогона: какие задания и тесты упали и почему. Сам ничего не проверяет |
+| `dashboard` | Сводная страница прогона: какие задания и тесты упали и почему. Само задание ничего не проверяет |
 
 ### Windows (`windows-latest`)
 
@@ -40,6 +42,7 @@ macOS ни одно задание CI не проверяет, поэтому р
 | --- | --- |
 | `verify-windows (tests)` | Полный набор тестов harness |
 | `verify-windows (clean-room)` | Clean-room установка |
+| `verify-windows-unit`, `verify-windows-integration` | Только для pull request: группы тестов unit и integration на Windows |
 | `runtime-ipc-windows` | Контрактные тесты IPC runtime через named pipe на Python и Rust и Rust-тесты Job Object супервизора |
 
 ### Fedora, SELinux, rootless Podman (self-hosted)
@@ -51,9 +54,11 @@ macOS ни одно задание CI не проверяет, поэтому р
 ## Когда задания запускаются
 
 - **Pull request в `integration/**`** получает лёгкий путь: `verify-light`, `docs`, `console-spa`,
-  `parser-bundle` и `private-terms`.
+  `parser-bundle`, `private-terms`, четыре группы тестов Linux и Windows и `verify-test-groups`.
 - **Pull request в другие ветки и push в `master`** получают полный путь: все задания Linux и
-  Windows, кроме `verify-light`. `diff-coverage` и `private-terms` идут только на pull request.
-- **`podman-smoke`** не запускается на pull request: репозиторий публичный, а self-hosted runner
-  принимает только push, который меняет контейнерный исполнитель или runtime, и ручной запуск.
-  Выключенный runner не задерживает проверки pull request и релиз.
+  Windows, кроме `verify-light`. `diff-coverage`, `private-terms`, группы тестов и
+  `verify-test-groups` идут только на pull request.
+- **`dashboard`** запускается после всех заданий на любом пути, каким бы ни был их результат.
+- **`podman-smoke`** не запускается на pull request, потому что репозиторий публичный. Self-hosted
+  runner запускает его только на push, который меняет контейнерный исполнитель или runtime, и вручную.
+  Если runner выключен, проверки pull request и релиз его не ждут.

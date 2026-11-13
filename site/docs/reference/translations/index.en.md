@@ -101,12 +101,12 @@ Localized skills, hook descriptions, role manifests and agent guides. Command na
 </details>
 <details data-ah-group><summary>Process and Git</summary>
 <ul><li data-ah-entry><a href="../../agents/git-workflow/">Git workflow: feature branch + PR</a></li>
-<li data-ah-entry><a href="../../agents/issue-tracker/">Issue tracker { #issue-tracker }</a></li>
-<li data-ah-entry><a href="../../agents/triage-labels/">Triage Labels { #triage-labels }</a></li>
-<li data-ah-entry><a href="../../agents/worktrees/">Parallel work: git worktrees { #parallel-work-git-worktrees }</a></li></ul>
+<li data-ah-entry><a href="../../agents/issue-tracker/">Issue tracker</a></li>
+<li data-ah-entry><a href="../../agents/triage-labels/">Triage Labels</a></li>
+<li data-ah-entry><a href="../../agents/worktrees/">Parallel work: git worktrees</a></li></ul>
 </details>
 <details data-ah-group><summary>Artifacts and releases</summary>
-<ul><li data-ah-entry><a href="../../agents/artifacts/">Artifacts &amp; Scratchpads Management { #artifacts-scratchpads-management }</a></li>
+<ul><li data-ah-entry><a href="../../agents/artifacts/">Artifacts &amp; Scratchpads Management</a></li>
 <li data-ah-entry><a href="../../agents/releases/">Harness next releases</a></li></ul>
 </details>
 <details data-ah-group><summary>Acceptance</summary>

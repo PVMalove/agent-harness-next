@@ -96,7 +96,7 @@ the next observation.
 Reconcile compares the saved intent with the actual host state. If the object already exists, the
 runtime does not start a second process. If the object is proven absent, the execution gets `lost` and
 becomes terminal. The execution state is an observation of Rust, and Python chooses the dispatch state
-from this observation. The runtime never writes the batch lifecycle directly.
+from this observation. The runtime does not change the batch lifecycle on its own: it only saves the Python decision.
 
 ## Verification
 
@@ -119,6 +119,8 @@ An error is typed, so that a retry does not spend the role budget on infrastruct
 | `code_test` | A test or mypy fails | A return to the developer with evidence. |
 | `timeout` | The deadline expired | A stop with a grace period and partial evidence. |
 
+Besides these five, the runtime vocabulary has the domains `tooling`, `cancelled`, and `unknown`.
+
 ## Security
 
 | Boundary | Rule |
@@ -140,7 +142,9 @@ An error is typed, so that a retry does not spend the role budget on infrastruct
 | 0023 | Incremental checks |
 | 0025 | The built-in container executor |
 | 0026 | The consolidation of Harness Next and the Release Gate |
+| 0030 | The operational recovery store and its reconciliation with the authority lifecycle |
 | 0031 | The autostart of `harness-runtime serve` for `/implement` |
+| 0032 | The cargo cache in QA containers |
 
 ## Next
 

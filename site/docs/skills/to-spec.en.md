@@ -22,7 +22,7 @@ disable-model-invocation: true
 **Objective:** synthesize the context of the current conversation and your understanding of the codebase into a final specification.
 **Strict rule:** do NOT interview the user and do not start a new round of grilling. If information seems to be missing, the previous grilling was incomplete. Synthesize the specification using only the known facts and explicit assumptions.
 
-You should already have the issue tracker and the triage label vocabulary. If `docs/agents/issue-tracker.md` or `docs/agents/triage-labels.md` is missing, tell the user to run `harness update`. It creates both files from the harness templates.
+You should already have the issue tracker and the triage label vocabulary in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. If either file is missing, tell the user to run `harness update`. It creates both files from the harness templates.
 
 #### Execution in two phases
 
@@ -39,15 +39,15 @@ You must run this skill in two separate phases, so that the user agrees on the t
 
 ##### Phase 2: drafting and publishing (after user approval)
 
-1. **Prepare the file:** write the specification from the `<spec-template>` below in its own folder under `docs/tasks/`.
-   - *Naming convention:* if the issue ID is known, use it. If not, use a descriptive slug (for example, `docs/tasks/add-user-auth/add-user-auth.md`) and later rename both the folder and the file when the ID is created. For the full convention, including grouping in the epic folder, see `docs/agents/artifacts.md`.
-   - Take the final list of Discovery Context files from the `Live Artifact` of the current session. If artifact publishing is unavailable, take the approved list of paths from the final Trunk summary instead. Add it to the closing template section `## Relevant Files (Discovery Context)`. Keep every path and the context that came with it. While drafting, do not search for this list again and do not replace it.
+1. **Prepare the file:** write the specification from the `<spec-template>` below at the root of its own folder under `docs/tasks/`. That folder also reserves `tickets/` (one file per child ticket, filled in later by `/to-tickets`) and `artifacts/` (the `/grilling` Live Artifact).
+   - *Naming convention:* if the issue ID is known, use it. If not, use a descriptive slug (for example, `docs/tasks/add-user-auth/add-user-auth.md`) and later rename both the folder and the file when the ID is created. For the full convention, including grouping in the epic folder and the `tickets/`/`artifacts/` subfolders, see `docs/agents/artifacts.md`.
+   - Take the final list of Discovery Context files from `artifacts/discovery-context.md` in the same folder (written by the Persisted List step of `/grilling`). If that file does not exist because artifact tracking never ran, take the approved list of paths from the final Trunk summary instead. Add it to the closing template section `## Relevant Files (Discovery Context)`. Keep every path and the context that came with it. While drafting, do not search for this list again and do not replace it.
 2. **Publish to the tracker:** publish the issue through the CLI of the configured tracker:
    - **GitHub:** `gh issue create --body-file <path>`.
    - **GitLab:** `glab issue create -R <project-url> --title '<title>' --description-file <path> --yes`. Keep `<title>` in single quotes. Write each apostrophe inside it as `'\''` in a POSIX shell or as `''` in PowerShell. `<project-url>` and the other GitLab placeholders (`<host>`, `<project-id>`) are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions. The epic number is the last segment of the issue URL that the command prints.
    - Do not pass the body inline with `--body`/`--description` or a heredoc: specification bodies contain nested quotes and backticks that break shell quoting.
 3. **Apply labels:** this published issue acts as the **epic** of the feature. Apply the following labels (see `docs/agents/triage-labels.md` for the full taxonomy):
-   - `bug` OR `enhancement`;
+   - `type::bug` OR `type::feature`;
    - `status::specs` (do NOT use `status::ready`, because decomposition is required first);
    - `task-report::required` (unless told to skip it).
    - **GitLab:** `glab issue update <epic> -R <project-url> --label 'type::feature,status::specs,task-report::required'` (`type::bug` for a bug; remove `task-report::required` if told to skip it). If a label does not exist in the project yet, GitLab silently creates it with the default color instead of failing, so run `/setup-labels` before the first epic.
@@ -79,7 +79,7 @@ The solution to the problem, from the user's point of view.
 
 #### User Stories
 A numbered list of user stories that covers every behavior of the feature.
-Format: `1. As a <role>, I want <feature>, so that <benefit>`
+Format: `1. As an <actor>, I want a <feature>, so that <benefit>`
 *(Example: as a bank customer, I want to see my balance, so that I can make informed spending decisions.)*
 
 #### Implementation Decisions

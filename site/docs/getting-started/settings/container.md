@@ -1,38 +1,40 @@
 # Контейнер
 
 Встроенный исполнитель `docker` запускает утверждённого внешнего worker в отдельном контейнере
-Docker или Podman. Контейнерный QA включается отдельно: каждая команда gate получает свой
-контейнер. Эта страница проводит через настройку; полный справочник полей — в
-[«Доступе и контейнере»](orchestration/access.md).
+Docker или Podman. Контейнерный QA включается отдельно, и тогда каждая команда gate получает свой
+контейнер. Здесь описана настройка по шагам, полный справочник полей находится на странице
+[«Доступ и контейнер»](orchestration/access.md).
 
 ## Когда нужен и что меняет {#when-to-use}
 
 Исполнитель нужен, если вы хотите ограничить доступ worker к ресурсам проекта или дать ему
-повторяемый набор инструментов в образе. Он работает только с `transport: external`; `in-process` даёт блокер.
-Разрешение dispatch и native approval агента сохраняются. Контейнер не подтверждает действия
-за человека, не включает auto-approve и не расширяет закреплённый план.
+повторяемый набор инструментов в образе. Он работает только с `transport: external`, с
+`in-process` coordinator ставит блокер. Разрешение dispatch и native approval агента остаются в
+силе. Контейнер не подтверждает действия за человека, не включает auto-approve и не расширяет
+закреплённый план.
 
-Харнесс не собирает, не скачивает и не публикует образы. Вы готовите их заранее; `dispatch propose`
-закрепляет локальные image ID, запуск использует эти ID. После правки конфига или пересборки образа
-нужны новые propose и approval: только так изменения попадут в dispatch.
+Harness не собирает, не скачивает и не публикует образы, их готовите вы. `dispatch propose`
+закрепляет локальные image ID, и запуск использует именно их. Если вы правите конфиг или
+пересобираете образ, нужны новые propose и approval: иначе изменения в dispatch не попадут.
 
 ## Требования к хосту {#host}
 
-Нужны Linux, локальный движок, runtime store и работающий `harness-runtime serve`.
-CLI `docker`/`podman` должен быть в `PATH` **процесса runtime**, а его пользователь — иметь
-доступ к движку. Репозиторий и все ресурсы плана должны быть доступны по тем же абсолютным путям.
+Нужны Linux, локальный движок, runtime store и запущенный `harness-runtime serve`.
+CLI `docker` или `podman` должен быть в `PATH` **процесса runtime**, а у пользователя этого
+процесса должен быть доступ к движку. Репозиторий и все ресурсы плана должны быть доступны по тем
+же абсолютным путям.
 
 | Среда | Что проверено в репозитории |
 | --- | --- |
-| Rootful Docker на Linux | Живой CI smoke worker + QA. |
-| Rootless Podman, Fedora, SELinux enforcing, cgroup v2 | Живой smoke на self-hosted runner; пользователю делегированы cpu, memory и pids. |
+| Rootful Docker на Linux | Живой smoke в CI: worker и QA. |
+| Rootless Podman, Fedora, SELinux enforcing, cgroup v2 | Живой smoke на self-hosted runner. Пользователю делегированы cpu, memory и pids. |
 | Rootful Podman; rootless Docker; Docker с SELinux enforcing | Только argv-матрица и scripted engine. Живой smoke для этих сочетаний не подтверждён. |
 | Remote Podman; Docker `userns-remap`; CLI-обёртка с несовпадающим `info` | Не поддержаны: preflight блокирует запуск. |
 | Не Linux или файловый ledger | Контейнерный исполнитель блокируется. |
 
-При переходе с файлового ledger сначала остановите его активную работу и согласуйте миграцию
-с человеком. Текущий Rust CLI требует заполненные `--approved-by`, `--approved-at` и `--reason`;
-одного `migrate --repo .` недостаточно. В Bash в корне целевого проекта:
+Если проект ещё на файловом ledger, сначала остановите активную работу с ним и согласуйте
+миграцию с человеком. Rust CLI требует заполнить `--approved-by`, `--approved-at` и `--reason`,
+одного `migrate --repo .` мало. В Bash в корне целевого проекта выполните:
 
 ```bash {.ah-code-wrap}
 read -r -p 'Approved by (human): ' MIGRATION_APPROVER
@@ -43,28 +45,29 @@ harness-runtime migrate --repo . \
   --approved-at "$MIGRATION_APPROVED_AT" --reason "$MIGRATION_REASON"
 ```
 
-Укажите реальное одобрение: время не в будущем, approver не `policy:`. Не запускайте миграцию,
-пока работают владельцы ledger; следуйте remedy, который она печатает. Если runtime store уже используется,
-повторная миграция для настройки контейнера не нужна.
+Укажите настоящее одобрение: время не в будущем, approver не начинается с `policy:`. Не
+запускайте миграцию, пока работают владельцы ledger, и выполняйте remedy, который она печатает.
+Если проект уже работает с runtime store, для настройки контейнера повторная миграция не нужна.
 
 ```bash {.ah-code-wrap}
 harness-runtime serve --repo .
 ```
 
-`serve` остаётся запущенным. У него и coordinator должны совпадать пользователь, репозиторий и
-IPC-каталог: на Unix абсолютный `XDG_RUNTIME_DIR` задаёт `$XDG_RUNTIME_DIR/harness`, иначе —
-`/tmp/harness-<uid>`. Сервис получает собственные `PATH` и окружение; изменение переменной в другом
-терминале их не меняет. Не запускайте второй runtime для того же репозитория.
+`serve` должен работать всё время. У него и coordinator должны совпадать пользователь,
+репозиторий и IPC-каталог. На Unix абсолютный `XDG_RUNTIME_DIR` задаёт каталог
+`$XDG_RUNTIME_DIR/harness`, без него runtime берёт `/tmp/harness-<uid>`. У сервиса свои `PATH` и
+окружение, и переменная, изменённая в другом терминале, на них не влияет. Не запускайте второй
+runtime для того же репозитория.
 
 ## Сборка образов {#images}
 
-Команды ниже собирают образы на выбранном движке. В целевом проекте с установленным
-`backend-orchestration` исходники лежат в `.harness/container/`. В репозитории самого харнесса
-они находятся в `harness/container/`: замените оба вхождения пути в каждой команде.
+Команды ниже собирают образы на выбранном движке. В целевом проекте с установленной
+`backend-orchestration` исходники образов лежат в `.harness/container/`. В репозитории самого
+harness они лежат в `harness/container/`: замените в каждой команде оба вхождения пути.
 
 ### База и proxy
 
-Выберите **один** движок. Образы Docker и Podman находятся в разных хранилищах.
+Выберите **один** движок: Docker и Podman хранят образы раздельно.
 
 ```bash {.ah-code-wrap}
 docker build -f .harness/container/Dockerfile.sandbox \
@@ -80,16 +83,16 @@ podman build -f .harness/container/Dockerfile.proxy \
   -t harness-proxy:local .harness/container
 ```
 
-База содержит `git`, `curl`, `jq`, CA certificates, Python с `uv`, Node.js и npm.
-В текущем Dockerfile закреплены Debian `trixie-20261020-slim` и `uv:0.12.21`.
+В базовом образе есть `git`, `curl`, `jq`, CA certificates, Python с `uv`, Node.js и npm.
+Текущий Dockerfile закрепляет Debian `trixie-20261020-slim` и `uv:0.12.21`.
 Rust, gcc и CLI агента база не устанавливает.
 
 ### Проектный Dockerfile.worker
 
-Следующий шаблон добавляет Rust из выбранного официального Rust-образа, gcc/libc6-dev и
-Claude Code. `jq` и `uv` наследуются из базы. Сохраните его как `Dockerfile.worker` в проекте.
-Все версии выберите явно: Rust-образ с тегом/digest, совместимые версии Debian-пакетов и CLI.
-Для сборки runtime этого репозитория нужен Rust ≥ 1.89; другой проект задаёт свои требования.
+Шаблон ниже добавляет Rust из выбранного официального Rust-образа, gcc, libc6-dev и Claude Code.
+`jq` и `uv` приходят из базы. Сохраните шаблон в проекте как `Dockerfile.worker`. Все версии
+выберите явно: Rust-образ с тегом или digest, совместимые версии Debian-пакетов и CLI. Для сборки
+runtime этого репозитория нужен Rust 1.89 или новее, у другого проекта свои требования.
 
 ```dockerfile {.ah-code-wrap}
 ARG RUST_IMAGE
@@ -114,10 +117,10 @@ ENV PATH="/usr/local/cargo/bin:${PATH}" \
     CARGO_HOME=/harness-home/.cargo
 ```
 
-Для образа Rust нужна структура официального образа (`/usr/local/cargo`, `/usr/local/rustup`)
-и совместимая с базой Linux/ABI. `CARGO_HOME` указывает на временный HOME worker, а установленный
-toolchain остаётся вне него. Проверьте образ под uid хоста: этот шаблон нужно собрать и проверить
-вживую в вашей среде; это не готовый поставляемый образ.
+Rust-образ должен иметь структуру официального образа (`/usr/local/cargo`, `/usr/local/rustup`)
+и совместимые с базой Linux и ABI. `CARGO_HOME` указывает на временный HOME worker, а установленный
+toolchain лежит вне его. Harness не поставляет готовый worker-образ: соберите шаблон и проверьте
+образ вживую в своей среде под uid хоста.
 
 ```bash {.ah-code-wrap}
 read -r -p 'Official Rust image, pinned tag/digest: ' WORKER_RUST_IMAGE
@@ -131,28 +134,29 @@ docker build -f Dockerfile.worker -t harness-worker:local \
   --build-arg CLAUDE_CODE_VERSION="$WORKER_CLAUDE_VERSION" .
 ```
 
-Для Podman замените `docker build` на `podman build`, используя те же аргументы и его базовый
-образ. Не передавайте токены через build-args. Выбранные версии должны существовать в реестрах;
-значения здесь намеренно не подставлены за проект.
+Для Podman замените `docker build` на `podman build` с теми же аргументами и базовым образом,
+собранным в Podman. Не передавайте токены через build-args. Выбранные версии должны существовать
+в реестрах. Значения здесь не подставлены намеренно: их выбирает проект.
 
 ### Контракт worker-образа
 
-- Нужны `/bin/sh`, интерпретатор shebang адаптера и все инструменты агента/QA. QA запускается
-  как `/bin/sh -c '<команда>'`.
-- Образ должен работать под произвольным uid: rootful использует uid:gid хоста; запись в
-  `/etc/passwd` может отсутствовать. Режим пользователя выбирает runtime по движку.
-- `HOME` — tmpfs `/harness-home`; файлы авторизации и инструменты в прежнем HOME образа
-  worker не увидит. Устанавливайте инструменты вне домашнего каталога.
-- Runtime задаёт entrypoint, пользователя и рабочий каталог. Не полагайтесь на свои
-  `ENTRYPOINT`, `CMD` или `USER`; не объявляйте `VOLUME`: анонимные тома останутся после удаления.
-- В образе не должно быть секретов. Runtime использует `--pull never`, `--cap-drop ALL` и
-  `no-new-privileges`; сокет движка не монтируется.
+- Нужны `/bin/sh`, интерпретатор из shebang адаптера и все инструменты агента и QA. QA
+  запускается как `/bin/sh -c '<команда>'`.
+- Образ должен работать под произвольным uid. Rootful-движок запускает контейнер с uid:gid хоста,
+  и записи в `/etc/passwd` для него может не быть. Режим пользователя runtime выбирает по движку.
+- `HOME` лежит в tmpfs `/harness-home`. Файлы авторизации и инструменты из прежнего HOME образа
+  worker не увидит, поэтому ставьте инструменты вне домашнего каталога.
+- Runtime сам задаёт entrypoint, пользователя и рабочий каталог. Не полагайтесь на свои
+  `ENTRYPOINT`, `CMD` или `USER`. Не объявляйте `VOLUME`: анонимные тома останутся после удаления
+  контейнера.
+- В образе не должно быть секретов. Runtime запускает контейнер с `--pull never`, `--cap-drop ALL`
+  и `no-new-privileges`, сокет движка не монтирует.
 
 ## Поля конфигурации {#configuration}
 
-Это фрагмент `.harness/orchestration.json` из руководства исполнителя. Подставьте выбранный
-движок, нужные хосты и свой cache path. QA здесь получает доступ к Python registry и не получает
-ключ модели. Настройки моделей и provider profiles остаются в существующих назначениях.
+Ниже фрагмент `.harness/orchestration.json` из руководства исполнителя. Подставьте выбранный
+движок, нужные хосты и свой путь кэша. QA в этом примере получает доступ к Python registry, но не
+получает ключ модели. Модели и provider profiles настраиваются в существующих назначениях.
 
 ```json {.ah-code-wrap}
 {
@@ -220,107 +224,111 @@ docker build -f Dockerfile.worker -t harness-worker:local \
 
 | Поле | Что настроить |
 | --- | --- |
-| `extensions.runtime_access` | `docker` для обоих движков. При его выборе обязателен `access_policy.defaults.container`. |
-| `access_policy.defaults.container.engine` | `docker` (default) или `podman`; имя extension остаётся `docker`. |
+| `extensions.runtime_access` | `docker` для обоих движков. Если выбран `docker`, обязателен `access_policy.defaults.container`. |
+| `access_policy.defaults.container.engine` | `docker` (по умолчанию) или `podman`. Extension в обоих случаях называется `docker`. |
 | `access_policy.defaults.container.worker_image` | Обязательная ссылка на существующий локальный worker-образ. |
-| `access_policy.defaults.container.proxy_image` | Образ proxy обязателен исполнителю при непустом списке хостов; если задан, должен существовать локально. |
-| `access_policy.defaults.mode` | Для этого исполнителя `sandbox` или `inherit`; допустимый схемой `unsandboxed` исполнитель отклоняет. |
-| `access_policy.defaults.environment` | Уникальные имена переменных, никогда значения. Runtime должен иметь их в своём окружении. |
-| `access_policy.defaults.network.hosts` | Точные DNS-имена без схемы URL, порта и wildcard; `[]` отключает сеть. |
-| `access_policy.defaults.filesystem` | Ресурсы `checkout`, `git_common`, `shared_storage`, `cache`, с `read`/`write`. Поля элементов: `resource`, `access`, `path`, `variable`; `path` обязателен только для `cache` и запрещён для остальных ресурсов; необязательный `variable` допустим только у `cache`. |
-| `access_policy.operations.qa.container` | Явно включите контейнер QA. Одного `defaults.container` недостаточно: без override QA остаётся на хосте. |
-| `execution_policy.worker_execution_timeout_seconds` | Целое ≥ 1, default `14400`: срок worker. |
-| `execution_policy.qa_command_timeout_seconds` | Целое ≥ 1, default `3600`: срок одной команды контейнерного QA. |
-| `execution_policy.stop_grace_seconds` | Целое ≥ 1, default `30`: пауза перед принудительным завершением. |
-| `assignment_plans.<ключ>.transport` | `external` для каждой отправляемой роли; default схемы — `in-process`, который здесь блокируется. Меняйте transport внутри существующего плана роли, сохраняя её runtimes/model. |
+| `access_policy.defaults.container.proxy_image` | Образ proxy. Исполнителю он нужен, если список хостов не пуст. Заданный образ должен существовать локально. |
+| `access_policy.defaults.mode` | Для этого исполнителя `sandbox` или `inherit`. Схема допускает и `unsandboxed`, но исполнитель его отклоняет. |
+| `access_policy.defaults.environment` | Уникальные имена переменных, без значений. Эти переменные должны быть в окружении runtime. |
+| `access_policy.defaults.network.hosts` | Точные DNS-имена без схемы URL, порта и wildcard. `[]` отключает сеть. |
+| `access_policy.defaults.filesystem` | Ресурсы `checkout`, `git_common`, `shared_storage`, `cache` с доступом `read` или `write`. Поля элементов: `resource`, `access`, `path`, `variable`. `path` обязателен для `cache` и запрещён для остальных ресурсов. Необязательный `variable` допустим только у `cache`. |
+| `access_policy.operations.qa.container` | Включает контейнер для QA. Одного `defaults.container` мало: без этого override QA работает на хосте. |
+| `execution_policy.worker_execution_timeout_seconds` | Целое число от 1, по умолчанию `14400`: сколько секунд может работать worker. |
+| `execution_policy.qa_command_timeout_seconds` | Целое число от 1, по умолчанию `3600`: сколько секунд может идти одна команда контейнерного QA. |
+| `execution_policy.stop_grace_seconds` | Целое число от 1, по умолчанию `30`: пауза в секундах перед принудительным завершением. |
+| `assignment_plans.<ключ>.transport` | `external` для каждой роли, которую отправляют в контейнер. По умолчанию схема ставит `in-process`, а он здесь блокируется. Меняйте transport в существующем плане роли и сохраняйте её runtimes и model. |
 
 Override роли или операции заменяет **весь названный компонент**, например `container`,
-`environment` или `network`. Операция QA берёт defaults и свой override, не настройки роли QA.
-При смене Docker на Podman измените engine и в defaults, и во всех явных container overrides.
-Не расширяйте права read-only ролей; полный справочник — [здесь](orchestration/access.md).
+`environment` или `network`. Операция QA берёт defaults и свой override, а настройки роли QA не
+берёт. Если меняете Docker на Podman, измените engine и в defaults, и во всех явных container
+overrides. Не расширяйте права read-only ролей. Полный справочник на странице
+[«Доступ и контейнер»](orchestration/access.md).
 
-Кэши сохраняются только как ресурсы `cache` плана, монтируемые по тому же абсолютному пути.
-Относительный путь считается от worktree dispatch, `~` раскрывается на хосте. Укажите инструменту
-этот путь через его настройки/переменную по имени или через поле `variable` элемента `cache`:
-исполнитель сам передаёт контейнеру `--env <variable>=<путь кэша>`, и окружение
-`harness-runtime serve` настраивать не нужно. Имя не совпадает с именами из `environment` и с
-именами, которые задаёт runtime (`HOME`, `TMPDIR`, `CARGO_TARGET_DIR`, имена прокси и другие).
-Для кэша cargo в QA укажите в `operations.qa.filesystem` абсолютный путь
-`.harness/.sandboxes/cache/cargo` основного checkout с `"variable": "CARGO_HOME"` и заранее
-создайте каталог (`mkdir -p`). Каждый QA-прогон сам задаёт `CARGO_TARGET_DIR` внутри своего run
-root: cargo-этапы одного прогона переиспользуют собранные зависимости, а каталог удаляется вместе с
-прогоном. Пример и процедура измерения — в разделе «Caches» `harness/docs/container-executor.md`.
+Кэш между запусками сохраняется только в ресурсах `cache` плана, которые монтируются по тому же
+абсолютному пути. Относительный путь считается от worktree dispatch, `~` раскрывается на хосте.
+Сообщите инструменту этот путь через его настройки или переменную. Можно задать имя переменной в
+поле `variable` элемента `cache`: тогда исполнитель сам передаст контейнеру
+`--env <variable>=<путь кэша>`, и окружение `harness-runtime serve` настраивать не нужно. Это имя
+не должно совпадать с именами из `environment` и с именами, которые задаёт runtime (`HOME`,
+`TMPDIR`, `CARGO_TARGET_DIR`, имена прокси и другие). Для кэша cargo в QA укажите в
+`operations.qa.filesystem` абсолютный путь `.harness/.sandboxes/cache/cargo` основного checkout с
+`"variable": "CARGO_HOME"` и заранее создайте каталог (`mkdir -p`). Каждый QA-прогон сам задаёт
+`CARGO_TARGET_DIR` внутри своего run root. Поэтому cargo-этапы одного прогона используют уже
+собранные зависимости, а каталог удаляется вместе с прогоном. Пример и способ замера описаны в
+разделе «Caches» файла `harness/docs/container-executor.md`.
 Контейнер не сохраняет свой HOME между запусками.
-Хостовый `~/.gitconfig` не монтируется; Git identity задаётся в конфиге репозитория или через
-разрешённые имена переменных. Worker получает artifacts на запись и shared storage на чтение;
-runtime socket ему недоступен.
+Хостовый `~/.gitconfig` не монтируется. Git identity задаётся в конфиге репозитория или через
+разрешённые имена переменных. Worker получает artifacts на запись и shared storage на чтение,
+к runtime socket у него доступа нет.
 
 ### Адаптер агента {#agent-adapter}
 
 Используйте поставляемый адаптер Claude Code `.harness/adapters/claude_worker.py`. Coordinator
-запускает `.py`-адаптер контейнерного плана через `python3` образа, а адаптер лежит в `.harness/`,
-который контейнер видит по тому же пути. Под `HARNESS_EXECUTOR=docker` адаптер:
+запускает `.py`-адаптер контейнерного плана через `python3` из образа. Адаптер лежит в `.harness/`,
+а этот каталог контейнер видит по тому же пути. При `HARNESS_EXECUTOR=docker` адаптер:
 
 - запускает `claude -p <промпт>` на переднем плане с `--output-format stream-json --verbose`,
-  поэтому хост читает событие `init` и шаги worker;
-- передаёт `allowed_tools` brief с `--permission-mode dontAsk` и каталог входящих отчётов через
-  `--add-dir`; read-only роль получает `Edit(//<report_staging_path>)` и может записать только
-  свой отчёт;
-- просит записать отчёт в `report_staging_path` и остановиться; `dispatch self-report`,
+  чтобы хост читал событие `init` и шаги worker;
+- передаёт `allowed_tools` из brief с `--permission-mode dontAsk`, а каталог входящих отчётов
+  через `--add-dir`. Read-only роль получает `Edit(//<report_staging_path>)` и может записать
+  только свой отчёт;
+- просит worker записать отчёт в `report_staging_path` и остановиться. `dispatch self-report`,
   `dispatch heartbeat` и `report submit` в контейнере не выполняются, их делает хост.
 
-В образе worker нужны `python3`, `git` и `claude` в `PATH`. В неинтерактивном режиме действие вне
-allowlist не получит подтверждения человека.
+В образе worker нужны `python3`, `git` и `claude` в `PATH`. В неинтерактивном режиме человек не
+сможет подтвердить действие вне allowlist, и оно не выполнится.
 
 ```bash {.ah-code-wrap}
 python .harness/orchestration/coordinator.py --repo . dispatch send \
   --dispatch '<approved-dispatch-id>' --adapter "$PWD/.harness/adapters/claude_worker.py"
 ```
 
-Эта команда запускает worker; для проверки конфигурации ниже используйте preflight, а не send.
-Собственный адаптер другого агента выполняет те же правила: печатает stream-json с событием
-`init`, ставит промпт перед variadic-флагами, пишет отчёт в `report_staging_path`, не вызывает
-команды coordinator и выходит с кодом агента.
+Эта команда запускает worker. Чтобы только проверить конфигурацию, используйте preflight (ниже),
+а не send. Собственный адаптер другого агента должен соблюдать те же правила: печатать stream-json
+с событием `init`, ставить промпт перед variadic-флагами, писать отчёт в `report_staging_path`, не
+вызывать команды coordinator и выходить с кодом агента.
 
-Runtime заменяет значения переменных из `environment` (от 8 байт) на `[redacted:<имя>]` в логах
-worker, потому что эти логи лежат в `.harness` и доступны на чтение другим контейнерным worker.
-Управляемые hooks (`.claude/settings.local.json`, `.claude/hooks/`) не отслеживаются Git и не
-попадают в issue worktree, поэтому в контейнере работают только hooks из отслеживаемых файлов.
+В логах worker runtime заменяет значения переменных из `environment` длиной от 8 байт на
+`[redacted:<имя>]`. Причина в том, что логи лежат в `.harness` и их могут читать другие
+контейнерные worker. Управляемые hooks (`.claude/settings.local.json`, `.claude/hooks/`) Git не
+отслеживает, и в issue worktree они не попадают. Поэтому в контейнере работают только hooks из
+отслеживаемых файлов.
 
 ## Сеть {#network}
 
-При `network.hosts: []` worker получает `--network none`. Иначе runtime создаёт internal-сеть
-и proxy sidecar; proxy — единственный выход наружу. Переменные `HTTP_PROXY`/`HTTPS_PROXY`
-и их строчные варианты задаёт исполнитель, `NO_PROXY` содержит localhost, 127.0.0.1 и ::1.
+При `network.hosts: []` worker получает `--network none`. Иначе runtime создаёт internal-сеть и
+proxy sidecar, и наружу можно выйти только через proxy. Переменные `HTTP_PROXY`, `HTTPS_PROXY` и
+их варианты в нижнем регистре задаёт исполнитель, `NO_PROXY` содержит localhost, 127.0.0.1 и ::1.
 
-- Разрешены HTTP и CONNECT, порты 80/443. SSH remote и другие протоколы через proxy не работают.
-- Хост должен совпасть точно: регистр и конечная точка нормализуются, wildcard и автоматического
-  допуска поддоменов нет. IP literal отклоняется даже при наличии в allowlist.
-- DNS-ответы проверяются: loopback, link-local, unspecified и multicast запрещены. Это точный
-  набор текущего фильтра; общего запрета всех private/RFC1918 адресов в нём нет.
-- Инструмент, который игнорирует proxy-переменные, прямого egress не получает.
+- Разрешены HTTP и CONNECT на портах 80 и 443. SSH remote и другие протоколы через proxy не
+  работают.
+- Хост должен совпасть точно. Регистр и точка в конце имени нормализуются, wildcard нет, поддомены
+  автоматически не разрешаются. IP literal proxy отклоняет, даже если он есть в allowlist.
+- Proxy проверяет DNS-ответы и запрещает адреса loopback, link-local, unspecified и multicast.
+  Это полный список текущего фильтра: все private-адреса (RFC 1918) он не запрещает.
+- Инструмент, который не читает proxy-переменные, напрямую в сеть не выйдет.
 
-Для worker перечислите API выбранной модели и git-хостинг, только если он нужен заданию.
-Для QA составьте отдельный список по registry проекта: Python часто требует `pypi.org` и
-`files.pythonhosted.org`; Rust — хосты используемого crates.io/mirror и скачивания crate.
-Точный список берите из manifest/настроек registry и отказов конкретного инструмента; два хоста
-из примера не обещают доступ ко всем зависимостям.
+Для worker перечислите API выбранной модели, а git-хостинг только если он нужен заданию.
+Для QA составьте отдельный список по registry проекта. Python часто требует `pypi.org` и
+`files.pythonhosted.org`, Rust требует хосты crates.io или зеркала и хост скачивания crate.
+Точный список берите из manifest, настроек registry и отказов конкретного инструмента. Двух хостов
+из примера может не хватить для всех зависимостей.
 
 | Симптом | Проверка и действие |
 | --- | --- |
-| `--network none` | Проверьте эффективный список хостов роли/операции; после одобренной смены плана нужен новый propose. |
-| Proxy возвращает `403` | Сверьте точный hostname, порт и DNS-адреса; не добавляйте wildcard или весь интернет ради обхода. |
-| Хост разрешён, но соединения нет | Проверьте proxy-переменные самого инструмента и доступность DNS/хоста. Проверки выполняйте в выбранном образе и плане. |
+| `--network none` | Проверьте итоговый список хостов роли или операции. Если смену плана одобрили, нужен новый propose. |
+| Proxy возвращает `403` | Сверьте точный hostname, порт и DNS-адреса. Не добавляйте wildcard и не открывайте весь интернет, чтобы обойти отказ. |
+| Хост разрешён, но соединения нет | Проверьте proxy-переменные самого инструмента и доступность DNS и хоста. Проверяйте в выбранном образе и плане. |
 
 ## Токен {#token}
 
-Для Claude Code можно использовать `ANTHROPIC_API_KEY` или токен подписки, полученный через
-`claude setup-token` и передаваемый как `CLAUDE_CODE_OAUTH_TOKEN`. Это разные варианты
+Claude Code принимает `ANTHROPIC_API_KEY` или токен подписки из `claude setup-token`, который
+передают как `CLAUDE_CODE_OAUTH_TOKEN`. Это разные способы
 [авторизации Claude Code](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token):
-выберите один подходящий вашему аккаунту и версии CLI. `setup-token` выполняйте сами в личном
-терминале: он выводит значение. В конфиге остаётся только имя выбранной переменной.
+выберите один, подходящий вашему аккаунту и версии CLI. `setup-token` выполняйте сами в личном
+терминале, потому что он печатает значение. В конфиг записывается только имя выбранной переменной.
 
-Пример для API-ключа в Bash, без значения в истории команды:
+Пример для API-ключа в Bash, значение не попадает в историю команд:
 
 ```bash {.ah-code-wrap}
 read -rs -p 'ANTHROPIC_API_KEY: ' ANTHROPIC_API_KEY
@@ -329,65 +337,67 @@ export ANTHROPIC_API_KEY
 harness-runtime serve --repo .
 ```
 
-Для OAuth используйте имя `CLAUDE_CODE_OAUTH_TOKEN` вместо `ANTHROPIC_API_KEY` и в ручном вводе,
-и в `environment`. Не передавайте оба варианта вслепую. Если runtime уже работает, штатно
-остановите его и перезапустите с новым окружением; у сервиса меняется окружение именно сервиса.
-Значения движок берёт у runtime, а не у позднее запущенного coordinator.
+Для OAuth используйте имя `CLAUDE_CODE_OAUTH_TOKEN` вместо `ANTHROPIC_API_KEY` и при вводе, и в
+`environment`. Не передавайте оба варианта на всякий случай. Если runtime уже работает,
+остановите его обычным способом и запустите с новым окружением. Если runtime работает как
+сервис, меняйте окружение сервиса. Движок берёт значения у runtime, а не у coordinator, который
+вы запускаете позже.
 
-Не включайте зарезервированные `HOME`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_0`,
-`GIT_CONFIG_VALUE_0`, `HARNESS_EXECUTOR` и, при сети, proxy-переменные в `environment`.
-Не монтируйте auth-файлы агента. Если значение попало в лог/отчёт/Git, отзовите его, выпустите
-новое и удалите доступные копии; удаление строки из текущего файла не очищает историю.
-Подробнее — [«Секреты и токены»](secrets.md).
+Не добавляйте в `environment` зарезервированные `HOME`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_0`,
+`GIT_CONFIG_VALUE_0`, `HARNESS_EXECUTOR`, а если сеть включена, ещё и proxy-переменные.
+Не монтируйте auth-файлы агента. Если значение попало в лог, отчёт или Git, отзовите его,
+выпустите новое и удалите копии, до которых можете дотянуться. Удаление строки из текущего файла
+историю не очищает. Подробнее на странице [«Секреты и токены»](secrets.md).
 
 ## Проверки и типичные ошибки {#checks}
 
 Сначала выполните [canonical validation и health](orchestration/index.md#config-validation).
-Для существующего batch проверьте доступ без запуска контейнера; подставьте реальный ID:
+Затем для существующего batch проверьте доступ, не запуская контейнер. Подставьте реальный ID:
 
 ```bash {.ah-code-wrap}
 python .harness/orchestration/coordinator.py --repo . dispatch preflight \
   --batch '<batch-id>' --role developer
 ```
 
-Preflight перечисляет блокеры с remedy и читает engine info/image IDs. При работе не из корня
-или с отдельным checkout проверьте параметры `--worktree` и `--candidate-commit` в `--help`.
-Успех preflight не заменяет живой smoke и не отправляет worker.
+Preflight перечисляет блокеры с remedy и читает info движка и image ID. Если вы работаете не из
+корня или с отдельным checkout, посмотрите параметры `--worktree` и `--candidate-commit` в `--help`.
+Успешный preflight не заменяет живой smoke и не отправляет worker.
 
 | Ошибка или блокер | Причина → действие |
 | --- | --- |
-| `runtime_unavailable` | Runtime не отвечает → проверьте запущенный serve, репозиторий, пользователя и IPC-каталог. Не создавайте второй процесс вслепую. |
-| `lease_held` | QA-lane/ledger ещё удерживает владелец → проверьте `ledger lock-status` и владельца; дождитесь освобождения. Не снимайте живой lease через force ради настройки. |
+| `runtime_unavailable` | Runtime не отвечает → проверьте, что serve запущен, и сверьте репозиторий, пользователя и IPC-каталог. Не запускайте второй процесс наугад. |
+| `lease_held` | QA lane или ledger ещё удерживает владелец → проверьте `ledger lock-status` и владельца, дождитесь освобождения. Не снимайте живой lease через force ради настройки. |
 | Переменная отсутствует | Имя есть в плане, значения нет у runtime → задайте его приватно и перезапустите runtime. Не печатайте значение для проверки. |
-| `approval_mismatch` | Изменился закреплённый образ/approval → восстановите image ID либо отмените dispatch и повторите propose с новым approval. |
-| Образ/движок недоступен | Проверьте реальный CLI, его PATH/права и локальные образы у пользователя runtime. |
-| Нет `external`, задан `unsandboxed` или нет proxy при непустой сети | Исправьте выбранный план по remedy; успешная JSON validation не доказывает готовность исполнителя. |
-| Корень открывает socket/runtime или пересекается с `/harness-home` | Выберите отдельный разрешённый ресурс; engine socket и runtime-каталоги worker не получает. |
+| `approval_mismatch` | Изменился закреплённый образ или approval → верните прежний image ID или отмените dispatch и повторите propose с новым approval. |
+| Образ или движок недоступен | Проверьте у пользователя runtime реальный CLI, его PATH и права, а также локальные образы. |
+| Нет `external`, задан `unsandboxed` или сеть не пуста, а proxy нет | Исправьте выбранный план по remedy. Успешная проверка JSON не значит, что исполнитель готов. |
+| Корень ресурса открывает socket или каталог runtime либо пересекается с `/harness-home` | Выберите отдельный разрешённый ресурс. Сокет движка и каталоги runtime worker не получает. |
 
-`dispatch status`/`dispatch wait` показывают то, что видит runtime. После выхода worker runtime
-сохраняет потоки и exit code, удаляет worker, proxy и сеть; reconcile повторяет неполную очистку.
-Посмотреть оставшиеся объекты и план очистки:
+`dispatch status` и `dispatch wait` показывают то, что видит runtime. Когда worker завершается,
+runtime сохраняет потоки вывода и exit code, удаляет worker, proxy и сеть. Если очистка не
+закончилась, reconcile повторяет её. Оставшиеся объекты и план очистки показывает команда:
 
 ```bash {.ah-code-wrap}
 harness cleanup .
 ```
 
-Только после того, как просмотрите список на удаление, выполните `harness cleanup . --apply`.
+Выполняйте `harness cleanup . --apply` только после того, как просмотрели список на удаление.
 Cleanup пропускает живые исполнения, не останавливает работающий worker и не удаляет volumes.
-Конкретный worker останавливает `docker stop harness-<dispatch_id>` или эквивалент Podman.
+Конкретный worker останавливает `docker stop harness-<dispatch_id>` или та же команда Podman.
 
-Живые smoke **репозитория харнесса**, не произвольного целевого проекта, расположены в
-`tests/orchestration/test_docker_smoke.py` и `test_podman_smoke.py`. CI собирает runtime и smoke-образы
-и запускает выбранный маркер с `HARNESS_REQUIRE_RUNTIME=1` и соответствующим
-`HARNESS_REQUIRE_DOCKER_SMOKE=1`/`HARNESS_REQUIRE_PODMAN_SMOKE=1`, чтобы skip не выдавался за успех.
-Они запускают реальные контейнеры и используют сеть; обычный `make verify` их не включает.
-Повторяйте процедуру из CI только на подготовленном хосте, а не как скрытую часть настройки.
+Живые smoke относятся к **репозиторию harness**, а не к целевому проекту. Они лежат в
+`tests/orchestration/test_docker_smoke.py` и `test_podman_smoke.py`. CI собирает runtime и
+smoke-образы и запускает выбранный маркер с `HARNESS_REQUIRE_RUNTIME=1` и нужным
+`HARNESS_REQUIRE_DOCKER_SMOKE=1` или `HARNESS_REQUIRE_PODMAN_SMOKE=1`, чтобы пропущенный тест не
+сошёл за успешный. Smoke запускают реальные контейнеры и ходят в сеть, обычный `make verify` их не
+включает. Повторяйте процедуру из CI только на подготовленном хосте и только как отдельный шаг,
+а не незаметно в ходе настройки.
 
-После `make bootstrap`, сборки runtime и smoke-образов с тегами `harness-worker:smoke` и
-`harness-proxy:smoke` из [Docker CI](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/verify.yml)
-или [Podman CI](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/podman-smoke.yml)
-выберите соответствующий прогон из корня исходников харнесса. Образы `:local` из настройки проекта
-не заменяют теги `:smoke` автоматически.
+Выполните `make bootstrap`, соберите runtime и smoke-образы с тегами `harness-worker:smoke` и
+`harness-proxy:smoke` по [Docker CI](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/verify.yml)
+или [Podman CI](https://github.com/PVMalove/agent-harness-next/blob/master/.github/workflows/podman-smoke.yml).
+Затем запустите нужный прогон из корня исходников harness. Образы `:local` из настройки проекта
+теги `:smoke` автоматически не заменяют.
 
 ```bash {.ah-code-wrap}
 HARNESS_RUNTIME_BIN="$PWD/native/harness-runtime/target/debug/harness-runtime" \
@@ -405,14 +415,14 @@ HARNESS_REQUIRE_RUNTIME=1 HARNESS_REQUIRE_PODMAN_SMOKE=1 \
 
 ## Особенности среды {#host-boundaries}
 
-Если агент работает в distrobox/devcontainer, а движок — на хосте, сначала выясните, где запущен
-**runtime**. Именно он вызывает CLI движка, читает имена переменных и передаёт абсолютные пути
-mount. Если `docker` есть в среде агента, это ещё не значит, что runtime видит движок.
+Если агент работает в distrobox или devcontainer, а движок на хосте, сначала выясните, где
+запущен **runtime**. Именно он вызывает CLI движка, читает переменные по именам и передаёт
+абсолютные пути mount. Если `docker` есть в среде агента, runtime всё равно может не видеть движок.
 
-Проверьте пользователя и `PATH` runtime, его IPC-каталог, доступ к локальному движку, одинаковые
-пути worktree/cache и видимость этих путей движку. Не передавайте engine socket worker ради
-исправления путей. Если сопоставление среды не подтверждено, остановитесь на blocker; такая
-комбинация не становится проверенной средой из таблицы только потому, что preflight читает JSON.
+Проверьте пользователя и `PATH` runtime, его IPC-каталог, доступ к локальному движку, совпадение
+путей worktree и кэша и то, что движок видит эти пути. Не отдавайте worker сокет движка, чтобы
+исправить пути. Если соответствие сред не подтверждено, остановитесь на blocker. То, что preflight
+читает JSON, не делает такую комбинацию проверенной средой из таблицы выше.
 
 ## Настройка с агентом {#agent-setup}
 

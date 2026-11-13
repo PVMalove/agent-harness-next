@@ -181,7 +181,7 @@ described separately.
 | `ci_required_checks` | Optional array of unique non-empty CI check names. All must pass to accept CI evidence through `integration collect-ci`. An empty or missing list keeps local QA as the fallback. |
 | `test_paths` | Optional non-empty array of unique relative globs without `..` segments. The test-author write zone; activation also requires a runner and successful preflight. |
 | `test_runner` | Optional isolated single-test runner object. Requires `test_runner.command`; build and database are separate opt-ins. |
-| `test_author` | Optional executor object for the short `/fast-implement` route: runtime, model, and effort are explicit. The full route uses the approved developer brief's selection. |
+| `test_author` | Optional object: the test-author executor for the short `/fast-implement` route: runtime, model, and effort are explicit. The full route uses the approved developer brief's selection. |
 | `hook_policy` | Optional object with required profile and optional escalations. If the entire object is absent, the profile resolves to `standard`. |
 | `story_points` | Optional scoring scale and routing thresholds object. All four nested fields are required when present. Without it, story-point routing is not configured. |
 | `memory` | Optional object containing only the required `memory.enabled` field. Without the object, memory is off. |
@@ -192,8 +192,8 @@ described separately.
 native Windows: `bash` on `PATH` can be the WSL launcher. The test runner command below remains
 an argv without a shell, regardless of `shell`.
 
-If `project.json` is entirely absent, branch hooks use their built-in pattern
-`^feature/issue-[0-9]+-.+`. An empty `branch_pattern` in an existing file does not enable this fallback.
+If `project.json` is absent, or `branch_pattern` in it is missing or empty, branch hooks use their
+built-in pattern `^feature/issue-[0-9]+-.+`.
 
 ## Tracker: tracker
 

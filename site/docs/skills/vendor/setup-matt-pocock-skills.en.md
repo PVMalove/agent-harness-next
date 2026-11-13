@@ -8,7 +8,7 @@
 
 ## 2. Russian description
 
-Prepares the issue tracker, the triage label vocabulary, and the location of the domain documents for the engineering skills.
+Configures the repository once for the engineering skills: the issue tracker, the triage label vocabulary, and the location of the domain documents.
 
 ## 3. Application
 

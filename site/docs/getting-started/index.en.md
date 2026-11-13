@@ -1,7 +1,7 @@
 # Quick start
 
 Agent Harness Next installs skills, hooks, and context documents into a project as a verifiable
-snapshot. After installation the project runs on its own. Skills and hooks work through the native
+snapshot. After installation the project does not depend on the harness repository. Skills and hooks work through the native
 mechanisms of Claude Code and Codex, and orchestration uses the Rust runtime and the local runtime store.
 
 !!! note "Early access"
@@ -154,8 +154,9 @@ python3 harness/bin/harness.py init /path/to/repository \
   --qa-gate-command "make test"
 ```
 
-If the project already has its own skills with the same names, use `adopt`. It keeps everything that
-is not part of the selected capability and fails with a list of conflicts. `--replace-conflicts`
+If the project already has its own skills, use `adopt`. It keeps everything that is not part of the
+selected capability. If a skill name from the capability is already taken, `adopt` fails and prints
+the list of conflicts. `--replace-conflicts`
 replaces the conflicting directories without a backup, so check the list first.
 
 ```bash {.ah-code-wrap}
@@ -163,13 +164,13 @@ python3 harness/bin/harness.py adopt /path/to/repository \
   --capability engineering-suite --replace-conflicts
 ```
 
-A capability sets the snapshot contents. The builds are mutually exclusive.
+A capability sets the snapshot contents. Choose one build.
 
 | Capability | What it adds |
 | --- | --- |
 | `project-foundation` | The default domain-neutral base: design, research, handoff, and the project language. |
 | `mattpocock-suite` | The full upstream set, pinned to a verified commit. |
-| `engineering-suite` | The engineering workflow: epics and tickets, triage, two-axis review, `qa-gate`, and PR preparation. |
+| `engineering-suite` | On top of `mattpocock-suite`: the engineering workflow, epics and tickets, triage, two-axis review, `qa-gate`, and PR preparation. |
 | `backend-orchestration` | On top of `engineering-suite`: a coordinator, roles, briefs, worktrees, a ledger, and a QA lane. |
 
 ??? quote ah-skill-text "Agent prompt: connect the harness"
@@ -213,8 +214,8 @@ python3 harness/bin/harness.py health /path/to/repository --json
 | Flag | What it does |
 | --- | --- |
 | no flags | Local checks of files, directories, the environment, and the Repo Map. |
-| `--fix` | Creates the missing `.harness/` directories and regenerates a stale skill registry. It does not touch worktrees. |
-| `--online` | Adds tracker checks: `gh`/`glab` authorization, origin reachability, permissions, and labels. |
+| `--fix` | Creates the missing `.harness/` directories and regenerates a stale skill registry. It does not touch system settings or worktrees. |
+| `--online` | Adds tracker checks: `gh`/`glab` authorization, origin reachability, permissions, and labels. Without the flag, only the local `tracker.project` check runs; the other `tracker.*` checks are skipped. |
 | `--json` | Prints a machine-readable report with `schema_version: 1`. |
 
 Each line is marked `✅` ok, `⚠️` warn, `❌` fail, or `-` skipped. On `fail` the command prints the
@@ -258,11 +259,11 @@ python3 harness/bin/harness.py update /path/to/repository
 | Command | Purpose |
 | --- | --- |
 | `list <repo>` | Lists the installed skills. |
-| `diff <repo>` | Shows the differences from the locked snapshot; `--json` gives a machine-readable report. |
-| `update <repo>` | Pulls the new capability version and keeps the local edits. |
-| `console <repo>` | The TUI panel and the web console: tasks, orchestration, reports, and recovery. |
+| `diff <repo>` | Shows the differences from the snapshot pinned in the lock file; `--json` gives a machine-readable report. |
+| `update <repo>` | Updates the managed files to the current harness version. If you edited the standard skills, it aborts and does not touch the files; `--force-managed-files` replaces your edits. |
+| `console <repo>` | Opens the TUI panel or the web console: tasks, orchestration, reports, and recovery. |
 | `cleanup <repo>` | A cleanup plan for `.harness/.sandboxes`; `--apply` deletes, and `--mode hard` requires `--apply --confirm HARD`. |
-| `uninstall <repo>` | A plan and the full removal of the harness; `--apply --confirm UNINSTALL` saves the changed files in `.harness-uninstall-backup/`. |
+| `uninstall <repo>` | Prints the harness removal plan; `--apply --confirm UNINSTALL` removes the whole harness and saves the changed files in `.harness-uninstall-backup/`. |
 
 `console` is beta. It needs `uv`, and on the first run it downloads dependencies, so it needs network
 access. `console --web` starts the Console Server, prints a URL with a token, and opens the browser.

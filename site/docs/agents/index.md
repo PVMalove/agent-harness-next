@@ -1,17 +1,20 @@
 # Карта агентов и руководств
 
-Операционные руководства Harness Next и русские описания проектных агентов. Руководства,
-кроме `releases.md`, совпадают с шаблонами `harness/project/docs-agents/`, и `harness init`
-разворачивает эти шаблоны в `docs/agents/` целевого проекта — это документы для работы агентов.
-Сам этот обзор и описания агентов в целевой проект не попадают. Публичные руководства по
-workflow и CLI ([руководства](../guides/workflow.md),
-[справочник CLI](../reference/cli.md)) и руководство по backend-оркестрации
-([`backend-orchestration.md`](../backend-orchestration.md)) предназначены для разработчика.
+Здесь собраны операционные руководства Harness Next и русские описания проектных агентов.
+Руководства artifacts, git-workflow, issue-tracker, test-author, triage-labels и worktrees
+соответствуют шаблонам `harness/project/docs-agents/`. `harness init` разворачивает эти шаблоны в
+`docs/agents/` целевого проекта: по этим документам работают агенты. `releases.md` и
+`console-web-home-checklist.md` относятся только к этому репозиторию. Сам этот обзор и описания
+агентов в целевой проект не попадают. Публичные руководства по workflow и CLI
+([руководства](../guides/workflow.md), [справочник CLI](../reference/cli.md)) и руководство по
+backend-оркестрации ([`backend-orchestration.md`](../backend-orchestration.md)) написаны для
+разработчика.
 
 ## Субагенты
 
-Проектные субагенты из `harness/project/agents/`. Каждое описание содержит название и
-локализацию, полный перевод манифеста, контракты и схему.
+Проектные субагенты из `harness/project/agents/`. Описания code-review-standards,
+code-review-spec и pr-composer содержат название и локализацию, полный перевод манифеста и
+контракты. Test-author описан руководством: конфигурация, защита и контракт вызова.
 
 | Агент | Назначение |
 | --- | --- |
