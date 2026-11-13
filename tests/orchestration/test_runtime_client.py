@@ -678,6 +678,41 @@ def test_dispatch_status_observes_every_supervised_dispatch_over_one_connection(
     assert len(runtime.operations("execution.observe")) == 3
 
 
+def test_the_reads_of_one_snapshot_share_one_connection_until_it_closes(
+    dirs: Directories,
+    runtimes: list[ScriptedRuntime],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def answer(request: JsonObject) -> JsonObject:
+        if request["operation"] == "state.read":
+            return _ok(request["operation_id"], {"records": {}, "snapshot": "snapshot-1"})
+        return _ok(request["operation_id"], HELLO_RESULT)
+
+    runtime = ScriptedRuntime(dirs, answer=answer)
+    runtimes.append(runtime)
+    for name, value in dirs.environ.items():
+        monkeypatch.setenv(name, value)
+    fetch = ledger_ops._runtime_fetch(dirs.repo)
+
+    for collection in ("dispatch-status", "dispatches", "batches"):
+        fetch([collection], [], None)
+    fetch.close()
+    fetch(["batches"], [], None)
+    fetch.close()
+
+    reads = runtime.operations("state.read")
+    assert [read["payload"].get("snapshot") for read in reads] == [
+        "open",
+        "snapshot-1",
+        "snapshot-1",
+        "snapshot-1",
+        "open",
+        "snapshot-1",
+    ]
+    assert runtime.connections == 2
+    assert len(runtime.operations("hello")) == 2
+
+
 def test_the_delay_doubles_up_to_five_seconds(dirs: Directories) -> None:
     timing = FakeTime()
     client = RuntimeClient(

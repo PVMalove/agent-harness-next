@@ -143,9 +143,18 @@ class _LazyClient:
     reaches the runtime (a refusal of its arguments, a ``ledger`` command of the file epoch) does
     not need the address of the runtime to be resolvable."""
 
-    def __init__(self, repo: Path) -> None:
+    def __init__(self, repo: Path, *, keep: bool = False) -> None:
+        """``keep`` holds one connection, and its ``hello``, from the first request until
+        ``release``: the reads of one snapshot need no new connection each."""
         self._repo = repo
+        self._keep = keep
         self._client: RuntimeClient | None = None
+
+    def release(self) -> None:
+        """Close the kept connection; the next request opens a new one."""
+        client, self._client = self._client, None
+        if client is not None and self._keep:
+            client.__exit__(None, None, None)
 
     def call(
         self,
@@ -162,6 +171,8 @@ class _LazyClient:
             from harness.orchestration.runtime_client import RuntimeClient
 
             self._client = RuntimeClient(self._repo)
+            if self._keep:
+                self._client.__enter__()
         return self._client.call(
             operation,
             operation_id=operation_id,
@@ -275,10 +286,11 @@ class _SnapshotRead:
     reads of one view see the store as it was at its first read, while other commands commit
     (ADR 0020, section 3). ``close`` ends it; the view closes it at a refresh, after its unit
     commits and when it is unbound. A busy store and a snapshot the runtime no longer holds read
-    as a busy ledger; the command repeats on a new snapshot."""
+    as a busy ledger; the command repeats on a new snapshot. The reads of a snapshot share one
+    runtime connection, which ``close`` closes with the snapshot."""
 
     def __init__(self, repo: Path) -> None:
-        self._client = _LazyClient(repo)
+        self._client = _LazyClient(repo, keep=True)
         self._snapshot: str | None = None
         self._generation: int | None = None
 
@@ -341,6 +353,7 @@ class _SnapshotRead:
     def close(self) -> None:
         snapshot, self._snapshot, self._generation = self._snapshot, None, None
         if snapshot is None:
+            self._client.release()
             return
         from harness.orchestration.runtime_client import RuntimeClientError
 
@@ -354,6 +367,8 @@ class _SnapshotRead:
         except RuntimeClientError:
             # An expired snapshot is closed already, and the runtime ends an idle one itself.
             pass
+        finally:
+            self._client.release()
 
 
 def _runtime_fetch(repo: Path) -> state_view.SnapshotFetch:
