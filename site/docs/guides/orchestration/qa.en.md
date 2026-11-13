@@ -136,7 +136,9 @@ policy and raise `needs_attention`. A human clears the attention. This does not 
 and does not allow a changed contract. New requirements go through the ordinary proposal and approval.
 Do not edit the ledger and do not rewrite the candidate for the sake of infrastructure recovery.
 
-**Native smoke.** The support check requires a real coding environment. Create a separate smoke project,
+### Native smoke {#native-smoke}
+
+The support check requires a real coding environment. Create a separate smoke project,
 a local bare remote, and a new empty cache inside the allowed shared storage. Record the full
 harness and candidate SHA, the checkout cleanliness, and the exact preparation/gate commands. Through the public CLI,
 go through batch/dispatch approval, the native role handoff, preparation/clean-room QA, and publish of the
@@ -256,6 +258,8 @@ The following table records historical smoke evidence for the named versions. It
 CLI flags, the coordinator host execution, and the POSIX `chmod` fixture do not prove the whole permission matrix.
 Another runtime, transport, or authored mode needs its own native evidence for support.
 
+### QA report and moving to the PR {#qa-report-pr}
+
 After the run, an immutable completion report is created with the commands, exit codes, and short
 sanitized evidence. The full sanitized stdout/stderr is stored outside Git in
 `.harness/orchestration/state/qa-artifacts/<sha256>.log`. The report refers to this path and checksum.
@@ -271,8 +275,8 @@ marker are not needed for a clean checkout whose `HEAD` equals the accepted `can
 each command of `qa_gate_commands`. Otherwise the earlier path with a marker remains.
 
 The ordinary entry point is `/implement <ticket>`. This session becomes the coordinator itself and runs
-the described cycle. It stops at five approval gates (architect, developer, code-review, qa,
-publish) and watches the heartbeat of each dispatch. One ticket is brought to a terminal batch state
+the described cycle. It takes the ticket through five stages (architect, developer, code-review, qa,
+publish), requests approval under the current `approval_policy`, and watches the heartbeat of each dispatch. One ticket is brought to a terminal batch state
 before the next one starts. A manual run following this guide stays fully valid. For
 it, a ready request to the controlling session can be worded like this:
 

@@ -166,10 +166,10 @@ expected and received values, a hint, and a remedy. Secrets do not get into the 
 stays `interrupted`, and a repeat of the command completes the action. An internal exception gives the diagnostic
 `internal-error` with a correlation ID, not a configuration error.
 
-The Harness console (`harness console`, the Orchestration section) shows three catalog entries in the
-`batch` group: `recovery status` and `recovery reload` run without confirmation, and `recovery resume` is a
-terminal coordinator action and asks for confirmation. `recovery fix` and `recovery abort` are
-available only from the CLI.
+The Harness console (`harness console`, the Orchestration section) shows every recovery command in the
+`batch` group: `recovery status`, `recovery reload`, the `recovery fix` preview, and `recovery abort` run
+without confirmation. `recovery resume` records a terminal coordinator decision and `recovery fix --apply`
+overwrites the configuration, so both ask for confirmation.
 
 Recovery records follow the same authority as the lifecycle (ADR 0020, ADR 0021): Python
 decides, the Rust store writes.

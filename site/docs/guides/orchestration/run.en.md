@@ -6,7 +6,7 @@ The coordinator tracks a batch, a unit of work for a ticket. Each dispatch gives
 
 ## Choosing roles and planning a batch {#3-choosing-roles-and-planning-a-batch}
 
-The base set has four write roles and three read-only roles.
+The base set has four write roles and four read-only roles.
 
 | Role | Mode | When to assign |
 | --- | --- | --- |
@@ -17,6 +17,7 @@ The base set has four write roles and three read-only roles.
 | `architect` | read-only | A boundary decision that is hard to reverse. |
 | `qa` | read-only | Independent verification through a project-facing interface is needed. |
 | `code-review` | read-only | Mandatory for the listed high-risk triggers; produces separate Standards and Spec reports. |
+| `verification` | read-only | A developer report stopped for an operational reason (`verification-infrastructure`, `transport`, `context-pressure`), and the candidate already exists and did not change. The role re-runs the approved checks on the pinned candidate. |
 
 One task may pass through several roles. But the handoff inside one batch is always sequential, and
 a batch has only one active writer. Batches with overlapping files may run in parallel,
@@ -137,7 +138,7 @@ in "Decisions and retries"). Opening a PR and the merge remain manual.
    clean architect report with the default plan. Therefore an architect who proposes a different plan
    states this in `risks`, and the report waits for a manual decision.
 
-   `dispatch send --role code-review` is the only case that needs one more mandatory flag:
+   `dispatch send` for the code-review role is the only case that needs one more mandatory flag:
    `--checkout <path>`. It points to a worktree that is actually checked out at the `candidate_commit` of the
    dispatch (see [Clean-room QA lane](qa.md#clean-room-qa-lane): review needs the same isolation). All other roles
    do not pass `--checkout`. Without it, the coordinator rejects `dispatch send` and shows the exact text of the

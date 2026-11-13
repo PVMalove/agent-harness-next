@@ -6,15 +6,15 @@
 Red → Green → Refactor cycle. It writes exactly one test and runs it through
 `.claude/hooks/run-test.sh`. The developer keeps the production code, the skeleton, and the orchestration.
 
-The subagent is available only in Claude Code, and only after a successful
-`.claude/hooks/test-author-preflight.sh`. The command returns the single line `{"status":"ok"}`
+The author's executor is selected from the configuration before the protected adapter is checked. The general command
+`python3 -I -B .harness/health/test_author.py preflight --repo .` returns the single line `{"status":"ok"}`
 when `test_paths`, `test_runner`, process isolation, and the scoped guard are confirmed. On any
 refusal it returns `{"status":"disabled","reason":"<sanitized reason>"}`, and the
 developer continues the usual route.
 
 ## 2. Configuration
 
-Both optional settings go in `.harness/project.json`:
+The optional test-zone and runner settings go in `.harness/project.json`:
 
 ```json {.ah-code-wrap}
 "test_paths": ["tests/**"],
@@ -60,6 +60,10 @@ The launcher rechecks the protected adapter, passes exact model/effort and sends
 stdin, including when the current session uses a different model. A runtime without a protected
 adapter returns `runtime_unsupported`; it is never replaced by another CLI. Currently only Claude
 Code has that adapter; `.claude` paths below refer to its guard and runner, not an implied executor.
+To switch the author to Claude Code, add `claude` with `model` and `effort` to
+`assignment_plans.developer.runtimes` in `.harness/orchestration.json`. If the plan has several
+runtimes, select `claude` in `assignment_plans.developer.default_runtime`. Without a developer plan,
+the runtime comes from `test_author.runtime` in `.harness/project.json`.
 
 ## 3. Protection
 
@@ -80,6 +84,8 @@ fixed reason:
 | Check | Refusal reason |
 | --- | --- |
 | The optional `--worktree <path>` names the same checkout where preflight lives | `checkout_mismatch` |
+| runtime/model/effort are selected from the developer brief or the project short profile | `test_author_missing`, `test_author_config_invalid` |
+| The selected runtime has a protected adapter | `runtime_unsupported` |
 | The checkout where preflight lives is the root of its own Git work tree (`git rev-parse --show-toplevel`) | `project_untrusted` |
 | `CLAUDE_PROJECT_DIR`, when passed, matches that Git root | `project_dir_mismatch` |
 | Claude Code is not started with `CLAUDE_CODE_SIMPLE=1` or `CLAUDE_CODE_SAFE_MODE=1` | `claude_code_unsupported` |
@@ -192,7 +198,8 @@ needs no database.
 
 **Supported versions and environments.**
 
-- Claude Code only; Codex is not supported. The harness does not pin a minimum Claude Code version:
+- Only Claude Code has a protected adapter now. Selecting Codex or another runtime is kept in
+  diagnostics and gives `runtime_unsupported`. The harness does not pin a minimum Claude Code version:
   preflight statically checks the agent, the scoped hook, and the guard, and the harness's own check
   (`make test-author-probe`, which needs `claude` and a login) confirms that the hook fires in a live session.
 - Linux only, with bubblewrap 0.9.0+ and unprivileged user namespaces. On Windows and macOS
@@ -252,15 +259,28 @@ it does not establish another stack's support. Ordinary Rust QA remains required
 
 ## 8. Diagnostics and live check
 
-`harness health` reports `hooks.test_author`: preflight readiness or a sanitized refusal, selected
-runtime/model/effort and source. Health uses the orchestration developer plan, marked `planned`,
+`harness health` reports `hooks.test_author`: preflight readiness for the target checkout or a
+sanitized refusal, selected runtime/model/effort and source. Health uses the orchestration developer plan, marked `planned`,
 and otherwise the project short profile. Planned readiness does not replace an approved brief.
-For the supported Claude adapter, Health checks trust by the preflight rule: the exact checkout
-path or the main checkout that lists it in `git worktree list`. Without opt-in the check is
+Without opt-in the check is
 skipped with a reason; an unavailable optional author warns while ordinary development works.
-Health prints each author condition — the `test_author` block, the project root by Git, trust,
-guard, runner and probe — as its own `hooks.test_author_*` line, and a refused line prints its fix
-step. `harness health --fix` adds a missing `test_author` block from the developer plan. The
+The preflight result applies to the checkout Health runs for; a worker worktree checks its own
+preflight when it calls the author.
+
+Health prints each author condition as its own line, and a refused line prints its fix step: a
+command or a configuration fragment.
+
+| Line | What it checks | Step on refusal |
+| --- | --- | --- |
+| `hooks.test_author_config` | the `test_author` block in `.harness/project.json` | a block fragment from the developer plan and `harness health --fix` |
+| `hooks.test_author_root` | the project root by Git and, when the variable is set, that `CLAUDE_PROJECT_DIR` matches it | both paths on `project_dir_mismatch` and `unset CLAUDE_PROJECT_DIR` |
+| `hooks.test_author_trust` | Claude Code trust for this checkout or for the main checkout that lists it in `git worktree list` | the path to trust and `cd <main checkout> && claude` |
+| `hooks.test_author_guard` | the agent, the executable guard, and its configuration check | `harness update` or a fix of `test_paths` and `test_runner` |
+| `hooks.test_author_runner` | an executable `.claude/hooks/run-test.sh` | `harness update` |
+| `hooks.test_author_probe` | the runner isolation probe | a step by reason: bubblewrap, user namespaces, checkout location |
+
+Guard and probe run project scripts, so their lines are skipped until the checkout is trusted.
+`harness health --fix` adds a missing `test_author` block from the developer plan. The
 [test-author settings](../getting-started/settings/test-author.md#enable) describe how to enable
 the author.
 

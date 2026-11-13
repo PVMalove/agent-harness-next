@@ -44,7 +44,8 @@ autonomous agent.
 
 1. **`/grill-with-docs`** → **`/to-spec`** → **`/to-tickets`**: the ticket "Migrate the export
    configuration" gets `hitl` and `status::ready`.
-2. **`/to-guide`** studies the code, assigns the ticket to itself, sets `status::in-progress`, and
+2. **`/to-guide`** studies the code, assigns the ticket to the current tracker user
+   (`@me`), sets `status::in-progress`, and
    writes the guide: a file map and steps with prompts, each starting with a test.
 3. **A human works next**: coding in their own environment, `/code-review`, `/qa-gate`, a PR with
    `Related to #<ID>`, the merge, and the closing of the ticket.

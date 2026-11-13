@@ -33,7 +33,7 @@ of other agents does not change.
 **Soft refusal.** The hook prints one `PreToolUse` JSON with `permissionDecision: deny` and the reason
 `test-author: <reason>` and exits with code 0. It writes no files, changes neither the dispatch nor the ledger,
 and returns no user input. Before the check of the call, the guard checks the activation again:
-whether the agent is installed with the hook enabled, whether `test_paths`, `test_runner`, and the write zones are valid; on
+whether the agent is installed with the hook enabled, whether it inherits model and effort, whether `test_paths`, `test_runner`, and the write zones are valid; on
 a failure, the refusal gets the reason of this check or `guard_unavailable`.
 
 **Internal mode.** `test-author-guard.py --validate-config` prints `{"status":"ok"}` or
@@ -47,7 +47,7 @@ a failure, the refusal gets the reason of this check or `guard_unavailable`.
 - **Refusal reasons (closed set):** `malformed_payload`, `write_outside_test_paths`,
   `write_path_invalid`, `patch_unparseable`, `runner_only`, `test_id_invalid`, `tool_not_allowed`, `guard_unavailable`
   and the reasons of the activation check: `agent_missing`, `scoped_hook_unsupported`, `config_invalid`,
-  `test_paths_missing`, `test_runner_missing`, `write_zone_rejected`.
+  `test_author_config_invalid`, `test_paths_missing`, `test_runner_missing`, `write_zone_rejected`.
 - **Exit code:** always `0`.
 
 ## Source

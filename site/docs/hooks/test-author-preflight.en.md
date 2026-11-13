@@ -9,23 +9,39 @@
 
 `test-author-preflight.sh` is not an event hook: the installation copies it to
 `.claude/hooks/test-author-preflight.sh` but does not connect it in `settings.local.json`. The developer
-runs it before a call of the test-author subagent. The script prints exactly one line of JSON and always
+runs it before a call of the test-author subagent, usually through the general command
+`.harness/health/test_author.py preflight`. The script prints exactly one line of JSON and always
 exits with code 0: `{"status":"ok"}` or `{"status":"disabled","reason":"<reason>"}`. A refusal creates no
 orchestration state, and the developer continues the usual route.
 
-**The `--worktree <path>` argument.** The script checks only the checkout where it lives, that is, the
-checkout it is started from. The developer calls `test-author-preflight.sh --worktree <worktree
-from the brief>` from the worktree it works in; an in-process developer does so through the
-`.harness/health/test_author.py run` launcher of its worktree. The answer `{"status":"ok"}`
-is possible only if the canonical path (after `cd` and `pwd -P`) matches the checkout of the script;
-otherwise the script answers `checkout_mismatch`. A missing, empty, or unresolvable path, as well as
-any other arguments (an unknown flag, extra arguments, `--worktree` without a value) give the same
-`checkout_mismatch`. The check runs right after the determination of the script root and before the others, and the path
-from the argument does not appear in the answer. A call without arguments works as before.
+**Arguments.** Call: `test-author-preflight.sh [--worktree <path>] [--brief <brief> | --planned]`.
 
-The script checks the conditions and, on the first violation, answers with a fixed reason (the table of conditions and
+- `--worktree <path>`. The script checks only the checkout where it lives, that is, the
+  checkout it is started from. The developer calls `test-author-preflight.sh --worktree <worktree
+  from the brief>` from the worktree it works in; an in-process developer does so through the
+  `.harness/health/test_author.py run` launcher of its worktree. The answer `{"status":"ok"}`
+  is possible only if the canonical path (after `cd` and `pwd -P`) matches the checkout of the script;
+  otherwise the script answers `checkout_mismatch`. The path from the argument does not appear in the answer.
+- `--brief <brief>` selects the author's executor from the approved developer brief. `--planned`
+  checks the developer plan from orchestration (this is what `harness health` does). Without these
+  flags the script requires an explicit `test_author` short profile in `.harness/project.json`. The
+  flags are mutually exclusive.
+- A repeated `--worktree`, a missing, empty, or unresolvable value, `--brief` together with
+  `--planned`, and any other arguments (an unknown flag, extra arguments) give
+  `checkout_mismatch`. Arguments are parsed right after the determination of the script root,
+  before the other checks.
+
+**Executor selection.** Before the Claude Code checks the script runs the installed selector
+`.harness/health/test_author.py check`. If the selector is missing or is a symlink, the answer is
+`selector_unavailable`. The selector may refuse with `test_paths_missing`,
+`test_runner_missing`, `test_author_missing`, `test_author_config_invalid`, `runtime_unsupported`,
+or `orchestration_unavailable`; any other answer gives `selector_unavailable`. A configured
+runtime without a protected adapter never turns into a Claude session.
+
+The script then checks the conditions and, on the first violation, answers with a fixed reason (the table of conditions and
 reasons is in the [guide](../agents/test-author.md), section 3). Supported reasons:
-`checkout_mismatch`, `runner_unavailable`, `project_untrusted`, `project_dir_mismatch`,
+`checkout_mismatch`, `selector_unavailable`, `test_author_missing`, `test_author_config_invalid`,
+`runtime_unsupported`, `orchestration_unavailable`, `runner_unavailable`, `project_untrusted`, `project_dir_mismatch`,
 `claude_code_unsupported`, `agent_missing`,
 `scoped_hook_unsupported`, `test_paths_missing`, `test_runner_missing`, `config_invalid`,
 `write_zone_rejected`, `guard_hook_unavailable`, `isolation_unavailable`. The answers of the guard and the runner

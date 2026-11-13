@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.0 {.ah-release-title}
 
-<p class="ah-release-meta">Breaking: 4 · Added: 61 · Changed: 26 · Fixed: 40</p>
+<p class="ah-release-meta">Breaking: 4 · Added: 63 · Changed: 26 · Fixed: 44</p>
 
 <p class="ah-release-summary">Highlights: required Rust runtime and runtime store · ledger version 4 · migrate and rollback with human approval · web console.</p>
 
@@ -353,7 +353,7 @@ The full list of additions, changes, and fixes is in the `[2.0.0]` section of
 
 <p class="ah-release-meta">Added: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.1.0">Open on GitHub</a></p>
 
-<p class="ah-release-summary">Highlights: harness uninstall <repo>: full removal of the harness from a project —  · harness console, Harness section: plan and application of the harness removal (enter UNINSTALL).</p>
+<p class="ah-release-summary">Highlights: <code>harness uninstall</code> fully removes the harness from a project · the Harness section in <code>harness console</code>: plan and application of the removal (enter UNINSTALL).</p>
 
 ??? note "Full notes"
 
@@ -388,7 +388,7 @@ The full list of additions, changes, and fixes is in the `[2.0.0]` section of
 
 <p class="ah-release-meta">Added: 10 · Changed: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.0.0">Open on GitHub</a></p>
 
-<p class="ah-release-summary">Highlights: The first stable release of the portable Agent Harness with capability snapshots, the installation CLI, orchestration, and Repo Map · A GitHub Release with the installation archive, SHA-256, and notes from this section; it is published automatically after a merge into master if the version tag from harness/VERSION does not exist yet · A managed example .</p>
+<p class="ah-release-summary">Highlights: The first stable release of the portable Agent Harness with capability snapshots, the installation CLI, orchestration, and Repo Map · A GitHub Release with the installation archive, SHA-256, and notes from this section; it is published automatically after a merge into master if the version tag from harness/VERSION does not exist yet · A managed example <code>.harness/orchestration.example.json</code>.</p>
 
 ??? note "Full notes"
 

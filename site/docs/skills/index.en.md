@@ -1,6 +1,6 @@
 # Map of skills and roles
 
-This directory is a short static memory of the harness. Each document records the localized name, triggers, responsibility, the Input/Output contract, and the Archify PNG diagram. The detailed primary sources stay in `skills/first-party/engineering/`, `harness/orchestration/roles/`, `harness/orchestration/playbook.md`, and `harness/orchestration/pilot.md`.
+This directory is a short static memory of the harness. Each document records the localized name, triggers, responsibility, and the Input/Output contract; some pages also have an Archify PNG diagram. The detailed primary sources stay in `skills/first-party/engineering/`, `harness/orchestration/roles/`, `harness/orchestration/playbook.md`, and `harness/orchestration/pilot.md`.
 
 ## Command skills
 
@@ -27,9 +27,10 @@ overrides with matching names are described separately here, against the current
 
 ## Related documents
 
-- Discovery Context starts in `/grilling` through the opt-in `Live Artifact` and passes through
-  `Relevant Files` and the ticket-specific Path inventory. The backend batch uses the LLM-free
-  `Context Package`, checkpoint/continuation for the write role, and the base-commit gate. The operating
+- Discovery Context (the list of paths that matter for the task) starts in `/grilling` through the
+  opt-in `Live Artifact`, persisted in the spec's `artifacts/discovery-context.md`, and passes through
+  the spec's `Relevant Files` and the ticket-specific Path inventory. The backend batch uses the LLM-free
+  `Context Package` and checkpoint/continuation for the write role. The operating
   rules are collected in [backend-orchestration](../backend-orchestration.md); ADR 0003 describes the current
   design, and ADR 0005 describes the pipeline.
 - Agents: [Agents](../agents/index.md)
