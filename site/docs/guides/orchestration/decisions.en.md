@@ -186,6 +186,22 @@ A fetch error rejects `batch decide --decision retry` with a remedy. `decision-p
 in `route_preview.retry`.
 The decision only proposes the target: the `integration_base_commit` of the batch does not change before accept.
 
+The `rebase` route (ADR 0034) carries an already accepted candidate without a developer. The
+coordinator chooses it when the base moved forward and nothing needs a fix: an accept of a
+code-review or qa report without incomplete items, or a retry of a code-review, qa, or publish
+report with `--reason-category candidate-change`, no carried items, and no `--retry-role developer`.
+The `rebaser` role must be installed and assignable (zero-config or an `assignment_plans.rebaser`
+entry); otherwise the route stays `rebase-fix-forward`. The routing record sets `next_action: rebase`
+instead of `qa` or `publish`; `decision-packet` shows it in advance in `route_preview.accept` or
+`route_preview.retry`. The `rebaser` dispatch carries the commits onto `rebase_target_commit` without
+new changes and spends no `retry_policy.max_developer_retries`. Its report must carry a
+`rebase_check` block (pairs by `patch-id`, `dropped`, `resolved_conflicts`, `generated_files`, and
+`range_diff` when a `patch-id` differs); `report submit` recomputes it from Git. The accepted report
+pins the target as `integration_base_commit` and leads to risk assessment, and the accepted review of
+the previous candidate covers the new one, so QA follows without a new code-review. A rebaser does
+not resolve a conflict about meaning: its `blocked` report goes to a developer-retry on the
+`rebase-fix-forward` route.
+
 The target enters a brief only through a dispatch with an explicit approval under any `approval_policy` except
 `auto`. The approval of another policy is rejected for it. `dispatch propose` shows the transition with the field
 `rebase_target_sha`, and the brief gets `rebase_target_commit`. Besides this, the brief field is filled
@@ -429,6 +445,9 @@ conditions or does not record them at all:
 - `rebase-fix-forward` is recorded by a `retry` that leads to `developer-retry` while the integration base
   has moved forward (see above); its routing record additionally names `rebase_target_commit` and
   `integration_base_commit`.
+- `rebase` is recorded by an accept of a code-review or qa report, or by a `candidate-change` retry,
+  while the integration base has moved forward and nothing needs a fix (see above); its routing
+  record names `rebase_target_commit`, `integration_base_commit`, and `candidate_commit`.
 - `batch decide` does not record `supersede`: `batch create --supersedes` records it in the
   `coordinator_decisions` of the new batch (see "Superseding batch" above).
 
@@ -457,7 +476,7 @@ The `auto` policy applies while the project configuration and the batch plan sel
 
 - `batch approve`: `coordinator_approval.approved_by` equals `policy:auto`;
 - `dispatch create`, including the milestones `publish`, `risk-trigger`, `risk-reassessment-required`,
-  `bypass-rerun`, `rebase-fix-forward`, and `rebase-target`;
+  `bypass-rerun`, `rebase-fix-forward`, `rebase-target`, and `rebase`;
 - `dispatch resume --trigger` for a planned continuation, except `human-decision`;
 - `batch carry-over`: the decision is written as `policy:auto`, not as `policy:carry-over`.
 

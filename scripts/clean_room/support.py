@@ -10,7 +10,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import IO, TypedDict, Unpack
 
 from harness.gate_runner.gate_runner import sanitise
 from harness.storage import storage_path
@@ -50,8 +52,31 @@ BASH = _find_bash()
 # hung step must fail the run and name the command instead of holding CI until the job timeout.
 STEP_TIMEOUT_SECONDS = 300
 
+# One clean-room command: a shell string or an argument list.
+Command = str | Sequence[str | Path]
+JsonReport = dict[str, object]
 
-def run_step(cmd, **kwargs) -> subprocess.CompletedProcess:
+
+class StepOptions(TypedDict, total=False):
+    """The ``subprocess.run`` options a clean-room step passes through."""
+
+    timeout: float
+    check: bool
+    capture_output: bool
+    text: bool
+    encoding: str
+    errors: str
+    stdin: int | IO[str] | None
+    stdout: int | None
+    stderr: int | None
+    input: str | bytes
+    env: Mapping[str, str]
+    cwd: Path | None
+
+
+def run_step(
+    cmd: Command, **kwargs: Unpack[StepOptions]
+) -> subprocess.CompletedProcess[str]:
     """`subprocess.run` с ограничением времени: зависший шаг завершает прогон с именем команды.
 
     Остальные аргументы (`check`, `capture_output`, `input`, `env`, `cwd`) передаются без
@@ -131,7 +156,7 @@ def run_health(repo: Path) -> None:
         raise SystemExit(code)
 
 
-def run_ok(cmd, quiet=False, quiet_all=False):
+def run_ok(cmd: Command, quiet: bool = False, quiet_all: bool = False) -> None:
     """Запустить команду, которая обязана пройти; при сбое завершиться её кодом выхода, как `set -e`."""
     stdout = subprocess.DEVNULL if (quiet or quiet_all) else None
     stderr = subprocess.DEVNULL if quiet_all else None
@@ -143,7 +168,7 @@ def run_ok(cmd, quiet=False, quiet_all=False):
         sys.exit(result.returncode)
 
 
-def run_fails(cmd, quiet=False, quiet_all=False) -> bool:
+def run_fails(cmd: Command, quiet: bool = False, quiet_all: bool = False) -> bool:
     """Запустить команду, которая должна упасть; вернуть `True`, если она упала."""
     stdout = subprocess.DEVNULL if (quiet or quiet_all) else None
     stderr = subprocess.DEVNULL if quiet_all else None
@@ -151,49 +176,59 @@ def run_fails(cmd, quiet=False, quiet_all=False) -> bool:
     return result.returncode != 0
 
 
-def fail_output(cmd) -> str:
+def fail_output(cmd: Command) -> str:
     """Запустить команду, которая обязана упасть, и вернуть её stdout и stderr вместе."""
     result = run_step(cmd, capture_output=True, text=True, check=False)
     if result.returncode == 0:
         sys.exit("command unexpectedly succeeded: " + " ".join(map(str, cmd)))
-    return result.stdout + result.stderr
+    return str(result.stdout) + str(result.stderr)
 
 
-def capture(cmd) -> str:
+def capture(cmd: Command) -> str:
     """Запустить команду, которая обязана пройти, и вернуть её stdout."""
-    return run_step(cmd, capture_output=True, text=True, check=True).stdout
+    return str(run_step(cmd, capture_output=True, text=True, check=True).stdout)
 
 
-def fail_json(cmd) -> dict:
+def _report(text: str) -> JsonReport:
+    report: object = json.loads(text)
+    if not isinstance(report, dict):
+        sys.exit("health --json output is not a JSON object")
+    return report
+
+
+def fail_json(cmd: Command) -> JsonReport:
     """Запустить `harness health ... --json`, которая обязана упасть, и разобрать её JSON stdout."""
     result = run_step(cmd, capture_output=True, text=True, check=False)
     if result.returncode == 0:
         sys.exit("command unexpectedly succeeded: " + " ".join(map(str, cmd)))
-    return json.loads(result.stdout)
+    return _report(result.stdout)
 
 
-def capture_json(cmd) -> dict:
+def capture_json(cmd: Command) -> JsonReport:
     """Запустить `harness health ... --json`, которая обязана пройти, и разобрать её JSON stdout."""
-    return json.loads(run_step(cmd, capture_output=True, text=True, check=True).stdout)
+    return _report(capture(cmd))
 
 
-def find_check(report: dict, check_id: str) -> dict:
+def find_check(report: JsonReport, check_id: str) -> JsonReport:
     """Найти проверку по стабильному `id` в отчёте `harness health --json`."""
-    for check in report["checks"]:
-        if check["id"] == check_id:
+    checks = report.get("checks")
+    for check in checks if isinstance(checks, list) else []:
+        if isinstance(check, dict) and check.get("id") == check_id:
             return check
     sys.exit(f"health --json report has no check with id {check_id!r}")
 
 
-def commit_map_for(brief: dict, commit_sha: str) -> list[dict]:
+def commit_map_for(brief: JsonReport, commit_sha: str) -> list[dict[str, object]]:
     """Обязательный `commit_map` отчёта developer для кандидата из одного коммита."""
+    plan = brief.get("commit_plan")
     return [
         {"commit_sha": commit_sha, "plan_entry_id": entry["id"]}
-        for entry in brief.get("commit_plan", [])
+        for entry in (plan if isinstance(plan, list) else [])
+        if isinstance(entry, dict)
     ]
 
 
-def fill_agents(repo: Path):
+def fill_agents(repo: Path) -> None:
     """Заменить незаполненные маркеры `{{...}}` в AGENTS.md проекта на `N/A`."""
     agents = repo / "AGENTS.md"
     agents.write_text(
@@ -212,10 +247,10 @@ def run_hook(
     project_dir: Path,
     command: str,
     *,
-    raw_payload=None,
-    env_overrides=None,
+    raw_payload: str | None = None,
+    env_overrides: Mapping[str, str] | None = None,
     cwd: Path | None = None,
-):
+) -> subprocess.CompletedProcess[str]:
     """Передать PreToolUse(Bash) hook тот же JSON, что отправляет Claude Code, с `CLAUDE_PROJECT_DIR`.
 
     Так поведение hook проверяется напрямую, а не выводится из файлов, созданных harness.
