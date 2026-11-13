@@ -1,14 +1,20 @@
 /* Unslop direction approved 2026-11-11: a short type scale with no text below 11px, weights 400-600,
  * no letter-spaced caps, tabular figures, a 4px spacing grid, one KPI accent, no italic and no
  * infinite animation outside a live state. Checked over the mockup stylesheet and the SPA layer. */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 const REPO = resolve(__dirname, "../..");
-const SHEETS = {
+const STYLES = "harness/console/frontend/src/styles";
+/** The design system v3 sheets (ds-tokens, ds-shell, ds-components, ds-screens), found by name. */
+const DS_SHEETS = readdirSync(join(REPO, STYLES))
+  .filter((name) => /^ds-.+\.css$/.test(name))
+  .sort();
+const SHEETS: Record<string, string> = {
   mockup: "docs/design/web-console-mockups/execution-console.css",
-  app: "harness/console/frontend/src/styles/app.css",
+  app: `${STYLES}/app.css`,
+  ...Object.fromEntries(DS_SHEETS.map((name) => [name, `${STYLES}/${name}`])),
 };
 const read = (path: string) => readFileSync(join(REPO, path), "utf-8");
 const mockup = read(SHEETS.mockup);
@@ -93,5 +99,55 @@ describe("numbers and accents", () => {
         .flatMap(([, body]) => [...body.matchAll(/(?:^|;)\s*color:\s*([^;]+)/g)].map((m) => m[1].trim())),
     );
     expect([...colours].filter((colour) => colour !== "var(--fg)").length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("the design system v3 sheets", () => {
+  const sheets = DS_SHEETS.map((name) => [name, read(`${STYLES}/${name}`)] as const);
+
+  test("the token, shell, component and screen sheets are all present once the shell lands", () => {
+    expect(DS_SHEETS).toContain("ds-tokens.css");
+  });
+
+  for (const [name, css] of sheets) {
+    test(`${name}: font sizes come from var(--ds-fs-N) only`, () => {
+      const sizes = [...css.matchAll(/(?:^|[;{\s])font(?:-size)?:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
+      const loose = sizes.filter((value) => /\d+(?:\.\d+)?(?:px|rem|em)\b/.test(value.replace(/var\([^)]*\)/g, "")));
+      expect(loose).toEqual([]);
+      const tokens = [...css.matchAll(/var\(--ds-fs-(\d+)\)/g)].map((m) => Number(m[1]));
+      expect(tokens.filter((n) => n < 1 || n > 5)).toEqual([]);
+    });
+
+    test(`${name}: only transform and opacity move, and nothing is letter-spaced`, () => {
+      for (const [selector, body] of rules(css)) {
+        for (const m of body.matchAll(/transition(?:-property)?:\s*([^;]+)/g)) {
+          const props = m[1]!.split(",").map((part) => part.trim().split(/\s+/)[0]);
+          expect(props.filter((p) => !["transform", "opacity", "none"].includes(p!)), selector).toEqual([]);
+        }
+      }
+      expect(css).not.toMatch(/letter-spacing/);
+    });
+  }
+
+  test("the type scale tokens are 11, 13, 16, 20 and 28 px", () => {
+    const tokens = read(`${STYLES}/ds-tokens.css`);
+    const scale = [...tokens.matchAll(/--ds-fs-(\d):\s*(\d+)px/g)].map((m) => [m[1], Number(m[2])]);
+    expect(scale).toEqual([["1", 11], ["2", 13], ["3", 16], ["4", 20], ["5", 28]]);
+  });
+
+  test("prefers-reduced-motion switches animation and transition off", () => {
+    const tokens = read(`${STYLES}/ds-tokens.css`);
+    const block = /@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?\n\})/.exec(tokens)?.[1] ?? "";
+    expect(block).toMatch(/animation:\s*none/);
+    expect(block).toMatch(/transition:\s*none/);
+  });
+
+  test("the switch is 34 by 20 px", () => {
+    const css = sheets.map(([, text]) => text).join("\n");
+    const rule = rules(css).filter(([selector]) => /^\.ds-sw\b/.test(selector) && !selector.includes("::") && !/[ >+~:]/.test(selector.slice(1).replace(/^ds-sw/, ""))).map(([, body]) => body).join(";");
+    if (DS_SHEETS.includes("ds-components.css")) {
+      expect(rule).toMatch(/width:\s*34px/);
+      expect(rule).toMatch(/height:\s*20px/);
+    }
   });
 });

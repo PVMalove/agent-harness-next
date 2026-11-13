@@ -1,0 +1,70 @@
+/* Design system v3 (RFC docs/rfc/web-console-v3.md): tokens and base rules. Every class and custom
+   property carries the ds- prefix, so the stylesheet of the not yet moved screens
+   (/execution-console.css, loaded first) keeps its meaning. Dark theme only. */
+:root {
+  --ds-bg: #11141b;
+  --ds-rail: #151922;
+  --ds-surface: #1a1f2a;
+  --ds-raised: #212836;
+  --ds-hover: #272f3f;
+  --ds-line: #2a3242;
+  --ds-line-strong: #3b4558;
+  --ds-fg: #e8ebf2;
+  --ds-muted: #a3acbe;
+  --ds-faint: #8891a5;
+  --ds-accent: #8b97ff;
+  --ds-accent-bg: #252b4f;
+  --ds-on-accent: #0d1030;
+  --ds-ok: #4fd1a1;
+  --ds-ok-bg: #163329;
+  --ds-warn: #f0b955;
+  --ds-warn-bg: #382e14;
+  --ds-err: #ff8a8a;
+  --ds-err-bg: #3c2025;
+  --ds-sans: "Segoe UI", system-ui, -apple-system, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --ds-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --ds-radius: 8px;
+  --ds-rail-w: 236px;
+  --ds-top-h: 56px;
+  --ds-foot-h: 32px;
+  --ds-fs-1: 11px;
+  --ds-fs-2: 13px;
+  --ds-fs-3: 16px;
+  --ds-fs-4: 20px;
+  --ds-fs-5: 28px;
+}
+
+.ds-app {
+  background: var(--ds-bg);
+  color: var(--ds-fg);
+  font: var(--ds-fs-2) / 1.5 var(--ds-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+.ds-app *,
+.ds-app *::before,
+.ds-app *::after { box-sizing: border-box; }
+.ds-app :focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; border-radius: 4px; }
+.ds-app code,
+.ds-mono { font-family: var(--ds-mono); font-size: inherit; }
+.ds-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.ds-ic { width: 18px; height: 18px; flex: none; }
+.ds-ic-sm { width: 14px; height: 14px; flex: none; }
+.ds-muted { color: var(--ds-muted); }
+.ds-faint { color: var(--ds-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-app *,
+  .ds-app *::before,
+  .ds-app *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

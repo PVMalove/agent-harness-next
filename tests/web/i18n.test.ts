@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { describe, expect, test } from "vitest";
 import catalog from "../../harness/console/frontend/src/i18n/catalog.json";
+import dsEnglish from "../../harness/console/frontend/src/i18n/ds.en.json";
 import {
   LanguageProvider,
   checkTitle,
@@ -45,11 +46,15 @@ describe("the translation catalog", () => {
     const strings = declared("t");
     for (const group of NAV_GROUPS) strings.add(group.label);
     expect(strings.size).toBeGreaterThan(5);
-    expect([...strings].filter((key) => !(key in catalog.en))).toEqual([]);
+    expect([...strings].filter((key) => !(key in catalog.en) && !(key in dsEnglish))).toEqual([]);
     const sections = declared("section");
     for (const group of NAV_GROUPS) for (const item of group.items) sections.add(item.section);
     expect([...sections].filter((key) => !(key in catalog.sections))).toEqual([]);
     expect([...declared("fact")].filter((key) => !(key in catalog.facts))).toEqual([]);
+  });
+
+  test("the client table of the v3 screens never shadows a kernel string", () => {
+    expect(Object.keys(dsEnglish).filter((key) => key in catalog.en)).toEqual([]);
   });
 
   test("translates with the TUI tables", () => {

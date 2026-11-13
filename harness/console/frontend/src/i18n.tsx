@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import catalog from "./i18n/catalog.json";
+import dsEnglish from "./i18n/ds.en.json";
 
 export type Language = "ru" | "en";
 export const LANGUAGES: readonly Language[] = ["ru", "en"];
@@ -10,7 +11,8 @@ export const LANGUAGE_KEY = "harness-console-lang";
 
 type Values = Readonly<Record<string, string | number>>;
 
-const EN: Readonly<Record<string, string>> = catalog.en;
+// The strings of the v3 screens that the kernel tables do not hold yet (see ds.en.json).
+const EN: Readonly<Record<string, string>> = { ...catalog.en, ...dsEnglish };
 const FACTS: Readonly<Record<string, string>> = catalog.facts;
 const TABS: Readonly<Record<string, string>> = catalog.tabs;
 const SECTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = catalog.sections;
