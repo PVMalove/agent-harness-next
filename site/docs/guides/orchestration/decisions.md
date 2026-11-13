@@ -525,8 +525,8 @@ retry вычислить нельзя (например, упало настро
   `--carry-incomplete`, `null` у решения без маршрута (остальные `accept`, `override-warning`,
   `block`, `fail`);
 - `evidence`: `dispatch_id`, путь `report` и `report_sha256` неизменяемого report;
-- `approver`: `{"kind": "policy", "name": "low_risk" | "milestone" | "auto"}` для auto-accept по
-  политике или `{"kind": "human", "name": <--approved-by>}` для явного решения;
+- `approver`: `{"kind": "policy", "name": "low_risk" | "milestone" | "auto" | "infrastructure-retry"}`
+  для решения по политике или `{"kind": "human", "name": <--approved-by>}` для явного решения;
 - `approved_at`.
 
 Решение `batch carry-over` пишет ту же деталь с `route: "carry-over"` и
