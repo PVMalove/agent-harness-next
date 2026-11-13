@@ -21,9 +21,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Two paths (#937, ADR 0016 and ADR 0023). A pull request into an `integration/**` branch runs the
-# light job `verify-light` and no job that runs the whole suite. A pull request into any other
-# branch, a push to `master` and a call from another workflow run the full jobs. Every job that
-# runs the Python or Rust suite carries the full-path condition; `console-spa` and `docs` run on
+# light job `verify-light` and the Linux/Windows Python unit and integration groups. A pull request
+# into any other branch, a push to `master` and a call from another workflow run the full jobs. The
+# legacy full suites keep the full-path condition; `console-spa` and `docs` run on
 # both paths; `private-terms` and `parser-bundle` run tests of nothing and keep their own
 # condition. The check name `verify-light` ends in `-light`: the coordinator never lets such a
 # check confirm a pair that requires the full selection. The job ids are the check names that
@@ -260,6 +260,73 @@ jobs:
           HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime
           HARNESS_REQUIRE_RUNTIME: "1"
         run: .harness/.venv/bin/python scripts/ci_light_tests.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  verify-test-groups:
+    # Integration PRs get Python unit/integration groups on both operating systems. Browser E2E
+    # stays in the dedicated console-spa/dashboard jobs below.
+    if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')
+    needs: docs
+    name: ${{ matrix.os-label }} / ${{ matrix.group }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os-label: Linux
+            group: unit
+            targets: --pytest-target tests/core --pytest-target tests/health --pytest-target tests/console --pytest-target tests/reporting --pytest-target tests/test_author
+          - os: windows-latest
+            os-label: Windows
+            group: unit
+            targets: --pytest-target tests/core --pytest-target tests/health --pytest-target tests/console --pytest-target tests/reporting --pytest-target tests/test_author
+          - os: ubuntu-latest
+            os-label: Linux
+            group: integration
+            targets: --pytest-target tests/memory --pytest-target tests/orchestration --pytest-target tests/repo_map --pytest-target tests/scripts --pytest-target tests/web
+          - os: windows-latest
+            os-label: Windows
+            group: integration
+            targets: --pytest-target tests/memory --pytest-target tests/orchestration --pytest-target tests/repo_map --pytest-target tests/scripts --pytest-target tests/web
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Configure Windows Git Bash
+        if: runner.os == 'Windows'
+        run: |
+          git_bash='C:\Program Files\Git\bin'
+          test -f "$(cygpath -u "$git_bash")/bash.exe"
+          echo "$git_bash" >> "$GITHUB_PATH"
+      - name: Bootstrap harness environment
+        run: make bootstrap
+      - name: Run ${{ matrix.group }} tests
+        env:
+          PYTHONUTF8: "1"
+          PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
+          PYTHONUNBUFFERED: "1"
+          VERIFY_ARGS: --only pytest ${{ matrix.targets }} --junit-xml .harness/.sandboxes/logs/junit-${{ matrix.os-label }}-${{ matrix.group }}.xml
+        run: |
+          mkdir -p .harness/.sandboxes/logs
+          make verify
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-${{ matrix.os-label }}-${{ matrix.group }}.xml --title "${{ matrix.os-label }}: ${{ matrix.group }}" >> "$GITHUB_STEP_SUMMARY"
+          python scripts/ci_summary.py annotate .harness/.sandboxes/logs/junit-${{ matrix.os-label }}-${{ matrix.group }}.xml
       - name: Check public Git metadata
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -835,7 +902,7 @@ jobs:
     # after every other job, whatever their results, and only reads what they leave.
     if: always()
     needs:
-      [private-terms, docs, lint, rust, parser-bundle, verify-light, console-spa, verify, diff-coverage, docker-smoke, fault-injection, repo-map-bundle, verify-windows, runtime-ipc-windows]
+      [private-terms, docs, lint, rust, parser-bundle, verify-light, verify-test-groups, console-spa, verify, diff-coverage, docker-smoke, fault-injection, repo-map-bundle, verify-windows, runtime-ipc-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

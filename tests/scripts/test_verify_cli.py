@@ -54,6 +54,7 @@ def test_an_unknown_argument_is_refused_before_any_stage(
     [
         ([], ["mypy", "pytest", "clean-room"]),
         (["--only", "tests"], ["mypy", "pytest"]),
+        (["--only", "pytest"], ["pytest"]),
         (["--only", "clean-room"], ["clean-room"]),
     ],
 )
@@ -99,8 +100,14 @@ def test_the_ci_options_reach_the_pytest_command(
             str(tmp_path / "cache"),
             "--junit-xml",
             str(tmp_path / "junit.xml"),
+            "--pytest-target",
+            "tests/core",
+            "--pytest-target",
+            "tests/health",
         ]
     )
     pytest_cmd = next(cmd for cmd in commands if "pytest" in cmd)
     assert "-x" in pytest_cmd and "--ff" in pytest_cmd
     assert f"--junitxml={tmp_path / 'junit.xml'}" in pytest_cmd
+    core_index = pytest_cmd.index("tests/core")
+    assert pytest_cmd[core_index : core_index + 2] == ["tests/core", "tests/health"]
