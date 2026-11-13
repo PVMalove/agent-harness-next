@@ -8569,7 +8569,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         brief = self._architect_reported()
         release = threading.Event()
         busy_observed = threading.Event()
-        real_lock = delivery._ledger_lock
+        real_lock = ledger_ops._ledger_lock
 
         @contextlib.contextmanager
         def release_after_busy(ledger: LifecycleLedger) -> Iterator[None]:
