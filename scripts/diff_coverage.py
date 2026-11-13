@@ -21,6 +21,8 @@ COVERAGE_DATA_FILE = ROOT / ".coverage"
 COVERAGE_JSON_FILE = ROOT / ".coverage.diff-coverage.json"
 # Bound for the helper commands (git, `coverage json`); the measured test run itself is unbounded.
 HELPER_TIMEOUT_SECONDS = 300
+# `pytest` reports "no tests collected" as exit code 5.
+PYTEST_NO_TESTS_COLLECTED = 5
 # Verified by the clean-room run (scripts/verify.py), not by the unittest suite this gate measures,
 # so their changed lines could never count as covered. The real Docker and Podman smokes run only
 # in their own CI job and workflow: the default pytest run this gate measures deselects the
@@ -138,6 +140,120 @@ def _repo_relative(path: str) -> str:
 def source_dirs(changed: Mapping[str, set[int]]) -> list[str]:
     """Каталоги изменившихся файлов — источники покрытия (`--cov`) для pytest."""
     return sorted({str(ROOT / Path(rel_path).parent) for rel_path in changed})
+
+
+def own_tests(changed: Mapping[str, set[int]]) -> list[str]:
+    """Тестовые модули среди изменённых файлов под `tests/` — собственные тесты diff.
+
+    Правило то же, что у `ticket_diff_selection`: `test_*.py` или `*_test.py`, без расширения по
+    графу импортов (parser bundle в задании покрытия не установлен). Только `tests/`: полный прогон
+    не собирает тесты вне него, и их покрытие не должно засчитываться."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from harness.repo_map.change_impact import is_test_path
+
+    return sorted(
+        path for path in changed if path.startswith("tests/") and is_test_path(path)
+    )
+
+
+def _pytest(changed: Mapping[str, set[int]], *args: str) -> int:
+    """Прогон pytest под coverage с источниками `source_dirs`; код возврата pytest."""
+    return subprocess.run(
+        [
+            sys.executable,
+            # pytest, not `unittest discover`: it also collects the function-style tests that
+            # unittest silently skips, which left their code counted as uncovered.
+            "-m",
+            "pytest",
+            "-q",
+            # xdist workers, as in scripts/verify.py: one process under coverage exceeds the CI
+            # job limit. pytest-cov combines the workers' data into COVERAGE_DATA_FILE.
+            "-n",
+            str(min(4, os.cpu_count() or 1)),
+            *(f"--cov={directory}" for directory in source_dirs(changed)),
+            "--cov-report=",
+            *args,
+        ],
+        cwd=ROOT,
+        check=False,
+    ).returncode
+
+
+def _coverage_files() -> dict[str, Mapping[str, Sequence[int]]] | int:
+    """Отчёт по файлам из COVERAGE_DATA_FILE с путями репозитория или код ошибки `coverage json`."""
+    try:
+        json_run = subprocess.run(
+            # --ignore-errors: some tests exec a copy of a module from a temp directory (simulating a
+            # deployed .harness/ checkout) that no longer exists by report time -- skip it rather than
+            # abort the whole report, since we only care about coverage of files under this repo.
+            [
+                sys.executable,
+                "-m",
+                "coverage",
+                "json",
+                "-o",
+                str(COVERAGE_JSON_FILE),
+                "-q",
+                "--ignore-errors",
+            ],
+            cwd=ROOT,
+            check=False,
+            timeout=HELPER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        sys.exit(f"diff-coverage: coverage json failed: {exc}")
+    if json_run.returncode != 0:
+        return json_run.returncode
+
+    report = json.loads(COVERAGE_JSON_FILE.read_text(encoding="utf-8"))
+    # coverage.json keys files by OS-native path (backslashes on Windows); git diff paths are
+    # always forward-slash. Normalize both sides to match regardless of platform.
+    return {
+        _repo_relative(key): value for key, value in report.get("files", {}).items()
+    }
+
+
+def measure(
+    changed: Mapping[str, set[int]],
+) -> dict[str, Mapping[str, Sequence[int]]] | int:
+    """Покрытие изменённых строк: сначала собственные тесты diff, остальной набор — только при нужде.
+
+    Если собственные тесты исполнили каждую изменённую строку-инструкцию, полный прогон дал бы тот же
+    отчёт: множество инструкций файла статично, а исполненные строки только добавляются. Иначе
+    остальной набор (`tests` без уже прогнанных модулей) дописывается к тем же данным через
+    `--cov-append`, и отчёт строится по полному набору, как без выбора. Код ошибки pytest или
+    `coverage json` возвращается как есть."""
+    COVERAGE_DATA_FILE.unlink(missing_ok=True)
+    selected = own_tests(changed)
+    if selected:
+        code = _pytest(changed, *(str(ROOT / path) for path in selected))
+        if code not in (0, PYTEST_NO_TESTS_COLLECTED):
+            return code
+        if code == 0:
+            files = _coverage_files()
+            if isinstance(files, int):
+                return files
+            _, _, uncovered = summarize_coverage(changed, files)
+            if not uncovered:
+                print(
+                    f"diff-coverage: the diff's own {len(selected)} test module(s) cover every "
+                    "changed line; the rest of the suite is not run"
+                )
+                return files
+            print(
+                f"diff-coverage: {len(uncovered)} changed line(s) not covered by the diff's own "
+                "tests; running the rest of the suite"
+            )
+    code = _pytest(
+        changed,
+        *(("--cov-append",) if selected else ()),
+        *(f"--ignore={ROOT / path}" for path in selected),
+        str(ROOT / "tests"),
+    )
+    if code != 0:
+        return code
+    return _coverage_files()
 
 
 def summarize_coverage(
@@ -324,59 +440,9 @@ def main() -> int:
         print(f"diff-coverage: no changed Python lines since {base}")
         return 0
 
-    COVERAGE_DATA_FILE.unlink(missing_ok=True)
-    run = subprocess.run(
-        [
-            sys.executable,
-            # pytest, not `unittest discover`: it also collects the function-style tests that
-            # unittest silently skips, which left their code counted as uncovered.
-            "-m",
-            "pytest",
-            "-q",
-            # xdist workers, as in scripts/verify.py: one process under coverage exceeds the CI
-            # job limit. pytest-cov combines the workers' data into COVERAGE_DATA_FILE.
-            "-n",
-            str(min(4, os.cpu_count() or 1)),
-            *(f"--cov={directory}" for directory in source_dirs(changed)),
-            "--cov-report=",
-            str(ROOT / "tests"),
-        ],
-        cwd=ROOT,
-        check=False,
-    )
-    if run.returncode != 0:
-        return run.returncode
-
-    try:
-        json_run = subprocess.run(
-            # --ignore-errors: some tests exec a copy of a module from a temp directory (simulating a
-            # deployed .harness/ checkout) that no longer exists by report time -- skip it rather than
-            # abort the whole report, since we only care about coverage of files under this repo.
-            [
-                sys.executable,
-                "-m",
-                "coverage",
-                "json",
-                "-o",
-                str(COVERAGE_JSON_FILE),
-                "-q",
-                "--ignore-errors",
-            ],
-            cwd=ROOT,
-            check=False,
-            timeout=HELPER_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as exc:
-        sys.exit(f"diff-coverage: coverage json failed: {exc}")
-    if json_run.returncode != 0:
-        return json_run.returncode
-
-    report = json.loads(COVERAGE_JSON_FILE.read_text(encoding="utf-8"))
-    # coverage.json keys files by OS-native path (backslashes on Windows); git diff paths are
-    # always forward-slash. Normalize both sides to match regardless of platform.
-    files = {
-        _repo_relative(key): value for key, value in report.get("files", {}).items()
-    }
+    files = measure(changed)
+    if isinstance(files, int):
+        return files
     COVERAGE_DATA_FILE.unlink(missing_ok=True)
     COVERAGE_JSON_FILE.unlink(missing_ok=True)
 

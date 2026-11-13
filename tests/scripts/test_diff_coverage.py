@@ -325,6 +325,95 @@ class ChangedLinesTests(unittest.TestCase):
         self.assertEqual(changed, {"модуль.py": {1}})
 
 
+class OwnTestsSelectionTests(unittest.TestCase):
+    """The diff's own test modules run first; the rest of the suite only when a line stays uncovered."""
+
+    CHANGED = {
+        "harness/a.py": {1, 2},
+        "tests/core/test_a.py": {5},
+        "tests/core/helpers.py": {1},
+        "skills/x/scripts/test_tool.py": {1},
+    }
+    OWN = str(diff_coverage.ROOT / "tests/core/test_a.py")
+
+    def _measure(
+        self,
+        pytest_codes: list[int],
+        reports: list[dict[str, dict[str, list[int]]]],
+    ) -> tuple[object, list[list[str]]]:
+        runs = [types.SimpleNamespace(returncode=code) for code in pytest_codes]
+        with (
+            tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary,
+            mock.patch.object(
+                diff_coverage, "COVERAGE_DATA_FILE", Path(temporary) / ".coverage"
+            ),
+            mock.patch.object(diff_coverage, "_coverage_files", side_effect=reports),
+            mock.patch.object(diff_coverage.subprocess, "run", side_effect=runs) as run,
+        ):
+            result = diff_coverage.measure(self.CHANGED)
+        return result, [call.args[0] for call in run.call_args_list]
+
+    def test_only_test_modules_under_tests_are_the_diffs_own_tests(self) -> None:
+        self.assertEqual(
+            diff_coverage.own_tests(self.CHANGED), ["tests/core/test_a.py"]
+        )
+
+    def test_own_tests_covering_every_changed_line_skip_the_rest_of_the_suite(
+        self,
+    ) -> None:
+        report = {
+            "harness/a.py": _file([1, 2], []),
+            "tests/core/test_a.py": _file([5], []),
+            "tests/core/helpers.py": _file([1], []),
+            "skills/x/scripts/test_tool.py": _file([1], []),
+        }
+
+        result, commands = self._measure([0], [report])
+
+        self.assertEqual(result, report)
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0][-1], self.OWN)
+        self.assertNotIn("--cov-append", commands[0])
+
+    def test_an_uncovered_line_appends_the_rest_of_the_suite_to_the_same_data(
+        self,
+    ) -> None:
+        partial = {
+            "harness/a.py": _file([1], [2]),
+            "tests/core/test_a.py": _file([5], []),
+        }
+        full = {"harness/a.py": _file([1, 2], [])}
+
+        result, commands = self._measure([0, 0], [partial, full])
+
+        self.assertEqual(result, full)
+        self.assertEqual(len(commands), 2)
+        rest = commands[1]
+        self.assertEqual(rest[-1], str(diff_coverage.ROOT / "tests"))
+        self.assertIn("--cov-append", rest)
+        self.assertIn(f"--ignore={self.OWN}", rest)
+
+    def test_own_tests_that_collect_nothing_fall_back_to_the_rest_of_the_suite(
+        self,
+    ) -> None:
+        full = {"harness/a.py": _file([1, 2], [])}
+
+        result, commands = self._measure(
+            [diff_coverage.PYTEST_NO_TESTS_COLLECTED, 0], [full]
+        )
+
+        self.assertEqual(result, full)
+        self.assertEqual(commands[1][-1], str(diff_coverage.ROOT / "tests"))
+
+    def test_a_failing_own_test_fails_the_gate_without_the_rest_of_the_suite(
+        self,
+    ) -> None:
+        result, commands = self._measure([1], [])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(len(commands), 1)
+
+
 class GitFailureTests(unittest.TestCase):
     def test_a_hung_git_diff_stops_the_gate_with_a_message(self) -> None:
         with (
