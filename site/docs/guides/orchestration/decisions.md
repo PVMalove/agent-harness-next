@@ -362,6 +362,35 @@ remedy предлагает снова передать в `--supersedes` тот
   остаётся в brief, пока продолжаемый snapshot его не содержит. Так бывает, например, после retry
   ещё не перебазированного отчёта.
 
+Отчёт architect, который не был принят, тоже можно перенести без нового architect. Нужно, чтобы
+человек подтвердил именно этот отчёт:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . batch create ... \
+  --supersedes <abandoned-batch-id> --approved-by 'имя утверждающего' \
+  --approved-at <approval-time-utc> \
+  --carry-architect <architect-dispatch-id> --architect-report-sha256 <report_sha256> \
+  --architect-confirmed-by 'имя подтвердившего' --architect-confirmed-at <confirmation-time-utc>
+```
+
+Подтверждение — отдельное решение человека, привязанное к байтам отчёта через `report_sha256`. Его
+проверяют как approval: TTL и отдельный запрос в терминале при `human_approval_gate: tty`.
+Подтверждающий с префиксом `policy:` отклоняется. Отчёт может нести любое решение, в том числе
+`retry` или `reject`. Команда называет remedy и ничего не пишет в таких случаях: подтверждение
+неполное; флаги переноса переданы без `--supersedes`; dispatch не является `reported` architect
+источника; outcome отчёта не `completed`; SHA-256 не совпадает с записанным `report_sha256`;
+Definition of Done другой; у источника есть `abandoned.last_accepted` (тогда работает обычный
+перенос); путь из `commit_plan` отчёта выходит за `allowed_paths` нового batch.
+
+Ссылка `supersedes` получает `last_accepted: null`, `start_commit: null` и
+`supersedes.architect` с полями `confirmed_by` и `confirmed_at`. Batch начинает с
+`next_action: developer` от своей base. `commit_plan` отчёта проверяется по Definition of Done и
+`allowed_paths` нового batch и закрепляется, как при accept. Поэтому замещающий batch можно
+спланировать с более широким scope и сохранить отчёт architect. Расширение scope живого batch без
+нового batch — отдельный маршрут (#1017). Источник, который сам перенёс подтверждённый отчёт,
+передаёт его дальше: `--carry-architect` называет тот же dispatch, а ссылка указывает на batch,
+где лежит отчёт.
+
 Что не переносится никогда: risk assessment, code-review, QA, carried items, candidate registrations
 и решения оператора. Они остаются evidence abandoned batch и доступны только по
 `supersedes.batch_id`. Risk assessment, review и QA проходят заново на новом candidate. Запись

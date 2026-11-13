@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[Перенос отчёта architect без last_accepted]:** `batch create --supersedes` переносит отчёт architect закрытого batch, который не был принят, если человек подтвердил именно этот отчёт: `--carry-architect <dispatch>`, `--architect-report-sha256`, `--architect-confirmed-by` и `--architect-confirmed-at`. Ссылка `supersedes.architect` хранит id dispatch, `report_sha256` и подтверждение; batch начинает с developer без нового architect. Отказ без подтверждения человека, при другом SHA-256, другом Definition of Done и при `commit_plan` вне `allowed_paths` нового batch (#1052).
+
 ### Fixed
 
 - **[Hooks и старый конверт]:** `runtime-autostart.sh` при `.claude/hooks/hook_response.py`, который не регистрирует `runtime-autostart`, больше не блокирует каждый вызов `Bash` и не зацикливает `Stop`: он печатает предупреждение `[runtime-autostart-failed]` с командой исправления и завершается кодом `0`. `harness update` не подключает hook, чей `hook_id` не знает установленный конверт, и печатает `harness update <repo> --force-seed-file .claude/hooks/hook_response.py`, которая за один запуск заменяет конверт и подключает hook. Проверка `hooks.policy` в `harness health` сообщает такой рассинхрон (`fail`, если hook подключён) и даёт ту же команду. Блокировка критичных hooks не меняется (#1100).

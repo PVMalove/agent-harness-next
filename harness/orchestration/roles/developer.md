@@ -162,7 +162,9 @@ startup SHA can already include unfinished progress. For `developer-retry`, map 
 The first developer of a superseding batch (`batch create --supersedes`) starts at the abandoned
 batch's last accepted candidate as its `snapshot_commit`: an initial brief maps the inherited
 commits after the batch base too, and a developer-retry brief with a non-null
-`rebase_target_commit` rebases them onto that target as described above.
+`rebase_target_commit` rebases them onto that target as described above. A superseding batch that
+carries a confirmed architect report (`--carry-architect`) has no `start_commit`, so its first
+developer starts at the batch base.
 Do not report the candidate SHA alone when it hides multiple commits.
 
 A developer-retry brief whose `carried_items` is not empty hands on the closed list of items its

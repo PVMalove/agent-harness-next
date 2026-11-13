@@ -362,6 +362,36 @@ What is carried over:
   stays in the brief until the snapshot being continued contains it. This happens, for example, after a retry of
   a report that was not yet rebased.
 
+An architect report that was never accepted can be carried too, without a new architect, once a
+human confirms that exact report:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . batch create ... \
+  --supersedes <abandoned-batch-id> --approved-by 'approver name' \
+  --approved-at <approval-time-utc> \
+  --carry-architect <architect-dispatch-id> --architect-report-sha256 <report_sha256> \
+  --architect-confirmed-by 'confirmer name' --architect-confirmed-at <confirmation-time-utc>
+```
+
+The confirmation is a separate human decision bound to the report bytes through `report_sha256`.
+It is checked like an approval: the TTL and a separate terminal prompt under
+`human_approval_gate: tty`. A confirmer with the `policy:` prefix is rejected. The report may carry
+any decision, `retry` or `reject` included. The command names a remedy and writes nothing when the
+confirmation is incomplete, the carry flags come without `--supersedes`, the dispatch is not a
+`reported` architect of the source, the report outcome is not `completed`, the SHA-256 differs from
+the recorded `report_sha256`, the Definition of Done differs, the source has an
+`abandoned.last_accepted` record (the ordinary carry applies then), or a path of the report's
+`commit_plan` lies outside the new batch's `allowed_paths`.
+
+The `supersedes` link gets `last_accepted: null`, `start_commit: null` and a
+`supersedes.architect` with `confirmed_by` and `confirmed_at`. The batch starts with
+`next_action: developer` from its base. The report's `commit_plan` is checked against the new
+batch's Definition of Done and `allowed_paths` and pinned as on an accept. A superseding batch can
+therefore be planned with a wider scope and keep the architect report. Widening the scope of a live
+batch without a new batch is a separate route (#1017). A source that itself carried a confirmed
+report hands it on: `--carry-architect` names the same dispatch, and the reference points at the
+batch that holds the report.
+
 What is never carried over: the risk assessment, code-review, QA, carried items, candidate registrations,
 and operator decisions. They stay evidence of the abandoned batch and are available only through
 `supersedes.batch_id`. The risk assessment, review, and QA run again on the new candidate. The `supersede`
