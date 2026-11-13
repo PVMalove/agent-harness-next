@@ -163,7 +163,8 @@ def test_the_runtime_launches_the_approved_worker_with_the_adr_0025_argv(
     }
     assert mounted == roots
     assert SECRET_NAME in flag_values(create, "--env")
-    assert flag_values(create, "--entrypoint") == [sys.executable]
+    # The image's Python runs a .py adapter: the host interpreter's path is not in it (#1125).
+    assert flag_values(create, "--entrypoint") == ["python3"]
     assert create[create.index(WORKER_ID) + 1] == str(repo.adapter)
     assert ["podman", "start", WORKER_CONTAINER] in engine.calls()
     assert_only_podman(engine)

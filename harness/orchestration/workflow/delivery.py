@@ -464,10 +464,12 @@ def send_dispatch(args: argparse.Namespace) -> JsonObject:
         command = None
         adapter_preflight: JsonObject | None = None
         if adapter is not None:
+            # A container runs the adapter with the image's Python: the host interpreter's path
+            # does not exist there (#1125).
             command = (
                 [str(adapter)]
                 if adapter.suffix.lower() != ".py"
-                else [sys.executable, str(adapter)]
+                else ["python3" if container else sys.executable, str(adapter)]
             )
             adapter_args = args.adapter_arg or []
             if any(
