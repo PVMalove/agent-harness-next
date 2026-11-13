@@ -22,6 +22,7 @@ from .protocol.events import replies as event_replies
 from ..application.screens import ScreenService
 from .protocol.screens import is_screen_request
 from .protocol.screens import respond as respond_screens
+from ..application.ports import ActivitySource
 from ..application.snapshots import SnapshotService
 from .protocol.snapshots import busy, respond
 from ..application.live_steps import LiveSteps
@@ -112,7 +113,7 @@ class RouterConnection:
             elif is_screen_request(raw):
                 await self._reply(await respond_screens(raw, router.screens))
             else:
-                await self._reply(await respond(raw, router.snapshots))
+                await self._reply(await respond(raw, router.snapshots, router.activity))
         except Exception:
             # A reply that cannot be produced or sent ends the connection.
             if self._on_failure is not None:
@@ -138,7 +139,9 @@ class RequestRouter:
         screens: ScreenService,
         workers: WorkerStepsQuery,
         steps: LiveSteps,
+        activity: ActivitySource | None = None,
     ) -> None:
+        self.activity = activity
         self.snapshots = snapshots
         self.jobs = jobs
         self.decisions = decisions

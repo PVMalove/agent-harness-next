@@ -66,6 +66,29 @@ export const firstLine = (text: string): string => text.split("\n").find((line) 
 export const priorityLabel = (card: BoardCard): string =>
   card.priority ? card.priority.replace("priority::", "").toUpperCase() : "";
 
+/** The way a ticket is implemented, from the command the server derives from its labels
+    (`launch_command`): `/fast-implement` for pipeline::fast, `/to-guide` for human-in-the-loop. */
+export type ImplementationKind = "fast" | "full" | "guide";
+
+export function implementationKind(card: BoardCard): ImplementationKind {
+  if (card.command === "/fast-implement") return "fast";
+  if (card.command === "/to-guide") return "guide";
+  return "full";
+}
+
+export function implementationLabel(t: Translate, kind: ImplementationKind): string {
+  return { fast: t("быстрая"), full: t("полная"), guide: t("с человеком") }[kind];
+}
+
+/** How many blocker ids a card shows before it says how many more are open. */
+const SHOWN_BLOCKERS = 3;
+
+/** The blocker badges of a card: the open ones by id (at most `SHOWN_BLOCKERS`), then how many more. */
+export function blockerBadges(card: BoardCard): { ids: string[]; more: number } {
+  const open = card.blockers.filter((blocker) => blocker.state === "open").map((blocker) => blocker.id);
+  return { ids: open.slice(0, SHOWN_BLOCKERS), more: Math.max(0, card.open_blockers - Math.min(SHOWN_BLOCKERS, open.length)) };
+}
+
 export interface BoardFilters {
   query: string;
   priority: string;

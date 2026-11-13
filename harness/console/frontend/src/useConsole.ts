@@ -3,7 +3,8 @@ import { createContext, createElement, useContext, useEffect, useMemo, useReduce
 import type { ReactNode } from "react";
 import { INITIAL, reduce } from "./connection";
 import type { ConnectionState } from "./connection";
-import type { HomeSnapshot } from "./ws/types";
+import { parseHomeEvents } from "./ws/homeEvents";
+import type { HomeEvent, HomeSnapshot } from "./ws/types";
 import { createConsoleClient } from "./ws/client";
 import type { ConsoleClient, SocketFactory } from "./ws/client";
 
@@ -14,12 +15,17 @@ export interface ConsoleValue {
   replies: number;
   /** Grows with every batch of orchestration events. */
   events: number;
+  /** The last orchestration events seen since the console opened, newest first. */
+  recentEvents: HomeEvent[];
   /** When the last valid Home snapshot arrived; null before the first one. */
   snapshotAt: Date | null;
   /** The last valid Home snapshot (kept while reconnecting); null before the first one. Other
       pages read its facts (project, harness, store, health) instead of asking again. */
   snapshot: HomeSnapshot | null;
 }
+
+/** How many orchestration events Home keeps for its list. */
+const RECENT_EVENTS = 20;
 
 const ConsoleContext = createContext<ConsoleValue | null>(null);
 
@@ -53,6 +59,7 @@ export function ConsoleProvider({
   const [replies, setReplies] = useState(0);
   const [events, setEvents] = useState(0);
   const [snapshotAt, setSnapshotAt] = useState<Date | null>(null);
+  const [recentEvents, setRecentEvents] = useState<HomeEvent[]>([]);
 
   useEffect(() => {
     const unsubscribe = client.subscribe((event) => {
@@ -61,7 +68,11 @@ export function ConsoleProvider({
       if (event.type === "snapshot" || event.type === "invalid" || event.type === "error") {
         setReplies((count) => count + 1);
       }
-      if (event.type === "events") setEvents((count) => count + 1);
+      if (event.type === "events") {
+        setEvents((count) => count + 1);
+        const seen = parseHomeEvents(event.events);
+        if (seen.length) setRecentEvents((kept) => [...seen.reverse(), ...kept].slice(0, RECENT_EVENTS));
+      }
     });
     client.start();
     const stop = () => client.stop();
@@ -74,8 +85,8 @@ export function ConsoleProvider({
   }, [client]);
 
   const value = useMemo(
-    () => ({ state, client, replies, events, snapshotAt, snapshot: state.snapshot }),
-    [state, client, replies, events, snapshotAt],
+    () => ({ state, client, replies, events, recentEvents, snapshotAt, snapshot: state.snapshot }),
+    [state, client, replies, events, recentEvents, snapshotAt],
   );
   return createElement(ConsoleContext.Provider, { value }, children);
 }

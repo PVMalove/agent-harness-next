@@ -1,5 +1,26 @@
 /* The Home snapshot body of a home.snapshot reply. ws-schema.json types it as JsonValue, so its
    shape follows harness/console/kernel/home_snapshot.py (HomeSnapshot.to_payload) by hand. */
+import type { HomeActivityPayload, LinkActivityPayload } from "./protocol.gen";
+
+/** The per-link counters of the Home contour: a key of the reply beside the snapshot, counted
+    for that reply from the events the console observed (kernel/home_activity.py). */
+export type HomeActivity = HomeActivityPayload;
+export type LinkActivity = LinkActivityPayload;
+
+/** One orchestration event of the console's journal, as Home lists it. */
+export interface HomeEvent {
+  seq: number;
+  observed_at: string;
+  event: string;
+  batch_id: string | null;
+  ticket: string | null;
+  dispatch_id: string | null;
+  role: string | null;
+  from: string | null;
+  to: string | null;
+  decision: string | null;
+  outcome: string | null;
+}
 
 export interface HealthCounters {
   ok: number;
@@ -251,6 +272,23 @@ export function parseHomeSnapshot(value: unknown): HomeSnapshot | null {
   if (!SNAPSHOT(value)) return null;
   const snapshot = value as unknown as HomeSnapshot;
   return snapshot.problems.length <= snapshot.problems_total ? snapshot : null;
+}
+
+const rate: Check = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+const ACTIVITY = fields({
+  window_seconds: count,
+  events_per_minute: rate,
+  links: list(
+    fields({ link: string, events_per_minute: rate, last_event_age_seconds: nullable(rate) }),
+  ),
+  last_event_age_seconds: nullable(rate),
+  events_total_window: count,
+});
+
+/** The activity when `value` has exactly its shape, otherwise null: a reply with a broken
+    activity still carries a usable snapshot, so the contour just has no data. */
+export function parseHomeActivity(value: unknown): HomeActivity | null {
+  return ACTIVITY(value) ? (value as HomeActivity) : null;
 }
 
 export const healthTotal = (health: HealthCounters): number =>

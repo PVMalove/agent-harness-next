@@ -570,6 +570,7 @@ def _bounded_sessions(
                 RouteStep(_clip(step.role, ID_BYTES), _clip(step.state, ID_BYTES))
                 for step in session.route[-ROUTE_LIMIT:]
             ),
+            updated_at=_clip(session.updated_at, ID_BYTES),
         )
         for session in sessions[:RECENT_SESSIONS_LIMIT]
     )

@@ -45,6 +45,7 @@ describe("Home", () => {
       "Последние задачи",
       "Здоровье",
       "Контур Harness",
+      "Последние события",
     ]);
     expect(headings(3).map((text) => text!.trim())).toEqual([
       "Проект",
@@ -52,6 +53,7 @@ describe("Home", () => {
       "Runtime store",
       "Repo Map",
       "Память",
+      "Наблюдение",
       "Маршрут сессии #7",
       "По областям",
       "Проверки",
@@ -135,6 +137,7 @@ describe("Home", () => {
       "Recent tasks",
       "Health",
       "Harness outline",
+      "Recent events",
     ]);
     expect(document.getElementById("problems-limit")!.textContent).toBe(
       "Showing 3 of 5 · Full check catalog unavailable",
@@ -254,5 +257,112 @@ describe("Home after the owner's review", () => {
     expect(steps.map((step) => step.querySelector("small")!.textContent)).toEqual(["Отчёт сдан", "Выполняется"]);
     expect(steps[1].className).toContain("current");
     expect(icons(steps[0])).toEqual(["architect"]);
+  });
+});
+
+const ACTIVITY = {
+  window_seconds: 300,
+  events_per_minute: 1.4,
+  links: [
+    { link: "decision", events_per_minute: 0, last_event_age_seconds: null },
+    { link: "typed", events_per_minute: 1.2, last_event_age_seconds: 4.4 },
+    { link: "write", events_per_minute: 0.2, last_event_age_seconds: 200 },
+    { link: "launch", events_per_minute: 0, last_event_age_seconds: null },
+    { link: "audit", events_per_minute: 1.4, last_event_age_seconds: 4.4 },
+    { link: "receipts", events_per_minute: 0, last_event_age_seconds: null },
+  ],
+  last_event_age_seconds: 4.4,
+  events_total_window: 7,
+};
+
+function renderWithActivity(activity: unknown) {
+  const client = createConsoleClient({
+    url: "ws://127.0.0.1:1/ws",
+    WebSocket: FakeSocket,
+    timers: new ManualClock(),
+    probeHealth: async () => false,
+  });
+  render(
+    <LanguageProvider>
+      <App client={client} />
+    </LanguageProvider>,
+  );
+  const socket = FakeSocket.last;
+  act(() => socket.open());
+  act(() => socket.reply({ ...snapshotReply(socket.request("home.snapshot").id, fixture), activity }));
+  return { socket };
+}
+
+const edges = () => Array.from(document.querySelectorAll("#home-contour .ct-edge"));
+const linkRow = (link: string) => document.querySelector(`#home-contour [data-link="${link}"]`)!;
+
+describe("Home contour activity", () => {
+  beforeEach(() => {
+    FakeSocket.reset();
+    window.location.hash = "#/";
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  test("without activity every link is static and says there is no data, with no numbers of its own", () => {
+    renderWithActivity(null);
+    expect(edges()).toHaveLength(6);
+    expect(edges().filter((edge) => edge.classList.contains("live"))).toHaveLength(0);
+    for (const link of ["decision", "typed", "write", "launch", "audit", "receipts"]) {
+      expect(linkRow(link).textContent).toBe(`${link}нет данных`);
+    }
+    expect(document.getElementById("home-contour")!.textContent).not.toMatch(/\/мин|назад/);
+    expect(document.getElementById("home")!.textContent).not.toMatch(/\/мин/);
+  });
+
+  test("a link stops moving by itself when no new reply comes", () => {
+    renderWithActivity(ACTIVITY);
+    expect(linkRow("typed").classList.contains("live")).toBe(true);
+    // The last typed event was 4.4 s old at the reply: one minute later it is past the threshold.
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(linkRow("typed").classList.contains("live")).toBe(false);
+    expect(edges().filter((edge) => edge.classList.contains("live"))).toHaveLength(0);
+    expect(linkRow("typed").textContent).toBe("typed1.2/мин · 64 с назад");
+  });
+
+  test("a link with fresh events moves; an old or empty one does not; values are the payload's", () => {
+    renderWithActivity(ACTIVITY);
+    const live = edges().map((edge) => edge.classList.contains("live"));
+    // decision, typed, write, launch, audit, receipts
+    expect(live).toEqual([false, true, false, false, true, false]);
+    expect(linkRow("typed").textContent).toBe("typed1.2/мин · 4 с назад");
+    expect(linkRow("write").textContent).toBe("write0.2/мин · 3 мин назад");
+    expect(linkRow("launch").textContent).toBe("launchнет событий в окне");
+    expect(linkRow("typed").classList.contains("live")).toBe(true);
+    // The KPI strip carries the counted rate: 7 events in 300 s.
+    expect(screen.getByRole("group", { name: "Показатели Главной" }).textContent).toContain("1.4");
+    expect(document.getElementById("home-context")!.textContent).toContain("300 с");
+  });
+
+  test("a malformed activity is dropped as no data, the snapshot stays", () => {
+    renderWithActivity({ ...ACTIVITY, links: "x" });
+    expect(edges().filter((edge) => edge.classList.contains("live"))).toHaveLength(0);
+    expect(document.getElementById("health-ok")!.textContent).toBe("42");
+  });
+
+  test("recent events: an empty state first, then the events newest first", () => {
+    const { socket } = renderWithActivity(null);
+    expect(document.getElementById("home-events")!.textContent).toContain("Событий с момента открытия консоли не было");
+    const subscription = socket.request("orchestration.subscribe").id;
+    const events = [
+      { seq: 1, observed_at: "2026-11-13T12:00:01+00:00", event: "batch.transition", batch_id: "b-1", ticket: "#1", from: null, to: "active" },
+      { seq: 2, observed_at: "2026-11-13T12:00:09+00:00", event: "dispatch.transition", batch_id: "b-1", role: "developer", from: "queued", to: "working" },
+      { junk: true },
+    ];
+    act(() =>
+      socket.reply({ v: 1, id: subscription, type: "orchestration.subscribe", ok: true, kind: "events", cursor: "j-2", events }),
+    );
+    const rows = Array.from(document.querySelectorAll("#home-events li")).map((row) => row.textContent);
+    expect(rows).toEqual([
+      "12:00:09dispatch.transitiondeveloper · queued → working",
+      "12:00:01batch.transition— → active",
+    ]);
   });
 });

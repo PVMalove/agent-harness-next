@@ -6,10 +6,14 @@ import { groupLabel, useI18n } from "../i18n";
 import { href } from "../navigation";
 import { preRelease } from "../AppShell";
 import { useConsole } from "../useConsole";
+import { KpiStrip, RecentEvents } from "./HomeBlocks";
+import { LINKS, ageText, linkState } from "./homeActivity";
+import { useAgedActivity } from "./useAgedActivity";
 import type {
   AreaCounters,
   HarnessInstall,
   HealthCounters,
+  HomeActivity,
   HomeSnapshot,
   Problem,
   RecentSession,
@@ -368,13 +372,15 @@ export function HealthStrip({ health }: { health: HealthCounters }) {
 }
 
 /** The Harness 2.0.0 contour of the mockup (homeContour): the structure is fixed, every value
-    comes from the snapshot; the typed IPC edge moves only while a batch is active. */
-function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
+    comes from the snapshot or from the activity the console counted for that reply; a link moves
+    only while events flow on it. */
+function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activity: HomeActivity | null }) {
   const { t } = useI18n();
+  const states = Object.fromEntries(LINKS.map((link) => [link, linkState(activity, link, t)]));
+  const edge = (link: string) => `ct-edge flow${states[link].animated ? " live" : ""}`;
   const store = snapshot?.store ?? null;
   const value = (text: string | number | null | undefined) =>
     text === null || text === undefined ? <b className="muted">{t("нет данных")}</b> : <b>{text}</b>;
-  const live = (snapshot?.active_batches ?? 0) > 0 ? " live" : "";
   const fact = (text: string | number | null | undefined) => (text === null || text === undefined ? "—" : String(text));
   return (
     <section id="home-contour" className="panel contour-panel">
@@ -440,19 +446,28 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
               <text className="ct-title" x="693" y="311">Execution receipts</text>
               <text className="ct-sub" x="693" y="327">exit evidence · lost evidence</text>
             </g>
-            <path className="ct-edge" d="M280 74H342" markerEnd="url(#ct-arrow)" />
-            <path className={`ct-edge blue${live}`} d="M542 74H600V112H465V145" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M592 167H680" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M592 200H646V231H680" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M465 215V292" markerEnd="url(#ct-arrow)" />
-            <path className="ct-edge" d="M828 258V292" markerEnd="url(#ct-arrow)" />
+            <path className={edge("decision")} d="M280 74H342" markerEnd="url(#ct-arrow)" />
+            <path className={edge("typed")} d="M542 74H600V112H465V145" markerEnd="url(#ct-arrow)" />
+            <path className={edge("write")} d="M592 167H680" markerEnd="url(#ct-arrow)" />
+            <path className={edge("launch")} d="M592 200H646V231H680" markerEnd="url(#ct-arrow)" />
+            <path className={edge("audit")} d="M465 215V292" markerEnd="url(#ct-arrow)" />
+            <path className={edge("receipts")} d="M828 258V292" markerEnd="url(#ct-arrow)" />
             <text className="ct-edge-label" x="288" y="68">decision</text>
             <text className="ct-edge-label" x="552" y="68">typed</text>
             <text className="ct-edge-label" x="600" y="161">write</text>
             <text className="ct-edge-label" x="600" y="194">launch</text>
             <text className="ct-edge-label" x="472" y="284">audit</text>
+            <text className="ct-edge-label" x="836" y="284">receipts</text>
           </svg>
         </div>
+        <ul className="contour-links" aria-label={t("Активность контура")}>
+          {LINKS.map((link) => (
+            <li key={link} data-link={link} className={states[link].animated ? "live" : ""}>
+              <span>{link}</span>
+              <b className={activity ? "" : "muted"}>{states[link].label}</b>
+            </li>
+          ))}
+        </ul>
         <div className="contour-facts">
           <div>
             <span>authority</span>
@@ -483,6 +498,9 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
         <p className="contour-note">
           {t("Схема показывает устройство контура, а не поток конкретного batch. Python решает; Rust пишет состояние и исполняет.")}
         </p>
+        <p className="contour-note contour-observed">
+          {t("Счётчики по звеньям считаются по событиям, которые увидела консоль (опрос раз в секунду); точность в пределах интервала опроса.")}
+        </p>
       </div>
     </section>
   );
@@ -490,12 +508,13 @@ function Contour({ snapshot }: { snapshot: HomeSnapshot | null }) {
 
 export function Home() {
   const { t, section, fact, language, state: stateText, plural } = useI18n();
-  const { state, client, replies, events } = useConsole();
+  const { state, client, replies, events, recentEvents } = useConsole();
   const [online, setOnline] = useState(false);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<"all" | "problem" | "skipped">("all");
   const firstEvents = useRef(events);
   const snapshot = state.snapshot;
+  const activity = useAgedActivity(state.activity);
   const unavailable = t("Недоступно в текущем снимке");
 
   // Offline mode re-reads Home 15 s after each reply; online refreshes only on request.
@@ -588,10 +607,15 @@ export function Home() {
         </div>
       </div>
 
+      <KpiStrip snapshot={snapshot} activity={activity} />
+
       <div className="home-main">
         <section id="home-attention" className="panel home-attn">
           <div className="panel-head">
             <h2>{t("Требует внимания")}</h2>
+            <a className="small" href={href("diagnostics")}>
+              {t("Все проверки →")}
+            </a>
             <span id="problem-count" className="small muted">
               {snapshot
                 ? `${plural(fails, ["ошибка", "ошибки", "ошибок"], ["error", "errors"])} · ${plural(warns, ["предупреждение", "предупреждения", "предупреждений"], ["warning", "warnings"])} · ${shown.length} / ${snapshot.problems_total}`
@@ -705,6 +729,20 @@ export function Home() {
                 <p className="aside-note">{`${policy.problem} ${policy.inactive}`.trim()}</p>
               ) : null}
             </div>
+            <div className="context-section">
+              <h3>
+                <Icon name="activity" /> {t("Наблюдение")}
+              </h3>
+              <dl className="kv">
+                <Fact label={t("Окно подсчёта")} value={activity ? t("{count} с", { count: activity.window_seconds }) : null} />
+                <Fact label={t("События в окне")} value={activity ? String(activity.events_total_window) : null} />
+                <Fact
+                  label={t("Последнее событие")}
+                  value={activity ? (activity.last_event_age_seconds === null ? "—" : ageText(activity.last_event_age_seconds, t)) : null}
+                />
+              </dl>
+              <p className="aside-note">{t("по наблюдению консоли")}</p>
+            </div>
           </div>
         </section>
 
@@ -808,7 +846,9 @@ export function Home() {
           </div>
         </section>
 
-        <Contour snapshot={snapshot} />
+        <Contour snapshot={snapshot} activity={activity} />
+
+        <RecentEvents events={recentEvents} />
       </div>
     </div>
   );

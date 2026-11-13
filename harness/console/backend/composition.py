@@ -55,6 +55,7 @@ from .application.ports import (
 )
 from .application.screens import ScreenService
 from .application.task_board import TaskBoardService
+from .application.home_activity import HomeActivityQuery
 from .application.snapshots import SnapshotService
 from .application.worker_steps import POLL_SECONDS, WorkerStepsQuery
 from .domain.approvals import DecisionsSnapshot
@@ -329,6 +330,6 @@ def compose(
         screens,
         workers,
         steps,
-        RequestRouter(snapshots, jobs, decisions, events, screens, workers, steps),
+        RequestRouter(snapshots, jobs, decisions, events, screens, workers, steps, HomeActivityQuery(events, now=utc_now_iso)),
         Discovery,
     )

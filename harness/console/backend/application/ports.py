@@ -12,6 +12,7 @@ from ....json_types import JsonObject
 from ...kernel.batch_history import History
 from ...kernel.container_route import Authored
 from ...kernel.coordinator_api import ApiResult
+from ...kernel.home_activity import HomeActivity
 from ...kernel.home_snapshot import HomeSnapshot
 from ...kernel.reports import LedgerView
 from ...kernel.protocol import _clip
@@ -189,6 +190,12 @@ class OrchestrationReader(Protocol):
 
 class JournalUnavailable(Exception):
     """The event journal cannot be read or written."""
+
+
+class ActivitySource(Protocol):
+    """The Home contour activity of this moment; None when the events cannot be read."""
+
+    def __call__(self) -> HomeActivity | None: ...
 
 
 class EventJournal(Protocol):

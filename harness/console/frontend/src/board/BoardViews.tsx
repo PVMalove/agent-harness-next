@@ -10,7 +10,18 @@ import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { BOARD_COLUMNS } from "../ws/taskBoard";
 import type { BoardCard, BoardColumn, BoardStale, TaskBoard } from "../ws/taskBoard";
-import { ageText, columnLabels, firstLine, priorityLabel, safeUrl, trackerReason, visible } from "./format";
+import {
+  ageText,
+  blockerBadges,
+  columnLabels,
+  firstLine,
+  implementationKind,
+  implementationLabel,
+  priorityLabel,
+  safeUrl,
+  trackerReason,
+  visible,
+} from "./format";
 import type { BoardFilters } from "./format";
 import { dropClass, moveOf, refusalCaption } from "./statusChange";
 
@@ -115,6 +126,8 @@ function Card({
   const link = safeUrl(card.url);
   const what = firstLine(card.what);
   const draggable = onDrag !== undefined;
+  const kind = implementationKind(card);
+  const badges = blockerBadges(card);
   const [dragging, setDragging] = useState(false);
   return (
     <article
@@ -146,16 +159,32 @@ function Card({
     >
       <div className="board-card-meta">
         <span>{card.id}</span>
-        {prio && <em className={`board-prio ${prio.toLowerCase()}`}>{prio}</em>}
+        <span className="board-card-badges">
+          {prio && <em className={`board-prio ${prio.toLowerCase()}`}>{prio}</em>}
+          <em className="board-sp" title={t("Story points")}>
+            {card.sp === null ? t("нет данных") : `${card.sp} SP`}
+          </em>
+        </span>
       </div>
       <h3>{card.title}</h3>
       <p>{what || t("нет данных")}</p>
       <div className="board-card-chips">
         <span className="board-chip command">{card.command}</span>
+        <span className={`board-chip kind ${kind}`} title={t("Тип реализации")}>
+          {implementationLabel(t, kind)}
+        </span>
         {card.dispatch && <span className="board-chip role">{t("dispatch: {role}", { role: card.dispatch })}</span>}
         {!card.closed &&
           (card.open_blockers > 0 ? (
-            <span className="board-chip blocker">{t("блокеров: {count}", { count: card.open_blockers })}</span>
+            <>
+              <span className="board-chip blocker">{t("блокеров: {count}", { count: card.open_blockers })}</span>
+              {badges.ids.map((id) => (
+                <span className="board-chip blocker-id" key={id} title={t("Открытый блокер")}>
+                  {id}
+                </span>
+              ))}
+              {badges.more > 0 && <span className="board-chip blocker-id">+{badges.more}</span>}
+            </>
           ) : (
             <span className="board-chip free">{t("без блокеров")}</span>
           ))}

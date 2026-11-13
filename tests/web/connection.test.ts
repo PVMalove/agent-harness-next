@@ -100,3 +100,26 @@ describe("the connection state", () => {
     }
   });
 });
+
+describe("the contour activity of the connection state", () => {
+  const activity = {
+    window_seconds: 300,
+    events_per_minute: 1.2,
+    links: [{ link: "typed" as const, events_per_minute: 1.2, last_event_age_seconds: 4.5 }],
+    last_event_age_seconds: 4.5,
+    events_total_window: 6,
+  };
+
+  test("a snapshot reply sets it and a reply without it clears it", () => {
+    const withActivity = run([{ ...(got(snapshot) as object), activity } as ClientEvent]);
+    expect(withActivity.activity).toEqual(activity);
+    expect(run([got(snapshot)], withActivity).activity).toBeNull();
+    expect(INITIAL.activity).toBeNull();
+  });
+
+  test("a dropped socket takes it away while the snapshot stays", () => {
+    const live = run([{ ...(got(snapshot) as object), activity } as ClientEvent]);
+    const dropped = run([{ type: "closed", wasOpen: true, attempt: 1, delayMs: 500 }], live);
+    expect(dropped).toMatchObject({ activity: null, snapshot, stale: true });
+  });
+});

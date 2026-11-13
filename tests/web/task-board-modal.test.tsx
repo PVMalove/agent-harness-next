@@ -159,3 +159,23 @@ describe("the ticket modal", () => {
     expect(screen.getByRole("button", { name: "Agent prompt" })).toBeTruthy();
   });
 });
+
+describe("the ticket drawer returns the focus (#1092)", () => {
+  test("Escape closes it and the card that opened it is focused again", () => {
+    FakeSocket.reset();
+    window.localStorage.clear();
+    renderBoard();
+    const card = document.querySelector<HTMLElement>('[data-board-ticket="#511"]')!;
+    card.focus();
+    act(() => {
+      fireEvent.keyDown(card, { key: "Enter" });
+    });
+    const dialog = document.querySelector("dialog")!;
+    expect(document.getElementById(dialog.getAttribute("aria-labelledby")!)!.textContent).toContain("Экран списка задач");
+    act(() => {
+      fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    });
+    expect(document.querySelector("dialog")).toBeNull();
+    expect(document.activeElement).toBe(card);
+  });
+});

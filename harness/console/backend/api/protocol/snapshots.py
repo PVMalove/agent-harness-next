@@ -10,6 +10,7 @@ from ....kernel.protocol import (
     MAX_ID_CHARS,
     PROTOCOL_VERSION,
 )
+from ...application.ports import ActivitySource
 from ...application.snapshots import SnapshotService
 from . import Rejected, encode, error_reply, parse_envelope
 
@@ -59,8 +60,14 @@ def busy(raw: str) -> str:
     return error_reply("busy", request.id, request.type)
 
 
-async def respond(raw: str, snapshots: SnapshotService) -> str:
-    """The reply to one request frame. Never raises: every failure is an error reply."""
+async def respond(
+    raw: str,
+    snapshots: SnapshotService,
+    activity: ActivitySource | None = None,
+) -> str:
+    """The reply to one request frame. Never raises: every failure is an error reply. The
+    `activity` of the contour is counted for this reply, beside the (cached) snapshot; it is
+    null when no source is given or its events cannot be read."""
     try:
         request = _parse(raw)
     except Rejected as rejected:
@@ -85,11 +92,22 @@ async def respond(raw: str, snapshots: SnapshotService) -> str:
         "cached": served.cached,
         "age_seconds": round(served.age_seconds, 3),
         "snapshot": served.snapshot.to_payload(),
+        "activity": _activity(activity),
     }
     # Only a reply that does not list every problem whole names where the rest is paged.
     if served.snapshot.listed_problems() != served.snapshot.problems:
         reply["problems_snapshot_id"] = served.snapshot_id
     return encode(reply)
+
+
+def _activity(source: ActivitySource | None) -> dict[str, object] | None:
+    if source is None:
+        return None
+    try:
+        found = source()
+    except Exception:
+        return None
+    return None if found is None else found.to_payload()
 
 
 def _problems_reply(request: _Request, snapshots: SnapshotService) -> str:

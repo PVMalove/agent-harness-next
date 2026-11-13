@@ -244,6 +244,13 @@ class OrchestrationEvents:
             available=self.available,
         )
 
+    def recent(self, limit: int) -> list[Event] | None:
+        """The last `limit` kept events, oldest first; None while no journal is loaded."""
+        journal = self._journal
+        if journal is None:
+            return None
+        return journal.events_after(max(journal.floor, journal.head - limit), limit)
+
     @staticmethod
     def _position(journal: EventJournal, cursor: object) -> int:
         if cursor is None:

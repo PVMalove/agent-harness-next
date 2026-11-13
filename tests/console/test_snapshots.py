@@ -531,6 +531,7 @@ def test_a_home_request_is_answered_with_the_snapshot_and_its_freshness() -> Non
         "cached": False,
         "age_seconds": 0.0,
         "snapshot": _wire(build_home_snapshot(DATA, HomeContext())),
+        "activity": None,
     }
 
 

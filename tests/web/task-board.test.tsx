@@ -300,3 +300,53 @@ describe("the Task Board route", () => {
     expect(content()).toContain("no data");
   });
 });
+
+describe("the board card (#1092)", () => {
+  beforeEach(() => {
+    FakeSocket.reset();
+    answered.clear();
+    window.localStorage.clear();
+  });
+
+  const card = (id: string) => document.querySelector(`[data-board-ticket="${id}"]`)!;
+  const meta = (id: string) => card(id).querySelector(".board-card-meta")!.textContent;
+  const chips = (id: string) => [...card(id).querySelectorAll(".board-chip")].map((chip) => chip.textContent);
+
+  test("shows the priority and story points, or no data when the ticket has none", () => {
+    renderBoard();
+    expect(meta("#511")).toBe("#511P13 SP");
+    expect(meta("#512")).toBe("#512P05 SP");
+    expect(meta("#516")).toBe("#516нет данных");
+  });
+
+  test("names the implementation type from the command: full, fast, with a human", () => {
+    renderBoard();
+    expect(chips("#512")).toContain("полная");
+    expect(chips("#513")).toContain("быстрая");
+    expect(chips("#514")).toContain("с человеком");
+    expect(card("#513").querySelector(".board-chip.kind")!.className).toContain("fast");
+  });
+
+  test("lists the open blockers by id; a closed or unknown one is not a badge", () => {
+    renderBoard();
+    expect(chips("#511")).toEqual(["/implement", "полная", "блокеров: 1", "#512"]);
+    expect(chips("#516")).toEqual(["/implement", "полная", "без блокеров"]);
+  });
+
+  test("names more open blockers than the badges hold", () => {
+    const many = {
+      ...BOARD,
+      tickets: BOARD.tickets.map((ticket) =>
+        ticket.id === "#511"
+          ? {
+              ...ticket,
+              open_blockers: 5,
+              blockers: ["#601", "#602", "#603", "#604", "#605"].map((id) => ({ id, n: 1, why: "w", state: "open" })),
+            }
+          : ticket,
+      ),
+    };
+    renderBoard({ board: many });
+    expect(chips("#511")).toEqual(["/implement", "полная", "блокеров: 5", "#601", "#602", "#603", "+2"]);
+  });
+});

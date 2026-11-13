@@ -354,6 +354,20 @@ class ErrorReply(_Envelope):  # type: ignore[explicit-any]
     error: ErrorBody
 
 
+class LinkActivityPayload(_Strict):  # type: ignore[explicit-any]
+    link: Literal["decision", "typed", "write", "launch", "audit", "receipts"]
+    events_per_minute: float
+    last_event_age_seconds: float | None
+
+
+class HomeActivityPayload(_Strict):  # type: ignore[explicit-any]
+    window_seconds: int
+    events_per_minute: float
+    links: list[LinkActivityPayload]
+    last_event_age_seconds: float | None
+    events_total_window: int
+
+
 class HomeSnapshotReply(_Envelope):  # type: ignore[explicit-any]
     type: Literal["home.snapshot"]
     ok: Literal[True]
@@ -361,6 +375,9 @@ class HomeSnapshotReply(_Envelope):  # type: ignore[explicit-any]
     age_seconds: float
     snapshot: dict[str, JsonValue]
     problems_snapshot_id: int | None = None
+    # Counted for this reply from the events the console observed, not cached with the
+    # snapshot; null when they cannot be read. Older clients ignore the key.
+    activity: HomeActivityPayload | None = None
 
 
 class HomeProblemsReply(_Envelope):  # type: ignore[explicit-any]

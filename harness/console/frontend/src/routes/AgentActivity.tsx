@@ -58,7 +58,7 @@ export function AgentActivity() {
     ["stats", t("Статистика")],
   ];
   return (
-    <div className="work-page" data-section="Ход работы">
+    <div className="work-page work-fit" data-section="Ход работы">
       <div className="page-title work-title">
         <div>
           <h1>{section("Ход работы")}</h1>
@@ -79,10 +79,12 @@ export function AgentActivity() {
           </a>
         </div>
       </div>
-      <WorkSummary dispatches={live.dispatches} />
-      <WorkKpis dispatches={live.dispatches} analytics={ledger.data?.analytics ?? null} now={now} />
+      <div className="work-stats">
+        <WorkSummary dispatches={live.dispatches} />
+        <WorkKpis dispatches={live.dispatches} analytics={ledger.data?.analytics ?? null} now={now} />
+      </div>
       <TabList id="work" label={section("Ход работы")} className="orch-tabbar work-tabbar" tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
-      <TabPanels id="work" tabs={tabs} value={tab}>
+      <TabPanels id="work" tabs={tabs} value={tab} className="work-panel">
       {tab === "overview" ? (
         <>
           <StepSources />

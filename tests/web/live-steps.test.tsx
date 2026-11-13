@@ -199,18 +199,23 @@ describe("the agent activity route", () => {
     ]);
   });
 
-  test("steps and session events show the 10 latest in compact rows inside a scroll region", () => {
+  test("steps and session events are compact rows inside scroll regions, the latest 100 and 50", () => {
     const { socket, id } = renderActivity();
     const many = Array.from({ length: 14 }, (_, index) => ({ ...AGENT_STEP, text: `step ${index}`, observed_at: `2026-11-05T10:${String(30 + index)}:00+00:00` }));
     act(() => socket.reply(stepsReply(id, many)));
-    expect(rows()).toEqual(Array.from({ length: 10 }, (_, index) => `step ${index + 4}`));
+    expect(rows()).toEqual([
+      "Dispatch dispatch-dev: dispatched → working",
+      "Read",
+      "Проверяю тесты",
+      ...Array.from({ length: 14 }, (_, index) => `step ${index}`),
+    ]);
     expect(list().getAttribute("role")).toBe("region");
     expect(list().tabIndex).toBe(0);
     const ask = socket.request("reports.timeline");
     const events = Array.from({ length: 14 }, (_, index) => ({ at: `2026-11-08T09:${String(10 + index)}:00+00:00`, kind: "state", role: null, text: `event ${index}` }));
     act(() => socket.reply(screenPage(ask.id, "reports.timeline", JSON.stringify({ ...TIMELINE, events }))));
     const shown = [...document.querySelectorAll("#work-events .work-event b")].map((item) => item.textContent);
-    expect(shown).toEqual(Array.from({ length: 10 }, (_, index) => `event ${13 - index}`));
+    expect(shown).toEqual(Array.from({ length: 14 }, (_, index) => `event ${13 - index}`));
     expect(document.querySelector("#work-events")?.getAttribute("role")).toBe("region");
   });
 
@@ -237,5 +242,59 @@ describe("the agent activity route", () => {
     const minutes = labels.map((label) => label.textContent).filter((text) => /м$/.test(text ?? ""));
     expect(minutes).toEqual(["0м", "15м", "30м", "45м", "60м"]);
     expect(labels.find((label) => label.textContent === "60м")?.getAttribute("text-anchor")).toBe("end");
+  });
+});
+
+describe("the step list as a timeline (#1092)", () => {
+  beforeEach(() => FakeSocket.reset());
+
+  const close = (index: number, seconds: number) => ({
+    ...AGENT_STEP,
+    text: `close ${index}`,
+    observed_at: `2026-11-06T10:05:${String(seconds).padStart(2, "0")}+00:00`,
+  });
+
+  test("close steps of one source are one row with a count, the newest text and the duration at the right", () => {
+    const { socket, id } = renderActivity();
+    act(() => socket.reply(stepsReply(id, [close(0, 0), close(1, 10), close(2, 20), { ...close(3, 0), observed_at: "2026-11-06T10:09:00+00:00", text: "later" }])));
+    const all = [...list().querySelectorAll(".work-event")];
+    // Three initial steps, the cluster of three close steps and the later one.
+    expect(all).toHaveLength(5);
+    const cluster = all[3] as HTMLElement;
+    expect(cluster.querySelector("b")!.textContent).toBe("close 2");
+    expect(cluster.querySelector(".work-cluster-toggle")!.textContent).toBe("×3");
+    // From the first close step to the next step of the same source: 10:05:00 -> 10:09:00.
+    expect(cluster.querySelector(".work-event-duration")!.textContent).toBe("4 мин 0 с");
+    expect(all[4]!.querySelector(".work-event-duration")!.textContent).toBe("—");
+    expect(all[4]!.querySelector(".work-cluster-toggle")).toBeNull();
+  });
+
+  test("the count opens the members of the cluster and closes them again", () => {
+    const { socket, id } = renderActivity();
+    act(() => socket.reply(stepsReply(id, [close(0, 0), close(1, 10)])));
+    const toggle = list().querySelector(".work-cluster-toggle") as HTMLElement;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(list().querySelector(".work-cluster-members")).toBeNull();
+    act(() => fireEvent.click(toggle));
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect([...list().querySelectorAll(".work-cluster-members li")].map((item) => item.textContent)).toEqual([
+      "10:05:00close 0",
+      "10:05:10close 1",
+    ]);
+    act(() => fireEvent.click(toggle));
+    expect(list().querySelector(".work-cluster-members")).toBeNull();
+  });
+
+  test("a long feed of 600 steps keeps the page short: 100 rows, the client holds 500 and the rest is counted", () => {
+    const { socket, id } = renderActivity();
+    const many = Array.from({ length: 600 }, (_, index) => ({
+      ...AGENT_STEP,
+      dispatch_id: `dispatch-${index}`,
+      text: `bulk ${index}`,
+      observed_at: `2026-11-06T11:00:00+00:00`,
+    }));
+    act(() => socket.reply(stepsReply(id, many)));
+    expect(list().querySelectorAll(".work-event")).toHaveLength(100);
+    expect(list().closest(".panel")!.querySelector(".panel-head")!.textContent).toContain("100 из 500");
   });
 });

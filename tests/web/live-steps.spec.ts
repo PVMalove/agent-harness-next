@@ -56,7 +56,8 @@ async function open(page: Page, width: number) {
   await page.clock.setFixedTime(new Date("2026-11-06T10:35:00Z"));
   await page.goto(`${base()}/#/agent-activity`);
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
-  await expect(page.locator("#work-steps .work-event")).toHaveCount(10);
+  // 13 steps; close steps of one source make one row each (8 rows).
+  await expect(page.locator("#work-steps .work-event")).toHaveCount(8);
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
@@ -74,11 +75,13 @@ test("new steps arrive without a reload and the filters narrow the list", async 
   await expect(page.locator("#work-steps")).not.toContainText("{");
 
   await page.locator('[data-dispatch="dispatch-rev"]').click();
-  await expect(texts(page)).toHaveText(["Проверяю изменения в request_router.py", "exec"]);
-  await expect(page.locator("#work-steps .orch-pill")).toHaveText(["структура недоступна", "структура недоступна"]);
+  await expect(texts(page)).toHaveText(["exec"]);
+  await expect(page.locator("#work-steps .work-cluster-toggle")).toHaveText("×2");
+  await expect(page.locator("#work-steps .orch-pill")).toHaveText(["структура недоступна"]);
   await page.locator('[data-dispatch="dispatch-rev"]').click();
   await page.getByLabel("Фильтр по роли").selectOption("architect");
-  await expect(texts(page)).toHaveText(["Dispatch dispatch-arch: working → reported", "Гейт dispatch-arch: accept"]);
+  await expect(texts(page)).toHaveText(["Гейт dispatch-arch: accept"]);
+  await expect(page.locator("#work-steps .work-cluster-toggle")).toHaveText("×2");
 });
 
 for (const width of [1440, 390]) {
@@ -98,7 +101,7 @@ for (const width of [1440, 390]) {
     await mockSocket(page);
     await open(page, width);
     await page.locator('[data-dispatch="dispatch-dev"]').click();
-    await expect(page.locator("#work-steps .work-event")).toHaveCount(4);
+    await expect(page.locator("#work-steps .work-event")).toHaveCount(2);
     await page.locator("#work-steps").scrollIntoViewIfNeeded();
     await expect(page.locator("#work-steps .work-event").first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
