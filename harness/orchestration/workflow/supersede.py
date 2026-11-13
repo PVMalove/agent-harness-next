@@ -182,14 +182,19 @@ def _carried_plan(source: JsonObject, architect: JsonObject) -> list[JsonObject]
     return [dict(entry) for entry in plan]
 
 
-def _start_commit(repo: Path, source: JsonObject, last: JsonObject) -> str | None:
-    """The last accepted candidate the first developer starts from; ``None`` when only the
-    architect was accepted."""
+def _start_commit(
+    repo: Path, source: JsonObject, last: JsonObject, branch_head: str
+) -> str | None:
+    """The commit the first developer starts from; ``None`` when only the architect was accepted.
+
+    It is the last accepted candidate, or the issue branch head when unaccepted commits (a
+    developer-retry) lie over that candidate: the worker's startup snapshot must equal the
+    worktree HEAD, and history is never rewritten (issue #1042)."""
     candidate = last.get("candidate_commit")
     if candidate is None:
         return None
     try:
-        return _candidate_commit(repo, candidate)
+        accepted = _candidate_commit(repo, candidate)
     except CoordinatorError as exc:
         raise CoordinatorError(
             f"the last accepted candidate {candidate} of batch {source.get('batch_id')} does not "
@@ -198,6 +203,9 @@ def _start_commit(repo: Path, source: JsonObject, last: JsonObject) -> str | Non
             "fetch it, then create the superseding batch again; or create an ordinary batch "
             "without --supersedes",
         ) from exc
+    if _git_is_ancestor(repo, accepted, branch_head):
+        return branch_head
+    return accepted
 
 
 def developer_next_action(batch: JsonObject) -> str:
@@ -264,8 +272,9 @@ def attach(
     With the same definition of done, the source's accepted architect is carried by reference and
     its pinned commit plan is copied, so the batch starts at the developer stage; with another
     definition of done nothing is carried and the architect stage runs again. The first developer
-    starts at the last accepted candidate (``start_commit``); when that does not descend from the
-    integration base pinned now, the base becomes its ``rebase_target_commit``.
+    starts at the last accepted candidate, or at the branch head over it (``start_commit``); when
+    that does not descend from the integration base pinned now, the base becomes its
+    ``rebase_target_commit``.
     """
     source = _load_source(root, source_id)
     from harness.orchestration.ledger.recovery_chain import legacy_abandoned
@@ -278,7 +287,7 @@ def attach(
     _require_same_work(source, record)
     same_done = source.get("definition_of_done") == record["definition_of_done"]
     architect = _architect_reference(root, source) if same_done else None
-    start = _start_commit(repo, source, last)
+    start = _start_commit(repo, source, last, record["branch_start_commit"])
     base = record["integration_base_commit"]
     target = (
         base if start is not None and not _git_is_ancestor(repo, base, start) else None
