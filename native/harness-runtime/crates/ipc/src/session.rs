@@ -145,6 +145,9 @@ impl Session {
                         "state": "serving",
                         "pid": std::process::id(),
                         "repo_id": shared.repo_id,
+                        // The PATH the workers this runtime spawns resolve their binaries on.
+                        "search_path": std::env::var_os("PATH")
+                            .map(|v| v.to_string_lossy().into_owned()),
                     }),
                 ),
                 close: false,
@@ -859,6 +862,20 @@ mod tests {
         assert_eq!(reply.response.status, Status::Ok);
         assert_eq!(reply.response.operation_id, "s");
         assert_eq!(reply.response.result.unwrap()["state"], "serving");
+    }
+
+    #[test]
+    fn status_answers_the_search_path_of_the_serve_environment() {
+        let (shared, root) = setup();
+        let mut session = authenticated(&shared, &root);
+
+        let reply = session.handle(&shared, &status_body(1, "status", NOW + 1), NOW);
+
+        let expected = std::env::var_os("PATH").map(|v| v.to_string_lossy().into_owned());
+        assert_eq!(
+            reply.response.result.unwrap()["search_path"],
+            json!(expected)
+        );
     }
 
     #[test]
