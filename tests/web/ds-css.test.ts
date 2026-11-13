@@ -7,6 +7,9 @@ import { describe, expect, test } from "vitest";
 
 const REPO = resolve(__dirname, "../..");
 const STYLES = join(REPO, "harness/console/frontend/src/styles");
+/** State classes the shell sets on <body> (`nav-open`, `nav-collapsed`): the sheets read them, the old
+    stylesheet owns their names. */
+const BODY_STATE = new Set(["nav-open", "nav-collapsed"]);
 const SHEETS = readdirSync(STYLES).filter((name) => /^ds-.+\.css$/.test(name)).sort();
 
 function selectors(css: string): string[] {
@@ -26,7 +29,7 @@ describe("ds-*.css", () => {
       const css = readFileSync(join(STYLES, name), "utf-8");
       const foreign = selectors(css)
         .flatMap((selector) => [...selector.replace(/\[[^\]]*\]/g, "").matchAll(/\.([A-Za-z_][\w-]*)/g)].map((m) => m[1]!))
-        .filter((cls) => !cls.startsWith("ds-"));
+        .filter((cls) => !cls.startsWith("ds-") && !BODY_STATE.has(cls));
       expect(foreign).toEqual([]);
     });
 

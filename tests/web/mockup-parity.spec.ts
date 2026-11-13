@@ -148,13 +148,13 @@ for (const width of [1440, 390]) {
   test(`shell at ${width} px: title, version, repository, branch, menu captions and counters`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "", width);
-    await expect(page.locator(".brand b")).toHaveText("Harness next");
-    await expect(page.locator(".brand .version")).toHaveText("1.5.1");
-    await expect(page.locator(".brand .channel")).toHaveCount(0);
+    await expect(page.locator(".ds-brand b")).toHaveText("Harness next");
+    await expect(page.locator(".ds-version")).toHaveText("1.5.1");
+    await expect(page.locator(".ds-channel")).toHaveCount(0);
     await expect(page.locator("#project")).toHaveText("claude-agent-harness");
     if (width < 600) await page.locator("#menu-toggle").click();
     const nav = page.getByRole("navigation", { name: "Разделы консоли" });
-    await expect(nav.locator(".nav-label")).toContainText(["Главная", "Диагностика", "Обновление", "Проект"]);
+    await expect(nav.locator(".ds-nav-text")).toContainText(["Главная", "Диагностика", "Обновление", "Проект"]);
     await expect(nav.locator('[data-route="diagnostics"]')).toHaveText("2");
     await expect(nav.locator('[data-route="update-harness"]')).toHaveText("3");
     await expect(nav.locator('[data-route="repo-map"]')).toHaveText("full");

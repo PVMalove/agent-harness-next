@@ -27,9 +27,10 @@ import type { ConsoleClient } from "./ws/client";
 function Layout() {
   const { state } = useConsole();
   const route = useLocation().pathname.replace(/^\/+/, "").split("/")[0] ?? "";
+  const connectionPage = showsConnectionPage(state.status, route);
   return (
-    <AppShell chip={<ConnectionChip />} banner={<ConnectionBanner />}>
-      {showsConnectionPage(state.status, route) ? <ConnectionPage /> : <Outlet />}
+    <AppShell chip={<ConnectionChip />} banner={<ConnectionBanner />} connectionPage={connectionPage}>
+      {connectionPage ? <ConnectionPage /> : <Outlet />}
     </AppShell>
   );
 }

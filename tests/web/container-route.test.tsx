@@ -48,7 +48,7 @@ describe("the Container route", () => {
       expect(document.querySelector('[role="tabpanel"]')?.getAttribute("data-stage")).toBe(stage);
       expect([stage, facts[stage].filter((fact) => !content().includes(fact))]).toEqual([stage, []]);
     }
-    expect(document.querySelector('nav a[aria-current="page"]')?.getAttribute("href")).toBe("#/orchestration");
+    expect(document.querySelector('#navigation a[aria-current="page"]')?.getAttribute("href")).toBe("#/orchestration");
   });
 
   test("a tab only switches the pane; only the read is interactive and no command starts", () => {
