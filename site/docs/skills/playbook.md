@@ -1,4 +1,4 @@
-# Playbook — Руководство по оркестрации
+# Playbook: руководство по оркестрации
 
 Источник: [`harness/orchestration/playbook.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/playbook.md).
 
@@ -13,36 +13,21 @@
 
 ## 2. Полное описание
 
-Playbook — runtime-neutral контракт координации для необязательной возможности `backend-orchestration`. Он задаёт ручной протокол координатора, а не механизм dispatch, выбор провайдера или обязательный runtime adapter. Первичный источник определяет полномочия координатора, неизменяемые brief и reports, конечный автомат batch, порядок ролей, правила liveness, условия параллелизма, quality-gates и базовые метрики.
+Playbook задаёт контракт координации для необязательной capability `backend-orchestration` и не зависит от runtime. Это ручной протокол координатора: сам playbook не запускает dispatch, не выбирает провайдера и не требует runtime adapter. Первоисточник определяет полномочия координатора, неизменяемые brief и reports, конечный автомат batch, порядок ролей, правила liveness, условия параллелизма, quality gates и базовые метрики.
 
-Координатор единолично принимает completion report, управляет lifecycle, approval dispatch и изменениями scope. Каждый batch имеет один тикет, issue-ветку и изолированный worktree; один write-role активен в момент времени. Изменение scope, зоны, DoD, назначения либо необходимого доказательства завершает dispatch и требует нового immutable brief.
+Только координатор принимает completion report и управляет жизненным циклом batch, одобрением dispatch и изменениями scope. У каждого batch один тикет, одна issue-ветка и один изолированный worktree. В каждый момент активна только одна write-роль. Если меняется scope, зона, DoD, назначение или нужное доказательство, текущий dispatch завершается и нужен новый неизменяемый brief.
 
-Context Package — immutable ledger-owned результат детерминированного `context_builder.py`. Он
-переиспользуется ролями одного batch, а его freshness перед каждым dispatch записывается в shadow
-режиме. Checkpoint — отдельная non-terminal запись только для write-роли; она позволяет начать новую
-worker session под тем же dispatch ID без переноса истории чата и traceback. Recognized rate-limit
-авторизует resume автоматически, planned trigger требует существующего coordinator decision.
+Context Package (пакет контекста для ролей) собирает детерминированный `context_builder.py`. Пакет неизменяем, им владеет ledger, и роли одного batch используют его повторно. Перед каждым dispatch coordinator проверяет свежесть пакета в shadow-режиме: записывает результат, но не блокирует dispatch. Checkpoint: отдельная нетерминальная запись только для write-роли. С ним новая worker session продолжает работу под тем же dispatch ID без истории чата и traceback. Распознанный rate limit разрешает resume автоматически. Плановый trigger требует уже записанного решения координатора.
 
-Перед review и publish coordinator выполняет base-commit gate: после `git fetch origin <integration_ref>`
-актуальная вершина должна совпадать с batch base. Drift устраняется новым developer/rebase dispatch.
-Delta-review бывает test-only (после Warning, только для test-only diff) и после fix-forward:
-coordinator выбирает delta-review или полный review сам, без отдельного решения человека; dispatch
-одобряется по `approval_policy` вместе с этим выбором. Условия полного review описаны в
-[`code-review`](code-review.md). Любой delta-review всегда является новым независимым
-review dispatch. Advisory tool call остаётся эфемерным non-role выводом и не может авторизовать
-работу.
+Перед review и publish coordinator проходит base-commit gate: после `git fetch origin <integration_ref>` текущая вершина должна совпадать с base batch. Если вершина ушла вперёд, coordinator назначает новый dispatch developer или rebase.
+Delta-review бывает двух видов: test-only (после Warning, только для diff из одних тестов) и после fix-forward. Coordinator сам выбирает delta-review или полный review, отдельное решение человека не нужно. Dispatch одобряется по `approval_policy` вместе с этим выбором. Когда нужен полный review, описано в [`code-review`](code-review.md). Любой delta-review всегда идёт новым независимым review dispatch. Вызов advisory tool даёт эфемерный вывод вне ролей и не может разрешить работу.
 
-`approval_policy: auto` задаёт автоматический путь от `batch approve` до принятого publish.
-Политика согласует batch, каждый dispatch и плановое продолжение. `batch auto-decide` принимает
-решение по отчёту из фактов ledger: accept чистого отчёта с рисками или retry по `route_preview`.
-Каждое решение пишется как `policy:auto` с evidence. Закрытый список остановок (`budget-exhausted`,
-`integrity-failure`, `no-automatic-route`) останавливает путь и пишет итоговый отчёт. После
-остановки каждый шаг согласует человек. PR открывает только человек, auto-merge запрещён.
+`approval_policy: auto` включает автоматический путь от `batch approve` до принятого publish. Политика одобряет batch, каждый dispatch и плановое продолжение. `batch auto-decide` решает по отчёту на основе фактов ledger: принимает чистый отчёт с рисками или назначает retry по `route_preview`. Каждое решение записывается как `policy:auto` с evidence. Путь останавливают условия из закрытого списка категорий (`integrity-failure`, `budget-exhausted`, `no-automatic-route`). При остановке coordinator пишет итоговый отчёт. Дальше каждый шаг одобряет человек. PR открывает только человек, auto-merge запрещён.
 
 ## 3. Контракты
 
-- **Вход (Input/Brief):** тикет, allowed paths, issue-ветка/worktree, DoD, запреты, команды проверки, назначение провайдера/модели и явное одобрение человека.
-- **Процесс (Process):** `planned → awaiting-approval → active → awaiting-approval`, затем `completed`, `blocked`, `failed`, `not-required` или `abandoned` (`blocked` продолжается только через `batch resume --reason`); Architect предшествует Developer; reports принимаются только при достаточном независимом доказательстве.
+- **Вход (Input/Brief):** тикет, allowed paths, issue-ветка и worktree, DoD, запреты, команды проверки, назначение провайдера и модели и явное одобрение человека.
+- **Процесс (Process):** batch проходит `planned → awaiting-approval → active → awaiting-approval` и заканчивается в `completed` или `abandoned`. Из `blocked`, `failed` и `paused` batch возвращает только человек. `not-required` остался как старая терминальная запись, новые команды пишут `completed`. Architect работает раньше Developer. Координатор принимает report, только если независимого доказательства достаточно.
 - **Выход (Output/Report):** Context Package, checkpoints, неизменяемые dispatch briefs, completion reports, принятый конечный статус batch и наблюдаемая базовая линия метрик.
 
 ## 4. Архитектурная схема

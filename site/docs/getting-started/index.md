@@ -1,13 +1,14 @@
 # Быстрый старт
 
-Agent Harness Next разворачивает в проект скиллы, hooks и контекстные документы как проверяемый
-snapshot. После установки проект живёт автономно: скиллы и hooks работают через нативные механизмы
-Claude Code и Codex, а оркестрация использует Rust runtime и локальный runtime-store.
+Agent Harness Next устанавливает в проект скиллы, hooks и контекстные документы одним snapshot,
+который можно проверить. После установки проект не зависит от репозитория harness: скиллы и hooks
+работают через встроенные механизмы Claude Code и Codex, а оркестрация хранит состояние в
+локальном runtime store, который ведёт Rust runtime.
 
 !!! note "Ранний доступ"
 
     Сайт описывает текущую версию, но поведение и флаги ещё меняются. Перед установкой в рабочий
-    проект сделайте backup и проверьте требования.
+    проект сделайте резервную копию и проверьте требования.
 
 ## Начать с агентом {#agent-setup}
 
@@ -75,7 +76,7 @@ Claude Code и Codex, а оркестрация использует Rust runtim
 
 ## Путь установки
 
-Выберите сборку: схема покажет, какой snapshot окажется в проекте. Узлы кликабельны.
+Выберите сборку, и схема покажет, какой snapshot попадёт в проект. На узлы можно нажимать.
 
 <div class="ah-flow" id="ah-install-flow">
   <div class="ah-core-scroll"><div class="ah-core is-fit" id="ah-install-map"></div></div>
@@ -90,28 +91,28 @@ Claude Code и Codex, а оркестрация использует Rust runtim
 | Компонент | Требование |
 | --- | --- |
 | Python | 3.12 или новее |
-| Git | Каталог проекта уже инициализирован как Git-репозиторий |
-| Runtime | Claude Code или Codex: скиллы и hooks подключаются нативно |
-| ОС | Linux; на Windows — поддерживаемый runtime и named pipe |
-| `uv` | Обязателен для окружения консоли и локальных проверок harness; без него health показывает `environment.uv: fail` |
-| `harness-runtime` | Для backend-оркестрации; сборка из исходников требует Rust 1.89+ |
+| Git | Каталог проекта уже Git-репозиторий |
+| Runtime | Claude Code или Codex: скиллы и hooks подключаются их встроенными механизмами |
+| ОС | Linux. На Windows нужен поддерживаемый runtime, связь с ним идёт через named pipe |
+| `uv` | Нужен консоли и локальным проверкам harness. Без него health показывает `environment.uv: fail` |
+| `harness-runtime` | Нужен backend-оркестрации. Для сборки из исходников нужен Rust 1.89 или новее |
 | Опционально | Docker или rootless Podman для контейнерного worker и QA |
 
-Зависимости самого проекта harness не устанавливает. Подготовьте их отдельно по
+Зависимости вашего проекта harness не устанавливает. Подготовьте их сами по
 [руководству по окружению](settings/environment.md).
 
 ## 1. Установите глобальный слой
 
-Глобальный слой ставится один раз на машину: минимальный профиль инструкций и скиллы
-`start-project` и `integrate-project`. Параметр `--runtime` повторяемый.
+Глобальный слой ставится один раз на машину. Это минимальный профиль инструкций и скиллы
+`start-project` и `integrate-project`. Параметр `--runtime` можно повторять.
 
 ```bash {.ah-code-wrap}
 python3 bin/install-global.py --target-home "$HOME" \
   --runtime claude --runtime codex
 ```
 
-`--check` показывает статус без записи, `--replace-conflicts` сохраняет backup конфликтующих
-файлов и заменяет их. MCP, модели, плагины, credentials и permissions установщик
+`--check` показывает статус и ничего не записывает. `--replace-conflicts` заменяет конфликтующие
+файлы и сохраняет их резервные копии. MCP, модели, плагины, credentials и permissions установщик
 не трогает.
 
 ??? quote ah-skill-text "Промпт для агента: глобальный слой"
@@ -142,10 +143,10 @@ python3 bin/install-global.py --target-home "$HOME" \
 
 ## 2. Подключите harness к проекту
 
-Новый проект удобнее начинать через скилл `start-project`, существующий — через `integrate-project`:
-он сначала изучает соглашения репозитория, а потом встраивает harness.
+Новый проект удобнее начинать скиллом `start-project`, существующий подключайте скиллом
+`integrate-project`: он сначала изучает соглашения репозитория, а потом встраивает harness.
 
-Прямая установка в Git-репозиторий:
+Чтобы установить harness в Git-репозиторий напрямую, выполните:
 
 ```bash {.ah-code-wrap}
 python3 harness/bin/harness.py init /path/to/repository \
@@ -154,22 +155,23 @@ python3 harness/bin/harness.py init /path/to/repository \
   --qa-gate-command "make test"
 ```
 
-Если в проекте уже есть свои скиллы с теми же именами, используйте `adopt`: он сохраняет всё, что
-не входит в выбранную capability, и падает со списком конфликтов. `--replace-conflicts` заменяет
-конфликтующие каталоги без backup, поэтому сначала проверьте список.
+Если в проекте уже есть свои скиллы, используйте `adopt`. Он сохраняет всё, что не входит в
+выбранную capability. Если имя скилла из capability уже занято, `adopt` завершается ошибкой и
+печатает список конфликтов. `--replace-conflicts` заменяет конфликтующие каталоги без резервной
+копии, поэтому сначала проверьте список.
 
 ```bash {.ah-code-wrap}
 python3 harness/bin/harness.py adopt /path/to/repository \
   --capability engineering-suite --replace-conflicts
 ```
 
-Capability задаёт состав snapshot; сборки взаимоисключающие.
+Capability задаёт состав snapshot. Выберите одну сборку.
 
 | Capability | Что добавляет |
 | --- | --- |
 | `project-foundation` | Доменно-нейтральная база по умолчанию: дизайн, research, handoff, язык проекта. |
 | `mattpocock-suite` | Полный upstream-набор, закреплённый на проверенном коммите. |
-| `engineering-suite` | Инженерный workflow: эпики и тикеты, триаж, двухосевое review, `qa-gate`, подготовка PR. |
+| `engineering-suite` | Поверх `mattpocock-suite`: инженерный workflow, эпики и тикеты, триаж, review по двум осям, `qa-gate`, подготовка PR. |
 | `backend-orchestration` | Поверх `engineering-suite`: coordinator, роли, briefs, worktrees, ledger и QA lane. |
 
 ??? quote ah-skill-text "Промпт для агента: подключить harness"
@@ -200,8 +202,8 @@ Capability задаёт состав snapshot; сборки взаимоискл
 
 ## 3. Проверьте установку: health
 
-`health` проверяет установку и окружение и без флагов ничего не меняет. Запускайте его после
-`init`, `adopt` или `update`, после клонирования проекта и когда агент не обнаруживает скиллы.
+`health` проверяет установку и окружение. Без флагов он ничего не меняет. Запускайте его после
+`init`, `adopt` или `update`, после клонирования проекта и когда агент не находит скиллы.
 
 ```bash {.ah-code-wrap}
 python3 harness/bin/harness.py health /path/to/repository
@@ -212,14 +214,14 @@ python3 harness/bin/harness.py health /path/to/repository --json
 
 | Флаг | Что делает |
 | --- | --- |
-| без флагов | Локальные проверки файлов, каталогов, окружения и Repo Map. |
-| `--fix` | Создаёт отсутствующие каталоги `.harness/` и перегенерирует устаревший registry скиллов; worktree не трогает. |
-| `--online` | Добавляет проверки трекера: авторизация `gh`/`glab`, доступность origin, права и метки. |
+| без флагов | Проверяет локально файлы, каталоги, окружение и Repo Map. |
+| `--fix` | Создаёт отсутствующие каталоги `.harness/` и перегенерирует устаревший registry скиллов. Системные настройки и worktree не трогает. |
+| `--online` | Добавляет проверки трекера: авторизацию `gh`/`glab`, доступность origin, права и метки. Без флага все проверки `tracker.*` пропускаются. |
 | `--json` | Печатает машиночитаемый отчёт `schema_version: 1`. |
 
-Каждая строка помечена `✅` ok, `⚠️` warn, `❌` fail или `-` skipped. На `fail` команда сама печатает
-причину и команду исправления. Группа «Оркестрация» появляется только при `backend-orchestration`:
-там видно runtime, ledger, незавершённые batch, dispatch без активности и неучтённые worktree.
+Каждая строка помечена `✅` ok, `⚠️` warn, `❌` fail или `-` skipped. При `fail` команда печатает
+причину и команду исправления. Группа «Оркестрация» появляется только с `backend-orchestration`.
+В ней видны runtime, ledger, незавершённые batch, dispatch без активности и неучтённые worktree.
 
 ??? quote ah-skill-text "Промпт для агента: проверить health"
 
@@ -257,17 +259,18 @@ python3 harness/bin/harness.py update /path/to/repository
 
 | Команда | Назначение |
 | --- | --- |
-| `list <repo>` | Список установленных скиллов. |
-| `diff <repo>` | Расхождения с залоченным snapshot; `--json` для машиночитаемого отчёта. |
-| `update <repo>` | Подтягивает новую версию capability и сохраняет локальные правки. |
-| `console <repo>` | TUI-пульт и веб-консоль: задачи, оркестрация, отчёты и восстановление. |
-| `cleanup <repo>` | План очистки `.harness/.sandboxes`; `--apply` удаляет, `--mode hard` требует `--apply --confirm HARD`. |
-| `uninstall <repo>` | План и полное удаление harness; `--apply --confirm UNINSTALL` сохраняет изменённые файлы в `.harness-uninstall-backup/`. |
+| `list <repo>` | Печатает список установленных скиллов. |
+| `diff <repo>` | Показывает расхождения с зафиксированным в lock-файле snapshot. `--json` печатает машиночитаемый отчёт. |
+| `update <repo>` | Обновляет управляемые файлы до текущей версии harness. Если вы правили стандартные скиллы, прерывается и не трогает файлы; `--force-managed-files` заменяет ваши правки. |
+| `console <repo>` | Открывает TUI-пульт или веб-консоль: задачи, оркестрация, отчёты и восстановление. |
+| `cleanup <repo>` | Печатает план очистки `.harness/.sandboxes`. `--apply` удаляет, `--mode hard` требует `--apply --confirm HARD`. |
+| `uninstall <repo>` | Печатает план удаления harness. `--apply --confirm UNINSTALL` удаляет harness целиком, изменённые файлы сохраняет в `.harness-uninstall-backup/`. |
 
-`console` — beta: ему нужен `uv`, а при первом запуске он скачивает зависимости, поэтому нужен
-доступ к сети. `console --web` поднимает Сервер консоли, печатает URL с токеном и открывает браузер.
+`console` находится в beta. Ему нужен `uv`, а при первом запуске он скачивает зависимости, поэтому
+нужен доступ к сети. `console --web` запускает Сервер консоли, печатает URL с токеном и открывает
+браузер.
 
-Если установлена `backend-orchestration`, добавьте проверку состояния:
+Если установлена `backend-orchestration`, проверьте ещё состояние оркестрации:
 
 ```bash {.ah-code-wrap}
 python3 .harness/orchestration/coordinator.py --repo . dispatch preflight \
@@ -303,9 +306,9 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
 
 ## 5. Runtime {#runtime}
 
-Раздел нужен при установленной `backend-orchestration`. После однократной миграции состояние
-оркестрации хранит runtime store, и записывать его может только процесс `harness-runtime serve`.
-Миграцию `harness-runtime migrate` выполняют один раз с одобрением человека; порядок описан в
+Раздел нужен, если установлена `backend-orchestration`. После однократной миграции состояние
+оркестрации хранит runtime store, и записывает в него только процесс `harness-runtime serve`.
+Миграцию `harness-runtime migrate` выполняют один раз, и её одобряет человек. Порядок описан в
 [руководстве по backend-оркестрации](../backend-orchestration.md).
 
 После миграции `serve` должен работать всё время, пока вы пользуетесь оркестрацией. Запускайте его
@@ -316,7 +319,7 @@ harness-runtime serve --repo /path/to/repository
 python3 .harness/orchestration/coordinator.py --repo . runtime status
 ```
 
-`runtime status` печатает pid, версию и протокол запущенного runtime. Без runtime отказывают:
+`runtime status` печатает pid, версию и протокол запущенного runtime. Если runtime не запущен, отказывают:
 
 - `coordinator.py` команды `batch`, `dispatch`, `qa` и `recovery`: код 2 и `[runtime_unavailable]`;
 - `harness cleanup`: worktree остаются с причиной «runtime does not answer»;
@@ -326,7 +329,7 @@ python3 .harness/orchestration/coordinator.py --repo . runtime status
 исправить») и веб-консоль: индикатор «Runtime» в заголовке и команда запуска на страницах
 оркестрации. В Claude Code runtime запускает hook
 [автозапуска](../guides/orchestration/operations.md#runtime-autostart). В Codex и на Windows
-держите процесс сами: в отдельном терминале или пользовательским сервисом. Пример для
+запускайте процесс сами: в отдельном терминале или как пользовательский сервис. Пример для
 `systemd --user`:
 
 ```ini {.ah-code-wrap}
@@ -348,14 +351,13 @@ systemctl --user daemon-reload
 systemctl --user enable --now harness-runtime.service
 ```
 
-У сервиса собственное окружение, а не окружение вашего shell:
+Сервис получает своё окружение, а не окружение вашего shell:
 
 - **`PATH`.** В `ExecStart` укажите абсолютный путь к `harness-runtime`. Для контейнерного
   исполнителя добавьте в `Environment=PATH=` каталог `docker` или `podman`.
 - **`XDG_RUNTIME_DIR`.** systemd задаёт сервису `/run/user/<uid>`. Клиенты ищут сокет в том же
-  каталоге, поэтому в shell, где работают агент и coordinator, должно быть то же значение. Если
-  в shell переменной нет, runtime и клиенты разойдутся: клиент будет искать сокет в
-  `/tmp/harness-<uid>`.
+  каталоге, поэтому в shell, где работают агент и coordinator, задайте то же значение. Если
+  в shell переменной нет, клиент ищет сокет в `/tmp/harness-<uid>` и не находит runtime.
 
 ## Дальше
 

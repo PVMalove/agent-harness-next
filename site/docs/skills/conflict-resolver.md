@@ -1,4 +1,4 @@
-# Conflict Resolver — Разрешение конфликтов
+# Conflict Resolver: разрешение конфликтов
 
 Источник: [`harness/orchestration/roles/conflict-resolver.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/conflict-resolver.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
 
@@ -13,15 +13,17 @@
 
 ## 2. Полное описание
 
-Conflict Resolver — write-роль для текстового конфликта между веткой тикета (candidate) и сдвинувшимся integration SHA (target), а также для провалившейся проверки CI или local-QA уже обновлённой пары (`resolver.trigger: verification-failure`: есть `failed_evidence_ids`, конфликтных файлов нет, правка остаётся в scope brief). Её нельзя назначить вручную: единственный путь к ней — `integration resolve`, который создаёт отдельный resolver batch рядом с завершённым batch тикета.
+Conflict Resolver разрешает текстовый конфликт между веткой тикета (candidate) и сдвинувшимся integration SHA (target). Это write-роль. Она же чинит проваленную проверку CI или local-QA уже обновлённой пары: тогда `resolver.trigger: verification-failure`, в brief есть `failed_evidence_ids`, конфликтных файлов нет, а правка остаётся в scope brief. Назначить роль вручную нельзя. Её вызывает только `integration resolve`: команда создаёт отдельный resolver batch рядом с завершённым batch тикета.
 
-Роль работает в issue-ветке и worktree своего batch, открывает skill `resolving-merge-conflicts`, сохраняет требования обеих сторон из секции `resolver` brief и не добавляет функциональность вне них. Она никогда не делает `--abort` и force-push. При несовместимых требованиях она не угадывает, а пишет checkpoint с конкретным описанием и вариантами; ответ человека фиксируется отдельным событием `human-decision`, и та же сессия продолжается. Собственный дефект тикета отправляется обычному developer-у.
+Роль работает в issue-ветке и worktree своего batch и открывает скилл `resolving-merge-conflicts`. Она сохраняет требования обеих сторон из секции `resolver` brief и не добавляет функциональность сверх них. Роль никогда не делает `--abort` и force-push.
+
+Если требования сторон несовместимы, роль не угадывает. Она пишет checkpoint: конкретная несовместимость и варианты с последствиями. Ответ человека записывается отдельным событием `human-decision`, и тот же dispatch продолжается. Новый developer не стартует, соседние batch продолжают работу. Если резолюции нужна правка собственного кода тикета, это дефект тикета: роль сообщает `cause: task-defect`, и работа уходит обычному developer.
 
 ## 3. Контракты
 
-- **Вход (Input/Brief):** immutable brief с секцией `resolver`: тикет, требования обеих сторон, SHA candidate и target, scope, запреты, план коммита, проверки, остаток бюджета (два автоматических target SHA) и `report_staging_path`.
-- **Процесс (Process):** rebase на точный SHA target, разрешение каждого конфликта с сохранением обеих сторон, проверки проекта, коммит резолюции; checkpoint при несовместимости.
-- **Выход (Output/Report):** commit SHA резолюции, точные changed files, проверки и блок `resolver` (сохранённые требования, решения человека, причина, коммиты по плану). После принятия идёт узкий маршрут: без повторного review, но с новыми QA и CI либо local-QA.
+- **Вход (Input/Brief):** неизменяемый brief с секцией `resolver`: тикет, требования обеих сторон, SHA candidate и target, scope, запреты, план коммитов, проверки, остаток бюджета (два автоматических target SHA) и `report_staging_path`.
+- **Процесс (Process):** rebase на точный SHA target, разрешение каждого конфликта с сохранением обеих сторон, проверки проекта, коммит резолюции. При несовместимости роль пишет checkpoint.
+- **Выход (Output/Report):** commit SHA резолюции, точные changed files, проверки и блок `resolver`: сохранённые требования, решения человека, причина, коммиты по плану. Принятая резолюция идёт узким маршрутом: повторного review нет, но QA и CI либо local-QA новой пары обязательны.
 
 ## Источник
 
