@@ -303,6 +303,17 @@ class StageTests(unittest.TestCase):
                 self.assertIn("name: harness-runtime-linux-debug", jobs[name])
                 self.assertNotIn("cargo build", jobs[name])
 
+    def test_both_lint_jobs_restore_the_mypy_cache_before_make_lint(self) -> None:
+        jobs = _jobs()
+        lint = jobs[GATE_JOB]
+
+        self.assertIn("path: .mypy_cache", lint)
+        self.assertIn("hashFiles('uv.lock', 'pyproject.toml')", lint)
+        self.assertIn("'harness/**/*.py', 'scripts/**/*.py', 'tests/**/*.py'", lint)
+        self.assertLess(lint.index("- &mypy-cache"), lint.index("make lint"))
+        light = jobs[LIGHT_JOB]
+        self.assertLess(light.index("- *mypy-cache"), light.index("run: make lint"))
+
     def test_the_failed_tests_of_each_suite_become_annotations(self) -> None:
         jobs = _jobs()
 
