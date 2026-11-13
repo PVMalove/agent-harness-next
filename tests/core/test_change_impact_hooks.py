@@ -112,7 +112,6 @@ def _script(
         capture_output=True,
         text=True,
         encoding="utf-8",
-        errors="replace",
         cwd=project,
         env={**os.environ, **(env or {})},
         check=False,

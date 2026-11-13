@@ -78,6 +78,7 @@ jobs:
           PATH="$(cygpath -u "$git_bash"):$PATH" bash -c 'command -v bash python3 python; python3 --version || true'
       - name: Verify harness and clean-room install
         env:
+          PYTHONUTF8: "1"
           PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
           PYTHONUNBUFFERED: "1"
           # The clean-room part of a pull request stops at the first failing scenario. The tests part
@@ -183,6 +184,8 @@ jobs:
 
   targeted:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
     defaults:
       run:
         shell: bash

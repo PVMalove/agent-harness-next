@@ -171,7 +171,6 @@ def _run(
         capture_output=True,
         text=True,
         encoding="utf-8",
-        errors="replace",
         env=_environment(project, role, profile),
         cwd=project,
         check=False,
