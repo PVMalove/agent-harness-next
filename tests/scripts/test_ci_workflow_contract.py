@@ -323,20 +323,22 @@ class FullPathTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertEqual(_condition(jobs[name]), condition)
 
-    def test_a_pull_request_into_master_runs_the_full_jobs_and_not_the_light_job(
+    def test_a_pull_request_into_master_runs_the_full_jobs_and_not_the_group_jobs(
         self,
     ) -> None:
         running = _running("pull_request", "master")
 
-        self.assertEqual(running, ALL_JOBS - {LIGHT_JOB})
+        self.assertEqual(running, ALL_JOBS - {LIGHT_JOB, GROUPS_JOB})
 
     def test_a_pull_request_into_another_branch_runs_the_full_jobs(self) -> None:
         self.assertEqual(
-            _running("pull_request", "release/1.x"), ALL_JOBS - {LIGHT_JOB}
+            _running("pull_request", "release/1.x"),
+            ALL_JOBS - {LIGHT_JOB, GROUPS_JOB},
         )
         # A branch that only starts with the word is no integration branch.
         self.assertEqual(
-            _running("pull_request", "integrations"), ALL_JOBS - {LIGHT_JOB}
+            _running("pull_request", "integrations"),
+            ALL_JOBS - {LIGHT_JOB, GROUPS_JOB},
         )
 
     def test_a_push_to_master_and_a_call_from_another_workflow_run_the_full_jobs(
@@ -347,7 +349,8 @@ class FullPathTests(unittest.TestCase):
             with self.subTest(event=event):
                 self.assertEqual(
                     _running(event, ""),
-                    ALL_JOBS - {LIGHT_JOB, "diff-coverage", "private-terms"},
+                    ALL_JOBS
+                    - {LIGHT_JOB, GROUPS_JOB, "diff-coverage", "private-terms"},
                 )
 
 
