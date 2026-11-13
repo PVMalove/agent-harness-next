@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .container_route import JsonObject, State, _text
+from .container_route.model import JsonObject, State, _text
 from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls, Outcome
 from .home_snapshot import _bool, _fields, _int, _list, _str
 from .json_fields import items as _items
