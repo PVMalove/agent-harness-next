@@ -8,8 +8,10 @@ are facts about the checkout, not about the lifecycle, so every layer above may 
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -84,6 +86,40 @@ def _registered_worktrees(repo: Path) -> set[Path]:
         for line in listing.splitlines()
         if line.startswith("worktree ")
     }
+
+
+WORKTREE_WRITE_REMEDY = (
+    "the session cannot write to that directory; run the coordinator from a session rooted in the "
+    "main checkout that can write to the issue worktree and its git metadata (for a sandboxed "
+    "session: a worktree the session did not create stays read-only under .git/worktrees), or use "
+    "the single-session route (/fast-implement)"
+)
+
+
+def _require_writable_worktree(worktree: str) -> None:
+    """Refuse an issue worktree whose directory or git metadata this session cannot write.
+
+    A sandboxed session can edit the files of a worktree another session created, while its
+    ``.git/worktrees/<name>`` stays read-only, so the writer's first ``git commit`` fails.  One
+    temporary file is created and removed in each of the two directories, and nowhere else.
+    """
+    path = Path(worktree).resolve()
+    git_metadata = Path(_git(path, "rev-parse", "--absolute-git-dir")).resolve()
+    for label, directory in (
+        ("issue worktree", path),
+        ("git metadata directory", git_metadata),
+    ):
+        try:
+            descriptor, probe = tempfile.mkstemp(
+                prefix=".harness-write-probe-", dir=directory
+            )
+            os.close(descriptor)
+            os.unlink(probe)
+        except OSError as exc:
+            raise CoordinatorError(
+                f"the session cannot write to the {label} {directory}: {exc.strerror or exc}",
+                remedy=WORKTREE_WRITE_REMEDY,
+            ) from exc
 
 
 def _worktree_roots(repo: Path) -> set[Path]:

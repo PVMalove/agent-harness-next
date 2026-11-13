@@ -71,6 +71,7 @@ from harness.orchestration.core.workspace import (
     _agent_inbox,
     _integration_ref,
     _prepare_agent_inbox,
+    _require_writable_worktree,
 )
 from harness.orchestration.dispatch_preflight import (
     PreflightError,
@@ -535,6 +536,10 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
         prepared = prepare_dispatch(batch["ticket"], args.role, state)
     except PreflightError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
+    # A writer commits in the issue worktree: a session that cannot write it learns so here,
+    # before the brief exists, not from the writer's failed commit (#1126).
+    if core_config._role(repo, args.role)["mode"] == "write":
+        _require_writable_worktree(batch["worktree"])
     return prepared.to_dict()
 
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import hashlib
 import inspect
 import io
@@ -2305,6 +2306,100 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             set(registered["context_package"]["starting_files"]),
             {"package_id", "sha256", "freshness"},
         )
+
+    @contextlib.contextmanager
+    def _read_only(self, directory: Path) -> Iterator[None]:
+        """Stand in for a sandbox mount: creating a file in ``directory`` fails with EROFS.
+
+        A real read-only mount is unavailable here, and chmod does not stop root.
+        """
+        real = tempfile.mkstemp
+
+        def mkstemp(*args: object, **kwargs: object) -> tuple[int, str]:
+            target = kwargs.get("dir")
+            if target is not None and Path(str(target)).resolve() == directory:
+                raise OSError(errno.EROFS, "Read-only file system", str(target))
+            return real(*args, **kwargs)  # type: ignore[call-overload,no-any-return]
+
+        with mock.patch.object(tempfile, "mkstemp", mkstemp):
+            yield
+
+    def _assert_write_refusal(
+        self, refused: coordinator.CoordinatorError, directory: Path
+    ) -> None:
+        self.assertIn(str(directory), refused.message)
+        self.assertIn("cannot write", refused.message)
+        self.assertIn("main checkout", refused.remedy)
+        self.assertIn("single-session route", refused.remedy)
+        self.assertNotIn("allowWrite", refused.remedy)
+
+    def test_batch_create_refuses_a_worktree_the_session_cannot_write(self) -> None:
+        _git(
+            self.repo,
+            "worktree",
+            "add",
+            "-b",
+            self.branch,
+            str(self.worktree),
+            "master",
+        )
+        git_metadata = (self.repo / ".git" / "worktrees" / self.worktree.name).resolve()
+        for read_only in (self.worktree.resolve(), git_metadata):
+            with self.subTest(read_only=read_only), self._read_only(read_only):
+                with self.assertRaises(coordinator.CoordinatorError) as refused:
+                    coordinator.create_batch(self._args(**self._batch_plan()))
+                self._assert_write_refusal(refused.exception, read_only)
+                self.assertEqual(list(self._records().glob("batches/*.json")), [])
+
+        before = sorted(os.listdir(self.worktree))
+        batch = coordinator.create_batch(self._args(**self._batch_plan()))
+        self.assertEqual(batch["state"], "planned")
+        self.assertEqual(sorted(os.listdir(self.worktree)), before)
+
+    def test_writer_preflight_and_send_refuse_a_read_only_git_metadata_directory(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        self._accepted_architect(batch["batch_id"])
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+        git_metadata = (self.repo / ".git" / "worktrees" / self.worktree.name).resolve()
+
+        def preflight(role: str) -> JsonObject:
+            return coordinator.preflight_dispatch(
+                self._args(
+                    batch=batch["batch_id"],
+                    role=role,
+                    purpose="work",
+                    runtime="claude",
+                    candidate_commit=None,
+                )
+            )
+
+        with self._read_only(git_metadata):
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                preflight("developer")
+            self._assert_write_refusal(refused.exception, git_metadata)
+            # A read-only role never writes the git metadata, so it is not probed.
+            self.assertEqual(preflight("architect")["role"], "architect")
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                coordinator.send_dispatch(
+                    self._args(
+                        dispatch=brief["dispatch_id"],
+                        adapter=None,
+                        adapter_arg=None,
+                        checkout=None,
+                    )
+                )
+            self._assert_write_refusal(refused.exception, git_metadata)
+
+        status = coordinator.dispatch_status(
+            self._args(dispatch=brief["dispatch_id"], batch=None, stale_after=None)
+        )
+        self.assertEqual(status["dispatches"][0]["state"], "approved")
+        self._start(brief["dispatch_id"])
 
     def _start(self, dispatch_id: str, *, checkout: Path | None = None) -> None:
         launched = coordinator.send_dispatch(
