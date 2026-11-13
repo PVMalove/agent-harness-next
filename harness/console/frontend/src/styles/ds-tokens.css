@@ -41,11 +41,13 @@
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
-.ds-app *,
-.ds-app *::before,
-.ds-app *::after { box-sizing: border-box; }
-.ds-app :focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; border-radius: 4px; }
-.ds-app code,
+/* Rules on bare elements and pseudo-classes carry the zero-specificity guard :where(:not(.ds-main--legacy *)): the screens
+   that are not moved yet render inside .ds-main--legacy and keep the old stylesheet's look. */
+.ds-app *:where(:not(.ds-main--legacy *)),
+.ds-app *::before:where(:not(.ds-main--legacy *)),
+.ds-app *::after:where(:not(.ds-main--legacy *)) { box-sizing: border-box; }
+.ds-app :focus-visible:where(:not(.ds-main--legacy *)) { outline: 2px solid var(--ds-accent); outline-offset: 2px; border-radius: 4px; }
+.ds-app code:where(:not(.ds-main--legacy *)),
 .ds-mono { font-family: var(--ds-mono); font-size: inherit; }
 .ds-sr {
   position: absolute;
@@ -61,9 +63,9 @@
 .ds-faint { color: var(--ds-faint); }
 
 @media (prefers-reduced-motion: reduce) {
-  .ds-app *,
-  .ds-app *::before,
-  .ds-app *::after {
+  .ds-app *:where(:not(.ds-main--legacy *)),
+  .ds-app *::before:where(:not(.ds-main--legacy *)),
+  .ds-app *::after:where(:not(.ds-main--legacy *)) {
     animation: none !important;
     transition: none !important;
   }

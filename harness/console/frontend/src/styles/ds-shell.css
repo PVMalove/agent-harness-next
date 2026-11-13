@@ -1,6 +1,7 @@
 /* Design system v3 shell: top bar, rail, connection banner, main area and footer. The rules of
    the older stylesheet for bare elements (a, nav, main, h1-h3, input, button) also reach this
-   markup, so the elements that matter are restated here with explicit values. */
+   markup, so the elements that matter are restated here with explicit values. Those restated rules
+   skip .ds-main--legacy, where the old stylesheet stays authoritative. */
 .ds-app {
   display: grid;
   grid-template-columns: var(--ds-rail-w) minmax(0, 1fr);
@@ -10,13 +11,13 @@
   overflow: hidden;
 }
 body.nav-collapsed .ds-app { --ds-rail-w: 60px; }
-.ds-app a { color: var(--ds-accent); text-decoration: none; }
-.ds-app a:hover { text-decoration: none; }
-.ds-app button { font: inherit; color: inherit; }
-.ds-app h1,
-.ds-app h2,
-.ds-app h3 { margin: 0; font-weight: 600; }
-.ds-app p { margin: 0; }
+.ds-app a:where(:not(.ds-main--legacy *)) { color: var(--ds-accent); text-decoration: none; }
+.ds-app a:hover:where(:not(.ds-main--legacy *)) { text-decoration: none; }
+.ds-app button:where(:not(.ds-main--legacy *)) { font: inherit; color: inherit; }
+.ds-app h1:where(:not(.ds-main--legacy *)),
+.ds-app h2:where(:not(.ds-main--legacy *)),
+.ds-app h3:where(:not(.ds-main--legacy *)) { margin: 0; font-weight: 600; }
+.ds-app p:where(:not(.ds-main--legacy *)) { margin: 0; }
 .ds-skip {
   position: absolute;
   left: 8px;

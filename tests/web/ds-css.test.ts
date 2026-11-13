@@ -7,6 +7,10 @@ import { describe, expect, test } from "vitest";
 
 const REPO = resolve(__dirname, "../..");
 const STYLES = join(REPO, "harness/console/frontend/src/styles");
+/** The legacy screens render inside .ds-main--legacy. A rule of the design system that targets a bare
+    element, `*` or a pseudo-class (so it has no ds- class of its own to scope it) must skip that
+    region through this zero-specificity guard; otherwise it restyles the old screens (#1091 review). */
+const LEGACY_GUARD = ":where(:not(.ds-main--legacy *))";
 /** State classes the shell sets on <body> (`nav-open`, `nav-collapsed`): the sheets read them, the old
     stylesheet owns their names. */
 const BODY_STATE = new Set(["nav-open", "nav-collapsed"]);
@@ -31,6 +35,18 @@ describe("ds-*.css", () => {
         .flatMap((selector) => [...selector.replace(/\[[^\]]*\]/g, "").matchAll(/\.([A-Za-z_][\w-]*)/g)].map((m) => m[1]!))
         .filter((cls) => !cls.startsWith("ds-") && !BODY_STATE.has(cls));
       expect(foreign).toEqual([]);
+    });
+
+    test(`${name}: no selector reaches bare elements of the legacy screens`, () => {
+      const css = readFileSync(join(STYLES, name), "utf-8");
+      const leaking = selectors(css)
+        .flatMap((list) => list.split(/,(?![^(]*\))/).map((selector) => selector.trim()))
+        .filter((selector) => !selector.includes(LEGACY_GUARD))
+        // Scoped by a ds- class other than the root (.ds-md p, .ds-seg button), by an id of the shell
+        // (#foot-status) or by the root itself.
+        .filter((selector) => !/\.ds-(?!app\b)[\w-]+|#[\w-]+/.test(selector))
+        .filter((selector) => selector !== ":root" && !/\.ds-app\s*$/.test(selector) && !/^\.ds-app\s*[:\[]/.test(selector));
+      expect(leaking).toEqual([]);
     });
 
     test(`${name}: every custom property starts with --ds-`, () => {
