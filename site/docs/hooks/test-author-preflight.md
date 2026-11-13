@@ -14,8 +14,9 @@
 создаёт состояния оркестрации, а developer продолжает обычный маршрут.
 
 **Аргумент `--worktree <путь>`.** Скрипт проверяет только тот checkout, в котором лежит сам, то есть
-checkout, откуда он запущен. Developer in-process worker работает в другом worktree, поэтому
-вызывает `test-author-preflight.sh --worktree <worktree из brief>`. Ответ `{"status":"ok"}`
+checkout, откуда он запущен. Developer вызывает `test-author-preflight.sh --worktree <worktree из
+brief>` из того worktree, где работает; in-process developer делает это через launcher
+`.harness/health/test_author.py run` своего worktree. Ответ `{"status":"ok"}`
 возможен, только если канонический путь (после `cd` и `pwd -P`) совпадает с checkout скрипта;
 иначе скрипт отвечает `checkout_mismatch`. Отсутствующий, пустой или неразрешимый путь, а также
 любые другие аргументы (неизвестный флаг, лишние аргументы, `--worktree` без значения) дают тот же
@@ -24,19 +25,29 @@ checkout, откуда он запущен. Developer in-process worker рабо
 
 Скрипт проверяет условия и на первом нарушении отвечает фиксированной причиной (таблица условий и
 причин есть в [руководстве](../agents/test-author.md), раздел 3). Поддерживаемые причины:
-`checkout_mismatch`, `runner_unavailable`, `project_untrusted`, `claude_code_unsupported`, `agent_missing`,
+`checkout_mismatch`, `runner_unavailable`, `project_untrusted`, `project_dir_mismatch`,
+`claude_code_unsupported`, `agent_missing`,
 `scoped_hook_unsupported`, `test_paths_missing`, `test_runner_missing`, `config_invalid`,
 `write_zone_rejected`, `guard_hook_unavailable`, `isolation_unavailable`. Ответы guard и runner
 пропускаются через список допустимых причин: любое другое значение заменяется на
 `guard_hook_unavailable` или `isolation_unavailable`, поэтому в ответ не попадают пути и текст
 чужих ошибок.
 
+**Корень проекта.** Скрипт берёт корень из `git rev-parse --show-toplevel` своего checkout: он
+обязан совпасть с checkout скрипта, иначе ответ `project_untrusted`. Так работает основной
+checkout, любой worktree, Claude Code и Codex. `CLAUDE_PROJECT_DIR` не обязателен: Claude Code не
+всегда передаёт его в Bash. Если переменная задана, её канонический путь сравнивается с корнем Git,
+и несовпадение даёт `project_dir_mismatch`: scoped guard нативного субагента берёт проект из этой
+переменной.
+
 **Доверие проекту.** Нативный режим `claude --print` не показывает диалог доверия, поэтому скрипт
-читает решение сам: в `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json`) для точного пути
-`CLAUDE_PROJECT_DIR` должно стоять `hasTrustDialogAccepted: true`. Отсутствие файла, битый JSON,
-чужие проекты и любое значение, кроме булева `true`, дают `project_untrusted`. Claude Code может
-считать доверенным и каталог, чей родитель или корень Git принят; для такого пути записи нет, и
-скрипт отвечает `project_untrusted`. Это безопасное направление ошибки.
+читает решение сам: в `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json`)
+`hasTrustDialogAccepted: true` должно стоять для точного пути checkout или для основного checkout
+репозитория, если checkout — его linked worktree. Основной checkout — родитель
+`git rev-parse --git-common-dir`; он обязан перечислять checkout в `git worktree list`. Отсутствие
+файла, битый JSON, чужие проекты, доверие только к родительскому каталогу, незарегистрированный
+каталог и любое значение, кроме булева `true`, дают `project_untrusted`. Это безопасное
+направление ошибки (ADR 0033).
 
 **Режимы Claude Code.** Переменные `CLAUDE_CODE_SIMPLE` и `CLAUDE_CODE_SAFE_MODE` отключают
 hooks; скрипт при значении `1` отвечает `claude_code_unsupported`. Обе переменные присутствуют в
@@ -90,4 +101,4 @@ production-код не изменён. Изолированный `HOME` с ре
 [test_preflight.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_preflight.py),
 [claude_probe.py](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/clean_room/claude_probe.py),
 [docs/agents/test-author.md](../agents/test-author.md),
-ADR 0014
+ADR 0014, ADR 0033

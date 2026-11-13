@@ -5,6 +5,22 @@ Red → Green → Refactor step and runs it through the protected runner. Produc
 refactoring and orchestration remain with the developer. This is an in-session subagent, not a
 separate ledger role. If protection is unavailable, ordinary TDD continues without an unprotected author.
 
+## Enable the test author {#enable}
+
+1. Set [`test_paths` and `test_runner`](#configuration) and add a `test_author` block with runtime,
+   model and effort to `.harness/project.json`. When `.harness/orchestration.json` has a developer
+   plan, `harness health --fix` adds the block from that plan; it never changes an existing block.
+2. Open Claude Code in the repository's main checkout once and accept the trust dialog. Worktrees
+   of this repository need no trust of their own.
+3. Run `harness health` and follow the step under each `hooks.test_author_*` line with status
+   warn: the lines check the `test_author` block, the project root by Git, trust, guard, runner
+   and the isolation probe. Rerun health until every line is ok. Guard and probe run project
+   scripts, so their lines are skipped until trust is accepted.
+
+```bash {.ah-code-wrap}
+harness health --fix
+```
+
 ## project.json fields {#configuration}
 
 Settings live in `.harness/project.json`. Activation needs `test_paths` and `test_runner`;
@@ -78,7 +94,8 @@ that selection. `.claude/agents/test-author.md` uses `model: inherit` with no ef
 the developer calls `Agent(test-author)` without model/effort overrides.
 
 For an external developer, the harness and protection must be installed **in the worker
-worktree**. Open that exact path in Claude Code and accept trust yourself. Do not copy main
+worktree**. A worktree of a trusted repository needs no trust dialog of its own; if the main
+checkout is not trusted, open it in Claude Code and accept trust yourself. Do not copy main
 checkout orchestration state there. In the developer session running in that worktree:
 
 ```bash {.ah-code-wrap}
@@ -96,8 +113,10 @@ The author writes only within the worker test zone **and** brief scope. Runner l
 in linked worktrees: `<main>/.harness/.sandboxes/runs/isolated-test-<run_id>/log.txt`. The developer
 passes this evidence path, rather than permission to write main-checkout production code.
 
-An in-process developer using main-checkout protection with a separate worker worktree receives
-`checkout_mismatch` and continues ordinary TDD. Refusal creates no new dispatch, blocker or ledger
+Main-checkout protection with a separate worker worktree answers `checkout_mismatch`, so an
+in-process developer calls the author through its worktree's launcher:
+`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <brief> --prompt-file <file>`.
+A refusal keeps ordinary TDD with its reason. Refusal creates no new dispatch, blocker or ledger
 record. The complete [test-author contract](../../agents/test-author.md) describes the cycle
 and independent test expectations.
 
@@ -111,9 +130,11 @@ and independent test expectations.
   multiple hard links or nested zones. The first segment is not `.git`, `.harness`, `.claude`,
   `.agents` or `.codex`; other segments contain no `*?[]{}` or backslash. For example, `tests/*.py`
   can pass the schema but not author activation.
-- `CLAUDE_PROJECT_DIR` matches the checkout. Claude Code is not running with `CLAUDE_CODE_SIMPLE=1`
-  or `CLAUDE_CODE_SAFE_MODE=1`. A human accepted trust for the **exact path**. Do not repair this
-  by writing an auth/trust file; open the project and accept the dialog.
+- The checkout is the root of its own Git work tree; `CLAUDE_PROJECT_DIR` is optional but, when
+  set, matches that root. Claude Code is not running with `CLAUDE_CODE_SIMPLE=1` or
+  `CLAUDE_CODE_SAFE_MODE=1`. A human accepted trust for **this checkout or the main checkout of its
+  repository**. Do not repair this by writing an auth/trust file; open the project and accept the
+  dialog.
 - The chosen runtime has a protected adapter. Currently that is Claude Code; the harness pins
   no minimum CLI version. Preflight checks agent/hook statically; live firing is confirmed separately.
 
@@ -131,8 +152,9 @@ Checks stop at the first refusal. Correct the cause and retry; do not disable th
 | `test_author_missing` | No short profile → configure runtime/model/effort for the short route; supply the approved brief for the full route. |
 | `test_author_config_invalid` | Invalid profile/brief or a stale fixed model/effort in the agent → check the selected source/template, without substituting another runtime. Replace a local seed only after reviewing its diff. |
 | `runtime_unsupported` | No protected runtime adapter → ordinary TDD; another CLI is not enabled automatically. |
-| `checkout_mismatch` | Wrong checkout or full-route session identity → run protection in the worker with its brief; do not spoof identity through an environment variable. |
-| `project_untrusted` | Git root/identity/exact-path trust unconfirmed → open the intended checkout in Claude Code and accept trust. |
+| `checkout_mismatch` | Wrong checkout → run protection in the worker with its brief. |
+| `project_dir_mismatch` | The passed `CLAUDE_PROJECT_DIR` is not the checkout's Git root → call the author from that worktree's session or through its launcher; do not spoof identity through an environment variable. |
+| `project_untrusted` | The checkout is not a Git root, or neither it nor the repository's main checkout is trusted → open the main checkout in Claude Code and accept trust. |
 | `claude_code_unsupported` | The CLI mode disables required hooks → use a supported environment, without bypassing the check. |
 | `agent_missing` | Missing/invalid `.claude/agents/test-author.md` → check installation in the correct checkout. |
 | `scoped_hook_unsupported` | Expected scoped PreToolUse hook absent in frontmatter → compare with the current template, retaining protection. |
@@ -225,7 +247,8 @@ Activation refusal instead leaves ordinary TDD without new blocker/ledger state.
 
     Read the approved developer brief in its worker checkout. Inherit resolved_runtime/model/effort,
     never the short profile or later live orchestration settings. Confirm worker-local installation,
-    exact-path user trust and approved Agent(test-author) permission; never spoof trust or widen
+    user trust of the worker or its repository's main checkout and approved Agent(test-author)
+    permission; never spoof trust or widen
     approved tools. Keep model: inherit without effort override. Use preflight with the brief in
     the correct checkout; refusal leaves ordinary TDD, not an unprotected or substituted author.
 

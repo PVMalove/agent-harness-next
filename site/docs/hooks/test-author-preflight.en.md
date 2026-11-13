@@ -14,8 +14,9 @@ exits with code 0: `{"status":"ok"}` or `{"status":"disabled","reason":"<reason>
 orchestration state, and the developer continues the usual route.
 
 **The `--worktree <path>` argument.** The script checks only the checkout where it lives, that is, the
-checkout it is started from. A developer in-process worker works in another worktree, so it
-calls `test-author-preflight.sh --worktree <worktree from the brief>`. The answer `{"status":"ok"}`
+checkout it is started from. The developer calls `test-author-preflight.sh --worktree <worktree
+from the brief>` from the worktree it works in; an in-process developer does so through the
+`.harness/health/test_author.py run` launcher of its worktree. The answer `{"status":"ok"}`
 is possible only if the canonical path (after `cd` and `pwd -P`) matches the checkout of the script;
 otherwise the script answers `checkout_mismatch`. A missing, empty, or unresolvable path, as well as
 any other arguments (an unknown flag, extra arguments, `--worktree` without a value) give the same
@@ -24,18 +25,28 @@ from the argument does not appear in the answer. A call without arguments works 
 
 The script checks the conditions and, on the first violation, answers with a fixed reason (the table of conditions and
 reasons is in the [guide](../agents/test-author.md), section 3). Supported reasons:
-`checkout_mismatch`, `runner_unavailable`, `project_untrusted`, `claude_code_unsupported`, `agent_missing`,
+`checkout_mismatch`, `runner_unavailable`, `project_untrusted`, `project_dir_mismatch`,
+`claude_code_unsupported`, `agent_missing`,
 `scoped_hook_unsupported`, `test_paths_missing`, `test_runner_missing`, `config_invalid`,
 `write_zone_rejected`, `guard_hook_unavailable`, `isolation_unavailable`. The answers of the guard and the runner
 pass through the list of allowed reasons: any other value is replaced with
 `guard_hook_unavailable` or `isolation_unavailable`, so no paths and no text of foreign errors get into the answer.
 
+**Project root.** The script takes the root from `git rev-parse --show-toplevel` of its checkout:
+it must match the script's checkout, otherwise the answer is `project_untrusted`. This works the
+same in the main checkout, any worktree, Claude Code and Codex. `CLAUDE_PROJECT_DIR` is optional:
+Claude Code does not always pass it to Bash. When the variable is set, its canonical path is
+compared with the Git root, and a mismatch gives `project_dir_mismatch`: the scoped guard of the
+native subagent takes the project from this variable.
+
 **Project trust.** The native mode `claude --print` shows no trust dialog, so the script
-reads the decision itself: in `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`), the exact path
-`CLAUDE_PROJECT_DIR` must have `hasTrustDialogAccepted: true`. A missing file, broken JSON,
-foreign projects, and any value except the boolean `true` give `project_untrusted`. Claude Code may
-also treat as trusted a directory whose parent or Git root is accepted; for such a path there is no record, and the
-script answers `project_untrusted`. This is the safe direction of the error.
+reads the decision itself: in `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`),
+`hasTrustDialogAccepted: true` must be set for the exact checkout path or for the repository's
+main checkout when the checkout is its linked worktree. The main checkout is the parent of
+`git rev-parse --git-common-dir`; it must list the checkout in `git worktree list`. A missing
+file, broken JSON, foreign projects, trust given only to a parent directory, an unregistered
+directory, and any value except the boolean `true` give `project_untrusted`. This is the safe
+direction of the error (ADR 0033).
 
 **Claude Code modes.** The variables `CLAUDE_CODE_SIMPLE` and `CLAUDE_CODE_SAFE_MODE` turn off
 hooks; with the value `1` the script answers `claude_code_unsupported`. Both variables are present in the
@@ -89,4 +100,4 @@ another project, and `.claude.json` is missing.
 [test_preflight.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_preflight.py),
 [claude_probe.py](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/clean_room/claude_probe.py),
 [docs/agents/test-author.md](../agents/test-author.md),
-ADR 0014
+ADR 0014, ADR 0033

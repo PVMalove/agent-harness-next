@@ -42,6 +42,7 @@
     "Git недоступен или не отвечает": "Git is unavailable or not responding",
     "Git-проект найден": "Git project found",
     "Git-проект найден · действие:": "Git project found · action:",
+    "Guard тест-автора недоступен": "The test author guard is unavailable",
     "HEAD не найден": "HEAD was not found",
     "Harness не установлен": "Harness is not installed",
     "Harness не установлен в проект": "Harness is not installed in the project",
@@ -82,6 +83,7 @@
     "Review": "Review",
     "Review / QA": "Review / QA",
     "Rootless Podman · среда, этапы и свидетельства.": "Rootless Podman · environment, stages and evidence.",
+    "Runner тест-автора недоступен": "The test author runner is unavailable",
     "Runtime не находит claude или codex": "The runtime does not find claude or codex",
     "Runtime не отвечает": "The runtime does not answer",
     "Runtime: не отвечает": "Runtime: not answering",
@@ -493,6 +495,7 @@
     "Изменения уходят на сервер командой configuration: проверка устаревания, резервная копия и подтверждение человека.": "Changes go to the server as a configuration command: a staleness check, a backup and a human confirmation.",
     "Изменить в мастере настройки": "Edit in the setup wizard",
     "Изменён и у вас, и в пакете: обычное обновление остановится, перезапись заменит файл версией пакета.": "Changed both by you and in the package: a normal update stops; overwriting replaces the file with the package version.",
+    "Изоляция runner недоступна": "Runner isolation is unavailable",
     "Изучить Repo Map": "Explore Repo Map",
     "Имя новой записи": "New entry name",
     "Инвентарь движка контейнеров не собран": "The container engine inventory was not collected",
@@ -595,6 +598,7 @@
     "Копировать CLI": "Copy CLI",
     "Копировать команду": "Copy command",
     "Копировать настройки из:": "Copy settings from:",
+    "Корень проекта не совпадает с Git": "The project root does not match Git",
     "Критерии": "Acceptance",
     "Курсор вне вывода job": "The cursor is outside the job output",
     "Кэш": "Cache",
@@ -689,6 +693,7 @@
     "Некорректный запрос": "Bad request",
     "Неподходящая версия Python": "Unsuitable Python version",
     "Нет C-компоновщика cc": "The cc C linker is missing",
+    "Нет блока test_author": "The test_author block is missing",
     "Нет данных": "No data",
     "Нет доступа к трекеру": "No access to the tracker",
     "Нет доступа к трекеру задач": "No access to the task tracker",
@@ -1031,6 +1036,7 @@
     "Прогресс": "Progress",
     "Продолжите работу в выбранной сессии или откройте другой проект.": "Continue a session or open another project.",
     "Проект": "Project",
+    "Проект не доверен для тест-автора": "The project is not trusted for the test author",
     "Проект →": "Project →",
     "Проект: {name} · режим: {mode} · отчёт не построен": "Project: {name} · mode: {mode} · no report",
     "Проект: {name} · режим: {mode} · отчёт построен {when}": "Project: {name} · mode: {mode} · report built {when}",
@@ -2025,6 +2031,30 @@
       "en": "The test author writes tests through a protected adapter; without it the TDD Red step is unavailable or not isolated.",
       "ru": "Test-author пишет тесты через защищённый адаптер; без него шаг Red в TDD недоступен или не изолирован."
     },
+    "hooks.test_author_config": {
+      "en": "Without the test_author block the short /fast-implement route does not start the test author.",
+      "ru": "Без блока test_author короткий маршрут /fast-implement не запускает тест-автора."
+    },
+    "hooks.test_author_guard": {
+      "en": "The guard keeps the test author out of everything but test_paths; without it the author stays off.",
+      "ru": "Guard не даёт тест-автору писать вне test_paths; без него автор не включается."
+    },
+    "hooks.test_author_probe": {
+      "en": "The probe checks the runner sandbox before any test runs; without isolation the test author stays off.",
+      "ru": "Probe проверяет песочницу runner до запуска теста; без изоляции тест-автор выключен."
+    },
+    "hooks.test_author_root": {
+      "en": "The preflight takes the project root from Git; another CLAUDE_PROJECT_DIR would bind the author to a different checkout.",
+      "ru": "Preflight берёт корень проекта из Git; другой CLAUDE_PROJECT_DIR привязал бы автора к чужому checkout."
+    },
+    "hooks.test_author_runner": {
+      "en": "The runner runs the selected test in isolation and confirms Red; without it the author cannot hand a test over.",
+      "ru": "Runner запускает выбранный тест в изоляции и подтверждает Red; без него автор не сдаёт тест."
+    },
+    "hooks.test_author_trust": {
+      "en": "The test author starts without a trust dialog, so trust must already be accepted for the checkout or the main checkout of its repository.",
+      "ru": "Тест-автор запускается без диалога доверия, поэтому нужно уже принятое доверие к checkout или к основному checkout его репозитория."
+    },
     "memory.index": {
       "en": "Without the memory index search over ADRs and the glossary is unavailable, and the agent relies on random files.",
       "ru": "Без индекса памяти поиск по ADR и глоссарию недоступен, и агент опирается на случайные файлы."
@@ -2578,6 +2608,30 @@
     "hooks.test_author": {
       "en": "Test author hook",
       "ru": "Хук автора тестов"
+    },
+    "hooks.test_author_config": {
+      "en": "test_author block",
+      "ru": "Блок test_author"
+    },
+    "hooks.test_author_guard": {
+      "en": "Test author guard",
+      "ru": "Guard тест-автора"
+    },
+    "hooks.test_author_probe": {
+      "en": "Runner isolation probe",
+      "ru": "Probe изоляции runner"
+    },
+    "hooks.test_author_root": {
+      "en": "Test author project root",
+      "ru": "Корень проекта тест-автора"
+    },
+    "hooks.test_author_runner": {
+      "en": "Test author runner",
+      "ru": "Runner тест-автора"
+    },
+    "hooks.test_author_trust": {
+      "en": "Test author trust",
+      "ru": "Доверие для тест-автора"
     },
     "memory.index": {
       "en": "Memory index",

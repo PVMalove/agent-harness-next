@@ -122,11 +122,13 @@ brief developer, без подмены профилем проекта. Наст
 `runtime_unsupported` и обычный TDD. Текущий защищённый адаптер Claude Code с external transport
 запускает preflight из
 собственного worker checkout: `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <путь brief>`.
-Точный trust этого пути принимает человек. После `{"status":"ok"}` и при наличии
+Worktree доверенного репозитория отдельного trust не требует, корень проекта preflight берёт из Git
+(ADR 0033). После `{"status":"ok"}` и при наличии
 `Agent(test-author)` или `Agent` в утверждённом brief developer вызывает автора без переопределения model/effort (`model: inherit`); без разрешения
 остаётся обычный TDD с причиной `agent_tool_unavailable`. Для in-process проверка основного
-checkout с `--worktree` даёт `checkout_mismatch` и оставляет обычный TDD. Отказ не становится
-blocker. Автор пишет и запускает тест в worker, а общий корень runner-логов получает от developer.
+checkout с `--worktree` даёт `checkout_mismatch`, поэтому developer вызывает автора через launcher
+своего worktree: `.harness/health/test_author.py run --repo <send.worker_worktree> --brief <путь brief>
+--prompt-file <файл>`. Отказ оставляет обычный TDD и не становится blocker. Автор пишет и запускает тест в worker, а общий корень runner-логов получает от developer.
 Проверка `hooks.test_author` показывает выбранный runtime/model/effort, источник и готовность или отказ; live-проба с учётом расхода
 проверяет реальный вызов developer → author. Rust и Codex этим решением не поддержаны.
 
