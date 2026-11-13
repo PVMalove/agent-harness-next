@@ -130,7 +130,9 @@ def _condition(job: str) -> str | None:
     """The one-line ``if:`` of a job; a job-level ``if`` that spans lines is not used here."""
     found = re.findall(r"^    if: (.+)$", job, flags=re.MULTILINE)
     assert len(found) <= 1, "a job has one if"
-    return found[0].strip() if found else None
+    if not found or str(found[0]).strip() in {">", ">-", "|", "|-"}:
+        return None
+    return str(found[0]).strip()
 
 
 def _atom(text: str, event: str, base_ref: str) -> bool:
@@ -257,8 +259,8 @@ class LightPathTests(unittest.TestCase):
                 self.assertIn("./.github/actions/verify-test-group", job)
                 self.assertIn("group: unit" if name.endswith("unit") else "group: integration", job)
                 self.assertIn("windows-latest" if "windows" in name else "ubuntu-latest", job)
-        self.assertIn("tests/core", (ROOT / ".github/actions/verify-test-group/action.yml").read_text())
-        self.assertIn("tests/orchestration", (ROOT / ".github/actions/verify-test-group/action.yml").read_text())
+        self.assertIn("--pytest-target tests/core", jobs["verify-windows-unit"])
+        self.assertIn("--pytest-target tests/orchestration", jobs["verify-windows-integration"])
 
 
 class StageTests(unittest.TestCase):
