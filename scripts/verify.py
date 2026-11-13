@@ -253,6 +253,7 @@ def pytest_command(
     junit_xml: Path | None = None,
     cache_dir: Path | None = None,
     targets: Sequence[str] | None = None,
+    pytest_targets: Sequence[str] | None = None,
 ) -> list[str]:
     """Сформировать аргументы запуска pytest с учетом платформы и числа воркеров.
 
@@ -281,7 +282,7 @@ def pytest_command(
             str(workers),
             "--basetemp",
             str(run_tmp / "p"),
-            *(targets or [str(ROOT / "tests")]),
+            *(targets or pytest_targets or [str(ROOT / "tests")]),
         ]
     )
     if platform == "win32":
@@ -437,6 +438,7 @@ def _run_stages(
     cache: WorktreeCache | None = None,
     recorder: _EvidenceRecorder | None = None,
     junit_mirrors: list[Path] | None = None,
+    pytest_targets: Sequence[str] | None = None,
 ) -> None:
     """Стадии с замером времени: mypy, pytest и clean-room прогон; `only` оставляет одну группу.
 
@@ -444,12 +446,13 @@ def _run_stages(
     С `recorder` потоки стадий хранятся раздельно и порождают stage evidence."""
     try:
         if only != "clean-room":
-            mypy_env = (
-                test_env
-                if cache is None
-                else dict(test_env, MYPY_CACHE_DIR=str(cache.mypy_dir))
-            )
-            _stage(recorder, "mypy", mypy_command(), cwd=ROOT, env=mypy_env)
+            if only != "pytest":
+                mypy_env = (
+                    test_env
+                    if cache is None
+                    else dict(test_env, MYPY_CACHE_DIR=str(cache.mypy_dir))
+                )
+                _stage(recorder, "mypy", mypy_command(), cwd=ROOT, env=mypy_env)
             try:
                 _stage(
                     recorder,
@@ -461,6 +464,7 @@ def _run_stages(
                         failed_first=failed_first,
                         junit_xml=junit_xml,
                         cache_dir=None if cache is None else cache.pytest_dir,
+                        pytest_targets=pytest_targets,
                     ),
                     env=test_env,
                     junit=junit_xml,
@@ -468,7 +472,7 @@ def _run_stages(
             finally:
                 if junit_xml is not None:
                     _mirror_junit(junit_xml, junit_mirrors or [])
-        if only != "tests":
+        if only not in {"tests", "pytest"}:
             _stage(
                 recorder,
                 "clean-room",
@@ -572,9 +576,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--only",
-        choices=("tests", "clean-room"),
+        choices=("tests", "pytest", "clean-room"),
         help=(
             "run one CI job's share: 'tests' = static checks, mypy and pytest; "
+            "'pytest' = static checks and pytest; "
             "'clean-room' = static checks and the clean-room run"
         ),
     )
@@ -585,6 +590,12 @@ def build_parser() -> argparse.ArgumentParser:
             "on Windows skip the platform-neutral slow test files "
             "(WINDOWS_PR_IGNORED_TESTS); the full run omits this flag"
         ),
+    )
+    parser.add_argument(
+        "--pytest-target",
+        action="append",
+        metavar="PATH",
+        help="limit pytest to this path; repeat for a test group",
     )
     parser.add_argument(
         "--fail-fast",
@@ -662,8 +673,9 @@ def _junit_paths(
 def _planned_stages(only: str | None) -> list[str]:
     """The stages a run with this ``--only`` goes through, in order."""
     return [
-        *(["mypy", "pytest"] if only != "clean-room" else []),
-        *(["clean-room"] if only != "tests" else []),
+        *(["mypy", "pytest"] if only not in {"clean-room", "pytest"} else []),
+        *(["pytest"] if only == "pytest" else []),
+        *(["clean-room"] if only not in {"tests", "pytest"} else []),
     ]
 
 
@@ -734,6 +746,7 @@ def main(argv: list[str] | None = None) -> None:
         cache=cache,
         recorder=recorder,
         junit_mirrors=junit_copies,
+        pytest_targets=args.pytest_target,
     )
     print("agent-harness verification passed")
 

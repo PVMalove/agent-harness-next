@@ -24,7 +24,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 import uuid
 from collections.abc import Iterator
@@ -70,6 +69,7 @@ from harness.orchestration.workflow import (
     supersede,
 )
 from harness.orchestration.workflow import batch as batch_module
+from harness.orchestration.workflow import delivery
 
 ORCHESTRATION_ROOT = Path(__file__).resolve().parents[2] / "harness" / "orchestration"
 # The structured evidence of a tool that blocked a legitimate role action (issue #500).
@@ -8874,19 +8874,26 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
     ) -> None:
         brief = self._architect_reported()
         release = threading.Event()
+        busy_observed = threading.Event()
+        real_lock = ledger_ops._ledger_lock
 
-        with self._ledger_held(release):
-            timer = threading.Timer(1.5, release.set)
-            timer.start()
-            started = time.monotonic()
+        @contextlib.contextmanager
+        def release_after_busy(ledger: LifecycleLedger) -> Iterator[None]:
+            try:
+                with real_lock(ledger):
+                    yield
+            except ledger_ops.LedgerBusyError:
+                busy_observed.set()
+                release.set()
+                raise
+
+        with self._ledger_held(release), mock.patch.object(delivery, "_ledger_lock", release_after_busy):
             event = self._wait_busy(brief["dispatch_id"], timeout=10)
-            elapsed = time.monotonic() - started
-            timer.join()
 
+        self.assertTrue(busy_observed.is_set())
         self.assertEqual(
             event, {"dispatch_id": brief["dispatch_id"], "event": "reported"}
         )
-        self.assertGreaterEqual(elapsed, 1.5)
 
     def test_dispatch_wait_times_out_normally_while_the_ledger_stays_busy(
         self,

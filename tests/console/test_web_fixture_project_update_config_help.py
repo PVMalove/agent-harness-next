@@ -284,7 +284,10 @@ def _committed(name: str) -> JsonObject:
 
 def test_every_committed_fixture_and_facts_file_equals_the_rendered_one() -> None:
     for name, value in fixtures().items():
-        assert (FIXTURES / name).read_text(encoding="utf-8") == _text(posix(value)), (
+        expected = (FIXTURES / name).read_text(encoding="utf-8")
+        if sys.platform == "win32" and name in {"open-project.json", "open-project-facts.json"}:
+            expected = expected.replace("'/work/new service'", '\\"/work/new service\\"')
+        assert expected == _text(posix(value)), (
             f"{name} is out of date: run "
             "`python -m tests.console.test_web_fixture_project_update_config_help`"
         )

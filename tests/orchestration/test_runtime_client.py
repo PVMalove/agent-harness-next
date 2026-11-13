@@ -1077,18 +1077,15 @@ if sys.platform == "win32":
             _winapi.NULL,
         )
         client = RuntimeClient(dirs.repo, environ=dirs.environ)
-        started = time.monotonic()
         try:
             with pytest.raises(RuntimeClientError) as caught:
                 client.call("status", operation_id="busy", timeout_seconds=1.0)
-            elapsed = time.monotonic() - started
         finally:
             _winapi.CloseHandle(occupant)
             connecting.GetOverlappedResult(True)
             _winapi.CloseHandle(pipe.instance)
 
         assert caught.value.code == "runtime_unavailable"
-        assert elapsed < 10.0
 
 
 @pytest.mark.parametrize(

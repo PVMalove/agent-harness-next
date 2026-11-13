@@ -223,7 +223,7 @@ def test_each_profile_gives_each_role_the_decision_of_the_matrix(
         if verdict["decision"] == "allow":
             assert verdict["reason_code"] == "ok"
     if MATRIX[profile][FIRST_TOUCH] == "warn":
-        assert verdicts[FIRST_TOUCH]["reason_code"] == "risky-path-first-touch"
+        assert verdicts[FIRST_TOUCH]["reason_code"] == "risky-path-first-touch", first.stderr
         context = json.loads(first.stdout)["hookSpecificOutput"]
         assert context["hookEventName"] == "PreToolUse"
         assert "pyproject.toml" in context["additionalContext"]

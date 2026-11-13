@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The two CI paths of .github/workflows/verify.yml (issue #937).
 
-A pull request into an ``integration/**`` branch runs one light job (``verify-light``) and none of
-the jobs that run the full test suite; a pull request into any other branch, a push to ``master``
+A pull request into an ``integration/**`` branch runs ``verify-light`` and the platform test groups;
+a pull request into any other branch, a push to ``master``
 and a call from another workflow run the full jobs. The workflow is read as text with the comment
 lines removed (no YAML library): a job that exists only in a comment pins nothing.
 """
@@ -22,6 +22,7 @@ LIGHT_JOB = "verify-light"
 LIGHT_CONDITION = (
     "github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')"
 )
+GROUPS_CONDITION = LIGHT_CONDITION
 FULL_CONDITION = "github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')"
 FULL_PULL_REQUEST_CONDITION = "github.event_name == 'pull_request' && !startsWith(github.base_ref, 'integration/')"
 # The jobs that run tests: the light path skips every one of them.
@@ -44,6 +45,7 @@ UNCHANGED_JOBS = {
 }
 # The jobs that run on both paths without a condition: the console SPA and the public site.
 BOTH_PATHS_JOBS = {"console-spa", "docs"}
+GROUPS_JOB = "verify-test-groups"
 ALL_JOBS = {
     LIGHT_JOB,
     GATE_JOB,
@@ -51,6 +53,7 @@ ALL_JOBS = {
     *FULL_JOBS,
     *UNCHANGED_JOBS,
     *BOTH_PATHS_JOBS,
+    GROUPS_JOB,
 }
 # What each suite waits for: the fast gate, directly or through `rust`, whose debug build of
 # harness-runtime the Linux suites download; the long suites also wait for the public site.
@@ -58,6 +61,7 @@ STAGES = {
     "rust": {GATE_JOB},
     "verify": {"docs", "rust"},
     "verify-windows": {GATE_JOB, "docs"},
+    GROUPS_JOB: {"docs"},
     "diff-coverage": {GATE_JOB, "docs"},
     "repo-map-bundle": {"parser-bundle", GATE_JOB},
     "runtime-ipc-windows": {GATE_JOB},
@@ -205,9 +209,28 @@ class LightPathTests(unittest.TestCase):
 
         self.assertEqual(
             running,
-            {LIGHT_JOB, "private-terms", "parser-bundle", "dashboard", *BOTH_PATHS_JOBS},
+            {
+                LIGHT_JOB,
+                GROUPS_JOB,
+                "private-terms",
+                "parser-bundle",
+                "dashboard",
+                *BOTH_PATHS_JOBS,
+            },
         )
         self.assertFalse(running & set(FULL_JOBS))
+
+    def test_integration_groups_cover_both_platforms_and_python_test_kinds(
+        self,
+    ) -> None:
+        job = _jobs()[GROUPS_JOB]
+        self.assertEqual(_condition(job), GROUPS_CONDITION)
+        self.assertIn("ubuntu-latest", job)
+        self.assertIn("windows-latest", job)
+        self.assertIn("group: unit", job)
+        self.assertIn("group: integration", job)
+        self.assertIn("tests/core", job)
+        self.assertIn("tests/orchestration", job)
 
 
 class StageTests(unittest.TestCase):
@@ -235,7 +258,9 @@ class StageTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertEqual(_needs(jobs[name]), needs)
 
-    def test_the_linux_suites_download_the_one_debug_build_of_the_rust_job(self) -> None:
+    def test_the_linux_suites_download_the_one_debug_build_of_the_rust_job(
+        self,
+    ) -> None:
         jobs = _jobs()
 
         self.assertIn("name: harness-runtime-linux-debug", jobs["rust"])
