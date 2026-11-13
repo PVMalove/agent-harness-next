@@ -75,8 +75,12 @@ def script_name(handler: object) -> str | None:
     return match.group(1) if match else None
 
 
-# hook_id, который скрипт передаёт конверту: `hook_response.py" run <hook_id> `.
-_ENVELOPE_RUN = re.compile(r'hook_response\.py" run ([a-z][a-z0-9-]*) ')
+# hook_id, который скрипт передаёт конверту: `hook_response.py" run <hook_id> ` или, через общий
+# фрагмент, `. "$(dirname "$0")/hook-envelope.sh" <hook_id>` в конце строки.
+_ENVELOPE_RUN = re.compile(
+    r'hook_response\.py" run ([a-z][a-z0-9-]*) '
+    r'|hook-envelope\.sh" ([a-z][a-z0-9-]*)(?=\s|$)'
+)
 
 
 def envelope_hook_ids(source: str) -> frozenset[str] | None:
@@ -106,7 +110,7 @@ def envelope_hook_ids(source: str) -> frozenset[str] | None:
 def script_envelope_id(source: str) -> str | None:
     """hook_id, с которым hook-скрипт вызывает конверт; None — скрипт конверт не вызывает."""
     match = _ENVELOPE_RUN.search(source)
-    return match.group(1) if match else None
+    return (match.group(1) or match.group(2)) if match else None
 
 
 def without_scripts(template: JsonObject, scripts: Collection[str]) -> JsonObject:

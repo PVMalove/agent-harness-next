@@ -544,6 +544,11 @@ def test_script_envelope_id_names_the_hook_id_the_script_passes_to_the_envelope(
     script = (HOOK_TEMPLATES / "runtime-autostart.sh").read_text(encoding="utf-8")
 
     assert script_envelope_id(script) == "runtime-autostart"
+    sourced = (HOOK_TEMPLATES / "block-pr-merge.sh").read_text(encoding="utf-8")
+    assert script_envelope_id(sourced) == "block-pr-merge"
+    assert script_envelope_id(sourced.replace("\n", "\r\n")) == "block-pr-merge"
+    helper = (HOOK_TEMPLATES / "hook-envelope.sh").read_text(encoding="utf-8")
+    assert script_envelope_id(helper) is None
     assert script_envelope_id("#!/bin/bash\nexit 0\n") is None
 
 
