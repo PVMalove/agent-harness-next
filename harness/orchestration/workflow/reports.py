@@ -124,6 +124,7 @@ from harness.orchestration.workflow import failure_domains
 from harness.orchestration.workflow.fix_forward import FixForwardHistory
 from harness.orchestration.workflow import commit_plan as plan_rules
 from harness.orchestration.workflow import rebase
+from harness.orchestration.workflow import rebaser
 from harness.orchestration.workflow import resolver_state
 from harness.orchestration.workflow import approval as approvals
 from harness.orchestration.workflow.approval import (
@@ -1848,6 +1849,7 @@ def _validate_report_in_batch(
         allowed_paths=batch.get("allowed_paths"),
     )
     resolver_state.validate_report(repo, root, batch, dispatch, report)
+    rebaser.validate_report(repo, dispatch, report)
 
 
 def report_scope_warnings(report: JsonObject, dispatch: JsonObject) -> list[str]:
@@ -2000,7 +2002,7 @@ def _record_report(
     # binds too: it carries the commit that `accept-conditional` or an infrastructure retry
     # then makes the batch's candidate, and no later step would bind it.
     if (
-        role["name"] in {"developer", "conflict-resolver"}
+        role["name"] in {"developer", "conflict-resolver", rebaser.REBASER_ROLE}
         and report.get("outcome") in {"completed", "blocked"}
         and dispatch.get("purpose", "work") == "work"
     ):

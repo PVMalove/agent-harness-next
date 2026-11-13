@@ -210,6 +210,21 @@ Routing record дополнительно называет `rebase_target_commit
 `decision-packet` показывает её в `route_preview.retry`. Решение только предлагает target:
 `integration_base_commit` batch до accept не меняется.
 
+Маршрут `rebase` (ADR 0034) переносит уже принятого кандидата без developer-а. Его выбирает
+coordinator, когда база ушла вперёд, а исправлять нечего: accept отчёта code-review или qa без
+incomplete items, или retry отчёта code-review, qa или publish с `--reason-category
+candidate-change` без перенесённых пунктов и без `--retry-role developer`. Условие — роль `rebaser`
+установлена и назначаема (zero-config или запись `assignment_plans.rebaser`); иначе остаётся
+`rebase-fix-forward`. Routing record ставит `next_action: rebase` вместо `qa` или `publish`;
+`decision-packet` показывает его заранее в `route_preview.accept` или `route_preview.retry`.
+Dispatch `rebaser` переносит коммиты на `rebase_target_commit` без новых изменений и не расходует
+`retry_policy.max_developer_retries`. Его отчёт обязан нести блок `rebase_check` (пары по
+`patch-id`, `dropped`, `resolved_conflicts`, `generated_files` и `range_diff` при несовпавшем
+`patch-id`); `report submit` пересчитывает его по Git. Принятый отчёт закрепляет цель как
+`integration_base_commit` и ведёт в risk assessment, а принятое ревью прежнего кандидата покрывает
+нового, поэтому дальше идёт QA без повторного code-review. Конфликт по смыслу rebaser не решает:
+отчёт `blocked` уходит в developer-retry по маршруту `rebase-fix-forward`.
+
 Target попадает в brief только через dispatch с явным approval при любой `approval_policy`, кроме
 `auto`. Approval другой политики для него отклоняется. `dispatch propose` показывает переход с полем
 `rebase_target_sha`, а brief получает `rebase_target_commit`. Кроме этого brief, поле заполнено
@@ -477,6 +492,10 @@ ledger.
   ушла вперёд (см. выше). Его routing record дополнительно называет `rebase_target_commit` и
   `integration_base_commit`.
 - `supersede` `batch decide` не записывает. Его записывает `batch create --supersedes` в
+- `rebase` записывает accept отчёта code-review или qa либо retry с `candidate-change`, пока
+  integration base ушла вперёд и исправлять нечего (см. выше); routing record называет
+  `rebase_target_commit`, `integration_base_commit` и `candidate_commit`.
+- `supersede` `batch decide` не записывает: его записывает `batch create --supersedes` в
   `coordinator_decisions` нового batch (см. «Замещающий batch» выше).
 - `environmental-restart` и `rewind` `batch decide` не записывает. `batch resume-stop` записывает
   `environmental-restart`, если перезапускает исходный dispatch, иначе `rewind`. `batch rewind`
@@ -544,7 +563,7 @@ remedy при записи и при чтении batch.
 
 - `batch approve`: `coordinator_approval.approved_by` равен `policy:auto`;
 - `dispatch create`, включая вехи `publish`, `risk-trigger`, `risk-reassessment-required`,
-  `bypass-rerun`, `rebase-fix-forward` и `rebase-target`;
+  `bypass-rerun`, `rebase-fix-forward`, `rebase-target` и `rebase`;
 - `dispatch resume --trigger` для планового продолжения, кроме `human-decision`;
 - `batch carry-over`: решение пишется как `policy:auto`, а не `policy:carry-over`.
 

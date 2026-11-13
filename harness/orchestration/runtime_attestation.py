@@ -25,13 +25,16 @@ WORKER_ROLES_REQUIRING_ISSUE_WORKTREE = frozenset(
         "architect",
         "developer",
         "conflict-resolver",
+        "rebaser",
         "database-migrations",
         "messaging-integration",
         "code-review",
     }
 )
 # Roles that write in the issue worktree itself; other roles run in the checkout they select.
-ISSUE_WORKTREE_WRITER_ROLES = frozenset({"architect", "developer", "conflict-resolver"})
+ISSUE_WORKTREE_WRITER_ROLES = frozenset(
+    {"architect", "developer", "conflict-resolver", "rebaser"}
+)
 
 
 def requires_attestation(dispatch: Mapping[str, object]) -> bool:
@@ -106,11 +109,10 @@ def attest(repo: Path, dispatch: Mapping[str, object], worktree: str) -> dict[st
             remedy="start the worker in the batch's registered issue worktree and report its canonical top-level path",
         )
     expected_path = dispatch.get("worker_worktree")
-    if expected_path is None and dispatch.get("role") in {
-        "architect",
-        "developer",
-        "conflict-resolver",
-    }:
+    if (
+        expected_path is None
+        and dispatch.get("role") in ISSUE_WORKTREE_WRITER_ROLES
+    ):
         expected_path = dispatch.get("worktree")
     if isinstance(expected_path, str) and checkout != Path(expected_path).resolve():
         raise AttestationError(
@@ -149,7 +151,7 @@ def attest(repo: Path, dispatch: Mapping[str, object], worktree: str) -> dict[st
         )
     role = dispatch.get("role")
     branch = _git(checkout, "branch", "--show-current")
-    if role in {"architect", "developer", "conflict-resolver"}:
+    if role in ISSUE_WORKTREE_WRITER_ROLES:
         expected_branch = dispatch.get("branch")
         if not isinstance(expected_branch, str):
             raise AttestationError(

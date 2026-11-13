@@ -368,6 +368,7 @@ class AutoDispatchApprovalTests(unittest.TestCase):
                 None,
             ),
             ("rebase-target", {}, "developer", "work", None, "a" * 40),
+            ("rebase", {"route": "rebase"}, "rebaser", "work", None, None),
         ]
 
     def _mode(

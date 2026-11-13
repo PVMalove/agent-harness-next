@@ -7675,7 +7675,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         real = decisions._retry_routing
 
         def unknown_route(*args: object, **kwargs: object) -> JsonObject:
-            return {**real(*args, **kwargs), "route": "rebase"}  # type: ignore[arg-type]
+            return {**real(*args, **kwargs), "route": "reroute"}  # type: ignore[arg-type]
 
         with mock.patch.object(decisions, "_retry_routing", unknown_route):
             with self.assertRaises(coordinator.CoordinatorError) as raised:
@@ -7700,7 +7700,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         ledger = LifecycleLedger(root)
         with ledger_ops._ledger_lock(ledger):
             record = ledger_ops._load_batch(root, batch["batch_id"])
-            record["coordinator_decisions"][-1]["routing"]["route"] = "rebase"
+            record["coordinator_decisions"][-1]["routing"]["route"] = "reroute"
             ledger_ops._replace_record(ledger, BatchRecord.from_dict(record))
 
         with self.assertRaises(coordinator.CoordinatorError) as raised:
@@ -7708,7 +7708,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
                 self._args(batch=batch["batch_id"], dispatch=None)
             )
 
-        self.assertIn("rebase", str(raised.exception))
+        self.assertIn("reroute", str(raised.exception))
         self.assertIn("same-candidate-rerun", raised.exception.remedy)
 
     def test_abandon_closes_unreported_dispatches_and_names_them(self) -> None:
@@ -13320,6 +13320,480 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         ]
         self.assertEqual(tickets, [done["ticket"]])
 
+    # -- the rebase route and the rebaser role (issue #1010) ----------------------------------
+
+    def _install_rebaser(self) -> None:
+        """Ship the rebaser manifest before the batch pins its runtime snapshot."""
+        roles = self.repo / ".harness" / "orchestration" / "roles"
+        (roles / "rebaser.md").write_text(
+            (ORCHESTRATION_ROOT / "roles" / "rebaser.md").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-m", "rebaser role")
+        _git(self.repo, "push", "origin", "master")
+
+    def _push_conflicting_upstream(self) -> str:
+        """An upstream commit that rewrites the file the candidate of ``_accepted_candidate``
+        changed, so the rebase stops on a textual conflict."""
+        path = self.repo / "services" / "x.py"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("UPSTREAM = 1\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-m", "upstream")
+        _git(self.repo, "push", "origin", "master")
+        return _git(self.repo, "rev-parse", "HEAD")
+
+    def _reviewed_candidate(self, *, rebaser: bool = True) -> str:
+        """An accepted, risk-assessed developer candidate with a clean review not decided yet."""
+        if rebaser:
+            self._install_rebaser()
+        batch_id = cast(str, self._create_batch()["batch_id"])
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id)
+        self._reported_review(batch_id, candidate)
+        return candidate
+
+    def _rebased(self, brief: JsonObject, *, conflict: bool) -> str:
+        """Run the rebaser's work in the issue worktree and return the rebased HEAD."""
+        target = brief["rebase_target_commit"]
+        base = brief["rebaser"]["previous_base_commit"]
+        if not conflict:
+            _git(self.worktree, "rebase", "--onto", target, base)
+        else:
+            with self.assertRaises(RuntimeError):
+                _git(self.worktree, "rebase", "--onto", target, base)
+            (self.worktree / "services" / "x.py").write_text(
+                "UPSTREAM = 1\nVALUE = 'x'\n", encoding="utf-8"
+            )
+            _git(self.worktree, "add", "-A")
+            _git(self.worktree, "-c", "core.editor=true", "rebase", "--continue")
+        return _git(self.worktree, "rev-parse", "HEAD")
+
+    def _rebase_check(
+        self, brief: JsonObject, head: str, **overrides: object
+    ) -> JsonObject:
+        original = brief["rebaser"]["previous_commits"][0]
+        match = git_utils._patch_id(self.repo, original) == git_utils._patch_id(
+            self.repo, head
+        )
+        check: JsonObject = {
+            "rebase_target_commit": brief["rebase_target_commit"],
+            "previous_base_commit": brief["rebaser"]["previous_base_commit"],
+            "rebased": [
+                {"rebased_from": original, "commit_sha": head, "patch_id_match": match}
+            ],
+            "dropped": [],
+            "patch_id_mismatches": []
+            if match
+            else [{"rebased_from": original, "commit_sha": head}],
+            "resolved_conflicts": [] if match else ["services/x.py"],
+            "generated_files": [],
+            "range_diff": None if match else "1:  aaa ! 1:  bbb feat: x",
+        }
+        check.update(overrides)
+        return check
+
+    def _rebaser_report(
+        self, brief: JsonObject, head: str, **overrides: object
+    ) -> JsonObject:
+        defaults: JsonObject = {
+            "commit_sha": head,
+            "changed_files": git_utils._changed_files_between(
+                self.repo, brief["rebase_target_commit"], head
+            ),
+            "rebase_check": self._rebase_check(brief, head),
+        }
+        defaults.update(overrides)
+        return self._base_report(brief, "rebaser", **defaults)
+
+    def _run_rebaser(self, *, conflict: bool) -> tuple[JsonObject, str, str]:
+        """A reviewed candidate whose base moved, accepted into the rebase route, and the rebaser
+        report submitted. Returns the rebaser brief, the previous candidate and the rebased HEAD."""
+        candidate = self._reviewed_candidate()
+        upstream = (
+            self._push_conflicting_upstream() if conflict else self._push_upstream()
+        )
+        self._decide(self.batch_id, "accept")
+        brief = self._dispatch(self.batch_id, "rebaser")["brief"]
+        self.assertEqual(
+            (brief["snapshot_commit"], brief["rebase_target_commit"]),
+            (candidate, upstream),
+        )
+        self._start(brief["dispatch_id"])
+        head = self._rebased(brief, conflict=conflict)
+        self._submit(brief["dispatch_id"], self._rebaser_report(brief, head))
+        return brief, candidate, head
+
+    def test_an_accepted_review_on_a_moved_base_routes_to_the_rebaser(self) -> None:
+        candidate = self._reviewed_candidate()
+        pinned = self._batch_record(self.batch_id)["integration_base_commit"]
+        unmoved = self._packet()["route_preview"]
+        upstream = self._push_upstream()
+
+        preview = self._packet()["route_preview"]["accept"]
+        decided = self._decide(self.batch_id, "accept")
+
+        self.assertNotIn("accept", unmoved)
+        routing = self._routing(decided)
+        recorded = dict(routing)
+        recorded.pop("decided_at")
+        self.assertEqual(recorded, preview)
+        self.assertEqual(
+            (
+                routing["route"],
+                routing["next_role"],
+                routing["next_action"],
+                routing["candidate_commit"],
+                routing["rebase_target_commit"],
+                routing["integration_base_commit"],
+            ),
+            ("rebase", "rebaser", "rebase", candidate, upstream, pinned),
+        )
+        self.assertEqual(
+            (decided["next_action"], decided["required_next_role"]),
+            ("rebase", "rebaser"),
+        )
+        self.assertEqual(decisions._developer_retry_count(decided), 0)
+        with self.assertRaises(coordinator.CoordinatorError):
+            self._dispatch(self.batch_id, "qa", candidate=candidate)
+
+    def test_without_the_rebaser_role_an_accepted_review_keeps_qa(self) -> None:
+        self._reviewed_candidate(rebaser=False)
+        self._push_upstream()
+
+        preview = self._packet()["route_preview"]
+        decided = self._decide(self.batch_id, "accept")
+
+        self.assertNotIn("accept", preview)
+        self.assertEqual(decided["next_action"], "qa")
+
+    def test_a_clean_rebase_goes_to_qa_without_a_new_review(self) -> None:
+        brief, candidate, head = self._run_rebaser(conflict=False)
+
+        accepted = self._decide(self.batch_id, "accept")
+        changed = git_utils._changed_files_between(
+            self.repo, brief["rebase_target_commit"], head
+        )
+        self._assess(self.batch_id, head, changed)
+        assessed = self._batch_record(self.batch_id)
+        qa = self._dispatch(self.batch_id, "qa", candidate=head)["brief"]
+
+        self.assertEqual(brief["verification_commands"], ["true"])
+        self.assertEqual(
+            brief["transition"]["rebase_target_sha"], brief["rebase_target_commit"]
+        )
+        self.assertEqual(
+            accepted["integration_base_commit"], brief["rebase_target_commit"]
+        )
+        link = accepted["rebases"][-1]
+        self.assertEqual(
+            (link["dispatch_id"], link["previous_candidate"], link["candidate"]),
+            (brief["dispatch_id"], candidate, head),
+        )
+        self.assertTrue(
+            accepted["coordinator_decisions"][-1]["rebase_check"]["rebased"][0][
+                "patch_id_match"
+            ]
+        )
+        self.assertEqual(assessed["next_action"], "qa")
+        self.assertEqual(qa["candidate_commit"], head)
+        roles = [item["role"] for item in assessed["dispatches"]]
+        self.assertEqual(roles.count("code-review"), 1)
+        self.assertEqual(decisions._developer_retry_count(assessed), 0)
+
+    def test_a_rebase_with_resolved_conflicts_goes_to_qa_without_a_new_review(
+        self,
+    ) -> None:
+        brief, _, head = self._run_rebaser(conflict=True)
+
+        accepted = self._decide(self.batch_id, "accept")
+        changed = git_utils._changed_files_between(
+            self.repo, brief["rebase_target_commit"], head
+        )
+        self._assess(self.batch_id, head, changed)
+        assessed = self._batch_record(self.batch_id)
+
+        check = accepted["coordinator_decisions"][-1]["rebase_check"]
+        self.assertEqual(len(check["patch_id_mismatches"]), 1)
+        self.assertTrue(check["range_diff"])
+        self.assertEqual(assessed["next_action"], "qa")
+        self.assertEqual(
+            self._dispatch(self.batch_id, "qa", candidate=head)["brief"][
+                "candidate_commit"
+            ],
+            head,
+        )
+        roles = [item["role"] for item in assessed["dispatches"]]
+        self.assertEqual(roles.count("code-review"), 1)
+
+    def test_a_rebaser_report_without_rebase_check_or_with_foreign_changes_is_refused(
+        self,
+    ) -> None:
+        candidate = self._reviewed_candidate()
+        self._push_conflicting_upstream()
+        self._decide(self.batch_id, "accept")
+        brief = self._dispatch(self.batch_id, "rebaser")["brief"]
+        self._start(brief["dispatch_id"])
+        head = self._rebased(brief, conflict=True)
+        report = self._rebaser_report(brief, head)
+        missing = dict(report)
+        missing.pop("rebase_check")
+        unlisted = self._rebaser_report(
+            brief,
+            head,
+            rebase_check=self._rebase_check(brief, head, resolved_conflicts=[]),
+        )
+        no_range_diff = self._rebaser_report(
+            brief, head, rebase_check=self._rebase_check(brief, head, range_diff=None)
+        )
+        wrong_pair = self._rebaser_report(
+            brief,
+            head,
+            rebase_check=self._rebase_check(
+                brief,
+                head,
+                rebased=[
+                    {
+                        "rebased_from": brief["rebaser"]["previous_commits"][0],
+                        "commit_sha": head,
+                        "patch_id_match": True,
+                    }
+                ],
+            ),
+        )
+
+        for invalid, expected in (
+            (missing, "rebase_check"),
+            (unlisted, "outside the resolved conflicts"),
+            (no_range_diff, "range-diff"),
+            (wrong_pair, "patch"),
+        ):
+            with self.subTest(expected=expected):
+                with self.assertRaises(coordinator.CoordinatorError) as refused:
+                    self._submit(brief["dispatch_id"], invalid)
+                self.assertIn(expected, refused.exception.message)
+        self._submit(brief["dispatch_id"], report)
+        accepted = self._decide(self.batch_id, "accept")
+        self.assertEqual(accepted["next_action"], "risk-assessment")
+        self.assertEqual(accepted["rebases"][-1]["previous_candidate"], candidate)
+
+    def test_another_role_report_never_carries_rebase_check(self) -> None:
+        batch_id = cast(str, self._create_batch()["batch_id"])
+        self._accepted_architect(batch_id)
+        brief = self._dispatch(batch_id, "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        candidate, changed = self._developer_commit("x")
+
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            self._submit(
+                brief["dispatch_id"],
+                self._developer_report(
+                    brief, candidate, changed, rebase_check={"rebased": []}
+                ),
+            )
+
+        self.assertIn("only a rebaser report", refused.exception.message)
+
+    def test_a_candidate_change_retry_of_a_review_routes_to_the_rebaser(self) -> None:
+        candidate = self._reviewed_candidate()
+        upstream = self._push_upstream()
+
+        preview = self._packet(reason_category="candidate-change")["route_preview"][
+            "retry"
+        ]
+        forced = self._packet(
+            reason_category="candidate-change", retry_role="developer"
+        )["route_preview"]["retry"]
+        decided = self._decide(
+            self.batch_id, "retry", reason_category="candidate-change"
+        )
+
+        self.assertEqual(forced["route"], "rebase-fix-forward")
+        routing = self._routing(decided)
+        self.assertEqual(preview["route"], "rebase")
+        self.assertEqual(
+            (
+                routing["route"],
+                routing["next_action"],
+                routing["candidate_commit"],
+                routing["rebase_target_commit"],
+            ),
+            ("rebase", "rebase", candidate, upstream),
+        )
+        self.assertEqual(decisions._developer_retry_count(decided), 0)
+        self.assertEqual(
+            self._dispatch(self.batch_id, "rebaser")["brief"]["rebase_target_commit"],
+            upstream,
+        )
+
+    def test_a_blocked_rebaser_routes_to_a_developer_retry_and_never_to_qa(
+        self,
+    ) -> None:
+        candidate = self._reviewed_candidate()
+        self._push_conflicting_upstream()
+        self._decide(self.batch_id, "accept")
+        brief = self._dispatch(self.batch_id, "rebaser")["brief"]
+        self._start(brief["dispatch_id"])
+        self._submit(
+            brief["dispatch_id"],
+            self._base_report(
+                brief,
+                "rebaser",
+                outcome="blocked",
+                commit_sha=candidate,
+                changed_files=[],
+                checks_run=self._checks(brief, "not_run"),
+                blockers={
+                    "status": "present",
+                    "details": "services/x.py: both sides define the module value",
+                },
+            ),
+        )
+
+        preview = self._packet(reason_category="requirements")["route_preview"][
+            "retry"
+        ]
+        decided = self._decide(self.batch_id, "retry", reason_category="requirements")
+
+        self.assertEqual(preview["route"], "rebase-fix-forward")
+        self.assertEqual(
+            (decided["next_action"], self._routing(decided)["next_role"]),
+            ("developer-retry", "developer"),
+        )
+        with self.assertRaises(coordinator.CoordinatorError):
+            self._dispatch(self.batch_id, "qa", candidate=candidate)
+
+    def test_a_transport_failure_of_the_rebaser_repeats_the_same_rebase(self) -> None:
+        candidate = self._reviewed_candidate()
+        upstream = self._push_upstream()
+        self._decide(self.batch_id, "accept")
+        brief = self._dispatch(self.batch_id, "rebaser")["brief"]
+        self._start(brief["dispatch_id"])
+        self._submit(
+            brief["dispatch_id"],
+            self._base_report(
+                brief,
+                "rebaser",
+                outcome="blocked",
+                commit_sha=candidate,
+                changed_files=[],
+                checks_run=self._checks(brief, "not_run"),
+                blockers={"status": "present", "details": "the session was lost"},
+            ),
+        )
+        upstream_again = self._push_upstream("later")
+
+        decided = self._decide(self.batch_id, "retry", reason_category="transport")
+        again = self._dispatch(self.batch_id, "rebaser")["brief"]
+
+        routing = self._routing(decided)
+        self.assertEqual(
+            (routing["route"], routing["next_action"], routing["next_role"]),
+            ("same-candidate-rerun", "rebase", "rebaser"),
+        )
+        self.assertNotEqual(upstream, upstream_again)
+        self.assertEqual(
+            (again["snapshot_commit"], again["rebase_target_commit"]),
+            (candidate, upstream),
+        )
+        self.assertEqual(decisions._developer_retry_count(decided), 0)
+
+    def test_auto_carries_a_moved_base_after_qa_through_the_rebaser_back_to_qa(
+        self,
+    ) -> None:
+        self._install_rebaser()
+        self._patch_config(approval_policy="auto")
+        plan = self._batch_plan()
+        plan["definition_of_done"] = ["add simple marker"]
+        _git(
+            self.repo, "worktree", "add", "-b", self.branch, str(self.worktree), "master"
+        )
+        batch = coordinator.create_batch(self._args(**plan))
+        coordinator.approve_batch(
+            self._args(batch=batch["batch_id"], **self._approval())
+        )
+        self.batch_id = batch_id = batch["batch_id"]
+        architect = self._dispatch(batch_id, "architect")["brief"]
+        self._start(architect["dispatch_id"])
+        self._submit(
+            architect["dispatch_id"], self._base_report(architect, "architect")
+        )
+        developer_id = self._batch_record(batch_id)["dispatches"][-1]["dispatch_id"]
+        developer = coordinator._read_object(
+            self._records() / "dispatches" / f"{developer_id}.json", "dispatch"
+        )
+        self._start(developer_id)
+        candidate, changed = self._developer_commit("x")
+        self._submit(
+            developer_id, self._developer_report(developer, candidate, changed)
+        )
+        qa_id = self._batch_record(batch_id)["dispatches"][-1]["dispatch_id"]
+        qa = coordinator._read_object(
+            self._records() / "dispatches" / f"{qa_id}.json", "dispatch"
+        )
+        self._stage_report(
+            batch_id,
+            qa_id,
+            self._base_report(qa, "qa", checks_run=self._checks(qa, "pass")),
+            via_qa_lane=True,
+        )
+        upstream = self._push_upstream()
+        report_path = self._records() / "reports" / f"{qa_id}.json"
+        with mock.patch.object(
+            qa_lane,
+            "run",
+            return_value={"state": "reported", "report": str(report_path)},
+        ):
+            coordinator.run_qa(self._args(dispatch=qa_id))
+
+        moved = self._batch_record(batch_id)
+        decision = moved["dispatches"][-1]["decision"]
+        self.assertEqual(
+            (
+                decision["approved_by"],
+                decision["routing"]["route"],
+                decision["routing"]["rebase_target_commit"],
+                moved["next_action"],
+            ),
+            ("policy:auto", "rebase", upstream, "rebase"),
+        )
+        self.assertNotIn("auto_stop", moved)
+        self.assertFalse(moved.get("manual_recovery"))
+        # The coordinator session creates the next dispatch without an approval of its own.
+        brief = coordinator.create_dispatch(
+            self._args(
+                transition_digest=None,
+                approved_by=None,
+                approved_at=None,
+                **self._proposal_fields(batch_id, "rebaser", "work", None),
+            )
+        )["brief"]
+        self.assertEqual(brief["coordinator_approval"]["approved_by"], "policy:auto")
+        self.assertIn(
+            "rebase",
+            self._batch_record(batch_id)["auto_decisions"][-1]["evidence"][
+                "lifted_milestones"
+            ],
+        )
+        self._start(brief["dispatch_id"])
+        head = self._rebased(brief, conflict=False)
+        result = self._submit(brief["dispatch_id"], self._rebaser_report(brief, head))
+
+        done = self._batch_record(batch_id)
+        self.assertTrue(result["auto_accepted"])
+        self.assertEqual(done["integration_base_commit"], upstream)
+        self.assertEqual(
+            (done["dispatches"][-1]["role"], done["dispatches"][-1]["state"]),
+            ("qa", "approved"),
+        )
+        qa_again = coordinator._read_object(
+            self._records() / "dispatches" / f"{done['dispatches'][-1]['dispatch_id']}.json",
+            "dispatch",
+        )
+        self.assertEqual(qa_again["candidate_commit"], head)
+        self.assertNotIn("auto_stop", done)
+
     # -- delta-review after a fix-forward (issue #625) -----------------------------------------
 
     SPEC_WARNING = {
@@ -16312,7 +16786,7 @@ class CoordinatorRetryRoutingTableTests(unittest.TestCase):
                     self._route(stage, self._report(standards=None), "block-bypass")
                 self.assertIn("developer reason category", raised.exception.remedy)
 
-    def test_the_recovery_routes_are_exactly_the_documented_sixteen(self) -> None:
+    def test_the_recovery_routes_are_exactly_the_documented_seventeen(self) -> None:
         self.assertEqual(
             constants.RECOVERY_ROUTES,
             (
@@ -16328,6 +16802,7 @@ class CoordinatorRetryRoutingTableTests(unittest.TestCase):
                 "narrowed-retry",
                 "fix-forward",
                 "rebase-fix-forward",
+                "rebase",
                 "supersede",
                 "environmental-restart",
                 "rewind",
@@ -16343,8 +16818,8 @@ class CoordinatorRetryRoutingTableTests(unittest.TestCase):
         self,
     ) -> None:
         for value, recorded in (
-            ("rebase", False),
-            ("rebase", True),
+            ("reroute", False),
+            ("reroute", True),
             (None, False),
             ("", True),
         ):
@@ -16357,7 +16832,7 @@ class CoordinatorRetryRoutingTableTests(unittest.TestCase):
     def test_a_recorded_route_outside_the_enum_is_rejected_on_read_back(
         self,
     ) -> None:
-        routing = {"route": "rebase", "next_action": "developer-retry"}
+        routing = {"route": "reroute", "next_action": "developer-retry"}
         for batch in (
             {"dispatches": [{"decision": {"decision": "retry", "routing": routing}}]},
             {"coordinator_decisions": [{"decision": "retry", "routing": routing}]},
