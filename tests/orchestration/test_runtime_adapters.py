@@ -558,14 +558,27 @@ def test_codex_writer_can_commit_without_editing_git_config_or_hooks(
             assert mode(path) == "read", path
 
 
+TURN_COMPLETES_LATER = """\
+        time.sleep(30)
+        print(json.dumps({'method': 'turn/completed', 'params': {'turn': {'status': 'completed'}}}), flush=True)
+"""
+
+
 def fake_app_server(
-    repo: Path, worker: Path, *, changes: dict[str, object] | None = None
+    repo: Path,
+    worker: Path,
+    *,
+    changes: dict[str, object] | None = None,
+    after_turn: str = TURN_COMPLETES_LATER,
 ) -> Path:
+    """A fake `codex app-server`; `after_turn` runs once the turn/start answer is sent."""
     return fake_runtime(
         repo,
-        f"""import json, os, sys, time
+        f"""import json, os, signal, sys, time
 from pathlib import Path
 evidence = Path({str(repo / 'native-session.json')!r})
+def note(method, params):
+    print(json.dumps({{'method': method, 'params': params}}), flush=True)
 if sys.argv[1] != 'app-server':
     print('legacy exec cannot expose native thread identity', flush=True)
     sys.exit(9)
@@ -581,6 +594,7 @@ for line in sys.stdin:
         result.update({changes or {}!r})
     elif method == 'turn/start':
         evidence.write_text(json.dumps({{'pid': os.getpid(), 'session': os.getsid(0),
+            'pgid': os.getpgid(0), 'parent': os.getppid(),
             'cwd': os.getcwd(), 'thread': request['params']['threadId'],
             'prompt': request['params']['input'][0]['text']}}))
         result = {{'turn': {{'id': 'turn-worker', 'status': 'inProgress'}}}}
@@ -588,9 +602,7 @@ for line in sys.stdin:
         continue
     print(json.dumps({{'id': request['id'], 'result': result}}), flush=True)
     if method == 'turn/start':
-        time.sleep(30)
-        print(json.dumps({{'method': 'turn/completed', 'params': {{'turn': {{'status': 'completed'}}}}}}), flush=True)
-""",
+{after_turn}""",
     )
 
 
@@ -701,6 +713,125 @@ def test_codex_starts_detached_in_worker_with_stdin(
     finally:
         if evidence.exists():
             os.kill(json.loads(evidence.read_text())["pid"], 15)
+
+
+def harness_events(stdout: str) -> list[tuple[object, object]]:
+    """Every stdout line must be a harness-event; return (kind, text) pairs."""
+    records = [json.loads(line) for line in stdout.splitlines() if line.strip()]
+    assert all(record["type"] == "harness-event" for record in records), records
+    return [(record["kind"], record["text"]) for record in records]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_codex_supervised_serves_the_turn_in_the_adapter_group_and_streams_events(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn="""\
+        note('item/started', {'item': {'id': 'cmd-1', 'type': 'commandExecution',
+                                       'command': 'cat secret.txt'}})
+        note('item/started', {'item': {'id': 'reason-1', 'type': 'reasoning'}})
+        note('item/reasoning/textDelta', {'itemId': 'reason-1', 'delta': 'private thought'})
+        note('item/agentMessage/delta', {'itemId': 'msg-1', 'delta': 'Hello, '})
+        note('item/agentMessage/delta', {'itemId': 'msg-1', 'delta': 'world'})
+        note('item/completed', {'item': {'id': 'msg-1', 'type': 'agentMessage'}})
+        note('item/agentMessage/delta', {'itemId': 'msg-2', 'delta': 'Unfinished tail'})
+        note('turn/completed', {'turn': {'status': 'completed'}})
+""",
+    )
+
+    result, adapter_pid = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads((repo / "native-session.json").read_text())
+    # The app-server is the adapter's own child in the adapter's group: no detached re-exec.
+    assert data["parent"] == adapter_pid
+    assert data["pgid"] == adapter_pid
+    assert data["cwd"] == str(worker)
+    assert "dispatch self-report" in data["prompt"]
+    assert harness_events(result.stdout) == [
+        ("system", "Runtime session connected"),
+        ("tool", "commandExecution"),
+        ("output", "Hello, world"),
+        ("output", "Unfinished tail"),
+        ("result", "Turn completed"),
+    ]
+    assert "cat secret.txt" not in result.stdout
+    assert "private thought" not in result.stdout
+    assert not (repo / ".harness/.sandboxes/scratch/worker-logs").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and signals")
+@pytest.mark.parametrize(
+    "after_turn,code",
+    [
+        ("        sys.exit(7)\n", 7),
+        ("        os.kill(os.getpid(), signal.SIGTERM)\n", 128 + signal.SIGTERM),
+        ("        sys.exit(0)\n", 1),
+    ],
+    ids=["exit-7", "sigterm", "exit-0-before-completion"],
+)
+def test_codex_supervised_returns_the_app_server_exit_status(
+    dispatch: tuple[Path, Path, dict[str, object]], after_turn: str, code: int
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(repo, worker, after_turn=after_turn)
+
+    result, _ = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == code, result.stderr
+    assert harness_events(result.stdout) == [("system", "Runtime session connected")]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_codex_supervised_reports_a_turn_that_did_not_complete_as_an_error(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn="""\
+        note('turn/completed', {'turn': {'status': 'failed'}})
+        time.sleep(30)
+""",
+    )
+
+    result, _ = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 1
+    assert harness_events(result.stdout)[-1] == ("error", "Turn failed")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_codex_supervised_streams_a_worker_error_and_fails(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn="""\
+        note('error', {'error': {'message': 'model overloaded'}, 'willRetry': False})
+        time.sleep(30)
+""",
+    )
+
+    result, _ = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 1
+    assert harness_events(result.stdout)[-1] == ("error", "model overloaded")
 
 
 def test_codex_dispatch_help_exposes_adapter_arguments(
