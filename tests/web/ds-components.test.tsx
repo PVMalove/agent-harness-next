@@ -86,6 +86,12 @@ describe("Panel, PageHeader and Summary", () => {
     expect(screen.getByText("тело")).not.toBeNull();
   });
 
+  test("only a panel marked scroll tells the fit spec that its body may scroll", () => {
+    render(<><Panel title="Список" scroll="list">а</Panel><Panel title="Факты">б</Panel></>);
+    expect(screen.getByText("а").getAttribute("data-scroll")).toBe("list");
+    expect(screen.getByText("б").hasAttribute("data-scroll")).toBe(false);
+  });
+
   test("the summary shows the figures and a caption only when there is one", () => {
     render(
       <>

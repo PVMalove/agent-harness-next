@@ -57,6 +57,8 @@ interface Fit {
   mainScrolls: boolean;
   strip: number;
   tabs: number;
+  /** Elements whose content is cut or only reachable by an inner scroll (class and path). */
+  clipped: string[];
 }
 
 /** Merges the measurements of one test into fit-measurements.json: a failed test restarts the
@@ -86,10 +88,26 @@ async function measure(page: Page) {
       if (rect.width === 0 || rect.height === 0 || rect.bottom > box.bottom + 1) continue;
       bottom = Math.max(bottom, rect.bottom);
     }
+    // A box whose content is taller than the box and whose overflow is not visible hides data: the
+    // content is cut or sits behind an inner scroll. Only the long lists of the RFC (section 5) may
+    // do that and they carry data-scroll (Panel `scroll`). Visually hidden text (.ds-sr) is not content.
+    const clipped: string[] = [];
+    for (const element of main.querySelectorAll<HTMLElement>("*")) {
+      if (element.closest("[data-scroll], [hidden], svg, .ds-sr")) continue;
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.display === "contents" || element.clientHeight === 0) continue;
+      if (style.overflowY === "visible") continue;
+      if (element.scrollHeight > element.clientHeight + 1) {
+        const id = element.id ? `#${element.id}` : "";
+        const label = element.closest<HTMLElement>(".ds-panel")?.querySelector(".ds-panel-title")?.textContent ?? "";
+        clipped.push(`${element.tagName.toLowerCase()}${id}.${String(element.className).trim().split(/\s+/).join(".")} [${label}] ${element.scrollHeight}>${element.clientHeight}`);
+      }
+    }
     return {
       pageScrolls: root.scrollHeight > innerHeight,
       mainScrolls: main.scrollHeight > main.clientHeight,
       strip: Math.round(box.bottom - bottom),
+      clipped,
     };
   }, BLOCKS);
 }
@@ -120,9 +138,31 @@ for (const [route, expectedTabs] of SCREENS) {
         expect.soft(fit.pageScrolls, `${route}/${name} ${size}: the page scrolls`).toBe(false);
         expect.soft(fit.mainScrolls, `${route}/${name} ${size}: main scrolls`).toBe(false);
         expect.soft(fit.strip, `${route}/${name} ${size}: empty strip under the last block`).toBeLessThanOrEqual(MAX_STRIP);
+        expect.soft(fit.clipped, `${route}/${name} ${size}: content cut off or behind an inner scroll`).toEqual([]);
       }
       record(fits);
       expect.soft(count, `${route}: tab count`).toBe(expectedTabs);
     });
   }
 }
+
+test("harness at 390x800: the grids collapse to one column and a label shares its row with the value", async ({ page }) => {
+  await mockSocket(page);
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(`${base()}/#/harness`);
+  await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
+  const tracks = (selector: string) =>
+    page.locator(selector).first().evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+  await expect(page.locator(".ds-loop").first()).toBeVisible({ timeout: 20000 });
+  expect(await tracks(".ds-overview-top"), ".ds-overview-top tracks").toBe(1);
+  expect(await tracks(".ds-loop"), ".ds-loop tracks").toBe(1);
+  await page.getByRole("tab", { name: /Runtime/ }).click();
+  const pairs = await page.locator("#harness-runtime .ds-kv dt").evaluateAll((labels) =>
+    labels.map((label) => ({ label: label.textContent, label_top: Math.round(label.getBoundingClientRect().top), value_top: Math.round(label.nextElementSibling!.getBoundingClientRect().top) })),
+  );
+  expect(pairs.length).toBeGreaterThan(0);
+  for (const pair of pairs) expect(Math.abs(pair.value_top - pair.label_top), `${pair.label}: value on the label's row`).toBeLessThanOrEqual(2);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const wide = await page.locator("#harness-runtime .ds-kv").evaluate((list) => getComputedStyle(list).gridTemplateColumns.split(" ").length);
+  expect(wide, "a two-column list of pairs").toBe(2);
+});

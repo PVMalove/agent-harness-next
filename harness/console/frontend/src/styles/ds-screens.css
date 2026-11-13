@@ -61,16 +61,6 @@
 .ds-link-row span { overflow-wrap: anywhere; }
 .ds-empty-state { align-items: center; justify-content: center; }
 
-@media (max-width: 900px) {
-  .ds-overview-top,
-  .ds-loop,
-  .ds-container-stats { grid-template-columns: minmax(0, 1fr); }
-  .ds-files,
-  .ds-split,
-  .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
-  .ds-file-rel { border-left: 0; }
-}
-
 /* Harness */
 .ds-overview-top { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); gap: 12px; flex: 0 1 auto; min-height: 160px; }
 .ds-tiles-panel { flex: 1 0 auto; }
@@ -103,3 +93,27 @@
 .ds-faq details { padding: 8px 0; border-bottom: 1px solid var(--ds-line); }
 .ds-faq summary { font-weight: 600; cursor: pointer; }
 .ds-faq p { margin: 4px 0 0; color: var(--ds-muted); }
+
+/* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
+   The page subtitle goes, the installation rows put their caption on the title line and the tile
+   captions take one line, so every panel shows all its rows. */
+@media (max-height: 960px) and (min-width: 901px) {
+  .ds-page[data-section="Harness"] .ds-sub { display: none; }
+  .ds-overview .ds-install .ds-row { min-height: 28px; padding-block: 2px; }
+  .ds-overview .ds-install .ds-row-main { display: flex; align-items: baseline; gap: 8px; }
+  .ds-overview .ds-install .ds-row-title { flex: none; }
+  .ds-overview .ds-install .ds-row-sub { flex: 1; min-width: 0; }
+  .ds-overview .ds-tile-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-overview .ds-tiles-panel .ds-tiles { grid-auto-rows: auto; }
+}
+
+/* Narrow windows: last in the sheet, so it wins over the base rules above at equal specificity. */
+@media (max-width: 900px) {
+  .ds-overview-top,
+  .ds-loop,
+  .ds-container-stats { grid-template-columns: minmax(0, 1fr); }
+  .ds-files,
+  .ds-split,
+  .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
+  .ds-file-rel { border-left: 0; }
+}

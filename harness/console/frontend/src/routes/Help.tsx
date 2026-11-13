@@ -102,7 +102,7 @@ export function Help() {
     key: entry[0], icon: entry[4], title: name(entry), count: counts[entry[0]], text: t(TILE_TEXT[entry[0]]),
   }));
   const guideBody = (at: number, label: string, extra?: React.ReactNode) => (
-    <Panel id={`help-section-${at}`} fill title={sections[at]?.title ?? label} label={sections[at]?.title ?? label}>
+    <Panel id={`help-section-${at}`} fill scroll="text" title={sections[at]?.title ?? label} label={sections[at]?.title ?? label}>
       {extra}
       {sections[at] ? <Markdown text={sections[at]!.markdown} /> : <p className="ds-empty">{screen.error ? "" : t("Справка загружается…")}</p>}
     </Panel>
@@ -113,7 +113,7 @@ export function Help() {
   const body = (() => {
     if (needle) {
       return (
-        <Panel id="help-search-results" fill title={t("Найдено в справке")} count={hits.length} label={t("Найдено в справке")}>
+        <Panel id="help-search-results" fill scroll="list" title={t("Найдено в справке")} count={hits.length} label={t("Найдено в справке")}>
           {hits.length === 0 ? <p className="ds-empty">{t("Ничего не найдено")}</p> : hits.map(({ item, at }) => (
             <div key={at}><h3 className="ds-rel-title ds-pad">{item.title}</h3><Markdown text={item.markdown} match={needle} /></div>
           ))}
@@ -125,12 +125,12 @@ export function Help() {
         return (
           <>
             <div className="ds-split">
-              <Panel id="help-intro" fill title={`${t("СПРАВКА")}${version ? ` · ${version}` : ""}`} label={t("СПРАВКА")}>
+              <Panel id="help-intro" fill scroll="text" title={`${t("СПРАВКА")}${version ? ` · ${version}` : ""}`} label={t("СПРАВКА")}>
                 {guide && <Markdown text={guide.intro} />}
                 <div className="ds-pillars">{PILLARS.map(([head, text]) => (<div key={head}><b>{t(head)}</b><span>{t(text)}</span></div>))}</div>
                 {sections[0] && <Markdown text={sections[0].markdown} />}
               </Panel>
-              <Panel fill title={t("Быстрые ссылки")} label={t("Быстрые ссылки")}>
+              <Panel fill scroll="list" title={t("Быстрые ссылки")} label={t("Быстрые ссылки")}>
                 <ul className="ds-rows">{QUICK.map(([route, icon, label]) => (
                   <li key={route}><a className="ds-row ds-quick" href={href(route)}>
                     <Icon name={icon} className="ds-ic" />
@@ -168,7 +168,7 @@ export function Help() {
         );
       case "faq":
         return (
-          <Panel id="help-faq" fill title={sections[6]?.title ?? name(tabEntry)} count={faq.length} label={name(tabEntry)}>
+          <Panel id="help-faq" fill scroll="list" title={sections[6]?.title ?? name(tabEntry)} count={faq.length} label={name(tabEntry)}>
             <div className="ds-faq">{faq.map(([question, answer]) => (<details key={question}><summary>{question}</summary><p>{answer}</p></details>))}</div>
           </Panel>
         );

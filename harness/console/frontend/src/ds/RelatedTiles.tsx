@@ -30,7 +30,7 @@ export function RelatedTiles({ title, tiles, onSelect, id }: {
           {tile.title}
           {tile.count !== undefined && tile.count !== null ? <span className="ds-tile-count">{tile.count}</span> : null}
         </b>
-        <small className="ds-tile-desc">{tile.text}</small>
+        <small className="ds-tile-desc" title={typeof tile.text === "string" ? tile.text : undefined}>{tile.text}</small>
       </span>
       <Icon name="chevron" className="ds-ic-sm ds-tile-go" />
     </>

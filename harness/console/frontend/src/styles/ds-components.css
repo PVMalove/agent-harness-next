@@ -231,6 +231,7 @@
 .ds-row-button[aria-pressed="true"] { background: var(--ds-accent-bg); box-shadow: inset 2px 0 0 var(--ds-accent); }
 .ds-row-button:hover { background: var(--ds-hover); }
 .ds-kv { display: grid; grid-template-columns: minmax(96px, max-content) 1fr; gap: 4px 16px; margin: 0; padding: 8px 12px; }
+.ds-kv-row { display: contents; }
 .ds-kv dt { color: var(--ds-muted); }
 .ds-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-family: var(--ds-mono); }
 

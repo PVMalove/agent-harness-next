@@ -17,10 +17,13 @@ export interface PanelProps {
   label?: string;
   /** Take the free height of the parent column; the body scrolls. */
   fill?: boolean;
+  /** Marks a body that may scroll by design: a long list or running text. Any other panel must
+      show all its content, which tests/web/console-fit.spec.ts checks. */
+  scroll?: "list" | "text";
   children?: ReactNode;
 }
 
-export function Panel({ title, count, meta, actions, id, className, fill = false, label, children }: PanelProps) {
+export function Panel({ title, count, meta, actions, id, className, fill = false, scroll, label, children }: PanelProps) {
   const name = label ?? (typeof title === "string" ? title : undefined);
   const classes = ["ds-panel", fill ? "ds-panel-fill" : "", className ?? ""].filter(Boolean).join(" ");
   return (
@@ -34,7 +37,7 @@ export function Panel({ title, count, meta, actions, id, className, fill = false
         </div>
       </div>
       {/* A body that can scroll is a focusable region, so the keyboard reaches its overflow (WCAG 2.1.1). */}
-      <div className="ds-panel-body" {...(fill && name ? { role: "region", tabIndex: 0, "aria-label": name } : {})}>
+      <div className="ds-panel-body" data-scroll={scroll} {...(fill && name ? { role: "region", tabIndex: 0, "aria-label": name } : {})}>
         {children}
       </div>
     </section>

@@ -151,7 +151,7 @@ export function Harness() {
 
       <PipeTabs id="harness" label={section("Harness")} tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
 
-      <TabPanel id="harness" tab="overview" value={tab} keepMounted className="ds-tabpanel">
+      <TabPanel id="harness" tab="overview" value={tab} keepMounted className="ds-tabpanel ds-overview">
         <div className="ds-overview-top">
           <InstallPanel overview={data} />
           <AttentionPanel overview={data} />
@@ -170,7 +170,7 @@ export function Harness() {
         <ContainersPanel overview={data} maintenance={view} />
       </TabPanel>
       <TabPanel id="harness" tab="commands" value={tab} keepMounted className="ds-tabpanel">
-        <Panel title={t("Команды")} fill id="harness-commands">
+        <Panel title={t("Команды")} fill scroll="text" id="harness-commands">
           <div className="ds-legacy-island">
             <CommandPanel section="harness" planDigests={digests} request={request} onJobDone={refreshAll} />
             <Maintenance
