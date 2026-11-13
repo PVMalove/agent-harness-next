@@ -492,10 +492,10 @@ jobs:
   # ============================================================================
 
   verify:
-    needs: [docs, rust, verify-linux-unit, verify-linux-integration]
-    if: >-
-      always() && (github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')) &&
-      needs.docs.result == 'success' && needs.rust.result == 'success'
+    # It never waits for the Linux test groups: on a pull request it runs only the clean-room
+    # scenarios, beside the groups, and `verify-test-groups` confirms the four groups.
+    needs: [docs, rust]
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     # The complete suite reached 81% after almost an hour on a hosted runner (#943).
     timeout-minutes: 120
@@ -578,24 +578,6 @@ jobs:
           path: .harness/.sandboxes/logs/junit-verify.xml
           if-no-files-found: ignore
           retention-days: 3
-      - name: Check Linux test groups
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        env:
-          GROUP_RESULTS: ${{ toJSON(needs) }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import sys
-
-          results = json.loads(os.environ["GROUP_RESULTS"])
-          required = ("verify-linux-unit", "verify-linux-integration")
-          failed = [name for name in required if results[name]["result"] != "success"]
-          if failed:
-              print("Linux test groups not successful: " + ", ".join(failed))
-              sys.exit(1)
-          print("Linux unit and integration groups passed.")
-          PY
 
   diff-coverage:
     # Measures its own pytest run under coverage, so it runs beside `verify` instead of after it:

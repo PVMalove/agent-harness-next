@@ -65,7 +65,8 @@ ALL_JOBS = {
 # harness-runtime the Linux suites download; the long suites also wait for the public site.
 STAGES = {
     "rust": {GATE_JOB},
-    "verify": {"docs", "rust", "verify-linux-unit", "verify-linux-integration"},
+    # The clean-room job never waits for the Linux groups; `verify-test-groups` confirms them.
+    "verify": {"docs", "rust"},
     "verify-windows": {
         GATE_JOB,
         "docs",
@@ -168,13 +169,12 @@ def _running(event: str, base_ref: str) -> set[str]:
     if event == "pull_request":
         running.update(PLATFORM_GROUP_JOBS | {GROUPS_JOB})
         if base_ref.startswith("integration/"):
-            running.discard("verify")
             running.discard("verify-windows")
         else:
-            running.update({"verify", "verify-windows"})
+            running.add("verify-windows")
     else:
         running.difference_update(PLATFORM_GROUP_JOBS | {GROUPS_JOB})
-        running.update({"verify", "verify-windows"})
+        running.add("verify-windows")
     return running
 
 
@@ -327,7 +327,7 @@ class FullPathTests(unittest.TestCase):
 
         for name, condition in FULL_JOBS.items():
             with self.subTest(job=name):
-                if name in {"verify", "verify-windows"}:
+                if name == "verify-windows":
                     self.assertIn("always()", jobs[name])
                 else:
                     self.assertEqual(_condition(jobs[name]), condition)
