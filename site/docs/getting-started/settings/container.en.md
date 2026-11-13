@@ -228,7 +228,7 @@ Model settings and provider profiles stay in the existing assignments.
 | `access_policy.defaults.mode` | This executor accepts `sandbox` or `inherit`; it refuses the schema-valid `unsandboxed`. |
 | `access_policy.defaults.environment` | Unique variable names, never values. The runtime must have them in its own environment. |
 | `access_policy.defaults.network.hosts` | Exact DNS names without a URL scheme, port or wildcard; `[]` disables networking. |
-| `access_policy.defaults.filesystem` | Resources `checkout`, `git_common`, `shared_storage`, `cache`, with `read`/`write`. Item fields: `resource`, `access`, `path`; `path` is required only for `cache` and forbidden for other resources. |
+| `access_policy.defaults.filesystem` | Resources `checkout`, `git_common`, `shared_storage`, `cache`, with `read`/`write`. Item fields: `resource`, `access`, `path`, `variable`; `path` is required only for `cache` and forbidden for other resources; the optional `variable` is allowed only for `cache`. |
 | `access_policy.operations.qa.container` | Explicitly enable container QA. `defaults.container` alone is insufficient: without the override, QA remains on the host. |
 | `execution_policy.worker_execution_timeout_seconds` | Integer ≥ 1, default `14400`: worker deadline. |
 | `execution_policy.qa_command_timeout_seconds` | Integer ≥ 1, default `3600`: deadline for one container QA command. |
@@ -242,7 +242,16 @@ overrides. Keep read-only roles read-only; the full reference is [here](orchestr
 
 Caches persist only as plan `cache` resources mounted at the same absolute path. Relative paths
 resolve from the dispatch worktree, and `~` expands on the host. Point tools at that path through
-their configuration/a named variable. A container's HOME does not persist between runs.
+their configuration/a named variable, or through the `variable` field of the `cache` item: the
+executor itself passes `--env <variable>=<cache path>` to the container, so the
+`harness-runtime serve` environment needs no setup. The name is not listed in `environment` and is
+not one the runtime sets (`HOME`, `TMPDIR`, `CARGO_TARGET_DIR`, the proxy names and others).
+For a cargo cache in QA, name the absolute path `.harness/.sandboxes/cache/cargo` of the main
+checkout in `operations.qa.filesystem` with `"variable": "CARGO_HOME"` and create the directory
+first (`mkdir -p`). Every QA run sets `CARGO_TARGET_DIR` inside its own run root itself: the cargo
+stages of one run reuse the built dependencies, and the directory is removed with the run. The
+example and the measurement procedure are in the "Caches" section of
+`harness/docs/container-executor.md`. A container's HOME does not persist between runs.
 Host `~/.gitconfig` is not mounted; configure Git identity in the repository or through allowed
 variable names. A worker gets writable artifacts and read-only shared storage, without the
 runtime socket.

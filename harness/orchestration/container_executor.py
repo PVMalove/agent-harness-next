@@ -58,6 +58,23 @@ RESERVED_ENV_NAMES = frozenset(
 PROXY_URL_ENV_NAMES = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
 PROXY_BYPASS_ENV_NAMES = ("NO_PROXY", "no_proxy")
 PROXY_ENV_NAMES = frozenset(PROXY_URL_ENV_NAMES + PROXY_BYPASS_ENV_NAMES)
+# Every name a container launch sets itself, the QA run settings included (ADR 0032): a cache
+# item's ``variable`` may not take one. ``RESERVED_ENV_NAMES`` keeps its narrower meaning for the
+# plan ``environment``.
+RUNTIME_SET_NAMES = (
+    RESERVED_ENV_NAMES
+    | PROXY_ENV_NAMES
+    | frozenset(
+        {
+            "TMPDIR",
+            "TMP",
+            "TEMP",
+            "GIT_CEILING_DIRECTORIES",
+            "HARNESS_VERIFY_COLD",
+            "CARGO_TARGET_DIR",
+        }
+    )
+)
 # ``inherit`` asks for no particular mode; the container isolates the worker either way.
 SUPPORTED_MODES = ("inherit", "sandbox")
 _IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")

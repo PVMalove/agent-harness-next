@@ -437,3 +437,109 @@ fn the_cli_engine_attaches_only_its_own_binary() {
     assert!(refused.is_err());
     std::fs::remove_dir_all(dir).expect("cleanup");
 }
+
+fn cache_plan(variable: &serde_json::Value, resource: &str) -> Result<Plan, String> {
+    Plan::parse(&json!({
+        "container": {"engine": "docker", "worker_image": "w:1"},
+        "network": {"hosts": []},
+        "requirements": [
+            {"resource": "checkout", "path": "/work/repo", "access": "read"},
+            {"resource": resource, "path": "/work/cache/cargo", "access": "write",
+             "variable": variable},
+        ],
+        "plan_digest": "digest",
+    }))
+}
+
+#[test]
+fn a_cache_variable_names_its_pinned_path_and_takes_no_runtime_name() {
+    let plan = cache_plan(&json!("CARGO_HOME"), "cache").expect("plan");
+    assert_eq!(
+        plan.cache_variables(),
+        vec![("CARGO_HOME".to_owned(), "/work/cache/cargo".to_owned())]
+    );
+    let without = plan_without_variable();
+    assert!(without.cache_variables().is_empty());
+    for (variable, resource) in [
+        (json!("SRC"), "checkout"),
+        (json!("A=B"), "cache"),
+        (json!(""), "cache"),
+        (json!(7), "cache"),
+        (json!("HOME"), "cache"),
+        (json!("TMPDIR"), "cache"),
+        (json!("CARGO_TARGET_DIR"), "cache"),
+        (json!("HTTPS_PROXY"), "cache"),
+    ] {
+        assert!(
+            cache_plan(&variable, resource).is_err(),
+            "{variable} on {resource} is accepted"
+        );
+    }
+}
+
+fn plan_without_variable() -> Plan {
+    Plan::parse(&json!({
+        "container": {"engine": "docker", "worker_image": "w:1"},
+        "requirements": [
+            {"resource": "cache", "path": "/work/cache/pip", "access": "write"},
+        ],
+        "plan_digest": "digest",
+    }))
+    .expect("plan")
+}
+
+#[test]
+fn a_qa_command_gets_the_cache_path_and_a_run_scoped_target_dir_without_a_volume() {
+    let labels = labels();
+    // A plan name the run sets itself never reaches the container as a bare host value.
+    let environment = strings(&["CARGO_TARGET_DIR", "PIP_INDEX_URL"]);
+    let settings = vec![
+        ("TMPDIR".to_owned(), "/work/runs/qa/run-1/tmp".to_owned()),
+        (
+            "CARGO_TARGET_DIR".to_owned(),
+            "/work/runs/qa/run-1/cargo-target".to_owned(),
+        ),
+        ("CARGO_HOME".to_owned(), "/work/cache/cargo".to_owned()),
+    ];
+    let mounts = vec![
+        ("/work/runs/qa/run-1".to_owned(), true),
+        ("/work/cache/cargo".to_owned(), true),
+    ];
+    let mut qa = run(&labels, false, &environment, &settings, &mounts);
+    qa.engine = Kind::Docker;
+    qa.mode = Mode::Rootful;
+
+    let argv = argv::qa_run_argv(&qa, "cargo-1", &QaCommand::Shell("cargo test".to_owned()));
+
+    let joined = argv.join(" ");
+    for part in [
+        "run --rm --init",
+        "--user 1000:1000",
+        "--tmpfs /harness-home:rw,exec,nosuid,nodev,mode=1777",
+        "--env CARGO_HOME=/work/cache/cargo",
+        "--env CARGO_TARGET_DIR=/work/runs/qa/run-1/cargo-target",
+        "--env PIP_INDEX_URL",
+        "type=bind,source=/work/cache/cargo,target=/work/cache/cargo",
+    ] {
+        assert!(joined.contains(part), "{part} not in {joined}");
+    }
+    assert!(
+        !argv.iter().any(|part| part == "CARGO_TARGET_DIR"),
+        "{joined}"
+    );
+    for forbidden in [
+        "--volume",
+        "-v",
+        "type=volume",
+        "--detach",
+        "-d",
+        "--restart",
+    ] {
+        assert!(
+            !argv
+                .iter()
+                .any(|part| part == forbidden || part.starts_with("type=volume")),
+            "{forbidden} in {joined}"
+        );
+    }
+}

@@ -34,7 +34,10 @@ require `assignment_plans`: the coordinator reads `access_policy` even in a conf
   `--purpose publish`, `qa` for the `qa` role and `integration local-qa`, `git` for `integration refresh`
   and `integration resolve`. The section "QA, Git, and publish access" below describes what exactly is checked.
 - `filesystem` names a resource: `checkout`, `git_common`, `shared_storage`, or `cache` (only `cache`
-  requires `path`). The coordinator turns them into the real paths of the worktree, the shared Git directory, and the
+  requires `path`). A `cache` item may name a `variable`: the container executor itself passes the
+  resolved cache path under this name (`--env NAME=<path>`), for example `CARGO_HOME` (ADR 0032).
+  The name is unique among the caches, is not listed in `environment` and is not one the runtime
+  sets; a cache without `variable` keeps the previous plan digest. The coordinator turns them into the real paths of the worktree, the shared Git directory, and the
   storage. A disk root and a whole home directory are rejected.
 - Write permissions do not widen the brief's `write_paths`, the tool policy, or the native confirmations, and a
   read-only role gets no write access to `checkout`, `git_common`, or `shared_storage`.
