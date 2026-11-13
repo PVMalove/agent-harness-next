@@ -19,6 +19,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import traceback
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -69,6 +71,7 @@ from scripts.verification.instructions import (
     check_no_dispatch_specific_data_in_always_sent_files,
 )
 from scripts.verification.process import (
+    CapturedRun,
     isolated_temp_env,
     remove_tree,
     run_captured,
@@ -311,11 +314,18 @@ def clean_room_command() -> list[str]:
 _STAGE_KINDS = {"mypy": "typecheck", "pytest": "pytest", "clean-room": "clean-room"}
 
 
+def _print_result(name: str, captured: CapturedRun) -> None:
+    """The ``[verify] <stage>: passed|failed in X`` line, as ``run_stage`` prints it."""
+    state = "passed" if captured.exit_code == 0 else "failed"
+    print(f"[verify] {name}: {state} in {captured.duration_ms / 1000:.2f}s")
+
+
 class _EvidenceRecorder:
     """Runs the stages with separate, kept output streams and writes their stage evidence.
 
     A stage the run never reached, because an earlier one failed or ``--only`` skipped it after the
-    failure, is recorded as ``not_run`` (ADR 0023, section 5).
+    failure, is recorded as ``not_run`` (ADR 0023, section 5). The document lists the stages in
+    their planned order, whatever order they finished in.
     """
 
     def __init__(
@@ -346,8 +356,20 @@ class _EvidenceRecorder:
             # before its session starts (a conftest import error) writes none.
             junit.unlink(missing_ok=True)
         captured = run_captured(cmd, env=env, cwd=cwd)
-        state = "passed" if captured.exit_code == 0 else "failed"
-        print(f"[verify] {name}: {state} in {captured.duration_ms / 1000:.2f}s")
+        _print_result(name, captured)
+        self.record(name, cmd, captured, junit=junit)
+        if captured.exit_code != 0:
+            sys.exit(captured.exit_code)
+
+    def record(
+        self,
+        name: str,
+        cmd: list[str],
+        captured: CapturedRun,
+        *,
+        junit: Path | None = None,
+    ) -> None:
+        """Keep the evidence of one finished stage, with the failed nodeids of its JUnit report."""
         failed: tuple[str, ...] = ()
         nothing_selected = (
             name == "pytest" and captured.exit_code == failed_only.NO_TESTS_EXIT
@@ -374,8 +396,6 @@ class _EvidenceRecorder:
             failed_nodeids=failed,
             not_run=nothing_selected,
         )
-        if captured.exit_code != 0:
-            sys.exit(captured.exit_code)
 
     def record_unrun(self, name: str, exit_code: int, reason: str) -> None:
         """Record a stage that selected nothing and so never started: ``not_run`` with ``reason``."""
@@ -398,6 +418,65 @@ class _EvidenceRecorder:
             selections=self.selections,
         )
         write_evidence(self._directory, bundle)
+
+
+class _OverlappedStage:
+    """A stage that runs in its own process next to pytest, with its output kept in its own log.
+
+    The two log files stay apart from the live pytest output; ``finish`` waits for the process
+    and replays them after pytest, so the console never interleaves the two stages.
+    """
+
+    def __init__(
+        self, name: str, cmd: list[str], *, env: Mapping[str, str], log_dir: Path
+    ) -> None:
+        self.name = name
+        self.cmd = cmd
+        self._stdout = log_dir / f"{name}.stdout.log"
+        self._stderr = log_dir / f"{name}.stderr.log"
+        with self._stdout.open("wb") as stdout, self._stderr.open("wb") as stderr:
+            self._started = time.perf_counter()
+            # No stdin: the console belongs to the foreground pytest stage.
+            self._process = subprocess.Popen(
+                cmd, env=env, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr
+            )
+        self._ended = self._started
+        # The duration ends when the process does, not when pytest lets ``finish`` wait for it.
+        self._waiter = threading.Thread(target=self._wait, daemon=True)
+        self._waiter.start()
+        print(
+            f"[verify] {name}: running next to pytest; log: {self._stdout}", flush=True
+        )
+
+    def _wait(self) -> None:
+        self._process.wait()
+        self._ended = time.perf_counter()
+
+    def finish(self) -> CapturedRun:
+        """Wait for the stage and replay its output; returns the finished run."""
+        self._waiter.join()
+        captured = CapturedRun(
+            self._process.wait(),
+            self._stdout.read_text(encoding="utf-8", errors="replace"),
+            self._stderr.read_text(encoding="utf-8", errors="replace"),
+            round((self._ended - self._started) * 1000),
+        )
+        sys.stdout.write(captured.stdout)
+        sys.stdout.flush()
+        sys.stderr.write(captured.stderr)
+        sys.stderr.flush()
+        return captured
+
+
+def _finish_overlapped(
+    recorder: _EvidenceRecorder | None, stage: _OverlappedStage
+) -> int:
+    """Finish an overlapped stage: replay it, print its result line, keep its evidence."""
+    captured = stage.finish()
+    _print_result(stage.name, captured)
+    if recorder is not None:
+        recorder.record(stage.name, stage.cmd, captured)
+    return captured.exit_code
 
 
 def _mirror_junit(source: Path, targets: list[Path]) -> None:
@@ -443,7 +522,13 @@ def _run_stages(
     """Стадии с замером времени: mypy, pytest и clean-room прогон; `only` оставляет одну группу.
 
     С `cache` mypy и pytest держат кэши в кэше worktree; clean-room стадия всегда холодная.
-    С `recorder` потоки стадий хранятся раздельно и порождают stage evidence."""
+    С `recorder` потоки стадий хранятся раздельно и порождают stage evidence.
+
+    Полный прогон после mypy запускает clean-room отдельным процессом параллельно с pytest: стадии
+    независимы. Упавший pytest дожидается clean-room, и обе записи попадают в evidence; код выхода
+    берётся у первой упавшей стадии в порядке mypy, pytest, clean-room."""
+    # UTF-8 mode: the harness CLI writes UTF-8, and a cp1252 runner locale cannot decode it.
+    clean_room_env = dict(test_env, HARNESS_TEST_RUN_ROOT=str(run_tmp), PYTHONUTF8="1")
     try:
         if only != "clean-room":
             if only != "pytest":
@@ -453,6 +538,17 @@ def _run_stages(
                     else dict(test_env, MYPY_CACHE_DIR=str(cache.mypy_dir))
                 )
                 _stage(recorder, "mypy", mypy_command(), cwd=ROOT, env=mypy_env)
+            overlapped = (
+                _OverlappedStage(
+                    "clean-room",
+                    clean_room_command(),
+                    env=clean_room_env,
+                    log_dir=run_tmp,
+                )
+                if only is None
+                else None
+            )
+            clean_room_exit = 0
             try:
                 _stage(
                     recorder,
@@ -472,14 +568,12 @@ def _run_stages(
             finally:
                 if junit_xml is not None:
                     _mirror_junit(junit_xml, junit_mirrors or [])
-        if only not in {"tests", "pytest"}:
-            _stage(
-                recorder,
-                "clean-room",
-                clean_room_command(),
-                # UTF-8 mode: the harness CLI writes UTF-8, and a cp1252 runner locale cannot decode it.
-                env=dict(test_env, HARNESS_TEST_RUN_ROOT=str(run_tmp), PYTHONUTF8="1"),
-            )
+                if overlapped is not None:
+                    clean_room_exit = _finish_overlapped(recorder, overlapped)
+            if clean_room_exit != 0:
+                sys.exit(clean_room_exit)
+        if only == "clean-room":
+            _stage(recorder, "clean-room", clean_room_command(), env=clean_room_env)
     finally:
         try:
             if recorder is not None:
@@ -558,7 +652,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="scripts/verify.py",
         description=(
             "Full project verification. Without options every run executes all stages\n"
-            "in order and stops at the first failure."
+            "in order and stops at the first failure; the clean-room run overlaps pytest,\n"
+            "and a failed pytest still waits for it and reports both."
         ),
         epilog=(
             "stages:\n"
@@ -567,7 +662,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  2. skills/REGISTRY.md: rebuilt in place, then must match the committed file\n"
             "  3. mypy\n"
             "  4. pytest\n"
-            "  5. clean-room install and update run\n"
+            "  5. clean-room install and update run (in its own process next to pytest)\n"
             "\n"
             "Temporary files go to an isolated run root under the harness storage and are removed\n"
             "at exit. Usually run as `make verify`."
