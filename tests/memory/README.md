@@ -78,9 +78,6 @@ noise stays at 0.61, all 20 query results are identical to version 8 and the gat
 `baseline_fts5_initial.json` stays unchanged. From #1061 on, the light CI job runs this test for
 any pull request that changes, removes or renames `CONTEXT.md` or `docs/adr/*.md`, so a stale
 hash fails there.
-Version 10 re-evaluates the merged corpus after #1138 adds the test-author worktree clarification
-to ADR 0005. Recall@1/@3/@5 remains 0.95, noise remains 0.61, and the gate passes; the report's
-ranked results are refreshed for the changed document. The initial baseline stays unchanged.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 
