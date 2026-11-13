@@ -61,6 +61,10 @@ Operational state живёт ровно в одной эпохе:
 Файловый ledger в 2.0.0 нужен только как источник импорта и формат отката; в обоих случаях его
 читает и пишет Rust (раздел 5).
 
+Удаление Python-writer выполняет тикет #814 (cutover и релиз 2.0.0). Пока релиз не вышел,
+`LifecycleLedger` в `harness/orchestration/ledger/lifecycle.py` пишет файловый ledger, если
+`store_is_authority` не выбирает эпоху `runtime-store`.
+
 ### 2. Разделение ответственности
 
 - **Python** (policy-слой, остаётся после cutover): семантика переходов batch/dispatch, approval,

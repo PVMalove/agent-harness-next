@@ -198,7 +198,8 @@ code-review написал отчёт, но `dispatch wait` закончился
 
 - **Hooks проекта.** Управляемые hooks (`.claude/settings.local.json`, `.claude/hooks/`) не
   отслеживаются Git и не попадают в issue worktree даже на хосте, поэтому в контейнере их нет.
-  Способ доставки hooks в worktree решает #1122; контейнер получит их тем же путём.
+  Доставка hooks в worktree остаётся отдельной открытой задачей: #1122 её не решил. Контейнер
+  получит hooks тем же путём, когда его выберут.
 - **Срок запуска** считается от `sent_at`, поэтому создание сети, proxy и контейнера входит в
   `startup_timeout_seconds`. `dispatch wait` отвечает `startup_timeout` событием и dispatch не
   блокирует.
