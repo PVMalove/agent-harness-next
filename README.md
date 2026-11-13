@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/harness-banner.svg" alt="Agent Harness Next — портативный harness для Claude Code и Codex" width="800">
+  <img src="./docs/assets/harness-banner.svg" alt="Agent Harness Next: портативный harness для Claude Code и Codex" width="800">
 </p>
 
 <p align="center">
@@ -7,12 +7,12 @@
   <img src="https://img.shields.io/badge/Runtime-Claude%20Code%20%7C%20Codex-E5A04B?labelColor=34312E" alt="Runtime: Claude Code | Codex">
   <img src="https://img.shields.io/badge/Python-3.12%2B-8FB573?labelColor=34312E" alt="Python 3.12+">
   <a href="https://github.com/PVMalove/agent-harness-next/actions/workflows/verify.yml"><img src="https://github.com/PVMalove/agent-harness-next/actions/workflows/verify.yml/badge.svg" alt="CI"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-9C958C?labelColor=34312E" alt="License: MIT"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BSL%201.1-9C958C?labelColor=34312E" alt="License: BSL 1.1"></a>
 </p>
 
 # Agent Harness Next
 
-Agent Harness Next разворачивает в проект скиллы, hooks и контекстные документы и ведёт оркестрацию через Rust runtime и локальный runtime-store, оставляя Python policy-слоем.
+Agent Harness Next разворачивает в проект скиллы, hooks и документы для coding-агентов и ведёт тикеты через этапы оркестрации. Состояние оркестрации хранит Rust runtime в локальном runtime store, а правила и проверки остаются на Python.
 
 [Сайт](https://pvmalove.github.io/agent-harness-next/) · [Быстрый старт](https://pvmalove.github.io/agent-harness-next/getting-started/) · [Архитектура](https://pvmalove.github.io/agent-harness-next/architecture/) · [Демо](https://pvmalove.github.io/agent-harness-next/demo/) · [Справочник](https://pvmalove.github.io/agent-harness-next/reference/)
 
@@ -24,8 +24,6 @@ Agent Harness Next разворачивает в проект скиллы, hook
 | `mattpocock-suite` | Полный upstream-набор, закреплённый на проверенном коммите. |
 | `engineering-suite` | Эпики и тикеты, триаж, двухосевое review, `qa-gate` и подготовка PR. |
 | `backend-orchestration` | Роли и coordinator для распределённых систем: briefs, worktrees и ledger. |
-
-Старое имя `pvmalove-suite` поддерживается как совместимый alias.
 
 ## Быстрый старт
 
@@ -47,52 +45,25 @@ python3 harness/bin/harness.py health /path/to/repository
 Без `--capability` устанавливается `project-foundation`. `harness diff` показывает изменения
 управляемого snapshot, `harness update` обновляет его и сохраняет локальные правки.
 
-## Состав `engineering-suite`
+## Как это работает
 
-В `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
-
-Сборка разворачивает проектные руководства `docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`
-и общий контракт `.harness/docs/technical-english.md`. Корневой `docs/` остаётся документацией
-исходного репозитория и в целевой проект не переносится.
+- `harness init` копирует в проект скиллы выбранной сборки, hooks и руководства для агентов.
+- Claude Code и Codex находят скиллы в `.claude/skills` и `.agents/skills`. Hooks проверяют команды и правки агента до того, как они выполнятся.
+- В сборке `backend-orchestration` скилл `/implement` проводит тикет через этапы architect, developer, review и QA. Состояние хранит процесс `harness-runtime serve`: пока он не запущен, команды оркестрации отказывают с `[runtime_unavailable]`.
+- Состав сборок задаёт [`harness/CAPABILITIES.json`](./harness/CAPABILITIES.json), архитектурные решения записаны в [ADR](./docs/adr/).
 
 ## Документация
 
-- [Быстрый старт](https://pvmalove.github.io/agent-harness-next/getting-started/) — требования, установка и `health`.
-- [Миграция на 2.0](https://pvmalove.github.io/agent-harness-next/guides/upgrade-2-0/) — переход с 1.x, `harness-runtime migrate` и откат.
-- [Архитектура](https://pvmalove.github.io/agent-harness-next/architecture/) — слои, runtime, store и безопасность.
-- [Справочник](https://pvmalove.github.io/agent-harness-next/reference/) — CLI, конфигурация, hooks и агенты.
-- [Демо](https://pvmalove.github.io/agent-harness-next/demo/) — веб-консоль на демонстрационных данных.
-- [ADR](./docs/adr/) и [правила Git](./docs/agents/git-workflow.md) — действующие контракты и рабочий процесс.
-- [CONTEXT.md](./CONTEXT.md) — глоссарий проекта; [docs/README.md](./docs/README.md) — индекс внутренней документации.
+- [Быстрый старт](https://pvmalove.github.io/agent-harness-next/getting-started/): требования, установка и `health`.
+- [Миграция на 2.0](https://pvmalove.github.io/agent-harness-next/guides/upgrade-2-0/): переход с 1.x, `harness-runtime migrate` и откат.
+- [Архитектура](https://pvmalove.github.io/agent-harness-next/architecture/): слои, runtime, store и безопасность.
+- [Справочник](https://pvmalove.github.io/agent-harness-next/reference/): CLI, конфигурация, hooks и агенты.
+- [Демо](https://pvmalove.github.io/agent-harness-next/demo/): веб-консоль на демонстрационных данных.
+- [ADR](./docs/adr/) и [правила Git](./docs/agents/git-workflow.md): действующие контракты и рабочий процесс.
+- [CONTEXT.md](./CONTEXT.md): глоссарий проекта; [docs/README.md](./docs/README.md): индекс внутренней документации.
 
-## Разработка
+## Участие в разработке
 
-Конфиг оркестрации проверяет `coordinator.py config validate --canonical --json`: при загрузке
-coordinator лишь нормализует enum-поля в памяти с предупреждением и файл не меняет. После
-`harness-runtime migrate` состояние batch хранит runtime store, а остановленный или удержанный batch
-восстанавливают команды `recovery status|reload|resume|fix|abort`; `recovery status`, `reload` и
-`resume` доступны и в разделе Orchestration консоли. Recovery не перезапускает принятые этапы и не восстанавливает потерянный
-контекст модели и незакоммиченные файлы. Подробности:
-[руководство по backend-оркестрации](./site/docs/backend-orchestration.md#удержание-batch-и-команды-recovery).
-Пока идёт оркестрация, `harness-runtime serve` должен работать. Без него команды coordinator
-`batch`, `dispatch`, `qa` и `recovery` отказывают с `[runtime_unavailable]`, `harness worktree-remove`
-отказывает, а `harness cleanup` оставляет worktree на месте. Как держать процесс запущенным и
-проверять его, описано в разделе [«Runtime» быстрого старта](./site/docs/getting-started/index.md#runtime).
+Каждое изменение проходит путь issue → ветка → PR по [правилам Git](./docs/agents/git-workflow.md). Перед PR запустите полный гейт `make verify`. Заметки о выпуске пишутся в [CHANGELOG.md](./CHANGELOG.md), порядок выпуска описан в [releases.md](./site/docs/agents/releases.md).
 
-При любой capability установщик ставит общий
-[контракт технического английского](./harness/docs/technical-english.md) как
-`.harness/docs/technical-english.md` и обновляет его в составе управляемого snapshot. `diff` и
-`update` показывают отдельный unified diff недостающих обязательных ссылок для существующих
-`AGENTS.md`, `CLAUDE.md` и установленных agent seeds. Команды сохраняют пользовательские инструкции.
-После просмотра и явного согласования человек или уполномоченный агент применяет только эти
-добавления обычным редактированием или patch. Подключённые входы требуют прочитать общий контракт
-до первого English handoff. Повторное обновление не предлагает уже подключённые ссылки.
-
-`backend-orchestration` проводит тикет через роли и coordinator: `/implement` ведёт этапы architect,
-developer, review и QA, `/to-pull-requests` готовит ветку к публикации.
-PR требует отдельного подтверждения; изменения проходят через issue, ветку и PR по
-[правилам Git](./docs/agents/git-workflow.md); полный гейт — `make verify`. Заметки о выпуске — в
-[CHANGELOG.md](./CHANGELOG.md), порядок выпуска — в [releases.md](./site/docs/agents/releases.md).
-
-Проект распространяется по лицензии [MIT](./LICENSE). Лицензия закреплённого upstream-snapshot
-находится в [`third_party/mattpocock-skills/LICENSE`](./third_party/mattpocock-skills/LICENSE).
+Проект распространяется по лицензии [Business Source License 1.1](./LICENSE): некоммерческое использование разрешено, коммерческое требует письменного разрешения автора. Лицензия закреплённого upstream-snapshot лежит в [`third_party/mattpocock-skills/LICENSE`](./third_party/mattpocock-skills/LICENSE).
