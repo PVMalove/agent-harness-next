@@ -96,6 +96,8 @@ REGISTRY: list[tuple[str, CheckFn]] = [
     ("orchestration.stale_dispatches", orchestration_checks.check_stale_dispatches),
     ("orchestration.orphaned_worktrees", orchestration_checks.check_orphaned_worktrees),
     ("orchestration.disposable_data", orchestration_checks.check_disposable_data),
+    ("orchestration.adapters", orchestration_checks.check_adapters),
+    ("orchestration.worker_binaries", orchestration_checks.check_worker_binaries),
 ]
 
 FIXERS: dict[str, FixFn] = {

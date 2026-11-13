@@ -82,6 +82,7 @@
     "Review": "Review",
     "Review / QA": "Review / QA",
     "Rootless Podman · среда, этапы и свидетельства.": "Rootless Podman · environment, stages and evidence.",
+    "Runtime не находит claude или codex": "The runtime does not find claude or codex",
     "Runtime не отвечает": "The runtime does not answer",
     "Runtime: не отвечает": "Runtime: not answering",
     "Runtime: работает": "Runtime: running",
@@ -220,6 +221,7 @@
     "«Готово» заполняет закрытие тикета после подтверждённого merge": "“Done” is filled by closing the ticket after a confirmed merge",
     "Адаптеры": "Adapters",
     "Адаптеры runtime": "Runtime adapters",
+    "Адаптеры worker не совпадают с версией harness": "Worker adapters do not match the harness version",
     "Адаптеры не собраны в этом снимке": "The adapters are not collected in this snapshot",
     "Активное время роли не отделено от ожидания в ledger": "The ledger does not separate a role's active time from waiting",
     "Активные": "Active",
@@ -2031,6 +2033,10 @@
       "en": "Shows which search slice (FTS5 or vector) answers memory queries, so its answers are not overrated.",
       "ru": "Показывает, каким срезом поиска (FTS5 или векторным) отвечает память, чтобы не переоценивать её ответы."
     },
+    "orchestration.adapters": {
+      "en": "An outdated or missing adapter starts the worker other than the runtime expects, and the dispatch gets blocked.",
+      "ru": "Устаревший или отсутствующий адаптер запускает worker не так, как ждёт runtime, и dispatch блокируется."
+    },
     "orchestration.blocked_batches": {
       "en": "A blocked batch does not move without a human decision.",
       "ru": "Заблокированный batch не движется без решения человека."
@@ -2058,6 +2064,10 @@
     "orchestration.unfinished_batches": {
       "en": "Unfinished batches hold branches and worktrees; the list shows what still waits for a decision.",
       "ru": "Незавершённые batch держат ветки и worktree; список показывает, что ещё ждёт решения."
+    },
+    "orchestration.worker_binaries": {
+      "en": "The runtime starts workers in the serve environment; without claude or codex on its PATH an external worker does not start.",
+      "ru": "Runtime запускает worker в окружении serve; без claude или codex в его PATH внешний worker не стартует."
     },
     "repo_map.tier": {
       "en": "Dispatches get their context from the Repo Map; an incomplete map gives roles a wrong picture of the code.",
@@ -2577,6 +2587,10 @@
       "en": "Memory model",
       "ru": "Модель памяти"
     },
+    "orchestration.adapters": {
+      "en": "Worker adapters",
+      "ru": "Адаптеры worker"
+    },
     "orchestration.blocked_batches": {
       "en": "Blocked batches",
       "ru": "Заблокированные batch"
@@ -2604,6 +2618,10 @@
     "orchestration.unfinished_batches": {
       "en": "Unfinished batches",
       "ru": "Незавершённые batch"
+    },
+    "orchestration.worker_binaries": {
+      "en": "Worker binaries",
+      "ru": "Бинарники worker"
     },
     "repo_map.tier": {
       "en": "Repo Map tier",

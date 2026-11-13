@@ -136,6 +136,12 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "orchestration.disposable_data": CheckRoute(
         "Накопились временные данные оркестрации", "Orchestration"
     ),
+    "orchestration.adapters": CheckRoute(
+        "Адаптеры worker не совпадают с версией harness", "Orchestration"
+    ),
+    "orchestration.worker_binaries": CheckRoute(
+        "Runtime не находит claude или codex", "Orchestration"
+    ),
     "repo_map.tier": CheckRoute("Repo Map работает в ограниченном режиме", "Repo Map"),
     "memory.index": CheckRoute("Индекс памяти проекта требует внимания", "Repo Map"),
     "memory.model": CheckRoute("Модель памяти недоступна", "Repo Map"),

@@ -258,6 +258,14 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "Показывает объём одноразовых данных, которые освободит harness cleanup.",
         "Shows how much disposable data harness cleanup would free.",
     ),
+    "orchestration.adapters": (
+        "Устаревший или отсутствующий адаптер запускает worker не так, как ждёт runtime, и dispatch блокируется.",
+        "An outdated or missing adapter starts the worker other than the runtime expects, and the dispatch gets blocked.",
+    ),
+    "orchestration.worker_binaries": (
+        "Runtime запускает worker в окружении serve; без claude или codex в его PATH внешний worker не стартует.",
+        "The runtime starts workers in the serve environment; without claude or codex on its PATH an external worker does not start.",
+    ),
 }
 
 
@@ -331,6 +339,8 @@ TITLES: dict[str, tuple[str, str]] = {
     "orchestration.stale_dispatches": ("Зависшие dispatch", "Stale dispatches"),
     "orchestration.orphaned_worktrees": ("Брошенные рабочие копии", "Orphaned worktrees"),
     "orchestration.disposable_data": ("Временные данные", "Disposable data"),
+    "orchestration.adapters": ("Адаптеры worker", "Worker adapters"),
+    "orchestration.worker_binaries": ("Бинарники worker", "Worker binaries"),
 }
 
 

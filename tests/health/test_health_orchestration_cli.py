@@ -23,6 +23,8 @@ _ORCHESTRATION_CHECK_IDS = [
     "orchestration.stale_dispatches",
     "orchestration.orphaned_worktrees",
     "orchestration.disposable_data",
+    "orchestration.adapters",
+    "orchestration.worker_binaries",
 ]
 
 

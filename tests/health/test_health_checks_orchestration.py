@@ -4,6 +4,7 @@ capability exactly like `files.check_orchestration_config` already is."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -20,9 +21,16 @@ from harness.health.context import HealthContext, shell_join
 from harness.health.model import CheckResult
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.ledger.lifecycle import (
+    STORE_LEDGER_VERSION,
     JsonObject,
     JsonValue,
     LifecycleLedger,
+)
+from harness.orchestration.runtime_client import (
+    RuntimeClient,
+    RuntimeClientError,
+    RuntimeReply,
+    serve_command,
 )
 
 _NO_CAPABILITY_LOCK: dict[str, object] = {"capabilities": []}
@@ -35,6 +43,8 @@ _CHECK_FUNCTIONS: list[Callable[[HealthContext], CheckResult]] = [
     checks.check_stale_dispatches,
     checks.check_orphaned_worktrees,
     checks.check_disposable_data,
+    checks.check_adapters,
+    checks.check_worker_binaries,
 ]
 
 
@@ -540,3 +550,187 @@ def test_disposable_data_reports_a_nonzero_size_as_information_with_a_cleanup_hi
         in result.message
     )
     assert stale_file.exists()  # preview only; nothing was removed
+
+
+# --- orchestration.adapters (#1124) -------------------------------------------------------------
+
+_ADAPTERS = (".harness/adapters/claude_worker.py", ".harness/adapters/codex_worker.py")
+
+
+def _install_adapters(repo: Path) -> dict[str, object]:
+    """Both adapters on disk and the lock of harness 9.9.9 that installed them."""
+    files: dict[str, object] = {}
+    for relative in _ADAPTERS:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(f"# {relative}\n".encode())
+        files[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {**_ORCHESTRATION_LOCK, "package_version": "9.9.9", "files": files}
+
+
+def test_adapters_ok_when_both_match_the_installed_harness_version(
+    tmp_path: Path,
+) -> None:
+    lock = _install_adapters(tmp_path)
+
+    result = checks.check_adapters(_context(tmp_path, lock=lock))
+
+    assert (result.id, result.group, result.status) == (
+        "orchestration.adapters",
+        "orchestration",
+        "ok",
+    )
+    assert "9.9.9" in result.message
+
+
+def test_adapters_fail_when_one_is_missing_from_the_lock_or_the_disk(
+    tmp_path: Path,
+) -> None:
+    lock = _install_adapters(tmp_path)
+    files = lock["files"]
+    assert isinstance(files, dict)
+    del files[".harness/adapters/codex_worker.py"]
+    (tmp_path / ".harness/adapters/claude_worker.py").unlink()
+
+    result = checks.check_adapters(_context(tmp_path, lock=lock))
+
+    assert result.status == "fail"
+    assert "claude_worker.py" in result.message
+    assert "codex_worker.py" in result.message
+    assert "не установлен" in result.message
+    assert result.fix is not None
+    assert result.fix.command == shell_join(["harness", "update", str(tmp_path)])
+
+
+def test_adapters_fail_when_one_differs_from_the_installed_harness_version(
+    tmp_path: Path,
+) -> None:
+    lock = _install_adapters(tmp_path)
+    (tmp_path / ".harness/adapters/codex_worker.py").write_text("# old\n")
+
+    result = checks.check_adapters(_context(tmp_path, lock=lock))
+
+    assert result.status == "fail"
+    assert "codex_worker.py" in result.message
+    assert "claude_worker.py" not in result.message
+    assert "9.9.9" in result.message
+
+
+# --- orchestration.worker_binaries (#1124) ------------------------------------------------------
+
+
+def _store_repo(repo: Path, plans: dict[str, object]) -> HealthContext:
+    _init_repo(repo)
+    state = repo / ".harness" / "orchestration" / "state"
+    state.mkdir(parents=True)
+    (state / "ledger.json").write_text(
+        json.dumps({"version": STORE_LEDGER_VERSION}), encoding="utf-8"
+    )
+    (repo / ".harness" / "orchestration.json").write_text(
+        json.dumps({"assignment_plans": plans}), encoding="utf-8"
+    )
+    return _context(repo, lock=_ORCHESTRATION_LOCK)
+
+
+def _status(result: JsonObject) -> Callable[[RuntimeClient, str], RuntimeReply]:
+    def answer(self: RuntimeClient, operation: str, **kwargs: object) -> RuntimeReply:
+        assert operation == "status"
+        return RuntimeReply(hello={}, result=result, revision=None)
+
+    return answer
+
+
+def _binary(directory: Path, name: str) -> None:
+    """An executable ``name`` that ``shutil.which`` finds on POSIX and on Windows."""
+    directory.mkdir(parents=True, exist_ok=True)
+    for file_name in (name, f"{name}.cmd"):
+        path = directory / file_name
+        path.write_text("#!/bin/sh\n", encoding="utf-8")
+        path.chmod(0o755)
+
+
+_RUNTIME = {"profiles": ["p"], "model": "m", "effort": "high"}
+
+
+def test_worker_binaries_fail_for_an_external_role_whose_binary_serve_cannot_find(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context = _store_repo(
+        tmp_path,
+        {
+            "developer": {"transport": "external", "runtimes": {"codex": _RUNTIME}},
+            "architect": {"runtimes": {"claude": _RUNTIME}},
+        },
+    )
+    bin_dir = tmp_path / "serve-bin"
+    _binary(bin_dir, "claude")
+    monkeypatch.setattr(RuntimeClient, "call", _status({"search_path": str(bin_dir)}))
+
+    result = checks.check_worker_binaries(context)
+
+    assert (result.id, result.group, result.status) == (
+        "orchestration.worker_binaries",
+        "orchestration",
+        "fail",
+    )
+    assert "codex" in result.message
+    assert result.fix is not None
+    assert "установите codex в PATH окружения serve" in result.fix.text
+    assert result.fix.command == serve_command(tmp_path)
+
+
+def test_worker_binaries_ok_lists_a_missing_binary_no_external_role_needs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context = _store_repo(
+        tmp_path,
+        {
+            "developer": {
+                "transport": "external",
+                "runtimes": {"claude": _RUNTIME, "codex": _RUNTIME},
+                "default_runtime": "claude",
+            },
+        },
+    )
+    bin_dir = tmp_path / "serve-bin"
+    _binary(bin_dir, "claude")
+    monkeypatch.setattr(RuntimeClient, "call", _status({"search_path": str(bin_dir)}))
+
+    result = checks.check_worker_binaries(context)
+
+    assert result.status == "ok"
+    assert "codex" in result.message
+
+
+def test_worker_binaries_warn_when_the_runtime_reports_no_search_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context = _store_repo(tmp_path, {})
+    monkeypatch.setattr(RuntimeClient, "call", _status({"pid": 1}))
+
+    result = checks.check_worker_binaries(context)
+
+    assert result.status == "warn"
+    assert "PATH" in result.message
+
+
+def test_worker_binaries_skip_on_a_file_ledger_or_an_unavailable_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(*_args: object, **_kwargs: object) -> RuntimeReply:
+        raise RuntimeClientError(
+            "runtime_unavailable", "no answer", remedy="start it", domain="infrastructure"
+        )
+
+    monkeypatch.setattr(RuntimeClient, "call", refuse)
+    store = tmp_path / "store"
+    store.mkdir()
+
+    file_ledger = checks.check_worker_binaries(
+        _context(tmp_path, lock=_ORCHESTRATION_LOCK)
+    )
+    unavailable = checks.check_worker_binaries(_store_repo(store, {}))
+
+    assert file_ledger.status == "skipped"
+    assert unavailable.status == "skipped"
+    assert "orchestration.runtime" in unavailable.message

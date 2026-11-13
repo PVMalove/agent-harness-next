@@ -154,6 +154,8 @@ EN: dict[str, str] = {
     "Есть зависшие dispatch": "There are stale dispatches",
     "Есть worktree без batch": "There are orphaned worktrees",
     "Накопились временные данные оркестрации": "Disposable orchestration data has piled up",
+    "Адаптеры worker не совпадают с версией harness": "Worker adapters do not match the harness version",
+    "Runtime не находит claude или codex": "The runtime does not find claude or codex",
     "Repo Map работает в ограниченном режиме": "Repo Map runs in a limited mode",
     "Индекс памяти проекта требует внимания": "The project memory index needs attention",
     "Модель памяти недоступна": "The memory model is unavailable",
