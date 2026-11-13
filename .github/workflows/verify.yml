@@ -308,6 +308,8 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/verify-test-group
         with:
           group: integration
@@ -370,6 +372,8 @@ jobs:
           git config --global core.fscache true
           git config --global core.preloadindex true
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
       - name: Disable Windows Defender for workspace and temp
         shell: powershell
         run: |
