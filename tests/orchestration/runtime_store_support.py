@@ -829,8 +829,9 @@ class HookStartedRuntime:
         deadline = time.monotonic() + 15
         while self.socket_exists() and time.monotonic() < deadline:
             time.sleep(0.1)
-        with contextlib.suppress(ProcessLookupError):
-            os.kill(self.pid, signal.SIGKILL)
+        if sys.platform != "win32":  # signal.SIGKILL is POSIX-only
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(self.pid, signal.SIGKILL)
         shutil.rmtree(self.xdg, ignore_errors=True)
 
 

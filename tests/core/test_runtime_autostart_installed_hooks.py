@@ -140,6 +140,8 @@ class Project:
 
     def close(self) -> None:
         for pid in self.pids:
+            if sys.platform == "win32":  # signal.SIGKILL is POSIX-only
+                break
             with contextlib.suppress(ProcessLookupError):
                 os.kill(pid, signal.SIGKILL)
         shutil.rmtree(self.xdg, ignore_errors=True)
@@ -188,6 +190,8 @@ def test_the_installed_hooks_start_reuse_and_stop_the_runtime(project: Project) 
 def test_the_runtime_survives_the_end_of_the_hook_process_group(project: Project) -> None:
     started = project.fire("PreToolUse")
     [pid] = project.pids
+    if sys.platform == "win32":
+        pytest.skip("os.getpgid is POSIX-only")
     group = os.getpgid(pid)
 
     # The hook ran in its own session; the runtime is in a process group of its own.

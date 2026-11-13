@@ -124,7 +124,8 @@ def test_protocol_markers(path: Path, markers: tuple[str, ...]) -> None:
 
 
 def test_changelog_records_the_full_route_worktree_fix() -> None:
-    unreleased = _text(CHANGELOG).split("\n## [", 2)[1]
+    # The release cut moves the entry from Unreleased into the newest release section.
+    unreleased = "".join(_text(CHANGELOG).split("\n## [", 3)[1:3])
     assert "#768" in unreleased
     assert "checkout_mismatch" in unreleased
 
