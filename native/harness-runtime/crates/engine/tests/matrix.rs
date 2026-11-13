@@ -185,3 +185,45 @@ fn the_golden_launch_keeps_the_adr_0025_defaults() {
         }
     }
 }
+
+#[test]
+fn a_worker_create_sets_each_cache_variable_to_its_pinned_path() {
+    let plan = Plan::parse(&serde_json::json!({
+        "container": {"engine": "docker", "worker_image": "w:1"},
+        "network": {"hosts": []},
+        "environment": ["NPM_TOKEN"],
+        "requirements": [
+            {"resource": "checkout", "path": "/work/repo", "access": "write"},
+            {"resource": "cache", "path": "/work/cache/cargo", "access": "write",
+             "variable": "CARGO_HOME"},
+        ],
+        "plan_digest": "digest",
+    }))
+    .expect("plan");
+    let labels = Labels {
+        dispatch: "d1".to_owned(),
+        repository: "/work/repo/.git".to_owned(),
+        plan_digest: "digest".to_owned(),
+        operation: OPERATION.to_owned(),
+        execution: EXECUTION.to_owned(),
+    };
+    let argv = engine::argv::create_argv(&Spec {
+        plan: &plan,
+        labels: &labels,
+        command: &[],
+        worker_image_id: "sha256:w",
+        proxy_image_id: None,
+        user: HostUser { uid: 1, gid: 1 },
+        mode: engine::facts::Mode::Rootful,
+        selinux: false,
+    });
+    let joined = argv.join(" ");
+    assert!(
+        joined.contains("--env NPM_TOKEN --env CARGO_HOME=/work/cache/cargo"),
+        "{joined}"
+    );
+    assert!(
+        joined.contains("type=bind,source=/work/cache/cargo,target=/work/cache/cargo"),
+        "{joined}"
+    );
+}

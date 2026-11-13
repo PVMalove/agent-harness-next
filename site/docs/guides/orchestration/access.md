@@ -34,7 +34,10 @@ worker. Без него brief сохраняет `inherit`, а `dispatch send` �
   `--purpose publish`, `qa` для роли `qa` и `integration local-qa`, `git` для `integration refresh`
   и `integration resolve`. Что именно проверяется, описывает раздел «Доступ QA, Git и publish» ниже.
 - `filesystem` называет ресурс: `checkout`, `git_common`, `shared_storage` или `cache` (только `cache`
-  требует `path`). Coordinator превращает их в реальные пути worktree, общего Git-каталога и
+  требует `path`). Элемент `cache` может назвать `variable` — имя переменной, через которую
+  контейнерный исполнитель сам передаёт разрешённый путь кэша (`--env NAME=<путь>`), например
+  `CARGO_HOME` (ADR 0032). Имя уникально среди кэшей, не совпадает с `environment` и с именами,
+  которые задаёт runtime; кэш без `variable` сохраняет прежний digest плана. Coordinator превращает их в реальные пути worktree, общего Git-каталога и
   хранилища. Корень диска и домашний каталог целиком отклоняются.
 - Права на запись не расширяют `write_paths` brief, tool policy и нативные подтверждения, а
   read-only роль не получает запись в `checkout`, `git_common` и `shared_storage`.

@@ -498,6 +498,18 @@ impl Supervisor {
             .iter()
             .map(|name| ((*name).to_owned(), tmp.clone()))
             .chain([("HARNESS_VERIFY_COLD".to_owned(), "1".to_owned())])
+            // One build directory for every cargo stage of this run, removed with its run root:
+            // no compiled code reaches another candidate's run (ADR 0032).
+            .chain([(
+                "CARGO_TARGET_DIR".to_owned(),
+                admitted
+                    .room
+                    .run_root
+                    .join("cargo-target")
+                    .to_string_lossy()
+                    .into_owned(),
+            )])
+            .chain(admitted.checked.plan.cache_variables())
             .collect();
         let observation = &admitted.observation;
         let launch = json!({
