@@ -168,9 +168,10 @@ def test_grill_docs_exception_blocks_commit_path_arguments(
         "cwd": str(repo),
     }
     result = subprocess.run(
-        ["bash", str(HOOKS / "block-direct-master.sh")],
+        [shutil.which("bash") or "bash", str(HOOKS / "block-direct-master.sh")],
         input=json.dumps(payload),
         text=True,
+        encoding="utf-8",
         capture_output=True,
         env=dict(os.environ, CLAUDE_PROJECT_DIR=str(repo)),
         check=False,
@@ -315,6 +316,7 @@ def test_project_scratchpad_requires_the_current_runtime_session(
         env={**os.environ, "CLAUDE_PROJECT_DIR": str(tmp_path)},
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     assert process.returncode == expected, process.stderr
 
@@ -355,6 +357,7 @@ def _direct_master(
         env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)},
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
 

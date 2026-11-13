@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import stat
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -138,8 +139,8 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertIn(
             str(Path(self.worktree) / ".claude" / "hooks" / "test-author-preflight.sh"), prompt
         )
-        self.assertIn(f"--worktree {self.worktree}", prompt)
-        self.assertIn(f"--brief {self.brief}", prompt)
+        self.assertIn(f"--worktree {shlex.quote(str(self.worktree))}", prompt)
+        self.assertIn(f"--brief {shlex.quote(str(self.brief))}", prompt)
         self.assertIn("without model or effort overrides", prompt)
         self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), prompt)
 

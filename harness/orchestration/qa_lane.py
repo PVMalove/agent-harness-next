@@ -15,7 +15,7 @@ import re
 import socket
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -855,6 +855,9 @@ def _record_report(
     dispatch: JsonObject,
     report: JsonObject,
     ops: QaWorkflowOps,
+    *,
+    checksum: str | None = None,
+    last_try: bool = True,
 ) -> Path:
     batch = ops._load_batch(root, dispatch["batch_id"])
     try:
@@ -862,10 +865,30 @@ def _record_report(
         policy = read_snapshot(dispatch)
         ops._validate_dispatch(repo, policy["config"], root, batch, dispatch)
     except CoordinatorError as exc:
-        path = capture_unaccepted(root, dispatch, report, exc)
+        busy = isinstance(exc, LedgerBusyError)
+        if busy and not last_try:
+            raise
+        acceptance: JsonObject | None = (
+            None
+            if checksum is None
+            else {
+                "refusal": STORE_BUSY if busy else "refused",
+                "sha256": checksum,
+                "captured_at": _now(),
+            }
+        )
+        path = capture_unaccepted(root, dispatch, report, exc, acceptance=acceptance)
+        # The refusal below aborts the store unit: the evidence is sent before it.
+        persist_writes(ledger)
+        remedy = (
+            f"run `qa run --dispatch {dispatch['dispatch_id']}` again: it accepts this "
+            "evidence without a new QA run"
+            if busy and acceptance is not None
+            else exc.remedy
+        )
         raise CoordinatorError(
             exc.message,
-            remedy=f"QA evidence captured without acceptance at {path}; {exc.remedy}",
+            remedy=f"QA evidence captured without acceptance at {path}; {remedy}",
         ) from exc
     status = ops._load_dispatch_status(root, dispatch["dispatch_id"])
     entry = _batch_entry(batch, dispatch["dispatch_id"])
@@ -887,6 +910,103 @@ def _record_report(
         batch.get("integration_base_commit") or batch.get("base_commit"),
     )
     return ops._persist_report(ledger, root, batch, dispatch, report)
+
+
+# How long the acceptance of QA evidence reads a busy store again, each time from a new snapshot.
+ACCEPT_BUSY_WAIT_SECONDS = 30.0
+# The refusal of a captured QA report that a repeat of ``qa run`` accepts without a new run.
+STORE_BUSY = "store_busy"
+
+
+class _ReadAgain(Exception):
+    """A read of the acceptance block was refused as busy: the block runs again."""
+
+
+def _accept_report(
+    ledger: LifecycleLedger,
+    root: Path,
+    repo: Path,
+    dispatch: JsonObject,
+    report: JsonObject,
+    ops: QaWorkflowOps,
+    checksum: str,
+) -> Path:
+    """Record the report of a finished QA run in a block of its own.
+
+    A read snapshot can expire or the store be busy while the block reads (``store_busy``); the
+    evidence is already captured, so the block runs again on a new snapshot instead of throwing
+    the run away. The last try keeps the refusal of ``_record_report``. A lock another operation
+    holds is not read again: that refusal stays the caller's."""
+    deadline = time.monotonic() + ACCEPT_BUSY_WAIT_SECONDS
+    while True:
+        last_try = time.monotonic() >= deadline
+        try:
+            with _lock(ledger):
+                try:
+                    return _record_report(
+                        ledger,
+                        root,
+                        repo,
+                        dispatch,
+                        report,
+                        ops,
+                        checksum=checksum,
+                        last_try=last_try,
+                    )
+                except LedgerBusyError as exc:
+                    if last_try:
+                        raise
+                    # Leave the block by an exception, so that its unit stages nothing.
+                    raise _ReadAgain from exc
+        except _ReadAgain:
+            time.sleep(RELEASE_LOCK_POLL_SECONDS)
+
+
+def _captured_report(ledger: LifecycleLedger, dispatch: JsonObject) -> JsonObject | None:
+    """The QA evidence of ``dispatch`` that a repeat of ``qa run`` accepts without a new run, or
+    ``None``.
+
+    Only the latest captured report of the dispatch counts, and only when a busy store refused it:
+    a later refusal for another reason, of a new run or of this evidence, makes the next ``qa run``
+    run the QA commands again. The dispatch record is immutable, so its candidate and brief are
+    those the evidence ran on."""
+    dispatch_id = _safe_id(dispatch["dispatch_id"], "dispatch")
+    captured: list[tuple[str, JsonObject]] = []
+    for path in state_view.glob(
+        _records_root(ledger) / "unaccepted-evidence", f"{dispatch_id}-*.json"
+    ):
+        record = _read_object(path, "unaccepted evidence")
+        acceptance = record.get("acceptance")
+        report = record.get("input")
+        if (
+            isinstance(acceptance, dict)
+            and isinstance(acceptance.get("sha256"), str)
+            and isinstance(acceptance.get("captured_at"), str)
+            and isinstance(report, dict)
+            and report.get("dispatch_id") == dispatch_id
+            and report.get("role") == "qa"
+        ):
+            captured.append((str(acceptance["captured_at"]), record))
+    if not captured:
+        return None
+    _, latest = max(captured, key=lambda item: item[0])
+    refusal = cast(JsonObject, latest["acceptance"]).get("refusal")
+    return latest if refusal == STORE_BUSY else None
+
+
+def _run_attempt(
+    dispatch: JsonObject, status: JsonObject, captured: JsonObject | None
+) -> int | None:
+    """The attempt of this run of a container QA dispatch (ADR 0021, section 4), or ``None``.
+
+    A rerun after an infrastructure ending is the next attempt, with its own operation id.
+    Accepting captured evidence runs nothing, so it keeps the recorded attempt."""
+    if not container_brief(dispatch):
+        return None
+    if captured is None:
+        return next_attempt(status)
+    recorded = status.get("attempt")
+    return recorded if isinstance(recorded, int) else None
 
 
 def _recover_transient_failure(
@@ -1116,6 +1236,7 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
                 remedy="approve the QA dispatch and run the QA runner before sending it to any agent",
             )
         _verify_access(ledger, repo, dispatch, ops)
+        captured = _captured_report(ledger, dispatch)
         # Strict fails closed before the lease, by the policy the brief pinned (ADR 0024, 2a).
         hook_policy.check_strict_boundary(
             repo,
@@ -1137,10 +1258,7 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
             return {"dispatch_id": dispatch["dispatch_id"], **admission}
         queue_path = Path(admission["queue_path"])
         lease = admission["lease"]
-        # A container QA run is an attempt of its dispatch (ADR 0021, section 4): a rerun after an
-        # infrastructure ending is the next attempt, with its own operation id.
-        container = container_brief(dispatch)
-        attempt = next_attempt(status) if container else None
+        attempt = _run_attempt(dispatch, status, captured)
         try:
             entry["state"] = "dispatched"
             _safe_id(dispatch["dispatch_id"], "dispatch")
@@ -1169,6 +1287,19 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
         raise CoordinatorError(
             "QA run reached the gate without an acquired lane",
             remedy=INTERNAL_INVARIANT_REMEDY,
+        )
+    if captured is not None:
+        evidence = cast(JsonObject, captured["acceptance"])
+        return _accept_and_release(
+            ledger,
+            root,
+            repo,
+            dispatch,
+            queue_path,
+            lease,
+            lambda: cast(JsonObject, captured["input"]),
+            str(evidence["sha256"]),
+            ops,
         )
     try:
         with qa_lease.heartbeat(ledger, lease, lease_seconds):
@@ -1330,12 +1461,35 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
         # A signal stopped the run: its partial evidence is recorded, then the signal goes on.
         interrupted = getattr(policy, "interrupted", None)
         raise interrupted if interrupted is not None else failure
-    try:
+
+    def build_report() -> JsonObject:
         report = _qa_report(dispatch, checks, artifact, checksum, stages)
         if domain is not None:
             _blocked_by(report, domain)
-        with _lock(ledger):
-            report_path = _record_report(ledger, root, repo, dispatch, report, ops)
+        return report
+
+    return _accept_and_release(
+        ledger, root, repo, dispatch, queue_path, lease, build_report, checksum, ops
+    )
+
+
+def _accept_and_release(
+    ledger: LifecycleLedger,
+    root: Path,
+    repo: Path,
+    dispatch: JsonObject,
+    queue_path: Path,
+    lease: JsonObject,
+    build_report: Callable[[], JsonObject],
+    checksum: str,
+    ops: QaWorkflowOps,
+) -> JsonObject:
+    """Accept the QA report that ``build_report`` builds for the evidence ``checksum``, then release
+    the lane; a refusal returns the dispatch to ``approved`` and frees the lane."""
+    try:
+        report_path = _accept_report(
+            ledger, root, repo, dispatch, build_report(), ops, checksum
+        )
     except CoordinatorError as exc:
         _recover_transient_failure(
             ledger, root, dispatch, queue_path, lease, exc, "report-persistence", ops
@@ -1352,7 +1506,7 @@ def run(args: argparse.Namespace, ops: QaWorkflowOps) -> JsonObject:
         "dispatch_id": dispatch["dispatch_id"],
         "state": "reported",
         "report": str(report_path),
-        "artifact": str(artifact),
+        "artifact": str(_artifact_path(ledger, checksum)),
         "sha256": checksum,
     }
 

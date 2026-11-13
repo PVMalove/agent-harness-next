@@ -292,6 +292,7 @@ def _verdict(hook: Path, command: str) -> tuple[int, str, str, str]:
         input=json.dumps({"tool_input": {"command": command}}),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)},
         cwd=project,
         check=False,

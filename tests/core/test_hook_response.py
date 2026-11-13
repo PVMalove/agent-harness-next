@@ -371,6 +371,7 @@ def _wrapper(
         input=stdin,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         check=False,
         timeout=30,
@@ -507,6 +508,7 @@ def test_a_command_that_cannot_start_is_an_internal_error(tmp_path: Path) -> Non
             input="",
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=30,
         )
@@ -670,6 +672,7 @@ def test_an_unknown_hook_or_usage_is_refused(tmp_path: Path) -> None:
             input="",
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=30,
         )
@@ -688,6 +691,7 @@ def test_the_real_merge_hook_answers_through_the_envelope(tmp_path: Path) -> Non
             input=json.dumps({"tool_input": {"command": command}}),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=30,
         )
@@ -719,6 +723,7 @@ def test_a_hook_without_the_helper_decides_alone(tmp_path: Path) -> None:
         input=json.dumps({"tool_input": {"command": "gh pr merge 1"}}),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=30,
     )

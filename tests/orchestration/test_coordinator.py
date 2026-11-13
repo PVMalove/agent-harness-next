@@ -7060,6 +7060,35 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             supersede.developer_next_action(self._batch_record(batch_id)), "developer"
         )
 
+    def test_issue_1042_a_superseding_batch_starts_at_the_branch_head_over_unaccepted_commits(
+        self,
+    ) -> None:
+        source, candidate = self._abandoned_batch()
+        unaccepted, _ = self._developer_commit("retry")
+
+        batch = self._supersede(source)
+        coordinator.approve_batch(
+            self._args(batch=batch["batch_id"], **self._approval())
+        )
+
+        link = batch["supersedes"]
+        self.assertEqual(
+            (link["start_commit"], link["last_accepted"]["candidate_commit"]),
+            (unaccepted, candidate),
+        )
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+        self.assertEqual(brief["snapshot_commit"], unaccepted)
+
+    def test_issue_1042_a_superseding_batch_keeps_the_candidate_when_the_head_does_not_descend_from_it(
+        self,
+    ) -> None:
+        source, candidate = self._abandoned_batch()
+        _git(self.worktree, "reset", "--hard", "HEAD~1")
+
+        link = self._supersede(source)["supersedes"]
+
+        self.assertEqual(link["start_commit"], candidate)
+
     def test_an_architect_accept_in_a_superseding_batch_routes_to_the_rebase(
         self,
     ) -> None:

@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,10 @@ def _context(repo: Path) -> HealthContext:
 
 def _executable(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":  # `which` finds a Windows executable by its PATHEXT suffix
+        path = path.with_name(path.name + ".cmd")
+        path.write_text("@exit /b 0\r\n", encoding="utf-8", newline="")
+        return path
     path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     path.chmod(0o755)
     return path
@@ -245,6 +250,8 @@ def test_a_cargo_manifest_only_inside_a_build_target_does_not_count_as_rust(
 def test_without_an_absolute_xdg_runtime_dir_the_socket_lives_in_tmp_harness_uid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, xdg: str | None
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getuid is POSIX-only")
     repo = _repo(tmp_path / "repo", ["make lint"])
     if xdg is None:
         monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)

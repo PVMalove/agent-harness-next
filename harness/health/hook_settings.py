@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import json
@@ -72,6 +73,68 @@ def script_name(handler: object) -> str | None:
     command = handler.get("command")
     match = _SCRIPT_PATH.search(command) if isinstance(command, str) else None
     return match.group(1) if match else None
+
+
+# hook_id, который скрипт передаёт конверту: `hook_response.py" run <hook_id> `.
+_ENVELOPE_RUN = re.compile(r'hook_response\.py" run ([a-z][a-z0-9-]*) ')
+
+
+def envelope_hook_ids(source: str) -> frozenset[str] | None:
+    """Ключи-строки верхнеуровневого `HOOKS` модуля конверта; код модуля не исполняется.
+
+    None — модуль не разбирается или `HOOKS` со словарём в нём нет."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names = [node.target.id]
+        else:
+            continue
+        if "HOOKS" in names and isinstance(node.value, ast.Dict):
+            return frozenset(
+                key.value
+                for key in node.value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            )
+    return None
+
+
+def script_envelope_id(source: str) -> str | None:
+    """hook_id, с которым hook-скрипт вызывает конверт; None — скрипт конверт не вызывает."""
+    match = _ENVELOPE_RUN.search(source)
+    return match.group(1) if match else None
+
+
+def without_scripts(template: JsonObject, scripts: Collection[str]) -> JsonObject:
+    """Копия шаблона без handler-ов скриптов `scripts`; опустевшие группы и события удаляются."""
+    result = copy.deepcopy(template)
+    hooks = result.get("hooks")
+    if not scripts or not isinstance(hooks, dict):
+        return result
+    for event in list(hooks):
+        groups = hooks[event]
+        if not isinstance(groups, list):
+            continue
+        kept: list[object] = []
+        for group in groups:
+            if isinstance(group, dict) and isinstance(group.get("hooks"), list):
+                group["hooks"] = [
+                    handler
+                    for handler in group["hooks"]
+                    if script_name(handler) not in scripts
+                ]
+                if not group["hooks"]:
+                    continue
+            kept.append(group)
+        if kept:
+            hooks[event] = kept
+        else:
+            del hooks[event]
+    return result
 
 
 def _groups(document: JsonObject) -> dict[str, list[JsonObject]] | str:

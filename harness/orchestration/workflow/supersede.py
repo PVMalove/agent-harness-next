@@ -368,14 +368,19 @@ def _carried_plan(source: JsonObject, architect: JsonObject) -> list[JsonObject]
     return [dict(entry) for entry in plan]
 
 
-def _start_commit(repo: Path, source: JsonObject, last: JsonObject) -> str | None:
-    """The last accepted candidate the first developer starts from; ``None`` when only the
-    architect was accepted."""
+def _start_commit(
+    repo: Path, source: JsonObject, last: JsonObject, branch_head: str
+) -> str | None:
+    """The commit the first developer starts from; ``None`` when only the architect was accepted.
+
+    It is the last accepted candidate, or the issue branch head when unaccepted commits (a
+    developer-retry) lie over that candidate: the worker's startup snapshot must equal the
+    worktree HEAD, and history is never rewritten (issue #1042)."""
     candidate = last.get("candidate_commit")
     if candidate is None:
         return None
     try:
-        return _candidate_commit(repo, candidate)
+        accepted = _candidate_commit(repo, candidate)
     except CoordinatorError as exc:
         raise CoordinatorError(
             f"the last accepted candidate {candidate} of batch {source.get('batch_id')} does not "
@@ -384,6 +389,9 @@ def _start_commit(repo: Path, source: JsonObject, last: JsonObject) -> str | Non
             "fetch it, then create the superseding batch again; or create an ordinary batch "
             "without --supersedes",
         ) from exc
+    if _git_is_ancestor(repo, accepted, branch_head):
+        return branch_head
+    return accepted
 
 
 def developer_next_action(batch: JsonObject) -> str:
@@ -434,7 +442,12 @@ def rebase_target(
 
 
 def _resume_from_last_accepted(
-    repo: Path, root: Path, source: JsonObject, last: JsonObject, same_done: bool
+    repo: Path,
+    root: Path,
+    source: JsonObject,
+    last: JsonObject,
+    same_done: bool,
+    branch_head: str,
 ) -> tuple[JsonObject | None, list[JsonObject] | None, str | None, str]:
     """The carried accepted architect, its pinned plan, the start commit and the rationale of a
     batch that resumes from ``source``'s ``abandoned.last_accepted`` record (issue #506)."""
@@ -445,7 +458,7 @@ def _resume_from_last_accepted(
         f"stage {last.get('dispatch_id')}; this batch resumes from that record, and its risk "
         "assessment, review and QA run again."
     )
-    return architect, plan, _start_commit(repo, source, last), rationale
+    return architect, plan, _start_commit(repo, source, last, branch_head), rationale
 
 
 def attach(
@@ -466,8 +479,9 @@ def attach(
     With the same definition of done, the source's accepted architect is carried by reference and
     its pinned commit plan is copied, so the batch starts at the developer stage; with another
     definition of done nothing is carried and the architect stage runs again. The first developer
-    starts at the last accepted candidate (``start_commit``); when that does not descend from the
-    integration base pinned now, the base becomes its ``rebase_target_commit``.
+    starts at the last accepted candidate, or at the branch head over it (``start_commit``); when
+    that does not descend from the integration base pinned now, the base becomes its
+    ``rebase_target_commit``.
 
     With a human ``confirmation`` (issue #1052), the source's never-accepted architect report it
     names is carried instead, and the batch starts at the developer stage from its base.
@@ -488,7 +502,7 @@ def attach(
         last = _resume_record(source)
         last_accepted, previous_role = dict(last), last.get("role")
         architect, plan, start, rationale = _resume_from_last_accepted(
-            repo, root, source, last, same_done
+            repo, root, source, last, same_done, record["branch_start_commit"]
         )
     else:
         architect, plan = _confirmed_architect(root, source, record, confirmation)

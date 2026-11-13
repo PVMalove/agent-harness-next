@@ -17,8 +17,11 @@ from ..hook_settings import (
     RuntimeAdapter,
     canonical_integration_id,
     critical_wiring,
+    envelope_hook_ids,
     is_wired,
     merge_hooks,
+    script_envelope_id,
+    script_name,
     supported_tools,
     template_digests,
 )
@@ -40,6 +43,7 @@ GROUP = "hooks"
 CHECK_ID = "hooks.policy"
 HOOK_CAPABILITIES = ("engineering-suite", BACKEND_ORCHESTRATION_CAPABILITY)
 HOOKS_DIR = ".claude/hooks"
+ENVELOPE_REL = f"{HOOKS_DIR}/hook_response.py"
 TEST_AUTHOR_AGENT = ".claude/agents/test-author.md"
 DEFAULT_SOURCE = "по умолчанию"
 PROJECT_JSON_SOURCE = ".harness/project.json"
@@ -164,22 +168,49 @@ def recorded_managed_entries(repo: Path, identifier: str) -> list[str] | None:
     return None
 
 
+def unregistered_envelope_scripts(repo: Path) -> tuple[str, ...] | None:
+    """Скрипты `.claude/hooks/*.sh`, чей hook_id не зарегистрирован в установленном конверте.
+
+    Нет конверта — `()`: скрипты тогда работают без него. Конверт не разбирается — None."""
+    hooks_dir = repo / HOOKS_DIR
+    envelope = repo / ENVELOPE_REL
+    if not envelope.is_file():
+        return ()
+    try:
+        known = envelope_hook_ids(envelope.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        known = None
+    if known is None:
+        return None
+    unknown: list[str] = []
+    for script in sorted(hooks_dir.glob("*.sh")):
+        try:
+            hook_id = script_envelope_id(script.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            continue
+        if hook_id is not None and hook_id not in known:
+            unknown.append(script.name)
+    return tuple(unknown)
+
+
 def _result(
     context: HealthContext,
     fails: list[str],
     warns: list[str],
     advisory: list[str],
     notes: list[str],
+    fix: Fix | None = None,
 ) -> CheckResult:
     """Собрать результат: fail важнее warn, warn важнее ok; части сообщения разделены `; `.
+
+    `fix` заменяет общую подсказку `harness update`, когда находку чинит другая команда.
 
     `advisory` — предупреждения, которые `harness update` не исправляет (у runtime нет события):
     они дают статус warn, но не подсказку исправления. Первая заметка — профиль. Символ без
     UTF-8 формы (одиночный суррогат из project.json) попадает в сообщение как escape `\\udXXX`,
     чтобы вывод отчёта не падал."""
     status: Status = "fail" if fails else "warn" if warns or advisory else "ok"
-    fix = None
-    if fails or warns:
+    if fix is None and (fails or warns):
         fix = Fix(
             text="верните managed hooks: harness update восстановит недостающие файлы и записи; "
             "изменённый файл после просмотра заменяет --force-seed-file <путь>, "
@@ -434,6 +465,56 @@ def _policy_file(
         )
 
 
+def _wired_scripts(repo: Path) -> set[str]:
+    """Имена скриптов `.claude/hooks/`, подключённых в любом файле hooks runtime."""
+    wired: set[str] = set()
+    for adapter in ADAPTERS:
+        try:
+            document: object = json.loads(
+                (repo / adapter.config).read_text(encoding="utf-8")
+            )
+        except JSON_READ_ERRORS:
+            continue
+        hooks = document.get("hooks") if isinstance(document, dict) else None
+        for groups in hooks.values() if isinstance(hooks, dict) else []:
+            for group in groups if isinstance(groups, list) else []:
+                handlers = group.get("hooks") if isinstance(group, dict) else None
+                for handler in handlers if isinstance(handlers, list) else []:
+                    if (name := script_name(handler)) is not None:
+                        wired.add(name)
+    return wired
+
+
+def _envelope_part(
+    context: HealthContext, fails: list[str], warns: list[str]
+) -> Fix | None:
+    """Скрипты hooks, чей hook_id не регистрирует установленный конверт; Fix — его замена."""
+    repo = context.repo
+    unknown = unregistered_envelope_scripts(repo)
+    if unknown == ():
+        return None
+    if unknown is None:
+        fails.append("hook_response.py: HOOKS не читается")
+    else:
+        wired = _wired_scripts(repo)
+        for script in unknown:
+            hook_id = script_envelope_id(
+                (repo / HOOKS_DIR / script).read_text(encoding="utf-8")
+            )
+            text = f"{ENVELOPE_REL} не регистрирует hook_id {hook_id} ({script}"
+            if script in wired:
+                fails.append(f"{text}, подключён)")
+            else:
+                warns.append(f"{text})")
+    return Fix(
+        text=f"замените конверт шаблоном: {ENVELOPE_REL} перезапишется, прежние байты "
+        "сохранятся в .harness/.sandboxes/seed-backups/<UTC-время>/, затем update подключит hooks",
+        command=context.harness_command(
+            "update", str(repo), "--force-seed-file", ENVELOPE_REL
+        ),
+    )
+
+
 def check_policy(context: HealthContext) -> CheckResult:
     """Профиль hooks и его источник, эскалации, скрипты, проводка по runtime, нехватка событий и дрейф."""
     if context.lock is None:
@@ -482,4 +563,5 @@ def check_policy(context: HealthContext) -> CheckResult:
     else:
         _script_drift(context, warns)
     _policy_file(context, problem is not None, fails, warns)
-    return _result(context, fails, warns, advisory, notes)
+    envelope_fix = _envelope_part(context, fails, warns)
+    return _result(context, fails, warns, advisory, notes, envelope_fix)

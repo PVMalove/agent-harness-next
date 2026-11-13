@@ -39,14 +39,18 @@ ADD = "*** Begin Patch\n*** Add File: notes/a.md\n+hello\n+world\n*** End Patch"
 
 
 def _paths(ops: Sequence[ap.FileOp]) -> list[tuple[str, str, str | None]]:
-    # The hook joins a patch path with `/` to a native cwd; normpath makes both native.
+    return [(op.kind, op.path, op.move_to) for op in ops]
+
+
+def _native_paths(ops: Sequence[ap.FileOp]) -> list[tuple[str, str, str | None]]:
+    """`_paths` of operations the hook joined with `/` to a native cwd, normalized to native."""
     return [
         (
-            op.kind,
-            os.path.normpath(op.path),
-            None if op.move_to is None else os.path.normpath(op.move_to),
+            kind,
+            os.path.normpath(path),
+            None if move_to is None else os.path.normpath(move_to),
         )
-        for op in ops
+        for kind, path, move_to in _paths(ops)
     ]
 
 
@@ -216,7 +220,7 @@ def test_operations_resolve_paths_against_the_payload_cwd(tmp_path: Path) -> Non
         "tool_input": {"command": patch},
     }
 
-    assert _paths(ap.operations(payload)) == [
+    assert _native_paths(ap.operations(payload)) == [
         ("add", str(tmp_path / "sub" / "rel.txt"), None),
         ("update", str(tmp_path / "abs.txt"), str(tmp_path / "sub" / "moved.txt")),
     ]
@@ -231,7 +235,9 @@ def test_bash_operations_join_the_cd_directory(tmp_path: Path) -> None:
 
     ops = ap.bash_operations(payload)
     assert ops is not None
-    assert _paths(ops) == [("add", str(tmp_path / ".codex" / "notes" / "a.md"), None)]
+    assert _native_paths(ops) == [
+        ("add", str(tmp_path / ".codex" / "notes" / "a.md"), None)
+    ]
     assert ap.bash_operations({"tool_input": {"command": "ls"}, "cwd": "/"}) is None
 
 
