@@ -890,19 +890,23 @@ def _dispatch_checkpoints(root: Path, dispatch: JsonObject) -> list[JsonObject]:
 def _events(
     repo: Path, root: Path, dispatch: JsonObject, receipt: object, offset: int
 ) -> JsonObject:
-    """The worker's events: its adapter's log, or the stream snapshot the runtime keeps of a
-    running container worker (#1014). An in-process worker has no stream; its reason names
-    where its progress is seen instead."""
+    """The worker's events: its adapter's log, the stream snapshot the runtime keeps of a
+    running container worker (#1014), or the run log of any other supervised worker. An
+    in-process worker has no stream; its reason names where its progress is seen instead."""
     from harness.orchestration import container_attestation
     from harness.orchestration.runtime_client import RuntimeClientError
-    from harness.orchestration.worker_observation import read_events
+    from harness.orchestration.worker_observation import (
+        read_events,
+        supervised_log_path,
+    )
     from harness.orchestration.workflow import execution_reaction
 
     plan = dispatch.get("runtime_access")
+    supervised = execution_reaction.supervised(root, dispatch)
     if (
         isinstance(plan, dict)
         and plan.get("runtime_extension") == container_executor.EXTENSION_NAME
-        and execution_reaction.supervised(root, dispatch)
+        and supervised
     ):
         try:
             execution = observed_execution(repo, dispatch["dispatch_id"])
@@ -915,6 +919,12 @@ def _events(
                 {"log_path": str(path)},
                 offset,
                 (container_attestation.stream_root(root),),
+            )
+    if supervised:
+        run_log, _reason = supervised_log_path(root, dispatch)
+        if run_log is not None:
+            return read_events(
+                repo, {"log_path": str(run_log)}, offset, (root / "executions",)
             )
     events = read_events(repo, receipt, offset)
     if (

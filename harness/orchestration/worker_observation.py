@@ -357,6 +357,26 @@ def structured_log_path(
     return path, None
 
 
+def supervised_log_path(
+    root: Path, dispatch: Mapping[str, object]
+) -> tuple[Path | None, str | None]:
+    """The run log of a supervised worker: the stdout the runtime keeps of the first launch.
+
+    ``root`` is the state directory the runtime serves; the path follows from the brief alone, so
+    observation asks the runtime nothing and works while the worker runs."""
+    from harness.orchestration.workflow.delivery import execution_operation_id
+
+    if not dispatch.get("execution"):
+        return None, "no_log"
+    executions = (root / "executions").resolve()
+    path = (
+        executions / execution_operation_id(dict(dispatch)) / "stdout.log"
+    ).resolve()
+    if not path.is_relative_to(executions):
+        return None, "log_outside_storage"
+    return path, None
+
+
 def external_log_path(
     repo: Path, dispatch: Mapping[str, object]
 ) -> tuple[Path | None, str | None]:

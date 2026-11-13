@@ -29,7 +29,10 @@ from harness.console.backend.infrastructure.worker_steps import (
 from harness.console.kernel.protocol import MESSAGE_BYTES
 from harness.console.tui.client import WorkerSteps
 from harness.console.tui.screens.worker_observation import with_server_steps
-from harness.orchestration.workflow.delivery import IN_PROCESS_STREAM_REASON
+from harness.orchestration.workflow.delivery import (
+    IN_PROCESS_STREAM_REASON,
+    execution_operation_id,
+)
 
 RECEIPT = {
     "protocol": "harness-worker-v1",
@@ -60,6 +63,18 @@ def test_bound_runtime_receipt_selects_structured_steps() -> None:
 
 def test_external_transport_without_receipt_selects_plain_log() -> None:
     assert select_source(_facts({"resolved_transport": "external"})) == "plain"
+
+
+def test_supervised_dispatch_selects_structured_steps_before_any_receipt() -> None:
+    facts = _facts(
+        {
+            "dispatch_id": "dispatch-a",
+            "resolved_transport": "external",
+            "execution": {"supervisor": "harness-runtime"},
+        }
+    )
+
+    assert select_source(facts) == "structured"
 
 
 def test_foreign_receipt_and_in_process_transport_select_no_log() -> None:
@@ -272,6 +287,47 @@ def test_infrastructure_reads_records_without_a_lock_and_changes_nothing(
     }
     assert after == before
     assert read_worker_facts(tmp_path, "dispatch-b") is None
+
+
+def test_infrastructure_reads_the_run_log_of_a_supervised_worker_while_it_grows(
+    tmp_path: Path,
+) -> None:
+    root = _ledger(tmp_path)
+    dispatch = {
+        "dispatch_id": "dispatch-a",
+        "state": "working",
+        "resolved_transport": "external",
+        "execution": {"supervisor": "harness-runtime"},
+    }
+    (root / "dispatches/dispatch-a.json").write_text(json.dumps(dispatch))
+    (root / "dispatch-status/dispatch-a.json").write_text(
+        json.dumps({"dispatch_id": "dispatch-a", "state": "working"})
+    )
+    log = root / "executions" / execution_operation_id(dispatch) / "stdout.log"
+    log.parent.mkdir(parents=True)
+    log.write_text(json.dumps({"type": "system", "subtype": "init"}) + "\n")
+    facts = read_worker_facts(tmp_path, "dispatch-a")
+    assert facts is not None
+
+    first = read_worker_log(tmp_path, facts, select_source(facts), 0, STEP_BUDGET_BYTES)
+    with log.open("a") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "half way"}]},
+                }
+            )
+            + "\n"
+        )
+    second = read_worker_log(
+        tmp_path, facts, "structured", int(str(first["offset"])), STEP_BUDGET_BYTES
+    )
+
+    assert (first["source"], first["state"]) == ("structured", "connected")
+    assert first["steps"] == [{"kind": "system", "text": "Runtime session connected"}]
+    assert second["steps"] == [{"kind": "output", "text": "half way"}]
+    assert second["offset"] == log.stat().st_size
 
 
 def test_infrastructure_reads_the_checkpoints_this_dispatch_recorded_and_skips_unusable_ones(

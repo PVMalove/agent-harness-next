@@ -709,6 +709,17 @@ def build_parser(
     dispatch_observe.add_argument("--dispatch", required=True)
     dispatch_observe.add_argument("--offset", type=int, default=0)
     dispatch_observe.set_defaults(handler=handlers.observe_dispatch)
+    dispatch_logs = dispatch_commands.add_parser(
+        "logs",
+        help="read the visible events of a worker's log; --follow prints each as a JSON line "
+        "until the execution ends; no model calls, lifecycle changes or ledger lock while following",
+    )
+    _common(dispatch_logs)
+    dispatch_logs.add_argument("--dispatch", required=True)
+    dispatch_logs.add_argument("--offset", type=int, default=0)
+    dispatch_logs.add_argument("--follow", action="store_true")
+    dispatch_logs.add_argument("--poll-seconds", type=float, default=1.0)
+    dispatch_logs.set_defaults(handler=handlers.dispatch_logs)
     dispatch_cancel = dispatch_commands.add_parser("cancel")
     _common(dispatch_cancel)
     dispatch_cancel.add_argument("--dispatch", required=True)

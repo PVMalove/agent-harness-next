@@ -18,6 +18,7 @@ from harness.orchestration.worker_observation import (
     read_plain_steps,
     read_structured_steps,
     structured_log_path,
+    supervised_log_path,
     unavailable_page,
 )
 
@@ -64,7 +65,10 @@ def read_worker_checkpoints(repo: Path, facts: WorkerFacts) -> list[Mapping[str,
 def read_worker_log(
     repo: Path, facts: WorkerFacts, source: str, offset: int, budget: int
 ) -> Mapping[str, object]:
-    if source == "structured":
+    if source == "structured" and facts.dispatch.get("execution"):
+        path, reason = supervised_log_path(repo / STATE_REL, facts.dispatch)
+        reader = read_structured_steps
+    elif source == "structured":
         receipt = facts.status.get("adapter_receipt") if facts.status else None
         path, reason = structured_log_path(repo, receipt, facts.dispatch_id)
         reader = read_structured_steps
