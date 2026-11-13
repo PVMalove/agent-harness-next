@@ -283,6 +283,10 @@ def pytest_command(
         [
             "-n",
             str(workers),
+            # An idle worker takes pending tests from a busy one, so the long tail of heavy
+            # coordinator tests no longer waits on the worker it was first assigned to.
+            "--dist",
+            "worksteal",
             "--basetemp",
             str(run_tmp / "p"),
             *(targets or pytest_targets or [str(ROOT / "tests")]),
