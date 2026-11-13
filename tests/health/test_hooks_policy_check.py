@@ -537,3 +537,55 @@ def test_console_route_of_the_policy_warn_does_not_promise_that_update_fixes_it(
     assert "неверно" not in route.title
     assert route.title != check_route("environment.hook_bash").title
     assert i18n.tr("en", route.title) != route.title
+
+
+ENVELOPE = ".claude/hooks/hook_response.py"
+
+
+def forget_runtime_autostart(repo: Path) -> None:
+    """An older installed envelope: its ``HOOKS`` and ``ACTIVE_PROFILES`` lack runtime-autostart."""
+    envelope = repo / ENVELOPE
+    text = envelope.read_text(encoding="utf-8")
+    for line in (
+        '    "runtime-autostart": ("runtime-autostart-failed", False),\n',
+        '    "runtime-autostart": ("minimal", "standard", "strict"),\n',
+    ):
+        assert line in text
+        text = text.replace(line, "")
+    envelope.write_text(text, encoding="utf-8")
+
+
+def test_a_wired_hook_the_envelope_does_not_register_fails_with_the_force_command(
+    repo: Path,
+) -> None:
+    forget_runtime_autostart(repo)
+
+    result = check(repo)
+
+    assert result["status"] == "fail"
+    assert "не регистрирует hook_id runtime-autostart" in result["message"]
+    assert "runtime-autostart.sh, подключён" in result["message"]
+    assert result["fix"]["command"].endswith(f"--force-seed-file {ENVELOPE}")
+    assert ".harness/.sandboxes/seed-backups/" in result["fix"]["text"]
+
+
+def test_an_unwired_hook_the_envelope_does_not_register_warns(repo: Path) -> None:
+    forget_runtime_autostart(repo)
+    document = load(repo, SETTINGS)
+    drop_script(document, "runtime-autostart.sh")
+    save(repo, SETTINGS, document)
+
+    result = check(repo)
+
+    assert "не регистрирует hook_id runtime-autostart (runtime-autostart.sh)" in result["message"]
+    assert "подключён)" not in result["message"]
+    assert result["fix"]["command"].endswith(f"--force-seed-file {ENVELOPE}")
+
+
+def test_an_unreadable_envelope_hooks_table_fails(repo: Path) -> None:
+    (repo / ENVELOPE).write_text("HOOKS = {\n", encoding="utf-8")
+
+    result = check(repo)
+
+    assert result["status"] == "fail"
+    assert "hook_response.py: HOOKS не читается" in result["message"]

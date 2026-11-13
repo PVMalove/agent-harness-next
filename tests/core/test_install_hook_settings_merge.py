@@ -8,7 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from harness.health.hook_settings import entry_digest
+from harness.health.hook_settings import (
+    entry_digest,
+    envelope_hook_ids,
+    script_envelope_id,
+    without_scripts,
+)
 from harness.json_types import JsonObject
 from tests.core.test_uninstall import git, harness
 
@@ -503,3 +508,84 @@ def test_second_runtime_update_is_idempotent(repo: Path) -> None:
     assert (repo / CODEX_CONFIG).read_bytes() == first
     assert (repo / INTEGRATIONS).read_bytes() == inventory
     assert f"hooks merge: {CODEX_CONFIG}: added=0 replaced=0" in result.stdout
+
+
+ENVELOPE = ".claude/hooks/hook_response.py"
+LOCK = ".harness/harness.lock"
+HOOK_TEMPLATES = Path(__file__).resolve().parents[2] / "harness/project/hooks"
+AUTOSTART_LINES = (
+    '    "runtime-autostart": ("runtime-autostart-failed", False),\n',
+    '    "runtime-autostart": ("minimal", "standard", "strict"),\n',
+)
+
+
+def without_autostart(source: str) -> str:
+    """An older envelope: its ``HOOKS`` and ``ACTIVE_PROFILES`` lack ``runtime-autostart``."""
+    for line in AUTOSTART_LINES:
+        assert line in source
+        source = source.replace(line, "")
+    return source
+
+
+def test_envelope_hook_ids_reads_the_hooks_keys_without_running_the_module() -> None:
+    source = (HOOK_TEMPLATES / "hook_response.py").read_text(encoding="utf-8")
+
+    known = envelope_hook_ids(source)
+    older = envelope_hook_ids(without_autostart(source))
+
+    assert known is not None and {"runtime-autostart", "block-pr-merge"} <= known
+    assert older is not None and "runtime-autostart" not in older
+    assert envelope_hook_ids('HOOKS = {"a": 1}\nraise SystemExit(3)\n') == frozenset({"a"})
+    assert envelope_hook_ids("x = 1\n") is None
+    assert envelope_hook_ids("HOOKS = {\n") is None
+
+
+def test_script_envelope_id_names_the_hook_id_the_script_passes_to_the_envelope() -> None:
+    script = (HOOK_TEMPLATES / "runtime-autostart.sh").read_text(encoding="utf-8")
+
+    assert script_envelope_id(script) == "runtime-autostart"
+    assert script_envelope_id("#!/bin/bash\nexit 0\n") is None
+
+
+def test_without_scripts_drops_their_handlers_and_empty_groups_only() -> None:
+    template = template_document()
+    before = json.dumps(template, sort_keys=True)
+
+    trimmed = without_scripts(template, ["runtime-autostart.sh"])
+
+    assert json.dumps(template, sort_keys=True) == before
+    assert handlers(trimmed, "runtime-autostart.sh") == []
+    assert handlers(trimmed, "block-pr-merge.sh") == handlers(template, "block-pr-merge.sh")
+    assert all(group["hooks"] for groups in trimmed["hooks"].values() for group in groups)
+
+
+def test_update_does_not_wire_a_hook_that_the_installed_envelope_does_not_know(
+    repo: Path,
+) -> None:
+    install(repo)
+    document = load(repo)
+    drop_script(document, "runtime-autostart.sh")
+    save(repo, document)
+    envelope = repo / ENVELOPE
+    envelope.write_text(without_autostart(envelope.read_text("utf-8")), encoding="utf-8")
+    lock = json.loads((repo / LOCK).read_text(encoding="utf-8"))
+    del lock["seed_files"][ENVELOPE]  # no baseline: update leaves the envelope as it is
+    (repo / LOCK).write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+
+    held = harness("update", str(repo))
+
+    assert held.returncode == 0, held.stderr
+    assert handlers(load(repo), "runtime-autostart.sh") == []
+    assert "runtime-autostart.sh" in held.stdout
+    assert f"--force-seed-file {ENVELOPE}" in held.stdout
+    assert f"--force-seed-file {SETTINGS}" not in held.stdout
+
+    fixed = harness("update", str(repo), "--force-seed-file", ENVELOPE)
+
+    assert fixed.returncode == 0, fixed.stderr
+    assert {event for event, _, _ in handlers(load(repo), "runtime-autostart.sh")} == {
+        "PreToolUse",
+        "Stop",
+        "SubagentStop",
+    }
+    assert envelope.read_bytes() == (HOOK_TEMPLATES / "hook_response.py").read_bytes()

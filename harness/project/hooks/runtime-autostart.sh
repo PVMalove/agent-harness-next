@@ -9,11 +9,17 @@
 # Rust binary. Only the main checkout of the session project (CLAUDE_PROJECT_DIR; never the payload
 # cwd, which the agent moves with cd) runs its binary. Windows (MINGW/MSYS/CYGWIN) and the agent sandbox keep the manual start.
 # Verdict envelope (hook_response.py): applies the hook profile and answers with the JSON verdict.
+# An envelope that knows this hook never exits non-zero for it (advisory). A non-zero code means an
+# older hook_response.py without the runtime-autostart hook_id: the hook warns and exits 0 instead
+# of blocking every Bash call and every Stop.
 if [ -z "${HARNESS_HOOK_ENVELOPE:-}" ]; then
   ENVELOPE_DIR="$(cd "$(dirname "$0")" && pwd)"
   ENVELOPE_PY="$(command -v python3 || command -v python)"
   if [ -n "$ENVELOPE_PY" ] && [ -f "$ENVELOPE_DIR/hook_response.py" ]; then
-    exec "$ENVELOPE_PY" "$ENVELOPE_DIR/hook_response.py" run runtime-autostart "${BASH:-bash}" "$0"
+    "$ENVELOPE_PY" "$ENVELOPE_DIR/hook_response.py" run runtime-autostart "${BASH:-bash}" "$0"
+    [ "$?" = "0" ] && exit 0
+    echo "[runtime-autostart-failed] .claude/hooks/hook_response.py не регистрирует hook runtime-autostart; выполните harness update <repo> --force-seed-file .claude/hooks/hook_response.py" >&2
+    exit 0
   fi
 fi
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
