@@ -256,55 +256,38 @@ Host `~/.gitconfig` is not mounted; configure Git identity in the repository or 
 variable names. A worker gets writable artifacts and read-only shared storage, without the
 runtime socket.
 
-### Project-owned agent adapter
+### Agent adapter {#agent-adapter}
 
-The harness does not ship a ready-made adapter for a particular agent. Below is the full shell
-example from the guide for **Claude Code**, rather than a universal adapter for any runtime.
-Check that the role assignment, model and brief tools match this CLI. Save it, for example, as
-`scripts/container-agent.sh`, make it executable and keep it inside a plan root at the same path
-the container sees. A `.py` adapter does not work here: the coordinator passes the host Python path.
+Use the shipped Claude Code adapter `.harness/adapters/claude_worker.py`. The coordinator runs a
+`.py` adapter of a container plan with the image's `python3`, and the adapter lives in `.harness/`,
+which the container sees at the same path. Under `HARNESS_EXECUTOR=docker` the adapter:
 
-```sh {.ah-code-wrap}
-#!/bin/sh
-# Project-owned runtime adapter (example). The harness does not ship this file.
-set -eu
-[ "${1:-}" = dispatch ] || { echo "usage: $0 dispatch --repo <repo> --brief <brief>" >&2; exit 2; }
-shift
-brief=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --repo) shift 2 ;;
-        --brief) brief=$2; shift 2 ;;
-        *) echo "unsupported argument: $1" >&2; exit 2 ;;
-    esac
-done
-if [ "${HARNESS_EXECUTOR:-}" != docker ]; then
-    echo "this adapter runs only under the container executor" >&2
-    exit 2
-fi
-# The container's working directory is the dispatch checkout; HOME is a tmpfs.
-tools=$(jq -r '.allowed_tools | join(",")' "$brief")
-model=$(jq -r '.resolved_model' "$brief")
-staging=$(jq -r '.report_staging_path' "$brief")
-exec claude --print --model "$model" --allowedTools "$tools" \
-    "Work on the brief $brief. You cannot run coordinator commands in this container. \
-Write the completion report JSON to $staging and stop."
-```
+- runs `claude -p <prompt>` in the foreground with `--output-format stream-json --verbose`, so
+  the host reads the `init` event and the worker's steps;
+- passes the brief's `allowed_tools` with `--permission-mode dontAsk` and the incoming reports
+  directory with `--add-dir`; a read-only role gets `Edit(//<report_staging_path>)` and can write
+  only its report;
+- asks for the report in `report_staging_path` and a stop; `dispatch self-report`,
+  `dispatch heartbeat` and `report submit` do not run in the container, the host does them.
 
-The script keeps native approval and passes the brief's allowlist. In non-interactive mode,
-an action outside that allowlist cannot obtain human approval. The completion JSON report goes
-to `report_staging_path` inside `.harness/.sandboxes/scratch`; the coordinator/a human registers
-it on the host. The worker does not run `dispatch self-report`, `dispatch heartbeat` or `report submit`.
-
-Use `--adapter` when sending an **already approved** dispatch:
+The worker image needs `python3`, `git` and `claude` on its `PATH`. In a non-interactive session
+an action outside the allowlist gets no human approval.
 
 ```bash {.ah-code-wrap}
-chmod +x scripts/container-agent.sh
 python .harness/orchestration/coordinator.py --repo . dispatch send \
-  --dispatch '<approved-dispatch-id>' --adapter scripts/container-agent.sh
+  --dispatch '<approved-dispatch-id>' --adapter "$PWD/.harness/adapters/claude_worker.py"
 ```
 
-This command starts a worker; use preflight below to check configuration instead of send.
+This command starts the worker; to check the configuration, use preflight below, not send. A
+project-owned adapter for another agent follows the same rules: it prints stream-json with the
+`init` event, puts the prompt before variadic options, writes the report to `report_staging_path`,
+runs no coordinator command and exits with the agent's exit code.
+
+The runtime replaces the values of the `environment` names (8 bytes or longer) with
+`[redacted:<name>]` in the worker's logs, because those logs live in `.harness`, which other
+container workers can read. Managed hooks (`.claude/settings.local.json`, `.claude/hooks/`) are not
+tracked by Git and do not reach an issue worktree, so only hooks in tracked files run in a
+container.
 
 ## Network {#network}
 

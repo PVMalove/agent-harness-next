@@ -73,23 +73,26 @@ class ContainerGuideTests(unittest.TestCase):
         self.assertIn("Rootless Docker", unverified)
         self.assertNotIn("Podman, rootful and rootless", unverified)
 
-    def test_the_example_adapter_keeps_native_approval(self) -> None:
+    def test_the_container_adapter_keeps_native_approval(self) -> None:
         text = SOURCE.read_text(encoding="utf-8")
-        example = text.split("## Example project-owned agent adapter", 1)[1]
+        section = _section(text, "Agent adapter in a container")
 
-        self.assertIn('"${HARNESS_EXECUTOR:-}" != docker', example)
-        self.assertIn(".allowed_tools", example)
+        self.assertIn("claude_worker.py", section)
+        self.assertIn("HARNESS_EXECUTOR=docker", section)
+        self.assertIn("allowed_tools", section)
+        self.assertIn("dontAsk", section)
         for token in BYPASS_TOKENS:
             with self.subTest(token=token):
                 self.assertNotIn(token, text)
 
-    def test_the_example_adapter_streams_the_events_the_host_attests_from(self) -> None:
+    def test_the_container_adapter_streams_the_events_the_host_attests_from(self) -> None:
         """#1014: the host reads the model from the stream-json init event of the worker."""
-        example = SOURCE.read_text(encoding="utf-8").split(
-            "## Example project-owned agent adapter", 1
-        )[1]
+        section = _section(
+            SOURCE.read_text(encoding="utf-8"), "Agent adapter in a container"
+        )
 
-        self.assertIn("--output-format stream-json --verbose", example)
+        self.assertIn("--output-format stream-json --verbose", section)
+        self.assertIn("never to run", section)
 
     def test_reports_from_a_container_name_the_host_side_self_report(self) -> None:
         section = _section(

@@ -37,7 +37,8 @@ from harness.orchestration.ledger.lifecycle import (
 SOURCE = "container-host"
 HEARTBEAT_NOTE = "container running"
 # The init event is the first record of a stream-json session; a bounded head finds it.
-INIT_SCAN_BYTES = 65536
+# The init event follows hook output at most; a bound keeps one read of a long stream small.
+INIT_SCAN_BYTES = 4 * 1024 * 1024
 
 
 def stream_root(root: Path) -> Path:
@@ -57,25 +58,40 @@ def stream_path(root: Path, execution: Mapping[str, object]) -> Path | None:
 
 
 def init_model(path: Path) -> str | None:
-    """The model of the first stream-json ``init`` event; output is data, never a command."""
+    """The model of the first stream-json ``init`` event; output is data, never a command.
+
+    Only complete lines within the first ``INIT_SCAN_BYTES`` count; hook output before the event
+    or one long line does not hide it (#1125)."""
     try:
         with path.open("rb") as stream:
-            head = stream.read(INIT_SCAN_BYTES)
+            scanned = 0
+            while scanned < INIT_SCAN_BYTES:
+                line = stream.readline(INIT_SCAN_BYTES - scanned)
+                scanned += len(line)
+                if not line.endswith(b"\n"):
+                    return None
+                model = _init_event_model(line)
+                if model is not None:
+                    return model or None
     except OSError:
         return None
-    for line in head[: head.rfind(b"\n") + 1].splitlines():
-        try:
-            record = json.loads(line)
-        except (ValueError, UnicodeDecodeError):
-            continue
-        if (
-            isinstance(record, dict)
-            and record.get("type") == "system"
-            and record.get("subtype") == "init"
-        ):
-            model = record.get("model")
-            return model.strip() if isinstance(model, str) and model.strip() else None
     return None
+
+
+def _init_event_model(line: bytes) -> str | None:
+    """The model of an ``init`` event line ("" for an event without one), ``None`` otherwise."""
+    try:
+        record = json.loads(line)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not (
+        isinstance(record, dict)
+        and record.get("type") == "system"
+        and record.get("subtype") == "init"
+    ):
+        return None
+    model = record.get("model")
+    return model.strip() if isinstance(model, str) else ""
 
 
 def _checkout(plan: Mapping[str, object]) -> str | None:
@@ -114,12 +130,16 @@ def attest(
     dispatch: Mapping[str, object],
     execution: Mapping[str, object],
 ) -> None:
-    """Record the self-report of a running container worker once, and its heartbeat."""
+    """Record the self-report of a container worker once, and the heartbeat of a running one.
+
+    An exited worker is proven from its saved stream: a short worker can stage its report and
+    exit before any command observes it running (#1125)."""
     from harness.orchestration.workflow.reports import record_self_report
 
     plan = dispatch.get("runtime_access")
+    running = execution.get("state") == "running"
     if not (
-        execution.get("state") == "running"
+        (running or execution.get("state") == "exited")
         and isinstance(plan, dict)
         and plan.get("runtime_extension") == container_executor.EXTENSION_NAME
     ):
@@ -135,7 +155,8 @@ def attest(
         return
     model = None if status.get("model_self_report") else init_model(path)
     if model is None:
-        _heartbeat(ledger, root, dispatch_id)
+        if running:
+            _heartbeat(ledger, root, dispatch_id)
         return
     checkout = _checkout(plan)
     evidence: JsonObject = {
@@ -160,6 +181,32 @@ def attest(
         # A mismatch is recorded on the status; dispatch wait reports it, and the exit of the
         # execution blocks the dispatch. Stopping the worker stays the operator's command.
         return
+
+
+def attest_before_submit(repo: Path, root: Path, dispatch_id: object) -> None:
+    """Prove a container worker before ``report submit`` checks its model confirmation.
+
+    ``report submit`` may be the first command after the worker exits; without this the
+    submit refuses the worker's report for a missing self-report (#1125)."""
+    from harness.orchestration.ledger.ledger_ops import _load_dispatch
+    from harness.orchestration.workflow.delivery import observed_execution
+
+    if not isinstance(dispatch_id, str) or not dispatch_id:
+        return
+    try:
+        dispatch = _load_dispatch(root, dispatch_id)
+    except CoordinatorError:
+        # The submit itself reports an unknown dispatch.
+        return
+    plan = dispatch.get("runtime_access")
+    if not (
+        isinstance(plan, dict)
+        and plan.get("runtime_extension") == container_executor.EXTENSION_NAME
+    ):
+        return
+    execution = observed_execution(repo, dispatch_id)
+    if execution is not None:
+        attest(repo, root, dispatch, execution)
 
 
 def staged_report(
