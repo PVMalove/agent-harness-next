@@ -80,7 +80,7 @@ for (const width of [1440, 390]) {
     await page.locator("#board-search").fill("");
     const card = page.locator('[data-board-ticket="#511"]');
     await expect(card.locator("h3")).toHaveText("Экран списка задач");
-    await expect(card.locator(".board-chip")).toHaveText(["/implement", "блокеров: 1"]);
+    await expect(card.locator(".board-chip")).toHaveText(["/implement", "полная", "блокеров: 1", "#512"]);
     expect(await noOverflow(page)).toBe(true);
 
     await card.locator("h3").click();

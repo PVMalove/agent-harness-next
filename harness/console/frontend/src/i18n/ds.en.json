@@ -57,5 +57,11 @@
   "Проверки пройдено": "Checks passed",
   "Ошибки и предупреждения": "Errors and warnings",
   "Событий в минуту": "Events per minute",
-  "{count} с назад": "{count} s ago"
+  "{count} с назад": "{count} s ago",
+  "быстрая": "fast",
+  "полная": "full",
+  "с человеком": "human in the loop",
+  "Story points": "Story points",
+  "Тип реализации": "Implementation type",
+  "Открытый блокер": "Open blocker"
 }

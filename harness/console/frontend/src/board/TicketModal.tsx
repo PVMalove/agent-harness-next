@@ -41,9 +41,15 @@ export function TicketModal({
 
   useEffect(() => {
     const dialog = ref.current;
-    if (!dialog || dialog.open) return;
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
+    // The drawer is unmounted, not closed: the page element that opened it gets the focus back.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (dialog && !dialog.open) {
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    }
+    return () => {
+      if (opener && opener.isConnected) opener.focus();
+    };
   }, []);
 
   useEffect(() => {
