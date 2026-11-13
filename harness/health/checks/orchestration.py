@@ -20,6 +20,8 @@ Every check only reads state: ledger records, `git worktree list --porcelain`, a
 
 from __future__ import annotations
 
+import hashlib
+import shutil
 import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -586,4 +588,138 @@ def check_disposable_data(context: HealthContext) -> CheckResult:
             f"одноразовых данных на {_human_size(total)} (информация, ничего не удалено); "
             f"предпросмотр очистки: {preview}"
         ),
+    )
+
+
+_ADAPTERS = (".harness/adapters/claude_worker.py", ".harness/adapters/codex_worker.py")
+
+
+def check_adapters(context: HealthContext) -> CheckResult:
+    """Whether the external adapters on disk are the ones the installed harness version shipped:
+    the sha256 of each must equal its hash in `.harness/harness.lock`."""
+    check_id = "orchestration.adapters"
+    if not context.orchestration_enabled() or context.lock is None:
+        return _skipped(check_id, context)
+    version = context.lock.get("package_version", "?")
+    hashes = context.lock.get("files")
+    problems: list[str] = []
+    for relative in _ADAPTERS:
+        expected = hashes.get(relative) if isinstance(hashes, dict) else None
+        path = context.repo / relative
+        if not isinstance(expected, str) or not path.is_file():
+            problems.append(f"адаптер {relative} не установлен")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            problems.append(f"адаптер {relative} не совпадает с версией harness {version}")
+    if problems:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message="; ".join(problems),
+            fix=Fix(
+                text="переустановите адаптеры текущей версии harness",
+                command=context.harness_command("update", str(context.repo)),
+            ),
+        )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message=f"адаптеры claude и codex совпадают с версией harness {version}",
+    )
+
+
+_WORKER_BINARIES = ("claude", "codex")
+
+
+def _external_binaries(repo: Path) -> set[str]:
+    """The worker binaries the external roles run by default: the `default_runtime` of a role
+    whose transport is external, else every runtime it names."""
+    try:
+        config = read_config_json(repo / ".harness" / "orchestration.json")
+    except (OSError, ValueError):
+        config = None
+    plans = config.get("assignment_plans") if isinstance(config, dict) else None
+    needed: set[str] = set()
+    for plan in plans.values() if isinstance(plans, dict) else ():
+        if not isinstance(plan, dict) or plan.get("transport") != "external":
+            continue
+        runtimes = plan.get("runtimes")
+        default = plan.get("default_runtime")
+        names = (
+            [default]
+            if isinstance(default, str)
+            else list(runtimes)
+            if isinstance(runtimes, dict)
+            else []
+        )
+        needed.update(name for name in names if name in _WORKER_BINARIES)
+    return needed
+
+
+def check_worker_binaries(context: HealthContext) -> CheckResult:
+    """Whether `claude` and `codex` resolve on the PATH of the `harness-runtime serve` environment,
+    where the supervised adapters look them up. A binary an external role needs is a failure."""
+    check_id = "orchestration.worker_binaries"
+    if not context.orchestration_enabled():
+        return _skipped(check_id, context)
+    if not _store_is_authority(context.repo):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message="леджер файловый: worker запускает адаптер в окружении координатора",
+        )
+    from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+
+    try:
+        client = RuntimeClient(context.repo)
+        reply = client.call(
+            "status",
+            operation_id=f"health-search-path-{client.paths.repo_id}",
+            timeout_seconds=_RUNTIME_TIMEOUT_SECONDS,
+        )
+    except RuntimeClientError as error:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message=f"runtime недоступен ({error.code}): см. orchestration.runtime",
+        )
+    search_path = reply.result.get("search_path")
+    if not isinstance(search_path, str):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="warn",
+            message="runtime не сообщает PATH: обновите и перезапустите serve",
+            fix=_serve_fix(context),
+        )
+    missing = [
+        name
+        for name in _WORKER_BINARIES
+        if shutil.which(name, path=search_path) is None
+    ]
+    required = sorted(_external_binaries(context.repo).intersection(missing))
+    if required:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message=f"в PATH окружения serve нет {', '.join(required)} для ролей с "
+            "транспортом external",
+            fix=Fix(
+                text=f"установите {', '.join(required)} в PATH окружения serve и "
+                "перезапустите runtime",
+                command=_serve_fix(context).command,
+            ),
+        )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message="worker-бинарники в PATH окружения serve найдены"
+        if not missing
+        else f"в PATH окружения serve нет {', '.join(missing)}; роли с транспортом "
+        "external их не используют",
     )

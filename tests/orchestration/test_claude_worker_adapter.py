@@ -198,6 +198,34 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         )
 
     @POSIX_ONLY
+    def test_supervised_worker_gets_the_prompt_as_an_argument_and_its_code_is_returned(
+        self,
+    ) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["execution"] = {"kind": "process"}
+        self.brief.write_text(json.dumps(brief))
+        script = self.bin / "claude"
+        script.write_text(
+            "#!/bin/sh\n"
+            f'pwd > "{self.cwd_dump}"\n'
+            f'printf "%s" "$2" > "{self.prompt_dump}"\n'
+            "exit 5\n"
+        )
+        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        extra = self.repo / "retry.txt"
+        extra.write_text("Retry handoff: {}")
+
+        self.assertEqual(self.run_adapter("--extra-prompt-file", str(extra)), 5)
+
+        self.assertEqual(self.cwd_dump.read_text().strip(), str(self.worktree))
+        prompt = self.prompt_dump.read_text()
+        self.assertIn("worker for dispatch dispatch-1", prompt)
+        self.assertIn("Retry handoff: {}", prompt)
+        self.assertFalse(
+            (self.repo / ".harness/.sandboxes/scratch/worker-logs").exists()
+        )
+
+    @POSIX_ONLY
     def test_worker_that_dies_at_startup_is_rejected(self) -> None:
         self.fake_claude(3)
         self.assertEqual(self.run_adapter(), 1)

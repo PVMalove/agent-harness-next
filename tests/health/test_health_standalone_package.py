@@ -183,6 +183,8 @@ def test_registry_runs_without_crashing_even_with_a_lock_file_present(
         "orchestration.stale_dispatches",
         "orchestration.orphaned_worktrees",
         "orchestration.disposable_data",
+        "orchestration.adapters",
+        "orchestration.worker_binaries",
     }
     # The project tracker resolver ships inside .harness/health/ and runs from the copied tree.
     project = next(check for check in report.checks if check.id == "tracker.project")

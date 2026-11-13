@@ -76,7 +76,9 @@ brief и report, независимый review и clean-room QA. Capability вы
 
 Новые поля и значения из обновлённого примера переносите в свой конфиг вручную. После любой правки
 выполните `harness health`. Команда проверяет конфиг полностью: схему полей, ссылки на профили,
-совместимость capability с role manifest'ами, fallback и обязательный `code-review`.
+совместимость capability с role manifest'ами, fallback и обязательный `code-review`. Для внешних
+worker она также сверяет адаптеры `.harness/adapters/` с версией harness (`orchestration.adapters`)
+и ищет `claude` и `codex` в PATH окружения `harness-runtime serve` (`orchestration.worker_binaries`).
 
 При загрузке coordinator нормализует в памяти только перечисленные enum-поля (`normalization.v1`:
 регистр, пробелы по краям и документированные алиасы вроде `in_process` → `in-process`), пишет

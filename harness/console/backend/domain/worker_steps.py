@@ -83,7 +83,10 @@ class StepsPage:
 
 
 def select_source(facts: WorkerFacts) -> str:
-    """A bound runtime receipt gives structured steps; an external adapter gives a plain log."""
+    """A supervised worker's run log or a bound runtime receipt gives structured steps; an
+    external adapter gives a plain log."""
+    if facts.dispatch.get("execution"):
+        return "structured"
     receipt = facts.status.get("adapter_receipt") if facts.status else None
     if (
         isinstance(receipt, Mapping)

@@ -145,12 +145,14 @@ belongs writes it outside the project.
 main checkout, and `EnterWorktree` refuses it there. Two paths exist; state which one the batch uses.
 - `external` (strict): set the worker roles' `transport` to `external` in `.harness/orchestration.json`
   and send with `--adapter <main-repo>/.harness/adapters/claude_worker.py` (absolute path).
-  `dispatch send` runs the adapter in `send.worker_worktree`, and it starts a detached headless
-  `claude -p` there on the brief's model, effort and `allowed_tools`, so the worker's CWD is the
-  issue worktree. The adapter builds the prompt; for a retry, put the retry lines in a file inside the
-  repository and pass `--adapter-arg=--extra-prompt-file=<path>`. A permission layer may refuse
-  launching an agent from the coordinator session; that refusal is a stop, so show the developer the
-  exact `dispatch send` command to run in their own terminal, then continue with `dispatch wait`.
+  `dispatch send` runs the adapter in `send.worker_worktree`, and it runs a headless `claude -p`
+  there on the brief's model, effort and `allowed_tools`, so the worker's CWD is the issue worktree.
+  Under the runtime (a brief with `execution`) the adapter waits for the worker in the foreground
+  and exits with its code; without `execution` it detaches the worker. The adapter builds the
+  prompt; for a retry, put the retry lines in a file inside the repository and pass
+  `--adapter-arg=--extra-prompt-file=<path>`. A permission layer may refuse launching an agent
+  from the coordinator session; that refusal is a stop, so show the developer the exact
+  `dispatch send` command to run in their own terminal, then continue with `dispatch wait`.
 - `in-process` (weaker evidence): the subagent's CWD is the main checkout, so the template's CWD check
   would stop it. Replace that check in its prompt: probe `git -C <worker_worktree>` for the top-level,
   branch and HEAD, run every command with `git -C` or `cd <worker_worktree> &&`, and use absolute
@@ -335,6 +337,8 @@ Run the native worker probe before feature work; a permanent EROFS/EPERM needs e
 
 Use `dispatch wait` for lifecycle signals. The console/`dispatch observe` reads existing events
 locally: no extra model calls, agent progress prompts or logs in model context for observation.
+For a supervised worker, `dispatch logs --dispatch <id> --follow` prints its run-log events as
+JSON lines until the execution ends, without holding the ledger lock.
 An in-process worker has no event stream (`stream_reason` says so); follow its self-report,
 heartbeat and the `checkpoints` that `observe` lists.
 A proven early exit uses auto-report → auto-decide → human `resume-stop --restart`; the one

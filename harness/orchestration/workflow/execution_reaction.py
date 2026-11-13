@@ -129,12 +129,17 @@ def _failure(execution: JsonObject) -> JsonObject:
             "execution_state": "exited",
             "error": "the runtime stopped the worker at its execution deadline without a report",
         }
+    exit_code = (
+        cast(JsonObject, exit_).get("exit_code") if isinstance(exit_, dict) else None
+    )
     return {
         "kind": "worker-exited-without-report",
         "operation": "execution",
         "worker_started": True,
         "execution_state": "exited",
         "error": "the worker exited without a completion report",
+        # The supervised adapter exits with its worker's code (#1124).
+        **({"exit_code": exit_code} if isinstance(exit_code, int) else {}),
     }
 
 

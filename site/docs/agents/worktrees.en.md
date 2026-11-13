@@ -57,7 +57,8 @@ In Claude Code the Agent tool cannot start a subagent in an existing checkout (i
 checkout and `EnterWorktree` refuses it there). For a worker whose CWD is the worktree, use the
 `external` transport with `.harness/adapters/claude_worker.py`:
 `dispatch send --adapter <main-repo>/.harness/adapters/claude_worker.py` runs it in `worker_worktree`
-and it starts a detached headless `claude -p` there. An `in-process` subagent works through absolute
+and it runs a headless `claude -p` there: in the foreground for the worker's whole run under the
+runtime (a brief with `execution`), detached otherwise. An `in-process` subagent works through absolute
 paths and `git -C <worker_worktree>`; its self-report proves the checkout it works in, not its CWD.
 The worker probes and self-reports its actual canonical Git top-level, branch and HEAD. A main
 checkout at the same SHA is still the wrong path for a writer. Keep the coordinator and its CLI
