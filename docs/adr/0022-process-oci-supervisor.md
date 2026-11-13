@@ -7,19 +7,16 @@
 
 ## Контекст системы
 
-В `integration/container-executor` встроенный `runtime_access` `docker` (`DockerExecutor`,
-`container_executor.py:813`) запускает worker-а staged-последовательностью `_launch` (`:385`)
-через единственную границу процесса `run_engine` (`:87`, таймаут 30 с). Статус читает
-`inspect_worker` (`:447`), очистку делают `engine_objects`/`remove_objects` (`:560`, `:605`),
-`workflow/container_status.reconcile` и `harness/cleanup.py`. Ограничения текущего кода:
+Решение принято, когда argv движка формировал и запускал Python (`container_executor.py`, одна
+граница процесса с таймаутом 30 с). У такой границы были ограничения:
 
 - остановки с grace-периодом нет; живой worker без явной команды не останавливается (ADR 0025);
-- `inspect_worker`, `engine_objects` и `remove_objects` вызывают `docker` даже на Podman-хосте
-  (`:463`, `:570-582`, `:631-633`);
-- clean-room QA в контейнере (#709) не реализован: `gate_runner._execute_commands` запускает
-  команду на хосте через `subprocess.run` без таймаута и сливает stdout и stderr
-  (`gate_runner.py:317-387` на `master`);
-- идентичность процесса не хранится, а `create_argv` не ставит `--rm`/`--init`.
+- статус и очистка вызывают `docker` даже на Podman-хосте;
+- clean-room QA в контейнере (#709) нет: команда QA идёт на хосте без таймаута, а stdout и stderr
+  сливаются;
+- идентичность процесса не хранится, а контейнер запускается без `--rm`/`--init`.
+
+Документ переносит запуск, наблюдение, остановку и очистку в Rust runtime.
 
 ## Действующий контракт
 
@@ -27,23 +24,28 @@
 
 - Один процесс `harness-runtime serve` на state-каталог репозитория. Эксклюзивность обеспечивает
   блокировка ОС на `runtime.db.lock`; второй экземпляр завершается с кодом 2 (ADR 0021).
-- Асинхронное ядро Tokio. Каждое исполнение — задача-супервизор, владеющая своей строкой
-  `executions`; вызовы движка — `tokio::process::Command` с таймаутом на вызов (30 с, как
-  `ENGINE_TIMEOUT_SECONDS`) и без `kill_on_drop`, чтобы падение runtime не убивало исполнение.
-- В Rust нет `unsafe`, кроме изолированных FFI-модулей платформы (`pidfd`, Job Objects), которые
-  покрыты отдельными тестами.
-- Все обращения к движку идут через трейт `Engine`. Реализации: Docker, Podman и scripted engine
-  для тестов, который записывает argv, как `FakeEngine` в `test_container_executor.py`. Двоичный
-  файл движка берётся из `observe()` для каждой операции, включая inspect и remove.
+- Ядро синхронное, на std-потоках: IPC-сервер обслуживает каждое соединение в своём
+  потоке. Каждый дочерний процесс ждёт свой поток (`Child::try_wait` со сроком исполнения),
+  ещё один поток выполняет периодический reconcile. Каждое исполнение владеет своей строкой
+  `executions`. `std::process::Child` не убивает процесс при drop, поэтому падение runtime не
+  убивает исполнение. Команду движка runtime запускает через `std::process::Command`, опрашивает
+  `try_wait` до 30 с (`ENGINE_TIMEOUT`) и затем убивает.
+- В Rust нет `unsafe`, кроме изолированного крейта `platform-ffi` (модуль `windows`: named pipes,
+  SID, DACL, Job Objects, консольные события), который покрыт отдельными тестами. Остальной
+  workspace запрещает `unsafe` через `forbid`.
+- Все обращения к движку идут через трейт `Engine`. Реализации: `Docker`, `Podman` и `Scripted`
+  для тестов, который отвечает по префиксу argv и записывает каждый argv. Двоичный файл движка
+  берётся из `observe()` для каждой операции, включая inspect и remove.
 
 ### 2. Идентичность и состояния
 
 - **Процесс Linux:** `boot_id`, inode PID-namespace, `pid`, время старта из `/proc/<pid>/stat`
-  (поле 22). Наблюдение идёт через `pidfd_open`, если ядро его поддерживает.
+  (поле 22). Наблюдение идёт опросом `/proc/<pid>/stat`: время старта отличает переиспользованный
+  PID. `pidfd` не используется: он не даёт кода выхода чужого процесса.
 - **Процесс Windows:** `pid`, время создания процесса и имя Job Object, производное от
-  `operation_id`.
+  `operation_id`. Имя хранится в intent и receipt, а не в колонках идентичности (решения #806, D4).
 - **Контейнер:** id, метки `harness.dispatch`, `harness.repository`, `harness.plan_digest`
-  (ADR 0025) и новые `harness.operation`, `harness.execution`.
+  (ADR 0025), `harness.operation` и `harness.execution`.
 - PID никогда не служит доказательством сам по себе. Объект другого namespace или boot без
   доказательства смерти считается живым.
 - Состояния исполнения: `launching → running → stopping → exited | lost | unknown`. `exited`
@@ -56,18 +58,23 @@
 
 ### 3. Процессы и группы
 
-- **Linux:** дочерний процесс стартует в своей группе (`setsid`). При наличии пользовательского
-  systemd он оборачивается в transient scope (`systemd-run --user --scope`) для учёта cgroup v2;
-  без systemd учёт идёт по группе процессов, и это записывается фактом в receipt.
+- **Linux:** дочерний процесс стартует лидером своей группы процессов
+  (`CommandExt::process_group(0)`) без новой сессии: `setsid` требует `unsafe` в `pre_exec`. Учёт
+  идёт по группе процессов, receipt содержит `"accounting": "process-group"`. Transient scope
+  systemd (`systemd-run --user --scope`) не используется: ему нужна пользовательская шина, которой
+  нет в CI и в sandbox.
 - **Windows:** именованный Job Object без `KILL_ON_JOB_CLOSE`, чтобы исполнение пережило рестарт
-  runtime, и `CREATE_NEW_PROCESS_GROUP` для доставки `CTRL_BREAK`.
-- `execution_deadline` — абсолютное время UTC: старт исполнения плюс `timeout_seconds` стадии
-  `VerificationPlan` (ADR 0023) или срок handoff из brief для worker-а. `stop_grace_seconds` —
-  поле того же плана; оба закрепляются в brief, значения по умолчанию задаёт тикет супервизора.
-- **Остановка** только по явной команде или по `execution_deadline` из плана:
+  runtime, и `CREATE_NEW_PROCESS_GROUP` для доставки `CTRL_BREAK`; receipt содержит
+  `"accounting": "job-object"` (решения #806).
+- `execution_deadline` — абсолютное время UTC: старт исполнения плюс срок из brief. Срок worker-а
+  задаёт `worker_execution_timeout_seconds` (по умолчанию 14400 с) в разделе `execution` brief. Срок
+  QA-команды задаёт `qa_command_timeout_seconds` (по умолчанию 3600 с) в разделе `qa_execution`:
+  QA исполняет `verification_commands`, у которых нет стадий плана. `stop_grace_seconds` (по
+  умолчанию 30 с) закрепляется там же. Значения берутся из `execution_policy`.
+- **Остановка** только по явной команде или по `execution_deadline` из brief:
   - Linux: SIGTERM группе, после grace-периода SIGKILL;
   - контейнер: `<engine> stop --time <grace>`, затем `<engine> kill`;
-  - Windows: `CTRL_BREAK`, затем `TerminateJobObject`.
+  - Windows: `CTRL_BREAK` через helper `harness-runtime ctrl-break`, затем `TerminateJobObject`.
 
   После остановки записываются exit evidence и частичные логи, затем освобождаются lease. Lease
   освобождается только после доказанной остановки.
@@ -75,20 +82,22 @@
 ### 4. Контейнеры
 
 - **Worker (handoff):** detached, как в ADR 0025. Launch, inspect, remove и reconcile выполняет
-  Rust; Python больше не формирует argv.
-- **QA-команда (#709):** отдельный foreground-контейнер `--rm --init` на каждую команду
-  `VerificationPlan` из образа, закреплённого в brief QA-dispatch, по плану `operations.qa`.
+  Rust; Python argv движка не формирует.
+- **QA-команда (#709):** отдельный foreground-контейнер `--rm --init` на каждую одобренную команду
+  QA-dispatch из образа, закреплённого в brief, по плану `operations.qa`. Контейнерный QA
+  включается, только если задан `access_policy.operations.qa.container`; проект с одним
+  `defaults.container` остаётся на хост-QA, чтобы исторический QA не менялся без явной настройки.
   Sidecar и сеть живут весь QA run. stdout и stderr сохраняются раздельно, в content-addressed
   файлы. `--init` пересылает сигналы и собирает зомби.
 - **Классификация кода выхода** команды в контейнере: 125 — ошибка движка (`infrastructure`),
   126/127 — команда не запускается или не найдена (`tooling`), 128+N — сигнал (`cancelled` при
   остановке по команде, иначе `unknown`), остальные — результат команды. Exit code wrapper-а не
-  подменяет exit code команды.
-- **Запрещённые монтирования:** план монтирования отвергается (`policy_denied`), если путь
-  совпадает с сокетом движка или лежит под ним (`/var/run/docker.sock`, `/run/docker.sock`,
-  `/run/podman/podman.sock`, `$XDG_RUNTIME_DIR/podman/`, `$XDG_RUNTIME_DIR/docker.sock`), с
-  каталогом runtime, сокетом или токеном ADR 0021. Проверка идёт по `realpath` после разрешения
-  symlink.
+  подменяет exit code команды. Срок команды и выход без кода уточняют решения #810.
+- **Запрещённые монтирования:** план монтирования отвергается (`policy_denied`), если `realpath`
+  пути равен защищённому пути, лежит под ним или содержит его. Защищены сокеты движка
+  (`/var/run/docker.sock`, `/run/docker.sock`, `/run/podman/podman.sock`, `$XDG_RUNTIME_DIR/podman/`,
+  `$XDG_RUNTIME_DIR/docker.sock`), каталог runtime, сокет и токен ADR 0021. Полный список
+  приводят решения #807.
 - Существующие запреты ADR 0025 остаются: `--cap-drop ALL`, `no-new-privileges`, `--pull never`,
   монтирования только по плану, env только по именам.
 
@@ -108,20 +117,20 @@ Reconcile запускается при старте runtime, перед каж�
 
 | Платформа | Процессы | Контейнеры | Особенности |
 |---|---|---|---|
-| Fedora, SELinux enforcing, rootless Podman | группы + systemd scope | Podman, `--userns=keep-id` | `label=disable`, как в ADR 0025: SELinux-разделение для контейнера выключается, зато файлы хоста не перемаркируются. Перемаркировка `:z`/`:Z` остаётся отвергнутой. Ограничения ресурсов требуют делегирования cgroup пользователю: без него ограничение из плана — блокер, а не тихий пропуск. |
-| Linux, rootful/rootless Docker | группы + systemd scope | Docker, режимы ADR 0025 | userns-remap — блокер, как в ADR 0025 |
-| Ubuntu CI | группы | Docker | AppArmor userns уже настраивается в `verify.yml` |
-| Windows | Job Objects | только Docker Desktop | Podman на Windows работает через VM, то есть удалённо, а удалённый Podman — блокер ADR 0025 |
+| Fedora, SELinux enforcing, rootless Podman | группы процессов | Podman, `--userns=keep-id` | `label=disable`, как в ADR 0025: SELinux-разделение для контейнера выключается, зато файлы хоста не перемаркируются. Перемаркировка `:z`/`:Z` остаётся отвергнутой. В плане нет лимитов ресурсов; блокер «лимит в плане без делегирования cgroup» вводит задача, которая добавит лимит (решения #811). |
+| Linux, rootful/rootless Docker | группы процессов | Docker, режимы ADR 0025 | userns-remap — блокер, как в ADR 0025 |
+| Ubuntu CI | группы | Docker | AppArmor userns настраивается в `verify.yml` |
+| Windows | Job Objects | не обслуживаются | Контейнеры и QA-прогоны на Windows решает отдельная задача (решения #806, D8). Podman на Windows работает через VM, то есть удалённо, а удалённый Podman — блокер ADR 0025 |
 
 ## Операционные последствия
 
 - **Approval.** Rust запускает только по сохранённому brief с совпадающими `plan_digest` и
   `runtime_images`; при изменённом образе срабатывает `CHANGED_IMAGE_REMEDY` и нужен новый
   propose. Auto-approve, флагов агента и обхода hooks нет.
-- **Перенос тестов.** Матрица argv `EngineMatrixChecks` (8 комбинаций Docker/Podman × rootful/
-  rootless × SELinux) экспортируется в golden-фикстуры и проверяется `cargo test` против трейта
-  `Engine`. Python-тесты сохраняют seam 1: граница процесса coordinator CLI и настоящий runtime,
-  подменён только scripted engine.
+- **Тесты движка.** Матрица argv (8 комбинаций Docker/Podman × rootful/rootless × SELinux) лежит в
+  golden-фикстуре `crates/engine/tests/fixtures/engine_matrix.json` и проверяется `cargo test`
+  через `Scripted`. Python-тесты сохраняют seam 1: граница процесса coordinator CLI и настоящий
+  runtime, подменён только scripted engine.
 - **Негативные тесты:**
   - SIGKILL runtime посреди staged-запуска → reconcile удаляет частичные объекты от новых к
     старым;
@@ -131,42 +140,37 @@ Reconcile запускается при старте runtime, перед каж�
   - SIGTERM посреди QA-команды → контейнер остановлен, частичные логи сохранены, lane освобождён;
   - таймаут команды → `timeout`;
   - exit 125/126/127 классифицируются по таблице;
-  - без делегирования cgroup и с лимитом в плане → блокер;
+  - без делегирования cpu, memory и pids preflight Podman smoke падает, а не пропускается
+    (решения #811);
   - сироты чужого репозитория не затрагиваются.
 - **Race-сценарии:** reconcile и явный `stop` одного исполнения сериализуются по строке
   `executions`; удаление объекта, который снова запущен, отвергается (как в
-  `test_a_worker_that_is_running_again_is_never_stopped_by_the_removal`).
-- **Живые smoke-проверки** выполняются вне `make verify`: Docker на Ubuntu в CI. Fedora с SELinux
-  и rootless Podman требует self-hosted runner или VM, потому что GitHub-hosted runner её не даёт;
-  до появления runner-а поддержка подтверждается только argv-матрицей, и это фиксируется в
-  отчётах. Windows-контракт (named pipe, Job Objects) — отдельное лёгкое задание CI, а не полный
-  `make verify` задания `verify-windows`, который был отключён в #753 и снова включён в #938.
+  `container_remove_refuses_a_foreign_object_and_a_running_worker_and_never_a_volume`).
+- **Живые smoke-проверки** выполняются вне `make verify`. Docker проверяет задание CI
+  `docker-smoke`. Fedora с SELinux и rootless Podman проверяет `podman-smoke.yml` на self-hosted
+  runner владельца, потому что GitHub-hosted runner её не даёт (решения #811). Windows-контракт
+  (named pipe, Job Objects) проверяет задание CI `runtime-ipc-windows`.
 - **Команды проверки:** `cargo test` в `native/harness-runtime`;
   `.harness/.venv/bin/python -m pytest -q tests/orchestration/test_container_executor.py
-  tests/orchestration/test_container_lifecycle.py tests/orchestration/test_runtime_access.py
-  tests/core/test_cleanup.py tests/core/test_gate_runner.py` (контейнерные тесты — из
-  `integration/container-executor` после её вливания); `make verify`.
+  tests/orchestration/test_runtime_access.py tests/core/test_cleanup.py
+  tests/core/test_gate_runner.py`; `make verify`.
 
 ## Решения реализации #805
 
-**Принято оператором (2026-10-28).** Supervisor процессов на Linux (#805) реализует разделы 1–3 и
-5 с отступлениями ниже. Контейнеры (#807), Windows Job Objects (#806) и одобрение политики hooks
-при запуске (#808) этот ticket не затрагивает.
+**Принято оператором (2026-10-28).** Решения для супервизора процессов на Linux (разделы 1–3 и 5).
+Модель потоков, группа процессов, учёт по группе и наблюдение через `/proc` записаны в разделах
+1–3.
 
-| Текст ADR | Решение #805 | Причина |
+| Вопрос | Решение | Причина |
 |---|---|---|
-| §1: асинхронное ядро Tokio, одна задача на исполнение | Один std-поток на дочерний процесс (`Child::try_wait` со сроком исполнения) и один поток периодического reconcile | Runtime синхронный: IPC-сервер обслуживает соединение в своём потоке. `std::process::Child` не убивает процесс при drop, поэтому отсутствие `kill_on_drop` выполняется по построению. |
-| §3: своя группа через `setsid` | `CommandExt::process_group(0)`: своя группа процессов без новой сессии | Безопасный Rust; `setsid` требует `unsafe` в `pre_exec`. Для остановки по сроку нужна группа процессов. |
-| §3: systemd `--user --scope`, если он есть | Учёт по группе процессов; receipt всегда содержит `"accounting": "process-group"` | ADR допускает учёт по группе с отметкой в receipt. Для scope нужна пользовательская шина, которой нет в CI и в sandbox; scope — отдельная задача. |
-| §2: наблюдение через `pidfd_open` | Опрос `/proc/<pid>/stat` с идентичностью по времени старта (поле 22) | Время старта отличает переиспользованный PID; pidfd не даёт кода выхода чужого процесса. |
-| ADR 0021 §4: новый запуск при доказанном отсутствии | Intent без живого процесса с метками после рестарта становится `lost`, операция — `failed`; повторного запуска нет | Отсутствие процесса не отличает «не стартовал» от «уже завершился и собран». At-most-once важнее. |
-| ADR 0021 §4: `attempt` из store | `attempt = 1`: счётчика попыток нет, повтор сегодня — новый dispatch | `operation_id = sha256([dispatch_id, brief_sha256, 1])` в каноническом виде digest. |
+| Исполнение без процесса после рестарта (ADR 0021 §4) | Intent без живого процесса с метками после рестарта становится `lost`, операция — `failed`; повторного запуска нет | Отсутствие процесса не отличает «не стартовал» от «уже завершился и собран». At-most-once важнее. |
+| `attempt` исполнения worker-а (ADR 0021 §4) | `attempt = 1`: счётчика попыток нет, повтор — новый dispatch | `operation_id = sha256([dispatch_id, brief_sha256, 1])` в каноническом виде digest. |
 
 Как работает реализация:
 
-- **Хранилище.** Схема store 4 добавляет таблицу `executions`: идентичность процесса (host,
+- **Хранилище.** Таблица `executions` store хранит идентичность процесса (host,
   `boot_id`, inode PID namespace, PID, время старта), `pgid`, receipt, свидетельство выхода и
-  аренда. Триггер допускает только переходы `launching → running | exited | lost | unknown`,
+  аренду. Триггер допускает только переходы `launching → running | exited | lost | unknown`,
   `running → stopping | exited | lost | unknown`, `stopping → exited | lost | unknown` и
   `unknown → running | exited | lost`; строка в `exited` или `lost` больше не меняется. Каждый
   переход — одна транзакция: строка с CAS по ревизии, `dispatch_status.execution_state` и одна
@@ -212,22 +216,19 @@ Reconcile запускается при старте runtime, перед каж�
   `dispatch status --dispatch` показывает причину как `reaction_error`.
 - **Адаптер.** Под меткой `HARNESS_OPERATION_ID` адаптер `claude_code` запускает worker на
   переднем плане и завершается вместе с ним. Сторонний адаптер, который возвращается сразу после
-  старта worker, завершает исполнение, и dispatch становится `blocked`. Worker наследует окружение
-  runtime, а не coordinator.
+  старта worker, завершает исполнение, и dispatch становится `blocked`. Правило жизни адаптера
+  задают решения #1124. Worker наследует окружение runtime, а не coordinator.
 
 ## Решения реализации #807
 
-**Принято оператором (2026-10-28).** Контейнерный worker (#807) реализует раздел 4 для worker-а
-с отступлениями ниже. QA-контейнер (#709), Windows Job Objects (#806), одобрение политики hooks
-при запуске (#808) и CI smoke Docker с базовым образом worker-а (#710) этот ticket не затрагивает.
+**Принято оператором (2026-10-28).** Решения для контейнерного worker-а (раздел 4).
 
-| Текст ADR | Решение #807 | Причина |
+| Вопрос | Решение | Причина |
 |---|---|---|
-| ADR 0025: значения `environment` берутся из окружения coordinator | Значения берутся из окружения `harness-runtime serve`; в контейнер по-прежнему передаётся только имя (`--env NAME`) | Контейнер запускает runtime, а значение не проходит через IPC, store и evidence. |
-| ADR 0025: worker, sidecar и сеть удаляются при терминальном `DispatchState` | Объекты удаляются при выходе исполнения, когда логи сохранены, а выход с кодом записан в `executions`; незавершённое удаление повторяет reconcile | Rust не пишет `DispatchState` (ADR 0021, один писатель), а выход исполнения — его собственное наблюдение. |
-| ADR 0021 §4, ADR 0025: сбой запуска удаляет объекты, dispatch можно отправить снова | Неудачный staged launch — at-most-once: объекты откатываются от новых к старым, исполнение `lost`, операция `failed`, dispatch `blocked`; повторного запуска нет | Как в #805: отсутствие объекта не отличает «не создан» от «уже удалён», at-most-once важнее. |
-| ADR 0025: исполнитель работает в любой эпохе ledger и на любой платформе | Только эпоха runtime store и только Linux; на файловом ledger и вне Linux `dispatch preflight` блокирует его с remedy (`harness-runtime migrate`, затем `serve`) | Rust запускает только по сохранённому brief; Windows — #806. |
-| §1: асинхронное ядро Tokio | Синхронный `std::process`: команда движка опрашивается `try_wait` до 30 секунд, затем убивается | Так же, как в #805: runtime синхронный, IPC обслуживает соединение в своём потоке. |
+| Значения `environment` (ADR 0025) | Значения берутся из окружения `harness-runtime serve`; в контейнер передаётся только имя (`--env NAME`) | Контейнер запускает runtime, а значение не проходит через IPC, store и evidence. |
+| Момент удаления worker-а, sidecar и сети (ADR 0025) | Объекты удаляются при выходе исполнения, когда логи сохранены, а выход с кодом записан в `executions`; незавершённое удаление повторяет reconcile | Rust не пишет `DispatchState` (ADR 0021, один писатель), а выход исполнения — его собственное наблюдение. |
+| Сбой запуска (ADR 0021 §4, ADR 0025) | Неудачный staged launch — at-most-once: объекты откатываются от новых к старым, исполнение `lost`, операция `failed`, dispatch `blocked`; повторного запуска нет | Как в #805: отсутствие объекта не отличает «не создан» от «уже удалён», at-most-once важнее. |
+| Эпоха ledger и платформа (ADR 0025) | Только эпоха runtime store и только Linux; на файловом ledger и вне Linux `dispatch preflight` блокирует исполнитель с remedy (`harness-runtime migrate`, затем `serve`) | Rust запускает только по сохранённому brief; Windows — решения #806. |
 
 Как работает реализация:
 
@@ -235,13 +236,10 @@ Reconcile запускается при старте runtime, перед каж�
   `Podman` и `Scripted` (ответы по префиксу argv и запись каждого argv для тестов) — единственная
   граница процесса движка. Построители argv и разбор `info`, id образа и `inspect` перенесены из
   Python 1:1; единственная дельта — метки `harness.operation` и `harness.execution` после
-  `harness.plan_digest`. Восемь строк `EngineMatrixChecks` (Docker и Podman, rootful и rootless,
-  с SELinux и без) экспортированы в `crates/engine/tests/fixtures/engine_matrix.json` и проходят
-  через `Scripted`.
-- **Хранилище.** Схема store 5 пересобирает `executions` с полями `kind` (`process`,
-  `container`), `engine` и `container_id`: исполнение-контейнер может быть `running` с id
-  контейнера вместо PID. `serve` повышает схему 4 до 5 при старте; сборка со схемой 4 store
-  схемы 5 не открывает.
+  `harness.plan_digest`. Восемь строк матрицы (Docker и Podman, rootful и rootless, с SELinux и
+  без) лежат в `crates/engine/tests/fixtures/engine_matrix.json` и проходят через `Scripted`.
+- **Хранилище.** Строка `executions` хранит `kind` (`process`, `container`, `qa`), `engine` и
+  `container_id`: исполнение-контейнер может быть `running` с id контейнера вместо PID.
 - **Политика монтирования.** Корень плана отвергается `policy_denied`, если его `realpath` равен
   защищённому пути, лежит под ним или содержит его, независимо от существования защищённого пути.
   Защищены сокеты движков (`/var/run/docker.sock`, `/run/docker.sock`,
@@ -262,7 +260,7 @@ Reconcile запускается при старте runtime, перед каж�
   сроку (`stop --time <grace>`, затем `kill`, `stopped_by: "deadline"`), сохранение логов в
   `executions/<id>/stdout.log` и `stderr.log` и удаление объектов всегда идут движком из строки
   `executions`, поэтому на хосте с Podman ни одна команда не уходит в `docker`.
-- **Протокол 1.3.** `container.observe {plan}`, `container.objects {engines}` и
+- **Операции `container.*`.** `container.observe {plan}`, `container.objects {engines}` и
   `container.remove {objects}` есть в `hello` только при подключённом store на Linux, как
   `execution.*`. Метка репозитория — собственный канонический общий git-каталог runtime, а не
   поле запроса. `container.remove` заново проверяет каждый объект и отказывает объекту другого
@@ -272,7 +270,7 @@ Reconcile запускается при старте runtime, перед каж�
   удаляет volumes ни одной командой. Анонимные volumes из `VOLUME` образа остаются за `rm` без
   `-v`.
 - **Python.** `container_executor.py` проверяет план, спрашивает `container.observe` и сравнивает
-  закреплённые digest; `run_engine`, argv движка и `workflow/container_status.py` удалены.
+  закреплённые digest; argv движка Python не строит и процесс движка не запускает.
   `dispatch send` применяет план supervised docker-dispatch без передачи провайдеру и запускает
   его через `execution.launch`; `dispatch status` и `dispatch wait` показывают исполнение runtime
   и движок не спрашивают. `harness cleanup` перечисляет и удаляет объекты только через
@@ -283,20 +281,16 @@ Reconcile запускается при старте runtime, перед каж�
 
 ## Решения реализации #810
 
-**Принято оператором (2026-10-28).** Контейнерный clean-room QA (#810) реализует раздел 3 и
-раздел 4 для команд QA с отступлениями ниже. Windows Job Objects (#806), одобрение политики hooks
-(#808) и CI smoke Docker (#710) этот ticket не затрагивает; detached worker-контейнер #807 не
-меняется.
+**Принято оператором (2026-10-28).** Решения для контейнерного clean-room QA (разделы 3 и 4).
+Срок команды и выбор между контейнерным и хост-QA записаны в разделах 3 и 4.
 
-| Текст ADR | Решение #810 | Причина |
+| Вопрос | Решение | Причина |
 |---|---|---|
-| ADR 0023 §5: повтор после `infrastructure` или `environment_preparation` — новый `attempt` | Для контейнерного QA так и есть: отчёта нет, есть запись `qa-lane/attempts`, `qa run` повторяется как attempt N+1. Исторический хост-QA сохраняет отчёт `blocked` и policy-retry новым dispatch | Объединение путей ломает поведение исторического QA (DoD 11). |
-| ADR 0021 §4: `attempt` хранится в строке dispatch | `attempt` — поле тела `dispatch-status`: его пишет Python через `state.write` с CAS, Rust только читает (нет поля — attempt 1) | Один писатель dispatch-status и без новой колонки схемы store. |
-| ADR 0025: ресурсы плана монтируются с их доступом | Сужение: `run_root` (каталог clean-room под `shared_storage`) на запись, `git_common` только на чтение, `cache` плана со своим доступом; `artifacts`, issue worktree и весь `shared_storage` не монтируются | Код кандидата не пишет ledger, `runtime.db` и refs. Шаг QA, которому нужна запись вне `run_root`, — повод пересмотреть решение, а не расширить монтирование молча. |
-| §3: срок команды берётся из `timeout_seconds` стадии `VerificationPlan` | Новый ключ `execution_policy.qa_command_timeout_seconds` (по умолчанию 3600) закрепляется в brief `qa_execution` | QA исполняет `verification_commands`, у которых нет стадий плана. |
-| `stage-evidence.v1`: результат команды — `pass`, `fail` или `not_run` | Домен окончания хранится в `qa_stages[].domain` и в exit evidence runtime; в stage evidence команда с доменом — `not_run` с реальным кодом выхода | В схеме stage evidence нет поля домена. |
-| §3: QA-команды исполняются в контейнере | Только если `access_policy.operations.qa.container` задан; проект с одним `defaults.container` остаётся на хост-QA | Исторический QA не меняется без явной настройки. |
-| §1: асинхронное ядро Tokio | Синхронный `std::process` и поток прогона; осиротевший после рестарта runtime QA-прогон становится `lost` и не возобновляется | Как в #805 и #807. |
+| Повтор после `infrastructure` или `environment_preparation` (ADR 0023 §5) | Контейнерный QA: отчёта нет, есть запись `qa-lane/attempts`, `qa run` повторяется как attempt N+1. Исторический хост-QA сохраняет отчёт `blocked` и policy-retry новым dispatch | Объединение путей ломает поведение исторического QA (DoD 11). |
+| Где хранится `attempt` (ADR 0021 §4) | `attempt` — поле тела `dispatch-status`: его пишет Python через `state.write` с CAS, Rust только читает (нет поля — attempt 1) | Один писатель dispatch-status и без новой колонки схемы store. |
+| Монтирования QA-прогона (ADR 0025) | Сужение: `run_root` (каталог clean-room под `shared_storage`) на запись, `git_common` только на чтение, `cache` плана со своим доступом; `artifacts`, issue worktree и весь `shared_storage` не монтируются | Код кандидата не пишет ledger, `runtime.db` и refs. Шаг QA, которому нужна запись вне `run_root`, — повод пересмотреть решение, а не расширить монтирование молча. |
+| Домен окончания в `stage-evidence.v1` | Домен окончания хранится в `qa_stages[].domain` и в exit evidence runtime; в stage evidence команда с доменом — `not_run` с реальным кодом выхода | В схеме stage evidence нет поля домена. |
+| Рестарт runtime во время прогона | Осиротевший после рестарта runtime QA-прогон становится `lost` и не возобновляется | Как в #805 и #807: at-most-once. |
 
 Как работает реализация:
 
@@ -326,46 +320,35 @@ Reconcile запускается при старте runtime, перед каж�
 - **Эпоха store.** Артефакты QA пишутся в единице store команды, а записи стадий сверяются с
   текстом артефакта, который принял runtime; схема brief принимает `qa_execution` только рядом с
   `runtime_images`.
-- **Проверки.** Fedora, SELinux и rootless Podman подтверждены argv-матрицей и scripted-движком;
-  живой smoke движка — #710.
+- **Проверки.** Fedora, SELinux и rootless Podman подтверждены argv-матрицей и scripted-движком.
+  Живой Podman проверяет smoke из решений #811, живой Docker проверяет задание CI `docker-smoke`
+  (#710).
 
 ## Решения реализации #806
 
-**Принято оператором (2026-10-29).** Supervisor процессов на Windows (#806) реализует разделы 2,
-3 и 5 для Job Objects с отступлениями ниже. Контейнеры на Windows (Docker Desktop), одобрение
-политики hooks при запуске (#808) и полный `verify-windows` (#753, включён снова в #938) этот ticket не затрагивает;
-поведение на Linux не меняется.
+**Принято оператором (2026-10-29); поправки D1, D2, D3 и D6 приняты в #921 (2026-10-30).**
+Решения для супервизора процессов на Windows (разделы 2, 3 и 5 для Job Objects). Поведение на
+Linux они не меняют.
 
-| Текст ADR | Решение #806 | Причина |
+| Вопрос | Решение | Причина |
 |---|---|---|
-| §3: `CREATE_NEW_PROCESS_GROUP` для доставки `CTRL_BREAK` | Исполнение получает ещё и свою скрытую консоль (`CREATE_NO_WINDOW`); хост скрытой консоли — участник job. `CTRL_BREAK` шлёт короткий helper `harness-runtime ctrl-break` без консоли (`DETACHED_PROCESS`), который подключается к консоли живого участника исполнения и не выбирает хост консоли (`conhost.exe` системного каталога) | `GenerateConsoleCtrlEvent` доходит только до процессов той же консоли. Общая консоль с runtime отдала бы исполнению Ctrl+Break оператора и закрытие окна терминала, а `AttachConsole` в самом runtime сломал бы его stderr. `AttachConsole` к хосту консоли не работает, а при ушедшем лидере хост может стоять в списке job первым. |
-| §3: `CTRL_BREAK`, затем `TerminateJobObject`; #805: отказ SIGTERM даёт `unknown` | Недоставленный `CTRL_BREAK` — факт `ctrl_break` (`delivered`, `no-member`, `failed` с `ctrl_break_error`), остановка продолжается `TerminateJobObject` с кодом 137; доказательство — в job нет живого участника исполнения (хост консоли не считается) и лидер ушёл; `term_sent_at` — время попытки | `TerminateJobObject` останавливает всех участников job, хост консоли тоже, и без `CTRL_BREAK`, а job без живых участников исполнения доказывает остановку. Одно определение участника исполнения действует для watcher, reconcile и остановки. |
-| #805: усыновлённый процесс без кода выхода становится `lost` | Лидер, которого runtime держит открытым handle с того момента, когда он был жив, при job без живых участников исполнения (хост консоли не считается) даёт `exited` с кодом выхода и `source: process-handle` | Windows хранит код выхода, пока открыт handle процесса. Хост консоли переживает лидера, пока к консоли подключён другой процесс, и исполнение не держит. |
-| §2: имя Job Object входит в идентичность | Имя хранится в `launch.job` intent и в receipt, а не в колонках идентичности; схема store 5 не меняется; `pgid` — pid лидера | Имя выводится из `operation_id`, поэтому новая колонка не нужна. |
-| §5: доказанное отсутствие — `lost` | Лидер ушёл (нет процесса, другое время создания или выход без удерживаемого handle) и имени job нет — `lost` с фактом `job: name-absent`, хотя участники могли пережить лидера | Временный объект ядра живёт по имени, только пока открыт хотя бы один handle. Без runtime и лидера имя пропадает, и job больше не найти. |
-| ADR 0021 §4, #805: intent усыновляется по метке окружения | Intent усыновляет живого участника job по имени из intent, который не хост консоли, чей родитель — runtime из `lease_owner` intent (pid родителя по снимку Toolhelp) и который создан не раньше этого runtime; его потоки возобновляются. Ровно один такой участник — лидер; нет такого при живых участниках исполнения или их больше одного — `unknown` с удержанной арендой и повторным наблюдением; нет участников исполнения — `lost`, как прежде | Окружение чужого процесса Windows отдаёт только через недокументированный разбор PEB, а участник job — заведомо процесс исполнения: breakaway запрещён. Runtime мог умереть до возобновления подвешенного лидера. Время создания процесса грубое, а участник, созданный раньше лидера, и хост консоли лидером стать не должны. |
-| §1: асинхронное ядро Tokio | Синхронные std-потоки, как в #805 | Runtime синхронный. |
-| §6: на Windows только Docker Desktop | Контейнеры и QA-прогоны на Windows не обслуживаются: `hello` перечисляет только `execution.launch` и `execution.observe`, `container.*` и `qa.*` дают `unknown_operation`, brief с `docker` отвергается `policy_denied` до intent | Контейнеры на Windows — отдельная задача. |
+| D1. Доставка `CTRL_BREAK` (§3) | Исполнение получает ещё и свою скрытую консоль (`CREATE_NO_WINDOW`); хост скрытой консоли — участник job. `CTRL_BREAK` шлёт короткий helper `harness-runtime ctrl-break` без консоли (`DETACHED_PROCESS`), который подключается к консоли живого участника исполнения и не выбирает хост консоли (`conhost.exe` системного каталога) | `GenerateConsoleCtrlEvent` доходит только до процессов той же консоли. Общая консоль с runtime отдала бы исполнению Ctrl+Break оператора и закрытие окна терминала, а `AttachConsole` в самом runtime сломал бы его stderr. `AttachConsole` к хосту консоли не работает, а при ушедшем лидере хост может стоять в списке job первым. |
+| D2. Недоставленный `CTRL_BREAK` (§3) | Недоставленный `CTRL_BREAK` — факт `ctrl_break` (`delivered`, `no-member`, `failed` с `ctrl_break_error`), остановка продолжается `TerminateJobObject` с кодом 137; доказательство — в job нет живого участника исполнения (хост консоли не считается) и лидер ушёл; `term_sent_at` — время попытки | `TerminateJobObject` останавливает всех участников job, хост консоли тоже, и без `CTRL_BREAK`, а job без живых участников исполнения доказывает остановку. Одно определение участника исполнения действует для watcher, reconcile и остановки. |
+| D3. Код выхода усыновлённого лидера | Лидер, которого runtime держит открытым handle с того момента, когда он был жив, при job без живых участников исполнения (хост консоли не считается) даёт `exited` с кодом выхода и `source: process-handle` | Windows хранит код выхода, пока открыт handle процесса. Хост консоли переживает лидера, пока к консоли подключён другой процесс, и исполнение не держит. |
+| D4. Имя Job Object в идентичности (§2) | Имя хранится в `launch.job` intent и в receipt, а не в колонках идентичности; `pgid` — pid лидера | Имя выводится из `operation_id`, поэтому новая колонка не нужна. |
+| D5. Доказанное отсутствие (§5) | Лидер ушёл (нет процесса, другое время создания или выход без удерживаемого handle) и имени job нет — `lost` с фактом `job: name-absent`, хотя участники могли пережить лидера | Временный объект ядра живёт по имени, только пока открыт хотя бы один handle. Без runtime и лидера имя пропадает, и job больше не найти. |
+| D6. Усыновление intent (ADR 0021 §4) | Intent усыновляет живого участника job по имени из intent, который не хост консоли, чей родитель — runtime из `lease_owner` intent (pid родителя по снимку Toolhelp) и который создан не раньше этого runtime; его потоки возобновляются. Ровно один такой участник — лидер; нет такого при живых участниках исполнения или их больше одного — `unknown` с удержанной арендой и повторным наблюдением; нет участников исполнения — `lost` | Окружение чужого процесса Windows отдаёт только через недокументированный разбор PEB, а участник job — заведомо процесс исполнения: breakaway запрещён. Runtime мог умереть до возобновления подвешенного лидера. Время создания процесса грубое, а участник, созданный раньше лидера, и хост консоли лидером стать не должны. |
+| D8. Контейнеры на Windows (§6) | Контейнеры и QA-прогоны на Windows не обслуживаются: `hello` перечисляет только `execution.launch` и `execution.observe`, `container.*` и `qa.*` дают `unknown_operation`, brief с `docker` отвергается `policy_denied` до intent | Контейнеры на Windows — отдельная задача. |
 
-**Поправки #921, приняты оператором 2026-10-30.** Поправки меняют строки 1, 2, 3 и 6 таблицы
-(D1, D2, D3 и D6); строки 4, 5, 7 и 8 (D4, D5, D7 и D8) не меняются. Причина — второй участник
-job: в CI-задании `runtime-ipc-windows` (run 40842357777) job лидера-python без потомков держал
-два процесса. Гипотеза: это хост скрытой консоли `conhost.exe`. Windows запускает его при
-инициализации консоли лидера после возобновления, хост наследует job лидера и становится
-участником с родителем-лидером. Хост живёт, пока к консоли подключён хотя бы один процесс,
-поэтому участником исполнения он не считается: иначе он держал бы исполнение `running`, а старое
-правило «самый ранний участник» могло выбрать его лидером. Гипотезу проверяет CI. Тест
+**Хост консоли в job (поправки #921).** Job лидера держит двух участников: лидера и хост скрытой
+консоли `conhost.exe` системного каталога с родителем-лидером. Windows запускает хост при
+инициализации консоли лидера после возобновления, и хост наследует job лидера. Хост живёт, пока к
+консоли подключён хотя бы один процесс, поэтому участником исполнения он не считается: иначе он
+держал бы исполнение `running` и мог стать лидером по правилу «самый ранний участник». Тест
 `a_launch_runs_the_leader_with_its_labels_in_the_job_of_its_operation_id` печатает состав job
-строкой `JOB-MEMBERS` (pid, родитель и образ каждого участника) и ждёт ровно двух участников:
-лидера `python.exe` и `conhost.exe` системного каталога с родителем-лидером. Строка
-`JOB-MEMBERS` и прохождение этого теста в задании `runtime-ipc-windows` подтверждают гипотезу;
-падение теста с фактическим составом в сообщении её опровергает. Выбор лидера от исхода не
-зависит: усыновление идёт по записанной идентичности запустившего runtime. Нераспознанный
-вспомогательный процесс считается участником исполнения, поэтому аренда раньше времени не
-освобождается. Три теста, которые висели до `timeout-minutes` задания, висели из-за обвязки, а
-не из-за супервизора. Libtest с `--test-threads=1` печатает `test runtime_process ... ` без
-перевода строки, `RECEIPT` попадал в ту же строку, и поиск по префиксу его не находил. Чтение
-stdout runtime не кончалось: лидер наследует pipe runtime и держит их открытыми.
+строкой `JOB-MEMBERS` (pid, родитель и образ каждого участника). Усыновление идёт по записанной
+идентичности запустившего runtime. Нераспознанный вспомогательный процесс считается участником
+исполнения, поэтому аренда раньше времени не освобождается.
 
 Как работает реализация:
 
@@ -433,18 +416,17 @@ stdout runtime не кончалось: лидер наследует pipe runti
 
 ## Решения реализации #909
 
-**Принято оператором (2026-10-30).** Исправление #909 уточняет раздел 3 и решения #805 для
-Linux: группа процессов, в которой остались только зомби, не держит аренду, а остановка по сроку
-не бросает своего ребёнка без `wait`. Supervisor на Windows (#806) получает только общую функцию
-платформенного слоя, и поведение Job Object не меняется.
+**Принято оператором (2026-10-30).** Решения уточняют раздел 3 и решения #805 для Linux: группа
+процессов, в которой остались только зомби, не держит аренду, а остановка по сроку не бросает
+своего ребёнка без `wait`. Поведение Job Object на Windows они не меняют.
 
-| Текст ADR | Решение #909 | Причина |
+| Вопрос | Решение | Причина |
 |---|---|---|
-| #805: участник группы жив, пока группу достигает `killpg(pgid, 0)` | `killpg` остаётся быстрым доказательством пустоты (ESRCH). Если он отвечает успехом или EPERM, решает `process::members`: два прохода по `/proc` подряд, участники выбираются по полю 5 (`pgrp`) `/proc/<pid>/stat`; группа пуста, только если ни один проход не нашёл живого участника | `killpg` успешен для группы из одного несобранного зомби, поэтому исполнение оставалось `running` или `unknown` с удержанной арендой до рестарта runtime. |
-| Задача #909: зомби — процесс в состоянии `Z` или `X` по `/proc/<pid>/stat` | Участник считается зомби, только если все его потоки в `/proc/<pid>/task` в состоянии `Z` или `X` | Процесс, главный поток которого вызвал `pthread_exit`, показывает `Z` в `/proc/<pid>/stat`, пока другой поток работает. Правило по одному `stat` освободило бы аренду работающего процесса. |
-| Задача #909: группа из одних зомби пуста | Пустоту доказывает только procfs PID namespace самого runtime (`/proc/self` называет pid runtime), смонтированный без `hidepid` (решает последнее монтирование `proc` в `/proc`; значения `0` и `off` не скрывают процессы), и только проходы без ошибок чтения. Иначе группа из одних зомби считается живой, как до #909 | При `hidepid` процессы других пользователей скрыты, а procfs чужого namespace показывает другие процессы, поэтому отсутствие живого участника не доказано. Ответ без доказательства не становится ошибкой: `wait_for` считает ошибку `members_alive` отсутствием выжившего участника и записал бы `exited` без доказательства. |
-| #805: отказ записи `running → stopping` после SIGTERM | Запись `stopping` идёт по правилам `Supervisor::record`: повторяемый отказ повторяется в пределах `RECORD_ATTEMPTS` × `RECORD_RETRY`, отказ навсегда оставляет строку `unknown` с фактом `unrecorded: stopping` и удержанной арендой, и SIGKILL не уходит | Из `unknown` разрешено только повторное наблюдение (раздел 2). Раньше остановка завершалась молча, наблюдатель бросал `Child` без `wait`, лидер оставался зомби, а строка — `running`. |
-| §3 и #805: exit evidence — статус ожидания ребёнка runtime | После отказа навсегда записи `stopping` статус подобранного ребёнка не записывается: reconcile доводит строку до `lost`, а не до `exited` | Запись `unknown → exited` из потока подбора гонялась бы с reconcile и с остановкой усыновлённого процесса и разошлась бы с Windows. |
+| Пустота группы | `killpg` остаётся быстрым доказательством пустоты (ESRCH). Если он отвечает успехом или EPERM, решает `process::members`: два прохода по `/proc` подряд, участники выбираются по полю 5 (`pgrp`) `/proc/<pid>/stat`; группа пуста, только если ни один проход не нашёл живого участника | `killpg` успешен и для группы из одного несобранного зомби: без прохода по `/proc` исполнение оставалось бы `running` или `unknown` с удержанной арендой до рестарта runtime. |
+| Какой участник — зомби | Участник считается зомби, только если все его потоки в `/proc/<pid>/task` в состоянии `Z` или `X` | Процесс, главный поток которого вызвал `pthread_exit`, показывает `Z` в `/proc/<pid>/stat`, пока другой поток работает. Правило по одному `stat` освободило бы аренду работающего процесса. |
+| Когда группа из одних зомби пуста | Пустоту доказывает только procfs PID namespace самого runtime (`/proc/self` называет pid runtime), смонтированный без `hidepid` (решает последнее монтирование `proc` в `/proc`; значения `0` и `off` не скрывают процессы), и только проходы без ошибок чтения. Иначе группа из одних зомби считается живой | При `hidepid` процессы других пользователей скрыты, а procfs чужого namespace показывает другие процессы, поэтому отсутствие живого участника не доказано. Ответ без доказательства не становится ошибкой: `wait_for` считает ошибку `members_alive` отсутствием выжившего участника и записал бы `exited` без доказательства. |
+| Отказ записи `running → stopping` после SIGTERM | Запись `stopping` идёт по правилам `Supervisor::record`: повторяемый отказ повторяется в пределах `RECORD_ATTEMPTS` × `RECORD_RETRY`, отказ навсегда оставляет строку `unknown` с фактом `unrecorded: stopping` и удержанной арендой, и SIGKILL не уходит | Из `unknown` разрешено только повторное наблюдение (раздел 2). Без `wait` лидер остался бы зомби, а строка — `running`. |
+| Exit evidence после отказа записи `stopping` | После отказа навсегда записи `stopping` статус подобранного ребёнка не записывается: reconcile доводит строку до `lost`, а не до `exited` | Запись `unknown → exited` из потока подбора гонялась бы с reconcile и с остановкой усыновлённого процесса и разошлась бы с Windows. |
 
 Как работает реализация:
 
@@ -466,9 +448,9 @@ Linux: группа процессов, в которой остались то�
   `owner-dead`, группа пуста, строка становится `lost`, и аренда освобождается в той же
   транзакции. Строку `stopping` остановка доводит до `exited` с `stop-observed`. Зомби остаётся в
   таблице процессов у своего родителя, потому что чужого ребёнка runtime подобрать не может.
-- **Подбор своего ребёнка.** Новая функция платформенного слоя `os::reap` на Linux запускает
+- **Подбор своего ребёнка.** Функция платформенного слоя `os::reap` на Linux запускает
   поток, который вызывает `wait()`, если `try_wait` ещё не дал статус; на Windows она закрывает
-  handles, как раньше делал конец `wait_for`. `wait_for` вызывает её, когда остановка закончилась
+  handles. `wait_for` вызывает её, когда остановка закончилась
   без доказательства выхода и когда статус ожидания нельзя прочитать. Лидер, завершённый SIGTERM,
   подбирается, и reconcile переводит строку `unknown → lost`. Лидера, который проигнорировал
   SIGTERM, reconcile возвращает в `running`, после срока остановка усыновлённого процесса шлёт
@@ -477,69 +459,56 @@ Linux: группа процессов, в которой остались то�
 - **Остаточный риск и стоимость.** Процесс предкового PID namespace, который сам вошёл в группу,
   достижим для `killpg`, но невидим в `/proc` runtime. Проход читает `stat` до первого живого
   участника, а `wait_for` повторяет его каждые 50 мс, пока живой участник переживает лидера.
-- **Проверки.** Unit-тесты `supervisor`: `a_group_whose_only_member_is_a_zombie_is_empty` (на
-  382cb2a ответ `Ok(true)`), `a_live_member_holds_the_group_of_a_zombie_leader` и разбор
+- **Проверки.** Unit-тесты `supervisor`: `a_group_whose_only_member_is_a_zombie_is_empty`,
+  `a_live_member_holds_the_group_of_a_zombie_leader` и разбор
   `hidepid`. Интеграционный тест `supervisor/tests/stop.rs`
   `a_stopping_record_refused_for_good_leaves_the_execution_unknown_and_reaps_the_child`: триггер
-  SQL отказывает в `stopping` навсегда, строка становится `unknown`, лидер подобран, затем `lost`;
-  на 382cb2a строка остаётся `running`. Seam-тест на реальном бинаре
+  SQL отказывает в `stopping` навсегда, строка становится `unknown`, лидер подобран, затем `lost`.
+  Seam-тест на реальном бинаре
   `test_a_refused_stopping_record_after_the_sigterm_is_retried_and_the_child_is_reaped` ставит
   debug-hook `execution.stop:stopping` (`HARNESS_RUNTIME_TEST_PAUSE_AT` и
   `HARNESS_RUNTIME_TEST_FAIL_AT`): первая запись получает повторяемый отказ, повтор пишет
-  `stopping`, исход — `exited` с `wait-status` и сигналом 15. Hook существует только вместе с
-  исправлением, поэтому на 382cb2a seam-тест падает на ожидании паузы; с hook, но без исправления
-  исполнение заканчивается `lost` вместо `exited`. Не доказаны: проход на настоящем монтировании с
-  `hidepid` и на procfs чужого namespace (проверен только разбор опций) и `os::reap` на Windows,
-  который собирается только в Windows CI.
+  `stopping`, исход — `exited` с `wait-status` и сигналом 15. Не доказаны: проход на настоящем
+  монтировании с `hidepid` и на procfs чужого namespace (проверен только разбор опций) и
+  `os::reap` на Windows, который собирается только в Windows CI.
 
 
 ## Решения реализации #811
 
 **Принято оператором (2026-10-30).**
 
-| Текст ADR | Решение #811 | Причина |
+| Вопрос | Решение | Причина |
 |---|---|---|
-| §6: без делегирования cgroup и с лимитом в плане — блокер | Preflight smoke проверяет делегирование cpu, memory и pids; без него smoke падает, а не пропускается. Отдельный живой тест читает memory.max, pids.max и cpu.max контейнера. Блокер в runtime не вводится: в `Plan` (`crates/engine/src/plan.rs`) и argv-матрице нет лимитов ресурсов, а `limits` в `qa_run.rs` содержит сроки. Блокер добавит задача, которая введёт лимит в план. | Блокировать нечего; изменение плана и argv Rust выходит за границы chore(ci). |
-| Fedora с SELinux и rootless Podman требует self-hosted runner или VM | Отдельный `.github/workflows/podman-smoke.yml` использует runner владельца с меткой `fedora-selinux-podman`. Запускается по push путей контейнерного исполнителя и вручную, без pull_request; находится вне verify.yml и make verify. Маркер podman_smoke исключён из обычного pytest. | Публичный PR не выполняет код на машине владельца; выключенный runner не держит проверки PR и release. |
+| Лимиты ресурсов и делегирование cgroup (§6) | Preflight smoke проверяет делегирование cpu, memory и pids; без него smoke падает, а не пропускается. Отдельный живой тест читает memory.max, pids.max и cpu.max контейнера. Блокера в runtime нет: в `Plan` (`crates/engine/src/plan.rs`) и argv-матрице нет лимитов ресурсов, а `limits` в `qa_run.rs` содержит сроки. Блокер добавит задача, которая введёт лимит в план. | Пока план не задаёт лимитов, блокировать нечего. |
+| Живой smoke Fedora с SELinux и rootless Podman | Отдельный `.github/workflows/podman-smoke.yml` использует runner владельца с меткой `fedora-selinux-podman`. Запускается по push путей контейнерного исполнителя и вручную, без pull_request; находится вне verify.yml и make verify. Маркер podman_smoke исключён из обычного pytest. | Публичный PR не выполняет код на машине владельца; выключенный runner не держит проверки PR и release. |
 
 **Проверки (2026-11-03).** [Положительный прогон](https://github.com/PVMalove/agent-harness-next/actions/runs/41687555523),
 SHA `75431885af4c963a291d6a7a881c77202153fb40`: 3 passed, 0 skipped. Артефакты подтверждают
 Podman 5.8.9, rootless, SELinux Enforcing, cgroup v2 и делегированные cpu, memory, pids.
-[Отрицательный прогон, попытка 2](https://github.com/PVMalove/agent-harness-next/actions/runs/41687555523/attempts/2)
-на том же SHA: 1 failure, 2 setup errors, 0 skipped. Все три теста остановлены preflight с
-`HARNESS_REQUIRE_PODMAN_SMOKE=1, but cgroup delegation to the user lacks cpu, memory, pids`.
-Контроллеры временно отключены через `DisableControllers=cpu memory pids` только для
-`user-1001.slice`, при сохранённом `Delegate=yes`; `podman info` показал только `io`.
-Первый способ с `Delegate=no` не позволил запустить пользовательский systemd, поэтому не
-считается отрицательной проверкой smoke. После проверки настройки восстановлены: доступны
-cpuset, cpu, io, memory, pids, пользовательский systemd активен, runner онлайн.
-
-[Положительный повтор после восстановления, попытка 3](https://github.com/PVMalove/agent-harness-next/actions/runs/41687555523/attempts/3)
-на том же SHA: 3 passed, 0 skipped; `podman info` вновь подтверждает cpu, io, memory, pids,
-SELinux остаётся Enforcing.
+[Отрицательный прогон](https://github.com/PVMalove/agent-harness-next/actions/runs/41687555523/attempts/2)
+на том же SHA без контроллеров cpu, memory и pids у пользователя: все три теста остановлены
+preflight с `HARNESS_REQUIRE_PODMAN_SMOKE=1, but cgroup delegation to the user lacks cpu, memory, pids`.
 
 ## Решения реализации #1124
 
-**Принято оператором (2026-11-13).** Исправление #1124 приводит стандартные адаптеры
-`.harness/adapters/claude_worker.py` и `.harness/adapters/codex_worker.py` к правилу решений #805:
-выход лидера группы — выход worker-а. Правило остаётся, Rust-супервизор не меняется; ответ
-`status` получает только поле `search_path`.
+**Принято оператором (2026-11-13).** Стандартные адаптеры `.harness/adapters/claude_worker.py` и
+`.harness/adapters/codex_worker.py` следуют правилу решений #805: выход лидера группы — выход
+worker-а. Ответ `status` runtime получает поле `search_path`.
 
-Причина ошибки: runtime запускает адаптер лидером новой группы процессов со stdin `/dev/null`
-(`process.rs`), а `wait_for` (`stop.rs`) записывает выход, когда лидер ушёл и в группе никого
-нет. Оба адаптера запускали worker через `Popen(start_new_session=True)` и завершались после
-проверки старта: Claude через 3 с, Codex через 10 с. Worker уходил в свою сессию и группу,
-группа исполнения пустела, исполнение становилось `exited`, и dispatch получал `blocked` с
-`worker-exited-without-report`, хотя worker продолжал работать.
+Супервизор видит только адаптер. Runtime запускает адаптер лидером новой группы процессов со stdin
+`/dev/null` (`process.rs`), а `wait_for` (`stop.rs`) записывает выход, когда лидер ушёл и в группе
+никого нет. Адаптер, который отсоединяет worker в свою сессию (`Popen(start_new_session=True)`) и
+завершается после проверки старта, опустошает группу исполнения: исполнение становится `exited`,
+и dispatch получает `blocked` с `worker-exited-without-report`, хотя worker продолжает работать.
 
-| Текст ADR | Решение #1124 | Причина |
+| Вопрос | Решение | Причина |
 |---|---|---|
-| #805, «Адаптер»: сторонний адаптер, который возвращается сразу после старта worker, завершает исполнение | Правило жизни обязательно для любого адаптера, стандартного и нового, если brief содержит `execution`: адаптер живёт столько же, сколько worker, держит его в своей группе или job, не читает свой stdin, передаёт промпт аргументом или файлом, пишет поток событий worker-а в stdout и возвращает код выхода worker-а. Контракт записан в playbook, раздел «Role order, liveness, and transport» | Супервизор видит только адаптер. Адаптер, который отпускает worker, делает выход лидера ложным доказательством выхода worker-а, а остановка группы до worker-а не доходит. |
-| Варианты для Claude: A — `os.execv` в `claude`, B — ожидание на переднем плане, C — runtime следит за чужой сессией | B на всех платформах: адаптер ждёт `claude -p` через `subprocess.run` и возвращает его код | На Windows `os.exec*` запускает новый процесс и завершает вызывающий, поэтому лидер job ушёл бы сразу, и ошибка повторилась бы. B оставляет один путь кода, worker остаётся в группе или job адаптера, а код выхода передаётся явно; цена — один простаивающий процесс Python на worker. C отменяет правило «выход лидера — выход worker-а», которое задача менять не может. |
+| Правило жизни адаптера | Правило жизни обязательно для любого адаптера, стандартного и нового, если brief содержит `execution`: адаптер живёт столько же, сколько worker, держит его в своей группе или job, не читает свой stdin, передаёт промпт аргументом или файлом, пишет поток событий worker-а в stdout и возвращает код выхода worker-а. Контракт записан в playbook, раздел «Role order, liveness, and transport» | Супервизор видит только адаптер. Адаптер, который отпускает worker, делает выход лидера ложным доказательством выхода worker-а, а остановка группы до worker-а не доходит. |
+| Запуск worker-а Claude: A — `os.execv` в `claude`, B — ожидание на переднем плане, C — runtime следит за чужой сессией | B на всех платформах: адаптер ждёт `claude -p` через `subprocess.run` и возвращает его код | На Windows `os.exec*` запускает новый процесс и завершает вызывающий, поэтому лидер job ушёл бы сразу, и ошибка повторилась бы. B оставляет один путь кода, worker остаётся в группе или job адаптера, а код выхода передаётся явно; цена — один простаивающий процесс Python на worker. C отменяет правило «выход лидера — выход worker-а», которое задача менять не может. |
 | Отсоединённый запуск адаптеров | Сохраняется только для brief без `execution`: файловый ledger или runtime без `execution.launch` | `delivery._run_adapter` ждёт адаптер синхронно и без таймаута. Адаптер, который не отсоединяет worker, держал бы `dispatch send` всё время работы worker-а. |
 | Промпт не передаётся через stdin | Адаптер Codex обслуживает ход в своём процессе: без повторного запуска `_run`, без задания в stdin и без receipt. Промпт уходит в запросе `turn/start` по закрытому JSON-RPC-каналу `codex app-server` (его stdio) | Адаптер не читает свой stdin, под runtime это `/dev/null`. Канал app-server — протокол самого app-server, а не передача промпта через stdin надзираемого процесса. |
 | Код выхода исполнения | Адаптер возвращает код worker-а, а для сигнала N — `128 + N`, как в shell. Codex возвращает 0 после завершённого хода; если app-server вышел раньше, его ненулевой код или 1; при другой ошибке адаптера — 1. `runtime_failure` вида `worker-exited-without-report` получает `exit_code` из свидетельства выхода | Оператор видит код worker-а в `dispatch status` и `dispatch observe`. Сигналы кодируются так же, как в разделе 4. |
-| Двоичный файл worker-а ищется в окружении coordinator | Ответ `status` содержит `search_path` — PATH окружения `harness-runtime serve` или `null`, если PATH не задан | Runtime запускает worker со своим окружением, поэтому `claude` и `codex` адаптера ищутся в этом PATH. Поле раскрывает только PATH процесса того же пользователя через его закрытый сокет. |
+| Поиск двоичного файла worker-а | Ответ `status` содержит `search_path` — PATH окружения `harness-runtime serve` или `null`, если PATH не задан | Runtime запускает worker со своим окружением, поэтому `claude` и `codex` адаптера ищутся в этом PATH. Поле раскрывает только PATH процесса того же пользователя через его закрытый сокет. |
 
 Как работает реализация:
 

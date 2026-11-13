@@ -8,36 +8,33 @@ operational state после одного cutover, который выходит
 
 ## Контекст системы
 
-Сейчас operational state целиком принадлежит Python `LifecycleLedger`
+До cutover operational state целиком принадлежит Python `LifecycleLedger`
 (`harness/orchestration/ledger/lifecycle.py`):
 
-- корень состояния `.harness/orchestration/state` (`core/constants.py:15`), указатель `ledger.json`
-  ровно с полями `{version, generation, selected_at}` (`lifecycle.py:880-913`), версии
-  `SUPPORTED_LEDGER_VERSIONS = (1, 2, 3)` (`lifecycle.py:37`); записи лежат в
+- корень состояния `.harness/orchestration/state` (`core/constants.py`), указатель `ledger.json`
+  ровно с полями `{version, generation, selected_at}`, версии
+  `SUPPORTED_LEDGER_VERSIONS = (1, 2, 3)` (`lifecycle.py`); записи лежат в
   `generations/generation-<hex>/{batches,dispatches,dispatch-status,risk-assessments,qa-lane,audit,...}`;
-- запись — `write_immutable` с `open("x")` (`:1230-1252`) или `replace` через `_atomic_write`
-  (tmp-файл и `os.replace`, `:1339-1350`); `fsync` в ledger нет;
+- запись — `write_immutable` с `open("x")` или `replace` через `_atomic_write`
+  (tmp-файл и `os.replace`); `fsync` в ledger нет;
 - audit — отдельный файл `audit/audit-<uuid4>.json` на каждое событие с собственным
-  `record_sha256` (`_append_audit`, `:1660-1671`). **Цепочки хэшей нет:** порядок не задан,
-  удаление файла не обнаруживается, `_validate_audit` (`:1838-1848`) проверяет только целостность
-  каждой записи и вызывается из `records_root()` (`:926-946`) при каждом чтении — O(N) на команду;
-- один глобальный замок: каталог `.coordinator.lock` с `owner.json` (`lock`, `:651-669`),
-  flock-guard `.coordinator.lock.release` берётся только при снятии (`_guard_byte`, `:148-163`);
+  `record_sha256` (`_append_audit`). **Цепочки хэшей нет:** порядок не задан,
+  удаление файла не обнаруживается, `_validate_audit` проверяет только целостность
+  каждой записи и вызывается из `records_root()` при каждом чтении — O(N) на команду;
+- один глобальный замок: каталог `.coordinator.lock` с `owner.json` (`lock`),
+  flock-guard `.coordinator.lock.release` берётся только при снятии;
   вердикты `owner-alive`, `owner-dead`, `owner-in-other-environment`, `owner-unknown-stale`,
-  `owner-unknown-recent`, `owner-on-another-host` (`ledger_admin.py:130-166`), таймаут
-  `LEDGER_LOCK_STALE_SECONDS = 3_600` (`core/constants.py:196`);
-- QA-lane — `qa-lane/lease.json`, очередь `qa-lane/queue/<seq>-<id>.json` (`qa_lane.py:181-198`);
-  #780 (только в `integration/orchestration-ledger`, 7cef1d7) добавил ожидание замка до 30 с при
+  `owner-unknown-recent`, `owner-on-another-host` (`ledger_admin.py`), таймаут
+  `LEDGER_LOCK_STALE_SECONDS = 3_600` (`core/constants.py`);
+- QA-lane — `qa-lane/lease.json`, очередь `qa-lane/queue/<seq>-<id>.json` (`qa_lane.py`);
+  #780 добавил ожидание замка до 30 с при
   откате и правило «снимается только lease, совпадающий со взятым»;
 - лимит параллельности в ledger не хранится: `concurrency_budget` — только поле контракта
-  (`contract.py:43`);
+  (`contract.py`);
 - CLI coordinator возвращает 0 и JSON в stdout при успехе, 2 и `ERROR:`/`REMEDY:` в stderr для
-  любой `HarnessError` (`harness/errors.py:33-39`, `coordinator.py:211-236`), 1 — для
+  любой `HarnessError` (`harness/errors.py`, `coordinator.py`), 1 — для
   непредвиденного исключения; `ledger_busy` — поле успешного ответа `dispatch status`
-  (`workflow/delivery.py:565-575`), а не код ошибки.
-
-В репозитории нет ни Rust-кода (`Cargo.toml`, `native/`), ни SQLite в orchestration (единственный
-`sqlite3` — `scripts/memory_vector_worker.py`).
+  (`workflow/delivery.py`), а не код ошибки.
 
 ## Действующий контракт
 
@@ -47,7 +44,7 @@ Operational state живёт ровно в одной эпохе:
 
 | Эпоха | Writer | Читатели | Признак |
 |---|---|---|---|
-| `file-ledger` (сейчас → cutover) | Python `LifecycleLedger` установки 1.x | Python 1.x | `ledger.json.version ∈ {1,2,3}` |
+| `file-ledger` (до cutover) | Python `LifecycleLedger` установки 1.x | Python 1.x | `ledger.json.version ∈ {1,2,3}` |
 | `runtime-store` (после cutover) | Rust runtime (`native/harness-runtime`, crate `state`) | Python только через IPC `runtime_client.py` | `ledger.json.version = 4` + `state/AUTHORITY.json` |
 
 Одновременной записи в оба хранилища нет ни в какой момент, включая миграцию и откат. Python
@@ -104,18 +101,11 @@ Operational state живёт ровно в одной эпохе:
   согласовавший более старый minor, отвечает `protocol_unsupported` с указанием обновить runtime, а
   не `malformed_request`. Бюджеты `dispatch status` на копии state этого репозитория: без фильтра
   ≤ 2 с, с `--batch` ≤ 0.5 с по p95; `tests/orchestration/test_runtime_store_measure.py` проверяет
-  их на источнике любой эпохи (следующие два пункта).
-- **Замер 2026-11-05** на консистентной копии живого store: 190 dispatch, 53 batch, 190 записей
-  `dispatch-status`, 418 записей audit, `runtime.db` 45 346 816 байт. При 30 прогонах каждой
-  команды `dispatch status` дал p50 0,954 с, p95 1,104 с, p99 1,108 с, а `dispatch status
-  --batch` — p50 0,330 с, p95 0,407 с, p99 0,452 с; оба бюджета выполнены. До cutover, 2026-11-03
-  на файловом ledger при 478 dispatch, `dispatch status` удерживал замок ledger 398 с (тикет #946,
-  T26 base #795): бюджет 2 с в той эпохе не выполнялся. Порог ≥478 dispatch относится к файловому
-  ledger этой даты и в store не воспроизводится: store содержит меньше dispatch, поэтому копия
-  измеряется в фактическом размере, а не догоняется до 478.
-- Измерение принимает источник любой эпохи. Копию file-ledger тест по-прежнему прогоняет через
+  их на источнике любой эпохи (следующий пункт).
+- Измерение принимает источник любой эпохи. Копию file-ledger тест прогоняет через
   `harness-runtime migrate` и проверяет порог ≥478 dispatch, так что замер «до и после» на одной
-  legacy-копии остаётся. Копию эпохи store тест измеряет напрямую: `runtime.db` снимается через
+  legacy-копии остаётся. Порог 478 равен размеру файлового ledger этого репозитория, на котором
+  приняты бюджеты; в store он не воспроизводится, поэтому копию store тест измеряет в фактическом размере. Копию эпохи store тест измеряет напрямую: `runtime.db` снимается через
   SQLite backup API вместе с указателями `ledger.json` и `AUTHORITY.json`, фаза `migrate`
   пропускается, а размер берётся из таблиц store, а не из файлового поколения.
 - QA-lane — singleton-строка `qa_lane(id=1, owner_kind, owner_id, fencing_token, expires_at)`.
@@ -330,35 +320,24 @@ audit-запись шага 7, продолжает с шага 8 по поко�
 
 ### 6. Поставка и работа до cutover
 
-Integration-ветки поставляются цепочкой: дочерние PR → `integration/orchestration-ledger` и
-`integration/container-executor` → integration-ветка Harness Next
-`integration/harness-runtime-reliability` → `master` одним релизом **2.0.0** (major: указатель
-`version: 4`, обязательный Rust runtime). Ни одна из этих integration-веток не попадает в `master`
-раньше Harness Next. Поэтому изменения файлового ledger из `integration/orchestration-ledger` дойдут
-до пользователей только вместе со store, который их заменяет, и в 2.0.0 файловый ledger служит лишь
-источником миграции и форматом отката. Rust-компонент не получает временной Python-реализации, а
-Python-доработки файлового ledger, которые store заменяет, не реализуются:
+Harness Next выходит из `integration/harness-runtime-reliability` в `master` одним релизом
+**2.0.0** (major: указатель `version: 4`, обязательный Rust runtime). В 2.0.0 файловый ledger
+служит лишь источником миграции и форматом отката. Rust-компонент не получает временной
+Python-реализации. Python-доработки файлового ledger, которые store заменяет, не реализуются: их
+статус Superseded-by-Harness-Next, а их критерии выполняет store. Снятие lease мёртвого владельца
+по идентичности процесса описывает раздел 7, инкрементальную проверку audit описывает раздел 4,
+конкурентность и порядок блокировок описывает раздел 3. Policy-исправления на Python (например, #781 в
+`workflow/recovery.py` и `workflow/risk.py`) остаются после cutover. Какие ветки и коммиты вошли в
+Harness Next, определяет ADR 0026, раздел 1.
 
-| Issue | Решение |
-|---|---|
-| #776 / PR #780 | Уже в `integration/orchestration-ledger`; правило «снимается только свой lease» переходит в fencing QA-lane (раздел 3). |
-| #777 | **Superseded-by-Harness-Next** как Python-реализация. Критерии переходят на store и миграцию: мёртвый владелец lease снимается без оператора по идентичности процесса (раздел 7), живой — никогда, каждое автоматическое снятие попадает в audit; legacy-замок, оставленный процессом 1.x, при `migrate` получает прежние вердикты (`ledger_admin.py:130-166`). |
-| #778 | **Superseded-by-Harness-Next** как Python-кэш. Критерии переходят на store: инкрементальная проверка по checkpoint audit-цепочки, `validate --full` без кэша, удалённый checkpoint → полная проверка, замер до и после (раздел 4). |
-| #779 | **Superseded-by-Harness-Next**: замки на batch в файловом ledger — новая архитектура конкурентности, которую store заменяет целиком. Критерии (параллельные batch, согласованное чтение, последовательный QA-lane, совместимость CLI, ADR порядка блокировок) переходят на store; требование ADR выполняет раздел 3. |
-| #781 | Исправляется в Python `workflow/recovery.py` и `workflow/risk.py`: это policy, которая остаётся на Python после cutover, поэтому исправление не временное и может выйти в `master` до 2.0.0 (у задачи нет эпика). Store добавляет CHECK-ограничение и repair при миграции (раздел 5). |
-
-Доработки файлового ledger и Python store из `integration/orchestration-system-fields` (#699,
-#701, #703, #712, #728, #735) тоже Superseded-by-Harness-Next; разбор по коммитам — ADR 0026,
-раздел 1.
-
-**Обновление до 2.0.0.** `harness update` до 2.0.0 сначала проверяет предусловия `migrate`
-(шаг 1) и при отказе не устанавливает 2.0.0. Затем он устанавливает файлы и запускает
-`harness-runtime migrate`. Если migrate прервался (код 3 или 4), authority остаётся у файлового
-ledger, coordinator 2.0.0 отказывает с кодом 2, а remedy — повтор `migrate` или возврат на 1.x.
+**Обновление до 2.0.0.** `harness update` устанавливает файлы, но cutover не выполняет: `migrate`
+запускает человек с approval (раздел 5). Пока cutover не выполнен или если migrate прервался
+(код 3 или 4), authority остаётся у файлового ledger, coordinator 2.0.0 отказывает с кодом 2, а
+remedy — повтор `migrate` или возврат на 1.x.
 
 Если до 2.0.0 зависшие замки файлового ledger станут недопустимыми для работы, исправление
-выпускается отдельным hotfix-тикетом от `master` (1.x), а не через `integration/orchestration-ledger`.
-До тех пор действуют `ledger lock-status` и `release-lock --force` (#759).
+выпускается отдельным hotfix-тикетом от `master` (1.x). До тех пор действуют `ledger lock-status`
+и `release-lock --force` (#759).
 
 ### 7. Идентичность процесса и lease
 
@@ -400,13 +379,6 @@ Lease и execution receipt в store хранят `boot_id`, inode PID-namespace,
   `cargo clippy --all-targets -- -D warnings`, `cargo test` в `native/harness-runtime`;
   rehearsal — `harness-runtime migrate` на копии state-каталога этого репозитория с замером
   `dispatch status`/`dispatch heartbeat` p50/p95/p99 до и после.
-- **Решения владельца (2026-10-20):** канонический эпик — #784, #783 закрыт как его дубликат;
-  integration-ветка Harness Next — существующая `integration/harness-runtime-reliability`
-  (`integration/harness-next-runtime` не создаётся); `integration/container-executor` и
-  `integration/orchestration-ledger` сначала вливаются в неё, затем всё выходит в `master` как
-  2.0.0, поэтому Python-исполнитель #704–#708 в `master` отдельно не попадает, а его граница движка
-  (`container_executor.run_engine`) переходит к Rust до 2.0.0; #709, #777, #778 и #779 стоят в
-  `status::blocked` до появления тикетов Rust-фундамента и store.
 - **Откат на 1.x:** `rollback --to-legacy` экспортирует состояние в формат v3, поэтому после него
   state-каталог снова читает установка 1.x; её `ledger validate` завершает откат. Перед откатом
   оператор останавливает `serve` (иначе код 2 на замке экземпляра) и дожидается пустой QA-lane;

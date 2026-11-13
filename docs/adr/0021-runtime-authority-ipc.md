@@ -1,6 +1,7 @@
 # Граница Rust runtime: authority, IPC и идемпотентность
 
-**Статус: ACCEPTED (2026-10-20).** Эпик #784, ADR 0019, ADR 0020, ADR 0026. Документ фиксирует,
+**Статус: ACCEPTED (2026-10-20). Частично заменён ADR 0026 (раздел 4: писатель пары Release
+Gate).** Эпик #784, ADR 0019, ADR 0020, ADR 0026. Документ фиксирует,
 кто владеет каждой сущностью, как Python обращается к Rust runtime и почему повтор после
 потерянного ответа не исполняет операцию дважды. Хранилище, миграцию и audit описывает ADR 0020,
 процессы и OCI — ADR 0022, проверки — ADR 0023, профили hooks — ADR 0024, импорт веток и Release
@@ -10,17 +11,15 @@ Gate — ADR 0026.
 
 По ADR 0003 ядро `harness/orchestration/` на Python владеет batch, dispatch, approval, immutable
 audit, очередью QA и решением о публикации. Approval связывает переход через `transition_digest`
-по полям `TRANSITION_FIELDS` (`operational_guards.py:18-32`): batch, роли, `candidate_sha`,
+по полям `TRANSITION_FIELDS` (`operational_guards.py`): batch, роли, `candidate_sha`,
 `base_sha`, `review_scope`, `verification_commands`, `context_package_id`, `required_gates`.
-Необязательные привязки (`OPTIONAL_TRANSITION_FIELDS`, `:36-43`) и `runtime_access_sha256`
-(`:45`) добавляют план доступа, recovery-событие и повтор инфраструктуры; `retry_idempotency_key`
-(`:158`) уже делает повтор developer-retry идемпотентным. `allowed_tools` попадает в brief
-(`workflow/dispatch.py:1282`), но в transition digest не входит.
+Необязательные привязки (`OPTIONAL_TRANSITION_FIELDS`) и `runtime_access_sha256` добавляют план
+доступа, recovery-событие, повтор инфраструктуры и `allowed_tools`; `retry_idempotency_key`
+делает идемпотентным повтор read-only ролей и publish.
 
-Контейнерный исполнитель ADR 0025 живёт в Python (`harness/orchestration/container_executor.py`)
-и вызывает движок через `subprocess.run`. Процесс coordinator выполняет и решение, и запись, и
-запуск, поэтому SIGKILL между запуском и записью оставляет контейнер без записи о нём, а повтор
-команды не знает, что запуск уже был.
+Если один процесс coordinator выполняет и решение, и запись, и запуск контейнера, SIGKILL между
+запуском и записью оставляет контейнер без записи о нём, а повтор команды не знает, что запуск
+уже был.
 
 ## Действующий контракт
 
@@ -44,7 +43,7 @@ audit, очередью QA и решением о публикации. Approval
 | Effective hook policy (ADR 0024) | Python resolver | Rust store в составе brief | Rust и hook-адаптеры | `hook_policy_sha256` |
 | Pinned configuration snapshot (#690, ADR 0026) | Python config boundary | Rust store в составе brief | Python при приёме evidence | `configuration_sha256` |
 | Счётчик `attempt` dispatch | Python (retry, повтор QA после infra-сбоя) | Rust store | оба | CAS по `revision` |
-| Пара Release Gate (ADR 0026, раздел 4) | Python `integration next` | Rust store | Python | `candidate_sha`, `target_sha`, `candidate_tree_sha` |
+| Пара Release Gate (ADR 0026, раздел 4) | Python `dispatch publish`, `integration prepare` и refresh; `integration next` только читает | Rust store | Python | `candidate_sha`, `target_sha`, `candidate_tree_sha` |
 | Реестр закрытых словарей `systemFields.v1` | человек через PR | файлы репозитория | Python и Rust | drift-проверка в CI (раздел 3) |
 | Git-операции и publish | Python coordinator | Git | — | вне контейнера, как в ADR 0025 |
 | Проектный конфиг | человек | файлы репозитория | Python | Rust получает только digest в плане |
@@ -165,7 +164,7 @@ Python не пишет в store и не запускает процессы и �
 
 - Lease хранит владельца, `fencing_token` и `expires_at`. Владелец продлевает lease heartbeat-ом
   не реже чем через треть срока. Срок — ключ `lease_ttl_seconds` в `.harness/orchestration.json`,
-  закреплённый в brief; значение по умолчанию задаёт тикет store вместе со схемой конфига.
+  закреплённый в brief; значение по умолчанию 300 с.
 - Истёкший `expires_at` сам lease не снимает: он только запускает проверку живости владельца по
   идентичности процесса (ADR 0020, раздел 7). Снятие — по доказанной смерти владельца или его
   собственной командой с совпадающим `fencing_token`. Живой владелец с истёкшим сроком остаётся
@@ -230,5 +229,5 @@ QA-evidence пары `{candidate_sha, target_sha}` правилам ADR 0023 (р
   отвергается; drift реестра `systemFields.v1` против Rust или Python валит CI.
 - **Команды проверки:** `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
   `cargo test` в `native/harness-runtime`;
-  `.harness/.venv/bin/python -m pytest -q tests/orchestration/test_runtime_client.py` (новый),
+  `.harness/.venv/bin/python -m pytest -q tests/orchestration/test_runtime_client.py`,
   `make verify`.

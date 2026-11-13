@@ -1,14 +1,10 @@
 # Встроенный контейнерный исполнитель
 
-**Реализация в Rust runtime (#807).** Argv движка, запуск, наблюдение, остановку и удаление
-worker-а выполняет `harness-runtime` (ADR 0022); Python проверяет план и закреплённые digest.
-Четыре отступления от этого документа, принятые оператором (значения `environment` из окружения
-runtime, удаление объектов при выходе исполнения, at-most-once staged launch, только эпоха
-runtime store на Linux), записаны в ADR 0022, раздел «Решения реализации #807». Контейнерный
-QA (#810) монтирует план суженно: каталог clean-room на запись, `git_common` только на чтение и
-`cache` плана; это и другие его решения записаны в ADR 0022, раздел «Решения реализации #810».
-Базовый образ, guide и smoke с настоящим Docker (#710) описывает раздел «Решения реализации #710»
-ниже.
+**Статус: ACCEPTED. Частично заменён ADR 0022.** Argv движка, запуск, наблюдение, остановку и
+удаление worker-а и QA-команд выполняет `harness-runtime` (ADR 0022); Python проверяет план и
+закреплённые digest. Контракт ниже уже учитывает решения ADR 0022: значения `environment` из
+окружения runtime, удаление объектов при выходе исполнения, at-most-once staged launch, только эпоха
+runtime store на Linux и суженные монтирования контейнерного QA.
 
 ## Контекст системы
 
@@ -34,20 +30,24 @@ QA (#810) монтирует план суженно: каталог clean-room 
 - Монтируются только ресурсы плана, по тем же абсолютным путям: `read` → read-only, `write` →
   read-write. Это сохраняет `gitdir` linked worktree и аргументы `--repo`/`--brief`; `/workspace`
   и перезапись путей отклонены. Тёплые кэши — только `cache`-ресурсы плана; named volumes и
-  постоянный контейнер отклонены, чтобы весь доступ оставался видимым в плане.
+  постоянный контейнер отклонены, чтобы весь доступ оставался видимым в плане. Контейнерный QA
+  монтирует план суженно: `run_root` (каталог clean-room под `shared_storage`) на запись,
+  `git_common` только на чтение и `cache` плана; `artifacts`, issue worktree и весь
+  `shared_storage` не монтируются (ADR 0022).
 - `network.hosts` исполняется через egress-proxy allowlist: worker подключён к internal-сети без
   прямого выхода, а proxy — sidecar-контейнер того же dispatch из отдельного proxy-образа харнесса.
   На Podman proxy дополнительно подключается к отдельной внешней сети с DNS: у стандартной сети
   `podman` DNS отключён, а DNS internal-сети не разрешает внешние имена. Обе сети имеют labels
   dispatch и execution и удаляются после контейнеров. Worker к внешней сети не подключается (#943).
 - Секреты передаются только по именам переменных из компонента `environment` плана (`-e NAME`);
-  значения не попадают в конфиг, brief, argv и слои образа. Auth-файлы не монтируются.
+  значения берутся из окружения `harness-runtime serve` и не попадают в конфиг, brief, argv, IPC
+  и слои образа. Auth-файлы не монтируются.
 - Владелец файлов совпадает с пользователем хоста: rootful → `--user uid:gid`, rootless Podman →
   `--userns=keep-id`, rootless Docker → worker с явным `--user 0:0` (UID 0 внутри отображается на
   пользователя хоста независимо от `USER` образа; sidecar остаётся без флага пользователя и
   работает от `USER` своего образа). При SELinux enforcing — `label=disable`, без
-  перемаркировки файлов хоста. Движок и режим определяет `observe()` одним запросом
-  `<engine> info`; удалённый Podman, Docker с userns-remap и ответ, не совпадающий с выбранным
+  перемаркировки файлов хоста. Движок и режим `observe()` получает от runtime
+  (`container.observe`), а runtime делает один запрос `<engine> info`; удалённый Podman, Docker с userns-remap и ответ, не совпадающий с выбранным
   движком, блокируют запуск до старта worker-а. `HARNESS_EXECUTOR=docker` и имя расширения `docker`
   не меняются для всех движков. `safe.directory` и HOME задаются через env и tmpfs, поэтому образ
   worker-а может быть любым; поставляемый `Dockerfile.sandbox` — лишь типовая база.
@@ -58,13 +58,19 @@ QA (#810) монтирует план суженно: каталог clean-room 
   `observe()` и записывает digest worker- и proxy-образа в brief рядом с планом — в transition
   digest, но не в `plan_digest`. Handoff запускает образы по digest; отсутствующий или
   пересобранный образ — блокер и новый propose.
-- Handoff detached: `launch_id` — id контейнера. Все объекты получают метки dispatch и репозитория;
-  coordinator снимает exit code и удаляет их при terminal-состоянии dispatch, `harness cleanup`
-  убирает сирот. Живой worker без явной команды не останавливается.
-- Clean-room QA использует тот же исполнитель синхронно: каждая gate-команда — отдельный
-  foreground-контейнер (`--rm --init`) из образа, закреплённого в brief QA-dispatch, с планом
-  `operations.qa`. Exit code и потоки команды становятся её evidence; сигнал или таймаут
-  coordinator-а останавливают контейнер с grace-периодом. Sidecar-proxy и сеть живут весь QA run.
+- Handoff detached: `launch_id` — id контейнера. Все объекты получают метки dispatch и репозитория.
+  При выходе исполнения runtime сохраняет логи и exit code в `executions` и удаляет объекты;
+  незавершённое удаление повторяет reconcile. `harness cleanup` убирает сирот. Живой worker без
+  явной команды не останавливается.
+- Неудачный staged launch выполняется не больше одного раза: runtime откатывает созданные объекты,
+  а dispatch становится `blocked` без повторного запуска (ADR 0022).
+- Исполнитель работает только в эпохе runtime store и только на Linux. На файловом ledger и вне
+  Linux `dispatch preflight` блокирует его с remedy.
+- Clean-room QA использует тот же исполнитель синхронно, если задан
+  `access_policy.operations.qa.container`: каждая gate-команда — отдельный foreground-контейнер
+  (`--rm --init`) из образа, закреплённого в brief QA-dispatch, с планом `operations.qa`. Exit code
+  и потоки команды становятся её evidence; по сроку команды runtime останавливает контейнер с
+  grace-периодом. Sidecar-proxy и сеть живут весь QA run.
 
 ## Операционные последствия
 
@@ -72,9 +78,8 @@ QA (#810) монтирует план суженно: каталог clean-room 
   командой из guide, харнесс образы не собирает и не скачивает.
 - Хост LLM API должен быть явно перечислен в `network.hosts`; ssh-remote через proxy не работает.
 - Тесты идут через публичный путь coordinator с подменённым исполнителем команд движка; smoke с
-  настоящим Docker выполняется в CI и исключён из `make verify`. Поддержка Podman и rootless Docker
-  проверена только матрицей ответов движка (argv), но не настоящим smoke, и остаётся непроверенной
-  на живом движке.
+  настоящим движком выполняется в CI и исключён из `make verify`. Границу проверки движков описывает
+  раздел «Решения реализации #710».
 
 ## Решения реализации #710
 
@@ -83,7 +88,7 @@ QA (#810) монтирует план суженно: каталог clean-room 
 
 | Текст ADR | Решение #710 | Причина |
 |---|---|---|
-| Флаги агента, включая отключение внутреннего sandbox, задаёт проектный адаптер | Пример адаптера в guide передаёт только allowlist из `brief.allowed_tools`, сохраняет native approval и не отключает sandbox агента; отключение остаётся решением проекта вне примера | Ни один пример не содержит auto-approve и обхода безопасности. |
+| Флаги агента, включая отключение внутреннего sandbox, задаёт проектный адаптер | Guide ссылается на поставляемый адаптер `claude_worker.py` (раздел «Решения реализации #1125») | Ни один пример не содержит auto-approve и обхода безопасности. |
 | Smoke с настоящим Docker исключён из `make verify` | Маркер `docker_smoke` отбрасывает `addopts` в `pyproject.toml` для любого прогона pytest по умолчанию (`make verify`, `make test`, coverage, diff-coverage); CI job `docker-smoke` выбирает его явно через `-m docker_smoke`, а модуль smoke внесён в `EXCLUDED_FROM_GATE` diff-coverage | Один источник исключения: машина разработчика с Docker не запускает smoke случайно, а gate не считает отброшенные строки непокрытыми. |
 | Образ собирает пользователь командой из guide | Guide поставляется только с `backend-orchestration` как `.harness/docs/container-executor.md` из `harness/docs/`, на английском, как соседние контракты агентов; корневой `docs/` в целевой проект не копируется | Guide читают агенты и пользователи целевого проекта. |
 
@@ -143,7 +148,7 @@ code-review написал отчёт, но `dispatch wait` закончился
   `<engine> logs <id>` в `stdout.log.partial` и `stderr.log.partial` и переименовывает их поверх
   логов. Ошибка снимка не меняет состояние execution: выход сохраняет логи заново.
 - **Self-report на хосте.** `container_attestation.attest` работает только для `running`
-  execution docker-плана (с #1125 — и `exited`). Он читает полные строки первых 4 МиБ снимка, берёт первое событие
+  и `exited` execution docker-плана. Он читает полные строки первых 4 МиБ снимка, берёт первое событие
   `{"type": "system", "subtype": "init"}` и вызывает `record_self_report`: ту же функцию, что и
   `dispatch self-report`. Worktree — путь ресурса `checkout` закреплённого плана. Записи
   `model_self_report` и `worktree_attestation` получают `source: container-host`, а attestation —

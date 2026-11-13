@@ -7,31 +7,10 @@
 
 ## Контекст системы
 
-Сейчас (`master` 3556b16):
-
-- Hooks поставляются только для одного coding runtime: шаблон `harness/project/settings.local.json.tmpl`
-  устанавливается в `.claude/settings.local.json`, скрипты — в `.claude/hooks/` (`SEED_FOLDERS`,
-  `harness/uninstall.py:39-44`). Шаблона для `.codex/hooks.json` нет; путь лишь учитывается в
-  `validate_integrations` (`harness/health/project_files.py:458`).
-- Установка (`harness init|adopt|update`, `scaffold_pvmalove_extras`, `harness/bin/harness.py:870`)
-  копирует файл, только если его нет. Отличающийся файл остаётся как есть и попадает в
-  предупреждение. Файл настроек заменяется целиком или не заменяется вовсе, поэтому пользователь
-  со своим hook-ом не получает новых managed hooks.
-- `harness health` проверяет только наличие bash на Windows (`check_hook_bash`); присутствие,
-  исполняемость и подключение hooks не проверяются.
-- Ключей профиля, уровня строгости или режима отказа нет ни в одной схеме. Fail-closed —
-  соглашение кода: блокирующие hooks при внутренней ошибке завершаются с кодом 2
-  (`qa-gate-state.py:292-296`, `block-direct-master.sh:5-6`).
-- Digest политики hooks в brief нет; `allowed_tools` в brief есть, но в transition digest не
-  входит.
-
-Текущие hooks:
-
-| Класс | Hooks |
-|---|---|
-| Критические, блокируют | `block-public-attribution`, `block-direct-master`, `block-pr-merge`, `check-branch-name`, `check-worktree-branch-name`, `block-dangerous-git`, `block-scratch-outside-docs-tasks`, `require-qa-gate`, `test-author-guard` |
-| Поведенческие | `require-bounded-check` (не даёт запускать полный набор в обход `test_summary.py`) |
-| Учётные, не блокируют | `count-skill-usage`, `mark-qa-gate-passed` |
+Hooks одного набора скриптов ставятся в каждый coding runtime проекта. Блокирующие hooks защищают
+границы высокого риска, а поведенческие подсказывают роли следующий шаг. Проектам нужна разная
+строгость поведенческой части, но критические guard-ы не должны зависеть от настроек. Поэтому
+строгость задаёт профиль, а набор критических guard-ов одинаков во всех профилях.
 
 ## Действующий контракт
 
@@ -41,9 +20,8 @@
   `{profile: minimal|standard|strict, escalations: [{paths, roles, profile}]}`. Схема
   `harness/project/project.schema.json` и `validate_project_json` меняются вместе, как требует
   AGENTS.md.
-- Без ключа действует `standard`. Его блокирующий набор равен сегодняшнему, поэтому существующие
-  проекты не меняют поведения без явной миграции. Новый проект через `start-project` и
-  `integrate-project` получает `standard` явно.
+- Без ключа действует `standard`. Новый проект через `start-project` и `integrate-project`
+  получает `standard` явно.
 - `escalations` только повышают профиль для путей или ролей; понижение отвергается валидатором.
   Порядок: базовый профиль → самая строгая подходящая эскалация.
 - Источник профиля — только `hook_policy` в `.harness/project.json`. Переменные окружения
@@ -56,9 +34,9 @@
     блок.
   - Запись в `.harness/project.json` через shell (`sed -i`, перенаправление, `tee` и подобные)
     не пропускается молча, потому что её результат нельзя вычислить до исполнения: в Claude Code
-    guard отвечает вердиктом `ask`, и запись выполняется только после ручного подтверждения человека
-    (поправка 2026-11-07, #938); вне Claude Code она блокируется. Жёсткий отказ той же команды
-    (настройки и каталоги hooks) сильнее вопроса.
+    guard отвечает вердиктом `ask`, и запись выполняется только после ручного подтверждения человека;
+    вне Claude Code она блокируется. Жёсткий отказ той же команды (настройки и каталоги hooks)
+    сильнее вопроса.
 
 ### 2. Профили
 
@@ -101,11 +79,11 @@ Hooks ставятся в проект, поэтому действуют для
 | `block-scratch-outside-docs-tasks` | Write, Edit | критический | блок | блок | блок | блок | нет |
 | `require-qa-gate` | Bash: создание PR | критический | блок | блок | блок | блок | `qa_evidence_verify` |
 | `test-author-guard` | Write, Edit, Bash субагента test-author (роль developer) | критический | блок | блок | блок | блок | нет |
-| `protect-hook-policy` (новый) | Write, Edit, Bash | критический | блок | блок | блок | блок | `hook_policy_sha256` в brief |
+| `protect-hook-policy` | Write, Edit, Bash | критический | блок | блок | блок | блок | `hook_policy_sha256` в brief |
 | `require-bounded-check` | Bash: полный прогон | поведенческий | предупр. | блок | блок | разрешает | `VerificationPlan` |
-| `impact-first-touch` (новый) | Write, Edit рискованного пути | поведенческий | нет | предупр. | предупр. | разрешает | ChangeImpact-gate (ADR 0023) |
-| `targeted-check-reminder` (новый) | завершение хода роли | поведенческий | нет | предупр. | предупр. | разрешает | сверка `checks_run` |
-| `sensitive-path-recheck` (новый) | Write, Edit чувствительного пути | поведенческий | нет | нет | предупр. и evidence | разрешает | граница `strict` ниже |
+| `impact-first-touch` | Write, Edit рискованного пути | поведенческий | нет | предупр. | предупр. | разрешает | ChangeImpact-gate (ADR 0023) |
+| `targeted-check-reminder` | завершение хода роли | поведенческий | нет | предупр. | предупр. | разрешает | сверка `checks_run` |
+| `sensitive-path-recheck` | Write, Edit чувствительного пути | поведенческий | нет | нет | предупр. и evidence | разрешает | граница `strict` ниже |
 | `count-skill-usage` | Skill | учётный | да | да | да | разрешает | — |
 | `mark-qa-gate-passed` | PostToolUse Bash | учётный | да | да | да | разрешает | — |
 | `runtime-autostart` (только Claude Code, ADR 0031) | PreToolUse Bash с coordinator, Stop, SubagentStop | операционный | предупр. | предупр. | предупр. | разрешает | remedy `[runtime_unavailable]` |
@@ -113,14 +91,14 @@ Hooks ставятся в проект, поэтому действуют для
 - Вспомогательные скрипты (`record-qa-gate-pass`, `run-test`, `test-author-preflight`,
   `qa-gate-state.py`, `direct_commits.py`, `pr_commands.py`, `tracker-issue.py`) вызываются
   hooks или skills и сами событием не подключены, поэтому в матрицу не входят.
-- Новые hook_id реализуют поведение из таблицы раздела 2; `protect-hook-policy` — решение
-  владельца D8 (ADR 0026).
+- `impact-first-touch`, `targeted-check-reminder` и `sensitive-path-recheck` реализуют поведение
+  из таблицы раздела 2; `protect-hook-policy` — решение владельца D8 (ADR 0026).
 - Fail-closed на границах высокого риска `strict` — не hook, а проверка coordinator и Rust при
   `dispatch propose` review и QA, `qa run` и publish (раздел 2).
 - Каждый runtime получает одни и те же скрипты. Если у runtime нет события строки, `harness health`
   (`hooks.policy`) сообщает это. Для критического hook-а защиту тогда даёт только «Проверка вне
   hook»; при значении «нет» это предупреждение health, а не тихий пропуск.
-- Новые hook_id входят в реестр `systemFields.v1`; ответ hook-а с неизвестным `hook_id` или
+- Hook_id матрицы входят в реестр `systemFields.v1`; ответ hook-а с неизвестным `hook_id` или
   `reason_code` — ошибка контракта.
 
 ### 3. Исполнение и привязка к approval
@@ -129,18 +107,16 @@ Hooks ставятся в проект, поэтому действуют для
   эскалации, набор критических guard-ов, версии hooks. Единственный писатель сгенерированного
   `.harness/hook-policy.json` — установка (`harness init`, `adopt`, `update`); файл содержит
   `{schema, policy, hook_policy_sha256, critical_guards, hook_versions}`.
-- Уточнение (2026-11-03, #829): `hook_policy_sha256` файла — digest только раздела `policy`
-  (нормализованные профиль и эскалации `hook_policy`), посчитанный той же функцией, которой
-  `dispatch create` закрепляет brief. Поэтому digest файла равен `hook_policy_sha256` brief-а для
-  той же конфигурации, а формула, пересчёт закреплённой политики в Python и Rust и уже выданные
-  brief-ы не меняются. `critical_guards` (hook_id критических строк матрицы 2a) и
-  `hook_versions` (SHA-256 байтов шаблонов `.claude/hooks/`) — факты установки вне digest: Rust
+- `hook_policy_sha256` файла — digest только раздела `policy` (нормализованные профиль и
+  эскалации `hook_policy`), посчитанный той же функцией, которой `dispatch create` закрепляет brief.
+  Поэтому digest файла равен `hook_policy_sha256` brief-а для той же конфигурации.
+  `critical_guards` (hook_id критических строк матрицы 2a) и `hook_versions` (SHA-256 байтов шаблонов `.claude/hooks/`) — факты установки вне digest: Rust
   пересчитывает digest только из `hook_policy` снимка brief-а, а ни одно решение файл не читает.
 - Некорректный `hook_policy` останавливает установку с кодом 2; существующий файл не меняется.
   Повторный `update` без изменения конфигурации оставляет файл байт-в-байт. `harness health`
   (`hooks.policy`) файл не пишет: отсутствие и расхождение с effective policy текущей конфигурации
   он сообщает как `warn`, исправляет их `harness update`.
-- `hook_policy_sha256` входит в `OPTIONAL_TRANSITION_FIELDS`, а `allowed_tools` добавляется в
+- `hook_policy_sha256` входит в `OPTIONAL_TRANSITION_FIELDS`, а `allowed_tools` входит в
   transition digest. Поэтому изменение конфига после approval не меняет запущенный dispatch и его
   QA-evidence.
 - Для операций, которые исполняет Rust runtime (запуск и QA), авторитетную проверку делает модуль
@@ -168,9 +144,9 @@ Hooks ставятся в проект, поэтому действуют для
 - `harness update` сливает файл настроек: managed-записи распознаются по пути команды
   `.claude/hooks/<имя шаблона>` и заменяются, остальные записи пользователя сохраняются.
   Конфликт (managed hook изменён пользователем) — предупреждение с перечнем, без перезаписи.
-- Существующие флаги `--force-seed-file` и `--force-seed-files` сохраняют смысл.
+- Флаги `--force-seed-file` и `--force-seed-files` сохраняют смысл.
 - Повторный `update` идемпотентен и выдаёт отчёт о миграции и проверке.
-- `harness health` получает проверку `hooks.policy`: effective profile и его источник,
+- `harness health` выполняет проверку `hooks.policy`: effective profile и его источник,
   эскалации, присутствие, исполняемость и подключение каждого критического hook-а, расхождение с
   шаблоном, отсутствие и дрейф `.harness/hook-policy.json` (раздел 3).
 
@@ -184,18 +160,18 @@ Hooks ставятся в проект, поэтому действуют для
   - `HOOK_PROFILE=minimal` в окружении игнорируется;
   - понижение через `escalations` отвергается;
   - правка `hook_policy` инструментом агента блокируется, а правка другого ключа
-    `.harness/project.json` через `Edit` разрешена; shell-запись в этот файл блокируется;
+    `.harness/project.json` через `Edit` разрешена; shell-запись в этот файл требует подтверждения
+    человека в Claude Code и блокируется вне него;
   - symlink на защищённый путь блокируется;
   - повторный вызов того же события даёт одно уведомление;
   - изменение конфига после approval не меняет решение по запущенному dispatch;
   - `strict` не блокирует команды восстановления и не зацикливается на первом касании;
   - внутренняя ошибка поведенческого hook-а разрешает, а критического — блокирует;
-  - legacy-проект без ключа ведёт себя как сейчас (сверка с `scripts/clean_room/project_hooks.py`);
+  - проект без ключа ведёт себя как `standard` (сверка с `scripts/clean_room/project_hooks.py`);
   - `update` сохраняет пользовательский hook и не дублирует managed.
 - **Замеры:** число вызовов hooks, дубликатов предупреждений и блокировок, время до первого
   полезного теста и время цикла developer-а по профилям. Профиль не увеличивает число полных
   прогонов.
 - **Команды проверки:** `.harness/.venv/bin/python -m pytest -q tests/health
-  tests/core/test_harness_cli_hardening.py tests/core/test_install_project_test_author.py
-  tests/core/test_runtime_adapters.py`, `.harness/.venv/bin/python scripts/test_clean_room.py`,
-  `harness health`, `make verify`.
+  tests/core/test_harness_cli_hardening.py tests/core/test_runtime_adapters.py`,
+  `.harness/.venv/bin/python scripts/test_clean_room.py`, `harness health`, `make verify`.
