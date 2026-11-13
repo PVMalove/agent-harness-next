@@ -43,6 +43,9 @@ PLATFORM_GROUP_JOBS = {
 }
 # The fast gate of the full path: no tests, but every suite waits for it.
 GATE_JOB = "lint"
+# The one debug build of harness-runtime on the full path: it waits for nothing, runs beside the
+# gate and is downloaded by every Linux suite that starts the runtime.
+BUILD_JOB = "runtime-build"
 # The jobs without tests keep their own condition on both paths.
 UNCHANGED_JOBS = {
     "private-terms": "github.event_name == 'pull_request'",
@@ -54,6 +57,7 @@ GROUPS_JOB = "verify-test-groups"
 ALL_JOBS = {
     LIGHT_JOB,
     GATE_JOB,
+    BUILD_JOB,
     "dashboard",
     *FULL_JOBS,
     *UNCHANGED_JOBS,
@@ -61,28 +65,29 @@ ALL_JOBS = {
     GROUPS_JOB,
     *PLATFORM_GROUP_JOBS,
 }
-# What each suite waits for: the fast gate, directly or through `rust`, whose debug build of
-# harness-runtime the Linux suites download; the long suites also wait for the public site.
+# What each suite waits for: the fast gate, directly or through `rust`, and the debug build of
+# harness-runtime that the Linux suites download; the long suites also wait for the public site.
 STAGES = {
     "rust": {GATE_JOB},
+    BUILD_JOB: set(),
     # The clean-room job never waits for the Linux groups; `verify-test-groups` confirms them.
-    "verify": {"docs", "rust"},
+    "verify": {"docs", GATE_JOB, BUILD_JOB},
     "verify-windows": {
         GATE_JOB,
         "docs",
         "verify-windows-unit",
         "verify-windows-integration",
     },
-    "verify-linux-unit": {"docs", GATE_JOB, LIGHT_JOB, "rust"},
-    "verify-linux-integration": {"docs", GATE_JOB, LIGHT_JOB, "rust"},
+    "verify-linux-unit": {"docs", GATE_JOB, LIGHT_JOB, BUILD_JOB},
+    "verify-linux-integration": {"docs", GATE_JOB, LIGHT_JOB, BUILD_JOB},
     "verify-windows-unit": {"docs", GATE_JOB, LIGHT_JOB},
     "verify-windows-integration": {"docs", GATE_JOB, LIGHT_JOB},
     GROUPS_JOB: PLATFORM_GROUP_JOBS,
     "diff-coverage": {GATE_JOB, "docs"},
     "repo-map-bundle": {"parser-bundle", GATE_JOB},
     "runtime-ipc-windows": {GATE_JOB},
-    "docker-smoke": {"rust"},
-    "fault-injection": {"rust"},
+    "docker-smoke": {GATE_JOB, BUILD_JOB},
+    "fault-injection": {GATE_JOB, BUILD_JOB},
 }
 # What the light job must never contain: each of these runs, or measures, the full suite.
 FULL_SUITE_MARKERS = (
@@ -292,12 +297,22 @@ class StageTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertEqual(_needs(jobs[name]), needs)
 
-    def test_the_linux_suites_download_the_one_debug_build_of_the_rust_job(
+    def test_the_build_job_is_on_the_full_path_and_builds_only_the_binary(self) -> None:
+        job = _jobs()[BUILD_JOB]
+
+        self.assertEqual(_condition(job), FULL_CONDITION)
+        self.assertIn("run: cargo build --locked --bin harness-runtime\n", job)
+        for marker in FULL_SUITE_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, job)
+
+    def test_the_linux_suites_download_the_one_debug_build_of_the_build_job(
         self,
     ) -> None:
         jobs = _jobs()
 
-        self.assertIn("name: harness-runtime-linux-debug", jobs["rust"])
+        self.assertIn("name: harness-runtime-linux-debug", jobs[BUILD_JOB])
+        self.assertNotIn("name: harness-runtime-linux-debug", jobs["rust"])
         for name in ("verify", "docker-smoke", "fault-injection"):
             with self.subTest(job=name):
                 self.assertIn("name: harness-runtime-linux-debug", jobs[name])

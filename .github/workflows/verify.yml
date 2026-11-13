@@ -157,9 +157,8 @@ jobs:
           .harness/.venv/bin/python scripts/check_public_metadata.py --commit-range "$COMMIT_RANGE" --exclude-reachable-from "$DEFAULT_BRANCH" --pr-body-file "$RUNNER_TEMP/pr-body.md"
 
   rust:
-    # Rust workspace of the runtime process (ADR 0019, ADR 0021): the tests and the one debug build
-    # of native/harness-runtime that the Linux suites below download instead of building it again;
-    # `lint` checked its format and Clippy. `rust-toolchain.toml` there pins the toolchain.
+    # Rust workspace of the runtime process (ADR 0019, ADR 0021): the tests; `lint` checked its
+    # format and Clippy, `runtime-build` builds the binary. `rust-toolchain.toml` pins the toolchain.
     needs: lint
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
@@ -174,6 +173,22 @@ jobs:
           workspaces: "native/harness-runtime -> target"
       - name: Test
         run: cargo test --locked
+
+  runtime-build:
+    # The one debug build of native/harness-runtime that the Linux suites below download instead of
+    # building it again. It waits for nothing and runs beside `lint`; every job that downloads it
+    # also waits for `lint`. The light path builds its own binary in `verify-light`.
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: native/harness-runtime
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.9.1
+        with:
+          workspaces: "native/harness-runtime -> target"
       - name: Build the debug harness-runtime binary (with test hooks)
         run: cargo build --locked --bin harness-runtime
       - name: Upload harness-runtime for the Linux suites
@@ -293,8 +308,8 @@ jobs:
     if: >-
       always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
       ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
-      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.rust.result == 'success'))
-    needs: [docs, lint, verify-light, rust]
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.runtime-build.result == 'success'))
+    needs: [docs, lint, verify-light, runtime-build]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -315,8 +330,8 @@ jobs:
     if: >-
       always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
       ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
-      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.rust.result == 'success'))
-    needs: [docs, lint, verify-light, rust]
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.runtime-build.result == 'success'))
+    needs: [docs, lint, verify-light, runtime-build]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -494,7 +509,7 @@ jobs:
   verify:
     # It never waits for the Linux test groups: on a pull request it runs only the clean-room
     # scenarios, beside the groups, and `verify-test-groups` confirms the four groups.
-    needs: [docs, rust]
+    needs: [docs, lint, runtime-build]
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     # The complete suite reached 81% after almost an hour on a hosted runner (#943).
@@ -521,7 +536,7 @@ jobs:
         run: chmod +x scripts/verify.py
       # The IPC seam tests (tests/orchestration/test_runtime_client.py) start this binary through
       # the coordinator CLI; a missing binary fails them here, it never skips them.
-      - name: Download the debug harness-runtime of the rust job
+      - name: Download the debug harness-runtime of the runtime-build job
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: harness-runtime-linux-debug
@@ -618,7 +633,7 @@ jobs:
     # every other pytest run; this job selects it explicitly, and its require flags turn a missing
     # engine, image or runtime into a failure instead of a skip. Podman and rootless Docker are
     # not covered by this job.
-    needs: rust
+    needs: [lint, runtime-build]
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -638,7 +653,7 @@ jobs:
           echo "::group::make bootstrap"
           make bootstrap
           echo "::endgroup::"
-      - name: Download the debug harness-runtime of the rust job
+      - name: Download the debug harness-runtime of the runtime-build job
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: harness-runtime-linux-debug
@@ -679,7 +694,7 @@ jobs:
     # harness-runtime, one marked test per scenario of tests/orchestration/fault_injection_matrix.py.
     # Only a debug build has the test hooks of the runtime. The require flags turn a missing runtime,
     # an unselected scenario or a skipped one into a failure, and nothing repeats a failed scenario.
-    needs: rust
+    needs: [lint, runtime-build]
     if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -699,7 +714,7 @@ jobs:
           echo "::group::make bootstrap"
           make bootstrap
           echo "::endgroup::"
-      - name: Download the debug harness-runtime of the rust job
+      - name: Download the debug harness-runtime of the runtime-build job
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: harness-runtime-linux-debug
@@ -990,7 +1005,7 @@ jobs:
     # after every other job, whatever their results, and only reads what they leave.
     if: always()
     needs:
-      [private-terms, docs, lint, rust, parser-bundle, verify-light, verify-test-groups, console-spa, verify, diff-coverage, docker-smoke, fault-injection, repo-map-bundle, verify-windows, runtime-ipc-windows]
+      [private-terms, docs, lint, rust, runtime-build, parser-bundle, verify-light, verify-test-groups, console-spa, verify, diff-coverage, docker-smoke, fault-injection, repo-map-bundle, verify-windows, runtime-ipc-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
