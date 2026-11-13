@@ -16,11 +16,11 @@ import pytest
 CLI = Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"
 
 FAKE_TOOL = """\
-import json, os, sys
+import json, os, sys, uuid
 folder = os.environ["FAKE_TRACKER_DIR"]
 argv = [os.path.splitext(os.path.basename(sys.argv[0]))[0], *sys.argv[1:]]
-with open(os.path.join(folder, "calls.jsonl"), "a", encoding="utf-8") as log:
-    log.write(json.dumps(argv) + "\\n")
+with open(os.path.join(folder, "call-" + uuid.uuid4().hex + ".json"), "w", encoding="utf-8") as log:
+    json.dump(argv, log)
 line = " ".join(argv)
 with open(os.path.join(folder, "fixture.json"), encoding="utf-8") as handle:
     rules = json.load(handle)
@@ -95,10 +95,7 @@ class Project:
         return done.returncode, json.loads(lines[-1])
 
     def calls(self) -> list[list[str]]:
-        log = self.tools / "calls.jsonl"
-        if not log.exists():
-            return []
-        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        return [json.loads(log.read_text(encoding="utf-8")) for log in self.tools.glob("call-*.json")]
 
     def writes(self) -> list[list[str]]:
         return [
