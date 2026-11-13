@@ -42,7 +42,8 @@ the CLI resolves its dependencies. Selection fields and prompts belong in [Quick
 3. Run `health` after installation. `--fix` and `--online` are separate actions.
 4. Inspect `diff` before an update. Local managed-file edits require a separate decision.
 5. Preview `cleanup` before removing temporary data. Deletion requires `--apply`.
-   Full Harness removal uses the separate `uninstall` command, also with a preview.
+   Full Harness removal uses the separate `uninstall` command. It also shows the plan first and
+   removes only with `--apply` (and `--confirm UNINSTALL`).
 
 Exact commands and conditions belong in the [CLI reference](reference/cli.md),
 [update instructions](hooks/install-and-update.md) and [project settings](getting-started/settings/index.md).
@@ -79,4 +80,4 @@ Unavailable memory does not justify inventing past decisions.
 
 The original long [Harness reference](https://github.com/PVMalove/agent-harness-next/blob/0b4fccb8854c1aa7d6a9dc77369117acaa1e29be/docs/harness-guide.md)
 records historical behavior. Capability names, commands and limits in this overview were checked
-against the current worktree; the obsolete `pvmalove-suite` is replaced here with `engineering-suite`.
+against the current code.

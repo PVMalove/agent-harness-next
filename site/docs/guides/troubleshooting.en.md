@@ -14,8 +14,8 @@ shows what exactly is not configured and often prints the fix command itself.
 | `project harness already exists; use 'harness update <repo>'` | `init` where the snapshot is already installed | Run `harness update` |
 | `project harness is missing; use 'harness init <repo>'` | `update` where there is no snapshot | Run `harness init` |
 | `selected skill names already exist; inspect them or use --replace-conflicts` | The project already has skills with the same names | Look at the list of conflicts; if the replacement is expected, repeat with `--replace-conflicts` |
-| `local skill changes would be overwritten; review them or use --force` | Managed files have local edits | Study the differences: for the snapshot use `--force-managed-files`, for the snapshot and seed files use `--force` |
-| `discovery path already exists and is not managed: <path>` | Something foreign sits where the skills directory should be | For `init`, remove it manually or use `adopt`; for `adopt`, use `--replace-conflicts`; for `update`, use `--force` |
+| `update aborted due to local skill changes (drift).` | Managed files have local edits | Study the differences: to replace the snapshot use `--force-managed-files`, for the snapshot and seed files use `--force` |
+| `discovery path already exists and is not managed: <path>` | Something foreign sits where the skills directory should be | For `init`, remove it manually or use `adopt`; for `adopt`, use `--replace-conflicts`; for `update`, use `--force` or `--force-managed-files` |
 | `install-global.py`: `[CONFLICT] ... (re-run with --replace-conflicts ...)` | The profile or symlink location is occupied | Repeat with `--replace-conflicts`: the conflicting files are first copied to a backup |
 | `install-global.py`: `Failed to create symlink` | No permission to create a directory symlink | Enable developer mode in the system or start the terminal with elevated rights |
 
@@ -28,7 +28,7 @@ shows what exactly is not configured and often prints the fix command itself.
 
 The allowed top-level fields are: `$schema`, `language`, `base_branch`, `branch_pattern`,
 `qa_gate_commands`, `shell`, `tracker`, `ci_required_checks`, `test_paths`, `test_runner`,
-`hook_policy`, `story_points`, `memory`, `memory_policy`.
+`hook_policy`, `story_points`, `memory`, `memory_policy`, `test_author`.
 
 Certificates, proxies, and credentials are not written to the configuration: they stay in the personal
 configuration of the tracker CLI.
@@ -45,8 +45,9 @@ configuration of the tracker CLI.
 | `hook_response.py: ожидается 'run <hook_id> <команда...>' с зарегистрированным hook_id` on every Bash call | A new hook, such as `runtime-autostart`, is wired while `.claude/hooks/hook_response.py` is old | Run `harness update <repo> --force-seed-file .claude/hooks/hook_response.py`: the envelope is replaced with the template (the previous bytes go to `.harness/.sandboxes/seed-backups/`), and the same run wires the hook. A plain `harness update` no longer wires such a hook while the envelope does not know it, and `runtime-autostart` with an old envelope only warns |
 | `ledger validate` finds a divergence in the audit chain | The state was edited around the CLI, or the chain is damaged | Do not edit `.harness/orchestration/state/` manually; read the report and decide by the recovery route |
 
-The recovery commands (`ledger lock-status`, `qa clear-stale-lease`, `batch rewind`, `dispatch cancel`)
-are not blocked by any hooks profile: otherwise there would be no way out of a refusal.
+The recovery commands (`ledger lock-status`, `qa clear-stale-lease`, `batch rewind`, `dispatch cancel`,
+`ledger release-lock --force`) are not blocked by any hooks profile: otherwise there would be no way
+out of a refusal. `ledger release-lock --force` still requires human approval.
 
 ## health as the first step
 
@@ -54,7 +55,7 @@ are not blocked by any hooks profile: otherwise there would be no way out of a r
 environment, and the project graph.
 
 - `--fix` creates the missing `.harness/` directories and rebuilds a stale skills registry; it does
-  not touch worktrees.
+  not change system settings or worktrees.
 - `--online` adds tracker checks: CLI authorization, remote availability, permissions, and labels.
 - `--json` prints a machine-readable report for scripts.
 

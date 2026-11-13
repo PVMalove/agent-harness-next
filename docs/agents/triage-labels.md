@@ -27,9 +27,9 @@ Every triaged issue or PR carries exactly one label from each of the first three
 | `hitl` | yellow `#fbca04` | Human-in-the-loop — needs review, testing, or approval from you |
 | `afk` | light blue `#54c1e8` | Away-from-keyboard — an agent can complete it alone |
 
-Документационные тикеты — те, что меняют только `docs/`, `site/`, `README.md` и `CHANGELOG.md`, —
-получают `hitl`, а не `afk`: результат читает человек, и он же решает, готов ли текст к публикации.
-`/implement` и `/fast-implement` не берут такие тикеты в afk-пайплайн.
+Documentation tickets — those that change only `docs/`, `site/`, `README.md`, and `CHANGELOG.md` —
+get `hitl`, not `afk`: a person reads the result and decides whether the text is ready to publish.
+`/implement` and `/fast-implement` do not take such tickets into the afk pipeline.
 
 ### 3. Status (`status::*`) — where it sits in the pipeline
 

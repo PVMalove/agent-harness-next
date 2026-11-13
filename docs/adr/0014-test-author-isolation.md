@@ -1,5 +1,7 @@
 # Изоляция тест-автора: guard и runner
 
+**Статус: ACCEPTED (2026-10-18). Частично заменён ADR 0033.**
+
 ## Контекст системы
 
 Эпик #549 вводит тест-автора — сидируемого субагента developer, которому запрещено менять
@@ -7,13 +9,12 @@ production-код. Разделение авторства само по себ�
 нужен guard инструментов (scoped hook субагента) и отдельная изоляция процесса (runner),
 причём отказ hook не является доказательством изоляции, а недоступная изоляция не должна
 позволять незащищённый запуск. Issue #551 проверяет это минимальным прототипом в реальной
-Claude Code, а не только документацией — наблюдения записаны в
-`docs/tasks/issue-549-test-author/tickets/issue-551-evidence.md`.
+Claude Code, а не только документацией.
 
 ## Действующий контракт
 
 **Guard — scoped PreToolUse hook во frontmatter субагента.** Claude Code передаёт в payload
-PreToolUse поле `agent_type` с именем субагента (наблюдалось: `proto-test-author`); полный
+PreToolUse поле `agent_type` с именем субагента; полный
 набор ключей payload — `agent_id, agent_type, cwd, hook_event_name, permission_mode,
 prompt_id, scratchpad_dir, session_id, tool_input, tool_name, tool_use_id, transcript_path`.
 Hook, объявленный в `hooks.PreToolUse` frontmatter конкретного субагента, вызывается только
@@ -21,13 +22,14 @@ Hook, объявленный в `hooks.PreToolUse` frontmatter конкретн�
 записей в его логе. Это проверено симметрично: контрольный субагент без hooks свободно пишет
 файлы и выполняет `Bash`, пока у целевого субагента те же операции получают явный deny.
 
-Guard реализован как Python-скрипт, читающий JSON из stdin и возвращающий
+Guard `.claude/hooks/test-author-guard.py` (шаблон `harness/project/hooks/test-author-guard.py`)
+читает JSON из stdin и возвращает
 `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
 "permissionDecisionReason": "<причина без путей и секретов>"}}` с exit code 0 (мягкий отказ,
 без диалога и без немедленного влияния на dispatch/ledger). Правила: `Write`/`Edit` разрешены
 только если путь после `resolve()` (нормализация `..`, относительных компонентов и symlink)
 лежит внутри glob-шаблонов `test_paths` из `.harness/project.json`; `Bash` разрешён только в
-форме `bin/run-test.sh <test-id>` с id, не содержащим метасимволов шелла; любой другой
+форме `.claude/hooks/run-test.sh <test-id>` с id, не содержащим метасимволов шелла; любой другой
 инструмент или ошибка разбора конфигурации/JSON — deny (fail closed). Правило проверено на
 нормализации `tests/../src`, относительном пути, symlink на каталог вне `test_paths` и на
 попытке подмешать `;`, `$()`, обратные кавычки и перевод строки в Bash-команду.
@@ -38,16 +40,17 @@ Guard реализован как Python-скрипт, читающий JSON и�
 гарантии, а не дефект guard'а — он контролирует только вызовы, прошедшие встроенные проверки
 инструмента.
 
-**Изоляция runner — bubblewrap (bwrap 0.9.0, Linux 7.2.8, проверено).** `bin/run-test.sh
-<test-id>` запускает один тест через
-`bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --bind <test_paths> --bind
-logs/reports --unshare-all --die-with-parent --new-session --cap-drop ALL`. Writable-зоны —
-только явно перечисленные пути `test_paths`, каталог отчётов и `/tmp` (tmpfs, не персистентный).
-Production-код, `.git`, конфигурация runner (`runner.cfg`, `bin/run-test.sh`,
-`.claude/hooks/guard.py`) доступны только на чтение. Дочерние процессы наследуют ограничения
-(`--unshare-all` отключает отдельные user/pid/net/mount неймспейсы для всего дерева процессов
-раннера). Отсутствие `bwrap`/Python в `PATH` даёт `exit 3` с `isolation_unavailable` до запуска
-теста — тест никогда не выполняется без изоляции.
+**Изоляция runner — bubblewrap (проверено на bwrap 0.9.0).** `.claude/hooks/run-test.sh
+<test-id>` (шаблон `harness/project/hooks/run-test.sh`, ядро `.harness/health/isolated_runner.py`,
+руководство [`site/docs/hooks/run-test.md`](../../site/docs/hooks/run-test.md)) запускает один тест
+через `bwrap --ro-bind / / --dev /dev --proc /proc --bind <run>/tmp-* /tmp --tmpfs /run --bind
+<writable-зоны> --chdir <repo> --unshare-all --die-with-parent --new-session --cap-drop ALL
+--json-status-fd <fd>`. Production-код, `.git` и конфигурация runner доступны только на чтение.
+Дочерние процессы наследуют ограничения (`--unshare-all` отключает отдельные user/pid/net/mount
+неймспейсы для всего дерева процессов раннера). Отсутствие записи `child-pid` в
+`--json-status-fd` означает, что песочница не поднялась. Пустой tmpfs поверх `/run` закрывает
+обход: `--ro-bind` не запрещает `connect()` к сокетам сервисов хоста, а через сессионную D-Bus в
+`/run/user/<uid>` systemd user manager запускает процессы вне песочницы.
 
 Проверенные негативные попытки и результат (process-level, без участия guard):
 
@@ -66,99 +69,72 @@ Production-код, `.git`, конфигурация runner (`runner.cfg`, `bin/r
 избыточна. Проверка process-уровня проведена независимо от guard: runner вызывался из обычного
 шелла и отдельно — от субагента с умышленно снятым hook'ом (см. «Отрицательные проверки»).
 
-**Активация и fallback.** `bin/preflight.sh` возвращает ровно один JSON без путей и stderr:
-`{"status":"ok"}` или `{"status":"disabled","reason":"<causa>"}`, всегда exit 0. Условия `ok`:
-(1) `test_paths` в `.harness/project.json` — непустой список; (2) `bin/run-test.sh --probe`
-подтверждает запись в production запрещена, в writable-зону разрешена; (3) canary-проверка —
-guard, получив попытку записи `canary.txt` вне `test_paths`, обязан создать `logs/canary.json`
-с тем же nonce, что лежит в `logs/canary-nonce`, и `decision: "deny"`, а сам `canary.txt` не
-должен появиться. Отсутствие любого условия → `disabled` с причиной `test_paths_missing`,
-`isolation_unavailable` или `guard_hook_unavailable` (в первой редакции — `guard_hook_not_firing`,
-см. уточнение ниже) соответственно; developer получает эту
-причину и продолжает обычный маршрут без тест-автора. `test_paths` — необходимое, но
-недостаточное условие: guard активируется только вместе с подтверждённой изоляцией и
-подтверждённым срабатыванием hook.
-
-**Уточнение реализации (#554).** Preflight не запускает Claude Code и не пишет canary: он
-статически проверяет agent, frontmatter и исполняемый guard, поэтому причина названа
-`guard_hook_unavailable`, а не `guard_hook_not_firing`. Срабатывание scoped hook подтверждает
-проба на реальном Claude Code в clean-room (`scripts/clean_room/claude_probe.py`): hook обязан
-отказать на запись вне `test_paths` и на произвольный `Bash` с причинами guard и пропустить запись
-в `test_paths`, а production guard не содержит кода для этой проверки. Preflight дополнительно
-требует принятое в Claude Code решение о доверии к точному пути проекта (`project_untrusted`):
-нативный режим `--print` диалог доверия пропускает. **Заменено ADR 0033:** корень проекта берётся
-из Git, `CLAUDE_PROJECT_DIR` необязателен (несовпадение — `project_dir_mismatch`), а linked
-worktree доверен через основной checkout репозитория.
+**Активация и fallback.** `.claude/hooks/test-author-preflight.sh` (шаблон
+`harness/project/hooks/test-author-preflight.sh`) возвращает ровно один JSON без путей и stderr:
+`{"status":"ok"}` или `{"status":"disabled","reason":"<причина>"}`, всегда exit 0. Developer
+получает причину и продолжает обычный маршрут без тест-автора. Preflight не запускает Claude Code.
+Он статически проверяет agent, frontmatter и исполняемый guard
+(`guard_hook_unavailable`, `scoped_hook_unsupported`), конфигурацию (`test_paths_missing`,
+`test_runner_missing`) и изоляцию через `run-test.sh --probe` (`isolation_unavailable`).
+`test_paths` — необходимое, но недостаточное условие: guard активируется только вместе с
+подтверждённой изоляцией и исправным scoped hook. Срабатывание scoped hook подтверждает проба на
+реальном Claude Code в clean-room (`scripts/clean_room/claude_probe.py`): hook обязан отказать на
+запись вне `test_paths` и на произвольный `Bash` с причинами guard и пропустить запись в
+`test_paths`, а production guard не содержит кода для этой проверки. Preflight требует принятое в
+Claude Code доверие к проекту: нативный режим `--print` диалог доверия пропускает. Корень проекта,
+доверие к worktree и полный список отказов preflight задаёт ADR 0033.
 
 **Отрицательные проверки (обязательны, не вывод из успешного отказа).** Проверено раздельно:
 (a) при недоверенной папке (`No` в диалоге доверия) сессия завершается, вызовов инструментов
 нет вовсе; (b) при снятом `hooks:` из frontmatter целевого субагента запись в production
 **проходит** (встроенная защита отсутствует без guard) — это подтверждает, что именно guard,
-а не что-то иное, блокировал запись в штатном режиме; в этом состоянии `preflight.sh`
-корректно возвращает `guard_hook_unavailable`; (c) изоляция runner проверена вызовом напрямую
+а не что-то иное, блокировал запись в штатном режиме; в этом состоянии preflight
+возвращает `scoped_hook_unsupported`; (c) изоляция runner проверена вызовом напрямую
 из шелла, без Claude Code и без guard, — на process-уровне защита не зависит от hook.
 
-**Контракт конфигурации.** В рамках #551 поле `test_paths` (список glob) в
-`.harness/project.json` было описано только в `CONTEXT.md`: в `project.schema.json` и в
-validator его не было, и `harness health` отклонял его как неизвестное. Схема, шаблон и
-validator в #551 не менялись. Зоны runner (временный каталог, каталог отчётов) в прототипе
-заданы в самом `bin/run-test.sh`, а не в конфиге проекта.
+**Контракт конфигурации.** Конфигурацию задают `project.schema.json` и
+validator (`test_paths_problems`, `test_runner_problems` в `harness/health/project_files.py`),
+которые runner вызывает сам:
 
-**Устанавливаемый runner (#553).** Прототип перенесён в устанавливаемый runner
-`.claude/hooks/run-test.sh` (шаблон `harness/project/hooks/run-test.sh`) с ядром
-`.harness/health/isolated_runner.py`; руководство — [`site/docs/hooks/run-test.md`](../../site/docs/hooks/run-test.md).
-Набор флагов bwrap выше сохранён без ослаблений и дополнен `--tmpfs /run`, `--chdir <repo>` и
-`--json-status-fd`: отсутствие записи `child-pid` означает, что песочница не поднялась. Пустой
-tmpfs поверх `/run` закрывает обход, который прототип не проверял: `--ro-bind` не запрещает
-`connect()` к сокетам сервисов хоста, а через сессионную D-Bus в `/run/user/<uid>` systemd user
-manager запускает процессы вне песочницы.
-Конфигурация задаётся единым контрактом — `project.schema.json` и validator
-(`test_paths_problems`, `test_runner_problems` в `harness/health/project_files.py`), которые
-runner вызывает сам:
-
-- `test_paths` — непустой список уникальных относительных glob без сегментов `..`; смысл поля не
-  меняется. Runner монтирует на запись только записи вида `<каталог>/**` вне `.git`, `.harness`,
-  `.claude`, `.agents` и `.codex`, без symlink в пути, без вложенных зон и без файлов с
-  несколькими жёсткими ссылками; остальные формы дают отказ `write_zone_rejected`;
+- `test_paths` — непустой список уникальных относительных glob без сегментов `..`. Runner монтирует
+  на запись только записи вида `<каталог>/**` вне `.git`, `.harness`, `.claude`, `.agents` и
+  `.codex`, без symlink в пути, без вложенных зон и без файлов с несколькими жёсткими ссылками;
+  остальные формы дают отказ `write_zone_rejected`;
 - `test_runner` — `{"command": [...]}`: argv без шелла, ровно один элемент `{test_id}`, не первый.
-  Заменяет `runner.cfg` прототипа; CLI принимает только идентификатор теста или `--probe`, поэтому
-  вызывающий не может расширить зону записи.
+  CLI принимает только идентификатор теста или `--probe`, поэтому вызывающий не может расширить
+  зону записи.
 
 `project.json.tmpl` пишет новые поля только по флагам `harness init --test-path` и
 `--test-runner-command`: без них runner отказывает с `test_paths_missing` или
 `test_runner_missing`. Значение `test_paths` по умолчанию включило бы тест-автора в каждом новом
-проекте и предполагало бы раскладку проекта, поэтому его нет; opt-in остаётся за #554.
+проекте и предполагало бы раскладку проекта, поэтому его нет.
 Writable-зоны запуска — каталоги `test_paths`, `/tmp` и свежие `cache/` и `reports/` в
-`.harness/.sandboxes/runs/isolated-test-<run_id>/`. С #769 `/tmp` — не tmpfs, а свой пустой каталог
-`<run>/tmp-*` на каждый запуск bwrap, смонтированный как `/tmp` и удаляемый после запуска (hermetic
-`/tmp` в Bazel): временные данные лежат в хранилище harness, хостовый `/tmp` в песочницу не попадает,
-а короткий путь `/tmp` сохраняет сокеты базы данных в лимите AF_UNIX. Перед тестом runner выполняет probe с тем же
-набором монтирований: запись в корень checkout получает `EROFS`, а `/run` и `/var/run` пусты.
-Провал любой проверки до запуска даёт отказ `isolation_unavailable` с кодом `platform`,
-`bwrap_missing`, `checkout_masked`, `sandbox_failed` или `probe_failed`.
+`.harness/.sandboxes/runs/isolated-test-<run_id>/`. Каждый запуск bwrap получает свой пустой
+каталог `<run>/tmp-*`, смонтированный как `/tmp` и удаляемый после запуска (hermetic `/tmp` в
+Bazel): временные данные лежат в хранилище harness, хостовый `/tmp` в песочницу не попадает, а
+короткий путь `/tmp` сохраняет сокеты базы данных в лимите AF_UNIX. Перед тестом runner выполняет
+probe с тем же набором монтирований: запись в корень checkout получает `EROFS`, а `/run` и
+`/var/run` пусты. Провал любой проверки до запуска даёт отказ `isolation_unavailable` с кодом
+`platform`, `bwrap_missing`, `checkout_masked`, `sandbox_failed` или `probe_failed`.
 Вывод — одна JSON-строка не длиннее 512 байт; коды выхода `0` (прошёл), `1` (упал или таймаут),
 `3` (отказ). `run-test.sh --probe` возвращает `{"status":"ok"}` или `unavailable` с кодом
-причины — это условие (2) preflight; сам `preflight.sh` с canary-проверкой guard — часть #554.
+причины; preflight использует его как проверку изоляции.
 Clean-room сценарий `scripts/clean_room/isolated_test_runner.py` проверяет runner на
 установленном проекте без сборки и БД, вызывая его из шелла без Claude Code и guard.
 
 ## Операционные последствия
 
-- #552–#554 переносят guard, runner и `proto-test-author`-подобного субагента из
-  `.harness/.sandboxes/runs/proto-551/` (не коммитится) в сидируемые шаблоны
-  `harness/project/agents/`, `harness/project/hooks/`, с учётом границы «guard не видит
-  вызовы, отклонённые встроенной проверкой Write-после-Read». Runner перенесён в #553 (см.
-  «Устанавливаемый runner»); guard в форме `bin/run-test.sh <test-id>` должен разрешать вызов
-  `.claude/hooks/run-test.sh <test-id>`.
-- Runner в проекте со сборкой должен готовить сборочные артефакты до входа в bwrap-сэндбокс с
-  read-only исходниками (эпик #549) — в прототипе сборка не проверялась (фикстура без шагов
-  сборки).
+- Сборочные артефакты и отдельную тестовую БД runner готовит в песочнице до теста по
+  необязательным `test_runner.build` и `test_runner.database`; исходники при этом доступны только
+  на чтение ([`site/docs/hooks/run-test.md`](../../site/docs/hooks/run-test.md)).
 - Поддержанное окружение — Linux + bubblewrap 0.9.0+ при наличии user-namespaces без
   дополнительных привилегий (`unshare -U` работает без root). Windows и macOS не проверялись;
-  там `preflight.sh` обязан вернуть `isolation_unavailable`, а не выполнить тест без изоляции.
+  там runner отвечает `isolation_unavailable` с кодом `platform`, и preflight отключает
+  тест-автора, а не выполняет тест без изоляции.
 - Проект, чей checkout лежит внутри `/tmp`, `/run` или другого пути, который runner монтирует как
-  tmpfs/приватный неймспейс, не поддерживается текущим набором флагов bwrap — `--probe`
-  провалится и `preflight.sh` отключит тест-автора, а не выполнит тест в небезопасном режиме.
+  tmpfs/приватный неймспейс, не поддерживается текущим набором флагов bwrap: runner отвечает
+  `isolation_unavailable` с кодом `checkout_masked`, и preflight отключает тест-автора, а не
+  выполняет тест в небезопасном режиме.
 - Разделение авторства, scoped guard и process-изоляция не гарантируют смысловую независимость
   или полноту тестов, которые напишет модель — это осталось вне доказательства #551, как и
   зафиксировано в эпике #549.
@@ -196,16 +172,14 @@ Red, сразу зелёный тест возвращается автору я
 
 ## Автор в worker worktree: вариант A (#971, 2026-11-06)
 
-Для Harness Next выбран вариант A с поддержкой external Claude Code developer. In-process
-транспорт сохраняет безопасный отказ `checkout_mismatch`, а `/fast-implement` — прежний opt-in.
-Решение согласовано для базы и цели PR `integration/harness-runtime-reliability`.
-
-External developer работает в точном worker checkout. Установленные там preflight, scoped guard
-и runner обслуживают его код; человек отдельно подтверждает trust этого канонического пути.
-Членство worktree в том же репозитории не наследует доверие. Основной checkout не становится
-зоной записи автора. Никакого перенаправления guard по произвольному tool payload не добавлено.
-Установка в linked worktree не сидирует общий scratch в другом checkout. Runner сохраняет логи
-в общем хранилище по действующему контракту; developer передаёт автору корень этих логов.
+Тест-автор работает в worktree developer. External Claude Code developer вызывает нативный
+`Agent(test-author)` в своём worker checkout. In-process developer вызывает автора через launcher
+своего worktree (ADR 0033). Установленные в worker checkout preflight, scoped guard и runner
+обслуживают его код. Основной checkout не становится зоной записи автора. Никакого
+перенаправления guard по произвольному tool payload не добавлено. Установка в linked worktree не
+сидирует общий scratch в другом checkout. Runner сохраняет логи в общем хранилище по действующему
+контракту; developer передаёт автору корень этих логов. Корень проекта и доверие к worktree задаёт
+ADR 0033. `/fast-implement` включает автора отдельным opt-in (раздел «Уточнение #993»).
 
 В утверждённом наборе инструментов developer нужен `Agent(test-author)`; в новых проектах его
 задаёт шаблон роли. При отсутствии явного tool_policy встроенный набор добавляет его только
@@ -221,17 +195,11 @@ external Claude developer с opt-in. Явное ограничение прое�
 исходников, тестов и Git-статус основного checkout сохраняются. Фактические usage и стоимость
 сохраняются отдельно от лимита; неизвестная метрика не подменяется нулём.
 
-**Заменено ADR 0033 (#1122):** отдельное доверие к точному пути worker не требуется — linked
-worktree доверенного репозитория доверен. In-process developer больше не ограничен отказом
-`checkout_mismatch`: он вызывает автора через launcher своего worktree, где guard и runner
-обслуживают этот worktree.
-
 Проверенная конфигурация — Python unittest/pytest. Rust-тесты этой поставкой автора не
 поддержаны; настраиваемый argv не служит доказательством их поддержки. Codex и другие runtime
 автора не поддерживают. Автор остаётся помощником developer, не ролью orchestration. Изменение
 не вводит writer operational state, не меняет Rust authority, supervisor, независимую QA и
 Release Gate ADR 0019–0026.
-
 
 ## Уточнение #993: исполнитель из конфигурации
 
@@ -249,6 +217,5 @@ Release Gate ADR 0019–0026.
 
 Выбор runtime не доказывает наличие защищённого адаптера: пока он реализован для Claude Code.
 Выбранный Codex, dsh или другой runtime получает `runtime_unsupported`, без запуска Claude.
-Live-проба использует профиль developer исходного проекта; фиксированный `haiku` удалён.
-Это уточнение меняет выбор исполнителя, сохраняя trust, scoped guard, runner и обычный TDD
-при недоступности автора по решениям #971 и этой ADR.
+Live-проба использует профиль developer исходного проекта. Выбор исполнителя не меняет trust,
+scoped guard, runner и обычный TDD при недоступности автора.

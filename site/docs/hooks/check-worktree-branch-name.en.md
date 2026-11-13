@@ -19,7 +19,7 @@ How it works:
 6. If the issue is not found, issues are disabled in the project, the CLI is not authorized, or the project is unavailable, the hook aborts the tool and names that reason.
 ## 3. Contracts
 - **Input (Input/Brief):** JSON with the arguments of the `EnterWorktree` tool call, delivered to `stdin`. The optional field `"name"` is expected.
-- **Output (Output/Report):** On success, or when there is no name, return code `0` is returned. If the naming convention is violated or the issue could not be confirmed (not found, issues disabled, no authorization, project unavailable, the CLI did not answer or exited with an unrecognized error), code `2` is returned and a message with the reason is printed to `stderr`.
+- **Output (Output/Report):** On success, or when there is no name, return code `0` is returned. If the naming convention is violated or the issue could not be confirmed (not found, issues disabled, no authorization, project unavailable, the CLI did not answer within 10 s or exited with an unrecognized error), code `2` is returned and a message with the reason is printed to `stderr`.
 ## Source
 
 [check-worktree-branch-name.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/check-worktree-branch-name.sh)

@@ -1,18 +1,18 @@
-# tdd — Разработка через тесты
+# tdd: разработка через тесты
 
 ## 1. Название и локализация
 
 - **Английское название:** `tdd`
 - **Русский перевод:** Разработка через тесты.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/tdd/SKILL.md)
+- **Исходный скилл:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/tdd/SKILL.md)
 
 ## 2. Русское описание
 
-Ведёт изменение циклом red, green и refactor с проверкой поведения тестом до реализации.
+Ведёт изменение циклом red, green и refactor: тест проверяет поведение до реализации.
 
 ## 3. Применение
 
-Точный порядок шагов, входные условия и ограничения задаёт исходный `SKILL.md`. Эта страница служит русским указателем на закреплённую upstream-версию.
+Порядок шагов, входные условия и ограничения задаёт исходный `SKILL.md`. Эта страница только кратко описывает по-русски закреплённую upstream-версию.
 
-В `engineering-suite` используется [first-party override](../tdd.md) с Refactor после Green.
-Vendor-снапшот остаётся неизменным.
+В `engineering-suite` работает [first-party override](../tdd.md): в нём шаг Refactor идёт после
+Green. Vendor-снапшот не меняется.

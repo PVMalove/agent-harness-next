@@ -13,7 +13,7 @@ session.
 | A small task whose direction is not under discussion | `/fast-implement` |
 | A human does the implementation from a ready guide | `/to-guide` |
 
-The route is strictly tied to the ticket label: auto-selection skips `pipeline::fast` tickets, and a
+The ticket label affects only auto-selection: auto-selection skips `pipeline::fast` tickets, and a
 ticket that is named explicitly runs the full cycle regardless of its label. There is no shortened
 path between review and QA; the shortened path is called `/fast-implement`.
 
@@ -23,7 +23,9 @@ path between review and QA; the shortened path is called `/fast-implement`.
 2. **State label.** Replace the current `status::*` with `status::in-progress` before creating the
    branch and making any edits, and check that it is the only one.
 3. **Integration ref.** Take the branch from the ticket's `## Integration Branch` section; if there is
-   none, take it from the parent epic or from the project's `base_branch`.
+   none, from its `## Git base` section; if there is neither, from the same section of the parent
+   epic. A missing value for a ticket that has an epic is a blocker. A ticket without an epic uses the
+   project's `base_branch`.
 4. **Issue worktree.** Create the ticket's worktree from the integration branch: `batch create`
    refuses to work with a worktree that is not in `git worktree list`.
 5. **Scope.** Run `batch preflight` with the same flags that will go to `batch create`, including
@@ -59,7 +61,7 @@ bypasses it.
 
 This is a strictly opt-in route: only the selected capability enables it, and no other build
 activates it. The developer creates a candidate commit; the work report stays `reported` until a decision
-under `approval_policy`. Only the developer publishes the accepted SHA through publish, and a person then separately invokes
+under `approval_policy`. Only the developer publishes the accepted SHA, in a dispatch with the `publish` purpose, and a person then separately invokes
 `/to-pull-requests`. The agent opens the PR only after explicit confirmation. The `integration next` command names the next step from the
 integration record. The adapter only transports what is already approved: it does not decide what to
 publish, and it does not open a PR.
@@ -72,10 +74,10 @@ publish, and it does not open a PR.
   silent dispatch is raised to a human as a blocker.
 - **Early blocked report.** The developer may report a blocker before the commit and name a recovery
   route; the coordinator does not invent a commit in its place.
-- **Stopping and cancelling are a human decision.** `batch resume-stop` sets and clears a pause,
-  `batch rewind` returns the batch to a previous step, and `batch abandon` closes a dead-end batch.
+- **Stopping and cancelling are a human decision.** `batch resume-stop` resumes the batch after a recorded
+  stop, `batch rewind` selects an earlier gate without changing Git history, and `batch abandon` closes a dead-end batch.
   All three need approval and a reason.
-- **The human trail is not edited.** The state in `.harness/orchestration/state/` is read only through
+- **The state is not edited by hand.** The state in `.harness/orchestration/state/` is read only through
   the CLI: it is an audit trail, not a working file.
 
 <figure class="ah-diagram">

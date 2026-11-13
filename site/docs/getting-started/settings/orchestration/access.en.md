@@ -12,10 +12,13 @@ are `none`. The example does not choose images, networking or host paths for the
 Without an authored policy, the brief preserves historical `inherit` behavior; this is not
 proof of sandbox isolation.
 
-Adding **any** `access_policy`, even `{}` or `mode: inherit`, makes `dispatch send` require a
-selected `extensions.runtime_access` implementation. `none` proves no access, so sending is
-blocked before handoff; there is no silent fallback to legacy `inherit`. Valid JSON and a
-successful health check do not prove native-executor readiness.
+The policy applies to a role only when `access_policy.defaults` or the role's own override
+`access_policy.roles.<role>` names it. For such a role, even with `mode: inherit`, `dispatch send`
+requires a selected `extensions.runtime_access` implementation. `none` proves no access, so
+sending is blocked before handoff; there is no silent fallback to legacy `inherit`. A role that
+the policy does not name (for example, with `access_policy: {}` or with only `operations`) runs
+with the legacy `inherit` plan. Valid JSON and a successful health check do not prove
+native-executor readiness.
 
 ## Defaults: access components {#defaults}
 
@@ -34,7 +37,7 @@ table below. Network/environment values describe the selected plan; without a po
 | `access_policy.defaults.network.hosts` | Array of explicit DNS names, without URL, port or wildcard; up to 253 characters, with labels up to 63. Required inside an authored `network`. Without a network component, the resolver uses `[]`. |
 | `access_policy.defaults.filesystem[].resource` | Required in each entry: `checkout`, `git_common`, `shared_storage`, `cache`. The `filesystem` array is optional; the selected plan defaults to `[]`. |
 | `access_policy.defaults.filesystem[].path` | Non-empty string without NUL. Required only for `cache` and forbidden for other resources. Relative paths resolve against the worktree; the resolver expands `~`. |
-| `access_policy.defaults.filesystem[].variable` | Environment variable name for a `cache` path; forbidden for other resources. The name must be unique in the component and cannot override runtime environment variables. |
+| `access_policy.defaults.filesystem[].variable` | Optional environment-variable name, only for `cache`, matching `[A-Za-z_][A-Za-z0-9_]*`. The container executor itself passes `--env <name>=<resolved cache path>` to the container, for example `CARGO_HOME`. The value comes from the plan, not from the serve environment. The name is unique among the component's caches, differs from every name in `environment`, and is not one of the names the runtime sets (`HOME`, `TMPDIR`, `CARGO_TARGET_DIR`, proxy names and others from [ADR 0032](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0032-qa-cargo-cache.md)). |
 | `access_policy.defaults.filesystem[].access` | Required in each entry: `read` or `write`. Actual environment permissions are checked separately, not inferred from configuration text. |
 
 `checkout`, `git_common` and `shared_storage` roots are resolved from the worktree and project
@@ -97,13 +100,16 @@ implementation. Extensions add no model tools and do not change system prompts.
 
 The distribution provides the built-in `docker` name for `runtime_access`; it supports both
 engines. Selecting it makes the schema and validator require
-`access_policy.defaults.container` with `worker_image`. Any other provider must be implemented
+`access_policy.defaults.container` with `worker_image`, or, without `defaults`,
+`access_policy.operations.qa.container`. Any other provider must be implemented
 and verified by the project.
 
 ## Container plan {#container}
 
 The built-in executor requires Linux, the runtime store and an available local engine. Roles
-sent through it need `transport: external`. The harness does not build or pull images: the
+sent through it need `transport: external`. If `defaults` or `roles.<role>` names a role with the
+`in-process` transport, the coordinator warns about it when it loads the configuration, and
+`dispatch preflight` blocks that role. The harness does not build or pull images: the
 user prepares them separately, `dispatch propose` pins their digests, and changing an image
 after approval requires a new approved plan.
 
@@ -218,8 +224,9 @@ for missing decisions and show the complete resulting plan before writing config
     Never read authentication files or request, print or store token/key values.
 
     First distinguish keeping unauthored legacy inherit from declaring an access policy.
-    Explain that even an authored inherit policy blocks dispatch send until a working
-    runtime_access provider verifies it; none is not an access proof.
+    Explain that even an authored inherit policy blocks dispatch send for every role that
+    defaults or roles.<role> names until a working runtime_access provider verifies it;
+    none is not an access proof. A role that neither names keeps legacy inherit.
     Ask which executor is intended: the built-in docker provider, an existing trusted
     project provider, or keeping the current unauthored behavior. Do not choose
     unsandboxed as a workaround for blockers. Do not invent a module:factory provider.
@@ -228,7 +235,8 @@ for missing decisions and show the complete resulting plan before writing config
     Explain whole-component replacement: container/network/filesystem/environment
     entries do not deep-merge. Operations use defaults plus their own override, never
     a role override. Keep read-only roles read-only and retain operational requirements.
-    For docker, verify defaults.container.worker_image is present. Explain that
+    For docker, verify defaults.container.worker_image is present, or, without defaults,
+    operations.qa.container. Explain that
     container QA requires an explicit operations.qa.container; defaults alone do not
     containerize QA. Do not enable other extensions just because fields are available.
 

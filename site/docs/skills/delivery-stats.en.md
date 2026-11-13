@@ -30,34 +30,34 @@ Read-only. The skill reads local session transcripts, the git history of this re
 The tool ships with the harness at `.harness/reporting/delivery_stats.py`. If it is absent, this project did not install the capability that provides it — say so instead of reimplementing it here.
 
 ```bash
-python .harness/reporting/delivery_stats.py --repo . --epic <number> \\
-  --html docs/reports/epic-<number>.html
+python .harness/reporting/delivery_stats.py --repo . --epic <number> \
+  --html .harness/.sandboxes/reports/delivery-stats/epic-<number>.html
 ```
 
 Add `--json` when the developer wants the raw numbers rather than the summary. `--rates <file>` overrides the rate card; `--base <ref>` overrides the diff base.
 
-Save a versioned baseline after a completed, comparable epic, and pass it to `--baseline` when reporting the next one. The comparison appears in both the terminal/JSON output and the HTML dashboard:
+Save a versioned baseline after a completed, comparable epic, then pass it when reporting the next one. The comparison appears in both the terminal/JSON output and the HTML dashboard:
 
 ```bash
-python .harness/reporting/delivery_stats.py --repo . --epic <baseline-epic> \\
-  --save-baseline docs/reports/epic-<baseline-epic>.baseline.json
-python .harness/reporting/delivery_stats.py --repo . --epic <current-epic> \\
-  --baseline docs/reports/epic-<baseline-epic>.baseline.json \\
-  --html docs/reports/epic-<current-epic>.html
+python .harness/reporting/delivery_stats.py --repo . --epic <baseline-epic> \
+  --save-baseline .harness/.sandboxes/reports/delivery-stats/epic-<baseline-epic>.baseline.json
+python .harness/reporting/delivery_stats.py --repo . --epic <current-epic> \
+  --baseline .harness/.sandboxes/reports/delivery-stats/epic-<baseline-epic>.baseline.json \
+  --html .harness/.sandboxes/reports/delivery-stats/epic-<current-epic>.html
 ```
 
 #### Procedure
 
 1. **Resolve the epic.** The developer names it. If they name a child ticket, run the tool on that ticket anyway — the tool treats a ticket with no sub-issues as a scope of one item — and say that you did so.
 2. **Check the rate card before promising money.** Cost appears only when `.harness/reporting/rates.json` exists and it prices the models that were used. There is no built-in price list, by design: prices depend on the plan and change over time. If the file is missing, copy `.harness/reporting/rates.example.json`, tell the developer to fill in their own rates, and report everything else in the meantime — do not invent a number, and do not quote a price that you did not read from that file.
-3. **Save or compare a baseline when it is appropriate.** Save only a completed epic that is comparable to the one being measured. The comparison preserves `exact` or `estimated` attribution on both sides; a delta appears only when telemetry exists on both sides.
-4. **Run the tool** and write the dashboard to `docs/reports/`.
-5. **Report the summary** in this session: tickets closed, code volume, tokens by model, cache read/write tokens, the number of worker sessions and the restart reasons, the share of the review diff outside the scope, the QA failure rate, the cost when rates are available, and the path to the HTML.
+3. **Save or compare a baseline when it is appropriate.** Save only a completed epic that is comparable to the one being assessed. The comparison preserves `exact` or `estimated` attribution for each provider on both sides; a delta appears only when telemetry exists on both sides.
+4. **Run the tool** and write the dashboard under `.harness/.sandboxes/reports/delivery-stats/`.
+5. **Report the summary** in this session: tickets closed, code volume, tokens by model, cache split, the cost when rates are available, and the path to the HTML.
 6. **Carry the caveats through, do not smooth them over.** They are the point of the report:
-   - Claude Code work is attributed **exactly** — every transcript record carries its branch.
-   - Codex work is attributed **approximately** — its logs carry no branch, only a working directory and a timestamp, so its totals cover this repository inside the epic's activity window and can include unrelated work from the same period. Always say `оценка` when quoting it.
-   - Anything the tool could not source reads `нет данных`. Repeat it as missing data; never round it to zero and never fill it from memory.
-   - An ADR counts as added only when the commit that first added the file belongs to one of the epic's pull requests, so a squash-merged pull request undercounts. Mention it only if the developer asks why a number looks low.
+    - Claude Code work is attributed **exactly** — every transcript record carries its branch.
+    - Codex work is attributed **approximately** — its logs carry no branch, only a working directory and a timestamp, so its totals cover this repository inside the epic's activity window and can include unrelated work from the same period. Always say `оценка` when quoting it.
+    - Anything the tool could not source reads `нет данных`. Repeat it as missing data; never round it to zero and never fill it from memory.
+    - An ADR counts as added only when the commit that first added the file belongs to one of the epic's pull requests, so a squash-merged pull request undercounts. Mention it only if the developer asks why a number looks low.
 7. **Offer to attach the report.** The dashboard is a local file; posting it to the epic is the developer's decision, not an automatic step.
 
 #### Boundaries
@@ -68,8 +68,8 @@ Do not edit the transcripts, the rate card, or the git history to make a number 
 
 ## 3. Contracts
 
-- **Input (Input/Brief):** the number of a completed epic or of a child ticket; the optional `--json`, `--rates`, and `--base` parameters.
-- **Output (Output/Report):** an HTML dashboard under `docs/reports/` and a short report with the closed tickets, the code volume, tokens, cache, the cost (when it is calculated), and the reliability caveats.
+- **Input (Input/Brief):** the number of a completed epic or of a child ticket; the optional `--json`, `--rates`, `--base`, `--save-baseline`, and `--baseline` parameters.
+- **Output (Output/Report):** an HTML dashboard under `.harness/.sandboxes/reports/delivery-stats/` and a short report with the closed tickets, the code volume, tokens, cache, the cost (when it is calculated), and the reliability caveats.
 
 ## Source
 

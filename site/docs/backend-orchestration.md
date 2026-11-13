@@ -1,6 +1,6 @@
 # Backend-оркестрация {#backend-}
 
-Используйте `backend-orchestration`, когда задаче нужны независимые роли или отдельная проверка. Capability расширяет `engineering-suite`. Управляющая сессия coordinator планирует работу и ведёт её по выбранной политике согласования. Роли не выбирают себе модель и не мержат PR.
+Capability `backend-orchestration` раздаёт задачу независимым ролям и даёт отдельную проверку их работы. Она расширяет `engineering-suite`. Управляющая сессия, coordinator, планирует работу и ведёт её по выбранной политике согласования. Роли не выбирают себе модель и не мержат PR.
 
 ## Выберите задачу {#choose-task}
 
@@ -18,11 +18,11 @@
 
 Coordinator применяет правила из установленного `.harness/orchestration/playbook.md`.
 Manifest-файлы в `roles/` задают границы ролей. Проектный `orchestration.json` выбирает назначения,
-проверки и политики в этих границах. Runtime adapter передаёт утверждённые задания.
+проверки и политики в этих границах. Runtime adapter передаёт ролям утверждённые задания.
 
 `/implement` ведёт порядок `architect → developer → code-review → qa → publish`.
-Как принимать отчёт, решает `approval_policy`. PR агент открывает только после отдельного
-подтверждения, merge делает человек.
+`approval_policy` решает, как принимать отчёт роли. Агент открывает PR только после отдельного
+подтверждения, мерж делает человек.
 
 ## Что устанавливается {#_2}
 
@@ -32,21 +32,21 @@ Manifest-файлы в `roles/` задают границы ролей. Прое
 - `.harness/orchestration/coordinator.py`: CLI для batch, dispatch, approval и report.
 - `.harness/orchestration.json`: настройки проекта.
 
-После миграции Rust хранит рабочие записи в `.harness/orchestration/state/runtime.db`.
+После миграции runtime на Rust хранит рабочие записи в `.harness/orchestration/state/runtime.db`.
 Python читает и меняет их через протокол runtime. Пути вида `reports/<id>.json` обозначают
-логические записи, а не JSON-файлы для ручной правки. Используйте CLI для чтения и изменений.
-Локальное состояние не публикуется в Git; очистка требует отдельного решения coordinator.
+логические записи, а не JSON-файлы для ручной правки. Читайте и меняйте их через CLI.
+Локальное состояние не попадает в Git. Coordinator очищает его только отдельным решением.
 
 ## Язык и доказательства {#language-evidence}
 
 Перед первым английским handoff прочитайте [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/technical-english.md).
-Передача между ролями, checkpoint и state evidence пишутся на английском; completion report для
-coordinator пишется на русском с `"report_language": "ru"`. Команды, пути и SHA не переводятся.
+Передачу между ролями, checkpoint и state evidence роли пишут на английском. Completion report для
+coordinator роль пишет на русском с `"report_language": "ru"`. Команды, пути и SHA не переводите.
 
-Токены учитываются только по наблюдаемой telemetry provider или runtime с указанием источника.
-Оценка роли не заменяет отсутствующую telemetry. Значения секретов не входят в конфиг, brief или report.
+Токены считаются только по наблюдаемой telemetry провайдера или runtime, с указанием источника.
+Оценка роли не заменяет отсутствующую telemetry. Значения секретов не попадают в конфиг, brief и report.
 
 ## С чего начать {#start-here}
 
 Для первого запуска откройте [включение и конфигурацию](guides/orchestration/setup.md).
-Если нужно выбрать значения с агентом, используйте [стартовый промпт настройки](getting-started/settings/orchestration/index.md#agent-setup).
+Чтобы выбрать значения вместе с агентом, используйте [стартовый промпт настройки](getting-started/settings/orchestration/index.md#agent-setup).

@@ -1,17 +1,19 @@
 # Map of agents and guides
 
-Harness Next operational guides and Russian descriptions of the project agents. The guides,
-except `releases.md`, match the templates in `harness/project/docs-agents/`, and `harness init`
-deploys these templates to `docs/agents/` of the target project. They are documents for agent work.
-This overview and the agent descriptions do not reach the target project. The public guides on
+Harness Next operational guides and Russian descriptions of the project agents. The guides
+artifacts, git-workflow, issue-tracker, test-author, triage-labels, and worktrees match the
+templates in `harness/project/docs-agents/`, and `harness init` deploys these templates to
+`docs/agents/` of the target project. They are documents for agent work. `releases.md` and
+`console-web-home-checklist.md` belong only to this repository. This overview and the agent descriptions do not reach the target project. The public guides on
 workflow and the CLI ([guides](../guides/workflow.md),
 [CLI reference](../reference/cli.md)) and the backend orchestration guide
 ([`backend-orchestration.md`](../backend-orchestration.md)) are meant for the developer.
 
 ## Subagents
 
-Project subagents from `harness/project/agents/`. Each description contains the name and
-localization, the full manifest, the contracts, and the diagram.
+Project subagents from `harness/project/agents/`. The code-review-standards, code-review-spec,
+and pr-composer descriptions contain the name and localization, the full manifest, and the
+contracts. Test-author is described by a guide: configuration, protection, and the call contract.
 
 | Agent | Purpose |
 | --- | --- |

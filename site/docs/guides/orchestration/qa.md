@@ -6,31 +6,32 @@ QA проверяет закреплённый candidate в чистой сре�
 
 ## Clean-room QA lane {#clean-room-qa-lane}
 
-Coordinator сам выполняет одобренный `qa` dispatch в отдельном temporary Git worktree,
-отсоединённом ровно на `candidate_commit`. Команды он берёт буквально из `verification_commands`
-immutable brief, а несовпадение HEAD или грязный worktree останавливает проверку. Запуск не
-передают runtime adapter:
+Одобренный `qa` dispatch coordinator выполняет сам, во временном Git worktree, отсоединённом ровно
+на `candidate_commit`. Команды он берёт дословно из `verification_commands` неизменяемого brief.
+Если HEAD не совпадает или worktree грязный, проверка останавливается. Запуск не передаётся
+runtime adapter:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . qa run \
   --dispatch <qa-dispatch-id> --lease-seconds 1800
 ```
 
-В репозитории есть одна FIFO-полоса тяжёлых проверок. Если она занята, команда сохраняет
-запрос и возвращает `state: queued` с позицией, а повторный вызов для того же dispatch запустит его,
-только когда он станет первым. Состояние и текущий owner видны без запуска gate:
+В репозитории одна FIFO-очередь тяжёлых проверок. Если она занята, команда сохраняет запрос и
+возвращает `state: queued` с позицией. Повторный вызов для того же dispatch запустит проверку,
+только когда запрос станет первым. Состояние очереди и текущего владельца можно посмотреть без
+запуска gate:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . qa status
 ```
 
 В эпохе runtime store lease содержит идентичность процесса владельца, fencing token и время
-heartbeat. После истечения срока следующий `qa run` может снять lease только владельца,
-чья смерть доказана runtime (`owner-dead`). Живой или недоступный для проверки владелец
-не считается завершившим работу. В файловой эпохе просроченный lease требует ручного решения.
+heartbeat. После истечения срока следующий `qa run` может снять lease только того владельца, чью
+смерть доказал runtime (`owner-dead`). Живой владелец или владелец, которого нельзя проверить, не
+считается завершившим работу. В файловой эпохе просроченный lease требует ручного решения.
 
-Для ручного восстановления сначала проверьте владельца через `qa status`, затем используйте
-`qa clear-stale-lease` с ожидаемыми host/PID/expiry, подтверждением и причиной:
+Для ручного восстановления сначала проверьте владельца через `qa status`. Затем вызовите
+`qa clear-stale-lease` с ожидаемыми host, PID и сроком, подтверждением и причиной:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . qa clear-stale-lease \
@@ -39,51 +40,53 @@ python .harness/orchestration/coordinator.py --repo . qa clear-stale-lease \
   --reason 'проверено, что владелец больше не выполняется'
 ```
 
-Если lease принадлежит dispatch, который остался `working` без записанного report, команда
+Если lease принадлежит dispatch, который остался в `working` без записанного report, команда
 возвращает его в `approved`. Поле `restored_dispatch_state` в ответе и в записи восстановления
 равно `approved` или `null`.
 
 ### Подготовка окружения и категории провала
 
-Необязательный `qa_preparation` в `.harness/orchestration.json` задаёт команды подготовки окружения
-(например, `uv sync --locked`). Необязательные `qa_environment_probes` (например, проверка
-доступности реестра пакетов) и `qa_project_file_checks` (например, `uv lock --check`) задают
-независимые факты. Их команды выполняются в том же checkout только после упавшей подготовки.
-`qa run` выполняет их и затем `verification_commands` в одном чистом checkout точного
-`candidate_commit`. Он останавливается на первой упавшей команде. Без `qa_preparation`
-(конфигурации только с `verification_commands`) поведение и форма report не меняются.
+Необязательное поле `qa_preparation` в `.harness/orchestration.json` задаёт команды подготовки
+окружения (например, `uv sync --locked`). Необязательные `qa_environment_probes` (например,
+проверка доступности реестра пакетов) и `qa_project_file_checks` (например, `uv lock --check`)
+дают независимые факты. Их команды выполняются в том же checkout и только после упавшей подготовки.
+`qa run` выполняет подготовку, затем `verification_commands` в одном чистом checkout точного
+`candidate_commit` и останавливается на первой упавшей команде. Без `qa_preparation` (только с
+`verification_commands`) поведение и форма report не меняются.
 
-Report и артефакт с подготовкой несут `qa_stages`. На каждую выполненную команду там есть стадия
-(`preparation`, `environment-probe`, `project-file-check` или `gate`), точная команда, результат,
-exit code и санитизированная диагностика упавшей команды. Также они несут `failed_stage` и
-`code_checks_started` (`started`, `not_started` или `unknown`). Записи сверяются с неизменяемым
-артефактом: команды и exit codes должны совпасть с его блоками. Если подготовка упала, команды gate
-в `checks_run` записываются как `not_run`. Это не выдуманная упавшая проверка кода.
+Report и артефакт с подготовкой содержат `qa_stages`. Для каждой выполненной команды там есть
+стадия (`preparation`, `environment-probe`, `project-file-check` или `gate`), точная команда,
+результат, exit code и очищенная от секретов диагностика упавшей команды. Ещё они содержат
+`failed_stage` и `code_checks_started` (`started`, `not_started` или `unknown`). Coordinator сверяет
+записи с неизменяемым артефактом: команды и exit codes должны совпасть с его блоками. Если
+подготовка упала, команды gate попадают в `checks_run` как `not_run`. Это не выдуманная упавшая
+проверка кода.
 
-Причину провала подготовки подтверждают независимые факты: ни exit code, ни ключевое слово в логе
-не решают в одиночку, а сама стадия подготовки инфраструктурную причину не доказывает. Сигнатуры
-лога лишь подкрепляют диагноз, и без настроенных проб и проверок файлов проекта инфраструктурная
-причина не подтверждается. Тогда провал требует triage:
+Причину провала подготовки подтверждают только независимые факты. Ни exit code, ни ключевое слово
+в логе не решают в одиночку, и сама стадия подготовки инфраструктурную причину не доказывает.
+Сигнатуры лога только подкрепляют диагноз. Без настроенных проб и проверок файлов проекта
+инфраструктурная причина не подтверждается, и провал требует разбора (triage):
 
 | Диагноз | Подтверждение | Report | Маршрут `batch decide --decision retry` |
 | --- | --- | --- | --- |
-| `infrastructure` | упала проба окружения, а все проверки файлов проекта прошли (и их задано не меньше одной); в выводе нет сигнатуры дефекта проекта; код не проверялся | `blocked`, «код не проверен» | `same-candidate-rerun` без `--reason-category`: новый qa dispatch на тот же SHA, бюджет developer retry не тратится |
-| `project-defect` | упала проверка файлов проекта (проба при этом не упала), либо сигнатура дефекта (например, несовместимый lock-файл), согласованная с отслеживаемым манифестом или lock-файлом, названным в выводе; проверки файлов проекта её не опровергают | `failed` | `developer-retry`, причина `code` |
+| `infrastructure` | упала проба окружения, а все проверки файлов проекта прошли (и задана хотя бы одна); в выводе нет сигнатуры дефекта проекта; код не проверялся | `blocked`, «код не проверен» | `same-candidate-rerun` без `--reason-category`: новый qa dispatch на тот же SHA, бюджет developer retry не тратится |
+| `project-defect` | упала проверка файлов проекта (проба при этом не упала) или есть сигнатура дефекта (например, несовместимый lock-файл), которая согласуется с отслеживаемым манифестом или lock-файлом из вывода; проверки файлов проекта её не опровергают | `failed` | `developer-retry`, причина `code` |
 | `unknown` | пробы и проверки не заданы, не подтверждают причину или противоречат друг другу (например, упали и проба, и проверка) | `blocked`, нужен triage | `retry` без `--reason-category` отклоняется; coordinator называет причину или блокирует batch |
 
-Провал самого gate остаётся обычным провалом проверок кода и идёт по прежнему маршруту
+Провал самого gate остаётся обычным провалом проверок кода и идёт прежним маршрутом
 `developer-retry`.
 
-**Восстановление на том же SHA.** После подтверждения готовности окружения coordinator выполняет
-`batch decide --decision retry`. Затем он создаёт новый qa dispatch для того же `candidate_commit` с
-теми же командами и границами. Прежние brief, report, артефакт и approval сохраняются как audit
+**Восстановление на том же SHA.** Когда окружение готово, coordinator выполняет
+`batch decide --decision retry`. Затем он создаёт новый qa dispatch для того же `candidate_commit`
+с теми же командами и границами. Прежние brief, report, артефакт и approval остаются как audit
 evidence. Сбой подготовки или записи report не оставляет lease, запись очереди или состояние
-`working`: тот же approved dispatch можно запустить заново без правки ledger и без нового batch.
-Исключение — ledger, занятый другой операцией дольше 30 секунд (см. [«Занятый ledger»](operations.md#ledger-report-complete-ledger-release-lock)).
+`working`, поэтому тот же approved dispatch можно запустить заново без правки ledger и без нового
+batch. Исключение: ledger занят другой операцией дольше 30 секунд (см.
+[«Занятый ledger»](operations.md#ledger-report-complete-ledger-release-lock)).
 
 ### Ограниченные инфраструктурные повторы
 
-Проект может отдельно разрешить policy-повтор подтверждённого инфраструктурного отказа:
+Проект может отдельно разрешить повтор по политике после подтверждённого инфраструктурного отказа:
 
 ```json
 {
@@ -92,62 +95,66 @@ evidence. Сбой подготовки или записи report не оста
 }
 ```
 
-Без opt-in действуют ручные gates. Политика не выдаёт права платформы, не подменяет native
-approval и не принимает failed QA. Бюджет использует существующий
-`attention_policy.max_infrastructure_retries`: default — 2, а `0` запрещает повторы.
-Developer retry budget не расходуется. Opt-in, бюджет и команды preparation/probe/project-file-check
-сохраняются в `orchestration_policy.infrastructure_retry` и связаны с approval digest.
-Исторические briefs без этой секции остаются в ручном режиме. Правка live config не включает
-повтор для старого approval и не меняет команды нового уже утверждённого brief.
+Без этого opt-in действуют ручные gates. Политика не выдаёт права платформы, не подменяет нативное
+approval и не принимает упавший QA. Бюджет берётся из `attention_policy.max_infrastructure_retries`:
+по умолчанию 2, а `0` запрещает повторы. Developer retry budget не расходуется. Opt-in, бюджет и
+команды preparation, probe и project-file-check coordinator сохраняет в
+`orchestration_policy.infrastructure_retry` и связывает с approval digest. Старые brief без этой
+секции остаются в ручном режиме. Правка живого конфига не включает повтор для старого approval и не
+меняет команды уже утверждённого brief.
 
-После QA preparation failure policy продолжает только маршрут `same-candidate-rerun` с
-подтверждённым `infrastructure`, `code_checks_started: not_started` и неизменным SHA. Перед
-решением coordinator проверяет доступ и заново выполняет закреплённые независимые пробы окружения и
-проверки файлов проекта в чистом checkout; если среда ещё не готова, новый dispatch он не создаёт. После
-устранения причины в прежних границах выполните:
+После провала QA preparation политика продолжает только маршрут `same-candidate-rerun`, и только при
+подтверждённом `infrastructure`, `code_checks_started: not_started` и неизменном SHA. Перед решением
+coordinator проверяет доступ и заново выполняет закреплённые пробы окружения и проверки файлов
+проекта в чистом checkout. Если среда ещё не готова, новый dispatch он не создаёт. Когда причина
+устранена в прежних границах, выполните:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . report complete --dispatch <qa-dispatch-id>
 ```
 
-Каждый состоявшийся повтор получает новый immutable dispatch и источник решения
-`policy:infrastructure-retry`, а прежние brief/report/artifact сохраняются. Повтор `report complete`
-возвращает уже созданный dispatch, а прерывание после решения докатывает недостающий шаг. Команда
-не запускает worker и не открывает PR.
+Каждый состоявшийся повтор получает новый неизменяемый dispatch и источник решения
+`policy:infrastructure-retry`, а прежние brief, report и артефакт сохраняются. Повторный
+`report complete` возвращает уже созданный dispatch. Если команду прервали после решения, повтор
+доделывает недостающий шаг. Команда не запускает worker и не открывает PR.
 
-Отказ доступа до запуска QA или publish не создаёт report о проверке кода. Для opt-in dispatch
-coordinator сохраняет structured access attempt и checksum. Когда тот же ресурс стал доступен,
-запросите проверку и новое policy-утверждённое задание:
+Отказ доступа до запуска QA или publish не создаёт report о проверке кода. Для dispatch с opt-in
+coordinator сохраняет структурированную попытку доступа и checksum. Когда ресурс снова доступен,
+запросите проверку и новое задание, утверждённое политикой:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . dispatch retry-infrastructure --dispatch <dispatch-id>
 ```
 
-Этот путь разрешён только для отказа, подтверждённого probe (`denied`), при свежем подтверждении
-готовности. Coordinator отменяет старый неотправленный brief и записывает причину в audit, а новый brief сохраняет этап, SHA, команды,
-runtime/model/effort, scope и доступ; повтор команды возвращает прежний результат. Publish remote
-тоже должен остаться тем же. Затем запускайте `qa run` или `dispatch publish` с новым ID.
-Неподтверждённый сетевой отказ (`unverified`), неподдержанный режим (`unsupported`), отказ самим
-планом и произвольная ошибка Git требуют ручного разбора. Git-операции без утверждённого dispatch
-сохраняют ручной маршрут: opt-in не разрешает произвольную команду Git.
+Этот путь открыт только для отказа, который подтвердила проба (`denied`), и при свежем
+подтверждении готовности. Coordinator отменяет старый неотправленный brief и записывает причину в
+audit. Новый brief сохраняет этап, SHA, команды, runtime, model, effort, scope и доступ. Повтор
+команды возвращает прежний результат. Remote для publish тоже должен остаться прежним. Затем
+запустите `qa run` или `dispatch publish` с новым ID. Неподтверждённый сетевой отказ
+(`unverified`), неподдерживаемый режим (`unsupported`), отказ самим планом и произвольная ошибка Git
+требуют ручного разбора. Git-операции без утверждённого dispatch идут ручным маршрутом: opt-in не
+разрешает произвольную команду Git.
 
-Смена candidate, команд или доступа, неизвестная причина и исчерпание бюджета останавливают
-policy и поднимают `needs_attention`. Снимает attention человек. Это не увеличивает бюджет
-и не разрешает изменённый контракт. Новые требования проходят обычные proposal и approval.
-Не редактируйте ledger и не переписывайте candidate ради инфраструктурного восстановления.
+Смена candidate, команд или доступа, неизвестная причина и исчерпанный бюджет останавливают
+политику и поднимают `needs_attention`. Attention снимает человек. Это не увеличивает бюджет и не
+разрешает изменённый контракт. Новые требования проходят обычные proposal и approval. Не
+редактируйте ledger и не переписывайте candidate ради инфраструктурного восстановления.
 
-**Native smoke.** Проверка поддержки требует реальной coding-среды. Создайте отдельный smoke-проект,
-локальный bare remote и новый пустой cache внутри разрешённого shared storage. Зафиксируйте полный
-SHA harness и candidate, чистоту checkout и точные preparation/gate команды. Через публичный CLI
-пройдите batch/dispatch approval, native handoff роли, preparation/clean-room QA и publish
-accepted SHA, а затем подтвердите отказ доступа, отсутствие retry до готовности, ограниченный
-повтор и сохранение evidence. Dynamic IDs и digest берите из JSON команд. Native approval принимает
-coding-runtime согласно действующей политике пользователя, и orchestration policy её не заменяет.
-Не меняйте machine/global профили, не очищайте пользовательский cache, не создавайте PR и не
-выполняйте merge. Внешний push требует разрешения на конкретный smoke remote, а push в локальный
-bare remote проверяет Git/publish, но не внешний Git-доступ.
+### Native smoke {#native-smoke}
 
-Первые шаги из source checkout (пути и actual model задаёт человек):
+Поддержку проверяют только в реальной coding-среде. Создайте отдельный smoke-проект, локальный bare
+remote и новый пустой cache внутри разрешённого shared storage. Запишите полный SHA харнесса и
+candidate, чистоту checkout и точные команды preparation и gate. Через публичный CLI пройдите
+approval batch и dispatch, нативный handoff роли, preparation и clean-room QA, publish принятого SHA.
+Затем подтвердите отказ доступа, отсутствие retry до готовности, ограниченный повтор и сохранность
+evidence. Динамические ID и digest берите из JSON-вывода команд. Нативное approval принимает
+coding-runtime по действующей политике пользователя, и orchestration policy его не заменяет.
+
+Не меняйте machine- и global-профили, не очищайте пользовательский cache, не создавайте PR и не
+делайте merge. Для внешнего push нужно разрешение на конкретный smoke remote. Push в локальный bare
+remote проверяет Git и publish, но не внешний доступ к Git.
+
+Первые шаги из source checkout (пути и фактическую модель задаёт человек):
 
 ```bash
 python harness/bin/harness.py init "$SMOKE_REPO" --capability backend-orchestration \
@@ -162,25 +169,26 @@ python "$SMOKE_REPO/.harness/orchestration/coordinator.py" --repo "$SMOKE_REPO" 
   --prohibited-change 'global config, other projects, secrets, PR, merge'
 ```
 
-Перед этим локальный `origin` должен содержать `integration/smoke`, а checkout — чистую issue branch.
-Создайте tracked `smoke.py`, manifest/lock и реальные project-owned команды подготовки, независимой
-пробы сети/cache и offline проверки файлов. Настройте opt-in до proposal, создайте отдельный cache и
-зафиксируйте его пустоту. Для QA используется, например,
+До этого локальный `origin` должен содержать `integration/smoke`, а checkout должен стоять на
+чистой issue-ветке. Создайте отслеживаемый `smoke.py`, manifest и lock и настоящие команды проекта:
+подготовку, независимую пробу сети и cache, offline-проверку файлов. Настройте opt-in до proposal,
+создайте отдельный cache и убедитесь, что он пуст. Для QA подходит, например,
 `UV_CACHE_DIR=<новый-cache> UV_PROJECT_ENVIRONMENT=.harness/.venv uv sync --locked`, а developer
 использует другой cache. Runner выбирает Python из `.harness/.venv` текущего clean-room checkout.
-Команда gate должна проверять фактическое изменение в `smoke.py`, а также расположение `sys.prefix`
-и импортируемого пакета в этом checkout. Сохраните фактический `executed_command` из stage evidence.
+Команда gate должна проверять изменение в `smoke.py`, а также то, что `sys.prefix` и
+импортируемый пакет находятся в этом checkout. Сохраните фактический `executed_command` из stage
+evidence.
 
-Выберите transport до создания batch. Для отдельной native CLI-сессии задайте
-`assignment_plans.<role>.transport: "external"` и реальные `runtimes`, `provider_profiles` и команды
-проверок. В authored assignment plan обязательны architect, developer, code-review и qa, и health
-проверяет этот набор. Подготовьте project-owned adapter, который получает `dispatch --repo --brief` и
-действительно запускает coding CLI в approved worktree с моделью и effort из brief; он
-возвращается после запуска worker и не управляет ledger. Для `in-process` роль запускают как
-субагента текущей coordinator-сессии, и отдельную CLI-сессию таким субагентом считать нельзя.
+Выберите transport до создания batch. Для отдельной нативной CLI-сессии задайте
+`assignment_plans.<role>.transport: "external"` и настоящие `runtimes`, `provider_profiles` и
+команды проверок. В заданном вручную assignment plan обязательны architect, developer, code-review
+и qa, и health проверяет этот набор. Подготовьте adapter проекта. Он получает
+`dispatch --repo --brief`, запускает coding CLI в approved worktree с моделью и effort из brief,
+возвращается после запуска worker и не управляет ledger. При `in-process` роль запускают как
+субагента текущей coordinator-сессии. Отдельную CLI-сессию таким субагентом считать нельзя.
 
-Из JSON `batch create` возьмите `batch_id`, после чего человек или явно назначенный им coordinator
-выполняет `batch approve` с `--approved-by` и фактическим `--approved-at`. В том же smoke checkout:
+Возьмите `batch_id` из JSON `batch create`. Затем человек или назначенный им coordinator выполняет
+`batch approve` с `--approved-by` и фактическим `--approved-at`. В том же smoke checkout:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . dispatch propose \
@@ -191,90 +199,98 @@ python .harness/orchestration/coordinator.py --repo . dispatch create \
 python .harness/orchestration/coordinator.py --repo . dispatch send --dispatch "$DISPATCH"
 ```
 
-Для выбранного `external` последняя команда содержит реальный adapter:
+Для `external` последняя команда указывает настоящий adapter:
 
 ```bash
 python .harness/orchestration/coordinator.py --repo . dispatch send \
   --dispatch "$DISPATCH" --adapter "$SMOKE_REPO/scripts/native_codex_adapter.py"
 ```
 
-`DIGEST` берётся из просмотренного proposal, `DISPATCH` — из create. Handoff выводит путь brief,
-report staging path и ожидаемую модель. При `external` роль запускает adapter, при `in-process` —
-coordinator в своей coding-сессии. Роль выполняет
+`DIGEST` берётся из просмотренного proposal, `DISPATCH` из вывода create. Handoff выводит путь
+brief, путь report staging и ожидаемую модель. При `external` роль запускает adapter, при
+`in-process` её запускает coordinator в своей coding-сессии. Роль выполняет
 `dispatch self-report --dispatch "$DISPATCH" --model "$ACTUAL_MODEL" --worktree "$SMOKE_REPO"`,
 затем `dispatch heartbeat --dispatch "$DISPATCH"` и настоящий `report submit --file <report>`.
-Architect не меняет код и не запускает full gate. После проверки report coordinator сохраняет
-его план как `{"commit_plan": [...]}` в `$COMMIT_PLAN` и выполняет
+Architect не меняет код и не запускает полный gate. Проверив report, coordinator сохраняет план
+architect как `{"commit_plan": [...]}` в `$COMMIT_PLAN` и выполняет
 `batch decide --batch "$BATCH" --decision accept --commit-plan-file "$COMMIT_PLAN" --approved-by "$APPROVER" --approved-at "$APPROVED_AT"`.
-Повторите proposal/create/send для developer: его commit/report задают полный candidate SHA.
-`risk assess --batch "$BATCH" --candidate-commit "$SHA" --changed-file smoke.py` определяет,
-нужен ли review, и требуемый review пропустить нельзя; его send использует checkout точного SHA.
+Повторите proposal, create и send для developer: его коммит и report задают полный candidate SHA.
+`risk assess --batch "$BATCH" --candidate-commit "$SHA" --changed-file smoke.py` определяет, нужен
+ли review. Обязательный review пропустить нельзя, и его send использует checkout точного SHA.
 
-Для нового qa proposal/create добавьте `--candidate-commit "$SHA"` и используйте `qa run`,
-не `dispatch send`. Вызовите отказ записи только в созданном cache (в POSIX fixture —
-`chmod u-w "$SMOKE_CACHE"`). Сохраните `qa_stages` и отказ `report complete` до готовности.
-Восстановите `chmod u+w "$SMOKE_CACHE"`. `report complete` должен вернуть новый ID на тот же SHA,
-а replay — тот же ID. Запустите `qa run` нового ID и вручную примите только успешный report.
-Publish proposal/create задаёт `--role developer --purpose publish --candidate-commit "$SHA"`.
-Для POSIX metadata fixture ограничьте запись только в smoke `.git`. Сохраните отказ
-`dispatch publish --dispatch "$PUBLISH" --remote origin` и отказ `dispatch retry-infrastructure`
-до восстановления. После восстановления получите новый ID и повторите publish в тот же `origin`.
-`git ls-remote --heads origin refs/heads/feature/issue-619-native-smoke` должен вернуть ровно `$SHA`.
-При прерывании восстановите write bit только своего fixture. Неполный или иной диагноз — blocker,
-а не разрешение продолжать сценарий. Авторизованный inherit coordinator операций не доказывает
-применение authored прав worker. Запускайте только режим, подтверждённый действующим extension.
+Для нового qa proposal и create добавьте `--candidate-commit "$SHA"` и запускайте `qa run`, а не
+`dispatch send`. Сымитируйте отказ записи только в созданном cache (в POSIX-фикстуре:
+`chmod u-w "$SMOKE_CACHE"`). Сохраните `qa_stages` и отказ `report complete` до готовности среды.
+Верните права: `chmod u+w "$SMOKE_CACHE"`. `report complete` должен вернуть новый ID на тот же SHA,
+а повторный вызов (replay) тот же ID. Запустите `qa run` с новым ID и вручную примите только
+успешный report.
 
-В evidence сохраняйте runtime, версию, transport и режим, полные SHA, native параметры и proof
-фактического доступа, команды с exit codes, readiness, dispatch IDs и checksum, предварительно
-удалив secrets. Health-конфиг и checkout attestation сетевые права не доказывают.
+Для publish proposal и create задайте `--role developer --purpose publish --candidate-commit "$SHA"`.
+В POSIX-фикстуре метаданных запретите запись только в `.git` smoke-проекта. Сохраните отказ
+`dispatch publish --dispatch "$PUBLISH" --remote origin` и отказ `dispatch retry-infrastructure` до
+восстановления. После восстановления получите новый ID и повторите publish в тот же `origin`.
+`git ls-remote --heads origin refs/heads/feature/issue-619-native-smoke` должен вернуть ровно
+`$SHA`. Если сценарий прервался, верните права на запись только своей фикстуре. Неполный или иной
+диагноз считается blocker, а не разрешением продолжать сценарий. Авторизованный `inherit` для
+операций coordinator не доказывает, что права worker применены. Запускайте только режим, который
+подтверждает действующий extension.
 
-Проверки этой реализации покрывают настоящие Git/ledger, preparation/gate, same-SHA retry,
-budget, attention, metadata refusal и локальный publish. Это контролируемые проверки: они не
-доказывают native handoff и всю runtime-матрицу. Для native handoff с authored планом доступа нужна
-реализация `extensions.runtime_access`, которая наблюдает и применяет фактический доступ worker;
-`none` такого proof не даёт, а явно выбранный непроверенный режим блокируется. `legacy-inherit`
-сохраняет прежнюю передачу задания, но права worker не подтверждает.
+В evidence сохраните runtime, версию, transport и режим, полные SHA, нативные параметры и
+доказательство фактического доступа, команды с exit codes, готовность среды, ID dispatch и
+checksum. Секреты из evidence удалите заранее. Health-конфиг и checkout attestation сетевые права не
+доказывают.
 
-Проверенный 2026-10-08 native smoke установлен из harness
-`cca45e172c7b3685c012e7e6c077356d6cbd6722`: Linux, Codex CLI 0.160.1, настоящий project adapter и
-две отдельные роли `architect`/`developer`. Candidate `1dba1785bc809971981129c747e85bffd9b29c51`
+Проверки этой реализации покрывают настоящие Git и ledger, preparation и gate, повтор на том же
+SHA, бюджет, attention, отказ записи метаданных и локальный publish. Это контролируемые проверки:
+они не доказывают нативный handoff и всю матрицу runtime. Для нативного handoff с заданным планом
+доступа нужна реализация `extensions.runtime_access`, которая наблюдает и применяет фактический
+доступ worker. `none` такого доказательства не даёт, а явно выбранный непроверенный режим
+блокируется. `legacy-inherit` сохраняет прежнюю передачу задания, но права worker не подтверждает.
+
+Проверенный 2026-10-08 native smoke установлен из харнесса
+`cca45e172c7b3685c012e7e6c077356d6cbd6722`: Linux, Codex CLI 0.160.1, настоящий adapter проекта и
+две отдельные роли `architect` и `developer`. Candidate `1dba1785bc809971981129c747e85bffd9b29c51`
 прошёл preparation и gate в новом clean-room checkout с пустым QA cache, свежей `.harness/.venv` и
-скачанными зависимостями, после чего был опубликован в local bare remote. Отказ cache и отказ записи
-`.git` остановили продолжение до readiness. Восстановление израсходовало два общих infrastructure
-retry, replay сохранил successor IDs, а прежние records сохранили checksum. Batch завершён через
-публичный CLI. Это подтверждает только границы из таблицы ниже.
+скачанными зависимостями и был опубликован в локальный bare remote. Отказ cache и отказ записи в
+`.git` остановили продолжение до готовности среды. Восстановление израсходовало два общих
+infrastructure retry, replay сохранил ID преемников, а прежние записи сохранили checksum. Batch
+завершён через публичный CLI. Это подтверждает только границы из таблицы ниже.
 
-Таблица фиксирует исторический smoke-прогон указанных версий и не подтверждает совместимость установленного сейчас CLI.
+Таблица описывает исторический smoke-прогон указанных версий и не подтверждает совместимость CLI,
+установленного сейчас.
 
 | Runtime / transport / режим | Результат native smoke | Граница evidence |
 | --- | --- | --- |
-| Codex CLI 0.160.1 / `external` / worker `legacy-inherit` | PASS: реальные роли, self-report, heartbeat, commit и report | Native CLI работал с `workspace-write`; authored worker access plan не проверен |
-| Coordinator / `inherit` / QA и publish | PASS: fresh dependencies, exact-SHA gate, cache/Git denial, readiness, budget и replay | Фактические операции в одной разрешённой среде coordinator; publish только в local bare remote |
-| Worker с authored `inherit`, `sandbox` или `unsandboxed` / `runtime_access: none` | Blocker | Нужен действующий extension с proof наблюдения и применения плана; attestation его не заменяет |
-| `in-process`, Claude и другие runtime, внешний Git push | Не проверено | Для каждого сочетания нужен отдельный фактический запуск |
+| Codex CLI 0.160.1 / `external` / worker `legacy-inherit` | PASS: реальные роли, self-report, heartbeat, commit и report | Нативный CLI работал с `workspace-write`; заданный план доступа worker не проверен |
+| Coordinator / `inherit` / QA и publish | PASS: свежие зависимости, gate на точном SHA, отказ cache и Git, готовность среды, бюджет и replay | Операции шли в одной разрешённой среде coordinator; publish только в локальный bare remote |
+| Worker с заданным `inherit`, `sandbox` или `unsandboxed` / `runtime_access: none` | Blocker | Нужен действующий extension, который доказывает наблюдение и применение плана; attestation его не заменяет |
+| `in-process`, Claude и другие runtime, внешний Git push | Не проверено | Для каждого сочетания нужен отдельный реальный запуск |
 
-CLI flags, host execution coordinator и POSIX `chmod` fixture не доказывают всю permission-матрицу.
-Для другого runtime, transport или authored режима поддержки требуют собственного native evidence.
+CLI flags, выполнение coordinator на хосте и POSIX-фикстура с `chmod` не доказывают всю матрицу
+прав. Для другого runtime, transport или заданного режима нужен собственный нативный evidence.
 
-После выполнения coordinator создаёт immutable completion report с командами, exit codes и кратким
-санитизированным evidence. Полный санитизированный stdout/stderr сохраняется вне Git в
+### Отчёт QA и переход к PR {#qa-report-pr}
+
+После выполнения coordinator создаёт неизменяемый completion report с командами, exit codes и
+кратким очищенным evidence. Полный очищенный stdout и stderr хранится вне Git в
 `.harness/orchestration/state/qa-artifacts/<sha256>.log`. Report ссылается на этот путь и checksum.
 Провал gate остаётся QA finding и требует нового одобренного developer dispatch. Runner не правит
-код и не перезапускает проверку самостоятельно.
+код и не перезапускает проверку сам.
 
-После accepted QA evidence coordinator создаёт, но не запускает, publish dispatch для того же
-candidate SHA. Этот SHA отправляет только developer publish, а ни QA, ни review, ни adapter не
-создают и не мержат PR. После publish человек вручную запускает `/to-pull-requests <ticket>`: он
-проверяет accepted QA evidence текущего SHA и ведёт обычный ручной PR workflow без повторного
-тяжёлого gate. Хук `require-qa-gate.sh` принимает то же evidence сам, поэтому повторный gate и
-маркер не нужны для чистого checkout с `HEAD`, равным accepted `candidate_commit`, и с `pass` по
-каждой команде `qa_gate_commands`. Иначе остаётся прежний путь с маркером.
+После принятого QA evidence coordinator создаёт, но не запускает publish dispatch для того же
+candidate SHA. Этот SHA пушит только developer publish. Ни QA, ни review, ни adapter не создают и
+не мержат PR. После publish человек сам запускает `/to-pull-requests <ticket>`. Скилл проверяет
+принятое QA evidence текущего SHA и ведёт обычный ручной PR workflow без повторного тяжёлого gate.
+Хук `require-qa-gate.sh` сам принимает то же evidence. Повторный gate и маркер не нужны, если
+checkout чистый, `HEAD` равен принятому `candidate_commit`, а каждая команда `qa_gate_commands`
+имеет `pass`. Иначе действует прежний путь с маркером.
 
-Обычная точка входа — `/implement <ticket>`. Эта сессия сама становится coordinator-ом и ведёт
-описанный цикл. Она останавливается на пяти approval-гейтах (architect, developer, code-review, qa,
-publish) и наблюдает за heartbeat каждого dispatch. Сессия доводит batch одного тикета до терминального
-состояния и только потом берёт следующий. Ручной запуск по этому руководству тоже работает. Запрос
-для управляющей сессии в этом случае может выглядеть так:
+Обычная точка входа: `/implement <ticket>`. Эта сессия сама становится coordinator и ведёт
+описанный цикл. Она проводит тикет через пять стадий (architect, developer, code-review, qa,
+publish), запрашивает approval по действующей `approval_policy` и следит за heartbeat каждого
+dispatch. Сессия доводит batch одного тикета до терминального состояния и только потом берёт
+следующий. Ручной запуск по этому руководству тоже работает. Запрос для управляющей сессии тогда
+может выглядеть так:
 
 ```text
 Выступи coordinator-ом backend batch для issue #123. Прочитай .harness/orchestration/roles/
