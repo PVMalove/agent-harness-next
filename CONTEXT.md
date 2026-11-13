@@ -685,7 +685,8 @@ _Avoid_: merge gate, release QA, QA-gate (проверка кода в checkout,
 **Harness Next**:
 Программа эпика #784: Rust runtime, транзакционный store, инкрементальная проверка и профили
 hooks. Работа идёт в `integration/harness-runtime-reliability` и выходит одним релизом 2.0.0
-(ADR 0019–0026).
+(ADR 0019–0026). Бренд продукта пишется иначе — «Harness next» (README, консоль,
+`AGENTS.md`): это имя продукта, а не программы эпика.
 _Avoid_: harness-next-runtime (такой ветки нет), HN как имя ветки.
 
 **Superseded-by-Harness-Next**:
