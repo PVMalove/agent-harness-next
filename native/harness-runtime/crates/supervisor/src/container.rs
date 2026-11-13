@@ -325,6 +325,8 @@ impl Supervisor {
             "images": {"worker": observation.worker_image_id, "proxy": observation.proxy_image_id},
             "objects": objects,
             "logs": {"stdout": logs.0, "stderr": logs.1},
+            // Names only: the saved logs replace their values (#1125).
+            "environment": checked.plan.environment,
         })
     }
 
@@ -472,6 +474,7 @@ impl Supervisor {
                         .map_err(|err| err.to_string())
                         .and_then(|()| {
                             ops::logs(engine, worker, &paths[0], &paths[1])
+                                .and_then(|()| redact_logs(execution, &paths))
                                 .map_err(|err| err.to_string())
                         })
                 },
@@ -498,6 +501,7 @@ impl Supervisor {
             .parent()
             .map_or(Ok(()), crate::launch::log_directory)
             .and_then(|()| ops::logs(engine, worker, &partial(stdout), &partial(stderr)))
+            .and_then(|()| redact_logs(execution, &[partial(stdout), partial(stderr)]))
             .and_then(|()| fs::rename(partial(stdout), stdout))
             .and_then(|()| fs::rename(partial(stderr), stderr));
         if let Err(err) = refreshed {
@@ -901,5 +905,70 @@ impl Supervisor {
             };
             self.record(id, from, ExecutionState::Unknown, &change);
         }
+    }
+}
+
+/// The shortest value the saved logs replace: a shorter one would rewrite ordinary words.
+const MIN_REDACTED_BYTES: usize = 8;
+
+/// Replace the value of each environment name of the execution's plan in its saved logs with
+/// `[redacted:<name>]` (#1125). The logs live in the shared storage that every container worker
+/// mounts read-only, and a worker may print a credential it was given by name.
+fn redact_logs(execution: &Execution, paths: &[PathBuf]) -> std::io::Result<()> {
+    let secrets: Vec<(Vec<u8>, Vec<u8>)> = execution
+        .launch
+        .get("environment")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|name| {
+            let value = std::env::var_os(name)?.into_encoded_bytes();
+            (value.len() >= MIN_REDACTED_BYTES)
+                .then(|| (value, format!("[redacted:{name}]").into_bytes()))
+        })
+        .collect();
+    if secrets.is_empty() {
+        return Ok(());
+    }
+    for path in paths {
+        let data = fs::read(path)?;
+        let redacted = secrets.iter().fold(data.clone(), |text, (value, mark)| {
+            replace_bytes(&text, value, mark)
+        });
+        if redacted != data {
+            fs::write(path, redacted)?;
+        }
+    }
+    Ok(())
+}
+
+fn replace_bytes(text: &[u8], value: &[u8], mark: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.windows(value.len()).position(|window| window == value) {
+        out.extend_from_slice(&rest[..at]);
+        out.extend_from_slice(mark);
+        rest = &rest[at + value.len()..];
+    }
+    out.extend_from_slice(rest);
+    out
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::replace_bytes;
+
+    #[test]
+    fn every_occurrence_of_the_value_is_replaced() {
+        let text = b"a secret-1234 b secret-1234secret-1234 c";
+        assert_eq!(
+            replace_bytes(text, b"secret-1234", b"[x]"),
+            b"a [x] b [x][x] c".to_vec()
+        );
+        assert_eq!(
+            replace_bytes(b"none", b"secret-1234", b"[x]"),
+            b"none".to_vec()
+        );
     }
 }

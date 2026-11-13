@@ -344,6 +344,38 @@ def test_a_running_container_streams_its_events_to_dispatch_observe(
     assert "Runtime session connected" in texts
 
 
+def test_a_credential_the_worker_prints_never_reaches_its_saved_logs(
+    podman: Podman,
+) -> None:
+    """#1125: the runtime replaces the value of each plan environment name in the snapshot of a
+    running worker and in the logs saved at its exit; other workers can read those files."""
+    repo, engine = podman()
+    _script_stream(
+        engine,
+        _stream(
+            {"type": "system", "subtype": "init", "model": "sonnet"},
+            {"type": "assistant", "text": f"key {SECRET} and {SECRET}"},
+        ),
+    )
+    answer(repo.send())
+    running = repo.wait_execution("running")
+    answer(repo.run("dispatch", "observe", "--dispatch", repo.dispatch))
+    stdout = Path(str(dig(running, "launch", "logs", "stdout")))
+    snapshot = stdout.read_text(encoding="utf-8")
+    assert '"model": "sonnet"' in snapshot
+    assert SECRET not in snapshot
+    assert f"[redacted:{SECRET_NAME}]" in snapshot
+
+    engine.update(
+        lambda state: state["objects"][WORKER_CONTAINER].update(status="exited")
+    )
+    repo.wait_execution("exited")
+
+    saved = stdout.read_text(encoding="utf-8")
+    assert SECRET not in saved
+    assert f"key [redacted:{SECRET_NAME}] and [redacted:{SECRET_NAME}]" in saved
+
+
 def test_a_running_container_writer_is_attested_on_the_host_and_its_report_accepted(
     podman: Podman,
 ) -> None:
