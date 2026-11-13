@@ -28,9 +28,9 @@ overrides с теми же именами описаны на страницах
 ## Связанные документы
 
 - Discovery Context (список путей, важных для задачи) начинается в `/grilling` с opt-in
-  `Live Artifact`, затем переходит в `Relevant Files` спецификации и в Path inventory тикета.
-  Backend batch берёт `Context Package`, который собирается без LLM, checkpoint/continuation для
-  write-роли и base-commit gate. Правила работы собраны в
+  `Live Artifact`, сохраняется в `artifacts/discovery-context.md` спецификации и переходит в
+  `Relevant Files` спецификации и в Path inventory тикета. Backend batch берёт `Context Package`,
+  который собирается без LLM, и checkpoint/continuation для write-роли. Правила работы собраны в
   [backend-orchestration](../backend-orchestration.md). Текущее устройство описывает ADR 0003,
   конвейер описывает ADR 0005.
 - Агенты: [Агенты](../agents/index.md)
