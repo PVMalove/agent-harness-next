@@ -217,6 +217,49 @@ fn migrate_without_a_ledger_prints_the_not_found_code_first() {
     assert!(remedy.starts_with("REMEDY: [not_found] "), "{remedy}");
 }
 
+fn init_args(repo: &Scratch, approved_by: &str) -> Vec<String> {
+    let mut args = migrate_args(repo, approved_by);
+    args[0] = "init".to_owned();
+    args
+}
+
+#[test]
+fn init_of_a_repository_without_state_prints_one_json_line_and_cuts_over() {
+    let repo = Scratch::repo("init");
+
+    let output = run_owned(&init_args(&repo, "human:operator"));
+
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.lines().count(), 1, "{stdout}");
+    let line: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(line["initialized"], true);
+    let pointer: serde_json::Value =
+        serde_json::from_slice(&fs::read(repo.state().join("ledger.json")).unwrap()).unwrap();
+    assert_eq!(pointer["version"], 4);
+}
+
+#[test]
+fn init_of_a_policy_approver_prints_the_policy_denied_code_and_writes_nothing() {
+    let repo = Scratch::repo("init-policy");
+
+    let (code, remedy) = refusal(&run_owned(&init_args(&repo, "policy:auto")));
+
+    assert_eq!(code, 2);
+    assert!(remedy.starts_with("REMEDY: [policy_denied] "), "{remedy}");
+    assert!(!repo.state().exists());
+}
+
+#[test]
+fn init_of_a_file_ledger_names_migrate_in_its_remedy() {
+    let repo = Scratch::repo_with_ledger("init-ledger").without_qa_lane_entries();
+
+    let (code, remedy) = refusal(&run_owned(&init_args(&repo, "human:operator")));
+
+    assert_eq!(code, 2);
+    assert!(remedy.contains("harness-runtime migrate"), "{remedy}");
+}
+
 #[test]
 fn migrate_while_the_ledger_lock_is_held_prints_the_store_busy_code_first() {
     let repo = Scratch::repo_with_ledger("busy").without_qa_lane_entries();

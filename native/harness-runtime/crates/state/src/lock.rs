@@ -32,6 +32,8 @@ pub const LOCK_OWNER: &str = "owner.json";
 pub const LOCK_RELEASE_GUARD: &str = ".coordinator.lock.release";
 /// The operation of `migrate` in the owner record.
 pub const OPERATION: &str = "runtime-cutover";
+/// The operation of `init` in the owner record.
+pub const INIT_OPERATION: &str = "runtime-init";
 /// The operation of `rollback --to-legacy` in the owner record.
 pub const ROLLBACK_OPERATION: &str = "runtime-rollback";
 const LOCK_AUDIT: &str = "lock-audit";
