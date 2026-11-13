@@ -25,7 +25,8 @@ Agent Harness Next разворачивает в проект скиллы, hook
 | `engineering-suite` | Эпики и тикеты, триаж, двухосевое review, `qa-gate` и подготовка PR. |
 | `backend-orchestration` | Роли и coordinator для распределённых систем: briefs, worktrees и ledger. |
 
-Старое имя `pvmalove-suite` поддерживается как совместимый alias.
+Старое имя `pvmalove-suite` поддерживается как совместимый alias во всех выпусках 2.x и будет
+удалено в 3.0.0.
 
 ## Быстрый старт
 
