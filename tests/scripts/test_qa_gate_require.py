@@ -101,6 +101,7 @@ class Project:
             input=json.dumps(payload),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
 
@@ -114,6 +115,7 @@ class Project:
             input=json.dumps({"tool_input": {"command": QA}}),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
 
@@ -318,22 +320,24 @@ def test_the_skill_records_the_marker_that_opens_the_pr_in_each_runtime(
     def create_pr() -> subprocess.CompletedProcess[str]:
         """Run the runtime's require hook on a PR-creating call from the session root."""
         return subprocess.run(
-            ["bash", "-c", runtime_require_command(template)],
+            [shutil.which("bash") or "bash", "-c", runtime_require_command(template)],
             cwd=project.main,
             env=env,
             input=json.dumps(payload),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
 
     without_marker = create_pr()
     recorded = subprocess.run(
-        ["bash", "-c", skill_record_command(skill)],
+        [shutil.which("bash") or "bash", "-c", skill_record_command(skill)],
         cwd=project.linked,
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     after_marker = create_pr()

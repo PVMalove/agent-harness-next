@@ -10,6 +10,7 @@ ignore and a flag-off plan answers with a full pytest stage.
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +44,9 @@ CLI_POLICY: JsonObject = {
     ],
 }
 
+
+# The command the plan records: the interpreter quoted as a shell would, as on Windows paths.
+PASS = shlex.join([sys.executable, "-c", "pass"])
 
 class TicketDiffCliTests(TicketDiffFixture):
     def _on(self, **changes: object) -> JsonObject:
@@ -95,8 +99,8 @@ class TicketDiffCliTests(TicketDiffFixture):
                 self.assertEqual(
                     proposal["transition"]["verification_commands"],
                     [
-                        f"{sys.executable} -c pass",
-                        f"{sys.executable} -c pass services/test_y.py",
+                        PASS,
+                        f"{PASS} services/test_y.py",
                     ],
                 )
 
@@ -152,7 +156,7 @@ class TicketDiffCliTests(TicketDiffFixture):
         self.assertEqual((tests["selection"], tests["nodeids"]), ("ticket-diff", []))
         self.assertEqual(
             proposal["transition"]["verification_commands"],
-            [f"{sys.executable} -c pass"],
+            [PASS],
         )
 
     def test_the_impact_gate_accepts_the_real_plan_through_dispatch_create(

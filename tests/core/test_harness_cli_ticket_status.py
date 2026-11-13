@@ -83,11 +83,12 @@ class Project:
             **os.environ,
             "PATH": f"{self.tools}{os.pathsep}{os.environ.get('PATH', '')}",
             "FAKE_TRACKER_DIR": str(self.tools),
+            "PYTHONIOENCODING": "utf-8",  # the CLI prints "…"; a piped Windows stdout is cp1252
         }
         done = subprocess.run(
             [sys.executable, str(CLI), "ticket-status", str(self.repo),
              "--spec", spec, "--ticket", ticket, "--to", to],
-            capture_output=True, text=True, env=env, timeout=60, check=False,
+            capture_output=True, text=True, encoding="utf-8", env=env, timeout=60, check=False,
         )  # fmt: skip
         lines = [line for line in done.stdout.splitlines() if line.strip()]
         assert lines, done.stderr
@@ -330,6 +331,9 @@ def test_an_unreadable_tracker_is_a_write_error_without_a_write(github: Project)
     assert github.writes() == []
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="a .cmd shim cannot take the & of a GitLab query"
+)
 def test_gitlab_move_unlabels_the_previous_status_explicitly(tmp_path: Path) -> None:
     project = Project(
         tmp_path, {"type": "gitlab", "host": "gitlab.example.com", "project": "g/p"}

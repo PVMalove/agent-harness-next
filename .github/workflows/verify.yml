@@ -717,6 +717,8 @@ jobs:
           git_bash='C:\Program Files\Git\bin'
           test -f "$(cygpath -u "$git_bash")/bash.exe"
           echo "$git_bash" >> "$GITHUB_PATH"
+          # What a hook sees from Git Bash: shown here because a failing hook reports only a verdict.
+          PATH="$(cygpath -u "$git_bash"):$PATH" bash -c 'command -v bash python3 python; python3 --version || true'
       - name: Verify harness and clean-room install
         env:
           PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"

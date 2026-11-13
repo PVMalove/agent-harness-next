@@ -35,6 +35,10 @@ def _context(repo: Path) -> HealthContext:
 
 def _executable(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":  # `which` finds a Windows executable by its PATHEXT suffix
+        path = path.with_name(path.name + ".cmd")
+        path.write_text("@exit /b 0\r\n", encoding="utf-8", newline="")
+        return path
     path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     path.chmod(0o755)
     return path

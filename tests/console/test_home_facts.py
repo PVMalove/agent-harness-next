@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -76,7 +77,10 @@ def test_an_unanswering_runtime_leaves_the_audit_count_unread_with_its_reason(
     assert facts.generation == "generation-ff01"
     assert facts.cutover_at is None
     assert "runtime_unavailable" in facts.reason
-    assert facts.start_command == f"harness-runtime serve --repo {tmp_path.resolve()}"
+    assert (
+        facts.start_command
+        == f"harness-runtime serve --repo {shlex.quote(str(tmp_path.resolve()))}"
+    )
 
 
 @pytest.mark.parametrize("code", ["protocol_unsupported", "store_busy"])

@@ -47,6 +47,8 @@ def test_windows_discovery_has_protected_current_user_only_dacl(tmp_path: Path) 
     from harness.console.kernel.discovery import discovery_path
 
     project = tmp_path
+    subprocess.run(["git", "init", "-q", str(project)], check=True)  # discovery needs a Git root
+
     async def scenario() -> None:
         server = ConsoleServer(project)
         await server.start()
