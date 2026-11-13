@@ -3,6 +3,7 @@
 use serde_json::Value;
 
 use crate::Kind;
+use crate::argv::RUNTIME_SET_NAMES;
 
 /// One plan root and whether any requirement writes it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -10,6 +11,8 @@ pub struct Requirement {
     pub resource: String,
     pub path: String,
     pub write: bool,
+    /// A cache item's environment name: the launch passes `NAME=<path>` itself (ADR 0032).
+    pub variable: Option<String>,
 }
 
 /// The container plan of a brief's `runtime_access` (ADR 0025).
@@ -50,6 +53,27 @@ fn texts(value: Option<&Value>, what: &str) -> Result<Vec<String>, String> {
         .collect()
 }
 
+/// A cache variable name: a valid environment name the launch does not set itself.
+fn variable(value: &Value, resource: &str) -> Result<String, String> {
+    let name = value
+        .as_str()
+        .ok_or("the plan cache variable is not a string")?;
+    let mut chars = name.chars();
+    let valid = chars
+        .next()
+        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric());
+    if resource != "cache" {
+        return Err(format!("the plan {resource} requirement names a variable"));
+    }
+    if !valid || RUNTIME_SET_NAMES.contains(&name) {
+        return Err(format!(
+            "the plan cache variable {name:?} is not a free environment name"
+        ));
+    }
+    Ok(name.to_owned())
+}
+
 impl Plan {
     /// The container plan in a resolved `runtime_access` plan.
     ///
@@ -72,10 +96,16 @@ impl Plan {
                 if access != "read" && access != "write" {
                     return Err(format!("unknown plan access {access}"));
                 }
+                let resource = text(item, "resource")?;
+                let variable = match item.get("variable") {
+                    None => None,
+                    Some(value) => Some(variable(value, &resource)?),
+                };
                 Ok(Requirement {
-                    resource: text(item, "resource")?,
+                    resource,
                     path: text(item, "path")?,
                     write: access == "write",
+                    variable,
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
@@ -91,6 +121,19 @@ impl Plan {
             requirements,
             plan_digest: text(plan, "plan_digest")?,
         })
+    }
+
+    /// Every cache variable with its pinned path, once per name, in plan order.
+    pub fn cache_variables(&self) -> Vec<(String, String)> {
+        let mut found: Vec<(String, String)> = Vec::new();
+        for item in &self.requirements {
+            if let Some(name) = &item.variable
+                && !found.iter().any(|(seen, _)| seen == name)
+            {
+                found.push((name.clone(), item.path.clone()));
+            }
+        }
+        found
     }
 
     /// The path of the first requirement of `resource`.
