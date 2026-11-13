@@ -260,14 +260,38 @@ runtime берётся из developer; отсутствие защищённог
 
 ## 8. Диагностика и живая проверка
 
+### Как включить тест-автора
+
+1. Задайте `test_paths` и `test_runner` (раздел 2) и добавьте в `.harness/project.json` блок
+   `test_author` с runtime, model и effort. Если в `.harness/orchestration.json` есть план
+   developer, `harness health --fix` добавит блок из этого плана сам; существующий блок он не
+   меняет.
+2. Один раз откройте Claude Code в основном checkout репозитория и примите диалог доверия.
+   Worktree этого репозитория отдельного доверия не требуют.
+3. Запустите `harness health` и выполните шаг под каждой строкой `hooks.test_author_*` со статусом
+   warn. Строки проверяют условия по одному, поэтому повторяйте health, пока все не станут ok.
+
 `harness health` выводит отдельную проверку `hooks.test_author`: результат preflight для
 целевого checkout или санитизированную причину отказа, выбранные runtime/model/effort и
 источник. Health использует план developer из orchestration (пометка `planned`), а при отсутствии
 плана — short-профиль проекта. Плановая готовность не заменяет выбор из утверждённого brief.
-Для поддержанного Claude-адаптера Health отдельно проверяет точное решение доверия. Без opt-in проверка пропускается с причиной,
-недоступный необязательный автор даёт предупреждение и оставляет обычный маршрут рабочим.
-Результат preflight относится к основному checkout; worker worktree проверяет свой preflight
-при вызове автора.
+Без opt-in проверка пропускается с причиной, недоступный необязательный автор даёт
+предупреждение и оставляет обычный маршрут рабочим. Результат preflight относится к checkout,
+для которого запущен health; worker worktree проверяет свой preflight при вызове автора.
+
+Каждое условие автора health показывает отдельной строкой, и при отказе строка печатает шаг
+исправления — команду или фрагмент конфигурации:
+
+| Строка | Что проверяет | Шаг при отказе |
+| --- | --- | --- |
+| `hooks.test_author_config` | блок `test_author` в `.harness/project.json` | фрагмент блока из плана developer и `harness health --fix` |
+| `hooks.test_author_root` | корень проекта по Git и совпадение с ним `CLAUDE_PROJECT_DIR`, если переменная задана | оба пути при `project_dir_mismatch` и `unset CLAUDE_PROJECT_DIR` |
+| `hooks.test_author_trust` | доверие Claude Code к этому checkout или к основному checkout, который перечисляет его в `git worktree list` | путь, который нужно доверить, и `cd <основной checkout> && claude` |
+| `hooks.test_author_guard` | agent, исполняемый guard и его проверка конфигурации | `harness update` или исправление `test_paths` и `test_runner` |
+| `hooks.test_author_runner` | исполняемый `.claude/hooks/run-test.sh` | `harness update` |
+| `hooks.test_author_probe` | probe изоляции runner | шаг по причине: bubblewrap, user namespaces, расположение checkout |
+
+Guard и probe запускают скрипты проекта, поэтому до доверия их строки пропускаются.
 
 Health не запускает Claude, выбранный тест, сборку или БД и не меняет доверие. Probe изоляции
 создаёт и удаляет временную песочницу в общем `runs/`. Статический `preflight: ok` не доказывает,

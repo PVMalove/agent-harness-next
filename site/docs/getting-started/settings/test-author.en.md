@@ -5,6 +5,22 @@ Red → Green → Refactor step and runs it through the protected runner. Produc
 refactoring and orchestration remain with the developer. This is an in-session subagent, not a
 separate ledger role. If protection is unavailable, ordinary TDD continues without an unprotected author.
 
+## Enable the test author {#enable}
+
+1. Set [`test_paths` and `test_runner`](#configuration) and add a `test_author` block with runtime,
+   model and effort to `.harness/project.json`. When `.harness/orchestration.json` has a developer
+   plan, `harness health --fix` adds the block from that plan; it never changes an existing block.
+2. Open Claude Code in the repository's main checkout once and accept the trust dialog. Worktrees
+   of this repository need no trust of their own.
+3. Run `harness health` and follow the step under each `hooks.test_author_*` line with status
+   warn: the lines check the `test_author` block, the project root by Git, trust, guard, runner
+   and the isolation probe. Rerun health until every line is ok. Guard and probe run project
+   scripts, so their lines are skipped until trust is accepted.
+
+```bash {.ah-code-wrap}
+harness health --fix
+```
+
 ## project.json fields {#configuration}
 
 Settings live in `.harness/project.json`. Activation needs `test_paths` and `test_runner`;

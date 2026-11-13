@@ -90,8 +90,9 @@ Preflight читает `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json
   причины выбора исполнителя, `project_untrusted`, `project_dir_mismatch`,
   `claude_code_unsupported`, `agent_missing`, `guard_hook_unavailable`, причины конфигурации и
   изоляции; формат ответа и порядок остальных проверок не меняются.
-- Проверка `hooks.test_author` в `harness health` пока сверяет доверие только по точному пути; её
-  согласование с этим контрактом — отдельный шаг тикета #1122.
+- `harness health` сверяет доверие по этому же правилу: проверка `hooks.test_author` и строка
+  `hooks.test_author_trust`, которая называет путь для диалога доверия. Корень проекта по Git и
+  `CLAUDE_PROJECT_DIR` проверяет строка `hooks.test_author_root`.
 - Тесты `tests/test_author/test_preflight.py` закрепляют: ответ `ok` без `CLAUDE_PROJECT_DIR` и
   без записи доверия для linked worktree, отказ `project_dir_mismatch`, отказ для незарегистрированного
   каталога и запуск автора launcher-ом in-process developer в его worktree. Живой вызов автора

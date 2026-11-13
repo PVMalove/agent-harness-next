@@ -255,8 +255,14 @@ it does not establish another stack's support. Ordinary Rust QA remains required
 `harness health` reports `hooks.test_author`: preflight readiness or a sanitized refusal, selected
 runtime/model/effort and source. Health uses the orchestration developer plan, marked `planned`,
 and otherwise the project short profile. Planned readiness does not replace an approved brief.
-For the supported Claude adapter, Health also checks exact-path trust. Without opt-in the check
-is skipped with a reason; an unavailable optional author warns while ordinary development works.
+For the supported Claude adapter, Health checks trust by the preflight rule: the exact checkout
+path or the main checkout that lists it in `git worktree list`. Without opt-in the check is
+skipped with a reason; an unavailable optional author warns while ordinary development works.
+Health prints each author condition — the `test_author` block, the project root by Git, trust,
+guard, runner and probe — as its own `hooks.test_author_*` line, and a refused line prints its fix
+step. `harness health --fix` adds a missing `test_author` block from the developer plan. The
+[test-author settings](../getting-started/settings/test-author.md#enable) describe how to enable
+the author.
 
 Health runs no Claude process, selected test, build or database and changes no trust. The isolation
 probe creates and removes a temporary sandbox under shared `runs/`. Static `preflight: ok` does

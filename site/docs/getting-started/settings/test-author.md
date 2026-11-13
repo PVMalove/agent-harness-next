@@ -5,6 +5,22 @@
 рефакторинг и orchestration остаются у developer. Это in-session субагент, а не отдельная роль
 ledger. Если защита недоступна, developer продолжает обычный TDD без незащищённого автора.
 
+## Как включить тест-автора {#enable}
+
+1. Задайте [`test_paths` и `test_runner`](#configuration) и добавьте в `.harness/project.json` блок
+   `test_author` с runtime, model и effort. Если в `.harness/orchestration.json` есть план
+   developer, блок из этого плана добавит `harness health --fix`; существующий блок он не меняет.
+2. Один раз откройте Claude Code в основном checkout репозитория и примите диалог доверия.
+   Worktree этого репозитория отдельного доверия не требуют.
+3. Запустите `harness health` и выполните шаг под каждой строкой `hooks.test_author_*` со статусом
+   warn: строки проверяют блок `test_author`, корень проекта по Git, доверие, guard, runner и probe
+   изоляции. Повторяйте health, пока все строки не станут ok. Guard и probe запускают скрипты
+   проекта, поэтому до доверия их строки пропускаются.
+
+```bash {.ah-code-wrap}
+harness health --fix
+```
+
 ## Поля project.json {#configuration}
 
 Настройки находятся в `.harness/project.json`. Для активации нужны `test_paths` и `test_runner`;
