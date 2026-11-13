@@ -33,6 +33,17 @@ so repeat the command after its `retry_after_seconds`.
 Do not infer or repair an opt-in capability. Process one ticket to a terminal batch state before
 beginning another.
 
+Before any tracker write (the `status::*` label swap), confirm that this session is rooted in the
+main checkout and can write every directory the pipeline writes: `.git/worktrees` (for an existing
+issue worktree, its git metadata directory from `git -C <worktree> rev-parse --absolute-git-dir`),
+the issue worktree directory when it exists, and `.harness/.sandboxes/scratch/inbox/`. Probe each by
+creating and removing one temporary file. A sandboxed session writes only inside its own directory,
+and a worktree another session created stays read-only under `.git/worktrees` even from the main
+checkout. On a failure, stop with one message that names the directory and the action: open the
+session in the main checkout, one that can write the issue worktree and its git metadata. Touch
+neither the tracker nor the ledger. `batch create`, and `dispatch preflight` and `dispatch send` for a write role,
+refuse an issue worktree or git metadata directory the session cannot write.
+
 If another batch holds the same unfinished ticket, branch or worktree, or the `concurrency_budget`
 is exhausted, inspect `batch list --open`, the conflicting dispatch,
 and its decision packet. Tell the developer which batch is blocking and how to finish it normally.
@@ -112,8 +123,8 @@ broken file and prints the expected format.
 ## Coordinator contract
 
 Resolve the tracker ticket, issue branch and blockers without opening a second batch for the same
-work. Ticket status is part of that pre-flight, before `batch create` and before the issue branch
-exists: check the ticket's blockers whatever its current label (any still open → stop, name them,
+work. Ticket status is part of that pre-flight, after the write-access probe in "Route", before
+`batch create` and before the issue branch exists: check the ticket's blockers whatever its current label (any still open → stop, name them,
 and make sure it carries `status::blocked`); otherwise replace its `status::*` label with
 `status::in-progress` exactly as `/fast-implement` Phase 1 steps 2–3 do, and confirm it is the
 only `status::*` label. A failed label write is a blocker, not a warning. Before `batch create`, run the batch-level preflight with bounded expected files, services and

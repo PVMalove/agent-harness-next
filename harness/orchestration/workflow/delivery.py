@@ -65,6 +65,7 @@ from harness.orchestration.core.utils import (
 from harness.orchestration.core.workspace import (
     _agent_inbox,
     _prepare_agent_inbox,
+    _require_writable_worktree,
 )
 from harness.orchestration.ledger.ledger_ops import (
     read_state,
@@ -456,6 +457,9 @@ def send_dispatch(args: argparse.Namespace) -> JsonObject:
                 remedy="the dispatch was already sent or is not registered in its batch -- "
                 + INTERNAL_INVARIANT_REMEDY,
             )
+        # The worktree may have become unwritable since preflight: refuse before the launch.
+        if dispatch.get("access") == "write":
+            _require_writable_worktree(dispatch["worktree"])
         brief_path = _worker_brief_path(repo, root, dispatch)
         command = None
         adapter_preflight: JsonObject | None = None
