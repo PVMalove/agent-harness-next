@@ -34,7 +34,6 @@
 | `access_policy.defaults.filesystem[].resource` | Обязателен в каждой записи: `checkout`, `git_common`, `shared_storage`, `cache`. Массив `filesystem` необязателен; выбранный план по умолчанию содержит `[]`. |
 | `access_policy.defaults.filesystem[].path` | Непустая строка без NUL. Обязательна только для `cache` и запрещена для остальных ресурсов. Относительный путь считается от worktree; `~` раскрывает resolver. |
 | `access_policy.defaults.filesystem[].access` | Обязателен в каждой записи: `read` или `write`. Реальные права среды проверяются отдельно, а не выводятся из текста конфига. |
-| `access_policy.defaults.filesystem[].variable` | Только у `cache`: имя переменной окружения по `[A-Za-z_][A-Za-z0-9_]*`, например `CARGO_HOME`. Контейнерный исполнитель сам передаёт `--env <имя>=<путь кэша>`; путь берётся из плана, а не из окружения `serve`. Имя уникально среди кэшей компонента, не совпадает с именем из `environment` и не входит в имена, которые задаёт runtime (ADR 0032). |
 
 Ресурсы `checkout`, `git_common` и `shared_storage` разрешаются из worktree и хранилища проекта;
 их произвольный `path` указать нельзя. У read-only роли нельзя запросить `write` для этих
@@ -52,7 +51,7 @@ resolver добавляет отдельно: `filesystem: []` не удаляе
 - `access_policy.roles.<ключ>.container.engine`, `access_policy.roles.<ключ>.container.worker_image`, `access_policy.roles.<ключ>.container.proxy_image`.
 - `access_policy.roles.<ключ>.environment`.
 - `access_policy.roles.<ключ>.network.hosts`.
-- `access_policy.roles.<ключ>.filesystem[].resource`, `access_policy.roles.<ключ>.filesystem[].path`, `access_policy.roles.<ключ>.filesystem[].access`, `access_policy.roles.<ключ>.filesystem[].variable`.
+- `access_policy.roles.<ключ>.filesystem[].resource`, `access_policy.roles.<ключ>.filesystem[].path`, `access_policy.roles.<ключ>.filesystem[].access`.
 
 Например, `filesystem` с одним `checkout: read` не добавляется к defaults, а заменяет весь
 их массив. У `container` также нет глубокого слияния: если повторить только `worker_image`,
@@ -69,7 +68,7 @@ coordinator, поэтому resolver использует defaults и override �
 - `access_policy.operations.<ключ>.container.engine`, `access_policy.operations.<ключ>.container.worker_image`, `access_policy.operations.<ключ>.container.proxy_image`.
 - `access_policy.operations.<ключ>.environment`.
 - `access_policy.operations.<ключ>.network.hosts`.
-- `access_policy.operations.<ключ>.filesystem[].resource`, `access_policy.operations.<ключ>.filesystem[].path`, `access_policy.operations.<ключ>.filesystem[].access`, `access_policy.operations.<ключ>.filesystem[].variable`.
+- `access_policy.operations.<ключ>.filesystem[].resource`, `access_policy.operations.<ключ>.filesystem[].path`, `access_policy.operations.<ключ>.filesystem[].access`.
 
 Поэтому операция coordinator может писать clean-room checkout, Git metadata или общее хранилище,
 даже если роль QA read-only. Операционные требования проверяются отдельно.
