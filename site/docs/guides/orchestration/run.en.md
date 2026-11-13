@@ -439,6 +439,9 @@ worker's exit code (`128 + N` for signal N). Claude gets the prompt as the argum
 worker moves the dispatch to `blocked` with `worker-exited-without-report`. Without `execution`, the adapter
 passes the lifecycle prompt to a detached worker through stdin. Claude limits
 additional access to the incoming reports directory and uses the native `allowed_tools`;
+a read-only role (not `developer`, without `Edit`/`Write`) also gets `Edit(//<report_staging_path>)` and can
+write only its report. When `--claude-bin` is a name, not a path, Claude is looked up in `PATH`, then in
+`~/.local/bin`.
 Codex passes this list in the prompt, and selects the sandbox by `access`: `read-only` or
 `workspace-write`. This is not a native Codex tool filter.
 Both adapters reject `qa`, `purpose: publish`, another transport, and a missing `allowed_tools`.

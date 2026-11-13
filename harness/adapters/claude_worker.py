@@ -13,6 +13,8 @@ log) and returns the worker's exit status. Without `execution` it starts a detac
 reads the prompt from stdin and returns. The worker's self-report, heartbeat and `report submit`
 prove its actual checkout. It runs on the brief's model and effort, with exactly the
 brief's `allowed_tools` and `dontAsk`, so nothing outside the brief can prompt or run unattended.
+A read-only role (no file-writing tool, not `developer`) also gets `Edit(//<report_staging_path>)`,
+so it can write its report and nothing else.
 
 The installed copy is `.harness/adapters/claude_worker.py`, outside the hashed runtime package, so
 installing it never changes the pinned runtime of an open batch.
@@ -24,10 +26,11 @@ import argparse
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import NotRequired, TypedDict, cast
 
 STARTUP_CHECK_SECONDS = 3
@@ -35,6 +38,8 @@ STARTUP_CHECK_SECONDS = 3
 # 32767 characters in all. Keep a margin for the other arguments.
 POSIX_PROMPT_BYTES = 120000
 WINDOWS_PROMPT_CHARS = 30000
+# Tools that already let a role write files; a role with none of them is read-only.
+WRITE_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
 
 class Liveness(TypedDict):
@@ -153,6 +158,35 @@ def check_prompt_bound(prompt: str) -> None:
         )
 
 
+def report_write_rule(staging: PurePath) -> str:
+    """`Edit(//<absolute path>)` for exactly the report file; a Windows drive becomes `/c/...`."""
+    posix = staging.as_posix()
+    if staging.drive:
+        posix = "/" + staging.drive.rstrip(":").lower() + posix[len(staging.drive) :]
+    return f"Edit(/{posix})"
+
+
+def worker_tools(brief: Brief) -> list[str]:
+    """The brief's tools; a read-only role also gets write access to its report file only."""
+    tools = list(brief["allowed_tools"])
+    if brief["role"] == "developer" or any(
+        tool.split("(", 1)[0] in WRITE_TOOLS for tool in tools
+    ):
+        return tools
+    return [*tools, report_write_rule(Path(brief["report_staging_path"]))]
+
+
+def resolve_claude(binary: str) -> str:
+    """A bare `--claude-bin` name is looked up in PATH, then in `~/.local/bin`."""
+    if os.sep in binary or (os.altsep and os.altsep in binary):
+        return binary
+    return (
+        shutil.which(binary)
+        or shutil.which(binary, path=str(Path.home() / ".local" / "bin"))
+        or binary
+    )
+
+
 def worker_command(
     brief: Brief, binary: str = "claude", *, prompt: str | None = None
 ) -> list[str]:
@@ -169,7 +203,7 @@ def worker_command(
         "--permission-mode",
         "dontAsk",
         "--allowedTools",
-        ",".join(brief["allowed_tools"]),
+        ",".join(worker_tools(brief)),
         "--add-dir",
         str(Path(brief["report_staging_path"]).parent),
         "--no-session-persistence",
@@ -234,11 +268,12 @@ def start(args: argparse.Namespace) -> int:
     prompt = build_prompt(brief, brief_path, repo, worktree, sha)
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
+    binary = resolve_claude(args.claude_bin)
     if supervised(brief):
         check_prompt_bound(prompt)
-        command = worker_command(brief, args.claude_bin, prompt=prompt)
+        command = worker_command(brief, binary, prompt=prompt)
     else:
-        command = worker_command(brief, args.claude_bin)
+        command = worker_command(brief, binary)
     if args.dry_run:
         print(json.dumps({"cwd": str(worktree), "command": command, "prompt": prompt}))
         return 0
@@ -289,7 +324,9 @@ def main(argv: list[str]) -> int:
     dispatch.add_argument("--repo", required=True, help="main project root")
     dispatch.add_argument("--brief", required=True, help="immutable dispatch brief")
     dispatch.add_argument(
-        "--claude-bin", default="claude", help="Claude Code executable"
+        "--claude-bin",
+        default="claude",
+        help="Claude Code executable; a bare name is looked up in PATH, then ~/.local/bin",
     )
     dispatch.add_argument(
         "--extra-prompt-file",

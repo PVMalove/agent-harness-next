@@ -441,6 +441,9 @@ worker (`128 + N` при сигнале N). Claude получает промпт
 завершается раньше worker, переводит dispatch в `blocked` с `worker-exited-without-report`. Без
 `execution` адаптер передаёт lifecycle-промпт отсоединённому worker через stdin. Claude ограничивает
 дополнительный доступ каталогом входящих отчётов и использует нативный `allowed_tools`;
+read-only роль (не `developer` и без `Edit`/`Write`) дополнительно получает `Edit(//<report_staging_path>)`
+и может записать только свой отчёт. Если `--claude-bin` задан именем, а не путём, Claude ищется в `PATH`,
+затем в `~/.local/bin`.
 Codex передаёт этот список в промпте, а sandbox выбирает по `access`: `read-only` или
 `workspace-write`. Это не нативный фильтр инструментов Codex.
 Оба адаптера отклоняют `qa`, `purpose: publish`, другой transport и отсутствующий `allowed_tools`.
