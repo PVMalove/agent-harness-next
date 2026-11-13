@@ -67,7 +67,7 @@ Symlink внутри зоны безопасен: запись через нег
 AF_UNIX в 107 байт. Общего кеша между запусками нет: через него тест подложил бы
 `.pyc` production-модуля следующему запуску.
 
-**Песочница.** Набор флагов из ADR 0014 не ослабляется:
+**Песочница.** Набор флагов из ADR 0035 не ослабляется:
 
 ```text
 bwrap --ro-bind / / --dev /dev --proc /proc --bind <run>/tmp-* /tmp --tmpfs /run
@@ -158,7 +158,7 @@ canary-проверкой guard и opt-in проекта вынесены в о�
 [run-test.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/run-test.sh),
 [isolated_runner.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/isolated_runner.py),
 [project_files.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/project_files.py),
-ADR 0014
+ADR 0035
 
 ### Сборка и тестовая БД
 
