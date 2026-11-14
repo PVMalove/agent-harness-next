@@ -366,6 +366,9 @@ class SelectionOfTheWritersTests(plan_dispatch.TicketDiffFixture):
     """Every writer of a pair decides ``selection`` from the batch it holds: a ticket whose frozen
     flag is on and whose target is ``integration/*`` records ``ticket-diff``."""
 
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    file_ledger = True
+
     def setUp(self) -> None:
         super().setUp()
         self._configure(self._on())
@@ -421,6 +424,9 @@ class SelectionOfTheWritersTests(plan_dispatch.TicketDiffFixture):
 
 class FullSelectionOfTheWritersTests(plan_dispatch.TicketDiffFixture):
     """The flag off, or a default-branch target with the flag on, keeps ``full``."""
+
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    file_ledger = True
 
     def published_pair(self, ref: str) -> JsonObject:
         branch = PublishedBranch(self.fx, ref)

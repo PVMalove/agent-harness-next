@@ -203,7 +203,7 @@ def approved_publish() -> object:
     """A branch whose candidate has accepted review and QA, and an approved publish dispatch."""
     support.runtime_binary()
     branch = PublishedBranch()
-    branch.fixture.state_dir = branch.repo / ".harness/orchestration/state"
+    branch.keep_state_in_repo()
     fx = branch.fixture
     batch_id = fx._create_batch()["batch_id"]
     fx._accepted_architect(batch_id)
@@ -274,7 +274,7 @@ def prepared_store() -> object:
     """A published and prepared branch whose ledger is then cut over to the runtime store."""
     support.runtime_binary()
     branch = PublishedBranch()
-    branch.fixture.state_dir = branch.repo / ".harness/orchestration/state"
+    branch.keep_state_in_repo()
     branch.publish()
     record_id = branch.prepare()["integration_record_id"]
     runtime = _cut_over(branch.repo)

@@ -30,6 +30,7 @@ from harness.orchestration.ledger.lifecycle import LedgerError
 from harness.orchestration.workflow import integration, local_qa
 from tests.orchestration import runtime_store_support as support
 from tests.orchestration import test_verification_plan_dispatch as plan_dispatch
+from tests.orchestration.legacy_state import seed_file_ledger
 from tests.orchestration.test_integration_record import PublishedBranch, _git
 
 
@@ -39,6 +40,8 @@ class LocalQaContractTests(unittest.TestCase):
         self.branch.fixture.state_dir = (
             self.branch.repo / ".harness/orchestration/state"
         )
+        # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+        seed_file_ledger(self.branch.fixture.state_dir)
         self.branch.publish()
         self.record = self.branch.prepare()["integration_record_id"]
 
@@ -565,11 +568,15 @@ class PlanLocalQaFixture(plan_dispatch.TicketDiffFixture):
 
     ref: str | None = "integration/it"
 
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    file_ledger = True
+
     def setUp(self) -> None:
         super().setUp()
         self._configure(self._on(stages=PASSING_STAGES))
         self.branch = PublishedBranch(self.fx, self.ref)
         self.fx.state_dir = self.fx.repo / ".harness/orchestration/state"
+        seed_file_ledger(self.fx.state_dir)
         self.branch.publish("test_y")
         self.record = self.branch.prepare()["integration_record_id"]
 

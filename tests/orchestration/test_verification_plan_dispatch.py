@@ -27,6 +27,7 @@ from harness.orchestration import (
 from harness.orchestration.core.utils import JsonObject
 from harness.repo_map import change_impact
 from tests.orchestration import test_coordinator as coordinator_tests
+from tests.orchestration.legacy_state import runs_on_file_ledger
 from tests.repo_map.test_change_impact import RegexBackend
 
 POLICY: JsonObject = {
@@ -68,6 +69,8 @@ class PlanFixture(unittest.TestCase):
 
     def setUp(self) -> None:
         self.fx = coordinator_tests.CoordinatorRetryRoutingTests()
+        # A subclass or test that reaches publish asks for a 1.x ledger (ADR 0036, section 5).
+        self.fx.file_ledger = runs_on_file_ledger(self)
         self.fx.setUp()
         self.addCleanup(self.fx.tearDown)
         self._write_test()

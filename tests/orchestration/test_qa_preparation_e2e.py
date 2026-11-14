@@ -169,7 +169,7 @@ class PreparationFixture(unittest.TestCase):
 
     def report_of(self, result: JsonObject) -> JsonObject:
         report: JsonObject = json.loads(
-            Path(result["report"]).read_text(encoding="utf-8")
+            self.fx._stored(result["report"]).read_text(encoding="utf-8")
         )
         return report
 
@@ -219,7 +219,7 @@ class QaPreparationE2ETests(PreparationFixture):
         )
         self.assertIn("code was not verified", report["output"])
         self.assertFalse(self.gate_ran.exists(), "the gate must not start")
-        artifact = Path(result["artifact"]).read_text(encoding="utf-8")
+        artifact = self.fx._stored(result["artifact"]).read_text(encoding="utf-8")
         # The artifact shows what ran; the stage keeps the approved command and names what ran.
         self.assertIn(f"$ {stage['executed_command']}", artifact)
         self.assertIn("EAI_AGAIN", artifact)
@@ -272,7 +272,7 @@ class QaPreparationE2ETests(PreparationFixture):
         self.assertTrue(self.gate_ran.exists())
         self.assertIn(
             "prepared: True",
-            Path(rerun_result["artifact"]).read_text(encoding="utf-8"),
+            self.fx._stored(rerun_result["artifact"]).read_text(encoding="utf-8"),
         )
         # The first dispatch, its report and its decision stay as audit evidence.
         entries = {
@@ -281,7 +281,7 @@ class QaPreparationE2ETests(PreparationFixture):
         }
         self.assertEqual(entries[first["dispatch_id"]]["state"], "reported")
         self.assertEqual(entries[first["dispatch_id"]]["decision"]["decision"], "retry")
-        self.assertTrue(Path(result["report"]).is_file())
+        self.assertTrue(self.fx._stored(result["report"]).is_file())
         self.assertEqual(self.developer_retries(), 0)
         accepted = self.fx._decide(self.batch_id, "accept")
         self.assertEqual(accepted["coordinator_decisions"][-1]["decision"], "accept")

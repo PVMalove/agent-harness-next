@@ -20,6 +20,7 @@ from harness.orchestration.core.utils import CoordinatorError, JsonObject, _cano
 from harness.orchestration.workflow import integration, release_gate
 from tests.orchestration import runtime_store_support as support
 from tests.orchestration import test_verification_plan_dispatch as plan_dispatch
+from tests.orchestration.legacy_state import seed_file_ledger
 from tests.orchestration.test_integration_record import PublishedBranch
 
 REPO = "owner/repo"
@@ -348,7 +349,19 @@ def _light_observation(
     )
 
 
-class _LightPair(plan_dispatch.TicketDiffFixture):
+class _FileLedgerPair(plan_dispatch.TicketDiffFixture):
+    """The pair fixture on a ledger in the repository."""
+
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    file_ledger = True
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.fx.state_dir = self.fx.repo / ".harness/orchestration/state"
+        seed_file_ledger(self.fx.state_dir)
+
+
+class _LightPair(_FileLedgerPair):
     """A published and prepared pair into ``integration/it`` whose flag stored ``ticket-diff``."""
 
     required = ["lint-light", "verify-light"]
@@ -357,7 +370,6 @@ class _LightPair(plan_dispatch.TicketDiffFixture):
         super().setUp()
         self._configure(self._on())
         self.branch = PublishedBranch(self.fx, self.integration_ref)
-        self.fx.state_dir = self.fx.repo / ".harness/orchestration/state"
         self.branch.publish()
         self.prepared = self.branch.prepare()
         write_project(self.fx.repo, GITHUB, self.required)
@@ -478,13 +490,12 @@ class LightCiStoreEpochTests(_LightPair):
         self.assertTrue(result["recorded"])
 
 
-class FullPairLightCiTests(plan_dispatch.TicketDiffFixture):
+class FullPairLightCiTests(_FileLedgerPair):
     """A pair into the default branch requires ``full``; the flag decides, not the check name."""
 
     def test_the_flag_off_pair_into_an_integration_ref_requires_full(self) -> None:
         self._configure(self._on(ticket_diff_selection=False))
         branch = PublishedBranch(self.fx, self.integration_ref)
-        self.fx.state_dir = self.fx.repo / ".harness/orchestration/state"
         branch.publish()
         prepared = branch.prepare()
         write_project(self.fx.repo, GITHUB, ["verify-light"])

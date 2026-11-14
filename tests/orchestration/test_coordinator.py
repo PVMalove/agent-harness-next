@@ -72,6 +72,13 @@ from harness.orchestration.workflow import (
 from harness.orchestration.workflow import batch as batch_module
 from harness.orchestration.workflow import delivery
 
+from .legacy_state import file_ledger_source, runs_on_file_ledger, seed_file_ledger
+from .runtime_store_support import (
+    StoreRecords,
+    bind_store_view_for,
+    serve_new_project_for,
+)
+
 ORCHESTRATION_ROOT = Path(__file__).resolve().parents[2] / "harness" / "orchestration"
 # The structured evidence of a tool that blocked a legitimate role action (issue #500).
 TOOLING_BLOCKER = {
@@ -91,8 +98,8 @@ class ImmutableReportPersistenceTests(unittest.TestCase):
     def test_markdown_failure_discards_the_incomplete_json_report(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             root = Path(temporary) / "state"
-            ledger = LifecycleLedger(root)
-            ledger.ensure()
+            # The report files of the file ledger are the subject: a ledger of 1.x (ADR 0036).
+            ledger = seed_file_ledger(root)
             dispatch: JsonObject = {
                 "dispatch_id": "dispatch-0123456789abcdef",
                 "batch_id": "batch-0123456789abcdef",
@@ -200,13 +207,16 @@ def _init_repo(tmp: Path) -> Path:
 
 
 class CoordinatorLedgerMigrationTests(unittest.TestCase):
-    """TDD seeds for the #195 migration, run against real git + a real LifecycleLedger."""
+    """TDD seeds for the #195 migration, run against real git + a real LifecycleLedger.
+
+    The file ledger is the subject, so the state is a ledger of installation 1.x (ADR 0036)."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.tmp = Path(self._tmp.name)
         self.repo = _init_repo(self.tmp)
         self.state_dir = self.tmp / "state"
+        seed_file_ledger(self.state_dir)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -1927,6 +1937,9 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
     components persist them.
     """
 
+    # The case runs on a file ledger of installation 1.x instead of the runtime store when
+    # true (ADR 0036, section 5); set it before setUp, or mark the test `@file_ledger_source`.
+    file_ledger: bool = False
     APPROVED_AT = "2026-09-17T00:00:00+00:00"
 
     def setUp(self) -> None:
@@ -1944,11 +1957,27 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-m", "roles")
         _git(self.repo, "push", "origin", "master")
-        self.state_dir = self.tmp / "state"
+        # A new project works on the runtime store (ADR 0036): a copy of the store `init` makes,
+        # its own `serve`, and one read view bound for the test. A test of publish or of the file
+        # ledger itself runs on a ledger of installation 1.x (`file_ledger_source`).
+        self.state_dir = self.repo / ".harness" / "orchestration" / "state"
+        self._store_records: StoreRecords | None = None
+        # Its own stack, not addCleanup: `_reset` and the fixtures of other modules call tearDown
+        # by hand, and the patches a test made before `_reset` must outlive it.
+        self._store_stack = contextlib.ExitStack()
+        if runs_on_file_ledger(self):
+            self.state_dir = self.tmp / "state"
+            seed_file_ledger(self.state_dir)
+        else:
+            register = self._store_stack.callback
+            serve_new_project_for(self, self.repo, register=register)
+            self._store_records = bind_store_view_for(self, self.repo, register=register)
         self.worktree = self.tmp / "worktree"
         self.branch = "feature/issue-244-routing"
 
     def tearDown(self) -> None:
+        # The runtime of the store and the bound view stop here.
+        self._store_stack.close()
         self._tmp.cleanup()
 
     def _reset(self) -> None:
@@ -1965,9 +1994,17 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         return {"approved_by": "Malove", "approved_at": self.APPROVED_AT}
 
     def _records(self) -> Path:
-        return LifecycleLedger(
-            ledger_ops._state_root(self._args(), self.repo)
-        ).records_root()
+        if self._store_records is None:
+            return LifecycleLedger(
+                ledger_ops._state_root(self._args(), self.repo)
+            ).records_root()
+        return self._store_records()
+
+    def _stored(self, path: Path | str) -> Path:
+        """The file of ``path``, a record path a coordinator answer names."""
+        if self._store_records is None:
+            return Path(path)
+        return self._store_records.stored(path)
 
     def _batch_record(self, batch_id: str) -> JsonObject:
         return coordinator._read_object(
@@ -2515,7 +2552,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         report["checks_run"] = self._checks(brief, "pass")
         submitted = self._submit(brief["dispatch_id"], report)
         self.assertEqual(submitted["state"], "reported")
-        recorded = json.loads(Path(submitted["report"]).read_text(encoding="utf-8"))
+        recorded = json.loads(self._stored(submitted["report"]).read_text(encoding="utf-8"))
         self.assertEqual(recorded["checks_run"], self._checks(brief, "pass"))
 
     def test_structured_empty_evidence_is_auto_accepted(self) -> None:
@@ -2719,7 +2756,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         report["checks_run"] = self._checks(brief, "pass")
         submitted = self._submit(developer_id, report)
         self.assertTrue(submitted["auto_accepted"])
-        recorded = json.loads(Path(submitted["report"]).read_text(encoding="utf-8"))
+        recorded = json.loads(self._stored(submitted["report"]).read_text(encoding="utf-8"))
         self.assertEqual(recorded["checks_run"], self._checks(brief, "pass"))
         stored = self._batch_record(batch["batch_id"])
         self.assertNotIn("auto_stop", stored)
@@ -2770,7 +2807,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             brief, candidate, changed, checks_run=self._checks(brief, result)
         )
         submitted = self._submit(brief["dispatch_id"], report)
-        recorded = json.loads(Path(submitted["report"]).read_text(encoding="utf-8"))
+        recorded = json.loads(self._stored(submitted["report"]).read_text(encoding="utf-8"))
         self.assertEqual(recorded["checks_run"], self._checks(brief, "not_run"))
         self.assertFalse(submitted.get("auto_accepted", False))
 
@@ -2811,11 +2848,11 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         )
         submitted = self._submit(brief["dispatch_id"], report)
         self.assertEqual(submitted["state"], "reported")
-        stored = json.loads(Path(submitted["report"]).read_text(encoding="utf-8"))
+        stored = json.loads(self._stored(submitted["report"]).read_text(encoding="utf-8"))
         self.assertEqual(stored["lessons"], report["lessons"])
         self.assertEqual(stored["used_memory"], report["used_memory"])
         markdown = (
-            Path(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
+            self._stored(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
         )
         self.assertIn("Validate source authorization", markdown)
         self.assertIn("historical-hit-without-a-current-index", markdown)
@@ -3709,6 +3746,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         # Only the earlier commit's message carries this trigger.
         self.assertNotIn("transactions", assessed["matched_triggers"])
 
+    @file_ledger_source
     def test_publish_of_a_batch_on_a_branch_with_earlier_commits_lists_only_its_own_files(
         self,
     ) -> None:
@@ -3724,7 +3762,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             self._args(dispatch=brief["dispatch_id"], remote="origin")
         )
 
-        report = json.loads(Path(published["report"]).read_text(encoding="utf-8"))
+        report = json.loads(self._stored(published["report"]).read_text(encoding="utf-8"))
         self.assertEqual(report["changed_files"], ["services/new.py"])
 
     def _axes(
@@ -4574,6 +4612,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             ).stdout,
         )
 
+    @file_ledger_source
     def test_publish_verifies_the_pinned_plan_and_reports_the_evidence(self) -> None:
         _, brief, candidate = self._publish_brief_under(
             {"defaults": {"mode": "inherit"}}
@@ -4589,6 +4628,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             published["access"]["plan_digest"], brief["runtime_access"]["plan_digest"]
         )
 
+    @file_ledger_source
     def test_publish_stops_before_the_push_when_the_remote_host_is_not_approved(
         self,
     ) -> None:
@@ -4606,6 +4646,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertIn("example.invalid", refused.exception.remedy)
         self._assert_nothing_published(brief, "origin", candidate)
 
+    @file_ledger_source
     def test_publish_stops_before_the_push_when_the_remote_is_unreachable(self) -> None:
         _, brief, candidate = self._publish_brief_under(
             {"defaults": {"mode": "inherit"}}
@@ -4620,6 +4661,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(refused.exception.evidence["status"], "unverified")
         self._assert_nothing_published(brief, "origin", candidate)
 
+    @file_ledger_source
     def test_publish_uses_the_pinned_plan_not_a_later_config_edit(self) -> None:
         _, brief, candidate = self._publish_brief_under(
             {"defaults": {"mode": "inherit"}}
@@ -4636,6 +4678,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(published["access"]["mode"], "inherit")
         self.assertEqual(published["candidate_commit"], candidate)
 
+    @file_ledger_source
     def test_publish_classifies_a_remote_that_refuses_the_push(self) -> None:
         if hasattr(os, "geteuid") and os.geteuid() == 0:
             self.skipTest("a privileged process is not denied by file permissions")
@@ -4944,6 +4987,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             (routing["reason_category"], routing["route"]), ("code", "developer-retry")
         )
 
+    @file_ledger_source
     def test_publish_infrastructure_blocker_retries_a_new_publish_on_the_same_candidate(
         self,
     ) -> None:
@@ -5237,10 +5281,10 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             ),
         )
         self.assertEqual(submitted["state"], "reported")
-        stored = json.loads(Path(submitted["report"]).read_text(encoding="utf-8"))
+        stored = json.loads(self._stored(submitted["report"]).read_text(encoding="utf-8"))
         self.assertEqual(stored["tooling_blocker"], interrupted)
         markdown = (
-            Path(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
+            self._stored(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
         )
         self.assertIn("Tooling blocker: safety-classifier", markdown)
 
@@ -5409,7 +5453,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
                     )
         submitted = self._submit(developer["dispatch_id"], report(blocker))
         markdown = (
-            Path(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
+            self._stored(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
         )
         self.assertIn("Uncommitted files: services/wip.py", markdown)
         decided = self._decide(batch["batch_id"], "retry")
@@ -7711,6 +7755,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertIn("reroute", str(raised.exception))
         self.assertIn("same-candidate-rerun", raised.exception.remedy)
 
+    @file_ledger_source
     def test_abandon_closes_unreported_dispatches_and_names_them(self) -> None:
         batch = self._create_batch()
         self._accepted_architect(batch["batch_id"])
@@ -8044,6 +8089,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
                     expected,
                 )
 
+    @file_ledger_source
     def test_a_scope_added_to_only_one_record_is_refused(self) -> None:
         batch = self._create_batch()
         path = self._records() / "plans" / f"{batch['batch_id']}.json"
@@ -8477,6 +8523,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
                 )
             )
 
+    @file_ledger_source
     def test_resumed_writer_rejects_a_tampered_checkpoint_record(self) -> None:
         brief, checkpoint = self._attested_checkpoint()
         self._resume_writer(brief, checkpoint)
@@ -8964,6 +9011,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             )
         )
 
+    @file_ledger_source
     def test_dispatch_wait_polls_through_a_busy_ledger_and_returns_the_report_once_released(
         self,
     ) -> None:
@@ -8990,6 +9038,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             event, {"dispatch_id": brief["dispatch_id"], "event": "reported"}
         )
 
+    @file_ledger_source
     def test_dispatch_wait_times_out_normally_while_the_ledger_stays_busy(
         self,
     ) -> None:
@@ -9002,6 +9051,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             event, {"dispatch_id": brief["dispatch_id"], "event": "timeout"}
         )
 
+    @file_ledger_source
     def test_dispatch_status_answers_a_busy_ledger_with_a_structured_retry(
         self,
     ) -> None:
@@ -9029,6 +9079,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             [brief["dispatch_id"]],
         )
 
+    @file_ledger_source
     def test_the_dispatch_status_cli_exits_zero_on_a_busy_ledger(self) -> None:
         brief = self._architect_reported()
 
@@ -9100,7 +9151,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         stored = self._batch_record(brief["batch_id"])
         self.assertEqual(submitted["state"], "reported")
         self.assertEqual(submitted["dispatch_id"], brief["dispatch_id"])
-        self.assertTrue(Path(submitted["report"]).is_file())
+        self.assertTrue(self._stored(submitted["report"]).is_file())
         self.assertEqual(
             submitted["report_sha256"], stored["dispatches"][0]["report_sha256"]
         )
@@ -9180,6 +9231,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(repeated["next_dispatch_id"], completed["next_dispatch_id"])
         self.assertEqual(self._ledger_files(), before)
 
+    @file_ledger_source
     def test_report_complete_on_a_busy_ledger_names_the_step_and_writes_nothing(
         self,
     ) -> None:
@@ -14842,10 +14894,10 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         )
 
         self.assertEqual(submitted["state"], "reported")
-        stored = json.loads(Path(submitted["report"]).read_text(encoding="utf-8"))
+        stored = json.loads(self._stored(submitted["report"]).read_text(encoding="utf-8"))
         self.assertEqual(stored["incomplete_items"], [item, tooled])
         markdown = (
-            Path(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
+            self._stored(submitted["report"]).with_suffix(".md").read_text(encoding="utf-8")
         )
         self.assertIn(f"[developer] {item['brief_item']}: {item['reason']}", markdown)
         self.assertIn("tooling blocker: safety-classifier", markdown)
@@ -16147,6 +16199,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             result, "budget-exhausted", "retry_policy.max_developer_retries"
         )
 
+    @file_ledger_source
     def test_auto_runs_from_batch_create_to_accepted_publish_without_a_human(
         self,
     ) -> None:
@@ -18164,7 +18217,10 @@ class PinnedRuntimeSnapshotTests(unittest.TestCase):
                     item, installed / item.name, ignore=ignore, dirs_exist_ok=True
                 )
         # A short state root keeps ledger temp files under Windows MAX_PATH in deep test roots.
+        # The installed coordinator copy runs on a ledger of installation 1.x (ADR 0036): the
+        # pinned runtime snapshot is the subject, and the store serves only an in-repo state.
         self.state_dir = self.tmp / "s"
+        seed_file_ledger(self.state_dir)
         self.runtimes = self.state_dir / workspace.RUNTIMES_DIR
 
     def tearDown(self) -> None:

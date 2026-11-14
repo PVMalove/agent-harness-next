@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 import argparse
+import contextlib
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, tzinfo
 from typing import cast
@@ -31,8 +34,18 @@ from tests.orchestration.test_coordinator import (
     ORCHESTRATION_ROOT,
 )
 
+from .legacy_state import file_ledger_source, runs_on_file_ledger, seed_file_ledger
+from .runtime_store_support import (
+    StoreRecords,
+    bind_store_view_for,
+    serve_new_project_for,
+)
+
 
 class RecoveryTests(unittest.TestCase):
+    # The case runs on a file ledger of installation 1.x instead of the runtime store when
+    # true (ADR 0036, section 5); set it before setUp, or mark the test `@file_ledger_source`.
+    file_ledger: bool = False
     APPROVED_AT = "2026-09-17T00:00:00+00:00"
 
     def setUp(self) -> None:
@@ -50,11 +63,29 @@ class RecoveryTests(unittest.TestCase):
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-m", "roles")
         _git(self.repo, "push", "origin", "master")
+        # A new project works on the runtime store (ADR 0036): a copy of the store `init` makes,
+        # its own `serve`, and one read view bound for the test. A test of the file ledger itself
+        # runs on a ledger of installation 1.x: `file_ledger = True` on an instance before `setUp`,
+        # or `file_ledger_source` on a test method.
         self.state_dir = self.repo / ".harness/orchestration/state"
+        self._store_records: StoreRecords | None = None
+        # Its own stack, not addCleanup: the tests and the fixtures of other modules call
+        # tearDown and setUp by hand.
+        self._store_stack = contextlib.ExitStack()
+        if runs_on_file_ledger(self):
+            seed_file_ledger(self.state_dir)
+        else:
+            register = self._store_stack.callback
+            serve_new_project_for(self, self.repo, register=register)
+            self._store_records = bind_store_view_for(
+                self, self.repo, register=register
+            )
         self.worktree = self.tmp / "worktree"
         self.branch = "feature/issue-662-recovery"
 
     def tearDown(self) -> None:
+        # The runtime of the store and the bound view stop here.
+        self._store_stack.close()
         self._tmp.cleanup()
 
     def test_default_policy_blocks_wrong_or_missing_worker_checkout_without_retry_cost(
@@ -338,6 +369,8 @@ class RecoveryTests(unittest.TestCase):
         self._start(developer["dispatch_id"])
         coordinator.validate_ledger(self._args())
 
+    # It tampers with a batch record file: a 1.x ledger (ADR 0036, section 5, rule 3).
+    @file_ledger_source
     def test_resealed_recovery_event_cannot_replace_its_original_audit(self) -> None:
         from harness.orchestration.workflow.approval import sealed
 
@@ -363,6 +396,8 @@ class RecoveryTests(unittest.TestCase):
             coordinator.validate_ledger(self._args())
         self.assertEqual(before, self._ledger_bytes())
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_dead_session_before_first_checkpoint_needs_human_startup_proof(
         self,
     ) -> None:
@@ -821,6 +856,8 @@ class RecoveryTests(unittest.TestCase):
             self.tearDown()
             self.setUp()
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_reported_writer_handoff_refuses_changes_after_preservation(self) -> None:
         batch = self._create_batch(allowed_paths=["services/**"])
         self._accepted_architect(batch["batch_id"])
@@ -1133,9 +1170,17 @@ class RecoveryTests(unittest.TestCase):
         return {"approved_by": "Malove", "approved_at": self.APPROVED_AT}
 
     def _records(self) -> Path:
-        return LifecycleLedger(
-            ledger_ops._state_root(self._args(), self.repo)
-        ).records_root()
+        if self._store_records is None:
+            return LifecycleLedger(
+                ledger_ops._state_root(self._args(), self.repo)
+            ).records_root()
+        return self._store_records()
+
+    def _stored(self, path: Path | str) -> Path:
+        """The file of ``path``, a record path a coordinator answer names."""
+        if self._store_records is None:
+            return Path(path)
+        return self._store_records.stored(path)
 
     def _batch_record(self, batch_id: str) -> JsonObject:
         return coordinator._read_object(
@@ -1443,9 +1488,14 @@ class RecoveryTests(unittest.TestCase):
         )
         return brief
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_ledger_validate_is_read_only_on_absent_and_populated_state(self) -> None:
+        # The state is absent first; `setUp` seeded the 1.x ledger the batch is created on.
+        shutil.rmtree(self.state_dir)
         self.assertEqual(coordinator.validate_ledger(self._args())["valid"], True)
         self.assertFalse(self.state_dir.exists())
+        seed_file_ledger(self.state_dir)
         batch = self._create_batch()
         before = self._ledger_bytes()
         result = coordinator.validate_ledger(self._args())
@@ -1858,6 +1908,8 @@ class RecoveryTests(unittest.TestCase):
         )
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
+    # It hand-writes a batch record: a 1.x ledger (ADR 0036, section 5, rule 3).
+    @file_ledger_source
     def test_legacy_failed_abandon_is_superseded_without_rewriting_source(self) -> None:
         batch = self._create_batch()
         self._accepted_architect(batch["batch_id"])
@@ -1976,6 +2028,8 @@ class RecoveryTests(unittest.TestCase):
         workspace._validate_harness_runtime_snapshot(self.repo, recovered)
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_early_429_rejects_unknown_progress_and_dirty_files_without_evidence(
         self,
     ) -> None:
@@ -1999,6 +2053,8 @@ class RecoveryTests(unittest.TestCase):
             )
         self.assertEqual(before, self._ledger_bytes())
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_recovered_429_requires_human_approval_and_spends_both_budgets(
         self,
     ) -> None:
@@ -2219,6 +2275,10 @@ class RecoveryTests(unittest.TestCase):
         )
 
         self.assertEqual(result["worker_worktree"], str(self.worktree.resolve()))
+        # The runtime supervisor launches the adapter of the store after send returns (ADR 0022).
+        deadline = time.monotonic() + 30
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
         self.assertEqual(
             marker.read_text(encoding="utf-8"), str(self.worktree.resolve())
         )
@@ -2230,6 +2290,10 @@ class RecoveryTests(unittest.TestCase):
         entry: JsonObject = status["dispatches"][0]
         return entry
 
+    # The bytes of the file ledger are the subject, and so is the adapter the coordinator runs
+    # itself; the store hands it to the runtime supervisor (ADR 0022): a 1.x ledger (ADR 0036,
+    # section 5, rule 2).
+    @file_ledger_source
     def test_issue_679_startup_failures_keep_an_explainable_batch_without_abandon(
         self,
     ) -> None:

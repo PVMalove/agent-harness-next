@@ -13,7 +13,6 @@ import json
 import shlex
 import subprocess
 import sys
-from pathlib import Path
 
 from harness.gate_runner import stage_evidence
 from harness.gate_runner.gate_runner import parse_evidence_trailer
@@ -47,6 +46,7 @@ CLI_POLICY: JsonObject = {
 
 # A bare launcher lets the gate select the checkout's Python on either platform.
 PASS = shlex.join(["python", "-c", "pass"])
+
 
 class TicketDiffCliTests(TicketDiffFixture):
     def _on(self, **changes: object) -> JsonObject:
@@ -191,7 +191,7 @@ class TicketDiffCliTests(TicketDiffFixture):
         code, out, err = self._process("qa", "run", "--dispatch", brief["dispatch_id"])
 
         self.assertEqual(code, 0, err)
-        log = Path(json.loads(out)["artifact"])
+        log = self.fx._stored(json.loads(out)["artifact"])
         linked = parse_evidence_trailer(log.read_text(encoding="utf-8").splitlines())
         assert linked is not None
         document = log.parent.parent / linked[0]

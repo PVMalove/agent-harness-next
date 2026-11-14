@@ -17,6 +17,9 @@ from tests.orchestration import test_startup_lifecycle as startup_tests
 from tests.orchestration import test_recovery as recovery_tests
 
 external_worker = startup_tests.launch
+# `dispatch send --adapter` runs this adapter only on a 1.x ledger: on the runtime store the
+# runtime supervises an external dispatch itself (ADR 0022).
+adapter_worker = startup_tests.adapter_launch
 
 # The fake runtimes below are shebang scripts the adapter executes directly.
 posix_runtime = pytest.mark.skipif(
@@ -143,8 +146,9 @@ def test_background_choice_preserves_runtime_stream_and_exit_evidence(
 
 
 def test_preflight_refusal_is_recorded_as_no_worker_started(
-    external_worker: recovery_tests.RecoveryTests,
+    adapter_worker: recovery_tests.RecoveryTests,
 ) -> None:
+    external_worker = adapter_worker
     from tests.orchestration.test_coordinator import ORCHESTRATION_ROOT
     from tests.orchestration.test_startup_lifecycle import cli
 
@@ -238,11 +242,12 @@ def test_worker_context_probe_keeps_the_exact_filesystem_refusal(
 @posix_runtime
 @pytest.mark.parametrize("panel_open", [False, True], ids=["panel-closed", "panel-open"])
 def test_native_permission_uses_control_frames_without_extra_model_messages(
-    external_worker: recovery_tests.RecoveryTests,
+    adapter_worker: recovery_tests.RecoveryTests,
     reachable_endpoint: str,
     monkeypatch: pytest.MonkeyPatch,
     panel_open: bool,
 ) -> None:
+    external_worker = adapter_worker
     monkeypatch.setenv("EXAMPLE_API_KEY", "native-secret-716")
     from tests.orchestration.test_startup_lifecycle import cli
     from harness.orchestration.workflow.delivery import respond_native_permission

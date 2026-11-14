@@ -14,6 +14,7 @@ import pytest
 
 from harness.orchestration import coordinator
 from tests.orchestration import test_coordinator as coordinator_tests
+from tests.orchestration.legacy_state import seed_file_ledger
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = ROOT / "harness" / "project" / "hooks" / "qa-gate-state.py"
@@ -31,12 +32,15 @@ raise SystemExit(main())
 class Pipeline:
     """A ticket branch taken through architect, developer, review and QA on a real ledger."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, file_ledger: bool = False) -> None:
         self.fixture = coordinator_tests.CoordinatorRetryRoutingTests()
+        self.fixture.file_ledger = file_ledger
         self.fixture.setUp()
         fx = self.fixture
         # The CLI reads the repository's own ledger: put the fixture's ledger there.
         fx.state_dir = fx.repo / coordinator.STATE_REL
+        if file_ledger:
+            seed_file_ledger(fx.state_dir)
         (fx.repo / ".harness" / "orchestration" / "coordinator.py").write_text(SHIM)
         self.batch_id = fx._create_batch()["batch_id"]
         fx._accepted_architect(self.batch_id)
@@ -86,6 +90,17 @@ def pipeline() -> Iterator[Pipeline]:
         found.close()
 
 
+@pytest.fixture
+def file_pipeline() -> Iterator[Pipeline]:
+    """The pipeline on a ledger of installation 1.x: the test tampers with a record file, which
+    the store snapshot of ``_records`` only copies (ADR 0036, section 5, rule 3)."""
+    found = Pipeline(file_ledger=True)
+    try:
+        yield found
+    finally:
+        found.close()
+
+
 def test_accepted_qa_of_the_same_sha_opens_the_pr(pipeline: Pipeline) -> None:
     pipeline.accept_qa()
     result = pipeline.require()
@@ -110,10 +125,10 @@ def test_accepted_qa_of_another_sha_keeps_blocking(pipeline: Pipeline) -> None:
     assert pipeline.require().returncode == 2
 
 
-def test_a_tampered_report_keeps_blocking(pipeline: Pipeline) -> None:
-    pipeline.accept_qa()
-    path = pipeline.qa_report_path()
+def test_a_tampered_report_keeps_blocking(file_pipeline: Pipeline) -> None:
+    file_pipeline.accept_qa()
+    path = file_pipeline.qa_report_path()
     report = json.loads(path.read_text(encoding="utf-8"))
     report["output"] = "tampered"
     path.write_text(json.dumps(report), encoding="utf-8")
-    assert pipeline.require().returncode == 2
+    assert file_pipeline.require().returncode == 2

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Regression tests for the clean-room QA lane: queue bootstrap, error remedies and the run path."""
+"""Regression tests for the clean-room QA lane: queue bootstrap, error remedies and the run path.
+
+They check the file QA lane itself (``qa-lane/lease.json``, the queue and sequence files) and
+hand-write ledger records, so they run on a ledger of installation 1.x (ADR 0036, section 5); the
+QA lane of the runtime store has its own tests."""
 
 from __future__ import annotations
 
@@ -51,6 +55,7 @@ from harness.orchestration.ledger.ledger_ops import LedgerBusyError
 from harness.orchestration.qa_lane import QaWorkflowOps
 from harness.orchestration.pinned_configuration import snapshot
 from harness.orchestration.workflow import reports, qa_integration
+from tests.orchestration.legacy_state import seed_file_ledger
 
 DISPATCH_ID = "dispatch-0123456789abcdef"
 OTHER_DISPATCH_ID = "dispatch-fedcba9876543210"
@@ -87,8 +92,7 @@ class QaLaneBootstrapTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             repo = Path(temporary)
-            ledger = LifecycleLedger(repo / coordinator.STATE_REL)
-            ledger.ensure()
+            ledger = seed_file_ledger(repo / coordinator.STATE_REL)
             identity = "local-qa-" + "c" * 32
             with ledger.lock():
                 admitted = qa_lane.acquire(
@@ -129,8 +133,7 @@ class QaLaneBootstrapTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
-            ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            ledger = seed_file_ledger(Path(temporary) / "state")
             with ledger.lock():
                 first = qa_lane.acquire(
                     ledger,
@@ -173,8 +176,7 @@ class QaLaneBootstrapTests(unittest.TestCase):
     def test_first_enqueue_creates_the_ledger_sequence_record(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
-            ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            ledger = seed_file_ledger(state_root)
 
             queue_path, entry = qa_lane._enqueue(ledger, "dispatch-0123456789abcdef")
 
@@ -198,8 +200,7 @@ class QaLaneTestCase(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.repo = Path(temporary.name)
         self.root = self.repo / coordinator.STATE_REL
-        self.ledger = LifecycleLedger(self.root)
-        self.ledger.ensure()
+        self.ledger = seed_file_ledger(self.root)
         self.lane = self.ledger.records_root() / "qa-lane"
 
     def assertRemedy(
