@@ -53,27 +53,48 @@ remedy (ADR 0036).
 
 ## Upgrade
 
-1. Update the project installation:
+The upgrade to 2.0.0 and the cutover of the state to the runtime store are one `harness update`
+step. A human runs it: on a version-3 `ledger.json`, update runs `harness-runtime migrate` with the
+approval from its flags (ADR 0020, section 6).
+
+1. Check the migration preconditions without a write:
 
     ```bash
-    harness update <repo>
+    harness-runtime migrate --check --repo <repo>
+    ```
+
+    Exit code 0 and `"ready": true` mean you can update. A refusal prints the code and a `REMEDY:`
+    line with the operator action; the state does not change.
+
+2. Update the installation and cut the state over:
+
+    ```bash
+    harness update <repo> \
+      --approved-by <human> \
+      --approved-at <RFC 3339 time> \
+      --reason <reason>
     ```
 
     `harness diff <repo>` shows the changes to the managed files beforehand, and `harness update`
-    keeps local edits.
+    keeps local edits. Before the first installed file, update checks the preconditions again and
+    installs nothing on a refusal. Without the approval on a version-3 ledger it also installs
+    nothing and prints the command. It looks for the `harness-runtime` binary in the release build
+    of the harness checkout, then on `PATH`. A project without orchestration state and a project
+    already on the store need no approval.
 
-2. Check the installation:
+3. Check the installation:
 
     ```bash
     harness health <repo>
     ```
 
-    Fix every `fail` before the migration. Health often prints the fix command itself.
+    Fix every `fail`. Health often prints the fix command itself.
 
 ## Migrate the state
 
-A human runs this command. The approval is written to the store audit chain and to
-`AUTHORITY.json`.
+`harness update` from the section above runs this command itself. Run it separately to repeat the
+migration after exit code 3 or 4. A human runs this command. The approval is written to the store
+audit chain and to `AUTHORITY.json`.
 
 ```bash
 harness-runtime migrate --repo <repo> \

@@ -52,26 +52,46 @@ harness-runtime init --repo <repo> \
 
 ## Обновление
 
-1. Обновите установку проекта:
+Обновление до 2.0.0 и перевод state на runtime store — один шаг `harness update`. Его выполняет
+человек: на `ledger.json` версии 3 update запускает `harness-runtime migrate` с approval из своих
+флагов (ADR 0020, раздел 6).
+
+1. Проверьте предусловия миграции без записи:
 
     ```bash
-    harness update <repo>
+    harness-runtime migrate --check --repo <repo>
+    ```
+
+    Код 0 и `"ready": true` — можно обновлять. Отказ печатает код и строку `REMEDY:` с действием
+    оператора; состояние не меняется.
+
+2. Обновите установку и переведите state:
+
+    ```bash
+    harness update <repo> \
+      --approved-by <человек> \
+      --approved-at <время RFC 3339> \
+      --reason <причина>
     ```
 
     `harness diff <repo>` заранее покажет изменения управляемых файлов. `harness update` сохраняет
-    локальные правки.
+    локальные правки. До установки первого файла update повторяет проверку предусловий и при отказе
+    ничего не устанавливает. Без approval на ledger версии 3 он тоже ничего не устанавливает и
+    печатает команду. Бинарник `harness-runtime` он ищет в release-сборке checkout harness, затем в
+    `PATH`. Проекту без state оркестрации и проекту, уже переведённому на store, approval не нужен.
 
-2. Проверьте установку:
+3. Проверьте установку:
 
     ```bash
     harness health <repo>
     ```
 
-    До миграции устраните каждый `fail` в выводе. Часто health сам печатает команду исправления.
+    Устраните каждый `fail` в выводе. Часто health сам печатает команду исправления.
 
 ## Миграция state
 
-Команду выполняет человек. `migrate` записывает approval в audit-цепочку store и в `AUTHORITY.json`.
+`harness update` из раздела выше запускает эту команду сам. Отдельно её выполняют, чтобы повторить
+migrate после кода 3 или 4. Команду выполняет человек. `migrate` записывает approval в audit-цепочку store и в `AUTHORITY.json`.
 
 ```bash
 harness-runtime migrate --repo <repo> \
