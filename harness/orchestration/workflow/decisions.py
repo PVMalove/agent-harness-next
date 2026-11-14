@@ -8,7 +8,6 @@ read-only role on the same candidate; anything about the code itself goes back t
 from __future__ import annotations
 
 import argparse
-import hashlib
 from functools import partial
 from pathlib import Path
 from typing import cast
@@ -1678,14 +1677,13 @@ def decide_batch(args: argparse.Namespace) -> JsonObject:
             if routing["next_action"] == resolver_state.RESOLVER_NEXT_ACTION:
                 resolver_state.require_fix_budget(root, config, batch)
             if routing["route"] == "verification":
-                report_path = _records_root(root) / pending[0]["report"]
+                # The digest the ledger checks the report against: the runtime store has no report
+                # file to hash (ADR 0020), so the file epoch uses the same value.
                 batch.setdefault("candidate_registrations", []).append(
                     {
                         "candidate_commit": routing["candidate_commit"],
                         "source_dispatch_id": dispatch["dispatch_id"],
-                        "source_report_sha256": hashlib.sha256(
-                            report_path.read_bytes()
-                        ).hexdigest(),
+                        "source_report_sha256": pending[0]["report_sha256"],
                         "reason_category": routing["reason_category"],
                         "registered_at": routing["decided_at"],
                     }
