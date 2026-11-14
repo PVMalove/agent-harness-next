@@ -1969,13 +1969,9 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         for name in ("origin.git", "work"):
             shutil.copytree(template / name, self.tmp / name, symlinks=True)
         self.repo = self.tmp / "work"
-        config_path = self.repo / ".git" / "config"
-        config_path.write_text(
-            config_path.read_text(encoding="utf-8").replace(
-                str(template / "origin.git"), str(self.tmp / "origin.git")
-            ),
-            encoding="utf-8",
-        )
+        # Git spells the path in its config its own way (forward slashes on Windows), so the
+        # origin of the copy is set through Git rather than by rewriting the config text.
+        _git(self.repo, "remote", "set-url", "origin", str(self.tmp / "origin.git"))
         # The copied index still holds the template files' inode and ctime stat data.
         _git(self.repo, "update-index", "-q", "--refresh")
         self.state_dir = self.tmp / "state"
