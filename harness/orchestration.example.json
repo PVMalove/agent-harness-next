@@ -110,7 +110,7 @@
             "claude-profile"
           ],
           "model": "claude-sonnet-5-5",
-          "effort": "xhigh"
+          "effort": "medium"
         },
         "codex": {
           "profiles": [
@@ -133,7 +133,7 @@
             "claude-profile"
           ],
           "model": "claude-sonnet-5-5",
-          "effort": "xhigh"
+          "effort": "medium"
         },
         "codex": {
           "profiles": [
@@ -225,7 +225,7 @@
             "claude-profile"
           ],
           "model": "claude-sonnet-5-5",
-          "effort": "xhigh"
+          "effort": "medium"
         },
         "codex": {
           "profiles": [
