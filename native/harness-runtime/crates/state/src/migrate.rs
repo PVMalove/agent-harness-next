@@ -349,3 +349,37 @@ pub fn run(repo: &Path, approval: &Approval) -> Result<Outcome> {
         authority,
     })
 }
+
+/// `harness-runtime migrate --check` (#814): step 1 of [`run`] without the approval and without a
+/// write, so `harness update` can refuse before it installs anything (ADR 0020, section 6).
+/// A state that is cut over answers `ready: false, already_cut_over: true`.
+///
+/// # Errors
+/// The refusal [`run`] would give in step 1, or for a store a rollback kept (exit code 2);
+/// `Error::Invariant` (4) for a cut-over state that is inconsistent.
+pub fn check(repo: &Path) -> Result<serde_json::Value> {
+    let state: PathBuf = repo.join(STATE_REL);
+    match epoch(&state) {
+        Epoch::Store(authority) => {
+            return Ok(json!({
+                "ready": false,
+                "already_cut_over": true,
+                "store_id": authority.store_id,
+            }));
+        }
+        Epoch::Inconsistent(reason) => {
+            return Err(Error::invariant(format!(
+                "the state directory is cut over but inconsistent: {reason}"
+            )));
+        }
+        Epoch::FileLedger => {}
+    }
+    let legacy = preconditions(&state)?;
+    refuse_a_rolled_back_store(&state)?;
+    Ok(json!({
+        "ready": true,
+        "already_cut_over": false,
+        "ledger_version": legacy.pointer.version,
+        "generation": legacy.pointer.generation,
+    }))
+}

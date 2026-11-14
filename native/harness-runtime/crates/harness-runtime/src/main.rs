@@ -12,7 +12,9 @@
 //! with a human approval (ADR 0020, section 5). It prints one JSON line and exits with 0 (done, or
 //! already done), 2 (the approval or a precondition refused it, nothing changed), 3 (it failed
 //! after it began; the file ledger is still the authority) or 4 (an invariant broke; an operator
-//! must look).
+//! must look). `harness-runtime migrate --check [--repo <path>]` runs only the preconditions,
+//! without an approval and without a write (#814): `{"ready": true, ...}` and 0, `ready: false,
+//! already_cut_over: true` and 0 after the cutover, or the refusal of `migrate` and 2.
 //!
 //! `harness-runtime rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <RFC
 //! 3339 time> --reason <text>` exports the runtime store into a new generation of the file ledger
@@ -74,7 +76,7 @@ const LOCK_POLL: Duration = Duration::from_millis(25);
 const USAGE: &str = "usage: harness-runtime serve [--repo <path>] [--owner-session <key> \
     [--owner-pid <pid>] [--owner-ttl-seconds <n>]] | harness-runtime stop [--repo <path>] | \
     harness-runtime restart [--repo <path>] | harness-runtime migrate \
-    [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
+    [--check] [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
     init [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
     rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | \
     harness-runtime repair-import-approval [--check] [--repo <path>] \
@@ -145,7 +147,9 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
                 parse_owner_flag(&mut owner, name, &value)?;
                 continue;
             }
-            Some("--check") if command == Command::RepairImportApproval => {
+            Some("--check")
+                if matches!(command, Command::RepairImportApproval | Command::Migrate) =>
+            {
                 check = true;
                 continue;
             }
@@ -659,6 +663,17 @@ fn print_stopped(stopped: &Stopped) -> ExitCode {
 
 /// Run the migration and print its outcome as one JSON line.
 fn migrate(args: &Args) -> ExitCode {
+    if args.check {
+        return match state::migrate::check(&args.repo) {
+            Ok(answer) => {
+                println!("{answer}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                Report::new(error.code(), &error, error.remedy()).print(error.exit_code())
+            }
+        };
+    }
     match state::migrate::run(&args.repo, &args.approval) {
         Ok(outcome) => {
             let mut stdout = std::io::stdout().lock();
