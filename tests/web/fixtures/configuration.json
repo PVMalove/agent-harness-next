@@ -112,7 +112,7 @@
     {
       "choices": [],
       "default": false,
-      "description": "Цель: гарантия целостности рабочего окружения. За что отвечает: требование от воркеров аттестации (подтверждения корректности Git-worktree, ветки и коммита) перед отправкой отчёта. Для architect, developer, conflict-resolver, database-migrations, messaging-integration и code-review аттестация обязательна независимо от настройки. Варианты: true (проверка для всех ролей), false (проверка только для перечисленных ролей, по умолчанию).",
+      "description": "Цель: гарантия целостности рабочего окружения. За что отвечает: требование от воркеров аттестации (подтверждения корректности Git-worktree, ветки и коммита) перед отправкой отчёта. Для architect, developer, conflict-resolver, rebaser, database-migrations, messaging-integration и code-review аттестация обязательна независимо от настройки. Варианты: true (проверка для всех ролей), false (проверка только для перечисленных ролей, по умолчанию).",
       "file": "orchestration.json",
       "group": "orchestrator",
       "label": "Аттестация всех воркеров",

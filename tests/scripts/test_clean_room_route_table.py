@@ -100,9 +100,9 @@ class RecoveryRouteTableRuleTests(unittest.TestCase):
 
     def test_a_route_outside_the_enum_is_refused(self) -> None:
         row = self._rows("abandon")[0]
-        extra = row.replace("`abandon`", "`rebase`")
+        extra = row.replace("`abandon`", "`detour`")
 
-        self._assert_refused(self.playbook.replace(row, f"{row}\n{extra}", 1), "rebase")
+        self._assert_refused(self.playbook.replace(row, f"{row}\n{extra}", 1), "detour")
 
 
 if __name__ == "__main__":

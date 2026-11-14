@@ -11,6 +11,7 @@ raw-path builder or a bare ``Path``+``dict`` write adapter.
 from __future__ import annotations
 
 import argparse
+import atexit
 import contextlib
 import errno
 import hashlib
@@ -1929,21 +1930,50 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
 
     APPROVED_AT = "2026-09-17T00:00:00+00:00"
 
+    _template: ClassVar[Path | None] = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._template_root()
+
+    @classmethod
+    def _template_root(cls) -> Path:
+        """``origin.git`` and ``work`` with the seed and roles commits, built once per process.
+
+        Other test modules call ``setUp`` on a bare instance without ``setUpClass``, so the
+        template is also built on first use; it is removed when the process exits.
+        """
+        if cls._template is None:
+            root = Path(tempfile.mkdtemp(prefix="routing-template-"))
+            atexit.register(shutil.rmtree, root, ignore_errors=True)
+            repo = _init_repo(root)
+            roles = repo / ".harness" / "orchestration" / "roles"
+            for name in ("developer", "verification", "code-review", "qa"):
+                (roles / f"{name}.md").write_text(
+                    (ORCHESTRATION_ROOT / "roles" / f"{name}.md").read_text(
+                        encoding="utf-8"
+                    ),
+                    encoding="utf-8",
+                )
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-m", "roles")
+            _git(repo, "push", "origin", "master")
+            cls._template = root
+        return cls._template
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.tmp = Path(self._tmp.name)
-        self.repo = _init_repo(self.tmp)
-        roles = self.repo / ".harness" / "orchestration" / "roles"
-        for name in ("developer", "verification", "code-review", "qa"):
-            (roles / f"{name}.md").write_text(
-                (ORCHESTRATION_ROOT / "roles" / f"{name}.md").read_text(
-                    encoding="utf-8"
-                ),
-                encoding="utf-8",
-            )
-        _git(self.repo, "add", "-A")
-        _git(self.repo, "commit", "-m", "roles")
-        _git(self.repo, "push", "origin", "master")
+        template = self._template_root()
+        for name in ("origin.git", "work"):
+            shutil.copytree(template / name, self.tmp / name, symlinks=True)
+        self.repo = self.tmp / "work"
+        # Git spells the path in its config its own way (forward slashes on Windows), so the
+        # origin of the copy is set through Git rather than by rewriting the config text.
+        _git(self.repo, "remote", "set-url", "origin", str(self.tmp / "origin.git"))
+        # The copied index still holds the template files' inode and ctime stat data.
+        _git(self.repo, "update-index", "-q", "--refresh")
         self.state_dir = self.tmp / "state"
         self.worktree = self.tmp / "worktree"
         self.branch = "feature/issue-244-routing"

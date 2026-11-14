@@ -103,11 +103,25 @@ def test_the_cached_ledger_is_released_on_expiry_and_never_held_twice() -> None:
     screens = service(facts, clock, ttl=0.05)
 
     async def scenario() -> bool:
-        await screens.reports()
-        await screens.reports(force=True)
-        clock.now += 1
-        await screens.reports()
-        await asyncio.sleep(0.3)
+        loop = asyncio.get_running_loop()
+        releases: list[tuple[object, tuple[object, ...]]] = []
+        call_later = loop.call_later
+
+        def defer_release(
+            _delay: float, callback: object, *args: object
+        ) -> None:
+            releases.append((callback, args))
+
+        loop.call_later = defer_release  # type: ignore[assignment]
+        try:
+            await screens.reports()
+            await screens.reports(force=True)
+            clock.now += 1
+            await screens.reports()
+            for callback, args in releases:
+                callback(*args)  # type: ignore[operator]
+        finally:
+            loop.call_later = call_later  # type: ignore[method-assign]
         gc.collect()
         return views[-1]() is None
 

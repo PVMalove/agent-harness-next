@@ -57,7 +57,6 @@ LABELS = (
     "migration generation selection",
     "migration repeat",
     "duplicate resume",
-    "concurrent resume",
     "stale approval",
     "live worker",
     "ambiguous external effect",
@@ -125,10 +124,6 @@ SCENARIOS: Sequence[Scenario] = (
     Scenario(
         "duplicate resume",
         f"{_COMMANDS}::test_a_repeated_resume_changes_nothing_more",
-    ),
-    Scenario(
-        "concurrent resume",
-        f"{_COMMANDS}::test_concurrent_resumes_release_the_hold_once",
     ),
     Scenario(
         "stale approval",
