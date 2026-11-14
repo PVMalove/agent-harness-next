@@ -368,7 +368,10 @@ impl Supervisor {
 
     /// A container launch on a platform without containers: refused before the intent.
     #[cfg(windows)]
-    #[allow(clippy::unused_self)]
+    #[allow(
+        clippy::unused_self,
+        reason = "the signature of the Linux method, so the one call site needs no cfg"
+    )]
     fn launch_container(
         self: &Arc<Self>,
         _connection: &mut Connection,
