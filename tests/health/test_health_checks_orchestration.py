@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -820,7 +821,9 @@ def test_worker_binaries_need_no_host_agent_for_a_container_role(
     result = checks.check_worker_binaries(context)
 
     assert result.status == "ok", result.message
-    assert seen == [(str(bin_dir / "podman"), "worker:local")]
+    engine = shutil.which("podman", path=str(bin_dir))
+    assert engine is not None
+    assert seen == [(engine, "worker:local")]
 
 
 def test_worker_binaries_fail_for_a_container_role_without_its_engine_or_image(

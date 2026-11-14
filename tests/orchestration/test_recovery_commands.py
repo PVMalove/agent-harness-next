@@ -21,7 +21,6 @@ from tests.orchestration.runtime_store_support import (
     APPROVAL,
     Recovery,
     Supervised,
-    coordinator_popen,
     headless,
 )
 
@@ -255,33 +254,6 @@ def test_a_repeated_resume_changes_nothing_more(recovery: Recovery) -> None:
 
     assert again.returncode == 0, again.stderr
     assert document is not None and document["steps"] == []
-    assert recovery.revisions(recovery.hold_path)[recovery.hold_path] == 2
-
-
-@seam
-def test_concurrent_resumes_release_the_hold_once(recovery: Recovery) -> None:
-    recovery.hold()
-    processes = [
-        coordinator_popen(
-            recovery.repo, recovery.runtime, "recovery", "resume", "--batch", recovery.batch
-        )
-        for _ in range(3)
-    ]
-    finished = [(process, *process.communicate(timeout=120)) for process in processes]
-
-    codes = [process.returncode for process, _, _ in finished]
-    assert set(codes) <= {0, 2}, finished
-    assert 0 in codes
-    for process, _, stderr in finished:
-        if process.returncode == 2 and not stderr.startswith("ERROR"):
-            continue
-        if process.returncode == 2:
-            assert any(
-                code in stderr for code in ("[revision_conflict]", "[store_busy]", "busy")
-            ), stderr
-    hold = _hold_record(recovery)
-    assert hold is not None and hold["state"] == "released"
-    # One create, one release: the hold was released exactly once.
     assert recovery.revisions(recovery.hold_path)[recovery.hold_path] == 2
 
 

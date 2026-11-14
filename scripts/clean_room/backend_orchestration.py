@@ -336,6 +336,7 @@ def run(ctx: SimpleNamespace) -> None:
         "developer.md",
         "messaging-integration.md",
         "qa.md",
+        "rebaser.md",
         "verification.md",
     }
     actual_role_files = {
