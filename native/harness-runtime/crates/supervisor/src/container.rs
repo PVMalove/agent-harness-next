@@ -192,10 +192,8 @@ impl Supervisor {
             .as_ref()
             .and_then(|payload| payload.get("plan"))
             .ok_or_else(|| {
-                error(
-                    ErrorCode::MalformedRequest,
-                    FailureDomain::Tooling,
-                    "the request is not valid: the payload is {\"plan\": <plan>}".to_owned(),
+                ErrorBody::malformed(
+                    "the payload is {\"plan\": <plan>}",
                     "send the resolved runtime_access plan as the payload",
                 )
             })?;

@@ -37,6 +37,7 @@ pub mod rollback;
 pub mod route;
 pub mod schema;
 pub mod snapshot;
+pub mod store_error;
 pub mod time;
 pub mod validate;
 pub mod vocabulary;

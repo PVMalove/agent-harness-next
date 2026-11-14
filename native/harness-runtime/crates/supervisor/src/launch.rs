@@ -27,6 +27,7 @@ use state::canonical::{canonical_json, object_sha256, sha256_hex};
 use state::executions::{self, Change, Execution, NewExecution, allowed, is_terminal};
 use state::hooks;
 use state::identity::{self, Identity};
+use state::store_error;
 use state::time::{iso_from_micros, iso_now, now_micros};
 
 pub(crate) use crate::os::log_directory;
@@ -86,17 +87,12 @@ fn now_ms() -> u64 {
 }
 
 pub(crate) fn sql<T>(result: rusqlite::Result<T>) -> Result<T, ErrorBody> {
-    result.map_err(|err| match err.sqlite_error_code() {
-        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+    result.map_err(|err| {
+        if store_error::is_busy(&err) {
             store_busy(&err.to_string())
+        } else {
+            store_error::store_failed(err)
         }
-        _ => ErrorBody::new(
-            ErrorCode::Internal,
-            FailureDomain::Infrastructure,
-            false,
-            format!("the store failed: {err}"),
-            "repeat the command; if the store stays unreadable, restore the state directory from the snapshot named in AUTHORITY.json",
-        ),
     })
 }
 
@@ -121,11 +117,8 @@ pub(crate) fn injected(err: &state::Error) -> ErrorBody {
 }
 
 fn malformed(detail: &str) -> ErrorBody {
-    ErrorBody::new(
-        ErrorCode::MalformedRequest,
-        FailureDomain::Tooling,
-        false,
-        format!("the request is not valid: {detail}"),
+    ErrorBody::malformed(
+        detail,
         "send {\"dispatch_id\": <id>} as the payload of the execution operation",
     )
 }

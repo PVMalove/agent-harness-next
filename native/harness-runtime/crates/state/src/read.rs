@@ -50,13 +50,9 @@ pub enum ReadError {
 
 impl From<rusqlite::Error> for ReadError {
     fn from(err: rusqlite::Error) -> Self {
-        let busy = matches!(
-            err.sqlite_error_code(),
-            Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
-        );
         Self::Store {
             message: err.to_string(),
-            busy,
+            busy: crate::store_error::is_busy(&err),
         }
     }
 }

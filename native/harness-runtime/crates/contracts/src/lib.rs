@@ -15,8 +15,8 @@ mod stage_evidence;
 
 pub use frame::{FrameError, MAX_FRAME_LEN, decode, encode, read_frame, write_frame};
 pub use protocol::{
-    ErrorBody, HelloPayload, HelloResult, PROTOCOL_VERSION, ProtocolVersion, Request, Response,
-    Status, VersionRange, negotiate,
+    ErrorBody, HelloPayload, HelloResult, PROTOCOL_REMEDY, PROTOCOL_VERSION, ProtocolVersion,
+    Request, Response, Status, VersionRange, negotiate,
 };
 pub use stage_evidence::{
     FileRef, SCHEMA as STAGE_EVIDENCE_SCHEMA, StageEvidence, StageEvidenceDocument,

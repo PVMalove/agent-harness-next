@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use contracts::{
-    ErrorBody, ErrorCode, FailureDomain, HelloPayload, HelloResult, PROTOCOL_VERSION,
-    ProtocolVersion, Request, Response, decode, negotiate,
+    ErrorBody, ErrorCode, FailureDomain, HelloPayload, HelloResult, PROTOCOL_REMEDY,
+    PROTOCOL_VERSION, ProtocolVersion, Request, Response, decode, negotiate,
 };
 use serde_json::{Value, json};
 
@@ -540,7 +540,7 @@ fn read_refusal(id: &str, error: state::read::ReadError) -> Reply {
             FailureDomain::Infrastructure,
             false,
             format!("the store cannot be read: {message}"),
-            "repeat the command; if the store stays unreadable, restore the state directory from the snapshot named in AUTHORITY.json",
+            state::store_error::REPEAT_OR_RESTORE_REMEDY,
         ),
     }
 }
@@ -675,13 +675,7 @@ fn serves_repository(shared: &Shared, client_root: &str) -> bool {
 fn malformed(operation_id: &str, detail: &str) -> Reply {
     failure(
         operation_id,
-        ErrorBody::new(
-            ErrorCode::MalformedRequest,
-            FailureDomain::Tooling,
-            false,
-            format!("the request is not valid: {detail}"),
-            "send a request the protocol defines: a known envelope, no unknown fields",
-        ),
+        ErrorBody::malformed(detail, PROTOCOL_REMEDY),
         false,
     )
 }
