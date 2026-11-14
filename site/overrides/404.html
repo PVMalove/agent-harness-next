@@ -1,0 +1,24 @@
+{% extends "main.html" %}
+
+{#- GitHub Pages serves one 404.html for the whole site, so it carries both languages. -#}
+{% block content %}
+  <div class="ah-404">
+    <img src="{{ 'assets/mascot.svg' | url }}" alt="Воксельный маскот Agent Harness Next / Voxel mascot of Agent Harness Next" width="120" height="156">
+    <div lang="ru">
+      <h1>Страница не найдена</h1>
+      <p>Такой страницы нет. Вернитесь на <a href="{{ '' | url }}">главную</a> или откройте
+        <a href="{{ 'getting-started/' | url }}">документацию</a>.</p>
+      <p><a class="md-button md-button--primary" href="{{ '' | url }}">На главную</a>
+        <a class="md-button" href="{{ 'demo/' | url }}">Демо</a>
+        <a class="md-button" href="{{ 'reference/' | url }}">Справочник</a></p>
+    </div>
+    <div lang="en">
+      <h2>Page not found</h2>
+      <p>This page does not exist. Go back to the <a href="{{ 'en/' | url }}">home page</a> or open the
+        <a href="{{ 'en/getting-started/' | url }}">documentation</a>.</p>
+      <p><a class="md-button md-button--primary" href="{{ 'en/' | url }}">Home</a>
+        <a class="md-button" href="{{ 'en/demo/' | url }}">Demo</a>
+        <a class="md-button" href="{{ 'en/reference/' | url }}">Reference</a></p>
+    </div>
+  </div>
+{% endblock %}

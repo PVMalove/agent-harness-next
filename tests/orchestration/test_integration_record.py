@@ -27,6 +27,7 @@ from harness.orchestration.ledger import (
 from harness.orchestration.ledger import JsonObject as LedgerObject
 from harness.orchestration.workflow import history, integration
 from tests.orchestration import test_coordinator as coordinator_tests
+from tests.orchestration.legacy_state import seed_file_ledger
 
 SHA_A = "a" * 40
 SHA_B = "b" * 40
@@ -110,8 +111,8 @@ class IntegrationRecordModelTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
-            ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            # The file ledger itself (generation, audit, clean, migrate): a 1.x ledger.
+            ledger = seed_file_ledger(Path(temporary) / "state")
             record = IntegrationRecord(
                 integration_record_id=IntegrationRecord.derive_id(IDENTITY),
                 extra={"identity": dict(IDENTITY)},
@@ -154,8 +155,8 @@ class IntegrationRecordModelTests(unittest.TestCase):
 
     def test_nested_records_survive_clean_and_migrate(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
-            ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            # The file ledger itself (generation, audit, clean, migrate): a 1.x ledger.
+            ledger = seed_file_ledger(Path(temporary) / "state")
             record = IntegrationRecord(
                 integration_record_id=IntegrationRecord.derive_id(IDENTITY),
                 extra={"identity": dict(IDENTITY)},
@@ -237,8 +238,8 @@ class BatchesForTicketBranchTests(unittest.TestCase):
     def test_missing_batches_directory_and_no_match_are_refused(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             root = Path(temporary) / "state"
-            ledger = LifecycleLedger(root)
-            ledger.ensure()
+            # A state directory outside a repository: a 1.x ledger (ADR 0036, section 5).
+            seed_file_ledger(root)
             with self.assertRaises(CoordinatorError) as raised:
                 history._batches_for_ticket_branch(root, "#1", "feature/issue-1-x")
             self.assertRegex(raised.exception.message, re.compile("no orchestration"))
@@ -251,15 +252,34 @@ class PublishedBranch:
     a real local bare remote through every role, and subclassing it would run its whole suite again.
     """
 
-    def __init__(self) -> None:
-        self.fixture = coordinator_tests.CoordinatorRetryRoutingTests()
-        self.fixture.setUp()
+    def __init__(
+        self,
+        fixture: coordinator_tests.CoordinatorRetryRoutingTests | None = None,
+        integration_ref: str | None = None,
+    ) -> None:
+        """``fixture`` is a coordinator fixture its caller already set up (and tears down) on a
+        1.x file ledger (``file_ledger = True`` before ``setUp``): ``publish`` needs it.
+        ``integration_ref`` is the target its batches name, ``master`` when it is ``None``."""
+        self.owned = fixture is None
+        if fixture is None:
+            fixture = coordinator_tests.CoordinatorRetryRoutingTests()
+            # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+            fixture.file_ledger = True
+            fixture.setUp()
+        self.fixture = fixture
+        self.integration_ref = integration_ref
         self.repo = self.fixture.repo
         self.branch = self.fixture.branch
         self.ticket = "#244"
 
+    def keep_state_in_repo(self) -> None:
+        """Move the 1.x ledger into the repository's own state directory, before any batch."""
+        self.fixture.state_dir = self.repo / ".harness/orchestration/state"
+        seed_file_ledger(self.fixture.state_dir)
+
     def close(self) -> None:
-        self.fixture.tearDown()
+        if self.owned:
+            self.fixture.tearDown()
 
     def args(self, **values: object) -> argparse.Namespace:
         return self.fixture._args(**values)
@@ -279,7 +299,7 @@ class PublishedBranch:
         batch without landing anything: a follow-up of the already published branch."""
         fx = self.fixture
         if landed is None and not again:
-            batch = fx._create_batch()
+            batch = fx._create_batch(integration_ref=self.integration_ref)
         else:
             if landed is not None:
                 _git(self.repo, "push", "origin", f"{landed}:refs/heads/master")
@@ -339,6 +359,7 @@ class PublishedBranch:
 
     def advance_integration_ref(self) -> str:
         """Another change lands on the integration ref in the remote."""
+        ref = self.integration_ref or "master"
         _git(self.repo, "checkout", "-q", "master")
         # The tip in the content keeps a second landing a new commit.
         tip = _git(self.repo, "rev-parse", "HEAD")
@@ -347,7 +368,7 @@ class PublishedBranch:
         # paths overflow MAX_PATH once a QA worktree is created for a refreshed candidate on Windows.
         _git(self.repo, "add", "landed.txt")
         _git(self.repo, "commit", "-m", "landed")
-        _git(self.repo, "push", "origin", "master")
+        _git(self.repo, "push", "origin", f"HEAD:refs/heads/{ref}")
         return _git(self.repo, "rev-parse", "HEAD")
 
     def snapshot(self) -> JsonObject:
@@ -391,6 +412,42 @@ class IntegrationPrepareTests(unittest.TestCase):
         self.branch = PublishedBranch()
         self.addCleanup(self.branch.close)
 
+    def test_prepare_records_a_batch_whose_moved_base_the_rebaser_carried(
+        self,
+    ) -> None:
+        fx = self.branch.fixture
+        candidate = fx._reviewed_candidate()
+        batch_id = fx.batch_id
+        upstream = fx._push_upstream()
+        fx._decide(batch_id, "accept")
+        brief = fx._dispatch(batch_id, "rebaser")["brief"]
+        fx._start(brief["dispatch_id"])
+        head = fx._rebased(brief, conflict=False)
+        fx._submit(brief["dispatch_id"], fx._rebaser_report(brief, head))
+        fx._decide(batch_id, "accept")
+        fx._assess(
+            batch_id,
+            head,
+            git_utils._changed_files_between(self.branch.repo, upstream, head),
+        )
+        fx._reported_qa(batch_id, head)
+        fx._decide(batch_id, "accept")
+        publish = fx._dispatch(
+            batch_id, "developer", purpose="publish", candidate=head
+        )["brief"]
+        coordinator.publish_dispatch(
+            self.branch.args(dispatch=publish["dispatch_id"], remote="origin")
+        )
+        fx._decide(batch_id, "accept")
+
+        result = self.branch.prepare()
+
+        self.assertNotEqual(candidate, head)
+        self.assertTrue(result["created"])
+        self.assertEqual(
+            (result["candidate_sha"], result["target_sha"]), (head, upstream)
+        )
+
     def test_prepare_links_ticket_branch_batch_candidate_and_target(self) -> None:
         published = self.branch.publish()
         target = _git(self.branch.repo, "rev-parse", "origin/master")
@@ -405,6 +462,10 @@ class IntegrationPrepareTests(unittest.TestCase):
         self.assertEqual(result["published_sha"], published["candidate"])
         self.assertEqual(result["target_sha"], target)
         self.assertEqual(result["integration_ref"], "master")
+        self.assertEqual(
+            result["candidate_tree_sha"],
+            _git(self.branch.repo, "rev-parse", f"{published['candidate']}^{{tree}}"),
+        )
         self.assertEqual(result["status"]["state"], "current")
         self.assertEqual(result["evidence_links"], [])
         source = result["source_evidence"]
@@ -1057,30 +1118,24 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class IntegrationGuidanceTests(unittest.TestCase):
-    """The guide, playbook, skills, their Russian descriptions and the glossary stay consistent
-    with the public command group."""
+    """The playbook, the skills and the glossary stay consistent with the public command group."""
 
     MENTIONS = {
-        "docs/backend-orchestration.md": (
-            "integration prepare",
-            "integration status",
-            "integration link-evidence",
-            "reports/integration",
-            "integration next",
-            "verification-failure",
-        ),
         "harness/orchestration/playbook.md": (
             "integration prepare",
             "integration status",
             "integration link-evidence",
             "integration next",
+            "reports/integration-pair",
+            "qa.evidence.verify",
+            "--merge-commit",
         ),
         "harness/orchestration/README.md": (
             "integration prepare",
             "integration status",
         ),
-        "skills/first-party/pvmalove/implement/SKILL.md": ("integration prepare",),
-        "skills/first-party/pvmalove/to-pull-requests/SKILL.md": (
+        "skills/first-party/engineering/implement/SKILL.md": ("integration prepare",),
+        "skills/first-party/engineering/to-pull-requests/SKILL.md": (
             "integration status",
             "integration next",
             "integration collect-ci",
@@ -1088,25 +1143,10 @@ class IntegrationGuidanceTests(unittest.TestCase):
             "candidate_sha",
             "target_sha",
             "qa_source",
-        ),
-        "docs/skills/implement.md": ("integration prepare",),
-        "docs/skills/to-pull-requests.md": (
-            "integration status",
-            "integration next",
-            "integration collect-ci",
-            "integration local-qa",
-            "qa_source",
-        ),
-        "docs/adr/0017-pr-continuation-routing.md": (
-            "integration next",
-            "verification-failure",
-            "collector-failed",
-        ),
-        "docs/skills/coordinator.md": (
-            "integration prepare",
-            "integration status",
-            "integration link-evidence",
-            "integration next",
+            "release-gate-refused",
+            "--merge-commit",
+            "candidate_tree_sha",
+            "merge-tree-mismatch",
         ),
         "CONTEXT.md": ("**Integration record**", "**Stale integration record**"),
     }
@@ -1120,7 +1160,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
 
     def test_the_skills_never_dispatch_or_rewrite_on_stale(self) -> None:
         text = (
-            REPO / "skills/first-party/pvmalove/to-pull-requests/SKILL.md"
+            REPO / "skills/first-party/engineering/to-pull-requests/SKILL.md"
         ).read_text(encoding="utf-8")
         self.assertIn("do not create a dispatch", text)
 
@@ -1128,21 +1168,9 @@ class IntegrationGuidanceTests(unittest.TestCase):
         """After the developer route of a failed original pair one ticket and branch have two
         records and '<ticket-branch>' is refused; '--record <new record>' replaces it."""
         notes = {
-            "skills/first-party/pvmalove/to-pull-requests/SKILL.md": (
+            "skills/first-party/engineering/to-pull-requests/SKILL.md": (
                 "several integration records match",
                 "`--record <new record>` replaces `<ticket-branch>`",
-            ),
-            "docs/skills/to-pull-requests.md": (
-                "several integration records match",
-                "`--record <новая запись>` заменяет `<ticket-branch>`",
-            ),
-            "docs/backend-orchestration.md": (
-                "several integration records match",
-                "`--record <новая запись>` заменяет `<ticket-branch>`",
-            ),
-            "docs/adr/0017-pr-continuation-routing.md": (
-                "several integration records match",
-                "`--record <новая запись>` заменяет `<ticket-branch>`",
             ),
         }
         for relative, needles in notes.items():
@@ -1151,24 +1179,9 @@ class IntegrationGuidanceTests(unittest.TestCase):
                 with self.subTest(file=relative, needle=needle):
                     self.assertIn(needle, text)
 
-    def test_guidance_states_the_order_independent_passed_check_rule(self) -> None:
-        """A passed, verified check of the current pair supersedes a failed one whatever the
-        recording order; the docs must not claim that only a 'later passed' does."""
-        stale = ("без позднего passed", "без более позднего passed")
-        rule = "независимо от порядка записи"
-        for relative in (
-            "docs/adr/0017-pr-continuation-routing.md",
-            "docs/backend-orchestration.md",
-        ):
-            text = (REPO / relative).read_text(encoding="utf-8")
-            with self.subTest(file=relative):
-                self.assertIn(rule, text)
-                for phrase in stale:
-                    self.assertNotIn(phrase, text)
-
     def test_the_pr_skill_binds_confirmation_to_the_pair_and_never_merges(self) -> None:
         text = (
-            REPO / "skills/first-party/pvmalove/to-pull-requests/SKILL.md"
+            REPO / "skills/first-party/engineering/to-pull-requests/SKILL.md"
         ).read_text(encoding="utf-8")
         confirmation = text.index("separate confirmation")
         opening = text.index("gh pr create")

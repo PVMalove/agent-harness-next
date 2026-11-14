@@ -110,7 +110,7 @@
             "claude-profile"
           ],
           "model": "claude-sonnet-5-5",
-          "effort": "xhigh"
+          "effort": "medium"
         },
         "codex": {
           "profiles": [
@@ -133,7 +133,7 @@
             "claude-profile"
           ],
           "model": "claude-sonnet-5-5",
-          "effort": "xhigh"
+          "effort": "medium"
         },
         "codex": {
           "profiles": [
@@ -212,6 +212,29 @@
           "effort": "xhigh"
         }
       }
+    },
+    "rebaser": {
+      "transport": "in-process",
+      "write_paths": [
+        "**"
+      ],
+      "default_runtime": "claude",
+      "runtimes": {
+        "claude": {
+          "profiles": [
+            "claude-profile"
+          ],
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        },
+        "codex": {
+          "profiles": [
+            "codex-profile"
+          ],
+          "model": "gpt-6-luna",
+          "effort": "xhigh"
+        }
+      }
     }
   },
   "concurrency_budget": 5,
@@ -266,10 +289,14 @@
     "max_developer_retries": 3
   },
   "execution_policy": {
+    "worker_startup_timeout_seconds": 120,
+    "worker_execution_timeout_seconds": 14400,
+    "stop_grace_seconds": 30,
     "dispatch_wait_timeout_seconds": 60,
     "dispatch_poll_interval_seconds": 5,
     "qa_lease_seconds": 1800,
-    "rate_limit_retry_seconds": 60
+    "rate_limit_retry_seconds": 60,
+    "qa_command_timeout_seconds": 3600
   },
   "attention_policy": {
     "retry_queue_seconds": 18000,
@@ -321,6 +348,24 @@
     ],
     "test_command": "pytest -q -n 8"
   },
+  "verification_plan_policy": {
+    "max_related_tests": 200,
+    "ticket_diff_selection": false,
+    "stages": [
+      {
+        "stage_id": "lint",
+        "kind": "lint",
+        "argv": ["make", "lint"],
+        "timeout_seconds": 900
+      },
+      {
+        "stage_id": "tests",
+        "kind": "pytest",
+        "argv": ["pytest", "-q", "-n", "8"],
+        "timeout_seconds": 1800
+      }
+    ]
+  },
   "verification_commands": [],
   "test_path_patterns": [
     "tests/**",
@@ -329,6 +374,9 @@
     "**/*_test.py"
   ],
   "tool_policy": {
+    "roles": {
+      "developer": ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "Agent(test-author)"]
+    },
     "modes": {
       "read-only": [
         "Read",

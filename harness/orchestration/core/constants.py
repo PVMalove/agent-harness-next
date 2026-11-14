@@ -41,6 +41,71 @@ class IntegrationCheckResult(StrEnum):
     FAILED = "failed"
 
 
+# Where the integration ref points now, compared with the target SHA an integration recorded.
+class IntegrationTargetState(StrEnum):
+    CURRENT = "current"
+    STALE = "stale"
+    UNAVAILABLE = "unavailable"
+
+
+# State of an integration local-QA attempt, of its result and of a request's pair observation.
+class LocalQaState(StrEnum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    UNAVAILABLE = "unavailable"
+    EXHAUSTED = "exhausted"
+
+
+# Verification mark of a local-QA result and of a linked pair check; integration collect-ci writes
+# its own marks (INTEGRATION_CI_COLLECTED, INTEGRATION_CI_COLLECTED_FAILURE) instead.
+class EvidenceVerification(StrEnum):
+    VERIFIED = "verified"
+    UNVERIFIED = "unverified"
+
+
+# The verdict of the runtime operation qa.evidence.verify on a Release Gate pair (ADR 0021,
+# section 7: qa_evidence_verify) and the violations it names (ADR 0023, section 5).
+class QaEvidenceVerdict(StrEnum):
+    OK = "ok"
+    REFUSED = "refused"
+
+
+class QaEvidenceViolation(StrEnum):
+    PAIR_NOT_RECORDED = "pair_not_recorded"
+    NO_FULL_QA = "no_full_qa"
+    SELECTION_NOT_FULL = "selection_not_full"
+    STAGE_NOT_PASSED = "stage_not_passed"
+    STAGE_CANDIDATE_MISMATCH = "stage_candidate_mismatch"
+    PLAN_MISMATCH = "plan_mismatch"
+    EVIDENCE_UNVERIFIABLE = "evidence_unverifiable"
+    CI_NOT_COLLECTED = "ci_not_collected"
+
+
+# Why the Python Release Gate refuses a merge handoff or blocks after a merge (ADR 0026, section 4).
+class ReleaseGateRefusal(StrEnum):
+    BRANCH_HEAD_MISMATCH = "branch_head_mismatch"
+    TARGET_NOT_IN_CANDIDATE_HISTORY = "target_not_in_candidate_history"
+    EVIDENCE_REFUSED = "evidence_refused"
+    MERGED_TREE_MISMATCH = "merged_tree_mismatch"
+
+
+# A code-review report's optional overall recommendation (review.recommendation).
+class ReviewRecommendation(StrEnum):
+    ACCEPT = "accept"
+    RETRY = "retry"
+
+
+# Owner of a QA lane queue entry or lease; a legacy entry without owner_kind is a dispatch's.
+class QaOwnerKind(StrEnum):
+    DISPATCH = "dispatch"
+    LOCAL_QA = "local-qa"
+
+
+class ContextPackageFreshness(StrEnum):
+    FRESH = "fresh"
+    STALE = "stale"
+
+
 class RetryReason(StrEnum):
     VERIFICATION_INFRASTRUCTURE = "verification-infrastructure"
     TRANSPORT = "transport"
@@ -50,6 +115,19 @@ class RetryReason(StrEnum):
     CODE = "code"
     REQUIREMENTS = "requirements"
     CANDIDATE_CHANGE = "candidate-change"
+    UNKNOWN = "unknown"
+
+
+class FailureDomain(StrEnum):
+    """The failure-domain taxonomy of ADR 0019; ``runtime.failure_domain`` in the registry."""
+
+    ENVIRONMENT_PREPARATION = "environment_preparation"
+    INFRASTRUCTURE = "infrastructure"
+    POLICY = "policy"
+    TOOLING = "tooling"
+    CODE_TEST = "code_test"
+    TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
     UNKNOWN = "unknown"
 
 
@@ -66,6 +144,7 @@ class RecoveryRoute(StrEnum):
     NARROWED_RETRY = "narrowed-retry"
     FIX_FORWARD = "fix-forward"
     REBASE_FIX_FORWARD = "rebase-fix-forward"
+    REBASE = "rebase"
     SUPERSEDE = "supersede"
     ENVIRONMENTAL_RESTART = "environmental-restart"
     REWIND = "rewind"
@@ -111,6 +190,41 @@ DECISIONS = {
 # Decisions that let the pipeline move past a reported stage. `accept-conditional` is a human
 # attestation that an infrastructure failure stopped the stage; it leaves an open condition.
 ACCEPTED_DECISIONS = frozenset({"accept", "override-warning", "accept-conditional"})
+# Every decision kind the coordinator records: `batch decide` records DECISIONS, the coordinator
+# records the others itself in coordinator_decisions, and `pause`, `startup-evidence` and
+# `report-relay` appear only as the decision detail of a batch transition audit record.
+COORDINATOR_DECISIONS = (
+    "accept",
+    "accept-conditional",
+    "override-warning",
+    "retry",
+    "block",
+    "fail",
+    "abandon",
+    "continue",
+    "continue-automatic",
+    "continue-rate-limit",
+    "cancel",
+    "rewind-developer",
+    "resume",
+    "not-required",
+    "carry-over",
+    "supersede",
+    "resume-stop",
+    "rewind",
+    "pause",
+    "startup-evidence",
+    "report-relay",
+)
+# coordinator_decisions entries the budgets count by these exact spellings: continuations and
+# rate-limit resumes per dispatch, developer retries per batch and infrastructure retries per
+# candidate.
+CONTINUATION_DECISIONS = frozenset(
+    {"continue", "continue-automatic", "continue-rate-limit"}
+)
+RATE_LIMIT_RESUME_DECISIONS = frozenset({"continue-automatic", "continue-rate-limit"})
+DEVELOPER_RETRY_DECISIONS = frozenset({"retry", "rewind-developer"})
+INFRASTRUCTURE_RETRY_DECISIONS = frozenset({"retry", "cancel"})
 TERMINAL_BATCH_STATES = {
     BatchState.COMPLETED,
     BatchState.NOT_REQUIRED,
@@ -164,6 +278,9 @@ RETRY_REASON_CATEGORIES = tuple(RetryReason)
 # ``rebase-fix-forward`` (issue #504) is a ``developer-retry`` decided while ``origin/<integration_ref>``
 # moved ahead of the pinned integration base: its brief carries the human-approved rebase target,
 # and the developer rebases the candidate onto it and fixes on top in the same dispatch.
+# ``rebase`` (issue #1010) carries an accepted candidate onto the moved ``origin/<integration_ref>``
+# tip through the narrow ``rebaser`` role: no new code, no developer retry spent, and the accepted
+# code-review keeps covering the rebased candidate, so QA follows directly (ADR 0034).
 # ``supersede`` (issue #506) is recorded by ``batch create --supersedes`` on the new batch: after a
 # forced abandon it resumes from the abandoned batch's ``last_accepted`` record instead of
 # repeating the architect stage and cherry-picking the accepted commits by hand.
@@ -178,12 +295,22 @@ NEXT_ACTION_DISPATCH_ROLE = {
     "publish": "developer",
     # Issue #534: a textual integration conflict is handed to the conflict-resolver writer.
     "resolve-conflict": "conflict-resolver",
+    # Issue #1010: a moved integration base is carried by the narrow rebaser writer (ADR 0034).
+    "rebase": "rebaser",
 }
 DISPATCH_PURPOSES = {"work", "verification", "publish"}
+# The gates `batch create --required-gate` may name; a batch that names none records `none`.
+REQUIRED_GATES = ("none", "review", "qa")
+# ADR 0023 section 2: how a verification-plan stage picks its tests, and what the stage runs.
+VERIFICATION_PLAN_SELECTIONS = ("full", "focused", "failed-only", "ticket-diff")
+VERIFICATION_STAGE_KINDS = ("lint", "typecheck", "pytest", "clean-room", "custom")
 ROLE_TRANSPORTS = {"in-process", "external"}
 ACCESS_MODES = ("inherit", "sandbox", "unsandboxed")
 ACCESS_RESOURCES = ("checkout", "git_common", "shared_storage", "cache")
 ACCESS_OPERATIONS = ("qa", "git", "publish")
+# The container access component names its engine; docker is the default when it names none.
+CONTAINER_ENGINES = ("docker", "podman")
+ACCESS_PERMISSIONS = ("read", "write")
 DEFAULT_PROFILE = "session"
 # A developer can legitimately spend tens of minutes in one build, migration, or test command.
 # Keep the default long enough for that work, while the handoff still requires frequent, explicit
@@ -199,6 +326,15 @@ DEFAULT_COMMUNICATION_POLICY = {
     "coordinator_report_language": "ru",
 }
 LIVE_DISPATCH_STATES = {DispatchState.DISPATCHED, DispatchState.WORKING}
+# A dispatch in one of these states needs no worker any more: its container resources may be released.
+TERMINAL_DISPATCH_STATES = frozenset(
+    {
+        DispatchState.REPORTED,
+        DispatchState.CANCELLED,
+        DispatchState.ABANDONED,
+        DispatchState.FAILED,
+    }
+)
 # The read-only commands an operator inspects before choosing any recovery or abandon (#679).
 RECOVERY_EVIDENCE_COMMANDS = (
     "batch auto-report, batch decision-packet, dispatch status and ledger validate"
@@ -259,6 +395,7 @@ DISPATCH_FIELDS = {
     "access",
     "zone",
     "write_paths",
+    "allowed_paths",
     "branch",
     "worktree",
     "definition_of_done",
@@ -293,11 +430,13 @@ DISPATCH_FIELDS = {
     "transition",
     "transition_digest",
     "retry_idempotency_key",
+    "retry_reason",
     "orchestration_policy",
     "liveness",
     "commit_plan",
     "commit_plan_divergence",
     "carried_items",
+    "accepted_design",
     "rebase_target_commit",
     "runtime_access",
     "delta_review_scope",
@@ -380,9 +519,11 @@ REPORT_OPTIONAL_FIELDS = {
     "used_memory",
     "tooling_blocker",
     "resolver",
+    "rebase_check",
     "incomplete_items",
     "carried_item_closure",
     "qa_stages",
+    "commit_plan",
 }
 # Per-stage evidence of a clean-room QA run (issue #618): the preparation commands, then the gate, in
 # one checkout. ``qa_stages`` is present only when the project declares ``qa_preparation``; a report
@@ -390,7 +531,10 @@ REPORT_OPTIONAL_FIELDS = {
 QA_STAGES_FIELDS = frozenset({"stages", "failed_stage", "code_checks_started"})
 QA_STAGES_OPTIONAL_FIELDS = frozenset({"diagnosis"})
 QA_STAGE_ENTRY_FIELDS = frozenset({"stage", "command", "result", "exit_code"})
-QA_STAGE_ENTRY_OPTIONAL_FIELDS = frozenset({"executed_command", "diagnostics"})
+QA_STAGE_ENTRY_OPTIONAL_FIELDS = frozenset({"executed_command", "diagnostics", "domain"})
+# The failure domains harness-runtime classifies the ending of a containerised QA command as
+# (ADR 0022, section 3); a stage entry names one only when its exit code is not its own result.
+QA_STAGE_DOMAINS = ("infrastructure", "tooling", "timeout", "cancelled", "unknown")
 # ``environment-probe`` and ``project-file-check`` stages exist only after a failed preparation stage:
 # they are the independent facts its diagnosis rests on.
 QA_PRIMARY_STAGE_NAMES = ("preparation", "gate")
@@ -514,11 +658,23 @@ DEFAULT_CONTEXT_PACKAGE_POLICY = {
     "section_index_min_tokens": 20_000,
 }
 DEFAULT_EXECUTION_POLICY = {
+    "worker_startup_timeout_seconds": 120,
     "dispatch_wait_timeout_seconds": 60,
     "dispatch_poll_interval_seconds": 5,
     "qa_lease_seconds": 1_800,
     "rate_limit_retry_seconds": 60,
+    # The runtime supervisor stops a worker at this deadline (ADR 0022, section 3): the default
+    # approval TTL, since an approval older than that would not authorise a new send either.
+    "worker_execution_timeout_seconds": 14_400,
+    "stop_grace_seconds": 30,
+    # The runtime stops one containerised QA command at this deadline (ADR 0022, section 3).
+    "qa_command_timeout_seconds": 3_600,
 }
+# The lifetime of a QA lease of the runtime store (ADR 0021, section 5): its owner renews it every
+# third of it, and the runtime checks the owner's liveness only after it expired. The runtime
+# grants at most a day. `execution_policy.qa_lease_seconds` keeps governing the file lane.
+DEFAULT_LEASE_TTL_SECONDS = 300
+MAX_LEASE_TTL_SECONDS = 86_400
 DEFAULT_CONTINUATION_POLICY = {"max_continuations": 2, "max_rate_limit_resumes": 1}
 DEFAULT_RETRY_POLICY = {"max_developer_retries": 1}
 DEFAULT_PREFLIGHT_POLICY = {
@@ -607,14 +763,21 @@ AUTO_STOP_REASONS = {
         "tooling-retry-repeated",
     ),
     "integrity-failure": (
+        "runtime-unavailable",
         "stale",
         "model-mismatch",
         "worktree-mismatch",
         "harness-snapshot-changed",
         "deterministic-gate-failed",
         "ledger-validation-failed",
+        "operational-hold",
     ),
-    "no-automatic-route": ("unknown-reason", "abandon-dead-end", "supersede-dead-end"),
+    "no-automatic-route": (
+        "unknown-reason",
+        "abandon-dead-end",
+        "supersede-dead-end",
+        "qa-environment-failure",
+    ),
 }
 AUTO_STOP_FIELDS = frozenset(
     {"category", "reason", "detected_at", "detected_by", "evidence", "record_sha256"}
@@ -697,6 +860,7 @@ TELEMETRY_FIELDS = {
     "restart_reason",
     "recorded_at",
 }
+TELEMETRY_SESSION_KINDS = ("worker", "coordinator")
 
 
 SANDBOXES_REL = Path(".harness") / ".sandboxes"

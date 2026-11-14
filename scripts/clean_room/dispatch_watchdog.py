@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -24,6 +26,7 @@ def run(ctx: SimpleNamespace) -> None:
     test_root = ctx.test_root
     # A mismatched model self-report is terminal for its batch, so it runs on its own state.
     mismatch_state = test_root / "mismatch-state"
+    seed_file_ledger(mismatch_state)
     run_step(
         ["git", "branch", "feature/issue-902-model-mismatch"],
         cwd=orchestration_project,

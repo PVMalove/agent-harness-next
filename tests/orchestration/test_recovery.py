@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 import argparse
+import contextlib
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, tzinfo
+from typing import cast
 from unittest import mock
 from pathlib import Path
 from harness.orchestration import coordinator
@@ -21,6 +25,7 @@ from harness.orchestration.workflow import (
     commit_plan,
     decisions,
     recovery,
+    risk as risk_policy,
 )
 from tests.orchestration.test_coordinator import (
     _init_repo,
@@ -29,8 +34,18 @@ from tests.orchestration.test_coordinator import (
     ORCHESTRATION_ROOT,
 )
 
+from .legacy_state import file_ledger_source, runs_on_file_ledger, seed_file_ledger
+from .runtime_store_support import (
+    StoreRecords,
+    bind_store_view_for,
+    serve_new_project_for,
+)
+
 
 class RecoveryTests(unittest.TestCase):
+    # The case runs on a file ledger of installation 1.x instead of the runtime store when
+    # true (ADR 0036, section 5); set it before setUp, or mark the test `@file_ledger_source`.
+    file_ledger: bool = False
     APPROVED_AT = "2026-09-17T00:00:00+00:00"
 
     def setUp(self) -> None:
@@ -48,11 +63,29 @@ class RecoveryTests(unittest.TestCase):
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-m", "roles")
         _git(self.repo, "push", "origin", "master")
+        # A new project works on the runtime store (ADR 0036): a copy of the store `init` makes,
+        # its own `serve`, and one read view bound for the test. A test of the file ledger itself
+        # runs on a ledger of installation 1.x: `file_ledger = True` on an instance before `setUp`,
+        # or `file_ledger_source` on a test method.
         self.state_dir = self.repo / ".harness/orchestration/state"
+        self._store_records: StoreRecords | None = None
+        # Its own stack, not addCleanup: the tests and the fixtures of other modules call
+        # tearDown and setUp by hand.
+        self._store_stack = contextlib.ExitStack()
+        if runs_on_file_ledger(self):
+            seed_file_ledger(self.state_dir)
+        else:
+            register = self._store_stack.callback
+            serve_new_project_for(self, self.repo, register=register)
+            self._store_records = bind_store_view_for(
+                self, self.repo, register=register
+            )
         self.worktree = self.tmp / "worktree"
         self.branch = "feature/issue-662-recovery"
 
     def tearDown(self) -> None:
+        # The runtime of the store and the bound view stop here.
+        self._store_stack.close()
         self._tmp.cleanup()
 
     def test_default_policy_blocks_wrong_or_missing_worker_checkout_without_retry_cost(
@@ -336,6 +369,8 @@ class RecoveryTests(unittest.TestCase):
         self._start(developer["dispatch_id"])
         coordinator.validate_ledger(self._args())
 
+    # It tampers with a batch record file: a 1.x ledger (ADR 0036, section 5, rule 3).
+    @file_ledger_source
     def test_resealed_recovery_event_cannot_replace_its_original_audit(self) -> None:
         from harness.orchestration.workflow.approval import sealed
 
@@ -361,6 +396,8 @@ class RecoveryTests(unittest.TestCase):
             coordinator.validate_ledger(self._args())
         self.assertEqual(before, self._ledger_bytes())
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_dead_session_before_first_checkpoint_needs_human_startup_proof(
         self,
     ) -> None:
@@ -666,6 +703,46 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(immutable.read_bytes(), original_report)
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
+    def test_abandoned_batch_keeps_blocked_writer_preservation_valid(self) -> None:
+        batch = self._create_batch(allowed_paths=["services/**"])
+        self._accepted_architect(batch["batch_id"])
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        self._submit(
+            brief["dispatch_id"],
+            self._base_report(
+                brief,
+                "developer",
+                outcome="blocked",
+                commit_sha=brief["snapshot_commit"],
+                checks_run=self._checks(brief, "not_run"),
+                blockers={"status": "present", "details": "IPC unavailable"},
+            ),
+        )
+        immutable = self._records() / "reports" / f"{brief['dispatch_id']}.json"
+        original_report = immutable.read_bytes()
+        coordinator.rewind_batch(
+            self._args(
+                batch=batch["batch_id"],
+                to="developer",
+                preserved_commit=brief["snapshot_commit"],
+                preserved_file=[],
+                note="preserve the stopped writer boundary",
+                **self._approval(),
+            )
+        )
+        coordinator.abandon_batch(
+            self._args(
+                batch=batch["batch_id"],
+                reason="operator ended the recovered batch",
+                **self._approval(),
+            )
+        )
+
+        self.assertEqual(self._batch_record(batch["batch_id"])["state"], "abandoned")
+        self.assertEqual(immutable.read_bytes(), original_report)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
     def test_reported_writer_preservation_refuses_unapproved_or_foreign_files(
         self,
     ) -> None:
@@ -779,6 +856,8 @@ class RecoveryTests(unittest.TestCase):
             self.tearDown()
             self.setUp()
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_reported_writer_handoff_refuses_changes_after_preservation(self) -> None:
         batch = self._create_batch(allowed_paths=["services/**"])
         self._accepted_architect(batch["batch_id"])
@@ -818,6 +897,56 @@ class RecoveryTests(unittest.TestCase):
 
         self.assertEqual(self._ledger_bytes(), before)
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_imported_preserved_event_accepts_an_immutable_blocked_source(self) -> None:
+        from harness.orchestration.workflow import preserved_progress
+
+        batch = self._create_batch(allowed_paths=["services/**"])
+        self._accepted_architect(batch["batch_id"])
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        self._submit(
+            brief["dispatch_id"],
+            self._base_report(
+                brief,
+                "developer",
+                outcome="blocked",
+                commit_sha=brief["snapshot_commit"],
+                checks_run=self._checks(brief, "not_run"),
+                blockers={"status": "present", "details": "native sandbox denied IPC"},
+                tooling_blocker={
+                    "tool": "native-sandbox",
+                    "command": "python -m pytest",
+                    "message": "Operation not permitted",
+                },
+            ),
+        )
+        recorded = self._batch_record(batch["batch_id"])
+        progress: JsonObject = {
+            "source_dispatch_id": brief["dispatch_id"],
+            "snapshot_commit": brief["snapshot_commit"],
+            "head_commit": brief["snapshot_commit"],
+            "checkout": {},
+            "files": {},
+            "index_sha256": "0" * 64,
+            "worktree_sha256": "0" * 64,
+        }
+        event: JsonObject = {
+            "kind": "rewind",
+            "next_action": "developer",
+            "evidence": {
+                "preserved_progress": progress,
+                "superseded_dispatches": [brief["dispatch_id"]],
+                "writer_start_commit": brief["snapshot_commit"],
+            },
+        }
+
+        preserved_progress.validate_event(self.state_dir, recorded, event)
+
+        progress["head_commit"] = "1" * 40
+        event["evidence"]["writer_start_commit"] = "1" * 40
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "diverged"):
+            preserved_progress.validate_event(self.state_dir, recorded, event)
 
     def test_preserved_handoff_refuses_drift_at_each_launch_boundary(self) -> None:
         for boundary, mutation in (
@@ -1041,9 +1170,17 @@ class RecoveryTests(unittest.TestCase):
         return {"approved_by": "Malove", "approved_at": self.APPROVED_AT}
 
     def _records(self) -> Path:
-        return LifecycleLedger(
-            ledger_ops._state_root(self._args(), self.repo)
-        ).records_root()
+        if self._store_records is None:
+            return LifecycleLedger(
+                ledger_ops._state_root(self._args(), self.repo)
+            ).records_root()
+        return self._store_records()
+
+    def _stored(self, path: Path | str) -> Path:
+        """The file of ``path``, a record path a coordinator answer names."""
+        if self._store_records is None:
+            return Path(path)
+        return self._store_records.stored(path)
 
     def _batch_record(self, batch_id: str) -> JsonObject:
         return coordinator._read_object(
@@ -1351,9 +1488,14 @@ class RecoveryTests(unittest.TestCase):
         )
         return brief
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_ledger_validate_is_read_only_on_absent_and_populated_state(self) -> None:
+        # The state is absent first; `setUp` seeded the 1.x ledger the batch is created on.
+        shutil.rmtree(self.state_dir)
         self.assertEqual(coordinator.validate_ledger(self._args())["valid"], True)
         self.assertFalse(self.state_dir.exists())
+        seed_file_ledger(self.state_dir)
         batch = self._create_batch()
         before = self._ledger_bytes()
         result = coordinator.validate_ledger(self._args())
@@ -1362,9 +1504,12 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(before, self._ledger_bytes())
 
     def _ledger_bytes(self) -> dict[str, bytes]:
+        # SQLite WAL and shared-memory bytes can change during reads. Compare the actual
+        # records and artifacts instead, keeping the 1.x file-ledger check byte-for-byte.
+        root = self._store_records() if self._store_records is not None else self.state_dir
         return {
-            str(p.relative_to(self.state_dir)): p.read_bytes()
-            for p in self.state_dir.rglob("*")
+            str(p.relative_to(root)): p.read_bytes()
+            for p in root.rglob("*")
             if p.is_file()
         }
 
@@ -1620,6 +1765,13 @@ class RecoveryTests(unittest.TestCase):
     def test_early_429_resumes_known_startup_without_fabricating_checkpoint(
         self,
     ) -> None:
+        class RetryClock(datetime):
+            current = datetime.now().astimezone()
+
+            @classmethod
+            def now(cls, tz: tzinfo | None = None) -> RetryClock:
+                return cls.fromtimestamp(cls.current.timestamp(), tz)
+
         batch = self._create_batch()
         self._accepted_architect(batch["batch_id"])
         brief = self._dispatch(batch["batch_id"], "developer")["brief"]
@@ -1632,9 +1784,10 @@ class RecoveryTests(unittest.TestCase):
                 worktree=str(self.worktree),
             )
         )
-        coordinator.rate_limited_dispatch(
-            self._args(dispatch=brief["dispatch_id"], retry_after_seconds=1)
-        )
+        with mock.patch("harness.orchestration.workflow.reports.datetime", RetryClock):
+            coordinator.rate_limited_dispatch(
+                self._args(dispatch=brief["dispatch_id"], retry_after_seconds=1)
+            )
         args = self._args(
             dispatch=brief["dispatch_id"],
             termination_reason="429",
@@ -1645,17 +1798,10 @@ class RecoveryTests(unittest.TestCase):
             approved_at=None,
             note=None,
         )
-        with self.assertRaises(coordinator.CoordinatorError):
-            coordinator.resume_dispatch(args)
-
-        class Later(datetime):
-            @classmethod
-            def now(cls, tz: tzinfo | None = None) -> Later:
-                return cls.fromtimestamp(
-                    (datetime.now(tz) + timedelta(seconds=2)).timestamp(), tz
-                )
-
-        with mock.patch("harness.orchestration.workflow.reports.datetime", Later):
+        with mock.patch("harness.orchestration.workflow.reports.datetime", RetryClock):
+            with self.assertRaises(coordinator.CoordinatorError):
+                coordinator.resume_dispatch(args)
+            RetryClock.current += timedelta(seconds=2)
             resumed = coordinator.resume_dispatch(args)
         self.assertEqual(resumed["state"], "dispatched")
         self.assertEqual(
@@ -1765,6 +1911,8 @@ class RecoveryTests(unittest.TestCase):
         )
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
+    # It hand-writes a batch record: a 1.x ledger (ADR 0036, section 5, rule 3).
+    @file_ledger_source
     def test_legacy_failed_abandon_is_superseded_without_rewriting_source(self) -> None:
         batch = self._create_batch()
         self._accepted_architect(batch["batch_id"])
@@ -1883,6 +2031,8 @@ class RecoveryTests(unittest.TestCase):
         workspace._validate_harness_runtime_snapshot(self.repo, recovered)
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_early_429_rejects_unknown_progress_and_dirty_files_without_evidence(
         self,
     ) -> None:
@@ -1906,6 +2056,8 @@ class RecoveryTests(unittest.TestCase):
             )
         self.assertEqual(before, self._ledger_bytes())
 
+    # The bytes of the file ledger are the subject: a 1.x ledger (ADR 0036, section 5, rule 2).
+    @file_ledger_source
     def test_recovered_429_requires_human_approval_and_spends_both_budgets(
         self,
     ) -> None:
@@ -2126,6 +2278,10 @@ class RecoveryTests(unittest.TestCase):
         )
 
         self.assertEqual(result["worker_worktree"], str(self.worktree.resolve()))
+        # The runtime supervisor launches the adapter of the store after send returns (ADR 0022).
+        deadline = time.monotonic() + 30
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
         self.assertEqual(
             marker.read_text(encoding="utf-8"), str(self.worktree.resolve())
         )
@@ -2137,6 +2293,10 @@ class RecoveryTests(unittest.TestCase):
         entry: JsonObject = status["dispatches"][0]
         return entry
 
+    # The bytes of the file ledger are the subject, and so is the adapter the coordinator runs
+    # itself; the store hands it to the runtime supervisor (ADR 0022): a 1.x ledger (ADR 0036,
+    # section 5, rule 2).
+    @file_ledger_source
     def test_issue_679_startup_failures_keep_an_explainable_batch_without_abandon(
         self,
     ) -> None:
@@ -2191,7 +2351,7 @@ class RecoveryTests(unittest.TestCase):
                 startup["classification"],
                 startup["restart_allowed"],
             ),
-            ("live", "model-self-report-missing", False),
+            ("unknown", "model-self-report-missing", False),
         )
         coordinator.cancel_dispatch(
             self._args(
@@ -2426,7 +2586,9 @@ class RecoveryTests(unittest.TestCase):
         )
         self._accepted_architect(batch_id)
         self._blocked_developer(batch_id)
-        self._decide(batch_id, "retry", reason_category="verification-infrastructure")
+        self._decide(
+            batch_id, "retry", reason_category="verification-infrastructure"
+        )
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
         coordinator.rewind_batch(
             self._args(
@@ -2539,3 +2701,382 @@ class RecoveryTests(unittest.TestCase):
 
         self.assertEqual(conditions.open_conditions(self._batch_record(batch_id)), [])
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def _cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+        """One public coordinator command in its own process, as an operator or a worker runs it."""
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ORCHESTRATION_ROOT / "coordinator.py"),
+                "--repo",
+                str(self.repo),
+                *args,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+
+    def _cli_rewind(self, batch_id: str, target: str) -> JsonObject:
+        result = self._cli(
+            "batch",
+            "rewind",
+            "--batch",
+            batch_id,
+            "--to",
+            target,
+            "--approved-by",
+            "Malove",
+            "--approved-at",
+            self.APPROVED_AT,
+            "--note",
+            "rework through a fresh writer",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return cast(JsonObject, json.loads(result.stdout))
+
+    def _cli_assess(
+        self,
+        batch_id: str,
+        candidate: str,
+        changed: list[str],
+        *triggers: str,
+    ) -> subprocess.CompletedProcess[str]:
+        flags = [item for path in changed for item in ("--changed-file", path)]
+        trigger_flags = [
+            item
+            for trigger in (triggers or ("transactions",))
+            for item in ("--developer-trigger", trigger)
+        ]
+        return self._cli(
+            "risk",
+            "assess",
+            "--batch",
+            batch_id,
+            "--candidate-commit",
+            candidate,
+            *flags,
+            *trigger_flags,
+        )
+
+    def _changed_for(self, batch_id: str, candidate: str) -> list[str]:
+        base = self._batch_record(batch_id)["base_commit"]
+        return git_utils._changed_files_between(self.repo, base, candidate)
+
+    def _accepted_review_for(self, batch_id: str, name: str) -> tuple[str, list[str]]:
+        """A review-required candidate with an accepted composite review: QA is the next handoff."""
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id, name)
+        self._reported_review(batch_id, candidate)
+        self._decide(batch_id, "accept")
+        self.assertEqual(self._batch_record(batch_id)["next_action"], "qa")
+        return candidate, self._changed_for(batch_id, candidate)
+
+    def _evidence_bytes(self) -> dict[Path, bytes]:
+        return {
+            path: path.read_bytes()
+            for folder in ("risk-assessments", "reports", "dispatches")
+            for path in (self._records() / folder).glob("*.json")
+        }
+
+    def _cli_propose_qa(
+        self, batch_id: str, candidate: str
+    ) -> subprocess.CompletedProcess[str]:
+        return self._cli(
+            "dispatch",
+            "propose",
+            "--batch",
+            batch_id,
+            "--role",
+            "qa",
+            "--candidate-commit",
+            candidate,
+            "--model",
+            "sonnet",
+            "--effort",
+            "high",
+        )
+
+    def _rewound_writer_report(
+        self, batch_id: str, name: str, **overrides: object
+    ) -> tuple[str, list[str], JsonObject]:
+        """A fresh writer after a rewind: its report is submitted but not yet accepted."""
+        brief = self._dispatch(batch_id, "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        candidate, changed = self._developer_commit(name)
+        base = self._batch_record(batch_id)["base_commit"]
+        commits = _git(
+            self.worktree, "rev-list", "--reverse", f"{base}..{candidate}"
+        ).split()
+        commit_map = [
+            {"commit_sha": sha, "plan_entry_id": entry["id"]}
+            for sha in commits
+            for entry in brief["commit_plan"]
+        ]
+        self._submit(
+            brief["dispatch_id"],
+            self._developer_report(
+                brief,
+                candidate,
+                changed,
+                commit_map=commit_map,
+                dod_coverage=[{"dod_item": 1, "commits": [candidate]}],
+                divergence_justification="the rewound writer adds a second commit",
+                **overrides,
+            ),
+        )
+        return candidate, changed, brief
+
+    def test_rewind_to_the_writer_binds_the_reassessment_until_the_new_candidate(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        self._accepted_candidate(batch_id, "first")
+        self._cli_rewind(batch_id, "developer")
+        pending = self._batch_record(batch_id)
+        self.assertIs(pending["risk_reassessment_required"], True)
+        self.assertIs(pending["risk_reassessment_pending_next"], True)
+        self.assertNotIn("risk_reassessment_candidate", pending)
+        second, changed, _ = self._rewound_writer_report(batch_id, "second")
+        bound = self._batch_record(batch_id)
+        self.assertIs(bound["risk_reassessment_required"], True)
+        self.assertEqual(bound["risk_reassessment_candidate"], second)
+        self.assertNotIn("risk_reassessment_pending_next", bound)
+        self._decide(batch_id, "accept")
+        blocked = self._cli_propose_qa(batch_id, second)
+        self.assertEqual(blocked.returncode, 2, blocked.stdout)
+        assessed = self._cli_assess(batch_id, second, changed)
+        self.assertEqual(assessed.returncode, 0, assessed.stderr)
+        after = self._batch_record(batch_id)
+        self.assertIs(after["risk_reassessment_required"], False)
+        self.assertEqual(after["next_action"], "code-review")
+        self._reported_review(batch_id, second)
+        self._decide(batch_id, "accept")
+        proposal = self._cli_propose_qa(batch_id, second)
+        self.assertEqual(proposal.returncode, 0, proposal.stderr)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def _cli_accept_conditional(self, batch_id: str) -> None:
+        result = self._cli(
+            "batch",
+            "decide",
+            "--batch",
+            batch_id,
+            "--decision",
+            "accept-conditional",
+            "--infrastructure-failure",
+            "--approved-by",
+            "Malove",
+            "--approved-at",
+            self.APPROVED_AT,
+            "--note",
+            "runtime restored; commits match the plan",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_blocked_writer_after_a_rewind_binds_its_candidate_through_qa(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        self._accepted_candidate(batch_id, "first")
+        self._cli_rewind(batch_id, "developer")
+        second, changed, _ = self._rewound_writer_report(
+            batch_id,
+            "second",
+            outcome="blocked",
+            blockers={
+                "status": "present",
+                "details": "runtime connection reset during the handoff to review",
+            },
+        )
+        bound = self._batch_record(batch_id)
+        self.assertIs(bound["risk_reassessment_required"], True)
+        self.assertEqual(bound["risk_reassessment_candidate"], second)
+        self.assertNotIn("risk_reassessment_pending_next", bound)
+        self._cli_accept_conditional(batch_id)
+        self.assertEqual(self._batch_record(batch_id)["next_action"], "risk-assessment")
+        assessed = self._cli_assess(batch_id, second, changed)
+        self.assertEqual(assessed.returncode, 0, assessed.stderr)
+        after = self._batch_record(batch_id)
+        self.assertIs(after["risk_reassessment_required"], False)
+        self.assertEqual(after["next_action"], "code-review")
+        self._reported_review(batch_id, second)
+        self._decide(batch_id, "accept")
+        proposal = self._cli_propose_qa(batch_id, second)
+        self.assertEqual(proposal.returncode, 0, proposal.stderr)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_repeated_assessment_after_an_accepted_review_keeps_qa_reachable(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        candidate, changed = self._accepted_review_for(batch_id, "stable")
+        evidence = self._evidence_bytes()
+        for _ in range(2):
+            replay = self._cli_assess(batch_id, candidate, changed)
+            self.assertEqual(replay.returncode, 0, replay.stderr)
+            stored = self._batch_record(batch_id)
+            self.assertEqual(stored["next_action"], "qa")
+            self.assertIs(stored["risk_reassessment_required"], False)
+        # The replays only append risk records: every earlier record is untouched.
+        after = self._evidence_bytes()
+        for path, content in evidence.items():
+            self.assertEqual(after[path], content, path.name)
+        proposal = self._cli_propose_qa(batch_id, candidate)
+        self.assertEqual(proposal.returncode, 0, proposal.stderr)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_an_assessment_matching_a_trigger_the_review_never_covered_returns_to_review(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        candidate, changed = self._accepted_review_for(batch_id, "wider")
+        wider = self._cli_assess(
+            batch_id, candidate, changed, "transactions", "concurrency-retry"
+        )
+        self.assertEqual(wider.returncode, 0, wider.stderr)
+        self.assertEqual(self._batch_record(batch_id)["next_action"], "code-review")
+
+    def test_qa_refusal_names_the_awaited_candidate_and_writes_nothing(self) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        self._accepted_candidate(batch_id, "first")
+        self._cli_rewind(batch_id, "developer")
+        second, _, _ = self._rewound_writer_report(batch_id, "second")
+        self._decide(batch_id, "accept")
+        before = self._ledger_bytes()
+        blocked = self._cli_propose_qa(batch_id, second)
+        self.assertEqual(blocked.returncode, 2, blocked.stdout)
+        remedy = blocked.stderr.partition("REMEDY:")[2]
+        self.assertIn(second, remedy)
+        self.assertEqual(before, self._ledger_bytes())
+
+    def test_qa_refusal_while_the_writer_is_awaited_says_to_wait_for_its_report(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        self._accepted_candidate(batch_id, "first")
+        self._cli_rewind(batch_id, "developer")
+        before = self._ledger_bytes()
+        blocked = self._cli_propose_qa(
+            batch_id, _git(self.worktree, "rev-parse", "HEAD")
+        )
+        self.assertEqual(blocked.returncode, 2, blocked.stdout)
+        self.assertIn(
+            "wait for the writer report", blocked.stderr.partition("REMEDY:")[2]
+        )
+        self.assertEqual(before, self._ledger_bytes())
+
+    def test_a_second_rewind_keeps_the_pending_requirement(self) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        self._accepted_candidate(batch_id, "first")
+        self._cli_rewind(batch_id, "developer")
+        self._cli_rewind(batch_id, "architect")
+        stored = self._batch_record(batch_id)
+        self.assertIs(stored["risk_reassessment_required"], True)
+        self.assertIs(stored["risk_reassessment_pending_next"], True)
+        self.assertNotIn("risk_reassessment_candidate", stored)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_rewind_to_review_clears_the_requirement_and_keeps_history(self) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        candidate, _ = self._accepted_review_for(batch_id, "reviewed")
+        evidence = self._evidence_bytes()
+        self._cli_rewind(batch_id, "code-review")
+        stored = self._batch_record(batch_id)
+        self.assertIs(stored["risk_reassessment_required"], False)
+        self.assertNotIn("risk_reassessment_pending_next", stored)
+        for path, content in evidence.items():
+            self.assertEqual(path.read_bytes(), content, path.name)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def _registered_candidate_after_verification(self, batch_id: str) -> tuple[str, list[str]]:
+        """A blocked developer candidate retried as verification-infrastructure, then verified,
+        accepted and risk-assessed: the registered candidate carries an active risk assessment."""
+        self._accepted_architect(batch_id)
+        _, candidate, changed = self._blocked_developer(batch_id)
+        self._decide(batch_id, "retry", reason_category="verification-infrastructure")
+        verification = self._dispatch(batch_id, "verification", candidate=candidate)[
+            "brief"
+        ]
+        self._start(verification["dispatch_id"], checkout=self.worktree)
+        self._submit(
+            verification["dispatch_id"], self._base_report(verification, "verification")
+        )
+        self._decide(batch_id, "accept")
+        self._assess(batch_id, candidate, changed)
+        return candidate, changed
+
+    def test_rewind_to_verification_binds_the_registered_candidate_through_qa(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        candidate, changed = self._registered_candidate_after_verification(batch_id)
+        evidence = self._evidence_bytes()
+        self._cli_rewind(batch_id, "verification")
+        stored = self._batch_record(batch_id)
+        self.assertIs(stored["risk_reassessment_required"], True)
+        self.assertEqual(stored["risk_reassessment_candidate"], candidate)
+        self.assertNotIn("risk_reassessment_pending_next", stored)
+        # The superseded assessments and reports stay readable and unmodified.
+        for path, content in evidence.items():
+            self.assertEqual(path.read_bytes(), content, path.name)
+        before = self._ledger_bytes()
+        blocked = self._cli_propose_qa(batch_id, candidate)
+        self.assertEqual(blocked.returncode, 2, blocked.stdout)
+        remedy = blocked.stderr.partition("REMEDY:")[2]
+        self.assertIn(candidate, remedy)
+        # The awaited step is the verification dispatch and its accept, not a writer report.
+        self.assertIn("verification", remedy)
+        self.assertNotIn("writer report", remedy)
+        self.assertEqual(before, self._ledger_bytes())
+        verification = self._dispatch(batch_id, "verification", candidate=candidate)[
+            "brief"
+        ]
+        self._start(verification["dispatch_id"], checkout=self.worktree)
+        self._submit(
+            verification["dispatch_id"], self._base_report(verification, "verification")
+        )
+        self._decide(batch_id, "accept")
+        assessed = self._cli_assess(batch_id, candidate, changed)
+        self.assertEqual(assessed.returncode, 0, assessed.stderr)
+        after = self._batch_record(batch_id)
+        self.assertIs(after["risk_reassessment_required"], False)
+        self.assertEqual(after["next_action"], "code-review")
+        self._reported_review(batch_id, candidate)
+        self._decide(batch_id, "accept")
+        proposal = self._cli_propose_qa(batch_id, candidate)
+        self.assertEqual(proposal.returncode, 0, proposal.stderr)
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_an_illegal_reassessment_state_is_refused_before_any_ledger_write(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        self._accepted_candidate(batch_id, "first")
+        before = self._ledger_bytes()
+
+        def illegal(batch: JsonObject, state: object) -> None:
+            batch["risk_reassessment_required"] = True
+
+        with (
+            mock.patch.object(risk_policy, "apply_reassessment", illegal),
+            self.assertRaisesRegex(
+                coordinator.CoordinatorError, "illegal risk reassessment"
+            ),
+        ):
+            coordinator.rewind_batch(
+                self._args(
+                    batch=batch_id,
+                    to="developer",
+                    note="return to writer",
+                    **self._approval(),
+                )
+            )
+        self.assertEqual(before, self._ledger_bytes())

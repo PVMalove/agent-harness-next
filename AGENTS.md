@@ -1,4 +1,4 @@
-# Agent Harness contributor instructions
+# Harness next contributor instructions
 
 This repository is the canonical public source of a portable, runtime-native coding-agent
 harness. Skills remain ordinary `SKILL.md` packages, project discovery uses runtime-supported
@@ -16,14 +16,17 @@ logs.
 - `README.md` — overview and CLI usage; `CONTEXT.md` — project glossary;
   `CHANGELOG.md` — release notes and `LICENSE` — project license.
 - `harness/` — packager CLI, capability catalog, version, and target-project templates.
-- `skills/vendor/` — pinned upstream snapshot; `skills/first-party/pvmalove/` — maintained skills.
+- `native/harness-runtime/` — Rust workspace of the runtime process (`harness-runtime serve`); safe Rust only,
+  except the isolated Windows FFI crate `crates/platform-ffi` (ADR 0022 §1), checked by `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` in that directory.
+- `skills/vendor/` — pinned upstream snapshot; `skills/first-party/engineering/` — maintained skills.
 - `global/` — seed template for the target project's global agent profile; `global-skills/` and
   `bin/` — global entry skills and installer; `scripts/` — registry, drift, verification, and
   clean-room checks.
-- `docs/README.md` — documentation index; `docs/agents/` — operations, releases, and Russian
-  agent descriptions; `docs/adr/` — architectural decisions; `docs/skills/`, `docs/hooks/` —
-  Russian descriptions; `docs/technical-russian.md` — Russian technical writing style guide;
-  `docs/runtime-discovery.md` — runtime skill routes.
+- `docs/README.md` — documentation index; `docs/agents/` — this repository's installed copy of the
+  agent instructions (source `harness/project/instructions/`); `docs/adr/` — architectural
+  decisions; `site/docs/skills/`, `site/docs/hooks/` — Russian descriptions;
+  `docs/technical-russian.md` — Russian technical writing style guide;
+  `site/docs/runtime-discovery.md` — runtime skill routes.
 - `third_party/mattpocock-skills/` — upstream manifest, lock, license, and checksums;
   `.github/workflows/` — CI.
 - `harness/CAPABILITIES.json` is the capability source of truth. `.harness/` and root
@@ -54,7 +57,7 @@ When a task matches a skill, open only its relevant `SKILL.md` through `.agents/
 - Never edit `skills/vendor/` manually. Replace a complete pinned snapshot only; use exact upstream
   revisions and retain license and provenance files.
 - Root `docs/` belongs only to this repository and must never be copied into target projects.
-  Target project guides come from `harness/project/docs-agents/` and other explicit templates.
+  Target project instructions come from `harness/project/instructions/` and other explicit templates.
 - For implementation or delivery, follow `docs/agents/git-workflow.md`: issue first, use the epic's
   recorded `integration/<service-or-team>` branch as the task base, create an isolated issue branch
   matching `.harness/project.json`, test before commits, use CLI-only Git and tracker operations,
@@ -63,8 +66,10 @@ When a task matches a skill, open only its relevant `SKILL.md` through `.agents/
   closed; for an integration PR, use `Related to #<ID>` and close the issue only after the developer
   confirms its merge. Use
   `docs/agents/artifacts.md` and `docs/agents/worktrees.md` for their respective workflows.
-- Keep commit messages and PR titles/bodies project-only: never add automated-agent attribution,
-  model names, session URLs, or `Co-Authored-By` trailers. The project hook and CI check enforce this.
+- Keep commit messages and PR titles/bodies project-only. Runtime and model names are allowed.
+  When forming a commit, never add the agent itself as an author or coauthor; human developer
+  `Co-Authored-By` trailers are allowed. Do not add generated-by marks or assistant session URLs.
+  The project hook and CI check reject known assistant signatures and automatic attribution.
   For `-F`/`--file` and PR `--body-file`/`--description-file`, pass a readable literal path: the hook
   checks the file's content, never its path, and rejects an unavailable or shell-variable path.
 - Run QA commands from `.harness/project.json`. After changing `harness/CAPABILITIES.json` or
@@ -84,4 +89,4 @@ Codex only: when the user explicitly asks to launch or use subagents, run them w
 and `max` reasoning effort. Do not apply this rule outside Codex.
 
 Before the first English handoff, agents must read
-[Technical English](.harness/docs/technical-english.md).
+[Technical English](.harness/instructions/technical-english.md).

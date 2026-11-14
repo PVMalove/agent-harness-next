@@ -18,8 +18,10 @@ from typing import TypedDict
 
 from harness.cleanup import _active_worktrees, _clear_read_only, _git
 from harness.runtime_adapters import ADAPTER_ROOT, adapter_problem
+from harness.health.hook_settings import ADAPTERS
 from harness.health.project_files import (
     DISCOVERY_LINKS,
+    HOOK_POLICY_REL,
     LOCK_REL,
     REGISTRY_REL,
     native_link_target,
@@ -37,16 +39,36 @@ GITIGNORE_LINES = ("/docs/tasks/", "/.harness/.sandboxes/")
 # Template folders `init`/`adopt` seed, in seeding order: (folder in harness/project, target in
 # the project, seeded file suffixes). The CLI copies exactly these, so uninstall finds them all.
 SEED_FOLDERS: tuple[tuple[str, str, frozenset[str]], ...] = (
-    ("docs-agents", "docs/agents", frozenset({".md"})),
+    ("instructions", "docs/agents", frozenset({".md"})),
     ("hooks", ".claude/hooks", frozenset({".sh", ".py"})),
     ("rules", ".claude/rules", frozenset({".md"})),
     ("agents", ".claude/agents", frozenset({".md"})),
 )
+# Instructions of `harness/project/instructions/` that are managed files, not seeds: the CLI installs
+# them into `.harness/instructions/` (`technical-english.md` in every install, the others with their
+# capability), and `update` overwrites them as any managed file (#814).
+MANAGED_INSTRUCTIONS = frozenset(
+    {"technical-english.md", "project-memory.md", "container-executor.md"}
+)
+
+
+def seed_sources(templates: Path, folder: str, suffixes: frozenset[str]) -> list[Path]:
+    """The seed templates of one `SEED_FOLDERS` folder, without the managed instructions."""
+    return [
+        source
+        for source in sorted((templates / folder).iterdir())
+        if source.is_file()
+        and source.suffix in suffixes
+        and not (folder == "instructions" and source.name in MANAGED_INSTRUCTIONS)
+    ]
+
+
 # Regenerated or disposable content inside .harness that is never worth a backup.
 _NO_BACKUP_PREFIXES = (".sandboxes/", ".venv/")
 _NO_BACKUP_FILES = {
     LOCK_REL.relative_to(HARNESS_DIR).as_posix(),
     REGISTRY_REL.relative_to(HARNESS_DIR).as_posix(),
+    HOOK_POLICY_REL.relative_to(HARNESS_DIR).as_posix(),
     ".gitignore",
     "orchestration.example.json",
 }
@@ -56,6 +78,7 @@ _PRUNE_DIRS = (
     ".claude/rules",
     ".claude/agents",
     ".claude",
+    ".codex",
     ".agents",
     "docs/agents",
     "docs",
@@ -96,12 +119,10 @@ def seed_templates() -> dict[str, bytes | None]:
     не с чем и он всегда копируется в резервную копию."""
     seeds: dict[str, bytes | None] = {}
     for folder, target, suffixes in SEED_FOLDERS:
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if source.is_file() and source.suffix in suffixes:
-                seeds[f"{target}/{source.name}"] = source.read_bytes()
-    seeds[".claude/settings.local.json"] = (
-        PROJECT_TEMPLATE_DIR / "settings.local.json.tmpl"
-    ).read_bytes()
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
+            seeds[f"{target}/{source.name}"] = source.read_bytes()
+    for adapter in ADAPTERS:
+        seeds[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
     seeds["CLAUDE.md"] = CLAUDE_MD_SEED.encode("utf-8")
     seeds["AGENTS.md"] = None
     return seeds

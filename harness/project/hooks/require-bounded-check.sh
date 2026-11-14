@@ -2,12 +2,16 @@
 # PreToolUse(Bash): blocks an unbounded full test/quality-gate run — one of the project's own
 # qa_gate_commands (.harness/project.json), or a full-suite pytest/unittest invocation with no
 # node-id/specific test — unless it already goes through the bounded-output wrapper
-# (skills/first-party/pvmalove/qa-gate/scripts/test_summary.py), which redacts and truncates output
+# (skills/first-party/engineering/qa-gate/scripts/test_summary.py), which redacts and truncates output
 # instead of dumping a raw multi-thousand-line run into the transcript. A point run of a single test
 # (a pytest node-id containing "::", or a fully-qualified unittest test path) is never blocked.
 # The shared shell parser keeps argv boundaries: literal text arguments, comments and inert
 # heredoc bodies do not fire; executable substitutions and nested shell commands still do.
 # Absent .harness/project.json this hook is inactive, so it never fires on an unharnessed project.
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" require-bounded-check
 INPUT=$(cat)
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"

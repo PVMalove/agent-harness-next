@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Standalone external adapter for a detached Codex app-server worker.
+"""Standalone external adapter for a Codex app-server worker.
 
 Install through harness init/adopt/update with backend-orchestration. The coordinator invokes
 ``codex_worker.py dispatch --repo <main repo> --brief <immutable brief>`` in the worker checkout.
 Only stdlib is required. Native permissions separate source access from lifecycle writes.
 The worker receives its own thread/start identity and still submits its own self-report.
+Under runtime supervision (a brief with an `execution` section) the adapter serves the turn
+in its own process, keeps the app-server in its process group, never reads its own stdin,
+writes `harness-event` JSON lines to stdout and returns the app-server's exit status. Without
+`execution` it starts a detached worker and returns after native readiness.
 """
 
 from __future__ import annotations
@@ -19,11 +23,14 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
 STARTUP_CHECK_SECONDS = 10
 PERMISSION_PROFILE = "harness-worker"
+# Items whose start is not a tool step; their content never reaches the event stream.
+NON_TOOL_ITEMS = frozenset({"agentMessage", "userMessage", "reasoning"})
 
 
 class Liveness(TypedDict):
@@ -44,6 +51,24 @@ class Brief(TypedDict):
     resolved_transport: str
     purpose: str
     access: str
+    execution: NotRequired[dict[str, object]]
+
+
+class Job(TypedDict):
+    command: list[str]
+    prompt: str
+    brief: Brief
+    worktree: str
+
+
+class WorkerExited(ValueError):
+    """The app-server ended before the turn completed; `code` is its exit code."""
+
+    def __init__(self, code: int, detail: str = "") -> None:
+        super().__init__(
+            f"native runtime exited with {code}" + (f": {detail}" if detail else "")
+        )
+        self.code = code
 
 
 PROMPT = """\
@@ -230,8 +255,7 @@ class AppServer:
         except queue.Empty as exc:
             raise ValueError("native runtime startup timed out") from exc
         if line is None:
-            code = self.process.wait(timeout=2)
-            raise ValueError(f"native runtime exited with {code}")
+            raise WorkerExited(self.process.wait(timeout=2))
         try:
             message = json.loads(line)
         except ValueError as exc:
@@ -241,9 +265,7 @@ class AppServer:
                 raise ValueError(
                     "native runtime returned invalid JSON: " + line[:500]
                 ) from exc
-            raise ValueError(
-                f"native runtime exited with {code}: {line[:500]}"
-            ) from exc
+            raise WorkerExited(code, line[:500]) from exc
         if not isinstance(message, dict):
             raise ValueError("native runtime message must be an object")
         if "method" in message and "id" in message:
@@ -300,11 +322,34 @@ def thread_params(brief: Brief, worktree: Path) -> dict[str, object]:
 
 
 def run_worker(args: argparse.Namespace) -> int:
+    """The detached child of an unsupervised launch: the job on stdin, readiness by receipt."""
     job = json.load(sys.stdin)
-    receipt = Path(job["receipt"])
+    return serve_turn(cast(Job, job), emit=None, receipt=Path(job["receipt"]))
+
+
+def emit_event(event: dict[str, str]) -> None:
+    """One allowlisted event line for the runtime's run log; never raw app-server JSON."""
+    print(json.dumps({"type": "harness-event", **event}), flush=True)
+
+
+def exit_status(code: int) -> int:
+    """A failed worker's status: its code, 128 + signal, or 1 for a clean early exit."""
+    if code < 0:
+        return 128 - code
+    return code or 1
+
+
+def serve_turn(
+    job: Job,
+    *,
+    emit: Callable[[dict[str, str]], None] | None,
+    receipt: Path | None,
+) -> int:
+    """Serve one worker turn; without `emit` agent text is printed as it arrives."""
     server: AppServer | None = None
+    messages: dict[str, str] = {}
     try:
-        brief = cast(Brief, job["brief"])
+        brief = job["brief"]
         worktree = Path(job["worktree"])
         server = AppServer(job["command"], worktree)
         server.request(
@@ -351,9 +396,12 @@ def run_worker(args: argparse.Namespace) -> int:
                 "input": [{"type": "text", "text": prompt}],
             },
         )
-        receipt.write_text(
-            json.dumps({"ready": True, "evidence": evidence}), encoding="utf-8"
-        )
+        if receipt is not None:
+            receipt.write_text(
+                json.dumps({"ready": True, "evidence": evidence}), encoding="utf-8"
+            )
+        if emit is not None:
+            emit({"kind": "system", "text": "Runtime session connected"})
         while True:
             message = (
                 server.notifications.pop(0)
@@ -365,12 +413,45 @@ def run_worker(args: argparse.Namespace) -> int:
             if not isinstance(payload, dict):
                 continue
             if method == "item/agentMessage/delta":
-                print(payload.get("delta", ""), end="", flush=True)
+                delta = payload.get("delta", "")
+                if emit is None:
+                    print(delta, end="", flush=True)
+                else:
+                    item_id = str(payload.get("itemId"))
+                    messages[item_id] = messages.get(item_id, "") + str(delta)
+            elif emit is not None and method in ("item/started", "item/completed"):
+                item = payload.get("item")
+                if not isinstance(item, dict):
+                    continue
+                kind = item.get("type")
+                if method == "item/started":
+                    if isinstance(kind, str) and kind not in NON_TOOL_ITEMS:
+                        emit({"kind": "tool", "text": kind})
+                elif text := messages.pop(str(item.get("id")), ""):
+                    emit({"kind": "output", "text": text})
             elif method == "error":
+                if emit is not None:
+                    error = payload.get("error")
+                    detail = error.get("message") if isinstance(error, dict) else None
+                    if not isinstance(detail, str) or not detail:
+                        detail = "native worker error"
+                    emit({"kind": "error", "text": detail})
                 raise ValueError(f"native worker error: {payload}")
             elif method == "turn/completed":
                 turn = payload.get("turn")
-                if not isinstance(turn, dict) or turn.get("status") != "completed":
+                status = turn.get("status") if isinstance(turn, dict) else None
+                if emit is not None:
+                    for text in messages.values():
+                        if text:
+                            emit({"kind": "output", "text": text})
+                    messages.clear()
+                    emit(
+                        {
+                            "kind": "result" if status == "completed" else "error",
+                            "text": f"Turn {status or 'ended without status'}",
+                        }
+                    )
+                if status != "completed":
                     raise ValueError(f"native worker turn did not complete: {turn}")
                 return 0
     except (
@@ -380,15 +461,24 @@ def run_worker(args: argparse.Namespace) -> int:
         TypeError,
         subprocess.SubprocessError,
     ) as exc:
-        if not receipt.exists():
+        if receipt is not None and not receipt.exists():
             receipt.write_text(
                 json.dumps({"ready": False, "error": str(exc)}), encoding="utf-8"
             )
         print(f"codex worker failed: {exc}", file=sys.stderr, flush=True)
-        return 1
+        return exit_status(exc.code) if isinstance(exc, WorkerExited) else 1
     finally:
         if server is not None:
             server.close()
+
+
+def log_path(brief: Brief) -> Path:
+    """The worker's stdout+stderr log; console observation reads it by the same rule."""
+    return (
+        Path(brief["report_staging_path"]).parent.parent
+        / "worker-logs"
+        / f"{brief['dispatch_id']}.log"
+    )
 
 
 def start(args: argparse.Namespace) -> int:
@@ -445,12 +535,21 @@ def start(args: argparse.Namespace) -> int:
             )
         )
         return 0
-    log = Path(brief["report_staging_path"]).parent.parent / "worker-logs"
-    log.mkdir(parents=True, exist_ok=True)
-    log_path = log / f"{brief['dispatch_id']}.log"
-    receipt = log / f"{brief['dispatch_id']}.ready.json"
+    if brief.get("execution"):
+        # Supervised: the runtime launches only briefs with `execution`. The turn runs in
+        # this process, so the app-server stays in its group and its exit is this exit.
+        job: Job = {
+            "command": command,
+            "prompt": prompt,
+            "brief": brief,
+            "worktree": str(worktree),
+        }
+        return serve_turn(job, emit=emit_event, receipt=None)
+    log = log_path(brief)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    receipt = log.with_name(f"{brief['dispatch_id']}.ready.json")
     receipt.unlink(missing_ok=True)
-    with log_path.open("ab") as sink:
+    with log.open("ab") as sink:
         process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "_run"],
             cwd=worktree,
@@ -492,12 +591,12 @@ def start(args: argparse.Namespace) -> int:
             break
         time.sleep(0.02)
     if process.poll() is None:
-        if os.name == "posix":
+        if sys.platform != "win32":
             os.killpg(process.pid, signal.SIGTERM)
         else:
             process.terminate()
         process.wait(timeout=3)
-    tail = log_path.read_text(encoding="utf-8", errors="replace")[-500:]
+    tail = log.read_text(encoding="utf-8", errors="replace")[-500:]
     print(f"codex worker failed before native readiness: {tail}", file=sys.stderr)
     return 1
 

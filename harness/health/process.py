@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -23,6 +25,11 @@ def run_tool(
     """
     child_env = dict(os.environ if env is None else env)
     child_env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    if sys.platform == "win32" and argv:
+        # CreateProcess ignores PATHEXT, so a `gh.cmd` shim is found only by an explicit lookup.
+        resolved = shutil.which(argv[0])
+        if resolved and resolved.lower().endswith((".cmd", ".bat")):
+            argv = [resolved, *argv[1:]]
     try:
         return subprocess.run(
             argv,

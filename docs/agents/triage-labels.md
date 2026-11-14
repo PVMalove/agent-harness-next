@@ -27,6 +27,10 @@ Every triaged issue or PR carries exactly one label from each of the first three
 | `hitl` | yellow `#fbca04` | Human-in-the-loop — needs review, testing, or approval from you |
 | `afk` | light blue `#54c1e8` | Away-from-keyboard — an agent can complete it alone |
 
+Documentation tickets — those that change only `docs/`, `site/`, `README.md`, and `CHANGELOG.md` —
+get `hitl`, not `afk`: a person reads the result and decides whether the text is ready to publish.
+`/implement` and `/fast-implement` do not take such tickets into the afk pipeline.
+
 ### 3. Status (`status::*`) — where it sits in the pipeline
 
 | Label | Color | Meaning |
@@ -107,6 +111,7 @@ An unlabeled issue is implicitly "needs triage" — there's no dedicated label f
 5. `status::ready` → `status::in-progress` when a session (agent or you) picks it up — `/implement` and `/fast-implement` set this in pre-flight, before the issue branch or any file edit. The label is replaced, never added: a ticket carries exactly one `status::*` label. On GitLab Free a `key::value` label is an ordinary label — mutually exclusive scoped labels are a Premium feature — so every replacement removes the previous label with the same `key::` prefix explicitly (`--unlabel`), exactly as `--remove-label` does on GitHub.
 6. Merged and closed → the ticket keeps `status::in-progress`; the closed state is its terminal `done`. In the same step `/to-pull-requests` moves every open ticket whose blockers are now all closed from `status::blocked` to `status::ready`.
 7. Rejected at any point → apply `resolution::wontfix`, drop the `status::*` label, close.
+8. The web console's task board moves a ticket through `harness ticket-status <repo> --spec <spec> --ticket <ref> --to <column>`, which checks the move itself and replaces the label as in step 5: Backlog → Ready only when every blocker is closed (step 4), Ready → Backlog and Ready → In progress, In progress → Ready only without an active batch. A move to Backlog writes `status::blocked`, the one Backlog label that keeps exactly one `status::*` label. Every other move, and any move into Review / QA or Done, is refused without a write: those columns follow the batch, the PR and the closed state.
 
 Apply `task-report::required` by default when `/to-spec` or `/to-tickets` create a ticket, unless told to skip it.
 
@@ -129,4 +134,4 @@ This field block is the vocabulary that [issue-tracker.md](./issue-tracker.md)'s
 
 ## Adapting this taxonomy per project
 
-This is the taxonomy `pvmalove-suite` ships by default — it's a design choice (namespaced multi-axis labels), not a hardcoded requirement. Renaming an axis or adding project-specific context labels means editing this file **and** `triage/SKILL.md` — the skill speaks the vocabulary documented here as hardcoded prose, not as data read from this file at runtime. Run `harness lock-project-skills` afterward so the customization is recorded as intentional provenance, rather than left as drift a future `harness update --force` could silently overwrite.
+This is the taxonomy `engineering-suite` ships by default — it's a design choice (namespaced multi-axis labels), not a hardcoded requirement. Renaming an axis or adding project-specific context labels means editing this file **and** `triage/SKILL.md` — the skill speaks the vocabulary documented here as hardcoded prose, not as data read from this file at runtime. Run `harness lock-project-skills` afterward so the customization is recorded as intentional provenance, rather than left as drift a future `harness update --force` could silently overwrite.

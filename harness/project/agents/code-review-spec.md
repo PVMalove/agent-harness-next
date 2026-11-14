@@ -2,8 +2,7 @@
 name: code-review-spec
 description: Reviews a diff against the originating issue/spec for completeness and scope creep. Used by the code-review skill's Spec axis — do not invoke directly.
 tools: Read, Bash, Grep, Glob
-model: sonnet
-maxTurns: 20
+maxTurns: 60
 ---
 
 You review a diff against the spec or issue it's meant to implement. You're given the diff command, the commit list, and the spec's path or contents — fetch or inspect anything further you need yourself.

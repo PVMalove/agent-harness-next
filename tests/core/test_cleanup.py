@@ -9,7 +9,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from harness.cleanup import apply_cleanup, plan_cleanup
+from harness import cleanup
+from harness.cleanup import apply_cleanup, plan_cleanup, remove_worktree, worktree_facts
+from harness.console.kernel.maintenance import REASONS_RU
+from harness.orchestration.ledger.lifecycle import STORE_LEDGER_VERSION
+from harness.orchestration.runtime_client import RuntimeClientError
+from tests.orchestration import runtime_store_support as support
+from tests.orchestration.scripted_engine import ScriptedEngine
 
 
 def git(repo: Path, *args: str) -> str:
@@ -324,9 +330,99 @@ class CleanupTests(unittest.TestCase):
             json.dumps({"generation": "generation-test"}), encoding="utf-8"
         )
         (records / "batch-test.json").write_text(
-            json.dumps({"state": state, "worktree": str(tree.relative_to(self.repo))}),
+            json.dumps(
+                {
+                    "batch_id": "batch-test",
+                    "state": state,
+                    "worktree": str(tree.relative_to(self.repo)),
+                }
+            ),
             encoding="utf-8",
         )
+
+    def test_hard_keeps_a_non_terminal_batch_worktree_and_names_the_batch(
+        self,
+    ) -> None:
+        """Проверить, что worktree нетерминального batch остаётся и план называет batch и состояние."""
+        self._add_origin()
+        tree = self._worktrees_dir() / "issue-2-two"
+        branch = "feature/issue-2-two"
+        git(self.repo, "worktree", "add", "-b", branch, str(tree), "HEAD")
+        git(self.repo, "push", "-u", "origin", branch)
+        for state in ("planned", "awaiting-approval"):
+            with self.subTest(state=state):
+                self._write_batch(tree, state)
+                plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+                self.assertNotIn(str(tree), {item["path"] for item in plan["remove"]})
+                self.assertIn(
+                    {
+                        "path": str(tree),
+                        "reason": "referenced by an active batch",
+                        "batch_id": "batch-test",
+                        "state": state,
+                    },
+                    plan["skipped"],
+                )
+
+    def test_an_unavailable_runtime_is_named_as_the_reason_a_worktree_stays(
+        self,
+    ) -> None:
+        """Проверить, что при недоступном runtime превью и факты worktree называют runtime."""
+        self._add_origin()
+        tree = self._worktrees_dir() / "issue-4-four"
+        git(self.repo, "worktree", "add", "-b", "feature/issue-4-four", str(tree), "HEAD")
+        state = self.repo / ".harness" / "orchestration" / "state"
+        state.mkdir(parents=True, exist_ok=True)
+        (state / "ledger.json").write_text(
+            json.dumps({"version": STORE_LEDGER_VERSION}), encoding="utf-8"
+        )
+        reason = "runtime does not answer: start `harness-runtime serve --repo <repo>`"
+        with mock.patch("harness.cleanup.RuntimeClient") as client:
+            client.return_value.call.side_effect = RuntimeClientError(
+                "runtime_unavailable",
+                "offline",
+                remedy="start runtime",
+                domain="infrastructure",
+            )
+            plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+            facts = {fact.path: fact.reason for fact in worktree_facts(self.repo)}
+            with self.assertRaisesRegex(ValueError, "runtime does not answer"):
+                remove_worktree(self.repo, tree)
+        self.assertIn(
+            {"path": str(self._worktrees_dir()), "reason": reason}, plan["skipped"]
+        )
+        self.assertEqual(facts[tree.resolve()], reason)
+        self.assertEqual(
+            REASONS_RU[reason],
+            "runtime не отвечает: запустите `harness-runtime serve --repo <repo>`",
+        )
+
+    def test_every_unread_ledger_reason_has_a_russian_text(self) -> None:
+        """Проверить, что у каждой причины непрочитанного ledger есть русский текст консоли."""
+        for reason in (cleanup.LEDGER_UNAVAILABLE, cleanup.RUNTIME_UNAVAILABLE):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, REASONS_RU)
+
+    def test_hard_reports_the_batch_of_a_removed_worktree(self) -> None:
+        """Проверить, что план и результат hard cleanup называют batch удалённого worktree."""
+        self._add_origin()
+        tree = self._worktrees_dir() / "issue-3-three"
+        branch = "feature/issue-3-three"
+        git(self.repo, "worktree", "add", "-b", branch, str(tree), "HEAD")
+        git(self.repo, "push", "-u", "origin", branch)
+        self._write_batch(tree, "completed")
+        expected = {
+            "kind": "worktree",
+            "path": str(tree),
+            "branch": branch,
+            "batch_id": "batch-test",
+            "state": "completed",
+        }
+        plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+        self.assertIn(expected, plan["remove"])
+        result = apply_cleanup(self.repo, plan, confirm="HARD")
+        self.assertFalse(result["failed"])
+        self.assertEqual(result["worktrees"], [expected])
 
     def test_hard_removes_clean_integration_worktree_only_when_pushed(self) -> None:
         """Проверить, что worktree с `integration/*` удаляется только после push на origin."""
@@ -413,6 +509,201 @@ class CleanupTests(unittest.TestCase):
             apply_cleanup(self.repo, fake_plan)  # type: ignore[arg-type]
         self.assertIn("cleanup plan changed", str(ctx.exception))
         self.assertTrue(outside_file.exists())
+
+
+@unittest.skipIf(
+    sys.platform == "win32",
+    "the scripted podman is a #!/bin/sh wrapper that locks its state with fcntl.flock, "
+    "which is POSIX-only",
+)
+class ContainerCleanupTests(unittest.TestCase):
+    """Orphaned container resources of this repository, listed and removed only by harness-runtime.
+
+    A real runtime serves a migrated store; its only engine is a scripted ``podman`` first on the
+    runtime's ``PATH``, so no ``docker`` is ever asked (ADR 0022, section 5).
+    """
+
+    def setUp(self) -> None:
+        """Подготовить репозиторий со store, docker-исполнителем, runtime и скриптованный podman."""
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.repo = (Path(self.temporary.name) / "repo").resolve()
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "main")
+        git(self.repo, "config", "user.name", "Test")
+        git(self.repo, "config", "user.email", "test@example.invalid")
+        (self.repo / ".gitignore").write_text("/.harness/\n", encoding="utf-8")
+        git(self.repo, "add", ".gitignore")
+        git(self.repo, "commit", "-m", "test: initial fixture")
+        self.root = self.repo / ".harness"
+        support.build_state(self.repo)
+        migrated = support.migrate(self.repo)
+        self.assertEqual(migrated.returncode, 0, migrated.stderr)
+        self.write_config(
+            {
+                "extensions": {"runtime_access": "docker"},
+                "access_policy": {"defaults": {"container": {"engine": "podman"}}},
+            }
+        )
+        self.repository = str((self.repo / ".git").resolve())
+        self.engine = ScriptedEngine(Path(self.temporary.name) / "engine")
+        self.runtime = support.ServingRuntime(
+            self.repo, env={"PATH": self.engine.path()}
+        )
+        self.addCleanup(self.runtime.stop)
+        patcher = mock.patch.dict(os.environ, self.runtime.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def write_config(self, config: dict[str, object]) -> None:
+        """Записать orchestration.json проекта."""
+        (self.root / "orchestration.json").write_text(
+            json.dumps(config), encoding="utf-8"
+        )
+
+    def dispatch(
+        self,
+        number: int,
+        worker: str = "exited",
+        *,
+        repository: str | None = None,
+    ) -> str:
+        """Добавить в движок worker, sidecar и сеть dispatch; вернуть id dispatch."""
+        dispatch_id = f"dispatch-{number:04d}"
+        labels = {
+            "harness.dispatch": dispatch_id,
+            "harness.repository": repository or self.repository,
+        }
+        name = f"harness-{dispatch_id}"
+        self.engine.add_container(f"{number:02d}" * 32, name, labels, worker)
+        self.engine.add_container(
+            f"{number:02d}" * 31 + "aa", f"{name}-proxy", labels, "running"
+        )
+        self.engine.add_network(f"{number:02d}" * 31 + "bb", f"{name}-net", labels)
+        return dispatch_id
+
+    def planned(self) -> list[str]:
+        """Имена ресурсов контейнеров в плане."""
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        return [
+            item["path"]
+            for item in plan["remove"]
+            if item["kind"] in {"container", "network"}
+        ]
+
+    def skipped(self) -> dict[str, str]:
+        """Причины пропуска по имени."""
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        return {item["path"]: item["reason"] for item in plan["skipped"]}
+
+    def test_an_orphan_of_this_repository_is_planned_and_a_foreign_one_never(
+        self,
+    ) -> None:
+        """Проверить, что в план попадает только сирота этого репозитория, по порядку worker, sidecar, сеть."""
+        own = self.dispatch(1)
+        self.dispatch(2, repository="/elsewhere/.git")
+
+        self.assertEqual(
+            self.planned(),
+            [f"harness-{own}", f"harness-{own}-proxy", f"harness-{own}-net"],
+        )
+        self.assertEqual(self.skipped(), {})
+        self.assertTrue(all(call[0] == "podman" for call in self.engine.calls()))
+
+    def test_a_worker_that_is_not_stopped_protects_its_whole_dispatch(self) -> None:
+        """Проверить, что живой worker защищает все ресурсы dispatch и cleanup его не останавливает."""
+        live = self.dispatch(1, worker="running")
+
+        self.assertEqual(self.planned(), [])
+        self.assertIn("podman stop", self.skipped()[f"harness-{live}"])
+        result = apply_cleanup(
+            self.repo, plan_cleanup(self.repo, "soft", min_age_hours=0)
+        )
+        self.assertEqual(result["removed"], [])
+        self.assertEqual(self.engine.removals(), [])
+
+    def test_apply_removes_the_orphans_with_podman_and_a_repeat_finds_nothing(
+        self,
+    ) -> None:
+        """Проверить удаление сирот через runtime, только podman и безопасность повторного запуска."""
+        own = self.dispatch(1)
+        foreign = self.dispatch(2, repository="/elsewhere/.git")
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+
+        result = apply_cleanup(self.repo, plan)
+
+        self.assertEqual(result["failed"], [])
+        self.assertEqual(
+            result["removed"],
+            [f"harness-{own}", f"harness-{own}-proxy", f"harness-{own}-net"],
+        )
+        names = {item["name"] for item in self.engine.state()["objects"].values()}
+        self.assertEqual(
+            names,
+            {
+                f"harness-{foreign}",
+                f"harness-{foreign}-proxy",
+                f"harness-{foreign}-net",
+            },
+        )
+        self.assertTrue(all(call[0] == "podman" for call in self.engine.calls()))
+        self.assertFalse(any("volume" in call for call in self.engine.calls()))
+        again = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        self.assertEqual(again["remove"], [])
+
+    def test_apply_refuses_a_plan_that_changed_after_the_preview(self) -> None:
+        """Проверить, что изменившийся набор ресурсов или состояние worker требуют нового просмотра."""
+        self.dispatch(1)
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        self.engine.update(
+            lambda state: state["objects"]["01" * 32].update(status="running")
+        )
+
+        with self.assertRaises(ValueError) as refused:
+            apply_cleanup(self.repo, plan)
+
+        self.assertIn("cleanup plan changed", str(refused.exception))
+        self.assertEqual(self.engine.removals(), [])
+
+    def test_a_project_without_the_docker_executor_never_reaches_the_engine(
+        self,
+    ) -> None:
+        """Проверить, что без выбранного docker-исполнителя runtime и движок не опрашиваются."""
+        self.dispatch(1)
+        self.write_config({})
+
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+
+        self.assertEqual(plan["remove"], [])
+        self.assertEqual(self.engine.calls(), [])
+
+    def test_an_unavailable_engine_or_runtime_plans_nothing(self) -> None:
+        """Проверить пропуск при недоступном движке и недоступном runtime."""
+        self.dispatch(1)
+        self.engine.update(lambda state: state["failures"].update(ps="cannot connect"))
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        skipped = {item["path"]: item["reason"] for item in plan["skipped"]}
+        self.assertIn("engine_unavailable", skipped["container resources"])
+        self.assertFalse(
+            any(item["kind"] in {"container", "network"} for item in plan["remove"])
+        )
+
+        self.runtime.stop()
+        # Transport deadlines are covered by runtime_client tests. Here only the
+        # cleanup response to an unavailable runtime belongs to the contract.
+        with mock.patch("harness.cleanup.RuntimeClient") as client:
+            client.return_value.call.side_effect = RuntimeClientError(
+                "runtime_unavailable",
+                "offline",
+                remedy="start runtime",
+                domain="infrastructure",
+            )
+            plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+        skipped = {item["path"]: item["reason"] for item in plan["skipped"]}
+        self.assertIn("runtime_unavailable", skipped["container resources"])
+        self.assertFalse(
+            any(item["kind"] in {"container", "network"} for item in plan["remove"])
+        )
 
 
 if __name__ == "__main__":

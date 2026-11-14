@@ -27,6 +27,8 @@ from .model import JsonObject
 REGISTRY_REL = Path(".harness/skills/REGISTRY.md")
 LOCK_REL = Path(".harness/harness.lock")
 INTEGRATIONS_REL = Path(".harness/integrations.json")
+# Effective hook policy, ADR 0024 section 3: written only by `harness init|adopt|update`.
+HOOK_POLICY_REL = Path(".harness/hook-policy.json")
 DISCOVERY_LINKS = {
     ".agents/skills": "../.harness/skills",
     ".claude/skills": "../.harness/skills",
@@ -34,6 +36,16 @@ DISCOVERY_LINKS = {
 ORCHESTRATION_CONFIG_REL = Path(".harness/orchestration.json")
 ORCHESTRATION_SCHEMA_REL = Path(".harness/orchestration/orchestration.schema.json")
 BACKEND_ORCHESTRATION_CAPABILITY = "backend-orchestration"
+# Capabilities whose install writes seed files (`harness init|adopt|update` seed step).
+SEED_CAPABILITIES = ("engineering-suite", BACKEND_ORCHESTRATION_CAPABILITY)
+
+
+def canonical_capability(name: str) -> str:
+    """Accept installed snapshots and CLI commands using the former suite name.
+
+    The ``pvmalove-suite`` alias is kept through the 2.x releases and removed in 3.0.0."""
+    return "engineering-suite" if name == "pvmalove-suite" else name
+
 
 PROJECT_JSON_REQUIRED_FIELDS = (
     "language",
@@ -51,6 +63,8 @@ PROJECT_JSON_ALLOWED_FIELDS = frozenset(PROJECT_JSON_REQUIRED_FIELDS) | {
     "ci_required_checks",
     "test_paths",
     "test_runner",
+    "test_author",
+    "hook_policy",
 }
 STORY_POINTS_REQUIRED_FIELDS = (
     "scale",
@@ -78,7 +92,7 @@ TRACKER_PROJECT_RULE = (
     "must be the full project path with subgroups (group/sub/project), "
     "without a leading or trailing slash"
 )
-# The optional `test_paths` and `test_runner` fields (docs/hooks/run-test.md and
+# The optional `test_paths` and `test_runner` fields (site/docs/hooks/run-test.md and
 # docs/agents/test-author.md): both settings are required for test-author activation. A `test_paths`
 # glob is relative - no leading slash or backslash, no drive letter - and has no `..` segment.
 # `project.schema.json` repeats the pattern verbatim; tests keep the two in step.
@@ -87,6 +101,11 @@ TEST_RUNNER_FIELDS = ("command", "build", "database")
 ARTIFACT_PATH_PATTERN = "^(?![/\\\\])(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.?(?:/|$))[^/*?\\[\\]{}\\\\\\x00-\\x1f]+(?:/[^/*?\\[\\]{}\\\\\\x00-\\x1f]+)*/\\*\\*$(?![\\s\\S])"
 # The one `test_runner.command` element the runner replaces with the selected test id.
 TEST_ID_PLACEHOLDER = "{test_id}"
+
+# The optional `hook_policy` field (issue #794): profiles ordered from the weakest to the strictest
+# and the roles an escalation may name.  `project.schema.json` repeats both lists.
+HOOK_PROFILES = ("minimal", "standard", "strict")
+HOOK_POLICY_ROLES = ("developer", "review", "qa", "coordinator")
 # Bound of the `git ls-files` skill inventory.
 GIT_TIMEOUT_SECONDS = 30
 # A JSON file cannot be opened, decoded or parsed (too deep nesting included).
@@ -117,6 +136,33 @@ def file_digest(path: Path) -> str | None:
         return digest(path.read_bytes())
     except FileNotFoundError:
         return None
+
+
+_SEED_HASH = re.compile(r"[0-9a-f]{64}")
+
+
+def seed_baseline_problems(value: object) -> list[str]:
+    """Problems of the `seed_files` value of harness.lock; [] when it is valid.
+
+    The one format validator of the seed baseline, shared by the CLI and `harness health`: an
+    object of project-relative POSIX paths to a lowercase sha256 hex from `digest`, or null."""
+    if not isinstance(value, dict):
+        return ["seed_files must be a JSON object"]
+    problems: list[str] = []
+    for key, item in value.items():
+        if (
+            not key
+            or key.startswith("/")
+            or "\\" in key
+            or re.match(r"[A-Za-z]:", key)
+            or ".." in key.split("/")
+        ):
+            problems.append(f"{key!r} is not a relative POSIX path")
+        if item is not None and not (
+            isinstance(item, str) and _SEED_HASH.fullmatch(item)
+        ):
+            problems.append(f"{key!r}: value is neither a lowercase sha256 hex nor null")
+    return problems
 
 
 def relative_path(value: object, *, label: str) -> Path:
@@ -517,6 +563,18 @@ def validate_integrations(repo: Path, problems: list[str]) -> int:
             problems.append(
                 f"integration {identifier!r} secret_refs must contain environment variable names only"
             )
+        managed = entry.get("managed_entries")
+        if managed is not None and not (
+            isinstance(managed, list)
+            and len(set(managed)) == len(managed)
+            and all(
+                isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item)
+                for item in managed
+            )
+        ):
+            problems.append(
+                f"integration {identifier!r} managed_entries must be unique sha256 digests"
+            )
         try:
             config = relative_path(
                 entry.get("config"), label=f"integration {identifier!r} config"
@@ -688,8 +746,91 @@ def test_runner_problems(value: object) -> list[str]:
     return problems
 
 
+def hook_policy_problems(value: object) -> list[str]:
+    """Problems of the `hook_policy` value: `{"profile": ..., "escalations": [{"paths": globs,
+    "roles": roles, "profile": ...}]}`.  An escalation must not be weaker than the base profile.
+    Values are shown by position, never echoed."""
+    prefix = ".harness/project.json hook_policy"
+    if not isinstance(value, dict):
+        return [f"{prefix} must be an object"]
+    problems: list[str] = []
+    extra = sorted(set(value) - {"profile", "escalations"})
+    if extra:
+        problems.append(f"{prefix} has unknown field(s): {', '.join(extra)}")
+    profile = value.get("profile")
+    if profile not in HOOK_PROFILES:
+        problems.append(f"{prefix}.profile must be one of: {', '.join(HOOK_PROFILES)}")
+    escalations = value.get("escalations", [])
+    if not isinstance(escalations, list):
+        problems.append(f"{prefix}.escalations must be a list")
+        return problems
+    for index, escalation in enumerate(escalations):
+        problems.extend(
+            _hook_escalation_problems(
+                f"{prefix}.escalations[{index}]", escalation, profile
+            )
+        )
+    return problems
+
+
+def _repeats_an_entry(items: list[object]) -> bool:
+    """Whether a JSON list repeats a value. Entries may be unhashable (an object or a list in a
+    malformed config), so membership is checked by equality, not through a set."""
+    seen: list[object] = []
+    for item in items:
+        if item in seen:
+            return True
+        seen.append(item)
+    return False
+
+
+def _hook_escalation_problems(
+    prefix: str, escalation: object, base: object
+) -> list[str]:
+    if not isinstance(escalation, dict):
+        return [f"{prefix} must be an object"]
+    problems: list[str] = []
+    extra = sorted(set(escalation) - {"paths", "roles", "profile"})
+    if extra:
+        problems.append(f"{prefix} has unknown field(s): {', '.join(extra)}")
+    profile = escalation.get("profile")
+    if profile not in HOOK_PROFILES:
+        problems.append(f"{prefix}.profile must be one of: {', '.join(HOOK_PROFILES)}")
+    elif base in HOOK_PROFILES and HOOK_PROFILES.index(profile) < HOOK_PROFILES.index(
+        base
+    ):
+        problems.append(f"{prefix}.profile must not be lower than the base profile")
+    if "paths" not in escalation and "roles" not in escalation:
+        problems.append(f"{prefix} must set paths or roles")
+    if "paths" in escalation:
+        paths = escalation["paths"]
+        if not isinstance(paths, list) or not paths:
+            problems.append(f"{prefix}.paths must be a non-empty list of glob strings")
+        else:
+            if _repeats_an_entry(paths):
+                problems.append(f"{prefix}.paths must not repeat an entry")
+            problems.extend(
+                f"{prefix}.paths[{i}] must be a relative glob without '..' segments"
+                for i, item in enumerate(paths)
+                if not (isinstance(item, str) and re.fullmatch(TEST_PATH_PATTERN, item))
+            )
+    if "roles" in escalation:
+        roles = escalation["roles"]
+        if not isinstance(roles, list) or not roles:
+            problems.append(f"{prefix}.roles must be a non-empty list of role names")
+        else:
+            if _repeats_an_entry(roles):
+                problems.append(f"{prefix}.roles must not repeat an entry")
+            problems.extend(
+                f"{prefix}.roles[{i}] must be one of: {', '.join(HOOK_POLICY_ROLES)}"
+                for i, item in enumerate(roles)
+                if item not in HOOK_POLICY_ROLES
+            )
+    return problems
+
+
 def validate_project_json(repo: Path, problems: list[str]) -> None:
-    """.harness/project.json не является обязательным (создаётся только pvmalove-suite), поэтому его
+    """.harness/project.json не является обязательным (создаётся только engineering-suite), поэтому его
     отсутствие не считается ошибкой; проверяется только при его наличии.
     Структура синхронизируется с `harness/project/project.schema.json`: редактор и мастер консоли
     проверяют эту схему (`harness/configuration_schema.py`, без зависимости `jsonschema`), а здесь
@@ -712,6 +853,14 @@ def validate_project_data(data: object, problems: list[str]) -> None:
     if not isinstance(data, dict):
         problems.append(".harness/project.json must contain a JSON object")
         return
+
+    if "test_author" in data:
+        from .test_author import profile_problems
+
+        problems.extend(
+            f".harness/project.json {problem}"
+            for problem in profile_problems(data["test_author"])
+        )
 
     if "memory" in data or "memory_policy" in data:
         from harness.memory.policy import parse_policy
@@ -767,6 +916,8 @@ def validate_project_data(data: object, problems: list[str]) -> None:
         problems.extend(test_paths_problems(data["test_paths"]))
     if "test_runner" in data:
         problems.extend(test_runner_problems(data["test_runner"]))
+    if "hook_policy" in data:
+        problems.extend(hook_policy_problems(data["hook_policy"]))
     if "story_points" in data:
         story_points = data["story_points"]
         if not isinstance(story_points, dict):

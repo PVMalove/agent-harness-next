@@ -151,6 +151,73 @@ class EvaluateTests(unittest.TestCase):
         obs = observation(checks=(run("lint"), run("tests", conclusion="failure")))
         self.assert_fallback(verdict(obs, target_sha="d" * 40), "stale_target")
 
+    def test_a_light_check_never_confirms_a_pair_that_requires_full(self) -> None:
+        light = observation(
+            checks=(run("lint-light"), run("verify-light", run_id="11"))
+        )
+        for required in (
+            ["verify-light"],
+            ["lint-light", "verify-light"],
+            ["lint", "verify-light"],
+        ):
+            with self.subTest(required=required):
+                result = verdict(light, required_checks=required)
+                self.assert_fallback(result, "light_check")
+                self.assertIsNone(result.verified)
+
+    def test_a_light_check_is_refused_before_the_observation_is_read(self) -> None:
+        for changes in (
+            {"error": "down"},
+            {"repository": "x/y"},
+            {"checkout": "unknown"},
+        ):
+            with self.subTest(changes=changes):
+                self.assert_fallback(
+                    verdict(observation(**changes), required_checks=["verify-light"]),
+                    "light_check",
+                )
+
+    def test_a_light_check_confirms_a_pair_that_allows_light(self) -> None:
+        light = observation(
+            checks=(run("lint-light"), run("verify-light", run_id="11"))
+        )
+
+        result = verdict(
+            light, required_checks=["lint-light", "verify-light"], allow_light=True
+        )
+
+        self.assertEqual(result.outcome, "accepted")
+        assert result.verified is not None
+        self.assertEqual(
+            [c["name"] for c in result.verified["checks"]],
+            ["lint-light", "verify-light"],
+        )
+
+    def test_allowing_light_changes_no_other_verdict(self) -> None:
+        light = observation(checks=(run("verify-light", conclusion="failure"),))
+        failed = verdict(light, required_checks=["verify-light"], allow_light=True)
+        self.assertEqual((failed.outcome, failed.reason), ("failed", "failed_check"))
+        self.assert_fallback(
+            verdict(
+                observation(checks=()),
+                required_checks=["verify-light"],
+                allow_light=True,
+            ),
+            "missing_check",
+        )
+
+    def test_only_the_suffix_marks_a_light_check(self) -> None:
+        names = ["light", "light-weight", "daylight", "verify_light", "verify-light "]
+        obs = observation(checks=tuple(run(name) for name in names))
+
+        result = verdict(obs, required_checks=names)
+
+        self.assertEqual(result.outcome, "accepted")
+
+    def test_a_full_pair_keeps_accepting_full_checks_by_default(self) -> None:
+        self.assertEqual(verdict(observation()).outcome, "accepted")
+        self.assertIn("light_check", ci_source.REASONS)
+
 
 if __name__ == "__main__":
     unittest.main()

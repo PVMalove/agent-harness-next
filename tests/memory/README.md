@@ -23,14 +23,15 @@ query's ranked top-5 paths and search status. The evaluation uses raw FTS5 candi
 token-limited interactive search output. Recall is a ticket-level hit rate, not document-level
 recall for a multi-label relevance set. Noise is a macro-average over the returned top-5 window.
 
-Measured FTS5 with the corrected labels: recall@1/@3/@5 **0.95**, noise **0.60**.
+Measured FTS5 with the corrected labels: recall@1/@3/@5 **0.95**, noise **0.61**.
 The default quality gate **passes** its unchanged 0.60 recall@5 floor and 0.70 noise ceiling.
 The reproducibility test checks the complete report and CLI exit code 0 on that real corpus.
 
 `baseline_fts5_initial.json` preserves the original single-label measurement byte-for-byte:
 recall@1 **0.70**, recall@3 **0.75**, recall@5 **0.85**, noise **0.83**, FAIL.
-The historical test reconstructs that dataset, verifies its original SHA-256 and reproduces the
-entire old report. Version 2 was an **annotation correction, not a retrieval-engine improvement**:
+The historical test reconstructs that dataset, verifies its original SHA-256, reproduces the
+entire old report and confirms that both baselines index the same sources and that only archived
+sources differ. Version 2 was an **annotation correction, not a retrieval-engine improvement**:
 queries, source bytes, FTS5, top-5 window and thresholds were identical to the initial measurement.
 Version 3 explicitly re-evaluates the corpus after #662 changes `CONTEXT.md` and ADR 0003.
 The aggregate retrieval metrics remain unchanged, but the ranked paths of several queries differ
@@ -40,6 +41,50 @@ source documents for historical reproduction; `baseline_fts5_initial.json` is un
 metrics and hits are unchanged; only the order inside the top-5 window of queries 345, 402 and 422
 differs. `fixtures/initial-corpus.json` now also keeps the original ADR 0005 bytes, so
 `baseline_fts5_initial.json` stays unchanged.
+Version 4 re-evaluates the corpus after #716 changes `CONTEXT.md`, ADR 0003 and ADR 0006, and
+the merged corpus together with the #555 changes. Recall and hits are unchanged; noise rises to
+0.61 because ADR 0008 replaces the expected ADR 0001 in the top-5 window of query 426, and the
+order inside the window of several other queries differs. `fixtures/initial-corpus.json` also
+keeps the original ADR 0006 bytes, so `baseline_fts5_initial.json` stays unchanged.
+#635 adds the container executor term to `CONTEXT.md` and re-evaluates the corpus explicitly.
+Only that source hash changes: the aggregate metrics and every query's ranked paths are identical
+to the revision above.
+#786 changes `CONTEXT.md` and ADR 0003 and #788 re-evaluates the corpus explicitly. Recall and hits
+are unchanged; the mean noise ratio rises from 0.60 to 0.61 because ADR 0008 replaces ADR 0001 in
+the top-5 window of query 426 (noise 0.6 to 0.8), and the ranked paths of queries 165, 422 and 423
+differ without changing their noise. `fixtures/initial-corpus.json` already keeps the original bytes of both
+documents, so `baseline_fts5_initial.json` stays unchanged.
+#789 imports #635 into Harness Next and re-evaluates the merged `CONTEXT.md` explicitly: only its
+source hash changes, and the report is identical to the #788 revision.
+Version 5 imports `integration/console-redesign` into Harness Next and re-evaluates the merged
+`CONTEXT.md`, ADR 0003 and ADR 0006 explicitly. Recall (0.95) and noise (0.61) are unchanged, and the
+gate passes; `baseline_fts5_initial.json` stays unchanged.
+#863 adds the Web Console and Console Server terms to `CONTEXT.md` and re-evaluates the corpus
+explicitly. Recall (0.95), noise (0.61) and the gate are unchanged; only the `CONTEXT.md` hash and the
+order of the retrieved paths of query 339 differ. `baseline_fts5_initial.json` stays unchanged.
+Issue #978 moves the public docs under `site/docs` and renames the repository; only the `CONTEXT.md`
+source hash changes, and the report is identical to the revision above.
+`baseline_fts5_initial.json` stays unchanged.
+Version 7 re-evaluates the corpus after #685 adds the configuration normalization, runtime store and
+confirmed boundary terms to `CONTEXT.md`. Recall (0.95) and noise (0.61) are unchanged and the gate
+passes; only `CONTEXT.md` and ADR 0003 swap places inside the top-5 window of query 339.
+Version 8 merges the Web Console and runtime reliability corpora for PR #892, including the
+external developer test-author route (#971) and canonical configuration/recovery terms (#685).
+The explicit re-evaluation keeps recall at 0.95 and measures noise at 0.61; the gate passes.
+The dataset, labels, engine, windows and thresholds are unchanged, as is the initial baseline.
+Version 9 (#1061) re-evaluates the corpus after `a7d6c65` and `cf188dd` change `CONTEXT.md` on
+`integration/web-console`. Only the `CONTEXT.md` source hash changes: recall@1/@3/@5 stay at 0.95,
+noise stays at 0.61, all 20 query results are identical to version 8 and the gate passes.
+`baseline_fts5_initial.json` stays unchanged. From #1061 on, the light CI job runs this test for
+any pull request that changes, removes or renames `CONTEXT.md` or `docs/adr/*.md`, so a stale
+hash fails there.
+Version 10 (#1142) re-evaluates the corpus after the ADR audit edits ADR 0003, 0004, 0005, 0009
+and 0010. Recall@1/@3/@5 stay at 0.95, noise stays at 0.61 and the gate passes; per-query recall
+and noise are unchanged, and only the ranked top-5 paths of queries 345, 394, 422, 423 and 459 change.
+`fixtures/initial-corpus.json` now also keeps the original bytes of ADR 0004, 0009 and 0010, so
+`baseline_fts5_initial.json` stays unchanged.
+Version 11 (#1150) re-evaluates the changed `CONTEXT.md` and ADR 0005: all query results,
+recall (0.95), noise (0.61), and the passing gate remain unchanged.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 

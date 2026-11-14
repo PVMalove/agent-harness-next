@@ -3,38 +3,50 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import re
 from pathlib import Path
 
 from harness.storage import storage_path
 from harness.gate_runner.gate_runner import (
+    QA_STAGE_GATE,
+    QA_STAGE_PREPARATION,
     CleanRoomPolicy,
+    EvidenceContext,
     GateResult,
     GateRunnerError,
     parse_command_log,
     run_gate,
+    run_qa_stages,
     sanitise,
 )
 from harness.orchestration.core import utils
 from harness.orchestration.core.config import (
     _attention_policy,
     _config,
+    _qa_preparation_commands,
     _verification_commands,
 )
-from harness.orchestration.core.config import _execution_policy
-from harness.orchestration import operation_access, qa_lane
+from harness.orchestration.core.config import _execution_policy, _lease_ttl
+from harness.orchestration import operation_access, qa_lane, qa_lease, verification_plan
+from harness.orchestration.contract import ticket_diff_plan_commands
 from harness.orchestration.core.constants import (
     INTEGRATION_SHA_PATTERN,
     LOCAL_QA_CI_CONDITIONS,
     STATE_REL,
+    EvidenceVerification,
     IntegrationCheckResult,
+    LocalQaState,
+    QaEvidenceVerdict,
+    QaOwnerKind,
 )
 from harness.orchestration.core.git_utils import (
     _candidate_commit,
     _git_is_ancestor,
     _remote_branch_tip,
 )
+from harness.orchestration.core import state_view
 from harness.orchestration.core.utils import (
     CoordinatorError,
     JsonObject,
@@ -43,6 +55,7 @@ from harness.orchestration.core.utils import (
 )
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
+    _load_batch,
     _records_root,
     _write_record,
 )
@@ -50,8 +63,11 @@ from harness.orchestration.ledger.lifecycle import (
     IntegrationLocalQaRecord,
     LedgerError,
     LifecycleLedger,
+    store_is_authority,
 )
-from harness.orchestration.workflow import integration, pr_refresh
+from harness.orchestration.runtime_client import RuntimeClientError
+from harness.orchestration.workflow import integration, pr_refresh, release_gate
+from harness.repo_map.policy import policy_from_section as repo_map_policy_from_section
 
 
 def _path(root: Path, record_id: str) -> Path:
@@ -88,13 +104,74 @@ def _observe_pair(
     return {"remote_branch_sha": branch, "integration_tip": target}
 
 
+def _pair_plan(
+    repo: Path, root: Path, ledger: LifecycleLedger, record: JsonObject, pair: JsonObject
+) -> tuple[str, JsonObject | None]:
+    """The QA selection the recorded pair requires and, for ``ticket-diff``, the plan of the
+    ticket's diff built from the source batch's frozen policy, as ``qa`` dispatches build it.
+
+    Call it inside the ledger lock: the pair record is read from the bound view."""
+    selection = release_gate.pair_selection(
+        ledger, pair["candidate_sha"], pair["target_sha"]
+    )
+    if selection != release_gate.SELECTION_TICKET_DIFF:
+        return selection, None
+    identity = record["identity"]
+    batch = _load_batch(root, identity["source_batch_id"])
+    plan = verification_plan.build_plan(
+        repo,
+        batch["verification_plan_policy"],
+        base=pair["target_sha"],
+        candidate=pair["candidate_sha"],
+        role="qa",
+        repo_map_policy=repo_map_policy_from_section(
+            batch.get("repo_map_policy") or {}
+        ),
+        integration_ref=identity["integration_ref"],
+    )
+    return selection, plan
+
+
+def _evidence_context(
+    repo: Path, candidate: str, plan: JsonObject | None
+) -> EvidenceContext:
+    """The stage evidence of a local QA run describes the stages of its plan by selection.
+
+    A local QA run has no brief, so its stages pin no plan digest: the runtime judges a local-QA
+    run against no pinned plan, and the request pins the plan instead."""
+    context = qa_lane.evidence_context(
+        repo, candidate, None if plan is None else {"verification_plan": plan}
+    )
+    return dataclasses.replace(context, plan_sha256=None)
+
+
 def _result_id(request_id: str) -> str:
     return IntegrationLocalQaRecord.derive_id(
         {"request_id": request_id, "event": "result"}
     )
 
 
-def _valid_result(root: Path, result: JsonObject) -> bool:
+def _verdict_id(request_id: str) -> str:
+    return IntegrationLocalQaRecord.derive_id(
+        {"request_id": request_id, "event": "pair-verdict"}
+    )
+
+
+def _log_bytes(root: Path, artifact: Path, written: str | None) -> bytes | None:
+    """The bytes of the QA log: the text just written, the file of the file ledger, or ``None``
+    in the runtime-store epoch, where the runtime holds the log and Python never reads it back."""
+    if written is not None:
+        return written.encode("utf-8")
+    if store_is_authority(root):
+        return None
+    return artifact.read_bytes()
+
+
+def _valid_result(root: Path, result: JsonObject, written: str | None = None) -> bool:
+    """The result matches its request and its QA log; ``written`` is the log text just written.
+
+    In the runtime-store epoch without ``written`` only the structure is checked here: the runtime
+    checks the stored log chain, and its verdict is the recorded ``pair-verdict``."""
     request_id = result["request_id"]
     request = _read_object(_path(root, request_id), "local QA request")
     members = request["members"]
@@ -126,21 +203,46 @@ def _valid_result(root: Path, result: JsonObject) -> bool:
     artifact = _records_root(root) / "qa-artifacts" / f"{checksum}.log"
     if str(artifact) != result["artifact"]:
         return False
-    contents = artifact.read_bytes()
+    contents = _log_bytes(root, artifact, written)
+    if contents is None:
+        return True
     if hashlib.sha256(contents).hexdigest() != checksum:
         return False
     logs = parse_command_log(contents.decode("utf-8").splitlines())
+    stages = result.get("qa_stages")
+    if stages is not None:
+        # A run with preparation logs every stage: the preparation, then the gate commands.
+        recorded = [
+            (stage.get("executed_command", stage["command"]), stage["exit_code"])
+            for stage in stages["stages"]
+        ]
+        gated = [
+            stage["command"]
+            for stage in stages["stages"]
+            if stage["stage"] == QA_STAGE_GATE
+        ]
+        return (
+            logs == recorded
+            and gated == commands
+            and all(code == 0 for _, code in logs)
+        )
     return len(logs) == len(commands) and all(code == 0 for _, code in logs)
 
 
 def verified_evidence(root: Path, link: JsonObject) -> bool:
     """Recheck generated evidence; a manual assertion never verifies local fallback."""
-    if link.get("verification") != "verified" or not link.get("local_qa_request_id"):
+    if link.get("verification") != EvidenceVerification.VERIFIED or not link.get(
+        "local_qa_request_id"
+    ):
         return False
     return _verified_generated(root, link)
 
 
-def _verified_generated(root: Path, link: JsonObject) -> bool:
+def _verified_generated(
+    root: Path, link: JsonObject, *, require_verdict: bool = True
+) -> bool:
+    """In the runtime-store epoch ``require_verdict`` also requires the recorded runtime verdict
+    ``ok`` on the pair of the request: Python does not read the stored log back."""
     try:
         request_id = link["local_qa_request_id"]
         if (
@@ -150,8 +252,8 @@ def _verified_generated(root: Path, link: JsonObject) -> bool:
             return False
         result = _read_object(_path(root, _result_id(request_id)), "local QA result")
         return (
-            result.get("verification") == "verified"
-            and result.get("state") == "completed"
+            result.get("verification") == EvidenceVerification.VERIFIED
+            and result.get("state") == LocalQaState.COMPLETED
             and link.get("local_qa_result_sha256") == integration._sha256(result)
             and all(
                 link.get(key) == result.get(key)
@@ -163,15 +265,75 @@ def _verified_generated(root: Path, link: JsonObject) -> bool:
                 )
             )
             and _valid_result(root, result)
+            and (
+                not require_verdict
+                or not store_is_authority(root)
+                or _recorded_verdict(root, request_id).get("verdict")
+                == QaEvidenceVerdict.OK
+            )
         )
     except (OSError, CoordinatorError, KeyError, TypeError, ValueError):
         return False
 
 
+def _recorded_verdict(root: Path, request_id: str) -> JsonObject:
+    """The recorded runtime verdict on the pair of the request, or ``{}`` before it is recorded."""
+    path = _path(root, _verdict_id(request_id))
+    if not state_view.exists(path):
+        return {}
+    return _read_object(path, "local QA pair verdict")
+
+
+def _pair_verdict(
+    repo: Path, ledger: LifecycleLedger, root: Path, result: JsonObject
+) -> JsonObject:
+    """Record the runtime's verdict on the pair of a linked result once (store epoch only).
+
+    The answer carries ``pair_verdict``, or ``pair_verdict_reason`` when the runtime cannot
+    answer; a later local QA of the same request records the verdict then."""
+    if not store_is_authority(root):
+        return {}
+    request_id = result["request_id"]
+    with _ledger_lock(ledger):
+        recorded = _recorded_verdict(root, request_id)
+    if not recorded:
+        pair = {
+            "candidate_sha": result["candidate_sha"],
+            "target_sha": result["target_sha"],
+        }
+        try:
+            answer = release_gate.qa_evidence_verify(repo, pair)
+        except (RuntimeClientError, CoordinatorError) as exc:
+            return {"pair_verdict_reason": sanitise(exc.message)}
+        recorded = {
+            "local_qa_id": _verdict_id(request_id),
+            "event": "pair-verdict",
+            "request_id": request_id,
+            **pair,
+            "verdict": answer["verdict"],
+            "confirmed_by": answer.get("confirmed_by"),
+            "violation_codes": release_gate.violation_codes(answer),
+            "recorded_at": utils._now(),
+        }
+        with _ledger_lock(ledger):
+            if state_view.exists(_path(root, recorded["local_qa_id"])):
+                recorded = _recorded_verdict(root, request_id)
+            else:
+                _write_record(ledger, IntegrationLocalQaRecord.from_dict(recorded))
+    return {
+        "pair_verdict": {
+            "verdict": recorded["verdict"],
+            "confirmed_by": recorded["confirmed_by"],
+            "violations": recorded["violation_codes"],
+        }
+    }
+
+
 def _attempts(root: Path, request_id: str) -> list[JsonObject]:
     directory = _records_root(root) / IntegrationLocalQaRecord.directory
     found = [
-        _read_object(path, "local QA attempt") for path in directory.glob("*.json")
+        _read_object(path, "local QA attempt")
+        for path in state_view.glob(directory, "*.json")
     ]
     return sorted(
         (
@@ -201,6 +363,15 @@ def _start_attempt(
     return document
 
 
+# The remedy of an operational stage whose failure is not the candidate's: each names its own cause.
+STAGE_REMEDIES = {
+    "environment-preparation": "fix the QA environment named in qa_stages.diagnosis (the "
+    "preparation failed before any check ran), then repeat local QA with --retry",
+    "artifact-persistence": "restore access to the runtime store or the ledger that refused "
+    "the QA evidence, then repeat local QA with --retry",
+}
+
+
 def _unavailable(
     ledger: LifecycleLedger,
     root: Path,
@@ -210,13 +381,14 @@ def _unavailable(
     stage: str,
     gate: GateResult | None = None,
     access: JsonObject | None = None,
+    qa_stages: JsonObject | None = None,
 ) -> JsonObject:
     """Retain operational evidence separately from deterministic findings; no retry loop."""
     details: JsonObject = {
         "request_id": request_id,
         "event": "attempt-finished",
         "attempt": started["attempt"],
-        "state": "unavailable",
+        "state": LocalQaState.UNAVAILABLE,
         "stage": stage,
         "reason": sanitise(str(failure)),
         "finished_at": utils._now(),
@@ -226,7 +398,11 @@ def _unavailable(
     if access is not None:
         # The structured refusal and its remedy are operational evidence, never a finding.
         details["access"] = access
-        details["remedy"] = sanitise(getattr(failure, "remedy", ""))
+    if qa_stages is not None:
+        details["qa_stages"] = qa_stages
+    remedy = STAGE_REMEDIES.get(stage) or getattr(failure, "remedy", "")
+    if remedy:
+        details["remedy"] = sanitise(remedy)
     details["local_qa_id"] = IntegrationLocalQaRecord.derive_id(
         {
             "request_id": request_id,
@@ -259,7 +435,7 @@ def _link_result(ledger: LifecycleLedger, root: Path, result: JsonObject) -> Jso
             "candidate_sha": result["candidate_sha"],
             "target_sha": result["target_sha"],
             "result": IntegrationCheckResult.PASSED
-            if result["state"] == "completed"
+            if result["state"] == LocalQaState.COMPLETED
             else IntegrationCheckResult.FAILED,
             "reference": str(_path(root, result["local_qa_id"])),
             "artifact_sha256": result["artifact_sha256"],
@@ -270,8 +446,9 @@ def _link_result(ledger: LifecycleLedger, root: Path, result: JsonObject) -> Jso
             "local_qa_result_sha256": integration._sha256(result),
         },
     )
-    if result["verification"] == "verified" and not _verified_generated(
-        root, linked["evidence"]
+    verified = result["verification"] == EvidenceVerification.VERIFIED
+    if verified and not _verified_generated(
+        root, linked["evidence"], require_verdict=False
     ):
         raise CoordinatorError(
             "existing link does not verify the generated result",
@@ -298,16 +475,22 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             "local QA requires a non-empty bounded CI reason",
             remedy="pass --reason with at most 1600 characters",
         )
-    commands = _verification_commands(_config(repo))
-    if not commands:
-        raise CoordinatorError(
-            "local QA requires full project verification_commands",
-            remedy="configure the full QA gate before requesting local QA",
-        )
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         record = integration._load_record(root, args.record)
         pair = pr_refresh.current_pair(root, record)
+        selection, plan = _pair_plan(repo, root, ledger, record, pair)
+        commands = (
+            ticket_diff_plan_commands(plan)
+            if plan is not None
+            else _verification_commands(_config(repo))
+        )
+        if not commands:
+            raise CoordinatorError(
+                "local QA requires the verification commands of its pair",
+                remedy="configure the full QA gate, or a verification plan that selects a "
+                "command, before requesting local QA",
+            )
         members: JsonObject = {
             "integration_record_id": args.record,
             **pair,
@@ -315,6 +498,10 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             "reason": reason,
             "verification_commands": commands,
             "commands_sha256": integration._sha256({"commands": commands}),
+            "selection": selection,
+            "verification_plan_sha256": None
+            if plan is None
+            else verification_plan.plan_sha256(plan),
         }
         request_id = IntegrationLocalQaRecord.derive_id(members)
         if getattr(args, "request", None) not in (None, request_id):
@@ -323,9 +510,12 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
                 remedy="use the original pair, CI assertion and command configuration, or create a new request",
             )
         path = _path(root, request_id)
-        if path.exists():
+        if state_view.exists(path):
             request = _read_object(path, "local QA request")
-            if request.get("members") != members:
+            pinned = request.get("verification_plan")
+            if request.get("members") != members or (
+                None if pinned is None else verification_plan.plan_sha256(pinned)
+            ) != members["verification_plan_sha256"]:
                 raise CoordinatorError(
                     "local QA request failed integrity check",
                     remedy="restore the immutable request from trusted evidence",
@@ -335,46 +525,65 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             try:
                 observed = _observe_pair(repo, root, record, pair)
             except CoordinatorError as exc:
-                observed = {"state": "unavailable", "reason": sanitise(exc.message)}
+                observed = {
+                    "state": LocalQaState.UNAVAILABLE,
+                    "reason": sanitise(exc.message),
+                }
             request = {
                 "local_qa_id": request_id,
                 "event": "request",
                 "members": members,
+                # The plan is pinned here: a repeat runs exactly this plan.
+                "verification_plan": plan,
                 "created_at": utils._now(),
                 "observed": observed,
             }
             _write_record(ledger, IntegrationLocalQaRecord.from_dict(request))
     result_id = _result_id(request_id)
+    # In the store epoch an expired lease whose owner is provably dead is reaped before the
+    # admission below; a live owner keeps it.
+    from harness.orchestration.workflow import qa_integration
+
+    qa_lane.reap_dead_owner(ledger, root, qa_integration._ops())
     with _ledger_lock(ledger):
         result_path = _path(root, result_id)
-        if result_path.exists():
-            existing = _read_object(result_path, "local QA result")
+        existing = (
+            _read_object(result_path, "local QA result")
+            if state_view.exists(result_path)
+            else None
+        )
+        if existing is not None:
             try:
                 _observe_pair(repo, root, record, pair)
-                if existing.get("verification") == "verified" and not _valid_result(
-                    root, existing
-                ):
+                verified = existing.get("verification") == EvidenceVerification.VERIFIED
+                if verified and not _valid_result(root, existing):
                     return {
                         **existing,
-                        "verification": "unverified",
+                        "verification": EvidenceVerification.UNVERIFIED,
                         "verification_reason": "generated evidence failed integrity check",
                     }
             except (CoordinatorError, OSError) as exc:
                 return {
                     **existing,
-                    "verification": "unverified",
+                    "verification": EvidenceVerification.UNVERIFIED,
                     "verification_reason": sanitise(str(exc)),
                 }
             try:
-                return _link_result(ledger, root, existing)
+                linked = _link_result(ledger, root, existing)
             except (CoordinatorError, OSError) as exc:
                 return {
                     **existing,
-                    "state": "unavailable",
-                    "verification": "unverified",
+                    "state": LocalQaState.UNAVAILABLE,
+                    "verification": EvidenceVerification.UNVERIFIED,
                     "reason": sanitise(str(exc)),
                 }
-        running = qa_lane.running_owner(ledger, request_id, owner_kind="local-qa")
+    if existing is not None:
+        # The runtime judges the pair after the unit above committed the link it reads.
+        return {**linked, **_pair_verdict(repo, ledger, root, linked)}
+    with _ledger_lock(ledger):
+        running = qa_lane.running_owner(
+            ledger, request_id, owner_kind=QaOwnerKind.LOCAL_QA
+        )
         if running is not None:
             return {"request_id": request_id, **members, **running}
         previous = _attempts(root, request_id)
@@ -382,7 +591,7 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
         if len(previous) > limit:
             return {
                 "request_id": request_id,
-                "state": "exhausted",
+                "state": LocalQaState.EXHAUSTED,
                 "attempts": len(previous),
                 "findings": [],
                 "reason": "infrastructure retry limit reached",
@@ -390,7 +599,7 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
         if previous and not getattr(args, "retry", False):
             return {
                 "request_id": request_id,
-                "state": "unavailable",
+                "state": LocalQaState.UNAVAILABLE,
                 "attempts": len(previous),
                 "findings": [],
                 "reason": "explicit --retry is required after an operational attempt",
@@ -399,7 +608,7 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             observed = _observe_pair(repo, root, record, pair)
         except CoordinatorError as exc:
             started = _start_attempt(ledger, request_id, len(previous) + 1)
-            qa_lane.withdraw(ledger, request_id, owner_kind="local-qa")
+            qa_lane.withdraw(ledger, request_id, owner_kind=QaOwnerKind.LOCAL_QA)
             return _unavailable(
                 ledger, root, request_id, started, exc, "pair-observation"
             )
@@ -412,15 +621,21 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             )
         except operation_access.OperationAccessError as exc:
             started = _start_attempt(ledger, request_id, len(previous) + 1)
-            qa_lane.withdraw(ledger, request_id, owner_kind="local-qa")
+            qa_lane.withdraw(ledger, request_id, owner_kind=QaOwnerKind.LOCAL_QA)
             return _unavailable(
                 ledger, root, request_id, started, exc, "access", access=exc.evidence
             )
         seconds = getattr(args, "lease_seconds", None)
         if seconds is None:
-            seconds = _execution_policy(_config(repo))["qa_lease_seconds"]
+            # The runtime lease is renewed by a heartbeat and lives lease_ttl_seconds; the file
+            # lane keeps its long lease.
+            seconds = (
+                _lease_ttl(_config(repo))
+                if qa_lease.active(ledger)
+                else _execution_policy(_config(repo))["qa_lease_seconds"]
+            )
         admission = qa_lane.acquire(
-            ledger, request_id, owner_kind="local-qa", lease_seconds=seconds
+            ledger, request_id, owner_kind=QaOwnerKind.LOCAL_QA, lease_seconds=seconds
         )
         if admission["state"] == "queued":
             return {"request_id": request_id, **members, **admission}
@@ -431,31 +646,85 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
             qa_lane.release(ledger, claimed)
             raise
     gate: GateResult | None = None
+    stages: JsonObject | None = None
     stage = "gate-run"
     try:
-        gate = run_gate(
-            [command for command in commands],
-            CleanRoomPolicy(repo, pair["candidate_sha"]),
-            stop_on_failure=True,
+        config = _config(repo)
+        preparation = _qa_preparation_commands(config)
+        policy = CleanRoomPolicy(repo, pair["candidate_sha"])
+        context = _evidence_context(
+            repo, pair["candidate_sha"], request.get("verification_plan")
         )
+        with qa_lease.heartbeat(ledger, claimed, seconds):
+            if preparation:
+                # As in ``qa run``: the preparation runs in the same checkout before the gate.
+                staged = run_qa_stages(
+                    preparation,
+                    commands,
+                    policy,
+                    environment_probes=_qa_preparation_commands(
+                        config, "qa_environment_probes"
+                    ),
+                    project_file_checks=_qa_preparation_commands(
+                        config, "qa_project_file_checks"
+                    ),
+                    evidence=context,
+                )
+                stages = staged.record()
+                gate = GateResult(
+                    staged.gate_checks,
+                    staged.artifact,
+                    staged.duration_seconds,
+                    staged.evidence,
+                )
+                if staged.failed_stage == QA_STAGE_PREPARATION:
+                    stage = "environment-preparation"
+                    with _ledger_lock(ledger):
+                        return _unavailable(
+                            ledger,
+                            root,
+                            request_id,
+                            started,
+                            CoordinatorError(
+                                "the QA environment preparation failed before any check ran",
+                                remedy=STAGE_REMEDIES[stage],
+                            ),
+                            stage,
+                            gate,
+                            qa_stages=stages,
+                        )
+            else:
+                gate = run_gate(
+                    [command for command in commands],
+                    policy,
+                    stop_on_failure=True,
+                    evidence=context,
+                )
         stage = "artifact-persistence"
-        checksum = hashlib.sha256(gate.artifact.encode("utf-8")).hexdigest()
-        artifact = _records_root(root) / "qa-artifacts" / f"{checksum}.log"
-        ledger.write_artifact(artifact, gate.artifact)
+        log = gate.artifact
+        # As in ``qa run``: in the store epoch the log and its stage evidence are written in a
+        # store unit of the command, never under a path inside the store file.
+        with _ledger_lock(ledger):
+            if gate.evidence is not None:
+                log += qa_lane.persist_stage_evidence(ledger, gate.evidence)
+            checksum = hashlib.sha256(log.encode("utf-8")).hexdigest()
+            artifact = _records_root(root) / "qa-artifacts" / f"{checksum}.log"
+            ledger.write_artifact(artifact, log)
         result: JsonObject = {
             "local_qa_id": result_id,
             "event": "result",
             "request_id": request_id,
             **members,
-            "state": "completed" if gate.passed else "failed",
+            "state": LocalQaState.COMPLETED if gate.passed else LocalQaState.FAILED,
             "checks_run": gate.checks,
             "duration_seconds": gate.duration_seconds,
             "artifact": str(artifact),
             "artifact_sha256": checksum,
             "finished_at": utils._now(),
-            "verification": "unverified",
+            "verification": EvidenceVerification.UNVERIFIED,
             "observed_before_run": observed,
             "attempt": started["attempt"],
+            **({} if stages is None else {"qa_stages": stages}),
             "findings": [
                 {
                     "severity": "blocker",
@@ -470,17 +739,20 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
         with _ledger_lock(ledger):
             try:
                 result["observed_at_finish"] = _observe_pair(repo, root, record, pair)
-                if gate.passed and _valid_result(root, result):
-                    result["verification"] = "verified"
+                if gate.passed and _valid_result(root, result, written=log):
+                    result["verification"] = EvidenceVerification.VERIFIED
             except CoordinatorError as exc:
                 result["verification_reason"] = sanitise(exc.message)
             _write_record(ledger, IntegrationLocalQaRecord.from_dict(result))
-            return _link_result(ledger, root, result)
+            linked = _link_result(ledger, root, result)
+        return {**linked, **_pair_verdict(repo, ledger, root, linked)}
     except (GateRunnerError, CoordinatorError, LedgerError, OSError) as exc:
         if isinstance(exc, GateRunnerError) and exc.partial_result is not None:
             gate = exc.partial_result
         with _ledger_lock(ledger):
-            return _unavailable(ledger, root, request_id, started, exc, stage, gate)
+            return _unavailable(
+                ledger, root, request_id, started, exc, stage, gate, qa_stages=stages
+            )
     finally:
         with _ledger_lock(ledger):
             qa_lane.release(ledger, claimed)

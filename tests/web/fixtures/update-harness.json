@@ -1,0 +1,48 @@
+{
+  "drift": {
+    "added": [
+      ".agents/skills/research/SKILL.md"
+    ],
+    "conflict": [
+      "AGENTS.md"
+    ],
+    "local_changed": [
+      ".harness/instructions/technical-english.md"
+    ],
+    "missing": [],
+    "package_changed": [
+      ".agents/skills/tdd/SKILL.md",
+      ".harness/orchestration/roles/developer.md"
+    ],
+    "retired": [],
+    "seed_differing": [
+      ".harness/project.json",
+      "docs/agents/git-workflow.md"
+    ],
+    "seed_link_proposals": [],
+    "state": "drift",
+    "unchanged": 240
+  },
+  "package_version": "2.0.0",
+  "state": {
+    "capabilities": [
+      "engineering-suite"
+    ],
+    "installed": true,
+    "installed_version": "1.5.1",
+    "managed_files": 259,
+    "orchestration": true,
+    "skills": 32,
+    "updated_at": "2026-11-05 10:00 UTC"
+  },
+  "store": {
+    "audit_records": 128,
+    "authority": "file-ledger",
+    "cutover_at": null,
+    "generation": "generation-0007",
+    "reason": "",
+    "schema": 3,
+    "start_command": ""
+  },
+  "store_target_schema": 4
+}

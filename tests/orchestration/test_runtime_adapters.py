@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -12,7 +14,20 @@ import tomllib
 
 import pytest
 
+from tests.orchestration import test_claude_adapter as claude_adapter
+from tests.orchestration import test_recovery as recovery_tests
+
 ROOT = Path(__file__).resolve().parents[2]
+# The installed-example worker of a recovery repository and a reachable model endpoint: the
+# fixtures of the claude_code adapter tests.
+external_worker = claude_adapter.external_worker
+claude_endpoint = claude_adapter.reachable_endpoint
+
+CODEX_ADAPTER = ROOT / "harness/adapters/codex_worker.py"
+CODEX_SPEC = importlib.util.spec_from_file_location("codex_worker", CODEX_ADAPTER)
+assert CODEX_SPEC and CODEX_SPEC.loader
+codex_worker = importlib.util.module_from_spec(CODEX_SPEC)
+CODEX_SPEC.loader.exec_module(codex_worker)
 
 
 @pytest.fixture
@@ -195,6 +210,121 @@ def test_claude_starts_detached_with_stdin_prompt_in_worker_checkout(
     finally:
         if evidence.exists():
             os.kill(json.loads(evidence.read_text())["pid"], 15)
+
+
+SUPERVISED: dict[str, object] = {"execution": {"kind": "process"}}
+
+
+def run_in_own_group(
+    dispatch: tuple[Path, Path, dict[str, object]],
+    *args: str,
+    runtime: str = "claude",
+    changes: dict[str, object] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], int]:
+    """Run the adapter as a group leader, as the runtime does; return its result and pid."""
+    repo, worker, brief = dispatch
+    payload = dict(brief)
+    payload.update(changes or {})
+    path = repo / "brief.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            str(ROOT / f"harness/adapters/{runtime}_worker.py"),
+            "dispatch",
+            "--repo",
+            str(repo),
+            "--brief",
+            str(path),
+            *args,
+        ],
+        cwd=worker,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    stdout, stderr = process.communicate(timeout=30)
+    return (
+        subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr),
+        process.pid,
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_claude_supervised_runs_the_worker_in_the_foreground_and_returns_its_code(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    evidence = repo / "started.json"
+    body = (
+        "import json, os, sys\nfrom pathlib import Path\n"
+        f"Path({str(evidence)!r}).write_text(json.dumps(dict(pgid=os.getpgid(0), "
+        "cwd=os.getcwd(), stdin=sys.stdin.read(), args=sys.argv[1:])))\n"
+        'print(\'{"type":"system"}\', flush=True)\n'
+        "sys.exit(7)\n"
+    )
+    binary = fake_runtime(repo, body)
+    result, adapter_pid = run_in_own_group(
+        dispatch, "--claude-bin", str(binary), changes=SUPERVISED
+    )
+    assert result.returncode == 7, result.stderr
+    assert '{"type":"system"}' in result.stdout
+    data = json.loads(evidence.read_text())
+    assert data["pgid"] == adapter_pid
+    assert data["cwd"] == str(worker)
+    assert data["stdin"] == ""
+    args = data["args"]
+    assert args[0] == "-p"
+    assert "dispatch self-report" in args[1]
+    assert args[args.index("--output-format") + 1] == "stream-json"
+    assert "--verbose" in args
+    assert not (repo / ".harness/.sandboxes/scratch/worker-logs").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX signals")
+def test_claude_supervised_reports_a_signalled_worker_as_128_plus_signal(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    binary = fake_runtime(
+        dispatch[0], "import os, signal\nos.kill(os.getpid(), signal.SIGTERM)\n"
+    )
+    result, _ = run_in_own_group(
+        dispatch, "--claude-bin", str(binary), changes=SUPERVISED
+    )
+    assert result.returncode == 128 + signal.SIGTERM
+
+
+def test_claude_supervised_refuses_a_prompt_over_the_argument_bound(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    extra = dispatch[0] / "retry.txt"
+    extra.write_text("x" * 130000, encoding="utf-8")
+    result = invoke(
+        dispatch,
+        "--claude-bin",
+        "/fake/claude",
+        "--extra-prompt-file",
+        str(extra),
+        changes=SUPERVISED,
+    )
+    assert result.returncode == 1
+    assert "shorten --extra-prompt-file" in result.stderr
+
+
+def test_claude_supervised_dry_run_puts_the_prompt_right_after_print_flag(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    result = invoke(
+        dispatch, "--dry-run", "--claude-bin", "/fake/claude", changes=SUPERVISED
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    command = data["command"]
+    assert command[0:3] == ["/fake/claude", "-p", data["prompt"]]
+    assert command[command.index("--output-format") + 1] == "stream-json"
+    assert "--verbose" in command
 
 
 def test_claude_dispatch_help_lists_entrypoint_arguments(
@@ -428,14 +558,27 @@ def test_codex_writer_can_commit_without_editing_git_config_or_hooks(
             assert mode(path) == "read", path
 
 
+TURN_COMPLETES_LATER = """\
+        time.sleep(30)
+        print(json.dumps({'method': 'turn/completed', 'params': {'turn': {'status': 'completed'}}}), flush=True)
+"""
+
+
 def fake_app_server(
-    repo: Path, worker: Path, *, changes: dict[str, object] | None = None
+    repo: Path,
+    worker: Path,
+    *,
+    changes: dict[str, object] | None = None,
+    after_turn: str = TURN_COMPLETES_LATER,
 ) -> Path:
+    """A fake `codex app-server`; `after_turn` runs once the turn/start answer is sent."""
     return fake_runtime(
         repo,
-        f"""import json, os, sys, time
+        f"""import json, os, signal, sys, time
 from pathlib import Path
 evidence = Path({str(repo / 'native-session.json')!r})
+def note(method, params):
+    print(json.dumps({{'method': method, 'params': params}}), flush=True)
 if sys.argv[1] != 'app-server':
     print('legacy exec cannot expose native thread identity', flush=True)
     sys.exit(9)
@@ -451,6 +594,7 @@ for line in sys.stdin:
         result.update({changes or {}!r})
     elif method == 'turn/start':
         evidence.write_text(json.dumps({{'pid': os.getpid(), 'session': os.getsid(0),
+            'pgid': os.getpgid(0), 'parent': os.getppid(),
             'cwd': os.getcwd(), 'thread': request['params']['threadId'],
             'prompt': request['params']['input'][0]['text']}}))
         result = {{'turn': {{'id': 'turn-worker', 'status': 'inProgress'}}}}
@@ -458,9 +602,7 @@ for line in sys.stdin:
         continue
     print(json.dumps({{'id': request['id'], 'result': result}}), flush=True)
     if method == 'turn/start':
-        time.sleep(30)
-        print(json.dumps({{'method': 'turn/completed', 'params': {{'turn': {{'status': 'completed'}}}}}}), flush=True)
-""",
+{after_turn}""",
     )
 
 
@@ -555,6 +697,8 @@ def test_codex_reports_early_exit_with_log_tail(
 def test_codex_starts_detached_in_worker_with_stdin(
     dispatch: tuple[Path, Path, dict[str, object]],
 ) -> None:
+    if sys.platform == "win32":
+        pytest.skip("os.getsid is POSIX-only")
     repo, worker, _ = dispatch
     evidence = repo / "native-session.json"
     binary = fake_app_server(repo, worker)
@@ -571,6 +715,125 @@ def test_codex_starts_detached_in_worker_with_stdin(
             os.kill(json.loads(evidence.read_text())["pid"], 15)
 
 
+def harness_events(stdout: str) -> list[tuple[object, object]]:
+    """Every stdout line must be a harness-event; return (kind, text) pairs."""
+    records = [json.loads(line) for line in stdout.splitlines() if line.strip()]
+    assert all(record["type"] == "harness-event" for record in records), records
+    return [(record["kind"], record["text"]) for record in records]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_codex_supervised_serves_the_turn_in_the_adapter_group_and_streams_events(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn="""\
+        note('item/started', {'item': {'id': 'cmd-1', 'type': 'commandExecution',
+                                       'command': 'cat secret.txt'}})
+        note('item/started', {'item': {'id': 'reason-1', 'type': 'reasoning'}})
+        note('item/reasoning/textDelta', {'itemId': 'reason-1', 'delta': 'private thought'})
+        note('item/agentMessage/delta', {'itemId': 'msg-1', 'delta': 'Hello, '})
+        note('item/agentMessage/delta', {'itemId': 'msg-1', 'delta': 'world'})
+        note('item/completed', {'item': {'id': 'msg-1', 'type': 'agentMessage'}})
+        note('item/agentMessage/delta', {'itemId': 'msg-2', 'delta': 'Unfinished tail'})
+        note('turn/completed', {'turn': {'status': 'completed'}})
+""",
+    )
+
+    result, adapter_pid = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads((repo / "native-session.json").read_text())
+    # The app-server is the adapter's own child in the adapter's group: no detached re-exec.
+    assert data["parent"] == adapter_pid
+    assert data["pgid"] == adapter_pid
+    assert data["cwd"] == str(worker)
+    assert "dispatch self-report" in data["prompt"]
+    assert harness_events(result.stdout) == [
+        ("system", "Runtime session connected"),
+        ("tool", "commandExecution"),
+        ("output", "Hello, world"),
+        ("output", "Unfinished tail"),
+        ("result", "Turn completed"),
+    ]
+    assert "cat secret.txt" not in result.stdout
+    assert "private thought" not in result.stdout
+    assert not (repo / ".harness/.sandboxes/scratch/worker-logs").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and signals")
+@pytest.mark.parametrize(
+    "after_turn,code",
+    [
+        ("        sys.exit(7)\n", 7),
+        ("        os.kill(os.getpid(), signal.SIGTERM)\n", 128 + signal.SIGTERM),
+        ("        sys.exit(0)\n", 1),
+    ],
+    ids=["exit-7", "sigterm", "exit-0-before-completion"],
+)
+def test_codex_supervised_returns_the_app_server_exit_status(
+    dispatch: tuple[Path, Path, dict[str, object]], after_turn: str, code: int
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(repo, worker, after_turn=after_turn)
+
+    result, _ = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == code, result.stderr
+    assert harness_events(result.stdout) == [("system", "Runtime session connected")]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_codex_supervised_reports_a_turn_that_did_not_complete_as_an_error(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn="""\
+        note('turn/completed', {'turn': {'status': 'failed'}})
+        time.sleep(30)
+""",
+    )
+
+    result, _ = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 1
+    assert harness_events(result.stdout)[-1] == ("error", "Turn failed")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_codex_supervised_streams_a_worker_error_and_fails(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn="""\
+        note('error', {'error': {'message': 'model overloaded'}, 'willRetry': False})
+        time.sleep(30)
+""",
+    )
+
+    result, _ = run_in_own_group(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 1
+    assert harness_events(result.stdout)[-1] == ("error", "model overloaded")
+
+
 def test_codex_dispatch_help_exposes_adapter_arguments(
     dispatch: tuple[Path, Path, dict[str, object]],
 ) -> None:
@@ -584,3 +847,131 @@ def test_codex_dispatch_help_exposes_adapter_arguments(
         "--network-access",
     ):
         assert flag in result.stdout
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_claude_code_runs_the_worker_in_the_foreground_under_the_runtime_supervisor(
+    external_worker: recovery_tests.RecoveryTests, claude_endpoint: str
+) -> None:
+    batch = external_worker._create_batch()
+    result = external_worker._dispatch(batch["batch_id"], "architect")
+    runtime = external_worker.tmp / "fake-claude"
+    runtime.write_text(
+        "#!/usr/bin/env python3\nimport json,sys\n"
+        "if '--help' in sys.argv:\n print('--verbose --output-format --model --effort --permission-mode --session-id --tools manual --input-format --permission-prompts');sys.exit(0)\n"
+        "init=json.loads(sys.stdin.readline())\n"
+        "print(json.dumps({'type':'control_response','response':{'subtype':'success','request_id':init['request_id'],'response':{}}}),flush=True)\n"
+        "sys.stdin.readline()\nsys.exit(3)\n"
+    )
+    runtime.chmod(0o755)
+    brief = (
+        external_worker._records() / "dispatches" / (result["dispatch_id"] + ".json")
+    )
+
+    process = subprocess.run(
+        [
+            sys.executable,
+            str(claude_adapter.ADAPTER),
+            "dispatch",
+            "--repo",
+            str(external_worker.repo),
+            "--brief",
+            str(brief),
+            "--runtime-executable",
+            str(runtime),
+            "--visibility=background",
+            "--endpoint",
+            claude_endpoint,
+        ],
+        env={**os.environ, "HARNESS_OPERATION_ID": "operation-of-the-runtime"},
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    # The adapter returned only after its worker ended, and exits with the worker's code.
+    assert process.returncode == 3, process.stderr or process.stdout
+    receipt = json.loads(process.stdout)
+    assert receipt["worker_exit_code"] == 3
+    terminal = json.loads(Path(receipt["terminal_path"]).read_text())
+    assert terminal["exit_code"] == 3
+    assert not (Path(receipt["terminal_path"]).parent / "supervisor.log").exists()
+
+
+class _SubprocessWith:
+    """The subprocess module with some attributes replaced."""
+
+    def __init__(self, **replaced: object) -> None:
+        self.replaced = replaced
+
+    def __getattr__(self, name: str) -> object:
+        return self.replaced[name] if name in self.replaced else getattr(subprocess, name)
+
+
+class StuckProcess:
+    """A worker process that never becomes ready and records how it was stopped."""
+
+    pid = 424242
+
+    def __init__(self) -> None:
+        self.stopped_by: list[str] = []
+        self.stdin = self
+
+    def write(self, data: bytes) -> int:
+        return len(data)
+
+    def close(self) -> None:
+        pass
+
+    def poll(self) -> None:
+        return None
+
+    def wait(self, timeout: float | None = None) -> int:
+        return 0
+
+    def terminate(self) -> None:
+        self.stopped_by.append("terminate")
+
+
+@pytest.mark.parametrize(
+    "platform,stopped_by",
+    [("win32", ["terminate"]), ("linux", ["killpg"])],
+)
+def test_codex_stops_a_stuck_worker_by_group_only_where_posix_groups_exist(
+    dispatch: tuple[Path, Path, dict[str, object]],
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    stopped_by: list[str],
+) -> None:
+    repo, worker, brief = dispatch
+    path = repo / "brief.json"
+    path.write_text(json.dumps(brief), encoding="utf-8")
+    process = StuckProcess()
+
+    def killpg(pid: int, number: int) -> None:
+        process.stopped_by.append("killpg")
+        assert (pid, number) == (process.pid, signal.SIGTERM)
+
+    monkeypatch.chdir(worker)
+    monkeypatch.setattr(sys, "platform", platform)
+    # Windows has no os.killpg: the stand-in must not exist there, and is never a real group.
+    monkeypatch.setattr(os, "killpg", killpg, raising=False)
+    # Only the adapter's own Popen is replaced; its `git` calls still run for real.
+    monkeypatch.setattr(
+        codex_worker,
+        "subprocess",
+        _SubprocessWith(Popen=lambda *a, **k: process),
+    )
+    # A negative window ends the readiness wait at once.
+    monkeypatch.setattr(codex_worker, "STARTUP_CHECK_SECONDS", -2)
+    args = codex_worker.argparse.Namespace(
+        repo=str(repo),
+        brief=str(path),
+        codex_bin="codex",
+        network_access="disabled",
+        extra_prompt_file=None,
+        dry_run=False,
+    )
+
+    assert codex_worker.start(args) == 1
+    assert process.stopped_by == stopped_by

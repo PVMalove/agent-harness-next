@@ -1,6 +1,6 @@
 """Изолированный runner одного теста: сценарий clean-room из `scripts/test_clean_room.py`.
 
-Свежий проект pvmalove-suite без сборки и без БД получает `test_paths` и `test_runner` флагами
+Свежий проект engineering-suite без сборки и без БД получает `test_paths` и `test_runner` флагами
 `init`, проходит `harness health`, а `.claude/hooks/run-test.sh` вызывается напрямую из шелла, без
 Claude Code и без guard: так проверяются ограничения уровня процесса. Если probe подтверждает
 песочницу, атаки теста на production, `.git` и конфигурацию runner проваливаются, а хэши защищённых
@@ -30,10 +30,12 @@ from scripts.clean_room.claude_probe import (
     UNTRUSTED_STATES,
     claude_environment,
     project_environment,
+    probe_mode,
     verify_scoped_hook,
 )
 from scripts.clean_room.support import (
     BASH,
+    ROOT,
     HARNESS,
     fill_agents,
     run_health,
@@ -41,6 +43,8 @@ from scripts.clean_room.support import (
     run_step,
 )
 from scripts.clean_room.test_author_cycle import Execute, verify_cycle
+from harness.storage import storage_path, storage_root
+from harness.health.test_author import AuthorUnavailable, adapter_for, read_author
 
 TEST_MODULE = "tests.test_runner_cases"
 BENIGN = f"{TEST_MODULE}.Benign.test_add"
@@ -223,17 +227,18 @@ def _direct_execute(project: Path) -> Execute:
     return execute
 
 
-def _install(project: Path) -> Path:
-    """A fresh pvmalove-suite project with src/, unittest tests and the runner settings."""
-    project.mkdir(parents=True)
-    run_step(["git", "init", "-q"], cwd=project, check=True)
+def _install(project: Path, *, existing_checkout: bool = False) -> Path:
+    """A fresh engineering-suite project with src/, unittest tests and the runner settings."""
+    if not existing_checkout:
+        project.mkdir(parents=True)
+        run_step(["git", "init", "-q"], cwd=project, check=True)
     run_ok(
         HARNESS
         + [
             "init",
             str(project),
             "--capability",
-            "pvmalove-suite",
+            "engineering-suite",
             "--base-branch",
             "main",
             "--language",
@@ -255,7 +260,29 @@ def _install(project: Path) -> Path:
         (project / ".harness" / "project.json").read_text(encoding="utf-8")
     )
     if config.get("test_runner") != {"command": RUNNER_COMMAND}:
-        sys.exit("pvmalove-suite init did not write the --test-* flags to project.json")
+        sys.exit(
+            "engineering-suite init did not write the --test-* flags to project.json"
+        )
+    # Deterministic fixture input, never a production executor default. Live probes instead
+    # consume the source project's configured developer assignment without a model override.
+    profile: dict[str, object] = {
+        "runtime": "claude",
+        "model": "fixture-model",
+        "effort": "medium",
+    }
+    if probe_mode() != "off":
+        try:
+            selected = read_author(storage_root(ROOT).parent, planned=True)
+            adapter_for(selected)
+        except AuthorUnavailable as exc:
+            sys.exit(
+                f"test-author probe: configured developer unavailable ({exc.reason})"
+            )
+        profile = {key: selected[key] for key in ("runtime", "model", "effort")}
+    config["test_author"] = profile
+    (project / ".harness/project.json").write_text(
+        json.dumps(config) + "\n", encoding="utf-8"
+    )
     fill_agents(project)
     _write_project_files(project)
     run_health(project)
@@ -279,9 +306,11 @@ def _write_project_files(project: Path) -> None:
 def _check_shipped_files(project: Path) -> None:
     """Everything the installer must scaffold for the runner and the test author is present."""
     if not (project / ".claude" / "hooks" / "run-test.sh").is_file():
-        sys.exit("pvmalove-suite init did not scaffold run-test.sh")
+        sys.exit("engineering-suite init did not scaffold run-test.sh")
     if not (project / ".harness" / "health" / "isolated_runner.py").is_file():
-        sys.exit("pvmalove-suite init did not ship .harness/health/isolated_runner.py")
+        sys.exit(
+            "engineering-suite init did not ship .harness/health/isolated_runner.py"
+        )
     for relative in (
         ".claude/agents/test-author.md",
         ".claude/hooks/test-author-guard.py",
@@ -290,10 +319,10 @@ def _check_shipped_files(project: Path) -> None:
         ".harness/skills/tdd/SKILL.md",
     ):
         if not (project / relative).is_file():
-            sys.exit(f"pvmalove-suite init did not ship {relative}")
+            sys.exit(f"engineering-suite init did not ship {relative}")
     registry = project / ".harness" / "skills" / "REGISTRY.md"
     if "| `tdd` | `.harness/skills/tdd` |" not in registry.read_text(encoding="utf-8"):
-        sys.exit("pvmalove-suite init did not register first-party tdd")
+        sys.exit("engineering-suite init did not register first-party tdd")
 
 
 def _hook(
@@ -347,9 +376,7 @@ def _snapshot(project: Path) -> dict[str, str]:
 
 def _run_dir(project: Path, data: dict[str, object]) -> Path:
     """The local artifact directory of one run."""
-    return (
-        project / ".harness" / ".sandboxes" / "runs" / f"isolated-test-{data['run_id']}"
-    )
+    return storage_path(project, "runs", f"isolated-test-{data['run_id']}")
 
 
 def _verify_isolation(project: Path, test_root: Path) -> None:

@@ -1,0 +1,29 @@
+# Optional QA image of the docker executor with a Rust toolchain: name its tag in
+# access_policy.operations.qa.container.worker_image and repeat dispatch propose.
+#
+# The harness never builds, pulls or publishes this image. Build harness-sandbox:local first, then
+# build this image from the installed payload:
+#
+#   docker build -f .harness/container/Dockerfile.qa -t harness-qa:local .harness/container
+#   podman build -f .harness/container/Dockerfile.qa -t harness-qa:local .harness/container
+#
+# A ticket-diff QA plan selects the cargo stages of a change under native/ whatever the executor;
+# an image without cargo stops the QA before the gate with an explicit environment reason. The
+# container runs under an arbitrary uid, so CARGO_HOME is writable for every user, and crates come
+# through the QA proxy (index.crates.io, static.crates.io). Pin the toolchain your project uses.
+# CARGO_HOME below is only the default without a cache: to keep downloaded crates between QA runs,
+# name a cache item with "variable": "CARGO_HOME" in access_policy.operations.qa.filesystem (see
+# "Caches" in harness/project/instructions/container-executor.md).
+FROM harness-sandbox:local
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential ca-certificates curl make \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --no-modify-path --profile minimal --default-toolchain 1.99.1 \
+    && chmod -R a+rwX /usr/local/cargo \
+    && chmod -R a+rX /usr/local/rustup \
+    && cargo --version && rustc --version

@@ -15,11 +15,14 @@ from functools import partial
 from pathlib import Path
 from typing import cast
 
-from harness.errors import INTERNAL_INVARIANT_REMEDY
+from harness.errors import INTERNAL_INVARIANT_REMEDY, PolicyError
 from harness.orchestration import (
+    hook_policy,
     infrastructure_retry,
     operational_guards,
+    operational_hold,
     runtime_access,
+    verification_plan,
 )
 from harness.orchestration.contract import (
     REPO_MAP_TIER_ORDER,
@@ -29,15 +32,20 @@ from harness.orchestration.contract import (
     resolve_min_repo_map_tier,
     retry_verification_commands,
     role_verification_commands,
+    ticket_diff_plan_commands,
 )
 from harness.orchestration.core import config as core_config
 from harness.orchestration.core import utils
-from harness.orchestration.core.constants import ACCEPTED_DECISIONS
+from harness.orchestration.core.constants import (
+    ACCEPTED_DECISIONS,
+    ContextPackageFreshness,
+)
 from harness.orchestration.core.config import (
     _adaptive_continuation_policy,
     _approval_policy,
     _communication_policy,
     _configured,
+    _execution_policy,
     _is_test_path,
     _orchestration_policy,
     _reject_sensitive,
@@ -63,6 +71,7 @@ from harness.orchestration.core.workspace import (
     _agent_inbox,
     _integration_ref,
     _prepare_agent_inbox,
+    _require_writable_worktree,
 )
 from harness.orchestration.dispatch_preflight import (
     PreflightError,
@@ -71,6 +80,7 @@ from harness.orchestration.dispatch_preflight import (
     prepare as prepare_dispatch,
 )
 from harness.orchestration.ledger.ledger_ops import (
+    store_is_authority,
     _ledger_lock,
     _load_batch,
     _load_dispatch,
@@ -90,8 +100,10 @@ from harness.orchestration.workflow import carried_items, conditions
 from harness.orchestration.workflow import commit_plan as plan_rules
 from harness.orchestration.workflow import delta_review
 from harness.orchestration.workflow import resolver as resolver_route
+from harness.orchestration.workflow import rebaser
 from harness.orchestration.workflow import resolver_state
 from harness.orchestration.workflow import supersede
+from harness.orchestration.workflow import risk as risk_policy
 from harness.orchestration.workflow import approval as approvals
 from harness.orchestration.workflow.approval import (
     _approval,
@@ -131,6 +143,7 @@ from harness.orchestration.workflow.risk import (
     _matching_triggers,
     _risk_triggers,
 )
+from harness.repo_map.policy import policy_from_section as repo_map_policy_from_section
 
 
 def _dispatch_verification_commands(
@@ -159,6 +172,50 @@ def _dispatch_verification_commands(
     return cast(list[str], role_verification_commands(batch, role_name, purpose))
 
 
+def _verification_plan(
+    repo: Path,
+    batch: JsonObject,
+    role_name: str,
+    purpose: str,
+    next_action: object,
+    candidate: str | None,
+    snapshot_commit: str,
+    runtime_images: JsonObject | None = None,
+) -> JsonObject | None:
+    """План проверки brief по замороженной ``verification_plan_policy`` (ADR 0023), либо ``None``.
+
+    План строится для developer-retry (diff до кандидата, который он дорабатывает), code-review
+    и qa (diff до кандидата роли). Первый developer диффа не имеет, а batch без политики остаётся
+    без плана и без нового поля в brief. ``runtime_images`` — образы docker-dispatch, которые
+    входят в ``environment_fingerprint`` стадий.
+    """
+    policy = batch.get("verification_plan_policy")
+    if not isinstance(policy, dict) or purpose != "work":
+        return None
+    if role_name == "developer" and next_action == "developer-retry":
+        head = snapshot_commit
+    elif role_name in {"code-review", "qa"} and candidate is not None:
+        head = candidate
+    else:
+        return None
+    # The ref is read only when the frozen flag asks for it: a flag-off plan never depends on it.
+    integration_ref = (
+        _integration_ref(repo, batch) if policy.get("ticket_diff_selection") else None
+    )
+    return verification_plan.build_plan(
+        repo,
+        policy,
+        base=_effective_base(batch),
+        candidate=head,
+        role=role_name,
+        repo_map_policy=repo_map_policy_from_section(
+            cast(dict[str, object], batch.get("repo_map_policy") or {})
+        ),
+        runtime_images=runtime_images,
+        integration_ref=integration_ref,
+    )
+
+
 def _developer_commit_plan(
     batch: JsonObject, write_paths: list[str]
 ) -> list[JsonObject]:
@@ -180,6 +237,22 @@ def _developer_commit_plan(
             + INTERNAL_INVARIANT_REMEDY,
         )
     return [dict(entry) for entry in pinned]
+
+
+def _accepted_design(root: Path, batch: JsonObject) -> JsonObject | None:
+    """The accepted architect report a developer works from, pinned by its integrity hash.
+
+    The developer takes its seam from this design instead of a coordinator retelling (#1015).
+    A batch without an accepted architect report of its own carries none.
+    """
+    for item in plan_rules.decided_entries(batch, "architect", ACCEPTED_DECISIONS):
+        report = _pending_report(root, batch, item)
+        return {
+            "dispatch_id": item["dispatch_id"],
+            "report_sha256": item["report_sha256"],
+            "output": report["output"],
+        }
+    return None
 
 
 def _accepted_divergence(
@@ -227,6 +300,7 @@ def _milestones(
         "risk-reassessment-required": bool(batch.get("risk_reassessment_required")),
         "bypass-rerun": route == "bypass-rerun",
         "rebase-fix-forward": route == "rebase-fix-forward",
+        "rebase": route == "rebase",
         "rebase-target": rebase_target is not None,
     }
     return [name for name, hit in crossed.items() if hit]
@@ -251,6 +325,28 @@ def _dispatch_approval_mode(
     both the project config and the batch plan choose it and no stop is recorded (issue #643);
     otherwise every transition of an ``auto`` batch needs a human.
     """
+    recovery_sha = getattr(args, "_restart_recovery_sha256", None)
+    if recovery_sha is not None:
+        events = batch.get("recovery_events", [])
+        event = events[-1] if events else {}
+        if (
+            event.get("kind") != "resume-stop"
+            or event.get("record_sha256") != recovery_sha
+            or not batch.get("environmental_restart")
+            or event.get("dispatch_id")
+            != batch["environmental_restart"].get("dispatch_id")
+            or str(event.get("approved_by", "")).startswith("policy:")
+        ):
+            raise CoordinatorError(
+                "same-contract restart lacks its recorded human recovery",
+                remedy="use batch resume-stop --restart for this confirmed startup failure",
+            )
+        approvals._require_current_approval(event["approved_at"], config)
+        args._recorded_recovery_approval = {
+            "approved_by": event["approved_by"],
+            "approved_at": event["approved_at"],
+        }
+        return "recorded-recovery"
     if _non_empty(getattr(args, "approved_by", None)) or _non_empty(
         getattr(args, "approved_at", None)
     ):
@@ -339,6 +435,8 @@ def _bind_dispatch_approval(
     -- means it approved another transition, and nothing is created. A policy approval is derived
     from the very transition being created, so it binds to its own digest.
     """
+    if mode == "recorded-recovery":
+        return {**args._recorded_recovery_approval, "transition_digest": digest}
     if mode != "explicit":
         return {
             "approved_by": mode,
@@ -354,7 +452,7 @@ def _bind_dispatch_approval(
     if supplied.strip() != digest:
         raise CoordinatorError(
             f"approval digest does not match the proposed transition: approved {supplied.strip()}, proposed {digest}",
-            remedy="a changed scope, candidate, role, verification command, reason category or Context Package needs a new approval: run 'dispatch propose' again and approve its digest",
+            remedy="a changed scope, candidate, role, verification command, reason category, Context Package or pinned runtime image needs a new approval: run 'dispatch propose' again and approve its digest",
         )
     return {**_approval(args, digest), "transition_digest": digest}
 
@@ -387,7 +485,12 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
         if progress is not None:
             preserved_progress.require_current(repo, root, batch, progress)
         package = _latest_context_package(root, batch)
-        package_pointer: JsonObject = {}
+        # Preflight writes nothing: before `dispatch create` registers the package it names who
+        # will, instead of an empty pointer that reads like an empty package (#1015).
+        package_pointer: JsonObject = {
+            "status": "not-registered",
+            "registered_by": "dispatch create",
+        }
         if package is not None:
             package_pointer = {
                 "package_id": package["context_package_id"],
@@ -435,6 +538,10 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
         prepared = prepare_dispatch(batch["ticket"], args.role, state)
     except PreflightError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
+    # A writer commits in the issue worktree: a session that cannot write it learns so here,
+    # before the brief exists, not from the writer's failed commit (#1126).
+    if core_config._role(repo, args.role)["mode"] == "write":
+        _require_writable_worktree(batch["worktree"])
     return prepared.to_dict()
 
 
@@ -450,6 +557,34 @@ def _newest_decided_dispatch(batch: JsonObject) -> JsonObject | None:
     )
 
 
+def _architect_retry_reason(batch: JsonObject, role: str) -> JsonObject | None:
+    previous = _newest_decided_dispatch(batch)
+    if role != "architect" or not previous or previous.get("role") != "architect":
+        return None
+    decision = previous.get("decision", {})
+    if decision.get("decision") != "retry":
+        return None
+    note = decision.get("note")
+    source = "decision.note"
+    if not _non_empty(note) or note.strip().lower() == "none":
+        # Older decisions and structured tooling retries may have no operator note. Preserve
+        # their sealed routing evidence, without presenting it as a human explanation.
+        note = decision.get("routing", {}).get("rationale")
+        source = "decision.routing.rationale"
+    if not _non_empty(note) or note.strip().lower() == "none":
+        raise CoordinatorError(
+            "architect retry requires a non-empty recorded reason",
+            remedy="record an explained retry decision; never pass an empty extra prompt file",
+        )
+    return {
+        "previous_dispatch_id": previous["dispatch_id"],
+        "note": note,
+        "source": source,
+        "reason_category": decision.get("routing", {}).get("reason_category"),
+        "decision_sha256": hashlib.sha256(_canonical(decision).encode()).hexdigest(),
+    }
+
+
 def _proposed_transition(
     batch: JsonObject,
     next_action: object,
@@ -462,6 +597,7 @@ def _proposed_transition(
     carried: JsonObject,
     delta_scope: JsonObject | None = None,
     supersede_target: str | None = None,
+    plan: JsonObject | None = None,
 ) -> JsonObject:
     """The canonical transition an approval binds: what came before, and exactly what is about to run.
 
@@ -471,16 +607,20 @@ def _proposed_transition(
     new approval. The developer-retry of a ``rebase-fix-forward`` decision binds the rebase target
     its routing record proposed (issue #504), else the ``supersede_target`` of a superseding batch
     (issue #506), and a code-review brief after a fix-forward binds its ``delta_review_scope``
-    (issue #625)."""
+    (issue #625). A brief that carries a verification plan binds its digest (ADR 0023)."""
     previous = _newest_decided_dispatch(batch)
     decision = previous.get("decision") if previous else None
     routing = decision.get("routing") if isinstance(decision, dict) else None
     rebase_target = (
         routing.get("rebase_target_commit")
         if isinstance(routing, dict)
-        and routing.get("route") == "rebase-fix-forward"
-        and next_action == "developer-retry"
-        and (role_name, purpose) == ("developer", "work")
+        and (
+            (routing.get("route"), next_action, role_name, purpose)
+            == ("rebase-fix-forward", "developer-retry", "developer", "work")
+            # A rebase, or a repeated one, binds the target its routing record carries (#1010).
+            or (next_action, role_name, purpose)
+            == (rebaser.REBASE_NEXT_ACTION, rebaser.REBASER_ROLE, "work")
+        )
         else None
     )
     if not isinstance(rebase_target, str):
@@ -508,10 +648,12 @@ def _proposed_transition(
         transition,
         {
             "carried_items": carried,
+            "retry_reason": _architect_retry_reason(batch, role_name),
             "rebase_target_commit": rebase_target
             if isinstance(rebase_target, str)
             else None,
             "delta_review_scope": delta_scope,
+            "verification_plan": plan,
         },
     )
 
@@ -654,6 +796,10 @@ def cancel_dispatch(args: argparse.Namespace) -> JsonObject:
                                 "model_self_report",
                                 "worker_worktree",
                                 "worker_snapshot_commit",
+                                # The receipt and the worker's exit evidence outlive the cancel.
+                                "runtime_access",
+                                "worker_exit",
+                                "worker_teardown",
                             )
                             if k in status
                         }
@@ -760,6 +906,84 @@ def _delta_review_eligibility(
     return "spec"
 
 
+def _qa_execution_section(
+    repo: Path, root: Path, config: JsonObject, brief: JsonObject
+) -> JsonObject | None:
+    """The QA run harness-runtime executes, pinned into a container QA brief (ADR 0022, section
+    3): the timeout of each command, the stop grace and the poll interval. ``None`` keeps the
+    historical host QA of every other brief. A container QA needs the runtime store and a runtime
+    that serves ``qa.run``; otherwise propose and create refuse it with a remedy."""
+    plan = brief.get("runtime_access")
+    if not isinstance(plan, dict) or not runtime_access.qa_container(
+        plan, brief.get("role")
+    ):
+        return None
+    if not store_is_authority(root):
+        raise CoordinatorError(
+            "a container QA runs only on the runtime store epoch, and this repository still "
+            "uses the file ledger",
+            remedy=f"cut the ledger over with `harness-runtime migrate --repo {repo}`, start "
+            f"`harness-runtime serve --repo {repo}`, then repeat dispatch propose",
+        )
+    from harness.orchestration import runtime_client
+
+    client = runtime_client.RuntimeClient(repo)
+    try:
+        hello = client.call(
+            "status", operation_id=f"status-{client.paths.repo_id}-{uuid.uuid4().hex}"
+        ).hello
+    except runtime_client.RuntimeClientError as exc:
+        raise CoordinatorError(
+            f"harness-runtime did not answer [{exc.code}]: {exc.message}",
+            remedy=exc.remedy,
+        ) from exc
+    features = hello.get("features")
+    if not isinstance(features, list) or "qa.run" not in features:
+        raise CoordinatorError(
+            "harness-runtime does not serve qa.run, so a container QA cannot run",
+            remedy="run the harness-runtime of this harness version on Linux, or remove "
+            "access_policy.operations.qa.container, then repeat dispatch propose",
+        )
+    policy = _execution_policy(config)
+    return {
+        "supervisor": "harness-runtime",
+        "command_timeout_seconds": policy["qa_command_timeout_seconds"],
+        "stop_grace_seconds": policy["stop_grace_seconds"],
+        "poll_interval_seconds": policy["dispatch_poll_interval_seconds"],
+    }
+
+
+def _execution_section(
+    repo: Path, root: Path, config: JsonObject, brief: JsonObject
+) -> JsonObject | None:
+    """The execution the runtime supervises, pinned into the approved brief (ADR 0022): for an
+    external worker dispatch on the runtime store whose runtime serves ``execution.launch``.
+    ``None`` keeps the adapter launch of ``dispatch send`` for every other dispatch."""
+    if (
+        brief.get("resolved_transport") != "external"
+        or brief.get("role") == "qa"
+        or brief.get("purpose") == "publish"
+        or not store_is_authority(root)
+    ):
+        return None
+    from harness.orchestration.runtime_client import RuntimeClient
+
+    client = RuntimeClient(repo)
+    hello = client.call(
+        "status", operation_id=f"status-{client.paths.repo_id}-{uuid.uuid4().hex}"
+    ).hello
+    features = hello.get("features")
+    if not isinstance(features, list) or "execution.launch" not in features:
+        return None
+    policy = _execution_policy(config)
+    return {
+        "supervisor": "harness-runtime",
+        "timeout_seconds": policy["worker_execution_timeout_seconds"],
+        "stop_grace_seconds": policy["stop_grace_seconds"],
+        "poll_interval_seconds": policy["dispatch_poll_interval_seconds"],
+    }
+
+
 def create_dispatch(args: argparse.Namespace) -> JsonObject:
     """Create one approved immutable dispatch brief, or, with ``propose``, render its transition.
 
@@ -774,6 +998,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         batch = _load_batch(root, args.batch)
+        operational_hold.require_no_hold(root, args.batch)
         _validate_batch_integrity(root, batch)
         if batch.get("state") != "awaiting-approval":
             raise CoordinatorError(
@@ -839,7 +1064,12 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             resolver_state.RESOLVER_NEXT_ACTION: {
                 (resolver_state.RESOLVER_ROLE, "work")
             },
+            # Issue #1010: a moved integration base is carried by the rebaser (ADR 0034).
+            rebaser.REBASE_NEXT_ACTION: {(rebaser.REBASER_ROLE, "work")},
         }
+        if role_name == "qa" and batch.get("risk_reassessment_required"):
+            message, remedy = risk_policy.reassessment_remedy(batch)
+            raise CoordinatorError(message, remedy=remedy)
         if next_action == "risk-assessment":
             raise CoordinatorError(
                 "risk assessment must prepare the next dispatch before another role starts",
@@ -979,11 +1209,6 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                 remedy="only pass --delta-review-of for a code-review dispatch",
             )
         if role_name == "qa":
-            if batch.get("risk_reassessment_required"):
-                raise CoordinatorError(
-                    "QA is blocked until the candidate is risk-assessed again",
-                    remedy="register a new risk assessment for this candidate before dispatching QA",
-                )
             if risk is None:
                 # The guard above raised when a qa dispatch has no risk.
                 raise CoordinatorError(
@@ -991,6 +1216,8 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     remedy=INTERNAL_INVARIANT_REMEDY,
                 )
             if risk["review_required"]:
+                # A candidate an accepted rebase carried keeps the review of its origin (#1010).
+                reviewed = {candidate, *rebaser.rebased_origins(batch, cast(str, candidate))}
                 accepted_review = any(
                     item.get("role") == "code-review"
                     and item.get("state") == "reported"
@@ -998,7 +1225,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     and _load_dispatch(root, item["dispatch_id"]).get(
                         "candidate_commit"
                     )
-                    == candidate
+                    in reviewed
                     for item in active_dispatches(batch)
                 )
                 if not accepted_review:
@@ -1055,6 +1282,9 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     if e["dispatch_id"] == latest["dispatch_id"]
                 )
                 snapshot_commit = _pending_report(root, batch, prior)["commit_sha"]
+        if role_name == rebaser.REBASER_ROLE:
+            # The rebaser carries the latest accepted candidate, never an unaccepted one.
+            snapshot_commit = _latest_developer_candidate(repo, root, batch)
         if role_name in {"architect", "developer", "verification", "code-review"}:
             snapshot_commit = (
                 candidate
@@ -1103,7 +1333,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                 )
             if (
                 context_package_freshness is None
-                or context_package_freshness["status"] != "fresh"
+                or context_package_freshness["status"] != ContextPackageFreshness.FRESH
             ):
                 raise CoordinatorError(
                     "newly registered Context Package is stale; refresh before dispatch",
@@ -1156,6 +1386,60 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             root,
             delta_scope,
         )
+        access_plan = runtime_access.resolve_plan(
+            repo,
+            Path(batch["worktree"]),
+            config,
+            role_name,
+            role["mode"],
+            operation=runtime_access.dispatch_operation(role_name, purpose),
+        )
+        # A docker plan pins the image digests observed now, beside the plan and outside its
+        # digest; propose and create each observe, so an image changed in between is refused.
+        # The plan's environment fingerprint carries them (ADR 0023, section 2).
+        runtime_images = runtime_access.pin_images(
+            access_plan, transport, role_name, purpose
+        )
+        qa_execution = _qa_execution_section(
+            repo, root, config, {"role": role_name, "runtime_access": access_plan}
+        )
+        plan = _verification_plan(
+            repo,
+            batch,
+            role_name,
+            purpose,
+            next_action,
+            candidate,
+            snapshot_commit,
+            runtime_images,
+        )
+        if plan is not None and role_name in {"code-review", "qa"}:
+            verification_plan.require_covered(plan)
+        # A ticket-diff plan derives the commands the role reports from its own stages.
+        derived_commands = ticket_diff_plan_commands(plan)
+        if derived_commands is not None:
+            dispatch_commands = derived_commands
+        project_snapshot = getattr(config, "project_snapshot", None)
+        if not isinstance(project_snapshot, dict):
+            project_snapshot = core_config._project(repo)
+        try:
+            project_hook_policy = hook_policy.normalize_policy(
+                project_snapshot.get("hook_policy")
+            )
+        except PolicyError as exc:
+            raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
+        # Strict fails closed before the record is written (ADR 0024, section 2a).
+        boundary_role = hook_policy.STRICT_BOUNDARY_ROLES.get(role_name)
+        if boundary_role is not None and purpose == "work" and candidate:
+            hook_policy.check_strict_boundary(
+                repo,
+                project_hook_policy,
+                role=boundary_role,
+                boundary=f"dispatch propose and create for {role_name}",
+                batch=batch,
+                candidate=candidate,
+                plan=plan,
+            )
         transition = _proposed_transition(
             batch,
             next_action,
@@ -1168,23 +1452,51 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             carried,
             delta_scope,
             supersede_target,
-        )
-        access_plan = runtime_access.resolve_plan(
-            repo,
-            Path(batch["worktree"]),
-            config,
-            role_name,
-            role["mode"],
-            operation=runtime_access.dispatch_operation(role_name, purpose),
+            plan,
         )
         transition[operational_guards.ACCESS_TRANSITION_FIELD] = access_plan[
             "plan_digest"
         ]
+        if runtime_images is not None:
+            transition = operational_guards.bind_transition(
+                transition, {"runtime_images": runtime_images}
+            )
         if batch.get("recovery_events"):
             transition["recovery_event_sha256"] = batch["recovery_events"][-1][
                 "record_sha256"
             ]
+        from harness.orchestration import pinned_configuration
+
         orchestration_policy = _orchestration_policy(config)
+        if qa_execution is not None:
+            from harness.orchestration.qa_execution import with_executable_checks
+
+            orchestration_policy["infrastructure_retry"] = with_executable_checks(
+                orchestration_policy["infrastructure_retry"], dispatch_commands
+            )
+        # The hook policy and the tool list are pinned with the approval (issue #794): a later
+        # edit of hook_policy or of the role tool policy does not change an approved dispatch.
+        allowed_tools = resolve_allowed_tools(
+            config,
+            role_name,
+            role["mode"],
+            test_author=(
+                resolved_runtime == "claude"
+                and transport == "external"
+                and bool(project_snapshot.get("test_paths"))
+                and bool(project_snapshot.get("test_runner"))
+            ),
+        )
+        hook_policy_sha256 = hook_policy.hook_policy_sha256(project_hook_policy)
+        transition = operational_guards.bind_transition(
+            transition,
+            {"hook_policy_sha256": hook_policy_sha256, "allowed_tools": allowed_tools},
+        )
+        pinned_config = pinned_configuration.snapshot(config, project_snapshot, role)
+        orchestration_policy["configuration"] = pinned_config
+        transition[pinned_configuration.TRANSITION_FIELD] = pinned_config[
+            "canonical_sha256"
+        ]
         transition[infrastructure_retry.TRANSITION_FIELD] = (
             operational_guards.policy_digest(
                 orchestration_policy["infrastructure_retry"]
@@ -1238,6 +1550,12 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     proposal["context_package_quality_warning"] = warning
             if delta_scope is not None:
                 proposal["delta_review_scope"] = delta_scope
+            if plan is not None:
+                proposal["verification_plan"] = plan
+            if runtime_images is not None:
+                proposal["runtime_images"] = runtime_images
+            if qa_execution is not None:
+                proposal["qa_execution"] = qa_execution
             return proposal
         if approval_mode is None:
             # Only a proposal skips the approval mode, and a proposal returned above.
@@ -1267,6 +1585,8 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             "access": role["mode"],
             "zone": batch.get("zone"),
             "write_paths": write_paths,
+            # The batch scope every role sees, so a read-only architect plans inside it (#1015).
+            "allowed_paths": batch.get("allowed_paths"),
             "branch": batch["branch"],
             "worktree": batch["worktree"],
             "definition_of_done": batch["definition_of_done"],
@@ -1279,7 +1599,8 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             "resolved_model": model,
             "resolved_effort": effort,
             "resolved_transport": transport,
-            "allowed_tools": resolve_allowed_tools(config, role_name, role["mode"]),
+            "allowed_tools": allowed_tools,
+            "hook_policy_sha256": hook_policy_sha256,
             "context_budget": _adaptive_continuation_policy(config)["context_limit"],
             "coordinator_approval": approval,
             "candidate_commit": candidate,
@@ -1313,9 +1634,13 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             "transition": transition,
             "transition_digest": digest,
             "retry_idempotency_key": idempotency_key,
+            "retry_reason": _architect_retry_reason(batch, role_name),
             "orchestration_policy": orchestration_policy,
             "liveness": {
                 "heartbeat_every_seconds": heartbeat_every,
+                "startup_timeout_seconds": _execution_policy(config)[
+                    "worker_startup_timeout_seconds"
+                ],
                 "stale_after_seconds": stale_after,
             },
             "commit_plan": commit_plan,
@@ -1323,16 +1648,37 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             if is_review_work
             else None,
             "carried_items": carried,
+            "accepted_design": _accepted_design(root, batch)
+            if role_name == "developer" and purpose == "work"
+            else None,
             # The human-approved target a rebase-fix-forward developer-retry rebases onto.
             "rebase_target_commit": transition.get("rebase_target_sha"),
             "runtime_access": access_plan,
         }
+        if runtime_images is not None:
+            brief["runtime_images"] = runtime_images
+        if qa_execution is not None:
+            brief["qa_execution"] = qa_execution
+        if plan is not None:
+            brief["verification_plan"] = plan
+        if role_name == rebaser.REBASER_ROLE:
+            target = brief.get("rebase_target_commit")
+            if not isinstance(target, str):
+                raise CoordinatorError(
+                    "a rebaser dispatch needs the rebase target of a rebase decision",
+                    remedy="decide the report whose route_preview names the rebase route, then "
+                    "create the rebaser dispatch",
+                )
+            brief["rebaser"] = rebaser.brief_section(repo, snapshot_commit, target)
         if role_name == resolver_state.RESOLVER_ROLE:
             brief["resolver"] = resolver_route.brief_section(
                 root, config, batch, dispatch_commands, brief["report_staging_path"]
             )
         if progress is not None:
             brief["preserved_progress"] = progress
+        execution = _execution_section(repo, root, config, brief)
+        if execution is not None:
+            brief["execution"] = execution
         if policy_source is not None:
             infrastructure_retry.require_same_contract(policy_source, brief)
         if batch.get("environmental_restart"):

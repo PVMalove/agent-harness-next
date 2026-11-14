@@ -128,12 +128,12 @@ def run(ctx: SimpleNamespace) -> None:
     """
     pv_project = ctx.pv_project
     test_root = ctx.test_root
-    # backend-orchestration is opt-in: it extends pvmalove-suite with the portable
-    # role contracts, while a regular pvmalove-suite project receives none of them.
+    # backend-orchestration is opt-in: it extends engineering-suite with the portable
+    # role contracts, while a regular engineering-suite project receives none of them.
     if (pv_project / ".harness" / "orchestration").exists():
-        sys.exit("pvmalove-suite unexpectedly installed orchestration resources")
+        sys.exit("engineering-suite unexpectedly installed orchestration resources")
     if (pv_project / ".harness" / "orchestration.json").exists():
-        sys.exit("pvmalove-suite unexpectedly installed orchestration config")
+        sys.exit("engineering-suite unexpectedly installed orchestration config")
     regular_implement = (
         pv_project / ".harness" / "skills" / "implement" / "SKILL.md"
     ).read_text(encoding="utf-8")
@@ -143,7 +143,7 @@ def run(ctx: SimpleNamespace) -> None:
         )
     fast_implement = pv_project / ".harness" / "skills" / "fast-implement" / "SKILL.md"
     if not fast_implement.is_file():
-        sys.exit("pvmalove-suite addition fast-implement missing")
+        sys.exit("engineering-suite addition fast-implement missing")
     if "no coordinator approval gates" not in fast_implement.read_text(
         encoding="utf-8"
     ):
@@ -158,7 +158,9 @@ def run(ctx: SimpleNamespace) -> None:
         return path
 
     orchestration_project.mkdir(parents=True)
-    run_step(["git", "init", "-q"], cwd=orchestration_project, check=True)
+    run_step(
+        ["git", "init", "-q", "-b", "master"], cwd=orchestration_project, check=True
+    )
     orchestration_remote = test_root / "orchestration-remote.git"
     run_step(["git", "init", "--bare", "-q", str(orchestration_remote)], check=True)
     run_step(
@@ -191,6 +193,32 @@ def run(ctx: SimpleNamespace) -> None:
     orchestration_root = orchestration_project / ".harness" / "orchestration"
     if not (orchestration_root / "orchestration.schema.json").is_file():
         sys.exit("backend-orchestration schema missing")
+    # Issue #706: the egress proxy and its Dockerfile are a byte-identical, drift-checked payload
+    # of backend-orchestration only; a engineering-suite project never receives the container directory.
+    # Issue #710 adds the optional worker base image Dockerfile.sandbox to the same payload.
+    for proxy_file in ("egress_proxy.py", "Dockerfile.proxy", "Dockerfile.sandbox"):
+        installed_proxy = orchestration_project / ".harness" / "container" / proxy_file
+        if not installed_proxy.is_file():
+            sys.exit(f"backend-orchestration payload is missing container/{proxy_file}")
+        if (
+            installed_proxy.read_bytes()
+            != (ROOT / "harness" / "container" / proxy_file).read_bytes()
+        ):
+            sys.exit(f"installed container/{proxy_file} differs from its source")
+    if (pv_project / ".harness" / "container").exists():
+        sys.exit("engineering-suite unexpectedly installed container resources")
+    # Issue #710: the container executor guide ships with backend-orchestration only, from
+    # harness/project/instructions/ and never from the source repository's root docs/.
+    installed_guide = orchestration_project / ".harness/instructions/container-executor.md"
+    if not installed_guide.is_file():
+        sys.exit("backend-orchestration payload is missing docs/container-executor.md")
+    if (
+        installed_guide.read_bytes()
+        != (ROOT / "harness" / "project" / "instructions" / "container-executor.md").read_bytes()
+    ):
+        sys.exit("installed docs/container-executor.md differs from its source")
+    if (pv_project / ".harness/instructions/container-executor.md").exists():
+        sys.exit("engineering-suite unexpectedly installed the container guide")
     installed_implement = (
         orchestration_project / ".harness" / "skills" / "implement" / "SKILL.md"
     ).read_text(encoding="utf-8")
@@ -247,8 +275,9 @@ def run(ctx: SimpleNamespace) -> None:
     ):
         sys.exit("installed to-pull-requests step does not record accepted QA evidence")
     # Issue #537: the installed PR step carries the whole continuation (next step, separate
-    # confirmation bound to the SHA pair, CI wait, local-QA fallback, merge handoff) and still keeps
-    # the plain /qa-gate branch for a project without the optional orchestration.
+    # confirmation bound to the SHA pair, CI wait, local-QA fallback, merge handoff, the Release Gate
+    # tree check after the merge) and still keeps the plain /qa-gate branch for a project without the
+    # optional orchestration.
     for required_pr_phrase in (
         "integration next",
         "integration collect-ci",
@@ -257,6 +286,9 @@ def run(ctx: SimpleNamespace) -> None:
         "qa_source",
         "Never merge it",
         "/qa-gate",
+        "--merge-commit",
+        "candidate_tree_sha",
+        "merge-tree-mismatch",
     ):
         if required_pr_phrase not in installed_pr_text:
             sys.exit(
@@ -292,69 +324,9 @@ def run(ctx: SimpleNamespace) -> None:
     ):
         sys.exit("force-managed-files did not restore the managed coordinator snapshot")
     orchestration_config.write_text(original_orchestration_config, encoding="utf-8")
-    public_documentation = {
-        ROOT / "README.md": (
-            "`backend-orchestration`",
-            "PR требует отдельного подтверждения",
-            "/to-pull-requests",
-        ),
-        ROOT / "CONTEXT.md": (
-            "`reported`",
-            "FIFO",
-            "санитизирован",
-        ),
-        ROOT / "docs" / "backend-orchestration.md": (
-            "`planned → awaiting-approval ↔ active → completed`",
-            "`reported`",
-            "детерминирован",
-            "Standards и Spec",
-            "обязательный полный QA gate",
-            "transport-only",
-            "санитизирован",
-            "stale",
-            "/to-pull-requests",
-            "integration next",
-            "verification-failure",
-        ),
-        ROOT / "docs" / "harness-guide.md": (
-            "строго opt-in маршрут",
-            "candidate commit",
-            "`reported`",
-            "/to-pull-requests",
-            "integration next",
-        ),
-        ROOT / "docs" / "agents" / "git-workflow.md": ("/to-pull-requests",),
-    }
-    for path, required_phrases in public_documentation.items():
-        text = path.read_text(encoding="utf-8")
-        if re.search(r"(?<![\w-])/to-pr(?![\w-])", text):
-            sys.exit(f"public documentation retains removed /to-pr route: {path}")
-        for phrase in required_phrases:
-            if phrase.casefold() not in text.casefold():
-                sys.exit(
-                    f"public documentation missing hybrid coordinator contract {phrase!r}: {path}"
-                )
-    for source_path, required_phrases in public_documentation.items():
-        if source_path.parent != ROOT / "docs" / "agents":
-            continue
-        installed_path = orchestration_project / "docs" / "agents" / source_path.name
-        if not installed_path.is_file():
-            sys.exit(
-                f"installed project is missing documentation seed: {source_path.name}"
-            )
-        installed_text = installed_path.read_text(encoding="utf-8")
-        for phrase in required_phrases:
-            if phrase.casefold() not in installed_text.casefold():
-                sys.exit(
-                    f"installed documentation missing hybrid coordinator contract {phrase!r}: {source_path.name}"
-                )
-        if re.search(r"(?<![\w-])/to-pr(?![\w-])", installed_text):
-            sys.exit(
-                f"installed documentation retains removed /to-pr route: {source_path.name}"
-            )
     # Developer guides stay in the source repository's docs/; only agent contracts are delivered.
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        if (orchestration_project / ".harness" / "docs" / human_guide).exists():
+        if (orchestration_project / ".harness" / "instructions" / human_guide).exists():
             sys.exit(f"developer guide leaked into the target project: {human_guide}")
     expected_role_files = {
         "architect.md",
@@ -364,6 +336,7 @@ def run(ctx: SimpleNamespace) -> None:
         "developer.md",
         "messaging-integration.md",
         "qa.md",
+        "rebaser.md",
         "verification.md",
     }
     actual_role_files = {
@@ -408,7 +381,7 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("backend-orchestration playbook missing")
     playbook = playbook_path.read_text(encoding="utf-8")
     _require_startup_recovery_contract(installed_implement, playbook)
-    contract = orchestration_project / ".harness/docs/technical-english.md"
+    contract = orchestration_project / ".harness/instructions/technical-english.md"
     for continuation_rule in ("integration next", "verification-failure"):
         if continuation_rule not in playbook:
             sys.exit(

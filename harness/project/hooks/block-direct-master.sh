@@ -4,6 +4,10 @@
 # --git-dir, a preceding cd, the payload cwd, then CLAUDE_PROJECT_DIR) and each push target ref.
 # Only its exit 0 with the word `allow` lets the command run, so a missing interpreter, any
 # nonzero status or a partial copy of the helper blocks (fail closed).
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" block-direct-master
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PY="$(command -v python3 || command -v python)"
 if [ -z "$PY" ]; then

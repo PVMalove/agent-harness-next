@@ -17,14 +17,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import sys
+import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
-from scripts.clean_room.support import run_step
+from harness.health.test_author import AuthorUnavailable, adapter_for, read_author
+from harness.storage import storage_path
+from scripts.clean_room.support import ROOT, run_step
 
 VERIFY_VARIABLE = "HARNESS_VERIFY_CLAUDE_TEST_AUTHOR"
 REQUIRE_VARIABLE = "HARNESS_REQUIRE_CLAUDE_TEST_AUTHOR"
@@ -48,6 +53,62 @@ RED_PROMPT = (
     "src/. Return the handoff described in your instructions."
 )
 RUN_ID = re.compile(r'"run_id"\s*:\s*"([A-Za-z0-9_.-]+)"')
+
+
+def probe_usage(stream: str) -> dict[str, object]:
+    """A final result's reported usage only; missing metrics are unknown, never zero."""
+    fields = (
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    )
+    final: dict[str, object] = {}
+    for line in stream.splitlines():
+        try:
+            event = json.loads(line)
+        except (ValueError, RecursionError):
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            final = event
+    raw = final.get("usage")
+    usage = raw if isinstance(raw, dict) else {}
+    cost = final.get("total_cost_usd")
+    return {
+        "cost_usd": cost
+        if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0
+        else None,
+        "usage": {
+            field: value
+            if type(value := usage.get(field)) is int and value >= 0
+            else None
+            for field in fields
+        },
+    }
+
+
+def _record_probe(project: Path, phase: str, stream: str, exit_code: int) -> None:
+    """Keep sanitized evidence outside disposable projects, including failed calls' usage."""
+    directory = storage_path(ROOT, "reports")
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"test-author-probe-{uuid.uuid4().hex}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "recorded_at": datetime.now(UTC).isoformat(),
+                "checkout": str(project),
+                "phase": phase,
+                "exit_code": exit_code,
+                "budget_usd_per_call": float(PROBE_BUDGET_USD),
+                **probe_usage(stream),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    print(f"claude probe: {phase} usage evidence {path}", flush=True)
 
 
 @dataclass(frozen=True)
@@ -241,14 +302,7 @@ def check_red_cycle(project: Path, calls: list[ToolCall], source_digest: str) ->
     match = RUN_ID.search(run.result)
     if match is None:
         sys.exit("claude probe: the runner answer has no run id")
-    log = (
-        project
-        / ".harness"
-        / ".sandboxes"
-        / "runs"
-        / f"isolated-test-{match.group(1)}"
-        / "log.txt"
-    )
+    log = storage_path(project, "runs", f"isolated-test-{match.group(1)}", "log.txt")
     text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
     if "AssertionError" not in text or re.search(
         r"ImportError|TypeError|SyntaxError", text
@@ -264,24 +318,43 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _probe_executor(project: Path) -> dict[str, object]:
+    """Resolve before looking for a CLI or linking its credentials."""
+    try:
+        selected = read_author(project)
+        adapter_for(selected)
+        return selected
+    except AuthorUnavailable as exc:
+        sys.exit(f"test-author probe: configured executor unavailable ({exc.reason})")
+
+
 def _run_claude(
-    claude: str, project: Path, environment: dict[str, str], prompt: str, tools: str
+    claude: str,
+    project: Path,
+    environment: dict[str, str],
+    prompt: str,
+    tools: str,
+    *,
+    as_main: bool = False,
 ) -> str:
     """One bounded `claude --agent test-author` run; any failure fails the scenario."""
+    selected = _probe_executor(project)
     result = run_step(
         [
             claude,
             "--print",
-            "--agent",
-            "test-author",
+            *([] if as_main else ["--agent", "test-author"]),
             "--model",
-            "haiku",
+            str(selected["model"]),
+            "--effort",
+            str(selected["effort"]),
             "--permission-mode",
             "dontAsk",
             "--allowed-tools",
             tools,
             "--setting-sources",
             "project,local",
+            *(["--add-dir", str(storage_path(project, "runs"))] if as_main else []),
             "--no-session-persistence",
             "--output-format",
             "stream-json",
@@ -298,10 +371,98 @@ def _run_claude(
         check=False,
         timeout=PROBE_TIMEOUT_SECONDS,
     )
+    _record_probe(
+        project,
+        "worker-developer" if as_main else "guard" if prompt == GUARD_PROMPT else "red",
+        result.stdout,
+        result.returncode,
+    )
     if result.returncode != 0 or not result.stdout.strip():
         tail = (result.stderr or result.stdout)[-300:].strip()
         sys.exit(f"claude probe: claude exited with {result.returncode} ({tail})")
     return str(result.stdout)
+
+
+def verify_worker_cycle(main: Path, worktree: Path) -> None:
+    """A real external developer calls the named author, then proves its Red in the worker."""
+    if probe_mode() == "off":
+        print(
+            "full-route worktree: live developer-to-author confirmation not requested",
+            flush=True,
+        )
+        return
+    selected = _probe_executor(worktree)
+    claude = shutil.which(str(selected["runtime"]))
+    if claude is None:
+        sys.exit("claude probe: worker confirmation requires claude")
+    source = worktree / "src/calc.py"
+    digest = _digest(source)
+    known_tests = set((worktree / "tests").glob("*.py"))
+    brief = worktree / ".harness/probe-developer-brief.json"
+    brief.write_text(
+        json.dumps(
+            {
+                "role": "developer",
+                **{
+                    f"resolved_{key}": selected[key]
+                    for key in ("runtime", "model", "effort")
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    prompt = (
+        "You are the external developer in this worker checkout. First run exactly "
+        f"`.claude/hooks/test-author-preflight.sh --worktree {worktree} --brief {brief}` and proceed only on "
+        '`{"status":"ok"}`. Then use the Agent tool to invoke subagent_type test-author in the '
+        "foreground without model or effort overrides; inherit the developer settings from the brief. "
+        "Wait for its result. Give it this requirement and no implementation: "
+        "add(a, b) from src.calc returns the sum plus a fee of 1; add(2, 3) must return 6. "
+        "Ask it to write exactly one unittest.TestCase under tests/ and run the dotted test id "
+        f"through .claude/hooks/run-test.sh. Tell it the runner log root is {storage_path(worktree, 'runs')}; "
+        "read logs there using the returned run_id. After it reports Red, run exactly "
+        "`.claude/hooks/run-test.sh <the actual dotted test id>` yourself to confirm the failed "
+        "assertion. Do not write a test yourself or change production code. Report the test id, "
+        "the runner JSON and failed assertion, then stop."
+    )
+    try:
+        environment = claude_environment(worktree, credentials=True)
+        stream = _run_claude(
+            claude,
+            worktree,
+            environment,
+            prompt,
+            "Read,Grep,Glob,Bash,Edit,Write,Agent(test-author)",
+            as_main=True,
+        )
+        calls = tool_calls(stream)
+        if not any(
+            call.name in {"Agent", "Task"}
+            and call.tool_input.get("subagent_type") == "test-author"
+            for call in calls
+        ):
+            sys.exit("claude probe: the external developer did not call test-author")
+        check_red_cycle(worktree, calls, digest)
+        created = set((worktree / "tests").glob("*.py")) - known_tests
+        if len(created) != 1:
+            sys.exit("claude probe: the worker author did not write exactly one test")
+        # The fixture developer makes this same unchanged test Green on worker code only.
+        source.write_text("def add(a, b):\n    return a + b + 1\n", encoding="utf-8")
+        from scripts.clean_room.isolated_test_runner import _hook
+
+        test_id = str(_runner_call(calls).tool_input["command"]).split()[-1]
+        if _hook(worktree, test_id).get("result") != "passed":
+            sys.exit("claude probe: the worker test did not reach Green")
+        print(
+            "full-route worktree: live developer -> test-author -> protected Red/Green verified",
+            flush=True,
+        )
+    finally:
+        brief.unlink(missing_ok=True)
+        remove_credentials(worktree)
+        source.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        for path in set((worktree / "tests").glob("*.py")) - known_tests:
+            path.unlink(missing_ok=True)
 
 
 def verify_scoped_hook(project: Path) -> None:
@@ -312,7 +473,8 @@ def verify_scoped_hook(project: Path) -> None:
             "isolated-test-runner: Claude Code confirmation not requested", flush=True
         )
         return
-    claude = shutil.which("claude")
+    selected = _probe_executor(project)
+    claude = shutil.which(str(selected["runtime"]))
     if claude is None:
         if mode == "require":
             sys.exit("claude probe: confirmation required but claude is unavailable")
@@ -329,7 +491,13 @@ def verify_scoped_hook(project: Path) -> None:
             claude, project, environment, GUARD_PROMPT, "Write,Bash"
         )
         check_guard_calls(project, tool_calls(guard_stream))
-        red_stream = _run_claude(claude, project, environment, RED_PROMPT, "Write,Bash")
+        red_stream = _run_claude(
+            claude,
+            project,
+            environment,
+            RED_PROMPT + f" Runner log root: {storage_path(project, 'runs')}.",
+            "Read,Write,Bash",
+        )
         check_red_cycle(project, tool_calls(red_stream), source_digest)
     finally:
         remove_credentials(project)

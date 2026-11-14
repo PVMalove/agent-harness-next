@@ -1,25 +1,43 @@
 #!/usr/bin/env python3
-"""Regression tests for the clean-room QA lane: queue bootstrap, error remedies and the run path."""
+"""Regression tests for the clean-room QA lane: queue bootstrap, error remedies and the run path.
+
+They check the file QA lane itself (``qa-lane/lease.json``, the queue and sequence files) and
+hand-write ledger records, so they run on a ledger of installation 1.x (ADR 0036, section 5); the
+QA lane of the runtime store has its own tests."""
 
 from __future__ import annotations
 
 import argparse
+import contextlib
+import hashlib
 import tempfile
+import threading
 import unittest
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 from unittest import mock
 
+from harness.gate_runner import stage_evidence
 from harness.gate_runner.gate_runner import (
     Diagnosis,
+    EvidenceContext,
     GateResult,
     GateRunnerError,
     QAStagesResult,
+    StageCommand,
+    build_stage_evidence,
     format_command_log,
+    parse_evidence_trailer,
 )
-from harness.orchestration import coordinator, operation_access, qa_lane
+from harness.orchestration import (
+    coordinator,
+    operation_access,
+    operational_guards,
+    qa_lane,
+    verification_plan,
+)
 from harness.storage import storage_path
 from harness.orchestration.core.utils import CoordinatorError
 from harness.orchestration.ledger import (
@@ -33,8 +51,11 @@ from harness.orchestration.ledger import (
     LifecycleLedger,
     PlanRecord,
 )
+from harness.orchestration.ledger.ledger_ops import LedgerBusyError
 from harness.orchestration.qa_lane import QaWorkflowOps
+from harness.orchestration.pinned_configuration import snapshot
 from harness.orchestration.workflow import reports, qa_integration
+from tests.orchestration.legacy_state import seed_file_ledger
 
 DISPATCH_ID = "dispatch-0123456789abcdef"
 OTHER_DISPATCH_ID = "dispatch-fedcba9876543210"
@@ -43,6 +64,14 @@ BATCH_ID = "batch-0123456789abcdef"
 
 def _ns(**values: object) -> argparse.Namespace:
     return argparse.Namespace(**values)
+
+
+def _passing_gate() -> GateResult:
+    return GateResult(
+        checks=[{"result": "pass", "command": "true"}],
+        artifact="all green",
+        duration_seconds=0.0,
+    )
 
 
 class _Ops:
@@ -63,8 +92,7 @@ class QaLaneBootstrapTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             repo = Path(temporary)
-            ledger = LifecycleLedger(repo / coordinator.STATE_REL)
-            ledger.ensure()
+            ledger = seed_file_ledger(repo / coordinator.STATE_REL)
             identity = "local-qa-" + "c" * 32
             with ledger.lock():
                 admitted = qa_lane.acquire(
@@ -105,8 +133,7 @@ class QaLaneBootstrapTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
-            ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            ledger = seed_file_ledger(Path(temporary) / "state")
             with ledger.lock():
                 first = qa_lane.acquire(
                     ledger,
@@ -149,8 +176,7 @@ class QaLaneBootstrapTests(unittest.TestCase):
     def test_first_enqueue_creates_the_ledger_sequence_record(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
-            ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            ledger = seed_file_ledger(state_root)
 
             queue_path, entry = qa_lane._enqueue(ledger, "dispatch-0123456789abcdef")
 
@@ -174,8 +200,7 @@ class QaLaneTestCase(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.repo = Path(temporary.name)
         self.root = self.repo / coordinator.STATE_REL
-        self.ledger = LifecycleLedger(self.root)
-        self.ledger.ensure()
+        self.ledger = seed_file_ledger(self.root)
         self.lane = self.ledger.records_root() / "qa-lane"
 
     def assertRemedy(
@@ -420,7 +445,7 @@ class QaLaneStatusTests(QaLaneTestCase):
     def test_status_reports_queue_and_lease(self) -> None:
         self.assertEqual(
             qa_lane.status(self._args()),
-            {"lease": None, "lease_stale": False, "queue": []},
+            {"lease": None, "lease_stale": False, "stale_heartbeat": False, "queue": []},
         )
         qa_lane._enqueue(self.ledger, DISPATCH_ID)
         lease = self._lease()
@@ -430,6 +455,7 @@ class QaLaneStatusTests(QaLaneTestCase):
 
         self.assertEqual(status["lease"], lease)
         self.assertTrue(status["lease_stale"])
+        self.assertTrue(status["stale_heartbeat"])
         self.assertEqual(
             [entry["dispatch_id"] for entry in status["queue"]], [DISPATCH_ID]
         )
@@ -493,7 +519,14 @@ class QaLaneClearStaleLeaseTests(QaLaneTestCase):
 
         result = qa_lane.clear_stale_lease(self._args(lease), self._ops())
 
-        self.assertEqual(result, {"state": "cleared", "dispatch_id": OTHER_DISPATCH_ID})
+        self.assertEqual(
+            result,
+            {
+                "state": "cleared",
+                "dispatch_id": OTHER_DISPATCH_ID,
+                "restored_dispatch_state": None,
+            },
+        )
         self.assertFalse((self.lane / "lease.json").exists())
         self.assertEqual(qa_lane._queue_entries(self.ledger), [])
         recoveries = list((self.lane / "recoveries").glob("*.json"))
@@ -520,8 +553,17 @@ class QaLaneRunTests(QaLaneTestCase):
         )
 
     def _seed(
-        self, *, batch_state: str = "approved", status_state: str = "approved"
+        self,
+        *,
+        batch_state: str = "approved",
+        status_state: str = "approved",
+        policy: JsonObject | None = None,
     ) -> None:
+        approved = snapshot(policy or {}, {}, {"name": self.dispatch["role"]})
+        self.dispatch["orchestration_policy"] = {"configuration": approved}
+        self.dispatch["transition"] = {
+            "configuration_sha256": approved["canonical_sha256"]
+        }
         records = self.ledger.records_root()
         batch: JsonObject = {
             "batch_id": BATCH_ID,
@@ -547,6 +589,7 @@ class QaLaneRunTests(QaLaneTestCase):
         self,
         persisted: list[dict[str, object]] | None = None,
         report_error: coordinator.CoordinatorError | None = None,
+        **overrides: object,
     ) -> QaWorkflowOps:
         def persist(
             ledger: LifecycleLedger,
@@ -564,12 +607,15 @@ class QaLaneRunTests(QaLaneTestCase):
         return cast(
             QaWorkflowOps,
             _Ops(
-                _validate_batch_integrity=lambda root, batch: None,
-                _validate_dispatch=lambda repo, config, root, batch, dispatch: None,
-                _config=lambda repo: {},
-                _role=lambda repo, name: {},
-                _validate_report=lambda *arguments, **keywords: None,
-                _persist_report=persist,
+                **{
+                    "_validate_batch_integrity": lambda root, batch: None,
+                    "_validate_dispatch": lambda repo, config, root, batch, dispatch: None,
+                    "_config": lambda repo: {},
+                    "_role": lambda repo, name: {},
+                    "_validate_report": lambda *arguments, **keywords: None,
+                    "_persist_report": persist,
+                    **overrides,
+                }
             ),
         )
 
@@ -684,6 +730,313 @@ class QaLaneRunTests(QaLaneTestCase):
             result = qa_lane.run(self.args, self._ops())
 
         self.assertEqual(result["state"], "reported")
+
+    def test_a_busy_store_at_acceptance_is_read_again_and_accepts_the_evidence(
+        self,
+    ) -> None:
+        self._seed()
+        validations: list[str] = []
+
+        def validate(root: Path, batch: object) -> None:
+            validations.append("validated")
+            # The second validation is the first read of the acceptance, after the QA run: the
+            # snapshot it names expired while the commands ran.
+            if len(validations) == 2:
+                raise LedgerBusyError(
+                    "the read snapshot cannot answer: the snapshot is closed or expired",
+                    remedy="[store_busy] read again from a new snapshot",
+                )
+
+        persisted: list[dict[str, object]] = []
+        sut = self._ops(persisted, _validate_batch_integrity=validate)
+
+        with mock.patch.object(qa_lane, "run_gate", return_value=_passing_gate()) as gate:
+            result = qa_lane.run(self.args, sut)
+
+        self.assertEqual(result["state"], "reported")
+        self.assertEqual(gate.call_count, 1)
+        self.assertEqual(len(persisted), 1)
+
+    @staticmethod
+    def _refused_after_the_run(
+        refusal: coordinator.CoordinatorError,
+    ) -> Callable[[Path, object], None]:
+        """A batch validation that passes before the QA run and refuses every acceptance."""
+        validations: list[str] = []
+
+        def validate(root: Path, batch: object) -> None:
+            validations.append("validated")
+            if len(validations) > 1:
+                raise refusal
+
+        return validate
+
+    @staticmethod
+    def _busy() -> LedgerBusyError:
+        return LedgerBusyError(
+            "the read snapshot cannot answer: the snapshot is closed or expired",
+            remedy="[store_busy] read again from a new snapshot",
+        )
+
+    def _refused_run(self, refusal: coordinator.CoordinatorError) -> CoordinatorError:
+        """A QA run whose commands pass and whose acceptance ``refusal`` refuses."""
+        with (
+            mock.patch.object(qa_lane, "ACCEPT_BUSY_WAIT_SECONDS", 0.0),
+            mock.patch.object(qa_lane, "run_gate", return_value=_passing_gate()),
+            self.assertRaises(coordinator.CoordinatorError) as refused,
+        ):
+            qa_lane.run(
+                self.args,
+                self._ops(_validate_batch_integrity=self._refused_after_the_run(refusal)),
+            )
+        return refused.exception
+
+    def test_a_rerun_after_a_busy_acceptance_accepts_the_captured_evidence_without_a_new_run(
+        self,
+    ) -> None:
+        self._seed()
+
+        refused = self._refused_run(self._busy())
+
+        self.assertIn(f"qa run --dispatch {DISPATCH_ID}", refused.remedy)
+        self._assert_transient_failure_released()
+
+        persisted: list[dict[str, object]] = []
+        with mock.patch.object(qa_lane, "run_gate") as gate:
+            result = qa_lane.run(self.args, self._ops(persisted))
+
+        self.assertEqual(gate.call_count, 0)
+        self.assertEqual(result["state"], "reported")
+        self.assertEqual(result["sha256"], hashlib.sha256(b"all green").hexdigest())
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0]["outcome"], "completed")
+
+    def test_captured_evidence_refused_at_its_own_acceptance_is_not_taken_again(
+        self,
+    ) -> None:
+        self._seed()
+        self._refused_run(self._busy())
+        changed = coordinator.CoordinatorError(
+            "the harness runtime changed after this batch was planned",
+            remedy="restore the pinned runtime",
+        )
+
+        with mock.patch.object(qa_lane, "run_gate") as gate, self.assertRaises(
+            coordinator.CoordinatorError
+        ):
+            qa_lane.run(
+                self.args,
+                self._ops(_validate_batch_integrity=self._refused_after_the_run(changed)),
+            )
+        self.assertEqual(gate.call_count, 0)
+
+        with mock.patch.object(
+            qa_lane, "run_gate", return_value=_passing_gate()
+        ) as gate:
+            result = qa_lane.run(self.args, self._ops())
+
+        self.assertEqual(gate.call_count, 1)
+        self.assertEqual(result["state"], "reported")
+
+    def test_evidence_refused_for_another_reason_than_a_busy_store_is_not_taken_again(
+        self,
+    ) -> None:
+        self._seed()
+        self._refused_run(
+            coordinator.CoordinatorError(
+                "batch integrity check failed", remedy="restore the batch record"
+            )
+        )
+
+        with mock.patch.object(
+            qa_lane, "run_gate", return_value=_passing_gate()
+        ) as gate:
+            result = qa_lane.run(self.args, self._ops())
+
+        self.assertEqual(gate.call_count, 1)
+        self.assertEqual(result["state"], "reported")
+
+    def _evidence_gate(self, commands: list[str]) -> GateResult:
+        """A gate result for ``commands`` whose last command failed and whose rest never ran."""
+        ran = [
+            StageCommand(command, command, 0, "", f"{command} out\n", "", 7)
+            for command in commands[:1]
+        ]
+        failed = StageCommand(
+            commands[1], commands[1], 1, "x", "bad out\n", "bad err\n", 9, ("t.py::x",)
+        )
+        entries: list[tuple[str, StageCommand | None]] = [
+            ("gate-1", ran[0]),
+            ("gate-2", failed),
+            *((f"gate-{n + 3}", None) for n in range(len(commands) - 2)),
+        ]
+        checks = [
+            {"command": commands[0], "result": "pass", "evidence": "exit 0"},
+            {"command": commands[1], "result": "fail", "evidence": "exit 1"},
+        ]
+        return GateResult(
+            checks=checks,
+            artifact=format_command_log(commands[0], 0, "ok")
+            + format_command_log(commands[1], 1, "bad"),
+            duration_seconds=0.0,
+            evidence=build_stage_evidence(EvidenceContext("a" * 40), entries),
+        )
+
+    def test_the_log_trailer_links_the_persisted_stage_evidence_and_streams(
+        self,
+    ) -> None:
+        self.dispatch["verification_commands"] = ["first", "second", "third"]
+        self._seed()
+        persisted: list[dict[str, object]] = []
+
+        with mock.patch.object(
+            qa_lane,
+            "run_gate",
+            return_value=self._evidence_gate(["first", "second", "third"]),
+        ):
+            result = qa_lane.run(self.args, self._ops(persisted))
+
+        log = Path(result["artifact"])
+        text = log.read_text(encoding="utf-8")
+        self.assertEqual(result["sha256"], hashlib.sha256(text.encode()).hexdigest())
+        linked = parse_evidence_trailer(text.splitlines())
+        assert linked is not None
+        relative, checksum = linked
+        records = log.parent.parent
+        document_text = (records / relative).read_text(encoding="utf-8")
+        self.assertEqual(
+            hashlib.sha256(document_text.encode("utf-8")).hexdigest(), checksum
+        )
+        stages = stage_evidence.parse(document_text).stages
+        self.assertEqual(
+            [(s.stage_id, s.result) for s in stages],
+            [("gate-1", "pass"), ("gate-2", "fail"), ("gate-3", "not_run")],
+        )
+        self.assertEqual(stages[1].failed_nodeids, ("t.py::x",))
+        for stage in stages[:2]:
+            for ref in (stage.stdout, stage.stderr):
+                assert ref is not None
+                data = (records / ref.path).read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(), ref.sha256)
+
+    def test_the_run_identifies_the_stage_evidence_by_candidate_plan_and_image(
+        self,
+    ) -> None:
+        plan: JsonObject = {
+            "stages": [{"stage_id": "p", "environment_fingerprint": "f" * 64}],
+            "role": "qa",
+        }
+        self.dispatch["verification_commands"] = ["first", "second"]
+        self.dispatch["candidate_commit"] = "c" * 40
+        self.dispatch["verification_plan"] = plan
+        images: JsonObject = {"worker": "sha256:" + "1" * 64}
+        self.dispatch["runtime_images"] = images
+        self._seed()
+
+        with mock.patch.object(
+            qa_lane, "run_gate", return_value=self._evidence_gate(["first", "second"])
+        ) as gate:
+            qa_lane.run(self.args, self._ops([]))
+
+        context = gate.call_args.kwargs["evidence"]
+        self.assertEqual(context.candidate_sha, "c" * 40)
+        self.assertEqual(context.environment_fingerprint, "f" * 64)
+        self.assertEqual(context.plan_sha256, verification_plan.plan_sha256(plan))
+        self.assertEqual(
+            context.image_digest,
+            operational_guards.runtime_images_digest(images),
+        )
+
+    def test_a_ticket_diff_plan_names_kind_selection_and_nodeids_of_each_command(
+        self,
+    ) -> None:
+        fingerprint = "f" * 64
+
+        def stage(
+            stage_id: str, kind: str, selection: str, nodeids: list[JsonValue]
+        ) -> JsonObject:
+            return {
+                "stage_id": stage_id,
+                "kind": kind,
+                "argv": [stage_id],
+                "timeout_seconds": 60,
+                "selection": selection,
+                "nodeids": nodeids,
+                "environment_fingerprint": fingerprint,
+            }
+
+        plan: JsonObject = {
+            "role": "qa",
+            "ticket_diff": {"python_tests": [], "cargo_targets": []},
+            "stages": [
+                stage("lint", "lint", "full", []),
+                stage("tests", "pytest", "ticket-diff", []),
+                stage("cargo-test-state-lib", "custom", "ticket-diff", ["state::lib"]),
+            ],
+        }
+        self.dispatch["verification_plan"] = plan
+        self.dispatch["verification_commands"] = ["lint", "cargo-test-state-lib"]
+        self.dispatch["candidate_commit"] = "c" * 40
+        self._seed()
+
+        with mock.patch.object(
+            qa_lane,
+            "run_gate",
+            return_value=self._evidence_gate(["lint", "cargo-test-state-lib"]),
+        ) as gate:
+            qa_lane.run(self.args, self._ops([]))
+
+        context = gate.call_args.kwargs["evidence"]
+        self.assertEqual(
+            [(p.stage_id, p.kind, p.selection, p.nodeids) for p in context.planned],
+            [
+                ("gate-1", "lint", "full", None),
+                ("gate-2", "custom", "ticket-diff", ("state::lib",)),
+            ],
+        )
+        self.assertEqual(
+            [(p.stage_id, p.kind, p.selection, p.nodeids) for p in context.unselected],
+            [("no-tests-in-diff", "pytest", "ticket-diff", ())],
+        )
+
+    def test_a_plan_without_the_ticket_diff_section_adds_no_stage_description(
+        self,
+    ) -> None:
+        plan: JsonObject = {
+            "stages": [{"stage_id": "p", "environment_fingerprint": "f" * 64}],
+            "role": "qa",
+        }
+        self.dispatch["verification_plan"] = plan
+        self.dispatch["verification_commands"] = ["first", "second"]
+        self._seed()
+
+        with mock.patch.object(
+            qa_lane, "run_gate", return_value=self._evidence_gate(["first", "second"])
+        ) as gate:
+            qa_lane.run(self.args, self._ops([]))
+
+        context = gate.call_args.kwargs["evidence"]
+        self.assertEqual((context.planned, context.unselected), ((), ()))
+
+    def test_a_command_the_gate_never_reached_is_not_run_in_the_report(self) -> None:
+        self.dispatch["verification_commands"] = ["first", "second", "third"]
+        self._seed()
+        persisted: list[dict[str, object]] = []
+
+        with mock.patch.object(
+            qa_lane,
+            "run_gate",
+            return_value=self._evidence_gate(["first", "second", "third"]),
+        ):
+            qa_lane.run(self.args, self._ops(persisted))
+
+        checks = persisted[0]["checks_run"]
+        assert isinstance(checks, list)
+        self.assertEqual(
+            [(c["command"], c["result"]) for c in checks],
+            [("first", "pass"), ("second", "fail"), ("third", "not_run")],
+        )
+        self.assertEqual(persisted[0]["outcome"], "failed")
 
     def test_report_persist_failure_releases_the_dispatch_for_retry(self) -> None:
         self._seed()
@@ -963,7 +1316,7 @@ class QaLaneRunTests(QaLaneTestCase):
 
     def _run_staged(self, staged: QAStagesResult) -> dict[str, object]:
         self.dispatch["verification_commands"] = list(self.GATE)
-        self._seed()
+        self._seed(policy={"qa_preparation": [self.PREPARE]})
         persisted: list[dict[str, object]] = []
 
         def persist(
@@ -1099,7 +1452,7 @@ class QaLaneRunTests(QaLaneTestCase):
 
     def test_stages_that_disagree_with_the_artifact_release_the_lane(self) -> None:
         self.dispatch["verification_commands"] = list(self.GATE)
-        self._seed()
+        self._seed(policy={"qa_preparation": [self.PREPARE]})
         staged = self._staged()
         tampered = QAStagesResult(
             **{**staged.__dict__, "artifact": format_command_log("other", 0, "x")}
@@ -1127,7 +1480,7 @@ class QaLaneRunTests(QaLaneTestCase):
         self,
     ) -> None:
         self.dispatch["verification_commands"] = list(self.GATE)
-        self._seed()
+        self._seed(policy={"qa_preparation": [self.PREPARE]})
         with (
             mock.patch.object(qa_lane, "run_qa_stages", return_value=self._staged()),
             mock.patch.object(
@@ -1150,6 +1503,276 @@ class QaLaneRunTests(QaLaneTestCase):
             )
 
         self._assert_transient_failure_released()
+
+    @contextlib.contextmanager
+    def _another_operation(self) -> Iterator[Callable[[float | None], None]]:
+        """Yield ``hold(release_after)``, which makes another operation take the real ledger lock.
+
+        The holder releases the lock ``release_after`` seconds later, or only when the block exits
+        for ``None``."""
+        release = threading.Event()
+        holders: list[threading.Thread] = []
+        timers: list[threading.Timer] = []
+
+        def hold(release_after: float | None) -> None:
+            holding = threading.Event()
+
+            def locked() -> None:
+                with LifecycleLedger(self.root).lock():
+                    holding.set()
+                    release.wait(30)
+
+            holder = threading.Thread(target=locked)
+            holders.append(holder)
+            holder.start()
+            self.assertTrue(holding.wait(10))
+            if release_after is not None:
+                timers.append(threading.Timer(release_after, release.set))
+                timers[-1].start()
+
+        try:
+            yield hold
+        finally:
+            release.set()
+            for timer in timers:
+                timer.cancel()
+            for holder in holders:
+                holder.join()
+
+    def _gate_then(self, step: Callable[[], None]) -> object:
+        """A passing gate that runs ``step`` before it returns."""
+
+        def gate(*arguments: object, **keywords: object) -> GateResult:
+            step()
+            return _passing_gate()
+
+        return gate
+
+    def test_a_busy_ledger_after_the_lease_releases_the_lane_once_the_lock_frees(
+        self,
+    ) -> None:
+        self._seed()
+
+        with (
+            self._another_operation() as hold,
+            mock.patch.object(
+                qa_lane, "run_gate", side_effect=self._gate_then(lambda: hold(0.5))
+            ),
+            self.assertRaises(coordinator.CoordinatorError) as caught,
+        ):
+            qa_lane.run(self.args, self._ops())
+
+        self.assertEqual(
+            caught.exception.message, "ledger is locked by another operation"
+        )
+        self._assert_transient_failure_released()
+        with mock.patch.object(qa_lane, "run_gate", return_value=_passing_gate()):
+            result = qa_lane.run(self.args, self._ops())
+        self.assertEqual(result["state"], "reported")
+
+    def test_a_ledger_busy_past_the_wait_names_the_lane_left_held(self) -> None:
+        self._seed()
+
+        with (
+            mock.patch.object(qa_lane, "RELEASE_LOCK_WAIT_SECONDS", 0.5),
+            self._another_operation() as hold,
+            mock.patch.object(
+                qa_lane, "run_gate", side_effect=self._gate_then(lambda: hold(None))
+            ),
+            self.assertRaises(coordinator.CoordinatorError) as caught,
+        ):
+            qa_lane.run(self.args, self._ops())
+
+        lease = qa_lane._lease(self.ledger)
+        assert lease is not None
+        self.assertEqual(qa_lane._owner(lease), ("dispatch", DISPATCH_ID))
+        self.assertIn(f"dispatch {DISPATCH_ID}", caught.exception.message)
+        self.assertIn(str(lease["expires_at"]), caught.exception.message)
+        self.assertRemedy(caught)
+        status = coordinator._load_dispatch_status(self.root, DISPATCH_ID)
+        self.assertEqual(status["state"], "working")
+
+    def _clear_expired_lease(self) -> JsonObject:
+        """Expire the current lease, then clear it as an operator who checked its owner."""
+        lease = qa_lane._lease(self.ledger)
+        assert lease is not None
+        expired = {
+            **lease,
+            "expires_at": (datetime.now(UTC) - timedelta(seconds=1)).isoformat(),
+        }
+        with self.ledger.lock():
+            self.ledger.replace(qa_lane._lane_path(self.ledger), expired)
+        return qa_lane.clear_stale_lease(
+            _ns(
+                repo=str(self.repo),
+                state_dir=None,
+                expected_host=expired["host"],
+                expected_pid=expired["pid"],
+                expected_expiry=expired["expires_at"],
+                reason="lane left held",
+            ),
+            cast(
+                QaWorkflowOps,
+                _Ops(
+                    _approval=lambda args: {
+                        "approved_by": "operator",
+                        "approved_at": "now",
+                    }
+                ),
+            ),
+        )
+
+    def test_clearing_the_lane_left_held_lets_the_same_dispatch_run_again(
+        self,
+    ) -> None:
+        self._seed()
+        with (
+            mock.patch.object(qa_lane, "RELEASE_LOCK_WAIT_SECONDS", 0.5),
+            self._another_operation() as hold,
+            mock.patch.object(
+                qa_lane, "run_gate", side_effect=self._gate_then(lambda: hold(None))
+            ),
+            self.assertRaises(coordinator.CoordinatorError),
+        ):
+            qa_lane.run(self.args, self._ops())
+
+        cleared = self._clear_expired_lease()
+
+        self.assertEqual(cleared["restored_dispatch_state"], "approved")
+        batch = coordinator._load_batch(self.root, BATCH_ID)
+        status = coordinator._load_dispatch_status(self.root, DISPATCH_ID)
+        self.assertEqual(batch["dispatches"][0]["state"], "approved")
+        self.assertEqual(status["state"], "approved")
+        recovery = coordinator._read_object(
+            next((self.lane / "recoveries").glob("*.json")), "recovery"
+        )
+        self.assertEqual(recovery["restored_dispatch_state"], "approved")
+        with mock.patch.object(qa_lane, "run_gate", return_value=_passing_gate()):
+            result = qa_lane.run(self.args, self._ops())
+        self.assertEqual(result["state"], "reported")
+
+    def test_clearing_a_lease_keeps_a_reported_dispatch_as_it_is(self) -> None:
+        self._seed(batch_state="reported", status_state="reported")
+        with self.ledger.lock():
+            qa_lane.acquire(self.ledger, DISPATCH_ID, lease_seconds=60)
+
+        cleared = self._clear_expired_lease()
+
+        self.assertIsNone(cleared["restored_dispatch_state"])
+        batch = coordinator._load_batch(self.root, BATCH_ID)
+        status = coordinator._load_dispatch_status(self.root, DISPATCH_ID)
+        self.assertEqual(batch["dispatches"][0]["state"], "reported")
+        self.assertEqual(status["state"], "reported")
+
+    def test_a_late_rollback_keeps_a_lease_a_newer_run_of_the_dispatch_took(
+        self,
+    ) -> None:
+        self._seed()
+        retaken: list[JsonObject] = []
+
+        def cleared_and_run_again(*arguments: object, **keywords: object) -> GateResult:
+            # The run outlived its lease: an operator cleared it and the dispatch ran again.
+            with self.ledger.lock():
+                for path, _ in qa_lane._queue_entries(self.ledger):
+                    qa_lane._delete_record(self.ledger, path, reason="test clearance")
+                qa_lane._delete_record(
+                    self.ledger,
+                    qa_lane._lane_path(self.ledger),
+                    reason="test clearance",
+                )
+                admission = qa_lane.acquire(self.ledger, DISPATCH_ID, lease_seconds=60)
+                retaken.append(admission["lease"])
+            raise GateRunnerError("checkout failed", remedy="fix the candidate commit")
+
+        with (
+            mock.patch.object(qa_lane, "run_gate", side_effect=cleared_and_run_again),
+            self.assertRaises(coordinator.CoordinatorError),
+        ):
+            qa_lane.run(self.args, self._ops())
+
+        self.assertEqual(qa_lane._lease(self.ledger), retaken[0])
+        self.assertEqual(len(qa_lane._queue_entries(self.ledger)), 1)
+        batch = coordinator._load_batch(self.root, BATCH_ID)
+        status = coordinator._load_dispatch_status(self.root, DISPATCH_ID)
+        self.assertEqual(batch["dispatches"][0]["state"], "dispatched")
+        self.assertEqual(status["state"], "working")
+
+    def _assert_busy_release_keeps_a_lease_taken_over_by(
+        self, owner: tuple[str, str]
+    ) -> None:
+        self._seed()
+        kind, identity = owner
+
+        with (
+            self._another_operation() as hold,
+            self.assertRaises(coordinator.CoordinatorError),
+        ):
+
+            def taken_over_then_busy() -> None:
+                # The run outlived its lease: the lease was cleared and another owner took the lane.
+                with self.ledger.lock():
+                    for path, _ in qa_lane._queue_entries(self.ledger):
+                        qa_lane._delete_record(
+                            self.ledger, path, reason="test takeover"
+                        )
+                    qa_lane._delete_record(
+                        self.ledger,
+                        qa_lane._lane_path(self.ledger),
+                        reason="test takeover",
+                    )
+                    qa_lane.acquire(
+                        self.ledger, identity, owner_kind=kind, lease_seconds=60
+                    )
+                hold(0.5)
+
+            with mock.patch.object(
+                qa_lane, "run_gate", side_effect=self._gate_then(taken_over_then_busy)
+            ):
+                qa_lane.run(self.args, self._ops())
+
+        lease = qa_lane._lease(self.ledger)
+        assert lease is not None
+        self.assertEqual(qa_lane._owner(lease), owner)
+        status = coordinator._load_dispatch_status(self.root, DISPATCH_ID)
+        self.assertEqual(status["state"], "approved")
+
+    def test_a_busy_release_keeps_a_lease_another_dispatch_took_over(self) -> None:
+        self._assert_busy_release_keeps_a_lease_taken_over_by(
+            ("dispatch", OTHER_DISPATCH_ID)
+        )
+
+    def test_a_busy_release_keeps_a_local_lease_without_a_dispatch(self) -> None:
+        self._assert_busy_release_keeps_a_lease_taken_over_by(
+            ("local-qa", "local-qa-" + "c" * 32)
+        )
+
+    def test_a_busy_ledger_after_the_report_still_releases_the_lane(self) -> None:
+        self._seed()
+        persisted: list[dict[str, object]] = []
+        original_lock = qa_lane._lock
+        took_over: list[bool] = []
+
+        with self._another_operation() as hold:
+
+            @contextlib.contextmanager
+            def busy_after_report(ledger: LifecycleLedger) -> Iterator[None]:
+                with original_lock(ledger):
+                    yield
+                if persisted and not took_over:
+                    # Another operation takes the ledger as soon as the report's lock is released.
+                    took_over.append(True)
+                    hold(0.5)
+
+            with (
+                mock.patch.object(qa_lane, "run_gate", return_value=_passing_gate()),
+                mock.patch.object(qa_lane, "_lock", busy_after_report),
+            ):
+                result = qa_lane.run(self.args, self._ops(persisted))
+
+        self.assertEqual(took_over, [True])
+        self.assertEqual(result["state"], "reported")
+        self.assertIsNone(qa_lane._lease(self.ledger))
+        self.assertEqual(qa_lane._queue_entries(self.ledger), [])
 
     def test_a_transient_failure_keeps_a_lease_another_owner_took_over(self) -> None:
         self._seed()
@@ -1224,6 +1847,30 @@ class QaLaneRunTests(QaLaneTestCase):
             )
         )
         refused(lambda r: r.update(role="qa", qa_stages="not a mapping"))
+
+    def test_a_failing_stage_with_a_runtime_domain_is_a_blocked_report(self) -> None:
+        # The runner and the validator share one outcome rule: a stage whose ending the runtime
+        # classified (exit 127, tooling) did not judge the code, so the report is blocked.
+        self.dispatch["verification_commands"] = list(self.GATE)
+        gate = self._staged(gate_exits=(0, 127))
+        gate.stages[-1]["domain"] = "tooling"
+        defect = self._staged(
+            prep_exit=127,
+            diagnosis=Diagnosis("project-defect", ("exit-code:127",), "lock"),
+            probe_exit=0,
+            check_exit=1,
+        )
+        defect.stages[0]["domain"] = "tooling"
+        for staged in (gate, defect):
+            report = qa_lane._qa_report(
+                self.dispatch, staged.gate_checks, Path("a"), "0" * 64, staged.record()
+            )
+            with self.subTest(staged.failed_stage):
+                reports._validate_qa_stages({**report, "outcome": "blocked"}, self.dispatch)
+                with self.assertRaisesRegex(
+                    coordinator.CoordinatorError, "requires outcome blocked"
+                ):
+                    reports._validate_qa_stages({**report, "outcome": "failed"}, self.dispatch)
 
     def test_qa_stages_belong_only_to_a_qa_report(self) -> None:
         with self.assertRaises(coordinator.CoordinatorError):

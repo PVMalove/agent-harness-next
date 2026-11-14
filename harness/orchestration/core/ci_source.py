@@ -48,7 +48,12 @@ REASONS = (
     "pending_check",
     "inconclusive_check",
     "failed_check",
+    "light_check",
 )
+
+# The suffix of the check names of the light CI path (issue #937): a pull request into an
+# ``integration/*`` branch runs ``verify-light``, which does not run the full suite.
+LIGHT_CHECK_SUFFIX = "-light"
 
 _SHA = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 _SAFE_REASON = re.compile(r"[^A-Za-z0-9 ._:/#()-]")
@@ -116,12 +121,24 @@ def evaluate(
     target_sha: str,
     required_checks: Sequence[str],
     base_ref: str | None = None,
+    allow_light: bool = False,
 ) -> CiVerdict:
-    """Decide whether ``observation`` is CI evidence for exactly this candidate/target pair."""
+    """Decide whether ``observation`` is CI evidence for exactly this candidate/target pair.
+
+    ``allow_light`` says the pair accepts the QA of the ticket's diff. Without it (the default,
+    which a pair requiring ``full`` keeps) a required check named ``*-light`` is configuration
+    that can never confirm the pair: the verdict is ``light_check`` whatever was observed."""
     if not required_checks:
         return _fallback(
             "not_configured",
             "project.json ci_required_checks is empty: CI evidence is not configured",
+        )
+    light = [name for name in required_checks if name.endswith(LIGHT_CHECK_SUFFIX)]
+    if light and not allow_light:
+        return _fallback(
+            "light_check",
+            f"required check {light[0]!r} is a light check, which never confirms a pair "
+            "that requires a full QA run",
         )
     if observation.error is not None:
         return _fallback("unavailable", observation.error)

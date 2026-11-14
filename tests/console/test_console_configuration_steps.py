@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import pytest
 
 from harness.configuration import parse_object
 from harness.configuration_schema import PACKAGE
-from harness.console.configuration import ConfigurationDraft
-from harness.console.configuration_steps import steps_for
+from harness.console.kernel.configuration import ConfigurationDraft
+from harness.console.tui.configuration_steps import steps_for
 
 
 @pytest.mark.parametrize("provider", ["none", "native_access", "runtime:factory"])
@@ -76,7 +77,7 @@ def test_absent_optional_parent_does_not_require_children(tmp_path: Path) -> Non
 
 @pytest.mark.parametrize("text", ["NaN", "Infinity", "-Infinity"])
 def test_numeric_steps_reject_non_json_numbers(text: str) -> None:
-    from harness.console.configuration_steps import ConfigurationStep
+    from harness.console.tui.configuration_steps import ConfigurationStep
 
     step = ConfigurationStep(
         "orchestration.json", ("threshold",), {"type": "number"}, "Threshold", True
@@ -88,7 +89,7 @@ def test_numeric_steps_reject_non_json_numbers(text: str) -> None:
 
 
 def test_nested_nonfinite_values_are_rejected_before_draft_rendering() -> None:
-    from harness.console.configuration_steps import ConfigurationStep
+    from harness.console.tui.configuration_steps import ConfigurationStep
 
     step = ConfigurationStep(
         "project.json", ("policy",), {"type": "object"}, "Policy", True
@@ -102,8 +103,8 @@ def test_nested_nonfinite_values_are_rejected_before_draft_rendering() -> None:
 def test_recommendations_use_project_facts_and_options_describe_limits(
     tmp_path: Path,
 ) -> None:
-    from harness.console.configuration_steps import step_for_problem
-    from harness.console.project_facts import project_facts
+    from harness.console.tui.configuration_steps import step_for_problem
+    from harness.console.tui.project_facts import project_facts
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
     (tmp_path / "Makefile").write_text("verify:\n\t@true\n", encoding="utf-8")
@@ -125,3 +126,10 @@ def test_recommendations_use_project_facts_and_options_describe_limits(
         steps, "project.json.language: значение вне допустимых"
     ) == (steps.index(language))
     assert step_for_problem(steps, "что-то без имени поля") is None
+
+
+@pytest.fixture(autouse=True)
+def no_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.console.tui import project_facts
+
+    monkeypatch.setattr(project_facts, "_default_branch", lambda _repo: None)

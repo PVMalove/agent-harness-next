@@ -129,6 +129,25 @@ class ContextBuilderFixture(unittest.TestCase):
 
 
 class ContextBuilderTests(ContextBuilderFixture):
+    def test_explicit_read_input_survives_a_changed_file_limit(self) -> None:
+        package = build_context_package(
+            self.repo, self.base_commit, self.candidate_commit,
+            min_starting_files=1, max_starting_files=1,
+            required_paths=["docs/adr/0001-base-module.md"],
+        )
+        self.assertEqual(
+            [item.path for item in package.starting_files],
+            ["docs/adr/0001-base-module.md"],
+        )
+
+    def test_explicit_read_inputs_cannot_exceed_the_starting_file_limit(self) -> None:
+        with self.assertRaisesRegex(ContextPackageError, "starting files exceed"):
+            build_context_package(
+                self.repo, self.base_commit, self.candidate_commit,
+                min_starting_files=1, max_starting_files=1,
+                required_paths=["pkg/base.py", "docs/adr/0001-base-module.md"],
+            )
+
     """Набор тестов для сборщика контекста при использовании минимального (безбандлового) уровня Repo Map."""
 
     def test_builds_diff_starting_files_cards_and_hashes(self) -> None:
@@ -1515,11 +1534,11 @@ class MemoryPackageTests(ContextBuilderFixture):
     def test_workflow_freezes_local_memory_once_and_reuses_matching_query(self) -> None:
         from harness.memory import build
         from harness.orchestration.ledger.ledger_ops import _load_context_package
-        from harness.orchestration.ledger.lifecycle import LifecycleLedger
         from harness.orchestration.workflow.context_package import (
             _persist_context_package,
         )
         from tests.memory.test_build import configure, source
+        from tests.orchestration.legacy_state import seed_file_ledger
 
         configure(self.repo, min_similarity=0)
         source(
@@ -1529,8 +1548,9 @@ class MemoryPackageTests(ContextBuilderFixture):
         )
         build(self.repo)
         root = self.repo / "state"
-        ledger = LifecycleLedger(root)
-        ledger.ensure()
+        # The Context Package reads records as files of a generation: a 1.x ledger (ADR 0036,
+        # section 5, rules 2 and 3).
+        ledger = seed_file_ledger(root)
         batch = {
             "batch_id": "batch-memory",
             "base_commit": self.base_commit,

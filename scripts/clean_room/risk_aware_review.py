@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 from scripts.clean_room.support import (
     capture,
     commit_map_for,
@@ -114,6 +116,7 @@ def run(ctx: SimpleNamespace) -> None:
     # explicit transport stays in the coordinator session, and an approved-but-unsent brief can
     # be cancelled without abandoning its whole batch or losing the audit trail.
     implicit_transport_state = test_root / "implicit-transport-state"
+    seed_file_ledger(implicit_transport_state)
     active_orchestration_config = orchestration_config.read_text(encoding="utf-8")
     implicit_transport = json.loads(json.dumps(valid_orchestration))
     del implicit_transport["assignment_plans"]["architect"]["transport"]
@@ -228,6 +231,7 @@ def run(ctx: SimpleNamespace) -> None:
     # A Windows Python configured with a legacy output encoding must still emit valid UTF-8 JSON;
     # otherwise a Git Bash display artifact looks like corrupted Russian batch evidence.
     unicode_state = test_root / "unicode-output-state"
+    seed_file_ledger(unicode_state)
     unicode_env = dict(os.environ, PYTHONIOENCODING="cp1251")
     sync_origin_base("integration/test-908")
     # The ticket title stays multilingual: it names the human's work item and is not the
@@ -313,6 +317,7 @@ def run(ctx: SimpleNamespace) -> None:
     # Historical abandoned plans can share the ticket and branch after a coordinator correction.
     # They carry no QA report for this candidate and must not make PR evidence ambiguous. A second
     # batch for unfinished work is refused, so they are planned and closed before the live batch.
+    seed_file_ledger(state_root)
     sync_origin_base()
     for history_index in range(2):
         historical = coordinator_run(

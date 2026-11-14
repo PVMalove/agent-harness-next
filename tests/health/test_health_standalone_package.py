@@ -12,7 +12,7 @@ from types import ModuleType
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-# Mirrors exactly what CAPABILITIES.json's pvmalove-suite capability copies into an installed
+# Mirrors exactly what CAPABILITIES.json's engineering-suite capability copies into an installed
 # project's .harness/ for health and its runtime dependencies (file and directory entries).
 _FILE_RESOURCES = (
     "errors.py",
@@ -80,6 +80,7 @@ def test_registry_runs_from_a_copied_health_only_tree_with_no_bin_harness(
         "repo_map",
         "memory",
         "environment",
+        "hooks",
         "tracker",
         "orchestration",
     }
@@ -121,6 +122,7 @@ def test_registry_runs_without_crashing_even_with_a_lock_file_present(
     ids = {check.id for check in report.checks}
     assert ids == {
         "files.lock",
+        "files.seed_baseline",
         "files.agents_md",
         "files.discovery_links",
         "files.project_json",
@@ -153,6 +155,9 @@ def test_registry_runs_without_crashing_even_with_a_lock_file_present(
         "environment.uv",
         "environment.glab",
         "environment.dev_env",
+        "environment.qa_executables",
+        "environment.c_linker",
+        "environment.runtime_socket_path",
         "environment.output_encoding",
         "environment.codex_sandbox",
         "environment.claude_sandbox",
@@ -163,18 +168,29 @@ def test_registry_runs_without_crashing_even_with_a_lock_file_present(
         "environment.pytest_temp",
         "environment.symlinks",
         "environment.hook_bash",
+        "hooks.policy",
+        "hooks.test_author",
+        "hooks.test_author_config",
+        "hooks.test_author_root",
+        "hooks.test_author_trust",
+        "hooks.test_author_guard",
+        "hooks.test_author_runner",
+        "hooks.test_author_probe",
         "tracker.project",
         "tracker.auth",
         "tracker.reachability",
         "tracker.permissions",
         "tracker.labels",
         "tracker.git_base",
+        "orchestration.runtime",
         "orchestration.ledger_summary",
         "orchestration.unfinished_batches",
         "orchestration.blocked_batches",
         "orchestration.stale_dispatches",
         "orchestration.orphaned_worktrees",
         "orchestration.disposable_data",
+        "orchestration.adapters",
+        "orchestration.worker_binaries",
     }
     # The project tracker resolver ships inside .harness/health/ and runs from the copied tree.
     project = next(check for check in report.checks if check.id == "tracker.project")

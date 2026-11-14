@@ -1,0 +1,370 @@
+site_name: Agent Harness Next · 2.0
+site_description: Портативный harness для coding-агентов.
+site_url: https://pvmalove.github.io/agent-harness-next/
+repo_url: https://github.com/PVMalove/agent-harness-next
+repo_name: PVMalove/agent-harness-next
+edit_uri: edit/master/site/docs/
+docs_dir: docs
+site_dir: ../site_build
+use_directory_urls: true
+
+theme:
+  name: material
+  language: ru
+  logo: assets/mark.svg
+  favicon: assets/mascot.svg
+  custom_dir: overrides
+  font: false
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Светлая тема
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Тёмная тема
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.tracking
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+plugins:
+  - search
+  - i18n:
+      # Configure the language switcher explicitly for Material instant navigation.
+      reconfigure_material: false
+      docs_structure: suffix
+      fallback_to_default: true
+      languages:
+        - locale: ru
+          default: true
+          name: Русский
+          build: true
+        - locale: en
+          name: English
+          build: true
+          site_name: Agent Harness Next · 2.0
+          theme:
+            language: en
+            palette:
+              - scheme: slate
+                primary: custom
+                accent: custom
+                toggle:
+                  icon: material/weather-sunny
+                  name: Light theme
+              - scheme: default
+                primary: custom
+                accent: custom
+                toggle:
+                  icon: material/weather-night
+                  name: Dark theme
+          extra:
+            mascot_alt: Voxel mascot of Agent Harness Next
+          nav_translations:
+            Главная: Home
+            Начало: Getting started
+            Настройки: Settings
+            Роли и транспорт: Roles and transport
+            Политики: Policies
+            Доступ и контейнер: Access and container
+            Верификация: Verification
+            Интеграции: Integrations
+            Секреты и токены: Secrets and tokens
+            Зависимости и окружение: Dependencies and environment
+            Контейнер: Container
+            Руководства: Guides
+            Рабочий поток: Workflow
+            Примеры: Examples
+            "QA gate и Release Gate": QA gate and Release Gate
+            Скиллы: Skills
+            Идея и исследование: Idea and research
+            Спецификация и тикеты: Specs and tickets
+            Реализация: Implementation
+            Качество и публикация: Quality and publishing
+            Настройка: Setup
+            Агенты: Agents
+            Субагенты: Subagents
+            Процесс и Git: Process and Git
+            Артефакты и релизы: Artifacts and releases
+            Приёмка: Acceptance
+            Git и ветки: Git and branches
+            QA и проверки: QA and checks
+            Политика и рискованные пути: Policy and risky paths
+            Служебные: Utility
+            Оркестрация: Orchestration
+            Политика и профили: Policy and profiles
+            Инструкции и процессы: Instructions and processes
+            Роли оркестрации: Orchestration roles
+            Переводы: Translations
+            О Harness: About Harness
+            Включение и конфигурация: Enable and configure
+            Доступ и контейнер: Access and containers
+            Контекст для ролей: Context for roles
+            Запуск и отчёты: Run and report
+            Решения и повторы: Decisions and retries
+            Диагностика и состояние: Diagnostics and state
+            Чистый QA: Clean-room QA
+            Публикация и PR: Publish and PR
+            Восстановление: Recovery
+            Краткий указатель: Quick index
+            Схемы: Diagrams
+            Концепции: Concepts
+            Контекст: Context
+            Справочник: Reference
+            Метки: Labels
+            Глоссарий: Glossary
+            Проект: Project
+            Структура: Structure
+            Архитектура: Architecture
+            Обзор: Overview
+            Релизы: Releases
+            Миграция на 2.0: Upgrade to 2.0
+            Платформы: Platforms
+
+extra_css:
+  - assets/docs-site.css
+
+extra_javascript:
+  - assets/nav-filter.js
+  - assets/nav-tree.js
+  - assets/diagram-embed.js
+  - assets/core-diagram.js
+  - assets/install-diagram.js
+  - assets/guide-diagram.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - toc:
+      permalink: "\u200b"
+      permalink_title: "Ссылка на этот раздел"
+
+not_in_nav: |
+  /diagrams/index.md
+  /diagrams/index.en.md
+
+nav:
+  - Главная: index.md
+  - Начало:
+      - getting-started/index.md
+      - Настройки:
+          - getting-started/settings/index.md
+          - project.json: getting-started/settings/project.md
+          - orchestration.json:
+              - getting-started/settings/orchestration/index.md
+              - Роли и транспорт: getting-started/settings/orchestration/roles.md
+              - Политики: getting-started/settings/orchestration/policies.md
+              - Доступ и контейнер: getting-started/settings/orchestration/access.md
+              - Верификация: getting-started/settings/orchestration/verification.md
+          - Интеграции: getting-started/settings/integrations.md
+          - Секреты и токены: getting-started/settings/secrets.md
+          - Зависимости и окружение: getting-started/settings/environment.md
+          - Контейнер: getting-started/settings/container.md
+          - Test-author: getting-started/settings/test-author.md
+  - Руководства:
+      - guides/index.md
+      - О Harness: harness-guide.md
+      - Рабочий поток: guides/workflow.md
+      - "/implement": guides/implement.md
+      - "/fast-implement": guides/fast-implement.md
+      - TDD: guides/tdd.md
+      - Code review: guides/code-review.md
+      - QA gate и Release Gate: guides/qa-gate.md
+      - Примеры: guides/examples.md
+      - Troubleshooting: guides/troubleshooting.md
+      - Миграция на 2.0: guides/upgrade-2-0.md
+      - Оркестрация:
+          - backend-orchestration.md
+          - Включение и конфигурация: guides/orchestration/setup.md
+          - Доступ и контейнер: guides/orchestration/access.md
+          - Контекст для ролей: guides/orchestration/context.md
+          - Запуск и отчёты: guides/orchestration/run.md
+          - Решения и повторы: guides/orchestration/decisions.md
+          - Диагностика и состояние: guides/orchestration/operations.md
+          - Чистый QA: guides/orchestration/qa.md
+          - Публикация и PR: guides/orchestration/publish.md
+          - Восстановление: guides/orchestration/recovery.md
+          - runtime-discovery.md
+          - console-configuration.md
+      - Концепции:
+          - Hooks: concepts/hooks.md
+          - Worktrees: concepts/worktrees.md
+          - Контекст: concepts/context.md
+  - Справочник:
+      - reference/index.md
+      - CLI: reference/cli.md
+      - Метки: reference/labels.md
+      - Переводы:
+          - reference/translations/index.md
+          - Скиллы:
+              - skills/index.md
+              - Краткий указатель: reference/skills.md
+              - Идея и исследование:
+                  - ask-matt: skills/ask-matt.md
+                  - wayfinder: skills/wayfinder.md
+                  - grilling: skills/grilling.md
+                  - grill-me: skills/grill-me.md
+                  - grill-with-docs: skills/grill-with-docs.md
+                  - diagnosing-bugs: skills/diagnosing-bugs.md
+                  - triage: skills/triage.md
+              - Спецификация и тикеты:
+                  - to-spec: skills/to-spec.md
+                  - to-tickets: skills/to-tickets.md
+                  - to-guide: skills/to-guide.md
+              - Реализация:
+                  - architect: skills/architect.md
+                  - implement: skills/implement.md
+                  - fast-implement: skills/fast-implement.md
+                  - tdd: skills/tdd.md
+              - Качество и публикация:
+                  - code-review: skills/code-review.md
+                  - qa-gate: skills/qa-gate.md
+                  - delivery-stats: skills/delivery-stats.md
+                  - to-pull-requests: skills/to-pull-requests.md
+              - Настройка:
+                  - start-project: skills/start-project.md
+                  - integrate-project: skills/integrate-project.md
+                  - setup-labels: skills/setup-labels.md
+                  - database-migrations: skills/database-migrations.md
+                  - messaging-integration: skills/messaging-integration.md
+              - Роли оркестрации:
+                  - coordinator: skills/coordinator.md
+                  - developer: skills/developer.md
+                  - verification: skills/verification.md
+                  - code-review-role: skills/code-review-role.md
+                  - qa: skills/qa.md
+                  - conflict-resolver: skills/conflict-resolver.md
+                  - playbook: skills/playbook.md
+                  - pilot: skills/pilot.md
+              - Upstream:
+                  - skills/vendor/index.md
+                  - Идея и исследование:
+                      - ask-matt: skills/vendor/ask-matt.md
+                      - wayfinder: skills/vendor/wayfinder.md
+                      - grilling: skills/vendor/grilling.md
+                      - grill-me: skills/vendor/grill-me.md
+                      - grill-with-docs: skills/vendor/grill-with-docs.md
+                      - research: skills/vendor/research.md
+                      - domain-modeling: skills/vendor/domain-modeling.md
+                      - codebase-design: skills/vendor/codebase-design.md
+                      - prototype: skills/vendor/prototype.md
+                  - Спецификация и тикеты:
+                      - triage: skills/vendor/triage.md
+                      - to-spec: skills/vendor/to-spec.md
+                      - to-tickets: skills/vendor/to-tickets.md
+                      - to-questionnaire: skills/vendor/to-questionnaire.md
+                  - Реализация:
+                      - implement: skills/vendor/implement.md
+                      - tdd: skills/vendor/tdd.md
+                      - diagnosing-bugs: skills/vendor/diagnosing-bugs.md
+                      - code-review: skills/vendor/code-review.md
+                      - improve-codebase-architecture: skills/vendor/improve-codebase-architecture.md
+                      - resolving-merge-conflicts: skills/vendor/resolving-merge-conflicts.md
+                  - Инструкции и процессы:
+                      - setup-matt-pocock-skills: skills/vendor/setup-matt-pocock-skills.md
+                      - writing-for-agents: skills/vendor/writing-for-agents.md
+                      - handoff: skills/vendor/handoff.md
+                      - wizard: skills/vendor/wizard.md
+                      - teach: skills/vendor/teach.md
+                      - wait-what: skills/vendor/wait-what.md
+          - Агенты:
+              - agents/index.md
+              - Субагенты:
+                  - code-review-standards: agents/code-review-standards.md
+                  - code-review-spec: agents/code-review-spec.md
+                  - pr-composer: agents/pr-composer.md
+                  - test-author: agents/test-author.md
+              - Процесс и Git:
+                  - git-workflow: agents/git-workflow.md
+                  - issue-tracker: agents/issue-tracker.md
+                  - triage-labels: agents/triage-labels.md
+                  - worktrees: agents/worktrees.md
+              - Артефакты и релизы:
+                  - artifacts: agents/artifacts.md
+                  - releases: agents/releases.md
+              - Приёмка:
+                  - console-web-home-checklist: agents/console-web-home-checklist.md
+          - Hooks:
+              - hooks/index.md
+              - Политика и профили: reference/hooks.md
+              - Git и ветки:
+                  - block-dangerous-git: hooks/block-dangerous-git.md
+                  - block-direct-master: hooks/block-direct-master.md
+                  - block-pr-merge: hooks/block-pr-merge.md
+                  - block-public-attribution: hooks/block-public-attribution.md
+                  - check-branch-name: hooks/check-branch-name.md
+                  - check-worktree-branch-name: hooks/check-worktree-branch-name.md
+              - QA и проверки:
+                  - require-qa-gate: hooks/require-qa-gate.md
+                  - record-qa-gate-pass: hooks/record-qa-gate-pass.md
+                  - mark-qa-gate-passed: hooks/mark-qa-gate-passed.md
+                  - require-bounded-check: hooks/require-bounded-check.md
+                  - targeted-check-reminder: hooks/targeted-check-reminder.md
+                  - run-test: hooks/run-test.md
+              - Политика и рискованные пути:
+                  - protect-hook-policy: hooks/protect-hook-policy.md
+                  - block-scratch-outside-docs-tasks: hooks/block-scratch-outside-docs-tasks.md
+                  - impact-first-touch: hooks/impact-first-touch.md
+                  - sensitive-path-recheck: hooks/sensitive-path-recheck.md
+              - Test-author:
+                  - test-author-guard: hooks/test-author-guard.md
+                  - test-author-preflight: hooks/test-author-preflight.md
+              - Служебные:
+                  - hook-response: hooks/hook-response.md
+                  - install-and-update: hooks/install-and-update.md
+                  - count-skill-usage: hooks/count-skill-usage.md
+      - Глоссарий: reference/glossary.md
+  - Проект:
+      - Структура: project/structure.md
+      - Платформы: project/platforms.md
+      - Архитектура:
+          - architecture/index.md
+          - Обзор: architecture/overview.md
+          - Rust runtime: architecture/runtime.md
+  - Релизы: releases/index.md
+  - Demo: demo/index.md
+
+copyright: © 2026 Agent Harness Next · MIT
+
+extra:
+  alternate:
+    - name: Русский
+      link: /agent-harness-next/
+      lang: ru
+    - name: English
+      link: /agent-harness-next/en/
+      lang: en
+  generator: false
+  mascot_alt: Воксельный маскот Agent Harness Next
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/PVMalove/agent-harness-next
+      name: GitHub
+
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    absolute_links: relative_to_docs
+    unrecognized_links: warn
+    anchors: warn

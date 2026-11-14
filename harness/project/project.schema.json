@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "harness project config",
-  "description": "Project-specific values pvmalove-suite's qa-gate, pr-composer, code-review, to-guide, and branch hooks read. Created by 'harness init'/'adopt'/'update' and editable afterward. Editors and the console wizard validate this schema; 'harness health' applies the shared project validator. The console also calls that validator for business rules; no jsonschema runtime dependency is required.",
+  "description": "Project-specific values engineering-suite's qa-gate, pr-composer, code-review, to-guide, and branch hooks read. Created by 'harness init'/'adopt'/'update' and editable afterward. Editors and the console wizard validate this schema; 'harness health' applies the shared project validator. The console also calls that validator for business rules; no jsonschema runtime dependency is required.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -113,7 +113,86 @@
         "minLength": 1,
         "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$)).+$"
       },
-      "description": "Optional test paths: relative globs without '..' segments that are the only write zone of the test author; without this field the test author is off. The isolated test runner (.claude/hooks/run-test.sh, docs/hooks/run-test.md) mounts only '<directory>/**' entries writable and refuses every other form."
+      "description": "Optional test paths: relative globs without '..' segments that are the only write zone of the test author; without this field the test author is off. The isolated test runner (.claude/hooks/run-test.sh, site/docs/hooks/run-test.md) mounts only '<directory>/**' entries writable and refuses every other form."
+    },
+    "hook_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile"
+      ],
+      "description": "Optional hook policy (issue #794). Without this key the project resolves to the 'standard' profile. The key is read only from this file: the HOOK_PROFILE environment variable and tool parameters are ignored, and agent tools cannot edit it (protect-hook-policy). Critical guards block in every profile, including 'minimal'. An escalation raises the profile for matching paths and roles and must not be lower than the base profile.",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "strict"
+          ],
+          "description": "Base hook profile."
+        },
+        "escalations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "profile"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "paths"
+                ]
+              },
+              {
+                "required": [
+                  "roles"
+                ]
+              }
+            ],
+            "properties": {
+              "paths": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$)).+$"
+                },
+                "description": "Relative globs without '..' segments; fnmatch semantics ('*' and '?' also cross '/'); the escalation applies when a touched path matches one. Each escalation sets paths or roles; entries are unique."
+              },
+              "roles": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "developer",
+                    "review",
+                    "qa",
+                    "coordinator"
+                  ]
+                },
+                "description": "Roles the escalation applies to."
+              },
+              "profile": {
+                "type": "string",
+                "enum": [
+                  "minimal",
+                  "standard",
+                  "strict"
+                ],
+                "description": "Profile of the escalation; 'harness health' rejects one lower than the base profile, which this draft-07 schema cannot express."
+              }
+            }
+          },
+          "description": "Optional escalations; the strictest matching one wins over the base profile."
+        }
+      }
     },
     "test_runner": {
       "type": "object",
@@ -322,6 +401,42 @@
         "max_tokens": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "test_author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "model",
+        "effort"
+      ],
+      "description": "Optional executor for the short test-author route. The full route inherits the approved developer runtime/model/effort instead. Missing settings disable the short-route author; no provider or model is implied.",
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "description": "Selected runtime ID. An unavailable protected adapter gives an explicit refusal, never a runtime fallback."
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "description": "Explicit CLI model ID or alias."
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "description": "Explicit effort from the project executor settings."
         }
       }
     }

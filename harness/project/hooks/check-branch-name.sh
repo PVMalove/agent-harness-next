@@ -1,6 +1,10 @@
 #!/bin/bash
 # PreToolUse(Bash): enforces the branch_pattern from .harness/project.json, and that the
 # numeric ID it encodes is a real, registered tracker issue ("Issue First", docs/agents/git-workflow.md).
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" check-branch-name
 INPUT=$(cat)
 PY="$(command -v python3 || command -v python)"
 if [ -z "$PY" ]; then

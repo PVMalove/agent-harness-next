@@ -1,6 +1,10 @@
 #!/bin/bash
 # PreToolUse(EnterWorktree): same branch_pattern convention as check-branch-name.sh,
 # extended to the native worktree tool (docs/agents/worktrees.md).
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" check-worktree-branch-name
 INPUT=$(cat)
 
 # Entering an existing worktree by path, or letting the tool assign a random name, isn't ticket

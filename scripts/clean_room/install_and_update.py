@@ -67,16 +67,16 @@ def run(ctx: SimpleNamespace) -> None:
     old_claude = "# Local Claude instructions\n\nRun the focused checks first.\n"
     (foundation / "AGENTS.md").write_text(old_agents, encoding="utf-8")
     (foundation / "CLAUDE.md").write_text(old_claude, encoding="utf-8")
-    contract = foundation / ".harness/docs/technical-english.md"
+    contract = foundation / ".harness/instructions/technical-english.md"
     contract.unlink()
     old_lock_path = foundation / ".harness/harness.lock"
     old_lock = json.loads(old_lock_path.read_text(encoding="utf-8"))
-    old_lock["files"].pop(".harness/docs/technical-english.md")
+    old_lock["files"].pop(".harness/instructions/technical-english.md")
     old_lock_path.write_text(json.dumps(old_lock), encoding="utf-8")
     update_output = capture(HARNESS + ["update", str(foundation)])
     if (
         contract.read_bytes()
-        != (ROOT / "harness/docs/technical-english.md").read_bytes()
+        != (ROOT / "harness/project/instructions/technical-english.md").read_bytes()
     ):
         sys.exit("standard update did not deliver the managed contract")
     for name, original in (("AGENTS.md", old_agents), ("CLAUDE.md", old_claude)):
@@ -118,7 +118,7 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("diff proposed a duplicate for an existing entry-point transition")
     # A passive reference needs an explicit obligation, without a second link.
     passive = (
-        old_claude + "\nSee [Technical English](.harness/docs/technical-english.md).\n"
+        old_claude + "\nSee [Technical English](.harness/instructions/technical-english.md).\n"
     )
     (foundation / "CLAUDE.md").write_text(passive, encoding="utf-8")
     proposal_output = capture(HARNESS + ["update", str(foundation)])
@@ -141,7 +141,7 @@ def run(ctx: SimpleNamespace) -> None:
     for title in ('"Shared contract"', "'Shared contract'", "(Shared contract)"):
         titled = (
             old_agents + "\nBefore the first English handoff, agents must read "
-            f"[Technical English](.harness/docs/technical-english.md {title}).\n"
+            f"[Technical English](.harness/instructions/technical-english.md {title}).\n"
         )
         (foundation / "AGENTS.md").write_text(titled, encoding="utf-8")
         (foundation / "CLAUDE.md").write_text(
@@ -174,7 +174,7 @@ def run(ctx: SimpleNamespace) -> None:
     for fence in ("```", "~~~"):
         fenced = (
             old_agents
-            + "\nSee [Technical English](.harness/docs/technical-english.md).\n\n"
+            + "\nSee [Technical English](.harness/instructions/technical-english.md).\n\n"
             + fence
             + "\nBefore the first English handoff, agents must read the contract linked above.\n"
             + fence
@@ -315,15 +315,15 @@ def run(ctx: SimpleNamespace) -> None:
             "--capability",
             "mattpocock-suite",
             "--capability",
-            "pvmalove-suite",
+            "engineering-suite",
         ],
         quiet_all=True,
     ):
         sys.exit(
-            "selecting mattpocock-suite and pvmalove-suite together unexpectedly succeeded"
+            "selecting mattpocock-suite and engineering-suite together unexpectedly succeeded"
         )
 
-    # pvmalove-suite inherits 25 upstream skills, overrides some of them in place, and adds 7 names;
+    # engineering-suite inherits 25 upstream skills, overrides some of them in place, and adds 7 names;
     # the clean-room check below expects 32 distinct installed skills (ADR 0001).
     pv_project = test_root / "pv_project"
     pv_project.mkdir(parents=True)
@@ -334,7 +334,7 @@ def run(ctx: SimpleNamespace) -> None:
             "init",
             str(pv_project),
             "--capability",
-            "pvmalove-suite",
+            "engineering-suite",
             "--base-branch",
             "main",
             "--language",
@@ -350,7 +350,7 @@ def run(ctx: SimpleNamespace) -> None:
     # Provenance matters: target docs/agents are intentionally identical to their
     # templates, so comparing bytes against root docs/ would reject a valid install.
     root_docs = (ROOT / "docs").resolve()
-    selected = ["pvmalove-suite"]
+    selected = ["engineering-suite"]
     sources = harness_cli.selected_skills(selected) + harness_cli.selected_resources(
         selected
     )
@@ -362,13 +362,16 @@ def run(ctx: SimpleNamespace) -> None:
     for destination, expected in payload.items():
         if (pv_project / destination).read_bytes() != expected:
             sys.exit(f"installed package differs from selected source: {destination}")
-    templates = harness_cli.PROJECT_TEMPLATE_DIR / "docs-agents"
+    # The managed instructions of the same template folder go to `.harness/instructions/`.
+    seed_guides = harness_cli.seed_sources(
+        harness_cli.PROJECT_TEMPLATE_DIR, "instructions", frozenset({".md"})
+    )
     installed_docs = pv_project / "docs" / "agents"
     if {path.name for path in installed_docs.glob("*.md")} != {
-        path.name for path in templates.glob("*.md")
+        path.name for path in seed_guides
     }:
         sys.exit("target docs/agents did not come only from project templates")
-    for source in templates.glob("*.md"):
+    for source in seed_guides:
         if (installed_docs / source.name).read_bytes() != source.read_bytes():
             sys.exit(f"installed guide differs from project template: {source.name}")
     fill_agents(pv_project)
@@ -419,11 +422,11 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("JSON diff differs from the visible update proposal")
     apply_patch(patch, pv_project)
     assert_contract_link(
-        agent, pv_project / ".harness/docs/technical-english.md", "installed agent seed"
+        agent, pv_project / ".harness/instructions/technical-english.md", "installed agent seed"
     )
     assert_contract_link(
         test_author,
-        pv_project / ".harness/docs/technical-english.md",
+        pv_project / ".harness/instructions/technical-english.md",
         "installed test-author seed",
     )
     patched = agent.read_bytes()
@@ -496,9 +499,9 @@ def run(ctx: SimpleNamespace) -> None:
         or not (pv_project / ".harness" / "token_estimator.py").is_file()
         or not (pv_project / ".harness" / "repo_map" / "repo_map.schema.json").is_file()
     ):
-        sys.exit("pvmalove-suite Repo Map resource missing")
+        sys.exit("engineering-suite Repo Map resource missing")
     if not (pv_project / ".harness" / "health" / "registry.py").is_file():
-        sys.exit("pvmalove-suite health resource missing")
+        sys.exit("engineering-suite health resource missing")
     map_project = test_root / "map_project"
     map_project.mkdir()
     run_step(["git", "init", "-q"], cwd=map_project, check=True)
@@ -541,7 +544,7 @@ def run(ctx: SimpleNamespace) -> None:
     pv_skill_count = count_skill_files(pv_project / ".harness" / "skills")
     if pv_skill_count != 32:
         sys.exit(
-            f"expected 32 skills in a pvmalove-suite project (25 inherited, overrides replaced in place, + 7 additions), found {pv_skill_count}"
+            f"expected 32 skills in a engineering-suite project (25 inherited, overrides replaced in place, + 7 additions), found {pv_skill_count}"
         )
 
     # A failed older update could remove a retired managed skill's SKILL.md but leave
@@ -554,26 +557,27 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("update did not remove an empty retired skill directory")
     run_health(pv_project)
     check_tracker_field(pv_project)
+    check_hook_settings_merge(pv_project)
     check_tracker_from_origin(test_root)
     check_package_root_without_init(test_root)
     if not filecmp.cmp(
-        ROOT / "skills" / "first-party" / "pvmalove" / "to-spec" / "SKILL.md",
+        ROOT / "skills" / "first-party" / "engineering" / "to-spec" / "SKILL.md",
         pv_project / ".harness" / "skills" / "to-spec" / "SKILL.md",
         shallow=False,
     ):
-        sys.exit("pvmalove-suite override did not install the first-party to-spec")
+        sys.exit("engineering-suite override did not install the first-party to-spec")
     to_tickets_source = (
-        ROOT / "skills" / "first-party" / "pvmalove" / "to-tickets" / "SKILL.md"
+        ROOT / "skills" / "first-party" / "engineering" / "to-tickets" / "SKILL.md"
     )
     to_tickets_installed = (
         pv_project / ".harness" / "skills" / "to-tickets" / "SKILL.md"
     )
     if not filecmp.cmp(to_tickets_source, to_tickets_installed, shallow=False):
-        sys.exit("pvmalove-suite override did not install the first-party to-tickets")
+        sys.exit("engineering-suite override did not install the first-party to-tickets")
     to_tickets_text = to_tickets_installed.read_text(encoding="utf-8")
     for required_text in (
         "enumerate every path under those directories",
-        "one cheap-model advisory call",
+        "one advisory sub-agent call",
         "stop and report blocker",
         "result dependency",
         "known requirement incompatibility",
@@ -598,15 +602,15 @@ def run(ctx: SimpleNamespace) -> None:
             sys.exit(f"installed to-pull-requests step lacks: {required_text}")
     for name in ("grill-me", "grill-with-docs", "diagnosing-bugs", "architect", "tdd"):
         if not filecmp.cmp(
-            ROOT / "skills" / "first-party" / "pvmalove" / name / "SKILL.md",
+            ROOT / "skills" / "first-party" / "engineering" / name / "SKILL.md",
             pv_project / ".harness" / "skills" / name / "SKILL.md",
             shallow=False,
         ):
-            sys.exit(f"pvmalove-suite override did not install the first-party {name}")
+            sys.exit(f"engineering-suite override did not install the first-party {name}")
     # Issue #552: the installed registry lists the first-party tdd, and the update baseline
     # records no drift for its files.
     _, tdd_description = frontmatter_metadata(
-        ROOT / "skills" / "first-party" / "pvmalove" / "tdd" / "SKILL.md"
+        ROOT / "skills" / "first-party" / "engineering" / "tdd" / "SKILL.md"
     )
     if f"| `tdd` | `.harness/skills/tdd` | {tdd_description} |" not in (
         pv_project / ".harness" / "skills" / "REGISTRY.md"
@@ -640,36 +644,36 @@ def run(ctx: SimpleNamespace) -> None:
         shallow=False,
     ):
         sys.exit(
-            "pvmalove-suite unexpectedly changed a skill it neither overrides nor adds"
+            "engineering-suite unexpectedly changed a skill it neither overrides nor adds"
         )
     if not filecmp.cmp(
-        ROOT / "harness" / "docs" / "project-memory.md",
-        pv_project / ".harness" / "docs" / "project-memory.md",
+        ROOT / "harness" / "project" / "instructions" / "project-memory.md",
+        pv_project / ".harness" / "instructions" / "project-memory.md",
         shallow=False,
     ):
-        sys.exit("pvmalove-suite did not install the interactive memory contract")
+        sys.exit("engineering-suite did not install the interactive memory contract")
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        if (pv_project / ".harness" / "docs" / human_guide).exists():
-            sys.exit(f"pvmalove-suite installed a developer guide: {human_guide}")
+        if (pv_project / ".harness" / "instructions" / human_guide).exists():
+            sys.exit(f"engineering-suite installed a developer guide: {human_guide}")
     # An older installation delivered the guides; update must retire them without touching others.
     stale_lock_path = pv_project / ".harness" / "harness.lock"
     stale_lock = json.loads(stale_lock_path.read_text(encoding="utf-8"))
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        stale = pv_project / ".harness" / "docs" / human_guide
+        stale = pv_project / ".harness" / "instructions" / human_guide
         stale.write_text("# legacy copy\n", encoding="utf-8")
-        stale_lock["files"][f".harness/docs/{human_guide}"] = hashlib.sha256(
+        stale_lock["files"][f".harness/instructions/{human_guide}"] = hashlib.sha256(
             stale.read_bytes()
         ).hexdigest()
     stale_lock_path.write_text(json.dumps(stale_lock), encoding="utf-8")
     capture(HARNESS + ["update", str(pv_project)])
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        if (pv_project / ".harness" / "docs" / human_guide).exists():
+        if (pv_project / ".harness" / "instructions" / human_guide).exists():
             sys.exit(f"update kept a retired developer guide: {human_guide}")
-    if not (pv_project / ".harness" / "docs" / "project-memory.md").is_file():
+    if not (pv_project / ".harness" / "instructions" / "project-memory.md").is_file():
         sys.exit("update removed the interactive memory contract")
     qa_gate_skill = pv_project / ".harness" / "skills" / "qa-gate" / "SKILL.md"
     if not qa_gate_skill.is_file():
-        sys.exit("pvmalove-suite addition qa-gate missing")
+        sys.exit("engineering-suite addition qa-gate missing")
     if "test_summary.py" not in qa_gate_skill.read_text(encoding="utf-8"):
         sys.exit("qa-gate does not route quality commands through the summary wrapper")
     pytest_summary = (
@@ -754,6 +758,90 @@ def run(ctx: SimpleNamespace) -> None:
     ctx.target_home = target_home
 
 
+def check_hook_settings_merge(pv_project) -> None:
+    """`update` сливает managed hook-записи: добавляет недостающую, сохраняет запись пользователя,
+    не трогает правку managed-записи и при повторном запуске ничего не меняет."""
+    config = ".claude/settings.local.json"
+    settings = pv_project / config
+    document = json.loads(settings.read_text(encoding="utf-8"))
+    bash_group = next(
+        group for group in document["hooks"]["PreToolUse"] if group["matcher"] == "Bash"
+    )
+    user_hook = {"type": "command", "command": "bash scripts/user-guard.sh"}
+    bash_group["hooks"] = [
+        hook
+        for hook in bash_group["hooks"]
+        if "block-pr-merge.sh" not in hook["command"]
+    ] + [user_hook]
+    settings.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
+    first = capture(HARNESS + ["update", str(pv_project)])
+    merged = json.loads(settings.read_text(encoding="utf-8"))
+    commands = [
+        hook["command"]
+        for group in merged["hooks"]["PreToolUse"]
+        for hook in group["hooks"]
+    ]
+    if sum("block-pr-merge.sh" in command for command in commands) != 1:
+        sys.exit("update did not restore the removed managed hook entry once")
+    if commands.count(user_hook["command"]) != 1:
+        sys.exit("update dropped or duplicated a user hook entry")
+    if "added=1 replaced=0" not in first:
+        sys.exit("update did not report the added managed hook entry")
+
+    settings_before = settings.read_bytes()
+    second = capture(HARNESS + ["update", str(pv_project)])
+    if settings.read_bytes() != settings_before:
+        sys.exit("a repeated update changed the merged hook settings")
+    if "added=0 replaced=0" not in second or "hooks check:" not in second:
+        sys.exit("a repeated update did not print the hooks migration and check report")
+
+    changed = json.loads(settings.read_text(encoding="utf-8"))
+    for group in changed["hooks"]["PreToolUse"]:
+        for hook in group["hooks"]:
+            if "block-dangerous-git.sh" in hook["command"]:
+                hook["timeout"] = 5
+    settings.write_text(json.dumps(changed, indent=2) + "\n", encoding="utf-8")
+    conflicted = settings.read_bytes()
+    output = capture(HARNESS + ["update", str(pv_project)])
+    if (
+        f"hooks conflict: {config}: PreToolUse [Bash] block-dangerous-git.sh"
+        not in output
+    ):
+        sys.exit("update did not list the changed managed hook entry as a conflict")
+    if settings.read_bytes() != conflicted:
+        sys.exit("update overwrote a managed hook entry changed by the user")
+    run_ok(
+        HARNESS + ["update", str(pv_project), "--force-seed-file", config], quiet=True
+    )
+
+    second_config = ".codex/hooks.json"
+    second = pv_project / second_config
+    second_document = json.loads(second.read_text(encoding="utf-8"))
+    for group in second_document["hooks"]["PreToolUse"]:
+        group["hooks"] = [
+            hook
+            for hook in group["hooks"]
+            if "block-pr-merge.sh" not in hook["command"]
+        ]
+    second.write_text(json.dumps(second_document, indent=2) + "\n", encoding="utf-8")
+    output = capture(HARNESS + ["update", str(pv_project)])
+    restored = second.read_text(encoding="utf-8")
+    if restored.count("block-pr-merge.sh") != 1:
+        sys.exit(
+            "update did not restore the removed managed entry of the second runtime"
+        )
+    if f"hooks merge: {second_config}: added=1 replaced=0" not in output:
+        sys.exit("update did not report the second runtime hook merge")
+    inventory = json.loads(
+        (pv_project / ".harness/integrations.json").read_text(encoding="utf-8")
+    )
+    if "engineering-suite-codex-hooks" not in {
+        entry["id"] for entry in inventory["integrations"]
+    }:
+        sys.exit("the second runtime hook adapter is not recorded in the integrations")
+
+
 def check_tracker_field(pv_project) -> None:
     """Поле tracker в установленном проекте (docs/adr/0011): discovery обоих runtime и health.
 
@@ -770,7 +858,7 @@ def check_tracker_field(pv_project) -> None:
         sys.exit("install wrote a tracker field into a project without origin")
     if not (pv_project / ".harness" / "health" / "project_tracker.py").is_file():
         sys.exit(
-            "pvmalove-suite health resource is missing the project tracker resolver"
+            "engineering-suite health resource is missing the project tracker resolver"
         )
     if not (pv_project / ".agents" / "skills" / "qa-gate" / "SKILL.md").is_file():
         sys.exit("Codex discovery path .agents/skills does not expose installed skills")
@@ -841,7 +929,7 @@ def check_tracker_from_origin(test_root) -> None:
                 "init",
                 str(project),
                 "--capability",
-                "pvmalove-suite",
+                "engineering-suite",
                 "--language",
                 "ru",
                 "--pr-base-branch",
@@ -892,7 +980,7 @@ def check_package_root_without_init(test_root) -> None:
             "init",
             str(project),
             "--capability",
-            "pvmalove-suite",
+            "engineering-suite",
             "--language",
             "ru",
             "--pr-base-branch",

@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """End-to-end clean-room проверка: harness/bin/harness.py, bin/install-global.py и hooks проекта.
 
 Сценарии живут в пакете `scripts/clean_room` и выполняются по порядку `SCENARIOS` против
@@ -12,6 +19,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -51,6 +59,7 @@ from scripts.clean_room import (
     parallel_batches,
     project_hooks,
     recovery_cycle,
+    recovery_regression,
     risk_aware_review,
     stuck_batch,
     zero_config_defaults,
@@ -83,6 +92,7 @@ SCENARIOS = (
     full_route_worktree,
     branch_hooks,
     recovery_cycle,
+    recovery_regression,
     global_install,
 )
 
@@ -128,10 +138,22 @@ def _check_path_budget(test_root):
 
 
 def _run(test_root: Path):
-    """Выполнить все сценарии по порядку с общим контекстом, начиная с корня `test_root`."""
+    """Выполнить все сценарии по порядку с общим контекстом, начиная с корня `test_root`.
+
+    После каждого сценария печатается `[clean-room] <сценарий>: X s`, после упавшего —
+    `[clean-room] <сценарий>: failed after X s`: так видно, куда уходит время прогона.
+    """
     context = SimpleNamespace(test_root=test_root)
     for scenario in SCENARIOS:
-        scenario.run(context)
+        name = scenario.__name__.rpartition(".")[2]
+        started = time.perf_counter()
+        try:
+            scenario.run(context)
+        except BaseException:
+            elapsed = time.perf_counter() - started
+            print(f"[clean-room] {name}: failed after {elapsed:.2f} s", flush=True)
+            raise
+        print(f"[clean-room] {name}: {time.perf_counter() - started:.2f} s", flush=True)
 
 
 def main():

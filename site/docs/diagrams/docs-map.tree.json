@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "Документация Harness Next",
+    "subtitle": "Карта разделов сайта: связи показывают вложенность страниц, а не вызовы между компонентами.",
+    "output": "site/docs/diagrams/docs-map.tree.html",
+    "quality_profile": "showcase"
+  },
+  "nodes": [
+    { "id": "docs", "label": "Документация Harness Next", "sublabel": "2.0 · 6 разделов" },
+    { "id": "guides", "label": "Руководства", "parent": "docs", "sublabel": "Рабочий поток" },
+    { "id": "skills", "label": "Скиллы", "parent": "docs", "sublabel": "First-party и upstream" },
+    { "id": "agents", "label": "Агенты", "parent": "docs", "sublabel": "Контракты ролей" },
+    { "id": "hooks", "label": "Hooks", "parent": "docs", "sublabel": "Защита и проверки" },
+    { "id": "orchestration", "label": "Оркестрация", "parent": "docs", "sublabel": "Batch, runtime, консоль" },
+    { "id": "diagrams", "label": "Схемы", "parent": "docs", "sublabel": "Archify" },
+    { "id": "workflow", "label": "Рабочий поток", "parent": "guides" },
+    { "id": "implement", "label": "/implement", "parent": "guides" },
+    { "id": "fast", "label": "/fast-implement", "parent": "guides" },
+    { "id": "tdd", "label": "TDD", "parent": "guides" },
+    { "id": "review", "label": "Code review", "parent": "guides" },
+    { "id": "qa", "label": "QA gate", "parent": "guides" },
+    { "id": "first_party", "label": "First-party", "parent": "skills" },
+    { "id": "upstream", "label": "Upstream", "parent": "skills" },
+    { "id": "backend", "label": "Backend-оркестрация", "parent": "orchestration" },
+    { "id": "runtime", "label": "Runtime discovery", "parent": "orchestration" },
+    { "id": "console", "label": "Конфигурация консоли", "parent": "orchestration" }
+  ]
+}

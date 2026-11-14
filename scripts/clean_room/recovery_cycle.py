@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
+import hashlib
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +38,16 @@ def run(ctx: SimpleNamespace) -> None:
             "echo verified",
         ],
         check=True,
+    )
+
+    run_step(
+        [
+            sys.executable,
+            str(project / ".harness/orchestration/adapters/claude_code.py"),
+            "--help",
+        ],
+        check=True,
+        capture_output=True,
     )
 
     def git(*args: str, cwd: Path = project) -> str:
@@ -106,6 +119,7 @@ def run(ctx: SimpleNamespace) -> None:
             datetime.now(UTC).isoformat(),
         ]
 
+    seed_file_ledger(project / ".harness/orchestration/state")
     batch = command(
         "batch",
         "create",
@@ -215,7 +229,32 @@ def run(ctx: SimpleNamespace) -> None:
         path = Path(brief["report_staging_path"])
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
-        command("report", "submit", "--file", str(path))
+        if brief["role"] == "architect":
+            raw = path.read_bytes()
+            relay = (
+                "report",
+                "submit",
+                "--file",
+                str(path),
+                "--relayed-by",
+                "fixture operator",
+                "--relay-reason",
+                "worker tool denied ledger write",
+                "--source-sha256",
+                hashlib.sha256(raw).hexdigest(),
+            )
+            command(*relay)
+            assert command(*relay)["already_recorded"] is True
+            assert path.read_bytes() == raw
+            observed = command(
+                "dispatch", "observe", "--dispatch", brief["dispatch_id"]
+            )
+            assert (
+                observed["report_recorded"] is True
+                and observed["stream_state"] == "unavailable"
+            )
+        else:
+            command("report", "submit", "--file", str(path))
 
     def decision() -> None:
         command(
@@ -333,13 +372,26 @@ def run(ctx: SimpleNamespace) -> None:
         batch,
         "--note",
         "fixed launch directory",
+        "--restart",
         *approved(),
     )
     upgrade = recovered["event"]["evidence"]["runtime_upgrade"]
     assert upgrade["from"] != upgrade["to"] and upgrade["original"] == upgrade["from"]
     manual = True
     command("dispatch", "heartbeat", "--dispatch", old["dispatch_id"], fails=True)
-    new = start(dispatch("developer"))
+    restart = recovered["restart_dispatch"]["brief"]
+    repeated = command(
+        "batch",
+        "resume-stop",
+        "--batch",
+        batch,
+        "--restart",
+        "--note",
+        "fixed launch directory",
+        *approved(),
+    )
+    assert repeated["restart_dispatch_id"] == restart["dispatch_id"]
+    new = start(restart)
     assert (
         new["dispatch_id"] != old["dispatch_id"]
         and new["snapshot_commit"] == old["snapshot_commit"]

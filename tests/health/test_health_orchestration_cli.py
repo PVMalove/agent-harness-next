@@ -7,21 +7,26 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from harness.health.model import JsonObject
-from harness.orchestration.core.constants import STATE_REL
-from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from harness.orchestration.ledger.lifecycle import JsonObject as LedgerJsonObject
 from harness.orchestration.ledger.lifecycle import JsonValue as LedgerJsonValue
+from tests.health.test_health_checks_orchestration import StoreLedger
+from tests.orchestration.runtime_store_support import serve_new_project
 
 _HARNESS_BIN = Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"
 
 _ORCHESTRATION_CHECK_IDS = [
+    "orchestration.runtime",
     "orchestration.ledger_summary",
     "orchestration.unfinished_batches",
     "orchestration.blocked_batches",
     "orchestration.stale_dispatches",
     "orchestration.orphaned_worktrees",
     "orchestration.disposable_data",
+    "orchestration.adapters",
+    "orchestration.worker_binaries",
 ]
 
 
@@ -38,8 +43,7 @@ def _write_lock(repo: Path, capabilities: list[str]) -> None:
 
 
 def _write_batch(
-    ledger: LifecycleLedger,
-    generation: Path,
+    ledger: StoreLedger,
     batch_id: str,
     state: str,
     dispatches: list[LedgerJsonObject] | None = None,
@@ -62,23 +66,31 @@ def _write_batch(
         "branch": branch,
         "created_at": created_at,
     }
-    ledger.write_immutable(
-        generation / "plans" / f"{batch_id}.json", {"batch_id": batch_id}
-    )
-    ledger.write_immutable(generation / "batches" / f"{batch_id}.json", record)
+    ledger.write(f"plans/{batch_id}.json", {"batch_id": batch_id}, batch_id=batch_id)
+    ledger.write(f"batches/{batch_id}.json", record, batch_id=batch_id)
+    for entry in dispatch_entries:
+        # The store keeps the dispatch record a status record refers to.
+        assert isinstance(entry, dict)
+        ledger.write(
+            f"dispatches/{entry['dispatch_id']}.json",
+            {**entry, "batch_id": batch_id},
+            batch_id=batch_id,
+        )
 
 
-def _build_ledger_fixture(repo: Path) -> None:
+def _build_ledger_fixture(ledger: StoreLedger) -> None:
     """Сформировать набор пакетов и диспетчеров для проверки всех состояний оркестрации."""
-    ledger = LifecycleLedger(repo / STATE_REL)
-    ledger.ensure()
-    generation = ledger.records_root()
-
-    _write_batch(ledger, generation, "batch-completed", "completed")
-    _write_batch(ledger, generation, "batch-blocked", "blocked")
+    _write_batch(ledger, "batch-completed", "completed")
+    # The store reader of cleanup refuses a non-terminal batch without a worktree, where the file
+    # reader took "" for the repository root.
     _write_batch(
         ledger,
-        generation,
+        "batch-blocked",
+        "blocked",
+        worktree=".harness/.sandboxes/worktrees/issue-100",
+    )
+    _write_batch(
+        ledger,
         "batch-live",
         "active",
         dispatches=[{"dispatch_id": "dispatch-stale", "state": "working"}],
@@ -87,8 +99,8 @@ def _build_ledger_fixture(repo: Path) -> None:
         worktree=".harness/.sandboxes/worktrees/issue-101",
         created_at="2020-01-01T00:00:00+00:00",
     )
-    ledger.write_immutable(
-        generation / "dispatch-status" / "dispatch-stale.json",
+    ledger.write(
+        "dispatch-status/dispatch-stale.json",
         {
             "dispatch_id": "dispatch-stale",
             "state": "working",
@@ -110,16 +122,23 @@ def _run_health_json(repo: Path) -> tuple[int, JsonObject]:
 
 
 def test_health_json_reports_every_orchestration_check_against_a_ledger_fixture(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Проверить, что CLI health формирует корректный отчет по всем проверкам оркестрации."""
     _init_repo(tmp_path)
     _write_lock(tmp_path, ["backend-orchestration"])
-    _build_ledger_fixture(tmp_path)
-    orphan = tmp_path / ".harness" / ".sandboxes" / "worktrees" / "orphan-1"
-    orphan.mkdir(parents=True)
+    # The runtime store of a new project (ADR 0036); `harness health` reaches its runtime
+    # through XDG_RUNTIME_DIR.
+    runtime = serve_new_project(tmp_path)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", runtime.environ["XDG_RUNTIME_DIR"])
+    try:
+        _build_ledger_fixture(StoreLedger(tmp_path, runtime))
+        orphan = tmp_path / ".harness" / ".sandboxes" / "worktrees" / "orphan-1"
+        orphan.mkdir(parents=True)
 
-    exit_code, data = _run_health_json(tmp_path)
+        exit_code, data = _run_health_json(tmp_path)
+    finally:
+        runtime.stop()
 
     checks_by_id = {check["id"]: check for check in data["checks"]}
     assert checks_by_id["orchestration.ledger_summary"]["status"] == "ok"

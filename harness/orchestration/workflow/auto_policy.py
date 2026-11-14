@@ -31,6 +31,8 @@ from harness.orchestration.core.constants import (
     BLOCK_BYPASS_STAGES,
     INCOMPLETE_ITEM_TARGET_ROLES,
     TERMINAL_BATCH_STATES,
+    FailureDomain,
+    ReviewRecommendation,
 )
 from harness.orchestration.core.utils import (
     CoordinatorError,
@@ -51,8 +53,13 @@ from harness.orchestration.ledger.lifecycle import BatchRecord, LifecycleLedger
 from harness.orchestration.workflow import approval as approvals
 from harness.orchestration.workflow import carried_items
 from harness.orchestration.workflow import commit_plan as plan_rules
-from harness.orchestration.workflow import decisions, resolver_state
-from harness.orchestration.workflow.attention import _attention_findings
+from harness.orchestration.workflow import (
+    decisions,
+    failure_classifier,
+    failure_domains,
+    resolver_state,
+)
+from harness.orchestration.workflow.attention import _attention_findings, _held
 from harness.orchestration.workflow.history import (
     _latest_developer_candidate,
     _pending_report,
@@ -65,6 +72,8 @@ from harness.orchestration.workflow.reports import (
 
 # An attention reason is a stop of the closed list: the automatic path never resolves attention.
 ATTENTION_STOPS = {
+    # The runtime store holds the batch (ADR 0026): recovery resume, never an abandon.
+    "operational-hold": ("integrity-failure", "operational-hold"),
     "stale-dispatch": ("integrity-failure", "stale"),
     "stale-evidence": ("integrity-failure", "stale"),
     "retry-queued-too-long": ("integrity-failure", "stale"),
@@ -78,6 +87,36 @@ ATTENTION_STOPS = {
 # Detection order: an untrustworthy ledger or runtime first, then a spent budget, then a dead end.
 # Spelled out: the key order of ``AUTO_STOP_REASONS`` lists the budget first.
 STOP_ORDER = ("integrity-failure", "budget-exhausted", "no-automatic-route")
+QA_ENVIRONMENT_REMEDY = (
+    "the QA environment refused a write outside the candidate's code, so a developer retry cannot "
+    "fix it: give QA a writable temporary directory (run qa run outside the outer sandbox, or with "
+    "TMPDIR under .harness/.sandboxes/), then a human re-runs QA on the same candidate with "
+    "batch rewind --to qa"
+)
+# A QA environment that cannot build or start the runtime (#1015) needs its own fix.
+QA_ENVIRONMENT_REMEDIES = {
+    "missing-linker": (
+        "cargo found no linker in the QA environment, so a developer retry cannot fix it: install "
+        "a C toolchain (cc) in the QA environment, then a human re-runs QA on the same candidate "
+        "with batch rewind --to qa"
+    ),
+    "socket-path-too-long": (
+        "the runtime socket path in the QA environment is longer than the Unix limit, so a "
+        "developer retry cannot fix it: set a short absolute XDG_RUNTIME_DIR (or TMPDIR) for QA, "
+        "then a human re-runs QA on the same candidate with batch rewind --to qa"
+    ),
+    # Keyed by the failure domain the runtime recorded on the failed gate stage (#1096).
+    "tooling": (
+        "a gate command was not found or not executable in the QA environment (exit 126/127): "
+        "install it in the QA image, rebuild, repeat dispatch propose (the image id is pinned), "
+        "then a human re-runs QA on the same candidate with batch rewind --to qa"
+    ),
+    "timeout": (
+        "a gate command ran past the QA command timeout: raise "
+        "execution_policy.qa_command_timeout_seconds or speed up the QA environment, then a "
+        "human re-runs QA on the same candidate with batch rewind --to qa"
+    ),
+}
 CLEAN_BASIS = (
     "the report is clean: completed, no blockers, every check passed, and nothing is left "
     "uncovered, unclosed, open or outside the approved scope"
@@ -218,9 +257,9 @@ def accept_obstacles(
             obstacles.append(
                 f"the review has findings at or above the {auto_retry_min_severity} retry threshold"
             )
-        if review.get("recommendation") == "retry" or (
+        if review.get("recommendation") == ReviewRecommendation.RETRY or (
             auto_retry_min_severity != "info"
-            and review.get("recommendation") != "accept"
+            and review.get("recommendation") != ReviewRecommendation.ACCEPT
         ):
             obstacles.append("the review recommendation is not accept")
     if isinstance(review, dict) and any(
@@ -311,6 +350,61 @@ def category(
     )
 
 
+def environment_stop(stage: str, report: JsonObject, repo: Path) -> Stop | None:
+    """The stop for a QA gate that failed on its environment, not on the code (no I/O, #769).
+
+    A failure domain the runtime recorded on the failed gate stage (a tooling or timeout ending,
+    #1096) decides by itself. Otherwise only the stage's recorded diagnostics are read;
+    ``failure_classifier`` keeps every code-defect sign and every other failed test on the
+    developer-retry path.
+    """
+    stages = report.get("qa_stages")
+    if (
+        stage != "qa"
+        or not isinstance(stages, dict)
+        or stages.get("failed_stage") != "gate"
+    ):
+        return None
+    failed = next(
+        (
+            entry
+            for entry in stages.get("stages", [])
+            if isinstance(entry, dict)
+            and entry.get("stage") == "gate"
+            and entry.get("result") == "fail"
+        ),
+        None,
+    )
+    if failed is None:
+        return None
+    domain = failed.get("domain")
+    # A domain the runtime recorded on the stage is structured; otherwise only the diagnostics speak.
+    found = (
+        {"method": "structured", "category": str(domain)}
+        if domain is not None
+        else failure_classifier.classify_environment(failed.get("diagnostics"), repo)
+    )
+    if found is None:
+        return None
+    failure = failure_domains.of_qa_stages(stages, repo=repo)
+    return Stop(
+        "no-automatic-route",
+        "qa-environment-failure",
+        {
+            "command": failed.get("command"),
+            "classification": found,
+            "remedy": QA_ENVIRONMENT_REMEDIES.get(
+                str(found["category"]), QA_ENVIRONMENT_REMEDY
+            ),
+            "failure": failure.to_json()
+            if failure is not None
+            else failure_domains.unrecognised(
+                "the failed gate stage is not in qa_stages", "qa_stages"
+            ).to_json(),
+        },
+    )
+
+
 def finish(
     routing: JsonObject | None,
     refusal: CoordinatorError | None,
@@ -321,9 +415,24 @@ def finish(
     """The second half of the table: ``None`` retries with ``routing`` (no I/O).
 
     A route the coordinator refuses and an unknown reason are dead ends a human resolves; an
-    exhausted developer-retry budget stops too. A tooling-retry without a bug ticket for the
-    blocking tool is refused instead: the session can create one and run the command again.
+    exhausted developer-retry budget stops too. A refusal because no code defect is proven
+    (``UnprovenFailureError``) is the ``unknown-reason`` stop and keeps its failure domain, so the
+    human sees that naming the cause (``--reason-category``) is the way on. A developer-retry whose
+    failure domain is ``unknown`` stops the same way even when a classifier hint named a category:
+    it would spend no developer retry, so nothing else would bound it. A tooling-retry without a
+    bug ticket for the blocking tool is refused instead: the session can create one and run the
+    command again.
     """
+    if isinstance(refusal, decisions.UnprovenFailureError):
+        return Stop(
+            "no-automatic-route",
+            "unknown-reason",
+            {
+                "refused": refusal.message,
+                "remedy": refusal.remedy,
+                "failure": refusal.failure.to_json(),
+            },
+        )
     if refusal is not None or routing is None:
         return Stop(
             "no-automatic-route",
@@ -333,19 +442,22 @@ def finish(
                 "remedy": refusal.remedy if refusal else None,
             },
         )
-    if routing.get("reason_category") == "unknown":
-        return Stop("no-automatic-route", "unknown-reason", {"route_preview": routing})
+    if routing.get("reason_category") == "unknown" or (
+        routing.get("next_action") == "developer-retry"
+        and failure_domains.domain_of(routing) == FailureDomain.UNKNOWN
+    ):
+        return Stop(
+            "no-automatic-route",
+            "unknown-reason",
+            {"route_preview": routing, "failure": routing.get("failure")},
+        )
     if routing["route"] == "tooling-retry" and bug_ticket is None:
         raise CoordinatorError(
             "a tooling-retry under approval_policy auto needs a bug ticket for the blocking tool",
             remedy="create or reuse a bug ticket for the tool named in the tooling_blocker "
             "through the tracker CLI, then run batch auto-decide again with --bug-ticket",
         )
-    if (
-        routing["next_action"] == "developer-retry"
-        and routing["route"] != "tooling-retry"
-        and budget_exhausted
-    ):
+    if decisions.spends_developer_budget(routing) and budget_exhausted:
         return Stop(
             "budget-exhausted",
             "retry_policy.max_developer_retries",
@@ -375,7 +487,9 @@ def attention_stops(batch: JsonObject, findings: list[dict[str, str]]) -> list[S
     return stops
 
 
-def _status_stops(root: Path, batch: JsonObject) -> list[Stop]:
+def _status_stops(
+    root: Path, batch: JsonObject, *, repo: Path | None = None
+) -> list[Stop]:
     """An open dispatch whose worker ran another model or another worktree than its brief
     approved; a dispatch a human already settled (abandoned on resume) is no stop."""
     stops = []
@@ -388,7 +502,16 @@ def _status_stops(root: Path, batch: JsonObject) -> list[Stop]:
             continue
         model = status.get("model_self_report")
         failure = status.get("runtime_failure", {})
-        if (
+        from harness.orchestration.workflow.startup import assess_startup
+
+        startup = assess_startup(
+            _load_dispatch(root, entry["dispatch_id"]), status, repo=repo
+        )
+        early_exit = (
+            startup["worker_state"] == "stopped"
+            and startup["classification"] == "runtime-crash"
+        )
+        if early_exit or (
             failure.get("kind") == "runtime-unavailable"
             and failure.get("worker_started") is False
         ):
@@ -396,7 +519,11 @@ def _status_stops(root: Path, batch: JsonObject) -> list[Stop]:
                 Stop(
                     "integrity-failure",
                     "runtime-unavailable",
-                    {"dispatch_id": entry["dispatch_id"], "runtime_failure": failure},
+                    {
+                        "dispatch_id": entry["dispatch_id"],
+                        "runtime_failure": failure,
+                        "startup": startup,
+                    },
                 )
             )
         if isinstance(model, dict) and model.get("match") is False:
@@ -464,8 +591,13 @@ def _continuation_stops(config: JsonObject, batch: JsonObject) -> list[Stop]:
 def fact_stops(
     repo: Path, root: Path, config: JsonObject, batch: JsonObject, moment: str
 ) -> list[Stop]:
-    """Every stop the ledger facts of a validated batch show, in detection order."""
+    """Every stop the ledger facts of a validated batch and its operational hold show, in
+    detection order."""
     stops: list[Stop] = []
+    if (held := _held(root, batch.get("batch_id"))) is not None:
+        stops.append(
+            Stop("integrity-failure", "operational-hold", {"hold": held.to_dict()})
+        )
     try:
         _validate_harness_runtime_snapshot(repo, batch)
     except CoordinatorError as exc:
@@ -476,7 +608,7 @@ def fact_stops(
                 {"refused": exc.message},
             )
         )
-    stops.extend(_status_stops(root, batch))
+    stops.extend(_status_stops(root, batch, repo=repo))
     findings = (
         []
         if batch.get("state") in TERMINAL_BATCH_STATES
@@ -654,6 +786,9 @@ def resolve(
     if stops:
         return Resolution(stop=stops[0])
     stage = decisions._reporting_stage(dispatch, report)
+    environment = environment_stop(stage, report, repo)
+    if environment is not None:
+        return Resolution(stop=environment)
     scope = (
         report_scope_warnings(report, dispatch)
         if report.get("role") != "architect"
@@ -690,12 +825,16 @@ def resolve(
         "commit_plan_file": inputs.commit_plan_file,
     }
     if choice.decision == "accept":
-        if inputs.commit_plan_file is not None and report.get("role") == "architect":
+        if report.get("role") == "architect":
             # A plan file that cannot be read is a session input error: the command refuses and
-            # records nothing. Only the plan in the file goes through the deterministic gate.
-            document = decisions._commit_plan_document(repo, inputs.commit_plan_file)
+            # records nothing. The plan in the file or in the report goes through the gate.
+            document = (
+                decisions._commit_plan_document(repo, inputs.commit_plan_file)
+                if inputs.commit_plan_file is not None
+                else None
+            )
             try:
-                plan = decisions._pin_commit_plan(batch, document)
+                plan = decisions.accepted_commit_plan(batch, report, document)
             except CoordinatorError as exc:
                 return Resolution(
                     stop=Stop(
@@ -704,7 +843,9 @@ def resolve(
                         {"gate": "commit-plan", "refused": exc.message},
                     )
                 )
-            outside = plan_rules.paths_outside_scope(plan, batch.get("allowed_paths"))
+            outside = plan_rules.paths_outside_scope(
+                plan or [], batch.get("allowed_paths")
+            )
             if outside:
                 return Resolution(
                     stop=Stop(
@@ -727,6 +868,7 @@ def resolve(
                 reason_category=choice.reason_category,
                 narrowed=choice.narrowed,
                 retry_role=None,
+                approved_by=approvals.AUTO_APPROVER,
             ),
         )
     except CoordinatorError as exc:

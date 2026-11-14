@@ -15,7 +15,7 @@ PYTHON_BOOTSTRAP ?= python3
 HARNESS_PYTHON := $(HARNESS_VENV)/bin/python
 endif
 
-.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint
+.PHONY: help bootstrap verify test coverage typecheck clean registry test-clean-room test-author-probe format lint web-install web-build web-test web-typecheck web-e2e docs-build docs-serve
 
 help: ## Показать список команд с описанием
 	@$(PYTHON_BOOTSTRAP) -c "import re, sys; print('Доступные команды:'); lines = open(sys.argv[1], encoding='utf-8').readlines(); matches = [re.match(r'^([a-zA-Z0-9_-]+):.*?## (.*)$$', line) for line in lines]; [print(f'  {m.group(1):<16} - {m.group(2)}') for m in matches if m]" $(MAKEFILE_LIST)
@@ -34,17 +34,18 @@ format: $(HARNESS_ENV_STAMP) ## Автоформатирование кода (r
 	$(HARNESS_PYTHON) -m ruff format .
 	$(HARNESS_PYTHON) -m ruff check --fix-only .
 
-lint: typecheck $(HARNESS_ENV_STAMP) ## Линтинг кода (ruff check + mypy)
+lint: typecheck $(HARNESS_ENV_STAMP) ## Линтинг кода (ruff check + mypy + лицензионные шапки)
+	$(HARNESS_PYTHON) scripts/check_license_headers.py
 	$(HARNESS_PYTHON) -m ruff check .
 
 verify: $(HARNESS_ENV_STAMP) ## Запустить полный набор проверок проекта (sanity checks, mypy, tests, clean-room)
 	$(HARNESS_PYTHON) scripts/verify.py $(VERIFY_ARGS)
 
-test: $(HARNESS_ENV_STAMP) ## Запустить только unit-тесты (pytest)
+test: $(HARNESS_ENV_STAMP) ## Запустить все уровни тестов (pytest)
 	$(HARNESS_PYTHON) -m pytest -n 4 tests
 
 coverage: $(HARNESS_ENV_STAMP) ## Запустить тесты с проверкой покрытия (pytest-cov)
-	$(HARNESS_PYTHON) -m pytest --cov=harness --cov-report=term --cov-report=html tests
+	$(HARNESS_PYTHON) -m pytest -n 4 --cov=harness --cov-fail-under=70 --cov-report=term --cov-report=html tests
 
 typecheck: $(HARNESS_ENV_STAMP) ## Запустить mypy (проверка типов)
 	$(HARNESS_PYTHON) -m mypy
@@ -61,6 +62,29 @@ test-author-probe: export HARNESS_VERIFY_CLAUDE_TEST_AUTHOR := 1
 test-author-probe: export HARNESS_REQUIRE_CLAUDE_TEST_AUTHOR := 1
 test-author-probe: $(HARNESS_ENV_STAMP) ## Подтвердить test-author на реальном Claude Code (нужны claude и вход; тратит квоту)
 	$(HARNESS_PYTHON) scripts/test_clean_room.py
+
+WEB_DIR := harness/console/frontend
+
+web-install: ## Установить зависимости SPA консоли (npm ci) и Chromium для Playwright
+	cd $(WEB_DIR) && npm ci && npx playwright install chromium
+
+web-build: ## Собрать SPA консоли в harness/console/frontend/dist
+	cd $(WEB_DIR) && npm run build
+
+web-typecheck: ## Проверить типы SPA консоли и её unit-тестов
+	cd $(WEB_DIR) && npm run typecheck
+
+web-test: ## Vitest-тесты SPA консоли из tests/web (нужна сборка: make web-build)
+	cd $(WEB_DIR) && npm test
+
+web-e2e: $(HARNESS_ENV_STAMP) ## Playwright-тесты SPA консоли против настоящего сервера (нужна сборка)
+	cd $(WEB_DIR) && npm run test:e2e
+
+docs-build: ## Собрать публичный сайт (MkDocs Material)
+	uvx --from mkdocs-material==9.8.0 --with mkdocs-static-i18n==1.3.1 mkdocs build --strict -f site/mkdocs.yml
+
+docs-serve: ## Локальный предпросмотр публичного сайта
+	uvx --from mkdocs-material==9.8.0 --with mkdocs-static-i18n==1.3.1 mkdocs serve -f site/mkdocs.yml
 
 clean: $(HARNESS_ENV_STAMP) ## Удалить временные файлы, стейт оркестратора, кэши и .pyc
 	$(HARNESS_PYTHON) -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['.mypy_cache', '.pytest_cache', '.harness/orchestration/state', '.harness/.sandboxes', '.harness/scratch', '.claude/worktrees', 'htmlcov'] if os.path.exists(p)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True)]"

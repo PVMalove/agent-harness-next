@@ -22,6 +22,9 @@ from scripts.clean_room.merge_corpus import (
 from scripts.clean_room.support import (
     BASH,
     HARNESS,
+    capture_json,
+    fail_json,
+    find_check,
     run_hook,
     run_ok,
     run_step,
@@ -37,37 +40,157 @@ def run(ctx: SimpleNamespace) -> None:
     test_root = ctx.test_root
     project_json = pv_project / ".harness" / "project.json"
     if not project_json.is_file():
-        sys.exit("pvmalove-suite init did not scaffold .harness/project.json")
+        sys.exit("engineering-suite init did not scaffold .harness/project.json")
     if not (pv_project / ".harness" / "project.schema.json").is_file():
-        sys.exit("pvmalove-suite init did not scaffold .harness/project.schema.json")
+        sys.exit("engineering-suite init did not scaffold .harness/project.schema.json")
 
     hook = pv_project / ".claude" / "hooks" / "check-branch-name.sh"
     if not hook.is_file():
-        sys.exit("pvmalove-suite init did not scaffold check-branch-name.sh")
+        sys.exit("engineering-suite init did not scaffold check-branch-name.sh")
     metadata_hook = pv_project / ".claude" / "hooks" / "block-public-attribution.sh"
     if not metadata_hook.is_file():
-        sys.exit("pvmalove-suite init did not scaffold block-public-attribution.sh")
+        sys.exit("engineering-suite init did not scaffold block-public-attribution.sh")
     scratch_hook = (
         pv_project / ".claude" / "hooks" / "block-scratch-outside-docs-tasks.sh"
     )
     if not scratch_hook.is_file():
         sys.exit(
-            "pvmalove-suite init did not scaffold block-scratch-outside-docs-tasks.sh"
+            "engineering-suite init did not scaffold block-scratch-outside-docs-tasks.sh"
         )
     bounded_hook = pv_project / ".claude" / "hooks" / "require-bounded-check.sh"
     if not bounded_hook.is_file():
-        sys.exit("pvmalove-suite init did not scaffold require-bounded-check.sh")
+        sys.exit("engineering-suite init did not scaffold require-bounded-check.sh")
     dangerous_hook = pv_project / ".claude" / "hooks" / "block-dangerous-git.sh"
     if not dangerous_hook.is_file():
-        sys.exit("pvmalove-suite init did not scaffold block-dangerous-git.sh")
+        sys.exit("engineering-suite init did not scaffold block-dangerous-git.sh")
     qa_gate_hook = pv_project / ".claude" / "hooks" / "require-qa-gate.sh"
     if not qa_gate_hook.is_file():
-        sys.exit("pvmalove-suite init did not scaffold require-qa-gate.sh")
+        sys.exit("engineering-suite init did not scaffold require-qa-gate.sh")
     merge_hook = pv_project / ".claude" / "hooks" / "block-pr-merge.sh"
     if not merge_hook.is_file():
-        sys.exit("pvmalove-suite init did not scaffold block-pr-merge.sh")
+        sys.exit("engineering-suite init did not scaffold block-pr-merge.sh")
     if not (pv_project / ".claude" / "hooks" / "pr_commands.py").is_file():
-        sys.exit("pvmalove-suite init did not scaffold the pr_commands.py hook helper")
+        sys.exit(
+            "engineering-suite init did not scaffold the pr_commands.py hook helper"
+        )
+    if not (pv_project / ".claude" / "hooks" / "hook_response.py").is_file():
+        sys.exit(
+            "engineering-suite init did not scaffold the hook_response.py envelope"
+        )
+    if not (pv_project / ".claude" / "hooks" / "hook-envelope.sh").is_file():
+        sys.exit(
+            "engineering-suite init did not scaffold the hook-envelope.sh verdict envelope"
+        )
+    check_change_impact_hooks(pv_project)
+    check_runtime_autostart_hook(pv_project)
+    if json.loads(project_json.read_text(encoding="utf-8")).get("hook_policy") != {
+        "profile": "standard"
+    }:
+        sys.exit("engineering-suite init did not set hook_policy.profile standard")
+    check_hooks_policy_health(pv_project)
+    check_legacy_hook_policy(test_root / "legacy-hook-policy")
+    for command, code, decision in (
+        ("gh pr merge 1", 2, "block"),
+        ("echo done", 0, "allow"),
+    ):
+        answered = run_hook(merge_hook, pv_project, command)
+        verdict = json.loads(answered.stderr.strip().splitlines()[-1])
+        if (answered.returncode, verdict.get("decision"), verdict.get("hook_id")) != (
+            code,
+            decision,
+            "block-pr-merge",
+        ):
+            sys.exit(
+                f"block-pr-merge.sh did not answer {decision} in JSON: {command!r}"
+            )
+
+    protect_hook = pv_project / ".claude" / "hooks" / "protect-hook-policy.sh"
+    for name in ("protect-hook-policy.sh", "protect_hook_policy.py"):
+        if not (pv_project / ".claude" / "hooks" / name).is_file():
+            sys.exit(f"engineering-suite init did not scaffold {name}")
+    settings_template = json.loads(
+        (pv_project / ".claude" / "settings.local.json").read_text(encoding="utf-8")
+    )
+    wired = [
+        entry["matcher"]
+        for entry in settings_template["hooks"]["PreToolUse"]
+        if "protect-hook-policy.sh" in json.dumps(entry)
+    ]
+    if wired != ["Bash", "Write|Edit|MultiEdit|NotebookEdit"]:
+        sys.exit(f"protect-hook-policy.sh is wired for {wired!r}")
+    config_path = str(project_json)
+    # A shell write to the project config asks a person in Claude Code: exit 0 and a "ask" answer.
+    for write in (
+        "sed -i s/a/b/ .harness/project.json",
+        "echo x > .harness/project.json",
+    ):
+        asked = run_hook(
+            protect_hook,
+            pv_project,
+            "",
+            raw_payload=json.dumps(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": write},
+                    "cwd": str(pv_project),
+                }
+            ),
+        )
+        try:
+            decision = json.loads(asked.stdout)["hookSpecificOutput"]["permissionDecision"]
+        except (ValueError, KeyError):
+            decision = None
+        if asked.returncode != 0 or decision != "ask":
+            sys.exit(
+                f"protect-hook-policy.sh did not ask a person for {write!r}: "
+                f"exit {asked.returncode}, stdout {asked.stdout!r}, stderr {asked.stderr}"
+            )
+    protect_cases = (
+        ("Bash", {"command": "cat .harness/project.json"}, 0),
+        (
+            "Write",
+            {
+                "file_path": str(pv_project / ".claude" / "settings.json"),
+                "content": "{}",
+            },
+            2,
+        ),
+        (
+            "Write",
+            {
+                "file_path": config_path,
+                "content": json.dumps({"hook_policy": {"profile": "minimal"}}),
+            },
+            2,
+        ),
+        (
+            "Edit",
+            {
+                "file_path": config_path,
+                "old_string": '"ci_required_checks": []',
+                "new_string": '"ci_required_checks": ["lint"]',
+            },
+            0,
+        ),
+    )
+    for tool, tool_input, code in protect_cases:
+        payload = json.dumps(
+            {"tool_name": tool, "tool_input": tool_input, "cwd": str(pv_project)}
+        )
+        for profile in (None, "minimal"):
+            answered = run_hook(
+                protect_hook,
+                pv_project,
+                "",
+                raw_payload=payload,
+                env_overrides={"HOOK_PROFILE": profile} if profile else None,
+            )
+            if answered.returncode != code:
+                sys.exit(
+                    f"protect-hook-policy.sh answered {answered.returncode} instead of "
+                    f"{code} for {tool} {tool_input!r} (HOOK_PROFILE={profile}): "
+                    f"{answered.stderr}"
+                )
 
     # A PR launched from the primary checkout can explicitly target a tested linked worktree.
     # Its QA marker must belong to that checkout, even when the primary checkout is dirty.
@@ -324,18 +447,20 @@ def run(ctx: SimpleNamespace) -> None:
     scratch_gitignore = storage_path(pv_project, "scratch", ".gitignore")
     if not scratch_gitignore.is_file():
         sys.exit(
-            "pvmalove-suite init did not scaffold .harness/.sandboxes/scratch/.gitignore"
+            "engineering-suite init did not scaffold .harness/.sandboxes/scratch/.gitignore"
         )
     if scratch_gitignore.read_text(encoding="utf-8") != "*\n!.gitignore\n":
         sys.exit(
-            "pvmalove-suite init scaffolded .harness/.sandboxes/scratch/.gitignore with unexpected content"
+            "engineering-suite init scaffolded .harness/.sandboxes/scratch/.gitignore with unexpected content"
         )
 
     root_gitignore = pv_project / ".gitignore"
     if not root_gitignore.is_file():
-        sys.exit("pvmalove-suite init did not create a root .gitignore")
+        sys.exit("engineering-suite init did not create a root .gitignore")
     if "/docs/tasks/" not in root_gitignore.read_text(encoding="utf-8").splitlines():
-        sys.exit("pvmalove-suite init did not add /docs/tasks/ to the root .gitignore")
+        sys.exit(
+            "engineering-suite init did not add /docs/tasks/ to the root .gitignore"
+        )
 
     # Retrofit path: emulate a project harnessed before these two protections existed by
     # removing them, then confirm a plain `update` restores both without disturbing the
@@ -749,7 +874,7 @@ def run(ctx: SimpleNamespace) -> None:
         run_hook(
             metadata_hook,
             pv_project,
-            'git commit -m "chore: add Claude-Session trailer"',
+            'git commit -m "chore: written by Claude Code"',
         ).returncode
         == 0
     ):
@@ -1836,7 +1961,7 @@ def run(ctx: SimpleNamespace) -> None:
         "echo gh pr merge 1",
         "echo 'glab mr merge 1'",
         "printf '%s\\n' \"glab mr merge\" > notes.txt",
-        "grep -n 'gh pr merge' docs/hooks/block-pr-merge.md",
+        "grep -n 'gh pr merge' notes/policy.md",
         "git commit -m 'docs: forbid gh pr merge'",
         "git commit -m 'docs: forbid glab mr accept' && echo done",
         "gh issue comment 7 --body 'gh pr merge is manual' 2>&1",
@@ -1924,16 +2049,176 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("a hook left .claude/hooks/__pycache__, which uninstall cannot prune")
 
 
+def check_change_impact_hooks(project: Path) -> None:
+    """Advisory-hooks ChangeImpact поставлены, подключены и предупреждают о рискованном пути с кодом 0."""
+    hooks = project / ".claude" / "hooks"
+    for name in (
+        "change_impact_hooks.py",
+        "impact-first-touch.sh",
+        "sensitive-path-recheck.sh",
+        "targeted-check-reminder.sh",
+    ):
+        if not (hooks / name).is_file():
+            sys.exit(f"engineering-suite init did not scaffold {name}")
+    settings = json.loads(
+        (project / ".claude" / "settings.local.json").read_text(encoding="utf-8")
+    )
+    for event in ("Stop", "SubagentStop"):
+        if "targeted-check-reminder.sh" not in json.dumps(settings["hooks"].get(event)):
+            sys.exit(f"targeted-check-reminder.sh is not wired for {event}")
+    payload = {
+        "session_id": "clean-room",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Edit",
+        "tool_input": {"file_path": str(project / "pyproject.toml")},
+        "cwd": str(project),
+    }
+    answered = run_hook(
+        hooks / "impact-first-touch.sh",
+        project,
+        "",
+        raw_payload=json.dumps(payload),
+        cwd=project,
+    )
+    verdict = json.loads(answered.stderr.strip().splitlines()[-1])
+    if (answered.returncode, verdict.get("decision"), verdict.get("reason_code")) != (
+        0,
+        "warn",
+        "risky-path-first-touch",
+    ):
+        sys.exit(f"impact-first-touch.sh did not warn with exit 0: {verdict}")
+
+
+def check_runtime_autostart_hook(project: Path) -> None:
+    """Hook автозапуска runtime поставлен, подключён только для Claude Code и молчит на команде
+    без coordinator (ADR 0031)."""
+    hooks = project / ".claude" / "hooks"
+    for name in ("runtime-autostart.sh", "runtime_autostart.py"):
+        if not (hooks / name).is_file():
+            sys.exit(f"engineering-suite init did not scaffold {name}")
+    settings = json.loads(
+        (project / ".claude" / "settings.local.json").read_text(encoding="utf-8")
+    )
+    for event in ("PreToolUse", "Stop", "SubagentStop"):
+        if "runtime-autostart.sh" not in json.dumps(settings["hooks"].get(event)):
+            sys.exit(f"runtime-autostart.sh is not wired for {event}")
+    codex = project / ".codex" / "hooks.json"
+    if codex.is_file() and "runtime-autostart" in codex.read_text(encoding="utf-8"):
+        sys.exit("runtime-autostart.sh is wired for the second runtime")
+    payload = {
+        "session_id": "clean-room",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status"},
+        "cwd": str(project),
+    }
+    answered = run_hook(
+        hooks / "runtime-autostart.sh",
+        project,
+        "",
+        raw_payload=json.dumps(payload),
+        cwd=project,
+    )
+    verdict = json.loads(answered.stderr.strip().splitlines()[-1])
+    if (answered.returncode, verdict.get("decision"), answered.stdout.strip()) != (
+        0,
+        "allow",
+        "",
+    ):
+        sys.exit(f"runtime-autostart.sh did not stay silent on a plain command: {verdict}")
+
+
+def check_hooks_policy_health(project: Path) -> None:
+    """`harness health` отчитывается о hooks.policy: профиль, проводка и потерянный критический hook."""
+    policy = find_check(
+        capture_json(HARNESS + ["health", str(project), "--json"]), "hooks.policy"
+    )
+    message = policy["message"]
+    # Both runtimes wire every critical hook they can receive, so a fresh install is ok.
+    if (
+        policy["status"] != "ok"
+        or "профиль standard (.harness/project.json)" not in message
+    ):
+        sys.exit(f"hooks.policy did not report the standard profile: {policy}")
+    if (
+        "claude: критических hooks подключено 9/9" not in message
+        or "codex: критических hooks подключено 8/8" not in message
+    ):
+        sys.exit(f"hooks.policy did not report the wired critical hooks: {message}")
+    script = project / ".claude" / "hooks" / "block-dangerous-git.sh"
+    content = script.read_bytes()
+    script.unlink()
+    try:
+        broken = find_check(
+            fail_json(HARNESS + ["health", str(project), "--json"]), "hooks.policy"
+        )
+    finally:
+        script.write_bytes(content)
+        script.chmod(script.stat().st_mode | 0o111)
+    if (
+        broken["status"] != "fail"
+        or "block-dangerous-git.sh: файл отсутствует" not in broken["message"]
+    ):
+        sys.exit(f"hooks.policy did not fail on a missing critical hook: {broken}")
+
+
+def check_legacy_hook_policy(legacy: Path) -> None:
+    """Проект без ключа hook_policy: профиль standard по умолчанию, тот же блокирующий набор.
+
+    `harness update` не создаёт ключ и не меняет `.harness/project.json`.
+    """
+    legacy.mkdir(parents=True)
+    run_step(["git", "init", "-q"], cwd=legacy, check=True)
+    run_ok(
+        HARNESS + ["init", str(legacy), "--capability", "engineering-suite"], quiet=True
+    )
+    config = legacy / ".harness" / "project.json"
+    document = json.loads(config.read_text(encoding="utf-8"))
+    del document["hook_policy"]
+    config.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    before = config.read_bytes()
+    run_ok(HARNESS + ["update", str(legacy)], quiet=True)
+    if config.read_bytes() != before:
+        sys.exit("harness update changed .harness/project.json of a legacy project")
+    # A bare install has unfilled project files, so the exit code of `health` is not the signal.
+    report = run_step(
+        HARNESS + ["health", str(legacy), "--json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    message = find_check(json.loads(report.stdout), "hooks.policy")["message"]
+    if "профиль standard (по умолчанию)" not in message:
+        sys.exit(
+            f"a legacy project did not get the default standard profile: {message}"
+        )
+    merge_hook = legacy / ".claude" / "hooks" / "block-pr-merge.sh"
+    answered = run_hook(merge_hook, legacy, "gh pr merge 1")
+    verdict = json.loads(answered.stderr.strip().splitlines()[-1])
+    if (answered.returncode, verdict.get("decision"), verdict.get("profile")) != (
+        2,
+        "block",
+        "standard",
+    ):
+        sys.exit(f"a legacy project did not keep the blocking hook set: {answered}")
+    bounded = run_hook(
+        legacy / ".claude" / "hooks" / "require-bounded-check.sh",
+        legacy,
+        "python -m pytest -q tests",
+    )
+    if bounded.returncode != 2:
+        sys.exit("a legacy project did not block the unbounded check like standard")
+
+
 def check_publication_forms(metadata_hook: Path, project: Path) -> None:
     """Проверить block-public-attribution.sh на каждой форме публикации gh и glab (#444).
 
     Короткий флаг несёт текст только там, где он несёт его в самом CLI: у gh `-d` — это
-    `--draft`, у glab `-b` — `--target-branch`. PR/MR title и body проверяются полным списком
-    запрещённых терминов. Title и body issue, comments и notes проверяются только на атрибуцию:
-    словарь проекта (`.claude/`, `CLAUDE.md`, имена runtime) в тексте трекера проходит.
+    `--draft`, у glab `-b` — `--target-branch`. PR/MR title и body, title и body issue,
+    comments и notes проверяются только на атрибуцию: словарь проекта (`.claude/`, `CLAUDE.md`, имена runtime) в тексте трекера проходит.
     """
     codex = "chore: generated by Codex"
-    coauthor = "Co-Authored-By: Example Bot <bot@example.invalid>"
+    coauthor = "Co-Authored-By: Codex <bot@example.invalid>"
     session = "https://claude.ai/code/session/example"
     trailer = "_Generated by [Claude Code](https://claude.ai/code)_"
     vocabulary = "Document .claude/settings.json, CLAUDE.md and the Codex runtime"
@@ -1947,6 +2232,12 @@ def check_publication_forms(metadata_hook: Path, project: Path) -> None:
     notes = "projects/:id/issues/1/notes"
     mr_notes = "projects/:id/merge_requests/1/notes"
     allowed = (
+        f'git commit -m "{vocabulary}"',
+        'git commit -m "fix: parser" -m "Co-Authored-By: Alice <alice@example.invalid>"',
+        f'gh pr create -t "Runtime notes" -b "{vocabulary}"',
+        f'glab mr create -t "{vocabulary}"',
+        f"gh pr create --body-file {vocabulary_file}",
+        f"glab mr update 1 --description-file {vocabulary_file}",
         'gh pr create -d -t "fix: keep the change focused" -b "Summary of the change"',
         'glab mr create -t "fix: keep the change focused" -d "Summary" '
         "-b feature/issue-1-codex-runtime",
@@ -2021,11 +2312,6 @@ def check_publication_forms(metadata_hook: Path, project: Path) -> None:
         f"{coauthor}\n"
         "EOF\n"
         ')"',
-        # The same project vocabulary is still forbidden in PR/MR metadata.
-        f'gh pr create -t "Runtime notes" -b "{vocabulary}"',
-        f'glab mr create -t "{vocabulary}"',
-        f"gh pr create --body-file {vocabulary_file}",
-        f"glab mr update 1 --description-file {vocabulary_file}",
         f"gh pr create -F {attributed_file}",
         f"gh pr edit 1 -F {attributed_file}",
         f"glab mr create --description-file {attributed_file}",

@@ -30,12 +30,16 @@ The coordinator runs these commands in the main checkout and does not enter the 
 ```bash
 git fetch origin <integration-branch>
 git worktree add --no-track -b feature/issue-<ID>-<slug> .harness/.sandboxes/worktrees/issue-<ID>-<slug> origin/<integration-branch>
+harness worktree-venv . .harness/.sandboxes/worktrees/issue-<ID>-<slug>
 ```
 
 - `<integration-branch>` is the ticket's `## Integration Branch` value. If the ticket has no such section, use its `## Git base` value, then the same section of its parent epic. For a task without an epic, use `base_branch` from `.harness/project.json`. If the value is absent for a ticket that has an epic, stop and report a blocker. Do not guess it.
 - `--no-track` is required. Without it, `git worktree add -b` writes the upstream of the new branch to `.git/config`. In a sandbox, `.git/config` can be write-protected. The command then stops half done: the branch exists, but the worktree does not.
 - `git push -u origin feature/issue-<ID>-<slug>` (see [git-workflow.md](./git-workflow.md#2-workflow-sequence), step 2) sets the upstream later. It writes `.git/config` too, so it can fail the same way in a sandbox. If it fails, push with `git push origin feature/issue-<ID>-<slug>` and tell the developer that the upstream is not set.
+- `harness worktree-venv` makes the worktree's `.harness/.venv` a symlink to the main checkout's venv, so brief checks such as `make lint` run without `make bootstrap`. It links only when the worktree's `uv.lock` and `pyproject.toml` match the main checkout. Otherwise it answers `"status": "refused"` with the differing files and a remedy: a separate venv in the worktree (`UV_PROJECT_ENVIRONMENT=.harness/.venv uv sync --locked`). Do not run `make bootstrap` in a worktree with a linked venv: through the link it re-syncs the main checkout's venv. Run the command again after the recovery `git worktree add` below.
 - Pass the absolute path of the worktree as `--worktree`, the branch as `--branch`, and the integration branch as `--integration-ref` to `batch create`. For a task without an epic, omit `--integration-ref`.
+
+**Session write access.** Run the coordinator from a session rooted in the main checkout. The session must be able to write the issue worktree and its git metadata directory (`<main>/.git/worktrees/<name>`, printed by `git -C <worktree> rev-parse --absolute-git-dir`): the writer's `git commit` creates its index lock there. A sandboxed session writes only inside its own directory. A session rooted in another ticket's worktree therefore cannot create the issue worktree, and even a session in the main checkout cannot commit into a worktree that another session created: `.git/worktrees` stays read-only for it. `/implement` probes these directories before it changes the ticket's `status::*` label. `batch create`, and `dispatch preflight` and `dispatch send` for a write role, refuse a worktree whose directory or git metadata the session cannot write and name that directory. The remedy is a session in the main checkout that can write the worktree, or the single-session route (`/fast-implement`).
 
 **Recovery after a partial failure.** If `git worktree add -b` fails and `git branch --list feature/issue-<ID>-<slug>` shows the branch, the branch exists and the worktree does not. Do not create the branch again and do not delete it. Run:
 
@@ -55,7 +59,8 @@ In Claude Code the Agent tool cannot start a subagent in an existing checkout (i
 checkout and `EnterWorktree` refuses it there). For a worker whose CWD is the worktree, use the
 `external` transport with `.harness/adapters/claude_worker.py`:
 `dispatch send --adapter <main-repo>/.harness/adapters/claude_worker.py` runs it in `worker_worktree`
-and it starts a detached headless `claude -p` there. An `in-process` subagent works through absolute
+and it runs a headless `claude -p` there: in the foreground for the worker's whole run under the
+runtime (a brief with `execution`), detached otherwise. An `in-process` subagent works through absolute
 paths and `git -C <worker_worktree>`; its self-report proves the checkout it works in, not its CWD.
 The worker probes and self-reports its actual canonical Git top-level, branch and HEAD. A main
 checkout at the same SHA is still the wrong path for a writer. Keep the coordinator and its CLI

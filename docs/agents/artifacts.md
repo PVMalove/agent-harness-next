@@ -16,14 +16,18 @@ scratch files (`scratch/`, `pr_body/`), expired logs (`logs/` >24h), and legacy 
 also previews clearing rebuildable caches (`cache/`), reports (`reports/`), and old clean managed
 worktrees (`worktrees/`). Execute hard cleanup with `--apply --confirm HARD`. Both modes default to a
 24-hour minimum age for temporary data and worktrees; adjust with `--min-age-hours`. Active runs,
-ledger-referenced worktrees, dirty trees, and branches with commits absent from `origin` are preserved.
-Remote branches are never deleted.
+worktrees of non-terminal batches, dirty trees, and branches with commits absent from `origin` are
+preserved. Hard cleanup removes the worktree of a `completed`, `failed`, `abandoned`, or
+`not-required` batch, and its local branch, when the tree is clean, pushed to `origin`, and older
+than the threshold. The plan and the `--apply` result name the `batch_id` and `state` of each
+worktree. Remote branches are never deleted.
 
 This guide defines only task artifacts and scratchpads. Orchestration contracts are in
 `.harness/orchestration/playbook.md`; run `harness --help` for the CLI.
 
 * **Storage Location:** Save specifications, scratchpads, and intermediate files inside the project repository, not in system temporary directories (`AppData/Local/Temp`, `/tmp`): `block-scratch-outside-docs-tasks.sh` rejects writes there.
 * **Project Directory:** Save intermediate task documents in `docs/tasks/` (create it if it doesn't exist).
+* **Project session scratchpad:** when the native hook supplies `session_id`, use `.harness/.sandboxes/scratch/sessions/<session_id>/scratchpad/` inside this project. The hook checks the canonical project path and exact session binding; another session or a symlink outside the project is refused. An external runtime scratchpad without a trusted binding is unsupported: use this project path or `docs/tasks/`. This does not allow arbitrary system temp paths or relax publication filenames.
 * **PR bodies:** A PR/MR body or comment — including a `task-report::required` completion report posted as an issue comment — is one-shot publication metadata, not a task artifact. Save it only under `.harness/.sandboxes/pr_body/`, never in `docs/tasks/`; delete it after the `gh`/`glab` command succeeds and keep it when the command fails so it can be retried.
   * **Filename is enforced, not just the directory:** `block-scratch-outside-docs-tasks.sh` only allows a file under `.harness/.sandboxes/pr_body/` when its *basename* contains `pr-body`, `pr-comment`, or `issue-comment` (case-insensitive) — e.g. `.harness/.sandboxes/pr_body/pr-body-<issue>-<slug>.md` or `.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`. A differently-named file in that same, otherwise-correct directory (e.g. `report-<issue>-completion.md`, `notes.md`) is rejected by the hook exactly like a generic system-temp path — the fix is renaming the file, not changing the directory.
 * **Pre-publish only:** `docs/tasks/` holds drafts and scratchpads *before* a spec or ticket is published to the issue tracker — never treat it as the tracker of record. Once published, the durable record lives with that tracker instead: the issue itself for GitHub/GitLab, or `.scratch/<feature-slug>/spec.md` and `.scratch/<feature-slug>/issues/` for the local markdown tracker (see `docs/agents/issue-tracker.md`) — which doesn't use `docs/tasks/` at all.

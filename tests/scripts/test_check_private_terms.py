@@ -38,7 +38,7 @@ TERMS = (
 ENV = {"HARNESS_PRIVATE_TERMS": TERMS}
 SKIPPED = (
     "private-terms: skipped: no term list (set HARNESS_PRIVATE_TERMS or create "
-    ".private-terms.txt in the main checkout; see docs/agents/releases.md)\n"
+    ".private-terms.txt in the main checkout)\n"
 )
 _GIT = (
     "git",
@@ -459,6 +459,24 @@ class FoldingTests(unittest.TestCase):
 
 
 class SkipTests(unittest.TestCase):
+    def test_in_github_actions_a_match_is_an_error_on_its_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _repo(Path(tmp))
+            (repo / "notes.md").write_text("one\n", encoding="utf-8")
+            _commit(repo, "base")
+            (repo / "notes.md").write_text("one\nsee Zorblax here\n", encoding="utf-8")
+            _git(repo, "add", "notes.md")
+
+            code, out, err = _run(
+                ["--repo", str(repo), "--staged"], {**ENV, "GITHUB_ACTIONS": "true"}
+            )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            out, "::error file=notes.md,line=2,title=private-terms::term #2\n"
+        )
+        self.assertIn("  notes.md:2: term #2\n", err)
+
     def test_without_a_list_the_check_skips_with_a_notice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = _repo(Path(tmp))

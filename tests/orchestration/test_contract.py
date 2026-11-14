@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import shutil
 import tempfile
 import tomllib
@@ -15,7 +16,9 @@ from unittest import mock
 
 from harness.errors import HarnessError
 from harness.orchestration import contract
-from harness.orchestration.core import config
+from harness.orchestration.core import config, constants
+from harness.orchestration.core.utils import JsonObject
+from harness.orchestration.extensions import EXTENSION_KINDS
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,9 +58,128 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
         self.assertNotRegex(workflow, r"(?<!uv )\bpip install|-m pip\b")
         self.assertNotIn("run: python scripts/verify.py", workflow)
-        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 4)
-        self.assertEqual(workflow.count("run: make bootstrap"), 4)
+        self.assertEqual(workflow.count("uses: astral-sh/setup-uv@"), 11)
+        # Each bootstrap runs in a folded group of the log.
+        self.assertEqual(workflow.count('echo "::group::make bootstrap"\n          make bootstrap\n'), 10)
         self.assertEqual(workflow.count("make verify"), 2)
+
+    @staticmethod
+    def _jobs() -> tuple[str, dict[str, str]]:
+        """The workflow text and the text of each of its jobs, by job name."""
+        workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
+        jobs = workflow.split("\njobs:\n", 1)[1]
+        blocks = {
+            block.strip().split(":", 1)[0]: block
+            for block in re.split(r"\n(?=  [a-z][a-z0-9-]*:\n)", jobs)
+        }
+        return workflow, blocks
+
+    def test_only_the_docker_smoke_job_selects_the_smoke_and_it_requires_the_engine(
+        self,
+    ) -> None:
+        workflow, blocks = self._jobs()
+        smoke = blocks["docker-smoke"]
+
+        # pyproject.toml deselects the marker everywhere else; this job alone selects it.
+        self.assertEqual(workflow.count("-m docker_smoke"), 1)
+        self.assertIn("-m docker_smoke", smoke)
+        self.assertIn("tests/orchestration/test_docker_smoke.py", smoke)
+        self.assertIn('HARNESS_REQUIRE_DOCKER_SMOKE: "1"', smoke)
+        self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', smoke)
+        # The smoke runs the one debug build of the `runtime-build` job.
+        self.assertIn("needs: [lint, runtime-build]", smoke)
+        self.assertIn("name: harness-runtime-linux-debug", smoke)
+        for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy"):
+            self.assertIn(f"-f harness/container/{dockerfile}", smoke)
+        for tag in ("harness-worker:smoke", "harness-proxy:smoke"):
+            self.assertIn(f"-t {tag}", smoke)
+        self.assertIn("name: junit-docker-smoke", smoke)
+        self.assertIn("docker-smoke", blocks["dashboard"].split("runs-on:", 1)[0])
+
+    def test_console_ci_runs_playwright_without_comparing_screenshots(self) -> None:
+        _, blocks = self._jobs()
+        job = blocks["console-spa"]
+        self.assertIn("npm run typecheck", job)
+        self.assertIn("npm run build", job)
+        self.assertIn("run: npm test", job)
+        self.assertIn("npx playwright install --with-deps chromium", job)
+        self.assertIn("run: npm run test:e2e", job)
+        self.assertNotIn("__screenshots__", job)
+        self.assertNotIn("update-snapshots", job)
+        web = ROOT / "tests/web"
+        self.assertFalse((web / "__screenshots__").exists())
+        for spec in sorted(web.glob("*.spec.ts")):
+            self.assertNotIn("toHaveScreenshot", spec.read_text(encoding="utf-8"), spec.name)
+        config = (web / "playwright.config.ts").read_text(encoding="utf-8")
+        self.assertNotIn("toHaveScreenshot", config)
+        self.assertNotIn("snapshotPathTemplate", config)
+
+    def test_the_podman_smoke_runs_only_on_the_self_hosted_runner_outside_pull_requests(
+        self,
+    ) -> None:
+        workflows = ROOT / ".github/workflows"
+        smoke = (workflows / "podman-smoke.yml").read_text(encoding="utf-8")
+
+        # The repository is public: no pull request event may reach the owner's machine.
+        self.assertIn("workflow_dispatch:", smoke)
+        self.assertIn("push:", smoke)
+        self.assertNotIn("pull_request", smoke)
+        self.assertIn("runs-on: [self-hosted, linux, x64, fedora-selinux-podman]", smoke)
+        self.assertIn("permissions:\n  contents: read", smoke)
+        self.assertIn("cancel-in-progress: false", smoke)
+        # pyproject.toml deselects the marker everywhere else; this workflow alone selects it.
+        selections = {
+            path.name: path.read_text(encoding="utf-8").count("-m podman_smoke")
+            for path in workflows.glob("*.yml")
+        }
+        self.assertEqual(
+            {name: count for name, count in selections.items() if count},
+            {"podman-smoke.yml": 1},
+        )
+        self.assertIn("tests/orchestration/test_podman_smoke.py", smoke)
+        self.assertIn('HARNESS_REQUIRE_PODMAN_SMOKE: "1"', smoke)
+        self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', smoke)
+        self.assertIn("cargo build --locked", smoke)
+        for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy"):
+            self.assertIn(f"podman build -f harness/container/{dockerfile}", smoke)
+        for tag in ("harness-worker:smoke", "harness-proxy:smoke"):
+            self.assertIn(f"-t {tag}", smoke)
+        self.assertIn("name: junit-podman-smoke", smoke)
+        self.assertNotIn("docker build", smoke)
+
+    def test_only_the_fault_injection_job_selects_the_suite_and_it_requires_the_runtime(
+        self,
+    ) -> None:
+        workflow, blocks = self._jobs()
+        job = blocks["fault-injection"]
+
+        # Every default run keeps the marked tests; this job alone runs only them.
+        self.assertEqual(workflow.count("-m fault_injection"), 1)
+        self.assertIn("-m fault_injection", job)
+        self.assertIn("tests/orchestration\n", job)
+        self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', job)
+        self.assertIn('HARNESS_REQUIRE_FAULT_INJECTION: "1"', job)
+        # The test hooks of the runtime exist only in a debug build: `runtime-build` builds it.
+        self.assertIn("needs: [lint, runtime-build]", job)
+        self.assertIn("name: harness-runtime-linux-debug", job)
+        self.assertIn("run: cargo build --locked --bin harness-runtime\n", blocks["runtime-build"])
+        self.assertNotIn("--release", blocks["runtime-build"])
+        self.assertIn("native/harness-runtime/target/debug/harness-runtime", job)
+        self.assertNotIn("--release", job)
+        self.assertIn("--junitxml=.harness/.sandboxes/logs/junit-fault-injection.xml", job)
+        self.assertIn("name: junit-fault-injection", job)
+        self.assertIn("fault-injection", blocks["dashboard"].split("runs-on:", 1)[0])
+        # A failing scenario fails the job: nothing reruns, reorders or tolerates it.
+        for masking in (
+            "continue-on-error",
+            "--reruns",
+            "--lf",
+            "--last-failed",
+            "--failed-first",
+            "--fail-fast",
+            "make verify",
+        ):
+            self.assertNotIn(masking, job)
 
 
 class ContractErrorInvariantTests(unittest.TestCase):
@@ -274,7 +396,17 @@ class ResolveAssignmentTests(unittest.TestCase):
         config = _config()
         config["assignment_plans"]["developer"]["transport"] = "smoke"
         error = self._fail(config, _role())
-        self.assertEqual(error.message, "role 'developer' has an invalid transport")
+        self.assertEqual(
+            error.message,
+            "role 'developer' transport must be one of: external, in-process "
+            "(got 'smoke'; write one listed value exactly: case-sensitive, "
+            "no surrounding spaces, no synonyms)",
+        )
+        self.assertEqual(
+            error.remedy,
+            "set assignment_plans['developer'].transport to exactly one of: "
+            "external, in-process (case-sensitive, no surrounding spaces, no synonyms)",
+        )
 
     def test_external_transport_resolves_for_project_adapter(self) -> None:
         config = _config()
@@ -471,7 +603,9 @@ class RepoMapPolicyProblemTests(unittest.TestCase):
                 "orchestration repo_map_policy.max_signature_length must be a positive integer",
                 "orchestration repo_map_policy.max_symbol_length must be a positive integer",
                 "orchestration repo_map_policy.redact_symbols must be a list of non-empty path globs",
-                "orchestration repo_map_policy.tier must be one of: full, minimal",
+                "orchestration repo_map_policy.tier must be one of: full, minimal "
+                "(got 'reduced'; write one listed value exactly: case-sensitive, "
+                "no surrounding spaces, no synonyms)",
             ],
         )
 
@@ -481,7 +615,11 @@ class RepoMapPolicyProblemTests(unittest.TestCase):
         )
         self.assertEqual(
             problems,
-            ["orchestration repo_map_policy.tier must be one of: full, minimal"],
+            [
+                "orchestration repo_map_policy.tier must be one of: full, minimal "
+                "(got a list; write one listed value exactly: case-sensitive, "
+                "no surrounding spaces, no synonyms)"
+            ],
         )
 
     def test_full_tier_and_parser_bundle_fields_are_valid(self) -> None:
@@ -550,9 +688,14 @@ class RepoMapPolicyProblemTests(unittest.TestCase):
         self.assertEqual(
             sorted(problems),
             [
-                "orchestration repo_map_policy.min_tier must be one of: full, minimal",
-                "orchestration repo_map_policy.min_tier_by_role names unknown role 'qa'",
-                "orchestration repo_map_policy.min_tier_by_role.developer must be one of: full, minimal",
+                "orchestration repo_map_policy.min_tier must be one of: full, minimal "
+                "(got 'reduced'; write one listed value exactly: case-sensitive, "
+                "no surrounding spaces, no synonyms)",
+                "orchestration repo_map_policy.min_tier_by_role names unknown role 'qa' "
+                "(allowed: architect, code-review, developer)",
+                "orchestration repo_map_policy.min_tier_by_role.developer must be one of: "
+                "full, minimal (got 'reduced'; write one listed value exactly: "
+                "case-sensitive, no surrounding spaces, no synonyms)",
             ],
         )
 
@@ -770,6 +913,56 @@ class ZoneFreeConfigHealthTests(unittest.TestCase):
         for path in ("", " ", "cache\x00bad"):
             self.assertIsNone(re.search(path_schema["pattern"], path))
 
+    def test_a_cache_variable_is_a_free_name_on_a_cache_item_only(self) -> None:
+        import re
+
+        def policy(*items: dict[str, object]) -> dict[str, object]:
+            return {"defaults": {"filesystem": list(items)}}
+
+        def cache(path: str, variable: object) -> dict[str, object]:
+            return {
+                "resource": "cache",
+                "access": "write",
+                "path": path,
+                "variable": variable,
+            }
+
+        self.assertEqual(
+            contract.access_policy_problems(policy(cache("/c", "CARGO_HOME")), set()),
+            [],
+        )
+        invalid = [
+            policy({"resource": "checkout", "access": "read", "variable": "SRC"}),
+            policy(cache("/a", "X"), cache("/b", "X")),
+            *(
+                policy(cache("/c", name))
+                for name in (
+                    None,
+                    "",
+                    "1X",
+                    "A=B",
+                    "HOME",
+                    "TMPDIR",
+                    "CARGO_TARGET_DIR",
+                    "HTTPS_PROXY",
+                    "HARNESS_VERIFY_COLD",
+                )
+            ),
+        ]
+        for value in invalid:
+            with self.subTest(policy=value):
+                self.assertTrue(contract.access_policy_problems(value, set()))
+        schema = json.loads(
+            (Path(contract.__file__).parent / "orchestration.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        variable = schema["definitions"]["accessComponent"]["properties"][
+            "filesystem"
+        ]["items"]["properties"]["variable"]
+        self.assertIsNotNone(re.fullmatch(variable["pattern"][1:-1], "CARGO_HOME"))
+        self.assertIsNone(re.fullmatch(variable["pattern"][1:-1], "A=B"))
+
     def _problems(self, config: dict[str, object]) -> list[str]:
         directory = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: shutil.rmtree(directory, ignore_errors=True))
@@ -892,7 +1085,11 @@ class AutoApprovalPolicyHealthTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        [rule] = schema["allOf"]
+        [rule] = [
+            rule
+            for rule in schema["allOf"]
+            if "approval_policy" in rule["if"]["properties"]
+        ]
         self.assertEqual(rule["if"]["properties"]["approval_policy"], {"const": "auto"})
         self.assertEqual(
             rule["then"]["properties"],
@@ -923,6 +1120,401 @@ class AccessPolicyContractTests(unittest.TestCase):
         ):
             with self.subTest(bad=bad):
                 self.assertTrue(contract.access_policy_problems(bad, {"developer"}))
+
+
+def _schema() -> JsonObject:
+    schema: JsonObject = json.loads(
+        (Path(contract.__file__).parent / "orchestration.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    return schema
+
+
+class ContainerComponentContractTests(unittest.TestCase):
+    """The validator and the schema give one verdict on the container component (issue #704)."""
+
+    VALID: tuple[dict[str, object], ...] = (
+        {"worker_image": "harness-worker:local"},
+        {"engine": "docker", "worker_image": "registry.example/team/worker@sha256:ab"},
+        {"engine": "podman", "worker_image": "w", "proxy_image": "harness-proxy:1.0"},
+    )
+    INVALID_REFS = ("", "-worker", "worker image", "worker\nimage", "w" * 256)
+    INVALID: tuple[object, ...] = (
+        None,
+        "harness-worker:local",
+        {},
+        {"engine": "docker"},
+        {"worker_image": "w", "engine": "kubernetes"},
+        {"worker_image": "w", "environment": ["TOKEN"]},
+        {"worker_image": 1},
+        {"worker_image": "w", "proxy_image": None},
+        *({"worker_image": ref} for ref in INVALID_REFS),
+        *({"worker_image": "w", "proxy_image": ref} for ref in INVALID_REFS),
+    )
+
+    def test_defaults_roles_and_operations_accept_the_same_valid_component(
+        self,
+    ) -> None:
+        for container in self.VALID:
+            policy = {
+                "defaults": {"mode": "sandbox", "container": container},
+                "roles": {"developer": {"container": container}},
+                "operations": {"qa": {"container": container}},
+            }
+            with self.subTest(container=container):
+                self.assertEqual(
+                    contract.access_policy_problems(policy, {"developer"}), []
+                )
+
+    def test_an_invalid_component_is_refused_in_every_layer(self) -> None:
+        for container in self.INVALID:
+            for policy in (
+                {"defaults": {"container": container}},
+                {"roles": {"developer": {"container": container}}},
+                {"operations": {"git": {"container": container}}},
+            ):
+                with self.subTest(policy=policy):
+                    problems = contract.access_policy_problems(policy, {"developer"})
+                    self.assertEqual(len(problems), 1)
+                    self.assertIn(".container must name a worker_image", problems[0])
+
+    def test_the_schema_states_the_validator_contract(self) -> None:
+        import re
+
+        component = _schema()["definitions"]["accessComponent"]["properties"][
+            "container"
+        ]
+        self.assertFalse(component["additionalProperties"])
+        self.assertEqual(component["required"], ["worker_image"])
+        self.assertEqual(
+            set(component["properties"]), {"engine", "worker_image", "proxy_image"}
+        )
+        self.assertEqual(
+            tuple(component["properties"]["engine"]["enum"]),
+            constants.CONTAINER_ENGINES,
+        )
+        for key in ("worker_image", "proxy_image"):
+            pattern = component["properties"][key]["pattern"]
+            self.assertEqual(
+                pattern, f"^{contract.CONTAINER_IMAGE_REF.pattern}$", msg=key
+            )
+            for ref in self.INVALID_REFS:
+                with self.subTest(key=key, ref=ref):
+                    self.assertIsNone(re.search(pattern, ref))
+            for container in self.VALID:
+                if key in container:
+                    self.assertIsNotNone(re.search(pattern, str(container[key])))
+
+    def test_docker_runtime_access_requires_a_default_container(self) -> None:
+        cases: tuple[tuple[dict[str, object], list[str]], ...] = (
+            ({"defaults": {"mode": "sandbox"}}, [contract.DOCKER_CONTAINER_PROBLEM]),
+            (
+                {
+                    "defaults": {"mode": "sandbox"},
+                    "roles": {"developer": {"container": {"worker_image": "w"}}},
+                },
+                [contract.DOCKER_CONTAINER_PROBLEM],
+            ),
+            (
+                {"defaults": {"mode": "sandbox", "container": {"worker_image": "w"}}},
+                [],
+            ),
+            # #1014: without defaults, a container QA alone satisfies the executor.
+            (
+                {"operations": {"qa": {"container": {"worker_image": "w"}}}},
+                [],
+            ),
+            (
+                {"operations": {"qa": {"mode": "sandbox"}}},
+                [contract.DOCKER_CONTAINER_PROBLEM],
+            ),
+        )
+        for policy, expected in cases:
+            with (
+                self.subTest(policy=policy),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                path = Path(directory) / "orchestration.json"
+                path.write_text(
+                    json.dumps(
+                        {
+                            "access_policy": policy,
+                            "extensions": {"runtime_access": "docker"},
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                self.assertEqual(
+                    contract.health_problems(
+                        path, ROOT / "harness/orchestration/roles"
+                    ),
+                    expected,
+                )
+
+    def _docker_problems(
+        self, policy: dict[str, object], transports: dict[str, str]
+    ) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "orchestration.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "access_policy": policy,
+                        "extensions": {"runtime_access": "docker"},
+                        "assignment_plans": {
+                            role: {"transport": transport}
+                            for role, transport in transports.items()
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            # The minimal config omits unrelated required fields; only the executor verdicts count.
+            return [
+                problem
+                for problem in contract.health_problems(
+                    path, ROOT / "harness/orchestration/roles"
+                )
+                if problem.startswith(contract.DOCKER_PROBLEM_PREFIX)
+            ]
+
+    def test_a_container_qa_alone_keeps_in_process_roles_valid(self) -> None:
+        """#1014: container QA no longer forces every role to the external transport."""
+        problems = self._docker_problems(
+            {"operations": {"qa": {"container": {"worker_image": "w"}}}},
+            {
+                "developer": "in-process",
+                "code-review": "in-process",
+                "qa": "in-process",
+            },
+        )
+
+        self.assertEqual(problems, [])
+
+    def test_an_in_process_role_with_an_authored_plan_is_named_at_load(self) -> None:
+        """#1014: the docker executor cannot prove an in-process launch, so a role that defaults
+        or its own override puts under it is named when the config loads, before any preflight.
+        It stays a warning: the config still serves its external roles and container QA."""
+        from harness.orchestration.config_boundary import inspect_configuration
+
+        container = {"worker_image": "w"}
+        transports = {
+            "developer": "in-process",
+            "code-review": "in-process",
+            "architect": "external",
+            "qa": "in-process",
+        }
+        cases: tuple[tuple[dict[str, object], list[str]], ...] = (
+            ({"defaults": {"container": container}}, ["code-review", "developer"]),
+            (
+                {
+                    "operations": {"qa": {"container": container}},
+                    "roles": {"developer": {"container": container}},
+                },
+                ["developer"],
+            ),
+            ({"operations": {"qa": {"container": container}}}, []),
+        )
+        for policy, named in cases:
+            with self.subTest(policy=policy):
+                document = {
+                    "access_policy": policy,
+                    "extensions": {"runtime_access": "docker"},
+                    "assignment_plans": {
+                        role: {"transport": transport}
+                        for role, transport in transports.items()
+                    },
+                }
+
+                result = inspect_configuration(
+                    ROOT,
+                    json.dumps(document).encode(),
+                    roles_root=ROOT / "harness/orchestration/roles",
+                )
+
+                warnings = [
+                    item.message
+                    for item in result.diagnostics
+                    if item.severity == "warning"
+                ]
+                self.assertEqual(
+                    warnings,
+                    [contract.docker_in_process_warning(role) for role in named],
+                )
+                self.assertEqual(self._docker_problems(policy, transports), [])
+                for role, message in zip(named, warnings):
+                    self.assertIn(f"role {role!r}", message)
+                    self.assertIn("transport to external", message)
+                    self.assertIn(f"access_policy.roles.{role}", message)
+
+    def test_a_role_override_without_a_container_and_without_defaults_is_named_at_load(
+        self,
+    ) -> None:
+        """#1014: without defaults, a roles.<role> override puts the role under the executor
+        with no container to run; config load names it instead of dispatch preflight only."""
+        from harness.orchestration.config_boundary import inspect_configuration
+
+        document = {
+            "access_policy": {
+                "operations": {"qa": {"container": {"worker_image": "w"}}},
+                "roles": {
+                    "developer": {"mode": "sandbox"},
+                    "architect": {"container": {"worker_image": "w"}},
+                },
+            },
+            "extensions": {"runtime_access": "docker"},
+            "assignment_plans": {
+                "developer": {"transport": "external"},
+                "architect": {"transport": "external"},
+            },
+        }
+
+        result = inspect_configuration(
+            ROOT,
+            json.dumps(document).encode(),
+            roles_root=ROOT / "harness/orchestration/roles",
+        )
+
+        warnings = [
+            item.message for item in result.diagnostics if item.severity == "warning"
+        ]
+        self.assertEqual(
+            warnings, [contract.docker_role_container_warning("developer")]
+        )
+        self.assertIn("access_policy.roles.developer.container", warnings[0])
+
+    def test_the_schema_requires_the_default_container_for_docker(self) -> None:
+        schema = _schema()
+        self.assertEqual(
+            set(schema["properties"]["extensions"]["propertyNames"]["enum"]),
+            set(EXTENSION_KINDS),
+        )
+        [rule] = [
+            rule for rule in schema["allOf"] if "extensions" in rule["if"]["properties"]
+        ]
+        self.assertEqual(
+            rule["if"]["properties"]["extensions"]["properties"],
+            {"runtime_access": {"const": "docker"}},
+        )
+        self.assertEqual(rule["then"]["required"], ["access_policy"])
+        policy = rule["then"]["properties"]["access_policy"]
+        # #1014: defaults name the container, or, without defaults, operations.qa names it.
+        self.assertEqual(
+            policy["anyOf"],
+            [
+                {
+                    "required": ["defaults"],
+                    "properties": {"defaults": {"required": ["container"]}},
+                },
+                {
+                    "not": {"required": ["defaults"]},
+                    "required": ["operations"],
+                    "properties": {
+                        "operations": {
+                            "required": ["qa"],
+                            "properties": {"qa": {"required": ["container"]}},
+                        }
+                    },
+                },
+            ],
+        )
+
+
+class EnvironmentComponentContractTests(unittest.TestCase):
+    """The validator, the schema and health give one verdict on environment names (issue #705)."""
+
+    VALID: tuple[list[str], ...] = (
+        [],
+        ["LLM_API_KEY"],
+        ["_TOKEN", "HTTPS_PROXY", "a1"],
+    )
+    INVALID_NAMES = ("", "1TOKEN", "LLM-KEY", "KEY=value", "A B", "KEY\nNEXT")
+    INVALID: tuple[object, ...] = (
+        None,
+        "LLM_API_KEY",
+        # Python's ``$`` matches before a final line break; the validator must not.
+        ["KEY\n"],
+        {"names": ["LLM_API_KEY"]},
+        {"LLM_API_KEY": "secret"},
+        [1],
+        ["KEY", "KEY"],
+        *([name] for name in INVALID_NAMES),
+    )
+
+    def test_defaults_roles_and_operations_accept_the_same_names(self) -> None:
+        for environment in self.VALID:
+            policy = {
+                "defaults": {"mode": "sandbox", "environment": environment},
+                "roles": {"developer": {"environment": environment}},
+                "operations": {"qa": {"environment": environment}},
+            }
+            with self.subTest(environment=environment):
+                self.assertEqual(
+                    contract.access_policy_problems(policy, {"developer"}), []
+                )
+
+    def test_anything_but_unique_variable_names_is_refused_in_every_layer(
+        self,
+    ) -> None:
+        for environment in self.INVALID:
+            for policy in (
+                {"defaults": {"environment": environment}},
+                {"roles": {"developer": {"environment": environment}}},
+                {"operations": {"git": {"environment": environment}}},
+            ):
+                with self.subTest(policy=policy):
+                    problems = contract.access_policy_problems(policy, {"developer"})
+                    self.assertEqual(len(problems), 1)
+                    self.assertIn(
+                        ".environment must list unique variable names", problems[0]
+                    )
+
+    def test_the_schema_states_the_validator_contract(self) -> None:
+        import re
+
+        component = _schema()["definitions"]["accessComponent"]["properties"][
+            "environment"
+        ]
+        self.assertEqual(component["type"], "array")
+        self.assertIs(component["uniqueItems"], True)
+        self.assertEqual(component["items"]["type"], "string")
+        pattern = component["items"]["pattern"]
+        self.assertEqual(pattern, f"^{contract.ENVIRONMENT_NAME.pattern}$")
+        for name in self.INVALID_NAMES:
+            with self.subTest(name=name):
+                self.assertIsNone(re.search(pattern, name))
+        for environment in self.VALID:
+            for name in environment:
+                self.assertIsNotNone(re.search(pattern, name))
+
+    def test_health_reports_an_invalid_environment_component(self) -> None:
+        value = "synthetic-secret-3c8e"
+        cases: tuple[tuple[object, int], ...] = (
+            (["LLM_API_KEY"], 0),
+            ([f"KEY={value}"], 1),
+        )
+        for environment, count in cases:
+            with (
+                self.subTest(environment=environment),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                path = Path(directory) / "orchestration.json"
+                path.write_text(
+                    json.dumps(
+                        {"access_policy": {"defaults": {"environment": environment}}}
+                    ),
+                    encoding="utf-8",
+                )
+
+                problems = contract.health_problems(
+                    path, ROOT / "harness/orchestration/roles"
+                )
+
+                self.assertEqual(len(problems), count, problems)
+                for problem in problems:
+                    self.assertIn("access_policy.defaults.environment", problem)
+                    self.assertNotIn(value, problem)
 
 
 class AccessOnlyConfigTests(unittest.TestCase):
@@ -998,6 +1590,119 @@ class ConfigLoadingTests(unittest.TestCase):
         loaded = config._config(repo)
 
         self.assertEqual(config._developer_verification_commands(loaded), ["pytest -q"])
+
+
+def _diff_stage(
+    stage_id: str,
+    kind: str,
+    argv: list[str],
+    selection: str = "full",
+    nodeids: list[str] | None = None,
+) -> JsonObject:
+    return {
+        "stage_id": stage_id,
+        "kind": kind,
+        "argv": argv,
+        "timeout_seconds": 60,
+        "selection": selection,
+        "nodeids": nodeids or [],
+        "environment_fingerprint": "0" * 64,
+    }
+
+
+def _diff_plan(python: list[str]) -> JsonObject:
+    pytest_argv = ["python", "-m", "pytest", "-q"]
+    return {
+        "role": "qa",
+        "ticket_diff": {"python_tests": python, "cargo_targets": []},
+        "stages": [
+            _diff_stage("lint", "lint", ["make", "lint"]),
+            _diff_stage(
+                "tests", "pytest", pytest_argv + python, "ticket-diff", python
+            ),
+            _diff_stage("cargo-fmt", "custom", ["cargo", "fmt", "--check"]),
+            _diff_stage(
+                "cargo-test-state-lib",
+                "custom",
+                ["cargo", "test", "-p", "state", "--lib"],
+                "ticket-diff",
+                ["state::lib"],
+            ),
+        ],
+    }
+
+
+class TicketDiffVerificationCommandsTests(unittest.TestCase):
+    CONFIG: ClassVar[JsonObject] = {
+        "verification_commands": ["make verify"],
+        "review_verification_commands": ["make review"],
+        "developer_verification_commands": ["make dev"],
+    }
+    DERIVED: ClassVar[list[str]] = [
+        "make lint",
+        "python -m pytest -q 'tests/a b.py'",
+        "cargo fmt --check",
+        "cargo test -p state --lib",
+    ]
+
+    def _accepted(self, role: str, brief: JsonObject) -> list[object]:
+        return contract.accepted_verification_commands(
+            self.CONFIG, role, "work", brief=brief
+        )
+
+    def test_the_commands_are_the_plan_stages_in_order(self) -> None:
+        commands = contract.ticket_diff_plan_commands(_diff_plan(["tests/a b.py"]))
+
+        self.assertEqual(commands, self.DERIVED)
+
+    def test_a_stage_without_a_selected_test_adds_no_command(self) -> None:
+        commands = contract.ticket_diff_plan_commands(_diff_plan([]))
+
+        self.assertEqual(
+            commands, ["make lint", "cargo fmt --check", "cargo test -p state --lib"]
+        )
+
+    def test_review_qa_and_developer_retry_accept_exactly_the_derived_list(
+        self,
+    ) -> None:
+        plan = _diff_plan(["tests/a b.py"])
+        retry: JsonObject = {
+            "transition": {"next_action": "developer-retry"},
+            "verification_plan": plan,
+        }
+
+        for role, brief in (
+            ("code-review", {"verification_plan": plan}),
+            ("qa", {"verification_plan": plan}),
+            ("developer", retry),
+        ):
+            with self.subTest(role=role):
+                accepted = self._accepted(role, brief)
+                self.assertIn(self.DERIVED, accepted)
+                self.assertNotIn(self.DERIVED[:-1], accepted)
+                self.assertNotIn([*self.DERIVED, "make verify"], accepted)
+
+    def test_a_plan_without_the_ticket_diff_section_accepts_only_the_role_lists(
+        self,
+    ) -> None:
+        plan = {k: v for k, v in _diff_plan(["tests/a.py"]).items() if k != "ticket_diff"}
+
+        accepted = self._accepted("qa", {"verification_plan": plan})
+
+        self.assertEqual(accepted, [["make verify"]])
+        self.assertEqual(
+            self._accepted("code-review", {}), [["make review"]]
+        )
+
+    def test_a_first_developer_brief_never_accepts_the_derived_list(self) -> None:
+        plan = _diff_plan(["tests/a b.py"])
+
+        accepted = self._accepted(
+            "developer",
+            {"transition": {"next_action": "developer"}, "verification_plan": plan},
+        )
+
+        self.assertNotIn(self.DERIVED, accepted)
 
 
 if __name__ == "__main__":

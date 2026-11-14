@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import TypedDict
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY
 from harness.orchestration.core import utils
 from harness.orchestration.core.constants import ACCEPTED_DECISIONS
 from harness.orchestration.core.git_utils import _candidate_commit, _git_is_ancestor
+from harness.orchestration.core import state_view
 from harness.orchestration.core.utils import (
     CoordinatorError,
     JsonObject,
@@ -39,10 +41,29 @@ from harness.orchestration.workflow.history import (
 
 ROUTE = "supersede"
 POLICY_APPROVER_PREFIX = "policy:"
+CARRY_FLAGS_HINT = (
+    "--carry-architect <architect dispatch id>, --architect-report-sha256 <its report_sha256>, "
+    "--architect-confirmed-by and --architect-confirmed-at"
+)
+RUN_ARCHITECT_AGAIN = (
+    "or create the batch without --carry-architect, which runs the architect stage again"
+)
 
 
-def request(args: argparse.Namespace) -> tuple[str, JsonObject] | None:
-    """The abandoned batch a ``batch create`` supersedes and its human approval, or ``None``.
+class ArchitectConfirmation(TypedDict):
+    """A human's confirmation of one architect report, bound to its bytes (issue #1052)."""
+
+    dispatch_id: str
+    report_sha256: str
+    confirmed_by: str
+    confirmed_at: str
+
+
+def request(
+    args: argparse.Namespace,
+) -> tuple[str, JsonObject, ArchitectConfirmation | None] | None:
+    """The superseded batch, its human approval and the human confirmation of a carried architect
+    report (``None`` without ``--carry-architect``); ``None`` for an ordinary batch.
 
     Read before the ledger lock, so the approval TTL and the terminal gate apply as on any other
     human decision. ``--approved-by`` and ``--approved-at`` belong only to ``--supersedes``: the
@@ -52,6 +73,12 @@ def request(args: argparse.Namespace) -> tuple[str, JsonObject] | None:
     approved_by = getattr(args, "approved_by", None)
     approved_at = getattr(args, "approved_at", None)
     if source is None:
+        if _carry_requested(args):
+            raise CoordinatorError(
+                "--carry-architect and its confirmation apply only to --supersedes",
+                remedy="pass --supersedes <abandoned batch id> with its --approved-by and "
+                f"--approved-at to carry that batch's architect report, or drop {CARRY_FLAGS_HINT}",
+            )
         if approved_by is not None or approved_at is not None:
             raise CoordinatorError(
                 "--approved-by and --approved-at on batch create approve only --supersedes",
@@ -77,12 +104,65 @@ def request(args: argparse.Namespace) -> tuple[str, JsonObject] | None:
             remedy="pass --approved-by naming the human who approved the superseding batch; no "
             "approval_policy approves it",
         )
-    return source.strip(), _approval(args)
+    return source.strip(), _approval(args), _architect_confirmation(args)
+
+
+def _carry_requested(args: argparse.Namespace) -> bool:
+    return any(
+        getattr(args, flag, None) is not None
+        for flag in (
+            "carry_architect",
+            "architect_report_sha256",
+            "architect_confirmed_by",
+            "architect_confirmed_at",
+        )
+    )
+
+
+def _architect_confirmation(args: argparse.Namespace) -> ArchitectConfirmation | None:
+    """The human confirmation of the architect report ``--carry-architect`` names (issue #1052),
+    bound to its ``report_sha256``; ``None`` when no carry flag is passed."""
+    if not _carry_requested(args):
+        return None
+    dispatch_id = getattr(args, "carry_architect", None)
+    digest = getattr(args, "architect_report_sha256", None)
+    confirmed_by = getattr(args, "architect_confirmed_by", None)
+    confirmed_at = getattr(args, "architect_confirmed_at", None)
+    if not (
+        _non_empty(dispatch_id)
+        and _non_empty(digest)
+        and _non_empty(confirmed_by)
+        and _non_empty(confirmed_at)
+    ):
+        raise CoordinatorError(
+            "a carried architect report requires a human confirmation of that report",
+            remedy=f"pass {CARRY_FLAGS_HINT} naming the human who read and confirmed that report",
+        )
+    if confirmed_by.strip().startswith(POLICY_APPROVER_PREFIX):
+        raise CoordinatorError(
+            "--architect-confirmed-by is a human, never a policy "
+            f"({confirmed_by.strip()})",
+            remedy="pass --architect-confirmed-by naming the human who read and confirmed the "
+            "architect report; no approval_policy confirms it",
+        )
+    # The confirmation is a human decision of its own: it passes the same TTL and terminal gate
+    # as the supersede approval, so a 'tty' gate asks for it separately.
+    confirmation = _approval(
+        argparse.Namespace(
+            **{**vars(args), "approved_by": confirmed_by, "approved_at": confirmed_at}
+        )
+    )
+    return {
+        "dispatch_id": dispatch_id.strip(),
+        "report_sha256": digest.strip(),
+        "confirmed_by": confirmation["approved_by"],
+        "confirmed_at": confirmation["approved_at"],
+    }
 
 
 def _load_source(root: Path, source_id: str) -> JsonObject:
     path = _records_root(root) / "batches" / f"{_safe_id(source_id, 'batch')}.json"
-    if not path.is_file():
+    if not state_view.is_file(path):
         raise CoordinatorError(
             f"batch {source_id} to supersede does not exist in the current ledger generation",
             remedy="pass --supersedes the batch_id of an abandoned batch of this ticket "
@@ -94,9 +174,8 @@ def _load_source(root: Path, source_id: str) -> JsonObject:
     return source
 
 
-def _resume_record(source: JsonObject) -> JsonObject:
-    """The abandoned batch's ``abandoned.last_accepted`` record that the superseding batch resumes
-    from; refuse any other source."""
+def _require_abandoned(source: JsonObject) -> None:
+    """Refuse a source that is not abandoned: only a dead end is superseded."""
     source_id = source.get("batch_id")
     from harness.orchestration.ledger.recovery_chain import legacy_abandoned
 
@@ -107,6 +186,13 @@ def _resume_record(source: JsonObject) -> JsonObject:
             remedy=f"a dead-end batch is superseded only after 'batch decide --batch {source_id} "
             "--decision abandon --reason <why>' or 'batch abandon' with explicit human approval",
         )
+
+
+def _resume_record(source: JsonObject) -> JsonObject:
+    """The abandoned batch's ``abandoned.last_accepted`` record that the superseding batch resumes
+    from; refuse any other source."""
+    source_id = source.get("batch_id")
+    _require_abandoned(source)
     abandoned = source.get("abandoned")
     last = abandoned.get("last_accepted") if isinstance(abandoned, dict) else None
     if not isinstance(last, dict):
@@ -125,7 +211,8 @@ def _resume_record(source: JsonObject) -> JsonObject:
             )
         raise CoordinatorError(
             f"abandoned batch {source_id} has no abandoned.last_accepted record to resume from",
-            remedy=remedy,
+            remedy=f"{remedy}; to keep a completed architect report of that batch, a human "
+            f"confirms it with {CARRY_FLAGS_HINT}",
         )
     return last
 
@@ -156,13 +243,113 @@ def _architect_reference(root: Path, source: JsonObject) -> JsonObject | None:
         carried = link.get("architect") if isinstance(link, dict) else None
         return dict(carried) if isinstance(carried, dict) else None
     _pending_report(root, source, entry)  # the referenced report is intact
+    return _reference(source, entry, plan_rules.accepted_plan_sha256(source))
+
+
+def _reference(
+    holder: JsonObject, entry: JsonObject, commit_plan_sha256: str | None
+) -> JsonObject:
+    """The carried architect reference: the report ``entry`` of batch ``holder`` that holds it."""
     return {
-        "batch_id": source["batch_id"],
+        "batch_id": holder["batch_id"],
         "dispatch_id": entry["dispatch_id"],
         "report": entry["report"],
         "report_sha256": entry["report_sha256"],
-        "commit_plan_sha256": plan_rules.accepted_plan_sha256(source),
+        "commit_plan_sha256": commit_plan_sha256,
     }
+
+
+def _confirmed_architect(
+    root: Path, source: JsonObject, record: JsonObject, confirmation: ArchitectConfirmation
+) -> tuple[JsonObject, list[JsonObject] | None]:
+    """The architect report a human confirmed, by reference, and the commit plan it reports,
+    validated against the new batch ``record`` (issue #1052).
+
+    The report is any completed architect report of ``source``, whatever decision it had, or the
+    one ``source`` itself carried from an earlier batch, so a chain of superseding batches can
+    carry it again. A source with an ``abandoned.last_accepted`` record resumes from that record
+    instead.
+    """
+    from harness.orchestration.workflow.decisions import accepted_commit_plan
+
+    source_id = source.get("batch_id")
+    dispatch_id = confirmation["dispatch_id"]
+    if isinstance(source["abandoned"].get("last_accepted"), dict):
+        raise CoordinatorError(
+            f"batch {source_id} has an abandoned.last_accepted record, so its accepted stages "
+            "are resumed, not a confirmed architect report",
+            remedy=f"drop {CARRY_FLAGS_HINT}: --supersedes {source_id} resumes from the last "
+            "accepted record, with its accepted architect",
+        )
+    holder, entry = _report_holder(root, source, dispatch_id)
+    report = _pending_report(root, holder, entry)  # the referenced report is intact
+    if entry["report_sha256"] != confirmation["report_sha256"]:
+        raise CoordinatorError(
+            f"--architect-report-sha256 does not match the report_sha256 of {dispatch_id}",
+            remedy="read the architect report again and confirm the report_sha256 recorded for "
+            f"{dispatch_id} in batch {holder['batch_id']}",
+        )
+    if report.get("outcome") != "completed":
+        raise CoordinatorError(
+            f"the architect report of {dispatch_id} is {report.get('outcome')!r}, not completed",
+            remedy=f"only a completed architect report can be carried; {RUN_ARCHITECT_AGAIN}",
+        )
+    if source.get("definition_of_done") != record["definition_of_done"]:
+        raise CoordinatorError(
+            f"batch {source_id} has another Definition of Done, so its architect report does not "
+            "plan this batch",
+            remedy="pass the Definition of Done of the abandoned batch to carry its architect "
+            f"report, {RUN_ARCHITECT_AGAIN}",
+        )
+    plan = accepted_commit_plan(record, report, None)
+    outside = (
+        plan_rules.paths_outside_scope(plan, record.get("allowed_paths"))
+        if plan is not None
+        else []
+    )
+    if outside:
+        raise CoordinatorError(
+            f"the carried commit_plan names paths outside the batch allowed_paths: "
+            f"{', '.join(outside)}",
+            remedy="plan the superseding batch with an --allowed-path that covers every "
+            f"expected path of the carried plan, {RUN_ARCHITECT_AGAIN}",
+        )
+    reference = _reference(
+        holder, entry, plan_rules.plan_sha256(plan) if plan is not None else None
+    )
+    reference["confirmed_by"] = confirmation["confirmed_by"]
+    reference["confirmed_at"] = confirmation["confirmed_at"]
+    return reference, plan
+
+
+def _report_holder(
+    root: Path, source: JsonObject, dispatch_id: str
+) -> tuple[JsonObject, JsonObject]:
+    """The batch that holds the reported architect ``dispatch_id`` and its dispatch entry:
+    ``source`` itself, or the batch whose architect ``source`` carried."""
+    from harness.orchestration.ledger.recovery_chain import active_dispatches
+
+    holder = source
+    link = source.get("supersedes")
+    carried = link.get("architect") if isinstance(link, dict) else None
+    if isinstance(carried, dict) and carried.get("dispatch_id") == dispatch_id:
+        holder = _load_source(root, carried["batch_id"])
+    entry = next(
+        (
+            item
+            for item in active_dispatches(holder)
+            if item.get("dispatch_id") == dispatch_id
+        ),
+        None,
+    )
+    if entry is None or entry.get("role") != "architect" or entry.get("state") != "reported":
+        source_id = source.get("batch_id")
+        raise CoordinatorError(
+            f"{dispatch_id} is not a reported architect dispatch of batch {source_id}",
+            remedy="pass --carry-architect the dispatch_id of the reported architect of batch "
+            f"{source_id} ('batch status --batch {source_id}'), {RUN_ARCHITECT_AGAIN}",
+        )
+    return holder, entry
 
 
 def _carried_plan(source: JsonObject, architect: JsonObject) -> list[JsonObject] | None:
@@ -181,14 +368,19 @@ def _carried_plan(source: JsonObject, architect: JsonObject) -> list[JsonObject]
     return [dict(entry) for entry in plan]
 
 
-def _start_commit(repo: Path, source: JsonObject, last: JsonObject) -> str | None:
-    """The last accepted candidate the first developer starts from; ``None`` when only the
-    architect was accepted."""
+def _start_commit(
+    repo: Path, source: JsonObject, last: JsonObject, branch_head: str
+) -> str | None:
+    """The commit the first developer starts from; ``None`` when only the architect was accepted.
+
+    It is the last accepted candidate, or the issue branch head when unaccepted commits (a
+    developer-retry) lie over that candidate: the worker's startup snapshot must equal the
+    worktree HEAD, and history is never rewritten (issue #1042)."""
     candidate = last.get("candidate_commit")
     if candidate is None:
         return None
     try:
-        return _candidate_commit(repo, candidate)
+        accepted = _candidate_commit(repo, candidate)
     except CoordinatorError as exc:
         raise CoordinatorError(
             f"the last accepted candidate {candidate} of batch {source.get('batch_id')} does not "
@@ -197,6 +389,9 @@ def _start_commit(repo: Path, source: JsonObject, last: JsonObject) -> str | Non
             "fetch it, then create the superseding batch again; or create an ordinary batch "
             "without --supersedes",
         ) from exc
+    if _git_is_ancestor(repo, accepted, branch_head):
+        return branch_head
+    return accepted
 
 
 def developer_next_action(batch: JsonObject) -> str:
@@ -246,12 +441,33 @@ def rebase_target(
     return target
 
 
+def _resume_from_last_accepted(
+    repo: Path,
+    root: Path,
+    source: JsonObject,
+    last: JsonObject,
+    same_done: bool,
+    branch_head: str,
+) -> tuple[JsonObject | None, list[JsonObject] | None, str | None, str]:
+    """The carried accepted architect, its pinned plan, the start commit and the rationale of a
+    batch that resumes from ``source``'s ``abandoned.last_accepted`` record (issue #506)."""
+    architect = _architect_reference(root, source) if same_done else None
+    plan = _carried_plan(source, architect) if architect is not None else None
+    rationale = (
+        f"batch {source['batch_id']} was abandoned after its accepted {last.get('role')} "
+        f"stage {last.get('dispatch_id')}; this batch resumes from that record, and its risk "
+        "assessment, review and QA run again."
+    )
+    return architect, plan, _start_commit(repo, source, last, branch_head), rationale
+
+
 def attach(
     repo: Path,
     root: Path,
     record: JsonObject,
     source_id: str,
     approval: JsonObject,
+    confirmation: ArchitectConfirmation | None = None,
 ) -> JsonObject:
     """Link the batch about to be written to the abandoned batch ``source_id``.
 
@@ -263,8 +479,12 @@ def attach(
     With the same definition of done, the source's accepted architect is carried by reference and
     its pinned commit plan is copied, so the batch starts at the developer stage; with another
     definition of done nothing is carried and the architect stage runs again. The first developer
-    starts at the last accepted candidate (``start_commit``); when that does not descend from the
-    integration base pinned now, the base becomes its ``rebase_target_commit``.
+    starts at the last accepted candidate, or at the branch head over it (``start_commit``); when
+    that does not descend from the integration base pinned now, the base becomes its
+    ``rebase_target_commit``.
+
+    With a human ``confirmation`` (issue #1052), the source's never-accepted architect report it
+    names is carried instead, and the batch starts at the developer stage from its base.
     """
     source = _load_source(root, source_id)
     from harness.orchestration.ledger.recovery_chain import legacy_abandoned
@@ -273,11 +493,25 @@ def attach(
         from harness.orchestration.workflow.decisions import _last_accepted
 
         source["abandoned"]["last_accepted"] = _last_accepted(repo, root, source)
-    last = _resume_record(source)
+    _require_abandoned(source)
     _require_same_work(source, record)
     same_done = source.get("definition_of_done") == record["definition_of_done"]
-    architect = _architect_reference(root, source) if same_done else None
-    start = _start_commit(repo, source, last)
+    last_accepted: JsonObject | None = None
+    previous_role: object = "architect"
+    if confirmation is None:
+        last = _resume_record(source)
+        last_accepted, previous_role = dict(last), last.get("role")
+        architect, plan, start, rationale = _resume_from_last_accepted(
+            repo, root, source, last, same_done, record["branch_start_commit"]
+        )
+    else:
+        architect, plan = _confirmed_architect(root, source, record, confirmation)
+        start = None
+        rationale = (
+            f"batch {source['batch_id']} was abandoned with nothing accepted; this batch "
+            f"carries the architect report {architect['dispatch_id']} confirmed by "
+            f"{architect['confirmed_by']}, and its risk assessment, review and QA run again."
+        )
     base = record["integration_base_commit"]
     target = (
         base if start is not None and not _git_is_ancestor(repo, base, start) else None
@@ -286,16 +520,14 @@ def attach(
         "batch_id": source["batch_id"],
         "approved_by": approval["approved_by"],
         "approved_at": approval["approved_at"],
-        "last_accepted": dict(last),
+        "last_accepted": last_accepted,
         "definition_of_done_matches": same_done,
         "architect": architect,
         "start_commit": start,
         "rebase_target_commit": target,
     }
-    if architect is not None:
-        plan = _carried_plan(source, architect)
-        if plan is not None:
-            record["commit_plan"] = plan
+    if plan is not None:
+        record["commit_plan"] = plan
     record["supersedes"] = link
     if architect is not None:
         # The developer stage is the only next action: no architect dispatch is allowed.
@@ -303,16 +535,14 @@ def attach(
     moment = utils._now()
     routing: JsonObject = {
         "route": _require_route(ROUTE),
-        "previous_role": last.get("role"),
+        "previous_role": previous_role,
         "reason_category": None,
         "next_role": "developer" if architect is not None else "architect",
         "next_action": record.get("next_action"),
         "candidate_commit": start,
         "rebase_target_commit": target,
         "superseded_batch_id": source["batch_id"],
-        "rationale": f"batch {source['batch_id']} was abandoned after its accepted "
-        f"{last.get('role')} stage {last.get('dispatch_id')}; this batch resumes from that "
-        "record, and its risk assessment, review and QA run again.",
+        "rationale": rationale,
         "decided_at": moment,
     }
     record["coordinator_decisions"] = [

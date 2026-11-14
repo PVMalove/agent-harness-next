@@ -1,0 +1,596 @@
+"""`harness init|adopt|update` merge managed hook entries into the runtime settings file."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+import pytest
+
+from harness.health.hook_settings import (
+    entry_digest,
+    envelope_hook_ids,
+    script_envelope_id,
+    without_scripts,
+)
+from harness.json_types import JsonObject
+from tests.core.test_uninstall import git, harness
+
+SETTINGS = ".claude/settings.local.json"
+INTEGRATIONS = ".harness/integrations.json"
+USER_HOOK = {"type": "command", "command": "bash scripts/user-guard.sh"}
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Path:
+    root = tmp_path / "project"
+    root.mkdir()
+    git(root, "init", "-b", "main")
+    return root
+
+
+def install(repo: Path) -> None:
+    result = harness("init", str(repo), "--capability", "engineering-suite")
+    assert result.returncode == 0, result.stderr
+
+
+def script_of(handler: JsonObject) -> str | None:
+    match = re.search(r"\.claude/hooks/([\w.-]+)", str(handler.get("command", "")))
+    return match.group(1) if match else None
+
+
+def load(repo: Path) -> JsonObject:
+    document: JsonObject = json.loads((repo / SETTINGS).read_text(encoding="utf-8"))
+    return document
+
+
+def save(repo: Path, document: JsonObject) -> None:
+    (repo / SETTINGS).write_text(
+        json.dumps(document, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def handlers(document: JsonObject, script: str) -> list[tuple[str, str, JsonObject]]:
+    """(event, matcher, handler) of every handler that runs `script`."""
+    found = []
+    for event, groups in document["hooks"].items():
+        for group in groups:
+            for handler in group["hooks"]:
+                if script_of(handler) == script:
+                    found.append((event, group.get("matcher", ""), handler))
+    return found
+
+
+def drop_script(document: JsonObject, script: str) -> None:
+    """Remove every handler of `script` and the groups that it leaves empty."""
+    for event in list(document["hooks"]):
+        groups = document["hooks"][event]
+        for group in groups:
+            group["hooks"] = [h for h in group["hooks"] if script_of(h) != script]
+        document["hooks"][event] = [g for g in groups if g["hooks"]]
+
+
+def template_document() -> JsonObject:
+    from harness.bin.harness import PROJECT_TEMPLATE_DIR
+
+    document: JsonObject = json.loads(
+        (PROJECT_TEMPLATE_DIR / "settings.local.json.tmpl").read_text(encoding="utf-8")
+    )
+    return document
+
+
+def test_update_restores_removed_managed_entries_and_keeps_user_hook(
+    repo: Path,
+) -> None:
+    install(repo)
+    document = load(repo)
+    drop_script(document, "protect-hook-policy.sh")
+    bash_group = next(
+        group for group in document["hooks"]["PreToolUse"] if group["matcher"] == "Bash"
+    )
+    bash_group["hooks"].append(USER_HOOK)
+    save(repo, document)
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    merged = load(repo)
+    restored = handlers(merged, "protect-hook-policy.sh")
+    assert sorted(matcher for _, matcher, _ in restored) == [
+        "Bash",
+        "Write|Edit|MultiEdit|NotebookEdit",
+    ]
+    user_commands = [
+        h["command"]
+        for group in merged["hooks"]["PreToolUse"]
+        for h in group["hooks"]
+        if h["command"] == USER_HOOK["command"]
+    ]
+    assert user_commands == [USER_HOOK["command"]]
+    assert merged["permissions"] == document["permissions"]
+
+
+@pytest.mark.parametrize("legacy_inventory", [False, True])
+def test_update_replaces_outdated_managed_entry_recorded_in_baseline(
+    repo: Path,
+    legacy_inventory: bool,
+) -> None:
+    install(repo)
+    document = load(repo)
+    ((event, matcher, handler),) = handlers(document, "block-dangerous-git.sh")
+    outdated = dict(handler, command=str(handler["command"]).replace("bash ", "sh "))
+    handler.update(outdated)
+    save(repo, document)
+    inventory = json.loads((repo / INTEGRATIONS).read_text(encoding="utf-8"))
+    entry = next(
+        item
+        for item in inventory["integrations"]
+        if item["id"] == "engineering-suite-hooks"
+    )
+    entry["managed_entries"] = sorted(
+        [*entry.get("managed_entries", []), entry_digest(event, matcher, outdated)]
+    )
+    if legacy_inventory:
+        for item in inventory["integrations"]:
+            item["id"] = item["id"].replace("engineering-suite", "pvmalove-suite")
+        lock_path = repo / ".harness/harness.lock"
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        lock["capabilities"] = ["pvmalove-suite"]
+        lock_path.write_text(json.dumps(lock), encoding="utf-8")
+    (repo / INTEGRATIONS).write_text(json.dumps(inventory, indent=2), encoding="utf-8")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    ((_, _, current),) = handlers(load(repo), "block-dangerous-git.sh")
+    assert current["command"].startswith("bash ")
+    updated = json.loads((repo / INTEGRATIONS).read_text(encoding="utf-8"))
+    identifiers = [item["id"] for item in updated["integrations"]]
+    assert identifiers.count("engineering-suite-hooks") == 1
+    assert identifiers.count("engineering-suite-codex-hooks") == 1
+    assert not any(
+        identifier.startswith("pvmalove-suite") for identifier in identifiers
+    )
+
+
+def test_update_leaves_user_modified_managed_entry_untouched(repo: Path) -> None:
+    install(repo)
+    document = load(repo)
+    ((_, _, handler),) = handlers(document, "block-dangerous-git.sh")
+    handler["timeout"] = 5
+    save(repo, document)
+    before = (repo / SETTINGS).read_bytes()
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / SETTINGS).read_bytes() == before
+
+
+def test_force_seed_file_and_force_seed_files_write_the_template_bytes(
+    repo: Path,
+) -> None:
+    install(repo)
+    template = (
+        Path(__file__).resolve().parents[2] / "harness/project/settings.local.json.tmpl"
+    ).read_bytes()
+    for flag in (["--force-seed-file", SETTINGS], ["--force-seed-files"]):
+        save(repo, {"hooks": {}, "permissions": {"allow": ["Bash(own)"]}})
+        result = harness("update", str(repo), *flag)
+        assert result.returncode == 0, result.stderr
+        assert (repo / SETTINGS).read_bytes() == template
+
+
+@pytest.mark.parametrize("command", ["init", "adopt"])
+def test_install_merges_into_existing_user_settings(repo: Path, command: str) -> None:
+    path = repo / SETTINGS
+    path.parent.mkdir(parents=True)
+    user = {
+        "permissions": {"allow": ["Bash(own)"]},
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [USER_HOOK]}]},
+    }
+    path.write_text(json.dumps(user), encoding="utf-8")
+
+    result = harness(command, str(repo), "--capability", "engineering-suite")
+
+    assert result.returncode == 0, result.stderr
+    merged = load(repo)
+    assert merged["permissions"] == user["permissions"]
+    first_group = merged["hooks"]["PreToolUse"][0]
+    assert first_group["hooks"][0] == USER_HOOK
+    expected = {
+        script
+        for groups in template_document()["hooks"].values()
+        for group in groups
+        for h in group["hooks"]
+        if (script := script_of(h))
+    }
+    for script in expected:
+        assert len(handlers(merged, script)) == len(
+            handlers(template_document(), script)
+        ), script
+
+
+def test_unreadable_settings_file_is_left_unchanged(repo: Path) -> None:
+    install(repo)
+    path = repo / SETTINGS
+    path.write_text("{not json", encoding="utf-8")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert path.read_text(encoding="utf-8") == "{not json"
+
+
+def test_conflict_is_reported_with_the_entry_and_left_unchanged(repo: Path) -> None:
+    install(repo)
+    document = load(repo)
+    ((_, _, handler),) = handlers(document, "block-dangerous-git.sh")
+    handler["timeout"] = 5
+    save(repo, document)
+    before = (repo / SETTINGS).read_bytes()
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / SETTINGS).read_bytes() == before
+    assert (
+        "hooks conflict: .claude/settings.local.json: PreToolUse [Bash] "
+        "block-dangerous-git.sh"
+    ) in result.stdout
+    assert "conflicts=1" in result.stdout
+    assert "--force-seed-file .claude/settings.local.json" in result.stdout
+    assert len(handlers(load(repo), "block-dangerous-git.sh")) == 1
+
+
+def test_conflict_is_not_adopted_into_the_recorded_baseline(repo: Path) -> None:
+    install(repo)
+    document = load(repo)
+    ((event, matcher, handler),) = handlers(document, "block-dangerous-git.sh")
+    handler["timeout"] = 5
+    save(repo, document)
+    harness("update", str(repo))
+
+    inventory = json.loads((repo / INTEGRATIONS).read_text(encoding="utf-8"))
+    entry = next(
+        item
+        for item in inventory["integrations"]
+        if item["id"] == "engineering-suite-hooks"
+    )
+
+    assert entry_digest(event, matcher, handler) not in entry["managed_entries"]
+    again = harness("update", str(repo))
+    assert "conflicts=1" in again.stdout
+
+
+def test_repeated_update_is_idempotent_and_prints_the_report(repo: Path) -> None:
+    install(repo)
+    document = load(repo)
+    drop_script(document, "block-pr-merge.sh")
+    save(repo, document)
+    first = harness("update", str(repo))
+    assert "added=1 replaced=0" in first.stdout
+    settings = (repo / SETTINGS).read_bytes()
+    inventory = (repo / INTEGRATIONS).read_bytes()
+
+    second = harness("update", str(repo))
+
+    assert second.returncode == 0, second.stderr
+    assert (repo / SETTINGS).read_bytes() == settings
+    assert (repo / INTEGRATIONS).read_bytes() == inventory
+    assert (
+        "hooks merge: .claude/settings.local.json: added=0 replaced=0" in second.stdout
+    )
+    assert "conflicts=0" in second.stdout
+    assert (
+        "hooks check: .claude/settings.local.json: critical wired 9/9" in second.stdout
+    )
+    assert len(handlers(load(repo), "block-pr-merge.sh")) == 1
+
+
+def test_report_names_the_critical_hook_that_a_conflict_leaves_unwired(
+    repo: Path,
+) -> None:
+    install(repo)
+    document = load(repo)
+    ((_, _, handler),) = handlers(document, "block-dangerous-git.sh")
+    drop_script(document, "block-dangerous-git.sh")
+    document["hooks"]["PreToolUse"].append({"matcher": "Edit", "hooks": [handler]})
+    save(repo, document)
+
+    result = harness("update", str(repo))
+
+    assert "conflicts=" in result.stdout
+    assert (
+        "hooks check: .claude/settings.local.json: critical wired 8/9; "
+        "missing: block-dangerous-git"
+    ) in result.stdout
+
+
+def test_update_of_a_legacy_project_leaves_project_json_without_hook_policy(
+    repo: Path,
+) -> None:
+    install(repo)
+    project_json = repo / ".harness/project.json"
+    data = json.loads(project_json.read_text(encoding="utf-8"))
+    del data["hook_policy"]
+    project_json.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    legacy = project_json.read_bytes()
+    document = load(repo)
+    drop_script(document, "block-pr-merge.sh")
+    save(repo, document)
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert "added=1 replaced=0" in result.stdout
+    assert project_json.read_bytes() == legacy
+    assert "hook_policy" not in json.loads(project_json.read_text(encoding="utf-8"))
+    assert len(handlers(load(repo), "block-pr-merge.sh")) == 1
+
+
+CODEX_CONFIG = ".codex/hooks.json"
+CODEX_COMMAND = re.compile(
+    r'cd "\$\(git rev-parse --show-toplevel\)" && bash "\.claude/hooks/([\w.-]+)"'
+)
+
+
+def load_codex(repo: Path) -> JsonObject:
+    document: JsonObject = json.loads((repo / CODEX_CONFIG).read_text(encoding="utf-8"))
+    return document
+
+
+def codex_triples(document: JsonObject) -> list[tuple[str, str, str]]:
+    """(event, matcher, script) of every handler of the second runtime's file."""
+    triples = []
+    for event, groups in document["hooks"].items():
+        for group in groups:
+            for handler in group["hooks"]:
+                match = CODEX_COMMAND.fullmatch(handler["command"])
+                assert match, handler["command"]
+                triples.append((event, group.get("matcher", ""), match.group(1)))
+    return triples
+
+
+def test_init_installs_the_second_runtime_adapter_from_the_same_scripts(
+    repo: Path,
+) -> None:
+    install(repo)
+
+    # The second runtime delivers PreToolUse for Bash and apply_patch and the end of a turn (Stop,
+    # SubagentStop); apply_patch reaches only the critical guards with the patch adapter.
+    expected = sorted(
+        [
+            *(
+                (event, group.get("matcher", ""), script)
+                for event, groups in template_document()["hooks"].items()
+                for group in groups
+                for handler in group["hooks"]
+                if (script := script_of(handler))
+                # The runtime autostart is shipped to Claude Code only (ADR 0031).
+                and script != "runtime-autostart.sh"
+                and (
+                    (event == "PreToolUse" and "Bash" in group["matcher"].split("|"))
+                    or event in ("Stop", "SubagentStop")
+                )
+            ),
+            ("PreToolUse", "apply_patch|Write|Edit", "protect-hook-policy.sh"),
+            (
+                "PreToolUse",
+                "apply_patch|Write|Edit",
+                "block-scratch-outside-docs-tasks.sh",
+            ),
+        ]
+    )
+    assert ("Stop", "", "targeted-check-reminder.sh") in expected
+    assert sorted(codex_triples(load_codex(repo))) == expected
+    inventory = json.loads((repo / INTEGRATIONS).read_text(encoding="utf-8"))
+    entry = next(
+        item
+        for item in inventory["integrations"]
+        if item["id"] == "engineering-suite-codex-hooks"
+    )
+    assert entry["kind"] == "hook"
+    assert entry["runtimes"] == ["codex"]
+    assert entry["config"] == CODEX_CONFIG
+    assert entry["managed_entries"] == sorted(set(entry["managed_entries"]))
+    assert len(entry["managed_entries"]) == len(expected)
+
+
+def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
+    repo: Path,
+) -> None:
+    install(repo)
+
+    scripts = {script for _, _, script in codex_triples(load_codex(repo))}
+
+    assert scripts.isdisjoint(
+        {
+            "check-worktree-branch-name.sh",
+            "count-skill-usage.sh",
+            "impact-first-touch.sh",
+            "sensitive-path-recheck.sh",
+            "runtime-autostart.sh",
+        }
+    )
+    assert "protect-hook-policy.sh" in scripts
+    # Write and Edit arrive as apply_patch: only the critical guards with the patch adapter take it.
+    assert {
+        (matcher, script)
+        for event, matcher, script in codex_triples(load_codex(repo))
+        if event == "PreToolUse" and matcher == "apply_patch|Write|Edit"
+    } == {
+        ("apply_patch|Write|Edit", "protect-hook-policy.sh"),
+        ("apply_patch|Write|Edit", "block-scratch-outside-docs-tasks.sh"),
+    }
+    # The advisory Write/Edit rows stay unwired: only the end-of-turn rows of the reminder are.
+    assert {
+        (event, script)
+        for event, _, script in codex_triples(load_codex(repo))
+        if script == "targeted-check-reminder.sh"
+    } == {
+        ("Stop", "targeted-check-reminder.sh"),
+        ("SubagentStop", "targeted-check-reminder.sh"),
+    }
+
+
+def test_second_runtime_adapter_does_not_wire_the_qa_marker_hook(repo: Path) -> None:
+    # The second runtime fires PostToolUse after a Bash command that exited non-zero, and its
+    # payload has no exit status: `mark-qa-gate-passed` would record a marker for a failed QA run.
+    install(repo)
+
+    def marker_triples() -> list[tuple[str, str, str]]:
+        return [
+            triple
+            for triple in codex_triples(load_codex(repo))
+            if triple[2] == "mark-qa-gate-passed.sh" or triple[0] == "PostToolUse"
+        ]
+
+    assert marker_triples() == []
+    assert handlers(load(repo), "mark-qa-gate-passed.sh")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert marker_triples() == []
+
+
+def test_second_runtime_file_follows_the_same_merge_rules(repo: Path) -> None:
+    install(repo)
+    document = load_codex(repo)
+    drop = "block-pr-merge.sh"
+    for group in document["hooks"]["PreToolUse"]:
+        group["hooks"] = [h for h in group["hooks"] if drop not in h["command"]]
+        if any("block-dangerous-git.sh" in h["command"] for h in group["hooks"]):
+            group["hooks"].append(USER_HOOK)
+            for h in group["hooks"]:
+                if "block-dangerous-git.sh" in h["command"]:
+                    h["timeout"] = 5
+    (repo / CODEX_CONFIG).write_text(json.dumps(document, indent=2), encoding="utf-8")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    merged = load_codex(repo)
+    commands = [h["command"] for g in merged["hooks"]["PreToolUse"] for h in g["hooks"]]
+    assert sum(drop in command for command in commands) == 1
+    assert commands.count(USER_HOOK["command"]) == 1
+    assert (
+        f"hooks conflict: {CODEX_CONFIG}: PreToolUse [Bash] block-dangerous-git.sh"
+        in result.stdout
+    )
+    assert f"hooks merge: {CODEX_CONFIG}: added=1" in result.stdout
+
+
+def test_force_seed_file_replaces_the_second_runtime_file_with_the_template(
+    repo: Path,
+) -> None:
+    install(repo)
+    template = (
+        Path(__file__).resolve().parents[2] / "harness/project/codex-hooks.json.tmpl"
+    ).read_bytes()
+    (repo / CODEX_CONFIG).write_text('{"hooks": {}}\n', encoding="utf-8")
+
+    result = harness("update", str(repo), "--force-seed-file", CODEX_CONFIG)
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / CODEX_CONFIG).read_bytes() == template
+
+
+def test_second_runtime_update_is_idempotent(repo: Path) -> None:
+    install(repo)
+    first = (repo / CODEX_CONFIG).read_bytes()
+    inventory = (repo / INTEGRATIONS).read_bytes()
+
+    result = harness("update", str(repo))
+
+    assert (repo / CODEX_CONFIG).read_bytes() == first
+    assert (repo / INTEGRATIONS).read_bytes() == inventory
+    assert f"hooks merge: {CODEX_CONFIG}: added=0 replaced=0" in result.stdout
+
+
+ENVELOPE = ".claude/hooks/hook_response.py"
+LOCK = ".harness/harness.lock"
+HOOK_TEMPLATES = Path(__file__).resolve().parents[2] / "harness/project/hooks"
+AUTOSTART_LINES = (
+    '    "runtime-autostart": ("runtime-autostart-failed", False),\n',
+    '    "runtime-autostart": ("minimal", "standard", "strict"),\n',
+)
+
+
+def without_autostart(source: str) -> str:
+    """An older envelope: its ``HOOKS`` and ``ACTIVE_PROFILES`` lack ``runtime-autostart``."""
+    for line in AUTOSTART_LINES:
+        assert line in source
+        source = source.replace(line, "")
+    return source
+
+
+def test_envelope_hook_ids_reads_the_hooks_keys_without_running_the_module() -> None:
+    source = (HOOK_TEMPLATES / "hook_response.py").read_text(encoding="utf-8")
+
+    known = envelope_hook_ids(source)
+    older = envelope_hook_ids(without_autostart(source))
+
+    assert known is not None and {"runtime-autostart", "block-pr-merge"} <= known
+    assert older is not None and "runtime-autostart" not in older
+    assert envelope_hook_ids('HOOKS = {"a": 1}\nraise SystemExit(3)\n') == frozenset({"a"})
+    assert envelope_hook_ids("x = 1\n") is None
+    assert envelope_hook_ids("HOOKS = {\n") is None
+
+
+def test_script_envelope_id_names_the_hook_id_the_script_passes_to_the_envelope() -> None:
+    script = (HOOK_TEMPLATES / "runtime-autostart.sh").read_text(encoding="utf-8")
+
+    assert script_envelope_id(script) == "runtime-autostart"
+    sourced = (HOOK_TEMPLATES / "block-pr-merge.sh").read_text(encoding="utf-8")
+    assert script_envelope_id(sourced) == "block-pr-merge"
+    assert script_envelope_id(sourced.replace("\n", "\r\n")) == "block-pr-merge"
+    helper = (HOOK_TEMPLATES / "hook-envelope.sh").read_text(encoding="utf-8")
+    assert script_envelope_id(helper) is None
+    assert script_envelope_id("#!/bin/bash\nexit 0\n") is None
+
+
+def test_without_scripts_drops_their_handlers_and_empty_groups_only() -> None:
+    template = template_document()
+    before = json.dumps(template, sort_keys=True)
+
+    trimmed = without_scripts(template, ["runtime-autostart.sh"])
+
+    assert json.dumps(template, sort_keys=True) == before
+    assert handlers(trimmed, "runtime-autostart.sh") == []
+    assert handlers(trimmed, "block-pr-merge.sh") == handlers(template, "block-pr-merge.sh")
+    assert all(group["hooks"] for groups in trimmed["hooks"].values() for group in groups)
+
+
+def test_update_does_not_wire_a_hook_that_the_installed_envelope_does_not_know(
+    repo: Path,
+) -> None:
+    install(repo)
+    document = load(repo)
+    drop_script(document, "runtime-autostart.sh")
+    save(repo, document)
+    envelope = repo / ENVELOPE
+    envelope.write_text(without_autostart(envelope.read_text("utf-8")), encoding="utf-8")
+    lock = json.loads((repo / LOCK).read_text(encoding="utf-8"))
+    del lock["seed_files"][ENVELOPE]  # no baseline: update leaves the envelope as it is
+    (repo / LOCK).write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+
+    held = harness("update", str(repo))
+
+    assert held.returncode == 0, held.stderr
+    assert handlers(load(repo), "runtime-autostart.sh") == []
+    assert "runtime-autostart.sh" in held.stdout
+    assert f"--force-seed-file {ENVELOPE}" in held.stdout
+    assert f"--force-seed-file {SETTINGS}" not in held.stdout
+
+    fixed = harness("update", str(repo), "--force-seed-file", ENVELOPE)
+
+    assert fixed.returncode == 0, fixed.stderr
+    assert {event for event, _, _ in handlers(load(repo), "runtime-autostart.sh")} == {
+        "PreToolUse",
+        "Stop",
+        "SubagentStop",
+    }
+    assert envelope.read_bytes() == (HOOK_TEMPLATES / "hook_response.py").read_bytes()
