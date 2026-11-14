@@ -171,7 +171,7 @@ site/
 | `/concepts/verification/` | ADR 0023 | P1 |
 | `/guides/implement/` | harness-guide §4 + docs/skills/implement | P0 |
 | `/guides/fast-implement/` | harness-guide §4 + docs/skills/fast-implement | P0 |
-| `/guides/tdd/` | docs/skills/tdd + ADR 0014 | P1 |
+| `/guides/tdd/` | docs/skills/tdd + ADR 0035 | P1 |
 | `/guides/code-review/` | docs/skills/code-review | P1 |
 | `/guides/qa-gate/` | docs/skills/qa-gate + ADR 0023 | P1 |
 | `/guides/release-gate/` | ADR 0026 §4 | P1 |

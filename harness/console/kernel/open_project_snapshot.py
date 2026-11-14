@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
+from .json_shape import json_list, json_object
 from .project_target import ProjectTarget
 
 # `harness console --web <path>`: the Web console of another project, started by its own server.
@@ -104,15 +105,11 @@ class OpenProjectFacts:
 
 
 def _object(value: object, fields: frozenset[str] | None = None) -> dict[str, object]:
-    if not isinstance(value, dict) or (fields is not None and set(value) != fields):
-        raise ValueError("open project snapshot off the schema")
-    return cast(dict[str, object], value)
+    return json_object(value, "open project snapshot off the schema", fields)
 
 
 def _list(value: object) -> list[object]:
-    if not isinstance(value, list):
-        raise ValueError("open project snapshot list")
-    return cast(list[object], value)
+    return json_list(value, "open project snapshot list")
 
 
 def _strings(value: object) -> tuple[str, ...]:

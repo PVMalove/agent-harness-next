@@ -18,12 +18,13 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
 use crate::hooks;
+use crate::mutex::lock_unpoisoned;
 use crate::platform;
 use crate::read::{self, Answer, ReadError, Snapshot};
 
@@ -90,7 +91,7 @@ impl Registry {
     }
 
     fn entries(&self) -> std::sync::MutexGuard<'_, HashMap<String, Entry>> {
-        self.open.lock().unwrap_or_else(PoisonError::into_inner)
+        lock_unpoisoned(&self.open)
     }
 
     /// End every snapshot that has outlived its limits; returns how many stay open.

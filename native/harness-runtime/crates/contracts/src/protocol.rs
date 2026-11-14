@@ -98,6 +98,10 @@ pub enum Status {
     Error,
 }
 
+/// The remedy of a request outside the protocol: a known envelope, no unknown fields.
+pub const PROTOCOL_REMEDY: &str =
+    "send a request the protocol defines: a known envelope, no unknown fields";
+
 /// The error of a response.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ErrorBody {
@@ -126,6 +130,18 @@ impl ErrorBody {
             remedy: remedy.into(),
             facts: Map::new(),
         }
+    }
+
+    /// `malformed_request`: the request is not valid; `remedy` names the request the operation
+    /// expects.
+    pub fn malformed(detail: impl std::fmt::Display, remedy: impl Into<String>) -> Self {
+        Self::new(
+            ErrorCode::MalformedRequest,
+            FailureDomain::Tooling,
+            false,
+            format!("the request is not valid: {detail}"),
+            remedy,
+        )
     }
 
     /// The same error with one more fact.
@@ -185,6 +201,19 @@ mod tests {
 
     const fn range(min: ProtocolVersion, max: ProtocolVersion) -> VersionRange {
         VersionRange { min, max }
+    }
+
+    #[test]
+    fn a_malformed_request_keeps_its_wording() {
+        let error = ErrorBody::malformed("no payload", PROTOCOL_REMEDY);
+        assert_eq!(error.code, ErrorCode::MalformedRequest);
+        assert_eq!(error.domain, FailureDomain::Tooling);
+        assert!(!error.retryable);
+        assert_eq!(error.message, "the request is not valid: no payload");
+        assert_eq!(
+            error.remedy,
+            "send a request the protocol defines: a known envelope, no unknown fields"
+        );
     }
 
     #[test]

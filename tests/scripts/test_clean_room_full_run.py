@@ -8,9 +8,10 @@ be selected, whether the stage runs on the host or in a QA container.
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -46,3 +47,54 @@ def test_one_run_executes_the_whole_scenarios_tuple_in_order(
 
     assert ran == list(test_clean_room.SCENARIOS)
     assert len(set(map(id, ran))) == len(ran)
+
+
+def _scenario_name(scenario: ModuleType) -> str:
+    return scenario.__name__.rpartition(".")[2]
+
+
+def test_each_scenario_reports_its_duration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    for scenario in test_clean_room.SCENARIOS:
+        monkeypatch.setattr(scenario, "run", lambda context: None)
+    monkeypatch.setenv("HARNESS_TEST_RUN_ROOT", str(tmp_path))
+
+    test_clean_room.main()
+
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.partition(": ")[0] for line in lines] == [
+        f"[clean-room] {_scenario_name(scenario)}"
+        for scenario in test_clean_room.SCENARIOS
+    ]
+    for line in lines:
+        assert re.fullmatch(r"\[clean-room\] \w+: \d+\.\d\d s", line)
+
+
+def test_a_failed_scenario_reports_how_long_it_ran_and_stops_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    first, second, *rest = test_clean_room.SCENARIOS
+
+    def fail(context: SimpleNamespace) -> None:
+        sys.exit("broken")
+
+    monkeypatch.setattr(first, "run", lambda context: None)
+    monkeypatch.setattr(second, "run", fail)
+    for scenario in rest:
+        monkeypatch.setattr(scenario, "run", lambda context: pytest.fail("ran"))
+    monkeypatch.setenv("HARNESS_TEST_RUN_ROOT", str(tmp_path))
+
+    with pytest.raises(SystemExit, match="broken"):
+        test_clean_room.main()
+
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 2
+    assert re.fullmatch(
+        rf"\[clean-room\] {_scenario_name(second)}: failed after \d+\.\d\d s",
+        lines[1],
+    )

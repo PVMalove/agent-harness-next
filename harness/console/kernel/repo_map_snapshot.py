@@ -13,6 +13,7 @@ from typing import TypeVar
 
 from harness.repo_map.bundle_fetch import ParserStatus
 
+from .json_shape import json_bool, json_int, json_object, json_str
 from .repo_map import RepoMapView, parse_map
 from .repo_map_coverage import coverage, symbol_kinds
 from .repo_map_settings import MemoryStatus, TierSetting
@@ -150,11 +151,10 @@ def _derived(view: RepoMapView | None, kinds: object, found: object) -> int | No
 
 
 def _object(value: object, fields: frozenset[str] | None) -> dict[str, object]:
-    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
-        raise ValueError("expected a JSON object")
-    if fields is not None and set(value) != fields:
+    found = json_object(value, "expected a JSON object")
+    if fields is not None and set(found) != fields:
         raise ValueError(f"expected the fields {sorted(fields)}")
-    return value
+    return found
 
 
 def _optional(value: object, read: Callable[[object], T]) -> T | None:
@@ -162,21 +162,15 @@ def _optional(value: object, read: Callable[[object], T]) -> T | None:
 
 
 def _int(value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("expected an integer")
-    return value
+    return json_int(value, "expected an integer")
 
 
 def _str(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError("expected a string")
-    return value
+    return json_str(value, "expected a string")
 
 
 def _bool(value: object) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError("expected a boolean")
-    return value
+    return json_bool(value, "expected a boolean")
 
 
 def _strs(value: object) -> tuple[str, ...]:

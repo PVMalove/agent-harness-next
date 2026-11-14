@@ -589,3 +589,20 @@ def test_an_unreadable_envelope_hooks_table_fails(repo: Path) -> None:
 
     assert result["status"] == "fail"
     assert "hook_response.py: HOOKS не читается" in result["message"]
+
+
+@pytest.mark.parametrize("envelope", [ENVELOPE, ".claude/hooks/hook-envelope.sh"])
+def test_a_missing_envelope_file_fails_and_update_restores_it(
+    repo: Path, envelope: str
+) -> None:
+    (repo / envelope).unlink()
+
+    result = check(repo)
+
+    assert result["status"] == "fail"
+    assert f"{envelope}: файл отсутствует" in result["message"]
+    assert "без JSON-конверта" in result["message"]
+    assert result["fix"]["command"].endswith(f"update {repo}")
+    assert harness("update", str(repo)).returncode == 0
+    assert (repo / envelope).is_file()
+    assert "файл отсутствует" not in check(repo)["message"]

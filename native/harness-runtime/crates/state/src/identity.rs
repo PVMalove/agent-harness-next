@@ -105,22 +105,24 @@ impl Identity {
 /// `HARNESS_RUNTIME_TEST_PID_NAMESPACE` and `HARNESS_RUNTIME_TEST_BOOT_ID` when a test sets them.
 pub fn observer() -> Observer {
     let environment = platform::environment();
-    #[allow(unused_mut)]
-    let mut observer = Observer {
+    Observer {
         host: platform::hostname(),
-        boot_id: environment.boot_id,
-        pid_namespace: environment.pid_namespace,
-    };
-    #[cfg(debug_assertions)]
-    {
-        if let Ok(namespace) = std::env::var("HARNESS_RUNTIME_TEST_PID_NAMESPACE") {
-            observer.pid_namespace = Some(namespace);
-        }
-        if let Ok(boot) = std::env::var("HARNESS_RUNTIME_TEST_BOOT_ID") {
-            observer.boot_id = Some(boot);
-        }
+        boot_id: test_override("HARNESS_RUNTIME_TEST_BOOT_ID").or(environment.boot_id),
+        pid_namespace: test_override("HARNESS_RUNTIME_TEST_PID_NAMESPACE")
+            .or(environment.pid_namespace),
     }
-    observer
+}
+
+/// The value a test set in `variable` for the observer of a debug build.
+#[cfg(debug_assertions)]
+fn test_override(variable: &str) -> Option<String> {
+    std::env::var(variable).ok()
+}
+
+/// A release build reads no test variable.
+#[cfg(not(debug_assertions))]
+fn test_override(_variable: &str) -> Option<String> {
+    None
 }
 
 /// The process state and the start time of a `/proc/<pid>/stat` line. The command name in

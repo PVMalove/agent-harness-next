@@ -5,15 +5,10 @@
 # .harness/project.json (exit code 3, turned into an "ask" verdict by hook_response.py).
 # protect_hook_policy.py decides every call; only its exit 0 with the word `allow` lets the action
 # run, so a missing interpreter, any other status or a partial copy of the helper blocks (fail closed).
-# Verdict envelope (hook_response.py): reruns this script, answers with the JSON verdict and the
-# exit code of the hook policy. Without Python or the helper the script below decides alone.
-if [ -z "${HARNESS_HOOK_ENVELOPE:-}" ]; then
-  ENVELOPE_DIR="$(cd "$(dirname "$0")" && pwd)"
-  ENVELOPE_PY="$(command -v python3 || command -v python)"
-  if [ -n "$ENVELOPE_PY" ] && [ -f "$ENVELOPE_DIR/hook_response.py" ]; then
-    exec "$ENVELOPE_PY" "$ENVELOPE_DIR/hook_response.py" run protect-hook-policy "${BASH:-bash}" "$0"
-  fi
-fi
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" protect-hook-policy
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PY="$(command -v python3 || command -v python)"
 if [ -z "$PY" ]; then

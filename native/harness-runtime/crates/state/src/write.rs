@@ -24,7 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Duration;
 
-use contracts::{ErrorBody, ErrorCode, FailureDomain, Request};
+use contracts::{ErrorBody, ErrorCode, FailureDomain, PROTOCOL_REMEDY, Request};
 use rusqlite::types::Value as Sql;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use serde_json::{Map, Value, json};
@@ -40,6 +40,7 @@ use crate::qa_evidence;
 use crate::read::valid_path;
 use crate::route::{Target, classify};
 use crate::schema;
+use crate::store_error::{self, store_failed};
 use crate::time::iso_now;
 
 /// The record directories a generation holds outside the typed tables and the audit chain.
@@ -136,13 +137,7 @@ pub(crate) fn failure(
 }
 
 fn malformed(detail: impl AsRef<str>) -> ErrorBody {
-    failure(
-        ErrorCode::MalformedRequest,
-        FailureDomain::Tooling,
-        false,
-        format!("the request is not valid: {}", detail.as_ref()),
-        "send a request the protocol defines: a known envelope, no unknown fields",
-    )
+    ErrorBody::malformed(detail.as_ref(), PROTOCOL_REMEDY)
 }
 
 fn revision_conflict(path: &str, expected: i64, actual: i64) -> ErrorBody {
@@ -169,13 +164,10 @@ fn store_busy(detail: &str) -> ErrorBody {
 }
 
 fn invariant(detail: impl AsRef<str>) -> ErrorBody {
-    failure(
-        ErrorCode::InvariantViolation,
-        FailureDomain::Tooling,
-        false,
-        format!("the change breaks a store invariant: {}", detail.as_ref()),
-        "nothing was written; run `coordinator.py ledger validate --full` and report the defect",
-    )
+    store_error::invariant(format!(
+        "the change breaks a store invariant: {}",
+        detail.as_ref()
+    ))
 }
 
 fn not_found(path: &str) -> ErrorBody {
@@ -189,23 +181,13 @@ fn not_found(path: &str) -> ErrorBody {
     .with_fact("path", path)
 }
 
-fn internal(detail: impl AsRef<str>) -> ErrorBody {
-    failure(
-        ErrorCode::Internal,
-        FailureDomain::Infrastructure,
-        false,
-        format!("the store failed: {}", detail.as_ref()),
-        "repeat the command; if the store stays unreadable, restore the state directory from the snapshot named in AUTHORITY.json",
-    )
-}
-
 fn from_sqlite(err: &rusqlite::Error) -> ErrorBody {
+    if store_error::is_busy(err) {
+        return store_busy(&err.to_string());
+    }
     match err.sqlite_error_code() {
-        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
-            store_busy(&err.to_string())
-        }
         Some(rusqlite::ErrorCode::ConstraintViolation) => invariant(err.to_string()),
-        _ => internal(err.to_string()),
+        _ => store_failed(err),
     }
 }
 
@@ -222,7 +204,7 @@ fn from_state(err: &Error) -> ErrorBody {
             message.clone(),
             remedy,
         ),
-        other => internal(other.to_string()),
+        other => store_failed(other),
     }
 }
 
@@ -1063,11 +1045,11 @@ enum Step {
 
 fn stored_result(result_json: &str) -> Result<Written, ErrorBody> {
     let result: Value = serde_json::from_str(result_json)
-        .map_err(|err| internal(format!("a stored result is not JSON: {err}")))?;
+        .map_err(|err| store_failed(format!("a stored result is not JSON: {err}")))?;
     let revision = result
         .get("audit_seq")
         .and_then(Value::as_u64)
-        .ok_or_else(|| internal("a stored result has no audit_seq"))?;
+        .ok_or_else(|| store_failed("a stored result has no audit_seq"))?;
     Ok(Written {
         revision,
         result,
@@ -1106,7 +1088,7 @@ fn replay(
     match state.as_str() {
         "committed" => stored_result(&result_json).map(Some),
         "failed" => Err(serde_json::from_str::<ErrorBody>(&result_json)
-            .map_err(|err| internal(format!("a stored failure is not an error: {err}")))?),
+            .map_err(|err| store_failed(format!("a stored failure is not an error: {err}")))?),
         _ => Err(store_busy("the operation is still being applied")),
     }
 }
@@ -1241,7 +1223,7 @@ fn run(
 
 fn sqlite_audit(tx: &Transaction<'_>, at: &str, effect: &Effect) -> Result<i64, ErrorBody> {
     audit::append(tx, at, effect.action, &effect.details).map_err(|err| match err {
-        Error::Interrupted(message) => internal(message),
+        Error::Interrupted(message) => store_failed(message),
         other => from_state(&other),
     })
 }
@@ -1317,7 +1299,7 @@ pub fn write_for(
     }
     let parsed = parse_payload(request.payload.as_ref())?;
     let digest = request_digest(request);
-    hooks::reach_once("state.write:before-begin").map_err(|err| internal(err.to_string()))?;
+    hooks::reach_once("state.write:before-begin").map_err(store_failed)?;
     let mut connection = open(state)?;
     // A store without a checkpoint is verified whole here, outside the transaction.
     audit::ensure_checkpoint(&mut connection).map_err(|broken| broken.to_error())?;
@@ -1339,7 +1321,7 @@ fn transact(
     peer_pid: Option<u32>,
 ) -> Result<Written, ErrorBody> {
     let tx = sqlite(connection.transaction_with_behavior(TransactionBehavior::Immediate))?;
-    hooks::reach_once("state.write:in-transaction").map_err(|err| internal(err.to_string()))?;
+    hooks::reach_once("state.write:in-transaction").map_err(store_failed)?;
     match run(&tx, request, digest, parsed, peer_pid)? {
         Step::Done(written) => {
             sqlite(tx.commit())?;

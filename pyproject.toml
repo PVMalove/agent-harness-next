@@ -54,6 +54,11 @@ markers = [
 [tool.coverage.run]
 # CLI adapters run in child Python processes, including their detached worker supervisors.
 patch = ["subprocess"]
+# sys.monitoring (PEP 669) instead of the C tracer: a line is recorded once and its event disabled,
+# so the measured suite runs markedly faster. Child processes get it through the serialized config
+# of `patch`. It requires line coverage only: on Python 3.12 and 3.13 sysmon cannot measure branches,
+# and coverage then warns and falls back to the C tracer.
+core = "sysmon"
 
 [tool.ruff.lint.per-file-ignores]
 # Facade: `import x as x` marks explicit re-exports under mypy strict (no implicit reexport).

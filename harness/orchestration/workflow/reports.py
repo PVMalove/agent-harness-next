@@ -1997,7 +1997,7 @@ def _record_report(
             )
         batch["retry_candidate_required"] = False
     # Only a work report reaches this point with risk_triggers: a publish dispatch is refused by
-    # `send` and recorded by `publish_dispatch` (delivery.py) without a submitted report, and it
+    # `send` and recorded by `publish_dispatch` (publication.py) without a submitted report, and it
     # runs after QA, so it has no reassessment to bind (issue #781).  A blocked writer report
     # binds too: it carries the commit that `accept-conditional` or an infrastructure retry
     # then makes the batch's candidate, and no later step would bind it.
