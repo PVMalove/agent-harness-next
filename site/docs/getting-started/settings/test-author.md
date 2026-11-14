@@ -94,7 +94,7 @@ launcher не заменяет его другим.
 
 Автор берёт `resolved_runtime`, `resolved_model` и `resolved_effort` из **утверждённого brief
 developer**. Short-профиль и последующие правки orchestration этот выбор не меняют.
-Шаблон `.claude/agents/test-author.md` задаёт `model: inherit` и не задаёт своего effort.
+Шаблон `.claude/agents/test-author.md` не задаёт ни `model`, ни своего effort.
 Developer вызывает `Agent(test-author)`, не переопределяя model и effort.
 
 Для external developer harness и защита должны быть установлены **в worker worktree**.
@@ -261,7 +261,7 @@ TDD, и новый blocker или состояние в ledger не появля
     never the short profile or later live orchestration settings. Confirm worker-local installation,
     user trust of the worker or its repository's main checkout and approved Agent(test-author)
     permission; never spoof trust or widen
-    approved tools. Keep model: inherit without effort override. Use preflight with the brief in
+    approved tools. Keep no model and no effort override. Use preflight with the brief in
     the correct checkout; refusal leaves ordinary TDD, not an unprotected or substituted author.
 
     Before any durable change, show the exact proposed diff or command and its effects, then wait

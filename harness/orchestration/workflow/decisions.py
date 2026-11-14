@@ -16,7 +16,7 @@ from harness.errors import INTERNAL_INVARIANT_REMEDY
 from harness.orchestration import extensions, operational_hold, qa_lane
 from harness.orchestration.contract import low_risk_eligible
 from harness.orchestration.core import config as core_config
-from harness.orchestration.core import utils
+from harness.orchestration.core import state_view, utils
 from harness.orchestration.core.config import (
     _extension_names,
     _reject_sensitive,
@@ -1146,7 +1146,8 @@ def _abandon_open_dispatches(
             / DispatchStatusRecord.directory
             / f"{_safe_id(entry['dispatch_id'], 'dispatch')}.json"
         )
-        if status_path.exists():
+        # The store epoch has no file behind the path: ask the view.
+        if state_view.exists(status_path):
             status = _load_dispatch_status(root, entry["dispatch_id"])
             status.update({"state": "abandoned", "updated_at": moment})
             _replace_record(ledger, DispatchStatusRecord.from_dict(status))

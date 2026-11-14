@@ -208,16 +208,16 @@ def run(ctx: SimpleNamespace) -> None:
     if (pv_project / ".harness" / "container").exists():
         sys.exit("engineering-suite unexpectedly installed container resources")
     # Issue #710: the container executor guide ships with backend-orchestration only, from
-    # harness/docs/ and never from the source repository's root docs/.
-    installed_guide = orchestration_project / ".harness/docs/container-executor.md"
+    # harness/project/instructions/ and never from the source repository's root docs/.
+    installed_guide = orchestration_project / ".harness/instructions/container-executor.md"
     if not installed_guide.is_file():
         sys.exit("backend-orchestration payload is missing docs/container-executor.md")
     if (
         installed_guide.read_bytes()
-        != (ROOT / "harness" / "docs" / "container-executor.md").read_bytes()
+        != (ROOT / "harness" / "project" / "instructions" / "container-executor.md").read_bytes()
     ):
         sys.exit("installed docs/container-executor.md differs from its source")
-    if (pv_project / ".harness/docs/container-executor.md").exists():
+    if (pv_project / ".harness/instructions/container-executor.md").exists():
         sys.exit("engineering-suite unexpectedly installed the container guide")
     installed_implement = (
         orchestration_project / ".harness" / "skills" / "implement" / "SKILL.md"
@@ -326,7 +326,7 @@ def run(ctx: SimpleNamespace) -> None:
     orchestration_config.write_text(original_orchestration_config, encoding="utf-8")
     # Developer guides stay in the source repository's docs/; only agent contracts are delivered.
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        if (orchestration_project / ".harness" / "docs" / human_guide).exists():
+        if (orchestration_project / ".harness" / "instructions" / human_guide).exists():
             sys.exit(f"developer guide leaked into the target project: {human_guide}")
     expected_role_files = {
         "architect.md",
@@ -381,7 +381,7 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("backend-orchestration playbook missing")
     playbook = playbook_path.read_text(encoding="utf-8")
     _require_startup_recovery_contract(installed_implement, playbook)
-    contract = orchestration_project / ".harness/docs/technical-english.md"
+    contract = orchestration_project / ".harness/instructions/technical-english.md"
     for continuation_rule in ("integration next", "verification-failure"):
         if continuation_rule not in playbook:
             sys.exit(

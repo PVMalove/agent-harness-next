@@ -421,8 +421,8 @@ class MainArgumentTests(unittest.TestCase):
         self.assertFalse(out_created)
 
 
-class MainRunTests(unittest.TestCase):
-    """`main` on a stub checkout: coordinator and lifecycle stubs, the focused test files."""
+class _StubCheckout:
+    """A stub checkout: coordinator and lifecycle stubs, the focused test files."""
 
     def _write(self, path: Path, text: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -479,6 +479,11 @@ class MainRunTests(unittest.TestCase):
         for directory in ("batches", "dispatches"):
             (generation / directory).mkdir()
         return generation / "dispatch-status" / "dispatch-1.json"
+
+
+
+class MainRunTests(_StubCheckout, unittest.TestCase):
+    """`main` on a stub checkout of the file-ledger epoch."""
 
     def test_pytest_timings_ignore_the_configuration_of_an_enclosing_project(
         self,
@@ -563,3 +568,129 @@ class MainRunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StoreEpochTests(_StubCheckout, unittest.TestCase):
+    """The measurement after the cutover (#814): the same commands on a copy of the runtime store."""
+
+    def _store(self, state: Path) -> None:
+        import sqlite3
+
+        state.mkdir(parents=True)
+        with sqlite3.connect(state / "runtime.db") as db:
+            db.execute("CREATE TABLE marker (value TEXT)")
+            db.execute("INSERT INTO marker VALUES ('store')")
+        self._write(state / "ledger.json", json.dumps({"version": 4, "generation": "g"}))
+        self._write(state / "AUTHORITY.json", json.dumps({"authority": "runtime-store"}))
+
+    def _runtime(self, tmp: Path) -> Path:
+        """A stand-in `harness-runtime`: `serve` reports ready and waits, `stop` succeeds."""
+        stub = tmp / "harness-runtime"
+        self._write(
+            stub,
+            f"#!{sys.executable}\n"
+            "import json, sys, time\n"
+            "if sys.argv[1] == 'serve':\n"
+            "    print(json.dumps({'status': 'ready'}), flush=True)\n"
+            "    time.sleep(60)\n",
+        )
+        stub.chmod(0o755)
+        return stub
+
+    def test_the_store_is_copied_through_the_backup_api_with_its_pointers(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target = Path(tmp) / "source", Path(tmp) / "target"
+            self._store(source)
+
+            baseline.copy_store(source, target)
+
+            with sqlite3.connect(target / "runtime.db") as db:
+                copied = db.execute("SELECT value FROM marker").fetchall()
+            pointer = json.loads((target / "ledger.json").read_text(encoding="utf-8"))
+            authority = (target / "AUTHORITY.json").is_file()
+
+        self.assertEqual(copied, [("store",)])
+        self.assertEqual(pointer["version"], 4)
+        self.assertTrue(authority)
+
+    def test_a_store_measurement_serves_the_copy_and_marks_what_it_cannot_measure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo, state, out = root / "repo", root / "state", root / "out"
+            self._stub_checkout(repo)
+            self._store(state)
+            argv = [
+                "--epoch",
+                "store",
+                "--runtime-binary",
+                str(self._runtime(root)),
+                "--repo",
+                str(repo),
+                "--state-dir",
+                str(state),
+                "--out",
+                str(out),
+                "--repeats",
+                "1",
+                "--slow-repeats",
+                "1",
+                "--test-repeats",
+                "1",
+            ]
+
+            code = baseline.main(argv)
+
+            coordinator, audit, runs = (
+                json.loads((out / name).read_text(encoding="utf-8"))
+                for name in ("coordinator.json", "audit.json", "implement-runs.json")
+            )
+            copy_left = (repo / ".harness/orchestration/state").exists()
+
+        self.assertEqual(code, 0)
+        self.assertEqual(coordinator["batch list"]["summary"]["status"], "measured")
+        self.assertEqual(coordinator["dispatch heartbeat"]["summary"]["status"], "not_run")
+        self.assertEqual(audit["status"], "нет данных")
+        self.assertEqual(runs["status"], "нет данных")
+        self.assertFalse(copy_left)
+
+    def test_an_exported_generation_feeds_the_ledger_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo, state, out = root / "repo", root / "state", root / "out"
+            self._stub_checkout(repo)
+            self._store(state)
+            export = root / "export"
+            exported = self._state(export)
+            generation = exported.parent.parent
+
+            code = baseline.main(
+                [
+                    "--epoch",
+                    "store",
+                    "--runtime-binary",
+                    str(self._runtime(root)),
+                    "--export-generation",
+                    str(generation),
+                    "--repo",
+                    str(repo),
+                    "--state-dir",
+                    str(state),
+                    "--out",
+                    str(out),
+                    "--repeats",
+                    "1",
+                    "--slow-repeats",
+                    "1",
+                    "--test-repeats",
+                    "1",
+                ]
+            )
+
+            size = json.loads((out / "ledger-size.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(size["dispatch-status"], 1)

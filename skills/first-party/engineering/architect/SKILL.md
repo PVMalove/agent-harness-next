@@ -24,7 +24,7 @@ deep-module vocabulary.
 
 Before comparing options, if project memory is enabled, run
 `harness memory search . "<decision, boundary and affected module>"` once for prior decisions.
-Use the installed equivalent from `.harness/docs/project-memory.md` when the packager CLI is
+Use the installed equivalent from `.harness/instructions/project-memory.md` when the packager CLI is
 absent. Follow that guide for main-checkout configuration, search-result and source
 statuses, source-hash validation and graceful fallback. Historical, unknown and unconfirmed source
 statuses require checking against current requirements; superseded sources are unusable. Open a

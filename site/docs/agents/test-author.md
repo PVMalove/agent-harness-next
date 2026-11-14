@@ -34,7 +34,7 @@ developer продолжает обычный маршрут.
 Исполнитель полного `/implement` наследует `resolved_runtime`, `resolved_model` и
 `resolved_effort` из утверждённого brief developer. Передавайте `--brief <путь>` общему
 preflight; текущая orchestration-конфигурация и профиль проекта уже утверждённый выбор не меняют.
-Для поддержанного нативного вызова `Agent(test-author)` шаблон использует `model: inherit` и
+Для поддержанного нативного вызова `Agent(test-author)` шаблон не задаёт `model` и
 наследует effort, поэтому developer вызывает автора без переопределения model/effort. Старый
 локальный шаблон с фиксированным model или effort получает `test_author_config_invalid`. После
 просмотра замените `.claude/agents/test-author.md` командой
@@ -43,7 +43,7 @@ preflight; текущая orchestration-конфигурация и профил
 Короткий `/fast-implement` читает отдельный явный профиль в `.harness/project.json`:
 
 ```json {.ah-code-wrap}
-"test_author": {"runtime": "claude", "model": "sonnet", "effort": "high"}
+"test_author": {"runtime": "<runtime>", "model": "<model>", "effort": "<effort>"}
 ```
 
 Это пример выбора пользователя, а не значения по умолчанию. Внутри профиля обязательны все три

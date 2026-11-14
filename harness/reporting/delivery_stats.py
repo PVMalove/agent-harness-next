@@ -1407,6 +1407,105 @@ def _finalize_ticket_orchestration(bucket: JsonObject) -> JsonObject:
     return bucket
 
 
+# The pointer version of the runtime-store epoch (ADR 0020, section 1).
+STORE_LEDGER_VERSION = 4
+# Paths per `state.read`: a bounded answer, far below the frame limit of the runtime.
+STORE_READ_CHUNK = 50
+
+
+def _store_epoch(root_dir: Path) -> bool:
+    """Whether `ledger.json` selects the runtime store; its records have no files then."""
+    try:
+        pointer = json.loads((root_dir / "ledger.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(pointer, dict) and pointer.get("version") == STORE_LEDGER_VERSION
+
+
+# Runs in the analysed repository's own orchestration tree: loading its coordinator aliases that
+# tree as `harness`, so this report reads the store even from a project without orchestration.
+_STORE_READ = """import importlib.util, json, sys, uuid
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("coordinator", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+try:
+    reply = RuntimeClient(Path(sys.argv[2])).call(
+        "state.read", operation_id="state.read-" + uuid.uuid4().hex,
+        payload=json.loads(sys.argv[3]), timeout_seconds=30.0)
+except RuntimeClientError as exc:
+    print(json.dumps({"error": exc.code}))
+else:
+    print(json.dumps({"records": reply.result.get("records") or {}}))
+"""
+
+
+class _StoreUnavailable(Exception):
+    """The runtime of the analysed repository did not answer `state.read`."""
+
+
+def _store_call(repo: Path, payload: JsonObject) -> JsonObject:
+    coordinator = next(
+        (
+            path
+            for path in (
+                repo / ".harness" / "orchestration" / "coordinator.py",
+                _HARNESS_ROOT / "orchestration" / "coordinator.py",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    if coordinator is None:
+        raise _StoreUnavailable("coordinator_missing")
+    done = subprocess.run(
+        [sys.executable, "-c", _STORE_READ, str(coordinator), str(repo), json.dumps(payload)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    try:
+        answer = json.loads(done.stdout)
+    except ValueError as exc:
+        raise _StoreUnavailable(f"exit {done.returncode}") from exc
+    if not isinstance(answer, dict) or "error" in answer:
+        raise _StoreUnavailable(str(answer.get("error") if isinstance(answer, dict) else answer))
+    records = answer.get("records")
+    return records if isinstance(records, dict) else {}
+
+
+def _materialize_store(repo: Path, target: Path) -> str | None:
+    """Write the `batches` and the `dispatches` they name into `target` as files, read through
+    `state.read` of the runtime (#814). Answers why it could not, or `None`."""
+    try:
+        batches = _store_call(repo, {"collections": ["batches"]})
+        names: list[str] = []
+        for record in batches.values():
+            if isinstance(record, dict):
+                for entry in _record_list(record, "dispatches"):
+                    identity = entry.get("dispatch_id") if isinstance(entry, dict) else None
+                    if isinstance(identity, str):
+                        names.append(f"dispatches/{identity}.json")
+        dispatches: JsonObject = {}
+        for start in range(0, len(names), STORE_READ_CHUNK):
+            dispatches.update(
+                _store_call(repo, {"paths": names[start : start + STORE_READ_CHUNK]})
+            )
+    except (_StoreUnavailable, OSError, subprocess.TimeoutExpired) as exc:
+        return (
+            f"runtime store не отвечает ({exc}): запустите "
+            f"harness-runtime serve --repo {repo}"
+        )
+    for path, record in {**batches, **dispatches}.items():
+        if isinstance(record, dict):
+            file = target / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    return None
+
+
 def orchestration_metrics(
     repo: Path, numbers: set[int], state_dir: Path | None = None
 ) -> JsonObject:
@@ -1415,10 +1514,26 @@ def orchestration_metrics(
     Метрики включают количество сессий воркеров и причины перезапуска/сжатия контекста,
     долю диффа код-ревью за пределами объявленной зоны записи разработчика и процент ошибок QA.
     Все числа берутся из записей координатора; при недоступности журнала метрика помечается как отсутствующая.
+    В эпохе runtime store записи читаются через `state.read` runtime, а не из файлов (#814).
     """
-    ledger_cls = _load_ledger_class(repo)
     root_dir = state_dir if state_dir is not None else repo / ORCHESTRATION_STATE_REL
+    if _store_epoch(root_dir):
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="delivery-stats-") as copy:
+            failure = _materialize_store(repo, Path(copy))
+            if failure is not None:
+                return {"status": MISSING, "reason": failure}
+            return _orchestration_metrics_of(Path(copy), numbers, None)
+    ledger_cls = _load_ledger_class(repo)
     root = _lenient_records_root(root_dir, ledger_cls)
+    return _orchestration_metrics_of(root, numbers, ledger_cls)
+
+
+def _orchestration_metrics_of(
+    root: Path | None, numbers: set[int], ledger_cls: LedgerClass | None
+) -> JsonObject:
+    """Метрики оркестрации по тикетам из корня записей `root` (файлы batches и dispatches)."""
     if root is None:
         return {
             "status": MISSING,

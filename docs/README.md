@@ -5,8 +5,8 @@
 
 Корневой `docs/` — внутренняя документация для разработчика исходного репозитория. Она не
 устанавливается в целевые проекты. Агентам доставляются только их собственные контракты:
-проектные руководства из `harness/project/docs-agents/`, `harness/docs/project-memory.md`,
-`harness/docs/technical-english.md`, роли и playbook оркестрации, скиллы и hooks.
+проектные руководства из `harness/project/instructions/`, `harness/project/instructions/project-memory.md`,
+`harness/project/instructions/technical-english.md`, роли и playbook оркестрации, скиллы и hooks.
 
 ## Публичные страницы
 
@@ -27,7 +27,7 @@
 | [Hooks](../site/docs/hooks/index.md) | Описания проектных hooks и вспомогательных скриптов (на сайте). |
 | [Backend-оркестрация](../site/docs/backend-orchestration.md) | Конфиг, coordinator, роли и lifecycle batch. |
 | [Конфигурация консоли](../site/docs/console-configuration.md) | Целевой проект, мастер JSON, версии и откат. |
-| [Technical English](../harness/docs/technical-english.md) | Контракт английской координации агентов. |
+| [Technical English](../harness/project/instructions/technical-english.md) | Контракт английской координации агентов. |
 | [Technical Russian](./technical-russian.md) | Правила технического русского языка и Keep a Changelog. |
 | [Runtime discovery](../site/docs/runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
 | [Восстановление и runtime store](./adr/0030-runtime-store-ledger-reconciliation.md) | ADR 0030: записи восстановления в runtime store, сверка с authority lifecycle и граница гарантии. |

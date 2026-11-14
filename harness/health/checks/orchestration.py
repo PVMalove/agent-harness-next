@@ -787,7 +787,7 @@ def check_worker_binaries(context: HealthContext) -> CheckResult:
             message="роли в контейнере не запустятся: " + "; ".join(container_problems),
             fix=Fix(
                 text="установите движок в PATH окружения serve и соберите образы по "
-                ".harness/docs/container-executor.md; харнесс образы не собирает и не скачивает",
+                ".harness/instructions/container-executor.md; харнесс образы не собирает и не скачивает",
                 command=_serve_fix(context).command,
             ),
         )

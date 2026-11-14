@@ -11,7 +11,7 @@
 
 Если память включена, скилл перед сравнением вариантов один раз выполняет
 `harness memory search . "<решение, граница и модуль>"`. Статус поиска и статус источника он
-трактует по [общему контракту](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/project-memory.md). Этот контракт задаёт и
+трактует по [общему контракту](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/project-memory.md). Этот контракт задаёт и
 установленный entry point для проекта без внешнего CLI. Возвращённые указатели дают кандидатов в
 прецеденты. Источники со статусом `historical`, `unknown` и неподтверждённые требуют проверки, а
 superseded исключаются. Скилл открывает источник, только если тот помогает различить варианты, и

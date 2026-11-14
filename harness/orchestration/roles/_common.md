@@ -6,7 +6,7 @@ verification commands. A role does not amend the brief; material new information
 new coordinator decision.
 
 Before the first English handoff, every worker must read
-[Technical English](../../docs/technical-english.md).
+[Technical English](../../instructions/technical-english.md).
 
 Use English for all agent-to-agent protocol text: handoff notes, checkpoints, state evidence,
 dependency explanations, and messages to the next worker. Treat `.harness/orchestration/state/` as a

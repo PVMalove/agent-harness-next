@@ -33,7 +33,7 @@ python .harness/orchestration/coordinator.py --repo . context-package register \
 - SHA-256 и размер в байтах каждого файла;
 - оценку токенов с запасом.
 
-Побайтно одинаковые файлы (например, зеркало `docs/agents/*` ↔ `harness/project/docs-agents/*`)
+Побайтно одинаковые файлы (например, зеркало `docs/agents/*` ↔ `harness/project/instructions/*`)
 остаются стартовыми файлами, но оценка учитывает их содержимое один раз. Причина второй копии
 называет оригинал и требует держать копии одинаковыми.
 

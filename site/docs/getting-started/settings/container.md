@@ -255,7 +255,7 @@ overrides. Не расширяйте права read-only ролей. Полны
 `"variable": "CARGO_HOME"` и заранее создайте каталог (`mkdir -p`). Каждый QA-прогон сам задаёт
 `CARGO_TARGET_DIR` внутри своего run root. Поэтому cargo-этапы одного прогона используют уже
 собранные зависимости, а каталог удаляется вместе с прогоном. Пример и способ замера описаны в
-разделе «Caches» файла `harness/docs/container-executor.md`.
+разделе «Caches» файла `harness/project/instructions/container-executor.md`.
 Контейнер не сохраняет свой HOME между запусками.
 Хостовый `~/.gitconfig` не монтируется. Git identity задаётся в конфиге репозитория или через
 разрешённые имена переменных. Worker получает artifacts на запись и shared storage на чтение,

@@ -892,7 +892,8 @@ def mark_batch_not_required(args: argparse.Namespace) -> JsonObject:
                 / DispatchStatusRecord.directory
                 / f"{_safe_id(entry['dispatch_id'], 'dispatch')}.json"
             )
-            if status_path.exists():
+            # The store epoch has no file behind the path: ask the view.
+            if state_view.exists(status_path):
                 status = _load_dispatch_status(root, entry["dispatch_id"])
                 status.update({"state": "cancelled", "updated_at": moment})
                 _replace_record(ledger, DispatchStatusRecord.from_dict(status))

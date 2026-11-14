@@ -2,7 +2,7 @@
 
 Harness Next operational guides and Russian descriptions of the project agents. The guides
 artifacts, git-workflow, issue-tracker, test-author, triage-labels, and worktrees match the
-templates in `harness/project/docs-agents/`, and `harness init` deploys these templates to
+templates in `harness/project/instructions/`, and `harness init` deploys these templates to
 `docs/agents/` of the target project. They are documents for agent work. `releases.md` and
 `console-web-home-checklist.md` belong only to this repository. This overview and the agent descriptions do not reach the target project. The public guides on
 workflow and the CLI ([guides](../guides/workflow.md),

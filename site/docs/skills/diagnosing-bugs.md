@@ -11,7 +11,7 @@
 Указатели помогают предложить гипотезу, но причину по-прежнему доказывает воспроизведение.
 Если память выключена или недоступна, диагностика идёт обычным порядком.
 
-Общий контракт [`project-memory.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/project-memory.md) разделяет статус
+Общий контракт [`project-memory.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/project-memory.md) разделяет статус
 поиска и статус источника. При `ok` и `stale_sources` можно рассматривать возвращённые указатели.
 Источники со статусом `historical`, `unknown` и неподтверждённые требуют проверки, а superseded
 исключаются. Источник открывают только при необходимости, сверяют его hash и считают недоверенным

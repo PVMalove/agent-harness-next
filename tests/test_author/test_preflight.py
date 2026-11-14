@@ -612,12 +612,22 @@ def test_preflight_refuses_stale_or_overridden_author_settings(
     project = _project(tmp_path)
     _runner(project, '{"status":"ok"}')
     agent = project / ".claude/agents/test-author.md"
-    agent.write_text(agent.read_text().replace("model: inherit", override))
+    agent.write_text(agent.read_text().replace("maxTurns:", f"{override}\nmaxTurns:", 1))
 
     assert _answer(_run(project)) == {
         "status": "disabled",
         "reason": "test_author_config_invalid",
     }
+
+
+def test_preflight_accepts_the_inherit_line_of_an_older_seed(tmp_path: Path) -> None:
+    """The template names no model (#814); a seed installed before keeps `model: inherit`."""
+    project = _project(tmp_path)
+    _runner(project, '{"status":"ok"}')
+    agent = project / ".claude/agents/test-author.md"
+    agent.write_text(agent.read_text().replace("maxTurns:", "model: inherit\nmaxTurns:", 1))
+
+    assert _answer(_run(project)) == {"status": "ok"}
 
 
 @pytest.mark.skipif(os.name == "nt", reason="native CLI fixture is a POSIX executable")

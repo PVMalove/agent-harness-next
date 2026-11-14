@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The container executor guide is a shipped payload of backend-orchestration only (#710).
 
-It installs as ``.harness/docs/container-executor.md``, comes from ``harness/docs/`` and never from
+It installs as ``.harness/instructions/container-executor.md``, comes from ``harness/project/instructions/`` and never from
 the source repository's root ``docs/``, and its example adapter keeps the agent's native approval.
 """
 
@@ -11,8 +11,8 @@ import unittest
 
 from harness.bin import harness as harness_cli
 
-INSTALLED = ".harness/docs/container-executor.md"
-SOURCE = harness_cli.PACKAGE / "docs" / "container-executor.md"
+INSTALLED = ".harness/instructions/container-executor.md"
+SOURCE = harness_cli.PACKAGE / "project" / "instructions" / "container-executor.md"
 # Options that would approve actions on the human's behalf or skip the agent's permission checks.
 BYPASS_TOKENS = ("dangerously", "bypassPermissions", "acceptEdits", "skip-permissions")
 
@@ -48,7 +48,7 @@ class ContainerGuideTests(unittest.TestCase):
     def test_the_qa_image_ships_a_rust_toolchain_and_the_guide_names_the_chosen_behavior(
         self,
     ) -> None:
-        dockerfile = (SOURCE.parent.parent / "container/Dockerfile.qa").read_text(
+        dockerfile = (harness_cli.PACKAGE / "container/Dockerfile.qa").read_text(
             encoding="utf-8"
         )
         text = SOURCE.read_text(encoding="utf-8")

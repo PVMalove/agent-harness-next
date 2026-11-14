@@ -12,7 +12,7 @@ durable ADR, the accepted decision goes through `domain-modeling`.
 
 Before it compares the options, with memory enabled, it runs
 `harness memory search . "<decision, boundary, and module>"` once. It interprets the search status and the source status
-according to the [shared contract](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/project-memory.md), which also defines
+according to the [shared contract](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/project-memory.md), which also defines
 the installed entry point for a project without an external CLI. The returned pointers
 give candidates for precedents; `historical`, `unknown`, and unconfirmed sources require
 verification, and superseded sources are excluded. It opens a source only when it helps distinguish an option, and checks its hash

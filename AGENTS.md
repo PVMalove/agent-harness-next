@@ -22,9 +22,10 @@ logs.
 - `global/` — seed template for the target project's global agent profile; `global-skills/` and
   `bin/` — global entry skills and installer; `scripts/` — registry, drift, verification, and
   clean-room checks.
-- `docs/README.md` — documentation index; `docs/agents/` — operations, releases, and Russian
-  agent descriptions; `docs/adr/` — architectural decisions; `site/docs/skills/`, `site/docs/hooks/` —
-  Russian descriptions; `docs/technical-russian.md` — Russian technical writing style guide;
+- `docs/README.md` — documentation index; `docs/agents/` — this repository's installed copy of the
+  agent instructions (source `harness/project/instructions/`); `docs/adr/` — architectural
+  decisions; `site/docs/skills/`, `site/docs/hooks/` — Russian descriptions;
+  `docs/technical-russian.md` — Russian technical writing style guide;
   `site/docs/runtime-discovery.md` — runtime skill routes.
 - `third_party/mattpocock-skills/` — upstream manifest, lock, license, and checksums;
   `.github/workflows/` — CI.
@@ -56,7 +57,7 @@ When a task matches a skill, open only its relevant `SKILL.md` through `.agents/
 - Never edit `skills/vendor/` manually. Replace a complete pinned snapshot only; use exact upstream
   revisions and retain license and provenance files.
 - Root `docs/` belongs only to this repository and must never be copied into target projects.
-  Target project guides come from `harness/project/docs-agents/` and other explicit templates.
+  Target project instructions come from `harness/project/instructions/` and other explicit templates.
 - For implementation or delivery, follow `docs/agents/git-workflow.md`: issue first, use the epic's
   recorded `integration/<service-or-team>` branch as the task base, create an isolated issue branch
   matching `.harness/project.json`, test before commits, use CLI-only Git and tracker operations,
@@ -88,4 +89,4 @@ Codex only: when the user explicitly asks to launch or use subagents, run them w
 and `max` reasoning effort. Do not apply this rule outside Codex.
 
 Before the first English handoff, agents must read
-[Technical English](.harness/docs/technical-english.md).
+[Technical English](.harness/instructions/technical-english.md).

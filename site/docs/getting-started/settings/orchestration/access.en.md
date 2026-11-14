@@ -201,7 +201,7 @@ container, environment and network: its container uses `docker`, receives no `LL
 does not inherit the proxy and has no network. This does not configure git/publish access.
 
 For image/environment/network preparation and blockers, see [Container](../container.md) and
-the installed `.harness/docs/container-executor.md`. Names and secret values are covered in
+the installed `.harness/instructions/container-executor.md`. Names and secret values are covered in
 [Secrets and tokens](../secrets.md).
 
 ## Configure with an agent {#agent-access-setup}
@@ -216,7 +216,7 @@ for missing decisions and show the complete resulting plan before writing config
 
     Follow repository instructions. Keep questions, choices and user-facing summaries in Russian.
     Read .harness/project.json, .harness/orchestration.json, the installed schema,
-    managed example and role manifests. Read .harness/docs/container-executor.md
+    managed example and role manifests. Read .harness/instructions/container-executor.md
     when container execution is involved. Run available read-only health/config checks.
     Ask only for unresolved facts, one question at a time. Offer 2-4 concrete choices
     plus «Другое», with one consequence each. Put an evidence-based recommendation
@@ -259,7 +259,7 @@ for missing decisions and show the complete resulting plan before writing config
 
     Follow repository instructions. Keep questions, choices and user-facing summaries in Russian.
     Read .harness/project.json, .harness/orchestration.json, the installed schema,
-    managed example and role manifests. Read .harness/docs/container-executor.md
+    managed example and role manifests. Read .harness/instructions/container-executor.md
     when container execution is involved. Run available read-only health/config checks.
     Ask only for unresolved facts, one question at a time. Offer 2-4 concrete choices
     plus «Другое», with one consequence each. Put an evidence-based recommendation

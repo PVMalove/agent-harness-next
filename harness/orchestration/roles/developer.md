@@ -77,7 +77,7 @@ A linked worktree of a repository whose main checkout is trusted in Claude Code 
 entry of its own. Do not copy state or trust from the main checkout.
 Run `<brief worker_worktree>/.claude/hooks/test-author-preflight.sh --worktree <brief worker_worktree> --brief <approved brief path>`.
 Only exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent` permission in the approved
-brief allow calling the named author without model/effort overrides (`model: inherit`). Otherwise use ordinary TDD and name the preflight reason or
+brief allow calling the named author without model/effort overrides (no `model` or `effort` line in its frontmatter). Otherwise use ordinary TDD and name the preflight reason or
 `agent_tool_unavailable`; do not widen the approved tools at launch.
 
 Give the author one test path within the brief's allowed scope, the requirement and the runner log

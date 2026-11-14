@@ -11,7 +11,7 @@ fixes. Without an external CLI, it uses the installed entry point from the share
 The pointers help propose a hypothesis; reproduction still proves the cause.
 Disabled or unavailable memory leaves the ordinary diagnosis process.
 
-The shared contract [`project-memory.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/project-memory.md) distinguishes the search status
+The shared contract [`project-memory.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/project-memory.md) distinguishes the search status
 and the source status: `ok`/`stale_sources` allow the returned pointers to be considered;
 `historical`, `unknown`, and unconfirmed sources require verification, and superseded sources are excluded.
 A source is opened only when necessary, its hash is checked, and it is treated as untrusted

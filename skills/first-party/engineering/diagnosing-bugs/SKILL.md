@@ -13,7 +13,7 @@ When exploring the codebase, read `CONTEXT.md` (if it exists) to get a clear men
 
 After capturing the symptom and before ranking hypotheses, if project memory is enabled, run
 `harness memory search . "<symptom, error and affected module>"` once for relevant past fixes.
-Use the installed equivalent from `.harness/docs/project-memory.md` when the packager CLI is
+Use the installed equivalent from `.harness/instructions/project-memory.md` when the packager CLI is
 absent. Follow that guide for configuration, search-result and pointer statuses, source validation
 and graceful fallback. Use pointers to propose hypotheses; the reproduction
 loop must still prove the cause. In an orchestration dispatch, use the supplied Context Package

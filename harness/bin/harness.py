@@ -58,6 +58,7 @@ from harness.uninstall import (
     CONFIRM_WORD,
     GITIGNORE_LINES as RUNTIME_GITIGNORE_LINES,
     SEED_FOLDERS,
+    seed_sources,
     apply_uninstall,
     plan_uninstall,
 )
@@ -68,6 +69,7 @@ from harness.memory import (
     rebuild as memory_rebuild,
     sync as memory_sync,
 )
+from harness import runtime_cutover
 from harness.storage import storage_path
 from harness.runtime_adapters import adapter_problem, is_adapter
 from harness.seed_links import propose_contract_links, print_contract_proposals
@@ -334,13 +336,26 @@ def _packageable(path: Path) -> bool:
     return path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
 
 
+# Managed agent instructions: the source in the project templates, the target in `.harness/` (#814).
+INSTRUCTIONS_SOURCE = PACKAGE / "project" / "instructions"
+INSTRUCTIONS_TARGET = ".harness/instructions"
+
+
+def _resource_target(source: Path) -> Path:
+    """Where a capability resource file is installed: an instruction into `.harness/instructions/`,
+    any other file at its path below `.harness/`."""
+    if source.parent == INSTRUCTIONS_SOURCE:
+        return Path(INSTRUCTIONS_TARGET) / source.name
+    return Path(".harness") / source.relative_to(PACKAGE)
+
+
 def package_files(names: list[str]) -> dict[str, bytes]:
     """Сформировать словарь относительных целевых путей и байтового содержимого файлов пакета."""
     # Общий контракт технического английского ставится в любую установку, вне каталога capability:
     # он не зависит от optional backend-orchestration.
     result: dict[str, bytes] = {
-        ".harness/docs/technical-english.md": (
-            PACKAGE / "docs/technical-english.md"
+        f"{INSTRUCTIONS_TARGET}/technical-english.md": (
+            INSTRUCTIONS_SOURCE / "technical-english.md"
         ).read_bytes(),
     }
     for source in selected_skills(names):
@@ -353,8 +368,7 @@ def package_files(names: list[str]) -> dict[str, bytes]:
     for source in selected_resources(names):
         if source.is_file():
             if _packageable(source):
-                target = Path(".harness") / source.relative_to(PACKAGE)
-                result[target.as_posix()] = source.read_bytes()
+                result[_resource_target(source).as_posix()] = source.read_bytes()
             continue
         for path in sorted(source.rglob("*")):
             if not _packageable(path):
@@ -871,9 +885,8 @@ def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str,
     """Seed-файлы, которые `update` может перезаписать: путь от корня проекта -> эталон из шаблона."""
     files: dict[str, bytes] = {}
     for folder, target, suffixes in SEED_FOLDERS:
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if source.is_file() and source.suffix in suffixes:
-                files[f"{target}/{source.name}"] = source.read_bytes()
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
+            files[f"{target}/{source.name}"] = source.read_bytes()
     scratch = storage_path(repo, "scratch", ".gitignore")
     # A linked checkout shares scratch with its main checkout. Seeding this worker must not
     # turn a shared path into a ../ write or fail while relativizing that outside path.
@@ -900,9 +913,8 @@ def hook_template_files() -> dict[str, bytes]:
     for folder, target, suffixes in SEED_FOLDERS:
         if folder != "hooks":
             continue
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if source.is_file() and source.suffix in suffixes:
-                files[f"{target}/{source.name}"] = source.read_bytes()
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
+            files[f"{target}/{source.name}"] = source.read_bytes()
     for adapter in ADAPTERS:
         files[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
     return files
@@ -1258,9 +1270,7 @@ def scaffold_engineering_extras(
     seeds = SeedInstall(repo, args, orchestration_enabled=orchestration_enabled)
 
     for folder, target, suffixes in SEED_FOLDERS:
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if not source.is_file() or source.suffix not in suffixes:
-                continue
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
             result = seeds.install(
                 f"{target}/{source.name}", executable=folder == "hooks"
             )
@@ -1530,6 +1540,9 @@ def cmd_update(args: argparse.Namespace) -> int:
                 "run it without --force, --force-managed-files and --force-seed-file(s)"
             )
         return record_seed_baseline(repo, lock)
+    # Harness 2.0.0 runs only on the runtime store: a version-3 ledger is cut over by this update,
+    # and every refusal comes before the first installed file (ADR 0020, section 6).
+    cutover = runtime_cutover.prepare(repo, args)
     selected = selected_capabilities(args.capability or lock.get("capabilities"))
     result = snapshot_diff(repo, selected)
     current_files = package_files(selected)
@@ -1592,6 +1605,8 @@ def cmd_update(args: argparse.Namespace) -> int:
     print(f"updated agent-harness to {version()} in {repo}")
     print(f"managed files: {len(written)}")
     print_contract_proposals(propose_contract_links(repo, PROJECT_TEMPLATE_DIR))
+    if cutover is not None:
+        runtime_cutover.run(repo, cutover)
     return 0
 
 
@@ -2053,6 +2068,7 @@ def parser() -> argparse.ArgumentParser:
         help="only record a seed_files baseline for seed files without one; change no file",
     )
     _add_engineering_args(update)
+    runtime_cutover.add_arguments(update)
     update.set_defaults(func=cmd_update)
 
     registry = commands.add_parser("registry")

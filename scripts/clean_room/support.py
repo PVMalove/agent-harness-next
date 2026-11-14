@@ -312,15 +312,15 @@ def starts_with_text(data: bytes, text: str) -> bool:
 
 def check_technical_english(project: Path) -> None:
     """Проверить доставку управляемого контракта и достижимость из новых точек входа."""
-    contract = project / ".harness/docs/technical-english.md"
+    contract = project / ".harness/instructions/technical-english.md"
     if not contract.is_file():
         sys.exit("standard install did not deliver the technical-English contract")
     delivered = contract.read_bytes()
-    if delivered != (ROOT / "harness/docs/technical-english.md").read_bytes():
+    if delivered != (ROOT / "harness/project/instructions/technical-english.md").read_bytes():
         sys.exit("installed technical-English contract differs from its shared source")
     lock = json.loads((project / ".harness/harness.lock").read_text(encoding="utf-8"))
     if (
-        lock["files"].get(".harness/docs/technical-english.md")
+        lock["files"].get(".harness/instructions/technical-english.md")
         != hashlib.sha256(delivered).hexdigest()
     ):
         sys.exit("technical-English contract is not managed by the snapshot lock")

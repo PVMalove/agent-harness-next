@@ -345,6 +345,15 @@ Harness Next, определяет ADR 0026, раздел 1.
 (код 3 или 4), authority остаётся у файлового ledger, coordinator 2.0.0 отказывает с кодом 2, а
 remedy — повтор `migrate` или возврат на 1.x.
 
+**Поправка 2026-11-14 (#814).** Проверку предусловий выполняет `harness-runtime migrate --check`:
+шаг 1 migrate без approval и без записи, ответ `{"ready": true, ...}` с кодом 0, после cutover —
+`ready: false, already_cut_over: true`, отказ — код и remedy обычного migrate. Approval cutover-а
+`harness update` принимает своими флагами `--approved-by`, `--approved-at` и `--reason` (все три
+вместе) и передаёт их `migrate` без изменений: правила approval (раздел 5) проверяет runtime. На
+`ledger.json` версии 3 без approval, на версиях 1–2 и без бинарника `harness-runtime` update
+отказывает до установки первого файла. Проект без state оркестрации и проект на store обновляются
+без migrate.
+
 Если до 2.0.0 зависшие замки файлового ledger станут недопустимыми для работы, исправление
 выпускается отдельным hotfix-тикетом от `master` (1.x). До тех пор действуют `ledger lock-status`
 и `release-lock --force` (#759).

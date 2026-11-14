@@ -1041,3 +1041,100 @@ mod autostart {
         }
     }
 }
+
+fn tree_bytes(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    let mut found = std::collections::BTreeMap::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                pending.push(entry.path());
+            } else {
+                found.insert(entry.path(), fs::read(entry.path()).unwrap());
+            }
+        }
+    }
+    found
+}
+
+fn migrate_check(repo: &Scratch) -> Output {
+    run(&["migrate", "--check", "--repo", repo.0.to_str().unwrap()])
+}
+
+#[test]
+fn migrate_check_of_a_ready_ledger_answers_ready_and_writes_nothing() {
+    let repo = Scratch::repo_with_ledger("check-ready").without_qa_lane_entries();
+    let before = tree_bytes(&repo.0);
+
+    let output = migrate_check(&repo);
+
+    assert!(output.status.success(), "{:?}", stderr_lines(&output));
+    let answer: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(answer["ready"], true, "{answer}");
+    assert_eq!(answer["already_cut_over"], false, "{answer}");
+    assert_eq!(answer["ledger_version"], 3, "{answer}");
+    assert_eq!(tree_bytes(&repo.0), before);
+}
+
+#[test]
+fn migrate_check_with_a_qa_lease_prints_lease_held_and_writes_nothing() {
+    let repo = Scratch::repo_with_ledger("check-lease");
+    let before = tree_bytes(&repo.0);
+
+    let (code, remedy) = refusal(&migrate_check(&repo));
+
+    assert_eq!(code, 2);
+    assert!(remedy.starts_with("REMEDY: [lease_held] "), "{remedy}");
+    assert_eq!(tree_bytes(&repo.0), before);
+}
+
+#[test]
+fn migrate_check_without_a_ledger_prints_not_found() {
+    let repo = Scratch::repo("check-no-ledger");
+    fs::create_dir_all(repo.state()).unwrap();
+
+    let (code, remedy) = refusal(&migrate_check(&repo));
+
+    assert_eq!(code, 2);
+    assert!(remedy.starts_with("REMEDY: [not_found] "), "{remedy}");
+}
+
+#[test]
+fn migrate_check_after_the_cutover_answers_already_cut_over() {
+    let (repo, _) = cut_over("check-cut-over");
+
+    let output = migrate_check(&repo);
+
+    assert!(output.status.success(), "{:?}", stderr_lines(&output));
+    let answer: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(answer["ready"], false, "{answer}");
+    assert_eq!(answer["already_cut_over"], true, "{answer}");
+}
+
+#[test]
+fn migrate_check_of_a_rolled_back_store_prints_the_invariant_code() {
+    let (repo, _) = cut_over("check-rolled-back");
+    let output = run_owned(&rollback_args(&repo, "human:operator"));
+    assert!(output.status.success(), "{:?}", stderr_lines(&output));
+
+    let (code, remedy) = refusal(&migrate_check(&repo));
+
+    assert_eq!(code, 2);
+    assert!(remedy.contains("archive or remove runtime.db"), "{remedy}");
+}
+
+#[test]
+fn migrate_check_accepts_approval_flags_and_ignores_them() {
+    let repo = Scratch::repo_with_ledger("check-approval").without_qa_lane_entries();
+    let mut args = migrate_args(&repo, "policy:auto");
+    args.insert(1, "--check".to_owned());
+
+    let output = run_owned(&args);
+
+    assert!(output.status.success(), "{:?}", stderr_lines(&output));
+    assert!(!repo.state().join("runtime.db").exists());
+}
