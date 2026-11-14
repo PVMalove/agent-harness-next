@@ -56,7 +56,7 @@ Only exactly `{"status":"ok"}` enables the author. The current protected adapter
 `.claude/hooks/test-author-preflight.sh`; other selected runtimes keep ordinary TDD until a
 protected adapter exists. For full external Claude execution, require `Agent(test-author)` or
 `Agent` in the approved tools and call the native subagent without model/effort overrides;
-`model: inherit` preserves the developer's approved settings. An in-process worker passes each
+An author without a `model` line inherits the developer's approved settings. An in-process worker passes each
 handoff to `python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo
 <worker_worktree> --brief <brief path> --prompt-file <path>` under the same permission rule.
 Linked workers read evidence from the supplied shared log root.

@@ -18,7 +18,6 @@ PR composer
 name: pr-composer
 description: Fills out this project's PR body template from docs/agents/git-workflow.md §3, given a branch diff, commit log, and the last qa-gate result. Use when a feature branch is ready and a PR body needs to be written, before `gh pr create --body-file` or `glab mr create -R <project-url> --description-file`.
 tools: Read, Write, Bash, Grep, Glob
-model: haiku
 maxTurns: 40
 ---
 

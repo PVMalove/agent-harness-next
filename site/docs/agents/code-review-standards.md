@@ -18,7 +18,6 @@
 name: code-review-standards
 description: Проверяет diff на соответствие задокументированным стандартам кодирования этого репозитория и фиксированному базовому набору «запахов» Фаулера. Его использует ось Standards скилла code-review; не вызывайте его напрямую.
 tools: Read, Bash, Grep, Glob
-model: sonnet
 maxTurns: 60
 ---
 

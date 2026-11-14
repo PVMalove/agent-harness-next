@@ -18,7 +18,6 @@
 name: pr-composer
 description: Заполняет шаблон тела PR этого проекта из docs/agents/git-workflow.md §3 по diff ветки, журналу коммитов и последнему результату qa-gate. Используйте, когда feature-ветка готова и нужно написать тело PR, перед `gh pr create --body-file` или `glab mr create -R <project-url> --description-file`.
 tools: Read, Write, Bash, Grep, Glob
-model: haiku
 maxTurns: 40
 ---
 

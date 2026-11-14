@@ -574,7 +574,7 @@ def run(ctx: SimpleNamespace) -> None:
     to_tickets_text = to_tickets_installed.read_text(encoding="utf-8")
     for required_text in (
         "enumerate every path under those directories",
-        "one cheap-model advisory call",
+        "one advisory sub-agent call",
         "stop and report blocker",
         "result dependency",
         "known requirement incompatibility",

@@ -18,7 +18,6 @@
 name: code-review-spec
 description: Проверяет diff по исходному issue или спецификации на полноту и выход за рамки задачи. Его использует ось Spec скилла code-review; не вызывайте его напрямую.
 tools: Read, Bash, Grep, Glob
-model: sonnet
 maxTurns: 60
 ---
 

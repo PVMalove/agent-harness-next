@@ -90,7 +90,7 @@ the chosen model/effort plus the task through stdin. An unsupported runtime is n
 
 The author inherits `resolved_runtime`, `resolved_model` and `resolved_effort` from the
 **approved developer brief**. The short profile and later orchestration changes do not alter
-that selection. `.claude/agents/test-author.md` uses `model: inherit` with no effort override;
+that selection. `.claude/agents/test-author.md` sets no `model` and no effort override;
 the developer calls `Agent(test-author)` without model/effort overrides.
 
 For an external developer, the harness and protection must be installed **in the worker
@@ -249,7 +249,7 @@ Activation refusal instead leaves ordinary TDD without new blocker/ledger state.
     never the short profile or later live orchestration settings. Confirm worker-local installation,
     user trust of the worker or its repository's main checkout and approved Agent(test-author)
     permission; never spoof trust or widen
-    approved tools. Keep model: inherit without effort override. Use preflight with the brief in
+    approved tools. Keep no model and no effort override. Use preflight with the brief in
     the correct checkout; refusal leaves ordinary TDD, not an unprotected or substituted author.
 
     Before any durable change, show the exact proposed diff or command and its effects, then wait

@@ -34,7 +34,7 @@ preflight отвечает `write_zone_rejected`, например для `tests
 Исполнитель полного `/implement` наследует `resolved_runtime`, `resolved_model` и
 `resolved_effort` из утверждённого brief developer. Передавайте `--brief <путь>` общему
 preflight; текущая orchestration-конфигурация и профиль проекта не меняют уже утверждённый
-выбор. Для поддержанного нативного вызова `Agent(test-author)` шаблон использует `model: inherit`
+выбор. Для поддержанного нативного вызова `Agent(test-author)` шаблон не задаёт `model`
 и наследует effort; developer вызывает автора без переопределения model/effort. Старый
 локальный шаблон с фиксированным model или effort получает `test_author_config_invalid`: после
 просмотра замените `.claude/agents/test-author.md` через `harness update . --force-seed-file .claude/agents/test-author.md`, чтобы восстановить наследование.
@@ -42,7 +42,7 @@ preflight; текущая orchestration-конфигурация и профил
 Короткий `/fast-implement` читает отдельный явный профиль в `.harness/project.json`:
 
 ```json
-"test_author": {"runtime": "claude", "model": "sonnet", "effort": "high"}
+"test_author": {"runtime": "<runtime>", "model": "<model>", "effort": "<effort>"}
 ```
 
 Это пример выбора пользователя, а не значения по умолчанию. Все три поля обязательны внутри

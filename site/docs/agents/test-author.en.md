@@ -34,7 +34,7 @@ an error, but they turn the test author off.
 The full `/implement` route inherits `resolved_runtime`, `resolved_model` and `resolved_effort`
 from the approved developer brief. Pass `--brief <path>` to general preflight. Later orchestration
 changes and the project short profile do not alter that approved choice. The native
-`Agent(test-author)` template uses `model: inherit` with no effort override; the developer calls
+`Agent(test-author)` template sets no `model` and no effort override; the developer calls
 it without model/effort overrides. A stale local fixed model or effort yields
 `test_author_config_invalid`. Review the template diff before replacing the seed with
 `harness update . --force-seed-file .claude/agents/test-author.md`.
@@ -42,7 +42,7 @@ it without model/effort overrides. A stale local fixed model or effort yields
 The short `/fast-implement` route uses a separate explicit profile in `.harness/project.json`:
 
 ```json {.ah-code-wrap}
-"test_author": {"runtime": "claude", "model": "sonnet", "effort": "high"}
+"test_author": {"runtime": "<runtime>", "model": "<model>", "effort": "<effort>"}
 ```
 
 This is an example user choice, not defaults. All three fields are required inside the profile.
