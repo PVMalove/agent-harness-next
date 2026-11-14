@@ -79,8 +79,8 @@ Podman. Если задан `access_policy.operations.qa.container`, в конт
 
 Пошаговую настройку целевого проекта (предпосылки, сборка образов, кэши, allowlist, блокеры,
 очистка, пример проектного адаптера) даёт англоязычное руководство
-[`harness/docs/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/container-executor.md).
-`backend-orchestration` ставит его как `.harness/docs/container-executor.md`. Проектные реализации
+[`harness/project/instructions/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/container-executor.md).
+`backend-orchestration` ставит его как `.harness/instructions/container-executor.md`. Проектные реализации
 `module:factory` работают как раньше. Хост-процесс не может зарегистрировать другую реализацию под
 именем `docker`.
 

@@ -1,4 +1,4 @@
-"""Согласованность документации с каталогом capability и зеркалом docs-agents.
+"""Согласованность документации с каталогом capability и зеркалом инструкций агентов.
 
 Каждая проверка ловит расхождение, которое уже однажды попадало в релиз: текст, продублированный
 вручную в нескольких документах, расходится с источником правды.
@@ -15,6 +15,7 @@ from pathlib import Path
 from scripts.verification.paths import (
     CAPABILITIES,
     DOCS_AGENTS_TEMPLATE,
+    MANAGED_INSTRUCTIONS,
     ROOT,
     SITE_PROJECT_STRUCTURE,
     SITE_REFERENCE_SKILLS,
@@ -74,13 +75,15 @@ def _filled_template_shape(text: str) -> tuple[str, list[str]]:
 
 
 def check_docs_agents_mirror() -> None:
-    """Проверить, что docs/agents/*.md совпадают с harness/project/docs-agents/*.md.
+    """Проверить, что docs/agents/*.md совпадают с seed-инструкциями harness/project/instructions/*.md.
 
     docs/agents — собственная копия файлов, которые scaffold_engineering_extras разворачивает в каждый
     проект engineering-suite. Обе копии правятся вручную, поэтому расхождение ловится здесь.
     У заготовок из PROJECT_FILLED_TEMPLATES сверяются только вводный текст и заголовки секций.
     """
     for template in sorted(DOCS_AGENTS_TEMPLATE.glob("*.md")):
+        if template.name in MANAGED_INSTRUCTIONS:
+            continue
         counterpart = ROOT / "docs" / "agents" / template.name
         if not counterpart.is_file():
             sys.exit(f"{template} has no docs/agents counterpart: {counterpart}")
@@ -90,12 +93,12 @@ def check_docs_agents_mirror() -> None:
             ) != _filled_template_shape(normalized_text(counterpart)):
                 sys.exit(
                     f"docs/agents/{template.name} intro or sections have drifted from "
-                    f"harness/project/docs-agents/{template.name}"
+                    f"harness/project/instructions/{template.name}"
                 )
             continue
         if normalized_text(template) != normalized_text(counterpart):
             sys.exit(
-                f"docs/agents/{template.name} has drifted from harness/project/docs-agents/{template.name}"
+                f"docs/agents/{template.name} has drifted from harness/project/instructions/{template.name}"
             )
 
 
@@ -138,7 +141,11 @@ def check_docs_agents_enumeration() -> None:
     Страница вручную перечисляет файлы, которые разворачивает scaffold_engineering_extras.
     Однажды список в документе разошёлся с шаблонами.
     """
-    names = {path.stem for path in DOCS_AGENTS_TEMPLATE.glob("*.md")}
+    names = {
+        path.stem
+        for path in DOCS_AGENTS_TEMPLATE.glob("*.md")
+        if path.name not in MANAGED_INSTRUCTIONS
+    }
     for doc in (SITE_PROJECT_STRUCTURE,):
         match = re.search(r"docs/agents/\{([a-z0-9,-]+)\}\.md", normalized_text(doc))
         if not match:
@@ -147,7 +154,7 @@ def check_docs_agents_enumeration() -> None:
         if listed != names:
             sys.exit(
                 f"{doc}: docs/agents/{{...}}.md enumeration {sorted(listed)} does not match "
-                f"harness/project/docs-agents/*.md {sorted(names)}"
+                f"harness/project/instructions/*.md seeds {sorted(names)}"
             )
 
 

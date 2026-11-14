@@ -213,7 +213,7 @@ Harness не устанавливает библиотеки и инструме
 | `environment.runtime_socket_path` | Путь сокета runtime длиннее 100 байт при текущем `XDG_RUNTIME_DIR` (без него берётся `/tmp/harness-<uid>`, `TMPDIR` runtime не использует). Проверка работает при backend-оркестрации, на Windows пропускается. |
 
 Запускайте health в той же среде, где агент выполняет QA, например внутри distrobox. Подробнее
-на странице [«Контейнер»](container.md) и в установленном `.harness/docs/container-executor.md`.
+на странице [«Контейнер»](container.md) и в установленном `.harness/instructions/container-executor.md`.
 
 Каталог `.harness/.venv`, который создаёт `make bootstrap` в исходниках **этого репозитория**,
 содержит dev-зависимости harness. Он не заменяет окружение целевого проекта. Отдельному

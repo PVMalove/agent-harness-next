@@ -6,7 +6,7 @@ dispatch work, select a provider, or require a runtime adapter. An adapter may t
 these records into its own commands later, but it must preserve the rules below.
 
 Before the first English handoff, the coordinator must read
-[Technical English](../docs/technical-english.md).
+[Technical English](../instructions/technical-english.md).
 
 ## Authority and invariants
 

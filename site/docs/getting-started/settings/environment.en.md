@@ -211,7 +211,7 @@ commands. These checks only read the environment and run nothing:
 | `environment.runtime_socket_path` | The runtime socket path is longer than 100 bytes with the current `XDG_RUNTIME_DIR` (without it, `/tmp/harness-<uid>`; the runtime ignores `TMPDIR`). Checked with backend orchestration; skipped on Windows. |
 
 Run health in the environment where the agent runs QA, for example inside distrobox. See
-[Container](container.md) and the installed `.harness/docs/container-executor.md`.
+[Container](container.md) and the installed `.harness/instructions/container-executor.md`.
 
 The `.harness/.venv` directory created by `make bootstrap` in **this repository's source checkout**
 contains harness development dependencies. It does not replace the target project's environment.

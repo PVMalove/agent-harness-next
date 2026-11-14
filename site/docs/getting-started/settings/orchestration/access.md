@@ -200,7 +200,7 @@ container, environment и network: его контейнер используе�
 не наследует proxy и работает без сети. Доступ git и publish этот фрагмент не настраивает.
 
 Как подготовить образы, среду и сеть и как снять блокеры, описано на странице
-[«Контейнер»](../container.md) и в установленном `.harness/docs/container-executor.md`.
+[«Контейнер»](../container.md) и в установленном `.harness/instructions/container-executor.md`.
 Имена и значения секретов разобраны в [«Секреты и токены»](../secrets.md).
 
 ## Настроить с агентом {#agent-access-setup}
@@ -215,7 +215,7 @@ container, environment и network: его контейнер используе�
 
     Follow repository instructions. Keep questions, choices and user-facing summaries in Russian.
     Read .harness/project.json, .harness/orchestration.json, the installed schema,
-    managed example and role manifests. Read .harness/docs/container-executor.md
+    managed example and role manifests. Read .harness/instructions/container-executor.md
     when container execution is involved. Run available read-only health/config checks.
     Ask only for unresolved facts, one question at a time. Offer 2-4 concrete choices
     plus «Другое», with one consequence each. Put an evidence-based recommendation
@@ -258,7 +258,7 @@ container, environment и network: его контейнер используе�
 
     Follow repository instructions. Keep questions, choices and user-facing summaries in Russian.
     Read .harness/project.json, .harness/orchestration.json, the installed schema,
-    managed example and role manifests. Read .harness/docs/container-executor.md
+    managed example and role manifests. Read .harness/instructions/container-executor.md
     when container execution is involved. Run available read-only health/config checks.
     Ask only for unresolved facts, one question at a time. Offer 2-4 concrete choices
     plus «Другое», with one consequence each. Put an evidence-based recommendation

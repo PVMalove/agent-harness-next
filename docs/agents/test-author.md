@@ -1,309 +1,316 @@
-# Test-author — тест-автор
+# Test-author
 
-## 1. Назначение
+## 1. Purpose
 
-`test-author` — необязательный in-session субагент developer для следующего поведенческого
-теста цикла Red → Green → Refactor. Он пишет ровно один тест и запускает его через
-`.claude/hooks/run-test.sh`; production-код, скелет и orchestration остаются у developer.
+`test-author` is an optional in-session developer subagent for the next behavior test of the
+Red → Green → Refactor cycle. It writes exactly one test and runs it through
+`.claude/hooks/run-test.sh`. The developer keeps the production code, the skeleton, and the
+orchestration.
 
-Исполнитель выбирается из конфигурации перед проверкой защищённого адаптера. Общая команда
-`python3 -I -B .harness/health/test_author.py preflight --repo .` возвращает одну строку `{"status":"ok"}`,
-если `test_paths`, `test_runner`, process isolation и scoped guard подтверждены. При любом
-отказе она возвращает `{"status":"disabled","reason":"<санитизированная причина>"}` и
-developer продолжает обычный маршрут.
+The executor is selected from the configuration before the check of the protected adapter. The
+common command `python3 -I -B .harness/health/test_author.py preflight --repo .` returns the single
+line `{"status":"ok"}` when `test_paths`, `test_runner`, process isolation, and the scoped guard are
+confirmed. On any refusal it returns `{"status":"disabled","reason":"<sanitized reason>"}`, and the
+developer continues the usual route.
 
-## 2. Конфигурация
+## 2. Configuration
 
-В `.harness/project.json` задаются необязательные настройки тестовой зоны и runner:
+`.harness/project.json` holds the optional settings of the test zone and the runner:
 
 ```json
 "test_paths": ["tests/**"],
 "test_runner": {"command": ["python3", "-m", "pytest", "{test_id}"]}
 ```
 
-`test_paths` — непустой список уникальных относительных glob-шаблонов без сегментов `..`.
-Схема и `harness health` принимают любой такой glob, но тест-автор активируется только с зонами
-записи вида `<каталог>/**`: остальные сегменты литеральные (без `*?[]{}` и `\`), первый сегмент не
-`.git`, `.harness`, `.claude`, `.agents` или `.codex`, каталог существует, на пути к нему нет
-symlink, внутри нет файлов с несколькими жёсткими ссылками, а зоны не вложены друг в друга. Иначе
-preflight отвечает `write_zone_rejected`, например для `tests/*.py`.
-`test_runner.command` — argv без shell, с ровно одним аргументом `{test_id}`, который не является
-первым. Схема, validator и `harness health` используют один контракт; отсутствие полей не
-считается ошибкой, но выключает тест-автора.
+`test_paths` is a non-empty list of unique relative glob patterns without `..` segments. The schema
+and `harness health` accept any such glob, but the test author activates only with write zones of
+the form `<directory>/**`: the other segments are literal (no `*?[]{}` and no `\`), the first
+segment is not `.git`, `.harness`, `.claude`, `.agents`, or `.codex`, the directory exists, no
+symlink is on the path to it, no file inside has several hard links, and the zones are not nested
+in each other. Otherwise preflight answers `write_zone_rejected`, for example for `tests/*.py`.
+`test_runner.command` is an argv without a shell, with exactly one `{test_id}` argument, which is
+not the first one. The schema, the validator, and `harness health` use one contract. Missing fields
+are not an error, but they turn the test author off.
 
-Исполнитель полного `/implement` наследует `resolved_runtime`, `resolved_model` и
-`resolved_effort` из утверждённого brief developer. Передавайте `--brief <путь>` общему
-preflight; текущая orchestration-конфигурация и профиль проекта не меняют уже утверждённый
-выбор. Для поддержанного нативного вызова `Agent(test-author)` шаблон не задаёт `model`
-и наследует effort; developer вызывает автора без переопределения model/effort. Старый
-локальный шаблон с фиксированным model или effort получает `test_author_config_invalid`: после
-просмотра замените `.claude/agents/test-author.md` через `harness update . --force-seed-file .claude/agents/test-author.md`, чтобы восстановить наследование.
+The full `/implement` route inherits `resolved_runtime`, `resolved_model` and `resolved_effort` from
+the approved developer brief. Pass `--brief <path>` to the common preflight. Later orchestration
+changes and the short profile of the project do not change that approved choice. The native
+`Agent(test-author)` template sets no `model` and no effort; the developer calls it without
+model/effort overrides. A stale local fixed model or effort gives `test_author_config_invalid`.
+Review the template diff before you replace the seed with
+`harness update . --force-seed-file .claude/agents/test-author.md`, which restores the inheritance.
 
-Короткий `/fast-implement` читает отдельный явный профиль в `.harness/project.json`:
+The short `/fast-implement` route reads a separate explicit profile in `.harness/project.json`:
 
 ```json
 "test_author": {"runtime": "<runtime>", "model": "<model>", "effort": "<effort>"}
 ```
 
-Это пример выбора пользователя, а не значения по умолчанию. Все три поля обязательны внутри
-профиля. Без профиля короткий маршрут получает `test_author_missing`. Без корректных полей
-brief полный маршрут получает `test_author_config_invalid`, без отката к профилю проекта.
-`resolve --repo . [--brief <путь>]` показывает фактически выбранные поля и источник.
+The values are the choice of the user, not defaults. All three fields are required inside the
+profile. Without the profile the short route gets `test_author_missing`. Without valid brief fields
+the full route gets `test_author_config_invalid`, without a fallback to the project profile.
+`resolve --repo . [--brief <path>]` shows the selected fields and their source.
 
-Короткий маршрут сохраняет требование и один сценарий в локальный prompt-файл и вызывает:
+The short route saves the requirement and one scenario in a local prompt file, then calls:
 
 ```sh
-python3 -I -B .harness/health/test_author.py run --repo . --prompt-file <prompt-файл>
+python3 -I -B .harness/health/test_author.py run --repo . --prompt-file '<prompt-file>'
 ```
 
-Launcher повторно проверяет защищённый адаптер, передаёт выбранному CLI точные model/effort
-и отдаёт текст задания через stdin. Он нужен и когда модель текущей сессии отличается от
-профиля проекта. Настроенный runtime без защищённого адаптера даёт `runtime_unsupported`;
-другой CLI вместо него не запускается. Сейчас защищённый адаптер реализован для Claude Code;
-упоминания `.claude` ниже относятся к его guard и runner, а не к выбору исполнителя. Чтобы
-переключить автора на Claude Code, добавьте `claude` с `model` и `effort` в
-`assignment_plans.developer.runtimes` файла `.harness/orchestration.json`. Если runtime в плане
-несколько, выберите `claude` в `assignment_plans.developer.default_runtime`. Без плана developer
-runtime задаёт `test_author.runtime` файла `.harness/project.json`.
+The launcher checks the protected adapter again, passes the exact model and effort, and sends the
+task through stdin. It does this also when the current session uses another model. A runtime
+without a protected adapter gets `runtime_unsupported`; another CLI never replaces it. Only Claude
+Code has such an adapter now; the `.claude` paths below refer to its guard and runner, not to the
+selection of the executor. To switch the author to Claude Code, add `claude` with `model` and
+`effort` to `assignment_plans.developer.runtimes` of `.harness/orchestration.json`. When the plan
+has several runtimes, select `claude` in `assignment_plans.developer.default_runtime`. Without a
+developer plan, `test_author.runtime` of `.harness/project.json` sets the runtime.
 
-## 3. Защита
+## 3. Protection
 
-Frontmatter установленного `.claude/agents/test-author.md` подключает
-`.claude/hooks/test-author-guard.py` только к этому субагенту для `Write`, `Edit` и `Bash`.
+The frontmatter of the installed `.claude/agents/test-author.md` attaches
+`.claude/hooks/test-author-guard.py` to this subagent only, for `Write`, `Edit`, and `Bash`.
 
-- `Write` и `Edit` проходят только после нормализации пути и только внутри `test_paths`; symlink,
-  ведущий за пределы тестовой зоны, отклоняется.
-- `Bash` разрешает только один вызов `.claude/hooks/run-test.sh <test-id>` (допускается
-  эквивалентный вызов через доверенный системный `bash`); shell-метасимволы, `--probe`,
-  дополнительные аргументы и другие команды отклоняются.
-- Отказ — мягкий: hook печатает JSON с причиной, не меняет dispatch/ledger и завершается кодом 0.
-  Другие субагенты не получают эту защиту и не меняют свой маршрут.
+- `Write` and `Edit` pass only after path normalization and only inside `test_paths`. A symlink
+  that leads out of the test zone is refused.
+- `Bash` allows only one call of `.claude/hooks/run-test.sh <test-id>` (an equivalent call through
+  the trusted system `bash` is allowed). Shell metacharacters, `--probe`, extra arguments, and other
+  commands are refused.
+- A refusal is soft: the hook prints JSON with the reason, does not change the dispatch or the
+  ledger, and exits with code 0. Other subagents do not get this protection and do not change their
+  route.
 
-Preflight проверяет условия и на первом нарушении отвечает `disabled` с одной
-фиксированной причиной:
+Preflight checks the conditions and, at the first violation, answers `disabled` with one fixed
+reason:
 
-| Проверка | Причина отказа |
+| Check | Refusal reason |
 | --- | --- |
-| Необязательный `--worktree <путь>` называет тот же checkout, где лежит preflight | `checkout_mismatch` |
-| Выбраны runtime/model/effort из brief developer или short-профиля проекта | `test_author_missing`, `test_author_config_invalid` |
-| Для выбранного runtime есть защищённый адаптер | `runtime_unsupported` |
-| Checkout, где лежит preflight, — корень своего рабочего дерева Git (`git rev-parse --show-toplevel`) | `project_untrusted` |
-| `CLAUDE_PROJECT_DIR`, если передан, совпадает с этим корнем Git | `project_dir_mismatch` |
-| Claude Code не запущен с `CLAUDE_CODE_SIMPLE=1` или `CLAUDE_CODE_SAFE_MODE=1` | `claude_code_unsupported` |
-| Пользователь принял диалог доверия для этого checkout или для основного checkout его репозитория | `project_untrusted` |
-| Установлен agent `test-author.md` | `agent_missing` |
-| В agent включён scoped `PreToolUse` hook | `scoped_hook_unsupported` |
-| Заданы `test_paths` и `test_runner`, зоны записи допустимы | `test_paths_missing`, `test_runner_missing`, `config_invalid`, `write_zone_rejected` |
-| Файл `test-author-guard.py` исполняемый и отвечает JSON | `guard_hook_unavailable` |
-| `run-test.sh --probe` подтверждает изоляцию | `isolation_unavailable`, `runner_unavailable` |
+| The optional `--worktree <path>` names the same checkout where preflight lives | `checkout_mismatch` |
+| The checkout where preflight lives is the root of its own Git work tree (`git rev-parse --show-toplevel`) | `project_untrusted` |
+| `CLAUDE_PROJECT_DIR`, when passed, matches that Git root | `project_dir_mismatch` |
+| Claude Code is not started with `CLAUDE_CODE_SIMPLE=1` or `CLAUDE_CODE_SAFE_MODE=1` | `claude_code_unsupported` |
+| The user accepted the trust dialog for this checkout or for the main checkout of its repository | `project_untrusted` |
+| The agent `test-author.md` is installed | `agent_missing` |
+| The scoped `PreToolUse` hook is enabled in the agent | `scoped_hook_unsupported` |
+| `test_paths` and `test_runner` are set, and the write zones are valid | `test_paths_missing`, `test_runner_missing`, `config_invalid`, `write_zone_rejected` |
+| Runtime, model and effort are selected from the developer brief or the short profile of the project | `test_author_missing`, `test_author_config_invalid` |
+| The selected runtime has a protected adapter | `runtime_unsupported` |
+| The file `test-author-guard.py` is executable and answers with JSON | `guard_hook_unavailable` |
+| `run-test.sh --probe` confirms isolation | `isolation_unavailable`, `runner_unavailable` |
 
-Корень проекта preflight берёт из Git, поэтому ни `export CLAUDE_PROJECT_DIR`, ни запись корня в
-настройках не нужны. Переданный Claude Code `CLAUDE_PROJECT_DIR` лишь сверяется с корнем Git.
+Preflight takes the project root from Git, so neither `export CLAUDE_PROJECT_DIR` nor a root entry
+in the settings is needed. A `CLAUDE_PROJECT_DIR` that Claude Code passes is only compared with the
+Git root.
 
-Доверие проверяется по записи в `~/.claude.json` (или `$CLAUDE_CONFIG_DIR/.claude.json`):
-`hasTrustDialogAccepted: true` должно стоять для точного пути checkout или для основного checkout
-репозитория, если checkout — его linked worktree из `git worktree list`. Нативный режим
-`claude --print` диалог доверия пропускает, поэтому preflight проверяет решение сам. Новый
-worktree доверенного репозитория отдельного диалога не требует. Доверие только к родительскому
-каталогу не считается: preflight отвечает `project_untrusted`, это безопасный отказ. Откройте
-основной checkout в Claude Code и примите диалог (ADR 0033).
+Trust is checked against an entry in `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`):
+`hasTrustDialogAccepted: true` must be set for the exact checkout path, or for the main checkout of
+the repository when the checkout is its linked worktree from `git worktree list`. The native mode
+`claude --print` skips the trust dialog, so preflight checks the decision itself. A new worktree of
+a trusted repository needs no dialog of its own. Trust that only a parent directory has does not
+count: preflight answers `project_untrusted`, a safe refusal. Open the main checkout in Claude Code
+and accept the dialog (ADR 0033).
 
-Проверки agent, hook и guard статические: preflight не запускает Claude Code и не доказывает,
-что hook сработает в живой сессии. Поэтому `guard_hook_unavailable` означает только отсутствие
-исполняемого guard или его неисправный ответ. Реальное срабатывание scoped hook подтверждает
-проверка самого харнесса на настоящем Claude Code; в установленный проект она не входит. Если agent
-или hook отсутствует, Claude Code работает в режиме, который отключает hooks, проект не является
-доверенным, либо изоляция недоступна, test-author не запускается без защиты.
+The checks of the agent, the hook, and the guard are static: preflight does not start Claude Code
+and does not prove that the hook fires in a live session. So `guard_hook_unavailable` means only
+that the executable guard is missing or its answer is broken. The own check of the harness on a
+real Claude Code confirms that the scoped hook fires; that check is not part of the installed
+project. If the agent or the hook is missing, Claude Code runs in a mode that turns hooks off, the
+project is not trusted, or isolation is unavailable, test-author does not start without protection.
 
-## 4. Контракт вызова
+## 4. Call contract
 
-Пока preflight возвращает `{"status":"ok"}`, developer вызывает test-author перед каждым шагом
-реализации. Он передаёт требование и seam из
-brief architect, публичные сигнатуры, существующие fixtures и один сценарий; предложенный
-алгоритм или фрагмент реализации не становится основанием ожидания. Seam, который не согласован
-в brief, developer не выдумывает, а эскалирует обычным путём blocker. Test-author читает
-минимальные относящиеся к делу файлы, пишет один тест только в `test_paths`, запускает выбранный
-тест через runner и коротко по-английски возвращает:
+While preflight returns `{"status":"ok"}`, the developer calls test-author before each
+implementation step. The developer passes the requirement and the seam from the architect brief,
+the public signatures, the existing fixtures, and one scenario. A proposed algorithm or a fragment
+of the implementation never becomes the basis of the expectation. The developer does not invent a
+seam that the brief did not agree, and escalates it as a blocker in the usual way. Test-author reads
+the minimal relevant files, writes one test only in `test_paths`, runs the selected test through
+the runner, and briefly returns, in English:
 
-1. `status`: `red`, `needs_skeleton` или `contract_gap`;
-2. требование и сценарий;
-3. входные данные и независимый источник ожидания;
-4. идентификатор теста;
-5. для `red` — доказательство Red: санитизированный JSON runner и в нескольких строках проваленное
-   утверждение, ожидание и фактический результат. В JSON только фиксированные ключи, поэтому эти
-   три факта автор берёт из `log.txt` запуска (каталог из `run_id`).
+1. `status`: `red`, `needs_skeleton`, or `contract_gap`;
+2. the requirement and the scenario;
+3. the input data and the independent source of the expectation;
+4. the test identifier;
+5. for `red`, the Red evidence: the sanitized runner JSON and, in a few lines, the failed
+   assertion, the expectation, and the actual result. The JSON holds only fixed keys, so the author
+   takes these three facts from `log.txt` of the run (the directory comes from `run_id`).
 
-Если runner отказал или тест оказался Green, субагент сообщает факт и останавливается. Он не
-создаёт manifest, dispatch, brief/report, approval или ledger record.
+If the runner refused or the test is Green, the subagent reports the fact and stops. It does not
+create a manifest, a dispatch, a brief or report, an approval, or a ledger record.
 
-## 5. Цикл Red → Green → Refactor
+## 5. The Red → Green → Refactor cycle
 
-Цикл — проза для developer, а не новая роль, состояние или запись ledger.
+The cycle is guidance for the developer, not a new role, state, or ledger record.
 
-1. Developer сверяет ожидание с требованием и источником до реализации. Принятое ожидание не
-   ослабляется ради Green; исправить его можно только при обоснованном изменении контракта,
-   новым вызовом автора и новой проверкой.
-2. `red` — переход к реализации. `needs_skeleton` — developer пишет только типы и сигнатуры без
-   логики, автор запускается повторно. `contract_gap` — developer уточняет требование по brief
-   или эскалирует его; угадывать контракт нельзя.
-3. Ошибка компиляции или импорта, ошибка fixture и ошибка окружения — не поведенческий Red,
-   какой бы `status` ни указал автор. Сразу зелёный тест возвращается автору явно и не считается
-   успешным циклом.
-4. После подтверждённого Red developer пишет минимальную реализацию до Green, рефакторит на
-   Green и только затем запрашивает следующий тест.
-5. После трёх подряд неудачных вызовов автора по одному тесту developer идёт по обычному пути
-   blocker. Отказ guard считается одним неудачным вызовом, отклонённый вызов не переформулируется.
-   Локальный повтор автора и отдельный отказ guard не создают dispatch и состояние ledger и не
-   обходят правила восстановления `/implement`.
-   Независимая QA, её роль и ledger не меняются.
+1. The developer checks the expectation against the requirement and the source before the
+   implementation. An accepted expectation is not weakened to get Green. It may be corrected only
+   when the contract changes for a good reason, with a new call to the author and a new check.
+2. `red` means: go to the implementation. `needs_skeleton` means: the developer writes only types
+   and signatures without logic, and the author runs again. `contract_gap` means: the developer
+   clarifies the requirement from the brief or escalates it; guessing the contract is not allowed.
+3. A compilation or import error, a fixture error, and an environment error are not a behavior Red,
+   whatever `status` the author reports. A test that is Green at once goes back to the author
+   explicitly and does not count as a successful cycle.
+4. After a confirmed Red, the developer writes the minimal implementation until Green, refactors on
+   Green, and only then requests the next test.
+5. After three failed calls to the author in a row for one test, the developer follows the usual
+   blocker path. A guard refusal counts as one failed call, and a refused call is not reworded. A
+   local retry of the author and a separate guard refusal do not create a dispatch or ledger state
+   and do not bypass the recovery rules of `/implement`. Independent QA, its role, and the ledger do
+   not change.
 
-Сборку и отдельную тестовую БД задают необязательные `test_runner.build` и
-`test_runner.database` (см. раздел 6). Тест-автор не меняет артефакты: его
-`Write`/`Edit` по-прежнему ограничены `test_paths`; недоступная защита отключает автора.
+The optional `test_runner.build` and `test_runner.database` set up the build and a separate test
+database (see section 6). Test-author does not change artifacts: its `Write` and `Edit` stay in
+`test_paths`. If protection is unavailable, the author is turned off.
 
-Runner запускает БД только для совпавших `test_runner.database.test_ids`; чистая доменная
-логика обходится без сервера. SQL, rollback и ограничения проверяйте на production-движке.
-Отказы `build_failed`, `build_timeout` и `database_unavailable` не являются поведенческим Red.
+The runner starts the database only for the matching `test_runner.database.test_ids`; pure domain
+logic needs no server. Check SQL, rollback, and constraints on the production engine. The refusals
+`build_failed`, `build_timeout`, and `database_unavailable` are not a behavior Red.
 
-`--probe` проверяет настройки и монтирования обеих фаз, но не запускает сборку, сервер БД
-или выбранный тест. Отказ настроек или монтирований сохраняется в preflight как `disabled`
-с санитизированной причиной; developer продолжает обычный маршрут без тест-автора. Готовность
-конкретной БД проверяется только для выбранного SQL-теста; её отказ не считается Red.
+`--probe` checks the settings and the mounts of both phases, but does not start the build, the
+database server, or the selected test. Preflight stores a refusal of the settings or the mounts as
+`disabled` with a sanitized reason, and the developer continues the usual route without the test
+author. The readiness of a specific database is checked only for the selected SQL test; its refusal
+is not a Red.
 
-## 6. Короткий маршрут `/fast-implement`
+## 6. The short `/fast-implement` route
 
-`/fast-implement` использует того же тест-автора и тот же цикл из раздела 5, но без шагов
-coordinator, architect и независимой QA: developer-сессия сама ведёт цикл от тикета до push.
-Различается только происхождение seam: он не берётся из brief architect, а согласуется с
-разработчиком до первого теста. Скил называет требование, seam, публичные сигнатуры и существующие
-fixtures, останавливается до ответа разработчика и не пишет тест на несогласованном seam.
-Передача автору, проверка ожидания, скелет, запрет ослаблять принятое ожидание и лимит из трёх
-подряд неудачных вызовов совпадают с полным маршрутом; локальные повторы не создают dispatch и
-состояние ledger.
+`/fast-implement` uses the same test author and the same cycle from section 5, but without the steps
+of the coordinator, the architect, and independent QA: the developer session runs the cycle itself,
+from the ticket to the push. Only the origin of the seam is different: it does not come from the
+architect brief, but is agreed with the developer before the first test. The skill names the
+requirement, the seam, the public signatures, and the existing fixtures, stops until the developer
+answers, and does not write a test on a seam that is not agreed. The handoff to the author, the
+check of the expectation, the skeleton, the ban on weakening an accepted expectation, and the limit
+of three failed calls in a row are the same as in the full route. Local retries do not create a
+dispatch or ledger state.
 
-**Включение (opt-in).** Тест-автор выключен, пока в `.harness/project.json` нет `test_paths` и
-`test_runner`. Новый проект получает их флагами `harness init --test-path` и
-`--test-runner-command`; старый проект без этих полей не меняется: `/fast-implement` идёт обычным
-`/tdd`. Чтобы включить автора в старом проекте, добавьте оба поля вручную и запустите
+**Opt-in.** The test author is off while `.harness/project.json` has no `test_paths` and
+`test_runner`. A new project gets them with the flags `harness init --test-path` and
+`--test-runner-command`. An old project without these fields does not change: `/fast-implement`
+follows the usual `/tdd`. To turn the author on in an old project, add both fields by hand and run
 `harness health`.
 
-**Защищённое окружение.** Тесты автора идут только через `.claude/hooks/run-test.sh`. Необязательные
-поля `test_runner.build` (`command` и `artifact_paths`) и `test_runner.database` (`engine`,
-`test_ids`, `command`, `ready_command`) готовят свежие артефакты и отдельную тестовую БД внутри
-песочницы; их задают флаги `--test-build-command`, `--test-artifact-path`, `--test-database-engine`,
-`--test-database-test-id`, `--test-database-command` и `--test-database-ready-command` вместе с
-`--test-runner-command`. Сборка пишет только в заранее созданные пустые каталоги артефактов, тест
-читает их без права записи, а БД запускается только для совпавших `test_ids`. Чистая доменная логика
-БД не требует.
+**Protected environment.** The tests of the author run only through `.claude/hooks/run-test.sh`.
+The optional fields `test_runner.build` (`command` and `artifact_paths`) and `test_runner.database`
+(`engine`, `test_ids`, `command`, `ready_command`) prepare fresh artifacts and a separate test
+database inside the sandbox. They are set with the flags `--test-build-command`,
+`--test-artifact-path`, `--test-database-engine`, `--test-database-test-id`,
+`--test-database-command`, and `--test-database-ready-command`, together with
+`--test-runner-command`. The build writes only into empty artifact directories created in advance,
+the test reads them without write access, and the database starts only for the matching
+`test_ids`. Pure domain logic needs no database.
 
-**Поддерживаемые версии и окружения.**
+**Supported versions and environments.**
 
-- Защищённый адаптер сейчас есть только для Claude Code; выбор Codex или другого runtime
-  сохраняется в диагностике и даёт `runtime_unsupported`. Харнесс не закрепляет минимальную версию Claude Code:
-  preflight статически проверяет agent, scoped hook и guard, а срабатывание hook в живой сессии
-  подтверждает проверка самого харнесса (`make test-author-probe`, нужны `claude` и вход).
-- Только Linux с bubblewrap 0.9.0+ и непривилегированными user-namespaces. На Windows и macOS
-  runner отвечает `isolation_unavailable`, а preflight выключает автора.
-- Checkout не должен лежать в `/tmp`, `/run`, `/dev` или `/proc`. Для сборки нужен компилятор или
-  инструмент, заданный в `test_runner.build.command`; для SQL-тестов нужны инструменты выбранной СУБД
-  (в проверках харнесса — `postgres`, `initdb`, `psql`, `pg_isready` в `PATH`). Без них отказывает
-  только соответствующий запуск, а не весь проект.
-- Для hook нужен `python3` (или `python`) в `PATH`, а проект должен быть принят в диалоге доверия
-  Claude Code.
+- Only Claude Code has a protected adapter now; a selection of Codex or another runtime stays in
+  the diagnostics and gives `runtime_unsupported`. The harness does not pin a minimum Claude Code
+  version: preflight statically checks the agent, the scoped hook, and the guard, and the own check
+  of the harness (`make test-author-probe`, which needs `claude` and a login) confirms that the hook
+  fires in a live session.
+- Linux only, with bubblewrap 0.9.0+ and unprivileged user namespaces. On Windows and macOS the
+  runner answers `isolation_unavailable`, and preflight turns the author off.
+- The checkout must not be in `/tmp`, `/run`, `/dev`, or `/proc`. The build needs a compiler or the
+  tools of `test_runner.build.command`; SQL tests need the tools of the selected DBMS (in the checks
+  of the harness: `postgres`, `initdb`, `psql`, and `pg_isready` in `PATH`). Without them only the
+  matching run refuses, not the whole project.
+- The hook needs `python3` (or `python`) in `PATH`, and the project must be accepted in the trust
+  dialog of Claude Code.
 
-**Откат на обычный маршрут.** Если preflight ответил не `{"status":"ok"}`, если hook отсутствует или
-упал либо изоляция недоступна, `/fast-implement` продолжает обычным `/tdd` в той же сессии, одной
-строкой называет разработчику санитизированную причину и не запускает незащищённого автора. Этот
-исход не добавляет шагов coordinator, architect или QA и не меняет ledger.
+**Fallback to the usual route.** If preflight answered anything other than `{"status":"ok"}`, the
+hook is missing or failed, or isolation is unavailable, `/fast-implement` continues with the usual
+`/tdd` in the same session, names the sanitized reason to the developer in one line, and does not
+start an unprotected author. This outcome adds no steps of the coordinator, the architect, or QA and
+does not change the ledger.
 
-## 7. Полный маршрут `/implement`
+## 7. The full `/implement` route
 
-Выбран вариант A задачи #971: автор работает рядом с external developer в worker worktree,
-с runtime/model/effort из его brief. Поддержанный адаптер запускает developer прямо в checkout
-из brief, поэтому runtime, scoped hook и runner относятся к тому же коду. Установите харнесс в worker checkout и включите там
-`test_paths` и `test_runner`; состояние оркестрации из основного checkout не копируется.
-Worktree доверенного репозитория отдельного диалога доверия не требует; если основной checkout
-не доверен, откройте его в Claude Code и примите диалог. Ни installer, ни developer, ни
-headless-запуск не создают решение доверия за пользователя.
+Option A of task #971 was selected: the author works beside an external developer in its worker
+worktree, with the runtime, model and effort of the developer brief. The supported adapter starts
+the developer in that checkout, so the runtime, the scoped hook and the runner refer to the same
+code. Install the harness in the worker checkout and enable `test_paths` and `test_runner` there; do
+not copy the orchestration state of the main checkout. A worktree of a trusted repository needs no
+trust dialog of its own; if the main checkout is not trusted, open it in Claude Code and accept the
+dialog. Neither the installer, the developer nor a headless launch makes that trust decision for
+you.
 
-External developer запускает общий preflight с `--repo <worker_worktree> --brief <путь brief>`.
-Для защищённого Claude-адаптера это `.claude/hooks/test-author-preflight.sh --worktree <worker_worktree> --brief <путь brief>`.
-Только точный ответ `{"status":"ok"}` разрешает следующий шаг. В утверждённом brief также должно
-быть разрешение `Agent(test-author)` или `Agent`; без него причина — `agent_tool_unavailable`.
-Новый шаблон orchestration задаёт именованное разрешение только роли developer. Существующие
-проекты с `tool_policy` включают его явно в `tool_policy.roles.developer`, сохраняя остальные
-инструменты роли. Явное ограничение проекта не расширяется автоматически, а список инструментов
-фиксируется digest до approval по ADR 0024.
+The external developer runs the common preflight with `--repo <worker_worktree> --brief <brief
+path>`. For the protected Claude adapter this is `.claude/hooks/test-author-preflight.sh --worktree
+<worker_worktree> --brief <brief path>`. Only the exact `{"status":"ok"}` enables the next step. The
+approved brief must also allow `Agent(test-author)` or `Agent`; otherwise the reason of the
+developer is `agent_tool_unavailable`. The new orchestration template gives the named permission
+only to the developer. Existing projects with a tool policy enable it explicitly in
+`tool_policy.roles.developer` and keep the other tools. Explicit restrictions are never widened
+automatically; the tool list is bound to the digest before the approval (ADR 0024).
 
-Автор пишет тест в `test_paths` worker checkout и запускает его runner. Developer передаёт один
-конкретный тестовый путь в пределах scope brief и корень логов runner из prompt адаптера:
-`<main>/.harness/.sandboxes/runs/`. В linked worktree эти логи общие; `run_id` указывает на
-`isolated-test-<run_id>/log.txt` внутри этого корня. Адаптер открывает доступ к каталогу evidence,
-а scoped guard сохраняет прежние ограничения записи и Bash. Код, тесты и Git-статус основного
-checkout не меняются; общие runtime-логи сохраняются в его игнорируемой песочнице.
+The author writes in the `test_paths` of the worker and uses its runner. The developer passes one
+specific test path in the brief scope and the log root from the adapter prompt:
+`<main>/.harness/.sandboxes/runs/`. Linked worktrees share these logs; `run_id` points to
+`isolated-test-<run_id>/log.txt` under that root. The adapter gives access to the evidence, and the
+scoped guard keeps its write and Bash limits. The code, the tests and the Git status of the main
+checkout stay unchanged; the shared runtime logs stay in its ignored sandbox.
 
-Preflight основного checkout с `--worktree` отдельного worker отвечает `checkout_mismatch`: его
-guard и runner обслуживают только основной checkout. Поэтому in-process developer вызывает автора
-через launcher своего worktree:
-`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <путь brief> --prompt-file <файл>`.
-Launcher проверяет preflight worker и запускает автора с guard и runner этого worktree; правило
-разрешения в brief то же. Любой отказ preflight и недоступность инструмента вызова автора
-сохраняют обычный TDD в worker, с указанной причиной, без blocker и новых записей ledger. Выбор
-runtime берётся из developer; отсутствие защищённого адаптера для него сохраняет обычный TDD, без
-подмены исполнителя.
+A preflight of the main checkout with the `--worktree` of a separate worker answers
+`checkout_mismatch`: its guard and runner serve only the main checkout. An in-process developer
+therefore calls the author through the launcher of its worktree:
+`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <brief path> --prompt-file <file>`.
+The launcher checks the preflight of the worker and starts the author with the guard and the runner
+of that worktree; the brief permission rule is the same. Any preflight refusal or an unavailable
+tool to call the author keeps the usual TDD in the worker, with the reason, without a blocker and
+without new ledger records. The runtime selection comes from the developer; a missing protected
+adapter for it keeps the usual TDD, without a substitute executor.
 
-В этой поставке проверены Python-тесты через unittest и pytest. Rust-тесты
-`native/harness-runtime/crates/*/tests` этим решением не поддержаны: для них не добавлены
-зоны записи и отдельный runner. Настраиваемый argv runner сам по себе не ограничен Python,
-но это не доказательство поддержки другого стека. Обычные Rust QA-команды проекта остаются
-обязательными для изменений Rust.
+This release verifies Python tests through unittest and pytest. Rust tests in
+`native/harness-runtime/crates/*/tests` are not supported by this solution: no write zones and no
+separate runner were added for them. A configurable argv is not itself restricted to Python, but it
+does not establish the support of another stack. Usual Rust QA stays required for Rust changes.
 
-## 8. Диагностика и живая проверка
+## 8. Diagnostics and live check
 
-### Как включить тест-автора
+### How to enable the test author
 
-1. Задайте `test_paths` и `test_runner` (раздел 2) и добавьте в `.harness/project.json` блок
-   `test_author` с runtime, model и effort. Если в `.harness/orchestration.json` есть план
-   developer, `harness health --fix` добавит блок из этого плана сам; существующий блок он не
-   меняет.
-2. Один раз откройте Claude Code в основном checkout репозитория и примите диалог доверия.
-   Worktree этого репозитория отдельного доверия не требуют.
-3. Запустите `harness health` и выполните шаг под каждой строкой `hooks.test_author_*` со статусом
-   warn. Строки проверяют условия по одному, поэтому повторяйте health, пока все не станут ok.
+1. Set `test_paths` and `test_runner` (section 2) and add a `test_author` block with runtime, model
+   and effort to `.harness/project.json`. When `.harness/orchestration.json` has a developer plan,
+   `harness health --fix` adds the block from that plan itself; it does not change an existing
+   block.
+2. Open Claude Code once in the main checkout of the repository and accept the trust dialog. The
+   worktrees of this repository need no trust of their own.
+3. Run `harness health` and do the step under each `hooks.test_author_*` line with the status warn.
+   The lines check the conditions one by one, so repeat health until all of them are ok.
 
-`harness health` выводит отдельную проверку `hooks.test_author`: результат preflight для
-целевого checkout или санитизированную причину отказа, выбранные runtime/model/effort и
-источник. Health использует план developer из orchestration (пометка `planned`), а при отсутствии
-плана — short-профиль проекта. Плановая готовность не заменяет выбор из утверждённого brief.
-Без opt-in проверка пропускается с причиной, недоступный необязательный автор даёт
-предупреждение и оставляет обычный маршрут рабочим. Результат preflight относится к checkout,
-для которого запущен health; worker worktree проверяет свой preflight при вызове автора.
+`harness health` reports `hooks.test_author`: the readiness of preflight or a sanitized refusal,
+and the selected runtime, model and effort with their source. Health uses the developer plan of the
+orchestration, marked `planned`, and otherwise the short profile of the project. A planned
+readiness does not replace an approved brief. Without opt-in the check is skipped with a reason; an
+unavailable optional author gives a warning and keeps the usual route working. The result of
+preflight refers to the checkout that health runs for; a worker worktree checks its own preflight
+when it calls the author.
 
-Каждое условие автора health показывает отдельной строкой, и при отказе строка печатает шаг
-исправления — команду или фрагмент конфигурации:
+Health shows each condition of the author as its own line, and a refused line prints the step that
+fixes it — a command or a fragment of the configuration:
 
-| Строка | Что проверяет | Шаг при отказе |
+| Line | What it checks | Step on a refusal |
 | --- | --- | --- |
-| `hooks.test_author_config` | блок `test_author` в `.harness/project.json` | фрагмент блока из плана developer и `harness health --fix` |
-| `hooks.test_author_root` | корень проекта по Git и совпадение с ним `CLAUDE_PROJECT_DIR`, если переменная задана | оба пути при `project_dir_mismatch` и `unset CLAUDE_PROJECT_DIR` |
-| `hooks.test_author_trust` | доверие Claude Code к этому checkout или к основному checkout, который перечисляет его в `git worktree list` | путь, который нужно доверить, и `cd <основной checkout> && claude` |
-| `hooks.test_author_guard` | agent, исполняемый guard и его проверка конфигурации | `harness update` или исправление `test_paths` и `test_runner` |
-| `hooks.test_author_runner` | исполняемый `.claude/hooks/run-test.sh` | `harness update` |
-| `hooks.test_author_probe` | probe изоляции runner | шаг по причине: bubblewrap, user namespaces, расположение checkout |
+| `hooks.test_author_config` | the `test_author` block in `.harness/project.json` | the block fragment from the developer plan and `harness health --fix` |
+| `hooks.test_author_root` | the project root by Git, and that `CLAUDE_PROJECT_DIR` matches it when the variable is set | both paths at `project_dir_mismatch` and `unset CLAUDE_PROJECT_DIR` |
+| `hooks.test_author_trust` | the trust of Claude Code in this checkout or in the main checkout that lists it in `git worktree list` | the path to trust and `cd <main checkout> && claude` |
+| `hooks.test_author_guard` | the agent, the executable guard and its check of the configuration | `harness update` or a fix of `test_paths` and `test_runner` |
+| `hooks.test_author_runner` | the executable `.claude/hooks/run-test.sh` | `harness update` |
+| `hooks.test_author_probe` | the isolation probe of the runner | the step for the reason: bubblewrap, user namespaces, location of the checkout |
 
-Guard и probe запускают скрипты проекта, поэтому до доверия их строки пропускаются.
+Guard and probe run scripts of the project, so their lines are skipped before the trust.
 
-Health не запускает Claude, выбранный тест, сборку или БД и не меняет доверие. Probe изоляции
-создаёт и удаляет временную песочницу в общем `runs/`. Статический `preflight: ok` не доказывает,
-что scoped hook сработает в живой сессии. Это проверяет `make test-author-probe`: нужны вход
-в Claude Code и квота. Проба берёт runtime/model/effort из плана developer исходного проекта, без отдельной дешёвой
-модели. Если адаптер выбранного runtime недоступен, проба завершается явным отказом. Команда
-для поддержанного адаптера подтверждает guard, поведенческий Red и вызов автора внешним
-developer в worker worktree; fixture developer затем проверяет Green неизменного теста.
+Health runs no Claude process, no selected test, no build and no database, and changes no trust.
+The isolation probe creates and removes a temporary sandbox under the shared `runs/`. A static
+`preflight: ok` does not prove that the scoped hook fires live. `make test-author-probe` checks
+that: it needs a Claude Code login and quota. It uses the runtime, model and effort of the
+developer plan of the source project, not a separate model of its own. An unsupported runtime
+adapter fails explicitly. The supported probe confirms the guard, a behavior Red and an external
+developer that calls the author in a worker worktree; a fixture developer then proves Green of the
+unchanged test.
 
-Каждый вызов CLI оставляет санитизированный `test-author-probe-*.json` в общем
-`.harness/.sandboxes/reports/`: checkout, этап, код выхода, время, фактические usage/стоимость,
-которые вернул runtime, и отдельно лимит. Отсутствующая метрика остаётся `null`; лимит не
-считается расходом. Эти файлы сохраняются после удаления clean-room проектов, полные
-транскрипты и credentials в них не попадают. Точную долю подписочной квоты runtime может
-не сообщать — она не вычисляется из USD.
+Each CLI call leaves a sanitized `test-author-probe-*.json` in the shared
+`.harness/.sandboxes/reports/`: checkout, stage, exit code, time, usage and cost reported by the
+runtime, and a separate limit. Unknown metrics stay `null`; a limit is not usage. The reports
+survive the removal of the clean-room project, without full transcripts or credentials. The share
+of a subscription quota can be absent from the runtime data and is never calculated from USD.

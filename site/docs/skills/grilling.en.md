@@ -24,7 +24,7 @@ description: Relentlessly interview the user about a plan, decision, or idea to 
 code or architecture, if project memory is enabled, run
 `harness memory search . "<goal, decision, and module>"` once for prior decisions.
 Repeat the search only when a newly settled decision changes the subject. Without an external CLI, use
-the installed entry point from `.harness/docs/project-memory.md`. That contract describes the
+the installed entry point from `.harness/instructions/project-memory.md`. That contract describes the
 configuration, the search and pointer statuses, source validation, and how to continue without memory.
 Treat hits as candidate precedents, and keep the Live Artifact's explicit path-approval rule. In an
 orchestration dispatch, use the supplied Context Package and escalate missing evidence instead of

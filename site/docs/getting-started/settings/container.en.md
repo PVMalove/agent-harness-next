@@ -251,7 +251,7 @@ checkout in `operations.qa.filesystem` with `"variable": "CARGO_HOME"` and creat
 first (`mkdir -p`). Every QA run sets `CARGO_TARGET_DIR` inside its own run root itself: the cargo
 stages of one run reuse the built dependencies, and the directory is removed with the run. The
 example and the measurement procedure are in the "Caches" section of
-`harness/docs/container-executor.md`. A container's HOME does not persist between runs.
+`harness/project/instructions/container-executor.md`. A container's HOME does not persist between runs.
 Host `~/.gitconfig` is not mounted; configure Git identity in the repository or through allowed
 variable names. A worker gets writable artifacts and read-only shared storage, without the
 runtime socket.

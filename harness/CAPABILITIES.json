@@ -72,7 +72,7 @@
       "configuration.py",
       "storage.py",
       "repo_map",
-      "docs/project-memory.md",
+      "project/instructions/project-memory.md",
       "token_estimator.py",
       "errors.py",
       "json_types.py",
@@ -92,7 +92,7 @@
       "adapters",
       "context_builder",
       "container",
-      "docs/container-executor.md"
+      "project/instructions/container-executor.md"
     ]
   }
 }

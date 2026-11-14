@@ -133,7 +133,7 @@ def _prompt(args: argparse.Namespace, brief: JsonObject) -> str:
     )
     reason = brief.get("retry_reason")
     return f"""You are the {brief['role']} worker for dispatch {brief['dispatch_id']}.
-Read {Path(args.repo).resolve() / '.harness/docs/technical-english.md'} before English coordination.
+Read {Path(args.repo).resolve() / '.harness/instructions/technical-english.md'} before English coordination.
 Read {Path(args.repo).resolve() / '.harness/orchestration/roles/_common.md'} and the role manifest in that directory.
 Immutable brief: {Path(args.brief).resolve()}
 Report staging path: {brief['report_staging_path']}

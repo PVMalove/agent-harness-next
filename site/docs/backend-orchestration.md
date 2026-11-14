@@ -39,7 +39,7 @@ Python читает и меняет их через протокол runtime. П
 
 ## Язык и доказательства {#language-evidence}
 
-Перед первым английским handoff прочитайте [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/technical-english.md).
+Перед первым английским handoff прочитайте [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/technical-english.md).
 Передачу между ролями, checkpoint и state evidence роли пишут на английском. Completion report для
 coordinator роль пишет на русском с `"report_language": "ru"`. Команды, пути и SHA не переводите.
 

@@ -67,16 +67,16 @@ def run(ctx: SimpleNamespace) -> None:
     old_claude = "# Local Claude instructions\n\nRun the focused checks first.\n"
     (foundation / "AGENTS.md").write_text(old_agents, encoding="utf-8")
     (foundation / "CLAUDE.md").write_text(old_claude, encoding="utf-8")
-    contract = foundation / ".harness/docs/technical-english.md"
+    contract = foundation / ".harness/instructions/technical-english.md"
     contract.unlink()
     old_lock_path = foundation / ".harness/harness.lock"
     old_lock = json.loads(old_lock_path.read_text(encoding="utf-8"))
-    old_lock["files"].pop(".harness/docs/technical-english.md")
+    old_lock["files"].pop(".harness/instructions/technical-english.md")
     old_lock_path.write_text(json.dumps(old_lock), encoding="utf-8")
     update_output = capture(HARNESS + ["update", str(foundation)])
     if (
         contract.read_bytes()
-        != (ROOT / "harness/docs/technical-english.md").read_bytes()
+        != (ROOT / "harness/project/instructions/technical-english.md").read_bytes()
     ):
         sys.exit("standard update did not deliver the managed contract")
     for name, original in (("AGENTS.md", old_agents), ("CLAUDE.md", old_claude)):
@@ -118,7 +118,7 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("diff proposed a duplicate for an existing entry-point transition")
     # A passive reference needs an explicit obligation, without a second link.
     passive = (
-        old_claude + "\nSee [Technical English](.harness/docs/technical-english.md).\n"
+        old_claude + "\nSee [Technical English](.harness/instructions/technical-english.md).\n"
     )
     (foundation / "CLAUDE.md").write_text(passive, encoding="utf-8")
     proposal_output = capture(HARNESS + ["update", str(foundation)])
@@ -141,7 +141,7 @@ def run(ctx: SimpleNamespace) -> None:
     for title in ('"Shared contract"', "'Shared contract'", "(Shared contract)"):
         titled = (
             old_agents + "\nBefore the first English handoff, agents must read "
-            f"[Technical English](.harness/docs/technical-english.md {title}).\n"
+            f"[Technical English](.harness/instructions/technical-english.md {title}).\n"
         )
         (foundation / "AGENTS.md").write_text(titled, encoding="utf-8")
         (foundation / "CLAUDE.md").write_text(
@@ -174,7 +174,7 @@ def run(ctx: SimpleNamespace) -> None:
     for fence in ("```", "~~~"):
         fenced = (
             old_agents
-            + "\nSee [Technical English](.harness/docs/technical-english.md).\n\n"
+            + "\nSee [Technical English](.harness/instructions/technical-english.md).\n\n"
             + fence
             + "\nBefore the first English handoff, agents must read the contract linked above.\n"
             + fence
@@ -362,13 +362,16 @@ def run(ctx: SimpleNamespace) -> None:
     for destination, expected in payload.items():
         if (pv_project / destination).read_bytes() != expected:
             sys.exit(f"installed package differs from selected source: {destination}")
-    templates = harness_cli.PROJECT_TEMPLATE_DIR / "docs-agents"
+    # The managed instructions of the same template folder go to `.harness/instructions/`.
+    seed_guides = harness_cli.seed_sources(
+        harness_cli.PROJECT_TEMPLATE_DIR, "instructions", frozenset({".md"})
+    )
     installed_docs = pv_project / "docs" / "agents"
     if {path.name for path in installed_docs.glob("*.md")} != {
-        path.name for path in templates.glob("*.md")
+        path.name for path in seed_guides
     }:
         sys.exit("target docs/agents did not come only from project templates")
-    for source in templates.glob("*.md"):
+    for source in seed_guides:
         if (installed_docs / source.name).read_bytes() != source.read_bytes():
             sys.exit(f"installed guide differs from project template: {source.name}")
     fill_agents(pv_project)
@@ -419,11 +422,11 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("JSON diff differs from the visible update proposal")
     apply_patch(patch, pv_project)
     assert_contract_link(
-        agent, pv_project / ".harness/docs/technical-english.md", "installed agent seed"
+        agent, pv_project / ".harness/instructions/technical-english.md", "installed agent seed"
     )
     assert_contract_link(
         test_author,
-        pv_project / ".harness/docs/technical-english.md",
+        pv_project / ".harness/instructions/technical-english.md",
         "installed test-author seed",
     )
     patched = agent.read_bytes()
@@ -644,29 +647,29 @@ def run(ctx: SimpleNamespace) -> None:
             "engineering-suite unexpectedly changed a skill it neither overrides nor adds"
         )
     if not filecmp.cmp(
-        ROOT / "harness" / "docs" / "project-memory.md",
-        pv_project / ".harness" / "docs" / "project-memory.md",
+        ROOT / "harness" / "project" / "instructions" / "project-memory.md",
+        pv_project / ".harness" / "instructions" / "project-memory.md",
         shallow=False,
     ):
         sys.exit("engineering-suite did not install the interactive memory contract")
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        if (pv_project / ".harness" / "docs" / human_guide).exists():
+        if (pv_project / ".harness" / "instructions" / human_guide).exists():
             sys.exit(f"engineering-suite installed a developer guide: {human_guide}")
     # An older installation delivered the guides; update must retire them without touching others.
     stale_lock_path = pv_project / ".harness" / "harness.lock"
     stale_lock = json.loads(stale_lock_path.read_text(encoding="utf-8"))
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        stale = pv_project / ".harness" / "docs" / human_guide
+        stale = pv_project / ".harness" / "instructions" / human_guide
         stale.write_text("# legacy copy\n", encoding="utf-8")
-        stale_lock["files"][f".harness/docs/{human_guide}"] = hashlib.sha256(
+        stale_lock["files"][f".harness/instructions/{human_guide}"] = hashlib.sha256(
             stale.read_bytes()
         ).hexdigest()
     stale_lock_path.write_text(json.dumps(stale_lock), encoding="utf-8")
     capture(HARNESS + ["update", str(pv_project)])
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        if (pv_project / ".harness" / "docs" / human_guide).exists():
+        if (pv_project / ".harness" / "instructions" / human_guide).exists():
             sys.exit(f"update kept a retired developer guide: {human_guide}")
-    if not (pv_project / ".harness" / "docs" / "project-memory.md").is_file():
+    if not (pv_project / ".harness" / "instructions" / "project-memory.md").is_file():
         sys.exit("update removed the interactive memory contract")
     qa_gate_skill = pv_project / ".harness" / "skills" / "qa-gate" / "SKILL.md"
     if not qa_gate_skill.is_file():

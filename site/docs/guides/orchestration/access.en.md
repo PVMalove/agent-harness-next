@@ -70,8 +70,8 @@ The value `extensions.runtime_access: "docker"` selects the executor that ships 
 Podman container, and, when `access_policy.operations.qa.container` is set, also each QA command. The
 executor contract is described in ADR 0025 and ADR 0022 (the "Implementation decisions" sections); this section
 describes the shipped behavior. The English-language guide
-[`harness/docs/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/container-executor.md), which
-`backend-orchestration` installs as `.harness/docs/container-executor.md`, gives the step-by-step target-project setup: prerequisites, building
+[`harness/project/instructions/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/container-executor.md), which
+`backend-orchestration` installs as `.harness/instructions/container-executor.md`, gives the step-by-step target-project setup: prerequisites, building
 images, caches, the allowlist, blockers, cleanup, and an example project adapter. Project implementations of
 `module:factory` work as before, and a host process cannot register another implementation
 under the name `docker`.
