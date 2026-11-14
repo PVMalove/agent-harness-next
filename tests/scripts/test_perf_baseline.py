@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import closing
+
 import contextlib
 import io
 import json
@@ -577,7 +579,7 @@ class StoreEpochTests(_StubCheckout, unittest.TestCase):
         import sqlite3
 
         state.mkdir(parents=True)
-        with sqlite3.connect(state / "runtime.db") as db:
+        with closing(sqlite3.connect(state / "runtime.db")) as db, db:
             db.execute("CREATE TABLE marker (value TEXT)")
             db.execute("INSERT INTO marker VALUES ('store')")
         self._write(state / "ledger.json", json.dumps({"version": 4, "generation": "g"}))
@@ -606,7 +608,7 @@ class StoreEpochTests(_StubCheckout, unittest.TestCase):
 
             baseline.copy_store(source, target)
 
-            with sqlite3.connect(target / "runtime.db") as db:
+            with closing(sqlite3.connect(target / "runtime.db")) as db, db:
                 copied = db.execute("SELECT value FROM marker").fetchall()
             pointer = json.loads((target / "ledger.json").read_text(encoding="utf-8"))
             authority = (target / "AUTHORITY.json").is_file()

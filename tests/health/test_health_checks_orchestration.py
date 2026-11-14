@@ -4,6 +4,8 @@ capability exactly like `files.check_orchestration_config` already is."""
 
 from __future__ import annotations
 
+import shlex
+
 import hashlib
 import json
 import os
@@ -169,7 +171,7 @@ def test_ledger_summary_leads_a_project_without_state_to_runtime_init(
     assert result.fix is not None
     assert result.fix.command is not None
     assert result.fix.command.startswith(
-        f"harness-runtime init --repo {tmp_path.resolve()} --approved-by"
+        f"harness-runtime init --repo {shlex.quote(str(tmp_path.resolve()))} --approved-by"
     )
     assert not (tmp_path / STATE_REL).exists()
 

@@ -83,6 +83,8 @@ and 0010. Recall@1/@3/@5 stay at 0.95, noise stays at 0.61 and the gate passes; 
 and noise are unchanged, and only the ranked top-5 paths of queries 345, 394, 422, 423 and 459 change.
 `fixtures/initial-corpus.json` now also keeps the original bytes of ADR 0004, 0009 and 0010, so
 `baseline_fts5_initial.json` stays unchanged.
+Version 11 (#1150) re-evaluates the changed `CONTEXT.md` and ADR 0005: all query results,
+recall (0.95), noise (0.61), and the passing gate remain unchanged.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 

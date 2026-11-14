@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -30,6 +32,7 @@ def run(ctx: SimpleNamespace) -> None:
     # Zero project configuration is a supported default: every batch states its own write scope and
     # the invoking session supplies the role runtime, so an in-process pipeline needs no assignment plan.
     zero_config_state = test_root / "zero-config-state"
+    seed_file_ledger(zero_config_state)
     saved_config = orchestration_config.read_text(encoding="utf-8")
     # A config that declares no assignments states nothing, so it has to mean the same as no file:
     # otherwise a project whose config was emptied takes the configured path, finds no assignment,
@@ -50,6 +53,7 @@ def run(ctx: SimpleNamespace) -> None:
         check=True,
     )
     sync_origin_base()
+    seed_file_ledger(test_root / "empty-seed-state")
     seeded = coordinator_run(
         "--state-dir",
         str(test_root / "empty-seed-state"),

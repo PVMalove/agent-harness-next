@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import hashlib
 import sys
@@ -117,6 +119,7 @@ def run(ctx: SimpleNamespace) -> None:
             datetime.now(UTC).isoformat(),
         ]
 
+    seed_file_ledger(project / ".harness/orchestration/state")
     batch = command(
         "batch",
         "create",

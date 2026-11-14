@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -29,6 +31,7 @@ def run(ctx: SimpleNamespace) -> None:
     # The long pipeline reviews every candidate.  Risk assessment decides when review is *mandatory*,
     # never when it is permitted, so a low-risk candidate can still be sent to code-review.
     low_risk_state = test_root / "low-risk-state"
+    seed_file_ledger(low_risk_state)
     run_step(
         ["git", "branch", "feature/issue-904-low-risk"],
         cwd=orchestration_project,

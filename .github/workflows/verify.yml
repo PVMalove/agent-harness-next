@@ -375,6 +375,7 @@ jobs:
         name: Configure Git for the test run
         run: |
           git config --global core.autocrlf false
+          git config --global core.longpaths true
           git config --global core.fscache true
           git config --global core.preloadindex true
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

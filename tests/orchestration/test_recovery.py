@@ -1504,9 +1504,12 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(before, self._ledger_bytes())
 
     def _ledger_bytes(self) -> dict[str, bytes]:
+        # SQLite WAL and shared-memory bytes can change during reads. Compare the actual
+        # records and artifacts instead, keeping the 1.x file-ledger check byte-for-byte.
+        root = self._store_records() if self._store_records is not None else self.state_dir
         return {
-            str(p.relative_to(self.state_dir)): p.read_bytes()
-            for p in self.state_dir.rglob("*")
+            str(p.relative_to(root)): p.read_bytes()
+            for p in root.rglob("*")
             if p.is_file()
         }
 
