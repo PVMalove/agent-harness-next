@@ -7,12 +7,13 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use platform_ffi::{
     PipeConnection, PipeListener, create_private_file, current_user_sid, process_user_sid,
 };
+use state::mutex::lock_unpoisoned;
 
 use crate::paths::RuntimePaths;
 use crate::peer::{PeerId, same_user};
@@ -100,11 +101,7 @@ impl Server {
     /// Tests use another SID to see the refusal of a foreign peer on a real pipe.
     pub fn serve_until_as(&self, stop: &AtomicBool, expected: PeerId) -> io::Result<()> {
         while !stop.load(Ordering::Relaxed) && !self.shutdown.load(Ordering::Relaxed) {
-            let accepted = self
-                .listener
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .accept(ACCEPT_POLL)?;
+            let accepted = lock_unpoisoned(&self.listener).accept(ACCEPT_POLL)?;
             if let Some(connection) = accepted {
                 let shared = Arc::clone(&self.shared);
                 let shutdown = Arc::clone(&self.shutdown);

@@ -16,7 +16,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
+use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 use std::thread;
 use std::time::Duration;
 
@@ -78,9 +78,7 @@ pub(crate) struct Inner {
     pub(crate) held: Mutex<HashMap<String, os::Launched>>,
 }
 
-pub(crate) fn guard<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
+pub(crate) use state::mutex::lock_unpoisoned as guard;
 
 fn now_ms() -> u64 {
     state::time::now_millis()

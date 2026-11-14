@@ -25,6 +25,7 @@ pub mod lease;
 pub mod legacy;
 pub mod lock;
 pub mod migrate;
+pub mod mutex;
 pub mod parity;
 pub mod platform;
 pub mod policy;
