@@ -127,6 +127,9 @@ def reset_ledger(args: argparse.Namespace) -> JsonObject:
     root = _state_root(args, repo)
     _refuse_in_store_epoch(root, "reset")
     ledger = LifecycleLedger(root)
+    with _ledger_errors():
+        # Before the lock, which would create the state directory.
+        ledger.refuse_new_project(repo)
     with _ledger_lock(ledger), _ledger_errors():
         return ledger.reset(args.confirm)
 

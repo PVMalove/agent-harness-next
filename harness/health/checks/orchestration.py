@@ -216,11 +216,17 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
             fix=_migration_fix(context),
         )
     if state.records_root is None:
+        from harness.orchestration.runtime_client import init_command
+
         return CheckResult(
             id=check_id,
             group="orchestration",
-            status="ok",
-            message="леджер оркестрации ещё не инициализирован (батчей нет)",
+            status="warn",
+            message="у проекта ещё нет runtime store оркестрации",
+            fix=Fix(
+                text="создайте runtime store: команду выполняет человек со своим approval",
+                command=init_command(context.repo),
+            ),
         )
     counts: dict[str, int] = {}
     for batch in state.batches:

@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable, Mapping
@@ -24,13 +25,18 @@ from harness.orchestration.ledger.lifecycle import (
     STORE_LEDGER_VERSION,
     JsonObject,
     JsonValue,
-    LifecycleLedger,
+    _canonical,
 )
 from harness.orchestration.runtime_client import (
     RuntimeClient,
     RuntimeClientError,
     RuntimeReply,
     serve_command,
+)
+from tests.orchestration.runtime_store_support import (
+    ServingRuntime,
+    serve_new_project,
+    store_call,
 )
 
 _NO_CAPABILITY_LOCK: dict[str, object] = {"capabilities": []}
@@ -56,39 +62,76 @@ def _init_repo(path: Path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=path, check=True)
 
 
-def _ledger(repo: Path) -> LifecycleLedger:
-    ledger = LifecycleLedger(repo / STATE_REL)
-    ledger.ensure()
-    return ledger
+class StoreLedger:
+    """The runtime store of a new project (ADR 0036) and the records a check reads, written
+    straight through ``state.write``: the checks summarise batches and dispatches, whatever
+    command wrote them."""
+
+    def __init__(self, repo: Path, runtime: ServingRuntime) -> None:
+        self.repo = repo
+        self.runtime = runtime
+
+    def write(
+        self, path: str, record: JsonObject, *, batch_id: str | None = None
+    ) -> None:
+        mutation: JsonObject = {
+            "op": "create",
+            "path": path,
+            "content": _canonical(record),
+        }
+        store_call(
+            self.repo,
+            self.runtime,
+            "state.write",
+            {"mutations": [mutation]},
+            batch_id=batch_id,
+        )
+
+
+@pytest.fixture
+def ledger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[StoreLedger]:
+    """``tmp_path`` as a git repository with a served runtime store; health reaches the runtime
+    through ``XDG_RUNTIME_DIR``."""
+    _init_repo(tmp_path)
+    runtime = serve_new_project(tmp_path)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", runtime.environ["XDG_RUNTIME_DIR"])
+    try:
+        yield StoreLedger(tmp_path, runtime)
+    finally:
+        runtime.stop()
 
 
 def _write_batch(
-    ledger: LifecycleLedger,
+    ledger: StoreLedger,
     batch_id: str,
     state: str,
     dispatches: list[JsonObject] | None = None,
+    **fields: JsonValue,
 ) -> None:
-    generation = ledger.records_root()
     dispatch_entries: list[JsonValue] = list(dispatches or [])
     record: JsonObject = {
         "batch_id": batch_id,
         "state": state,
         "coordinator_approval": None,
         "dispatches": dispatch_entries,
+        **fields,
     }
-    ledger.write_immutable(
-        generation / "plans" / f"{batch_id}.json", {"batch_id": batch_id}
-    )
-    ledger.write_immutable(generation / "batches" / f"{batch_id}.json", record)
+    ledger.write(f"plans/{batch_id}.json", {"batch_id": batch_id}, batch_id=batch_id)
+    ledger.write(f"batches/{batch_id}.json", record, batch_id=batch_id)
+    # The store keeps a dispatch record for every dispatch a batch names: a status record of
+    # the dispatch refers to it.
+    for entry in dispatches or []:
+        ledger.write(
+            f"dispatches/{entry['dispatch_id']}.json",
+            {**entry, "batch_id": batch_id},
+            batch_id=batch_id,
+        )
 
 
 def _write_dispatch_status(
-    ledger: LifecycleLedger, dispatch_id: str, status: JsonObject
+    ledger: StoreLedger, dispatch_id: str, status: JsonObject
 ) -> None:
-    generation = ledger.records_root()
-    ledger.write_immutable(
-        generation / "dispatch-status" / f"{dispatch_id}.json", status
-    )
+    ledger.write(f"dispatch-status/{dispatch_id}.json", status)
 
 
 # --- capability gating (DoD 1) ----------------------------------------------------------------
@@ -116,10 +159,17 @@ def test_skips_without_a_lock_at_all(
 # --- orchestration.ledger_summary (DoD 2, 3) --------------------------------------------------
 
 
-def test_ledger_summary_ok_with_no_orchestration_data_yet(tmp_path: Path) -> None:
+def test_ledger_summary_leads_a_project_without_state_to_runtime_init(
+    tmp_path: Path,
+) -> None:
     result = checks.check_ledger_summary(_context(tmp_path, lock=_ORCHESTRATION_LOCK))
 
-    assert result.status == "ok"
+    assert result.status == "warn"
+    assert result.fix is not None
+    assert result.fix.command is not None
+    assert result.fix.command.startswith(
+        f"harness-runtime init --repo {tmp_path.resolve()} --approved-by"
+    )
     assert not (tmp_path / STATE_REL).exists()
 
 
@@ -196,8 +246,8 @@ def test_ledger_summary_warns_on_a_stale_schema_version(tmp_path: Path) -> None:
 
 def test_ledger_summary_reports_generation_schema_and_batch_counts(
     tmp_path: Path,
+    ledger: StoreLedger,
 ) -> None:
-    ledger = _ledger(tmp_path)
     _write_batch(ledger, "batch-a", "completed")
     _write_batch(ledger, "batch-b", "abandoned")
     _write_batch(ledger, "batch-c", "active")
@@ -213,19 +263,23 @@ def test_ledger_summary_reports_generation_schema_and_batch_counts(
 
 def test_unfinished_batches_excludes_legacy_operator_abandonment(
     tmp_path: Path,
+    ledger: StoreLedger,
 ) -> None:
-    ledger = _ledger(tmp_path)
-    _write_batch(ledger, "batch-abandoned", "failed")
-    path = ledger.records_root() / "batches/batch-abandoned.json"
-    batch = json.loads(path.read_text(encoding="utf-8"))
-    approval = {"approved_by": "Owner", "approved_at": "2026-10-01T00:00:00+00:00"}
-    batch["abandoned"] = {
-        **approval,
-        "reason": "The owner stopped this attempt.",
-        "abandoned_at": approval["approved_at"],
+    approval: JsonObject = {
+        "approved_by": "Owner",
+        "approved_at": "2026-10-01T00:00:00+00:00",
     }
-    batch["coordinator_decisions"] = [{"decision": "abandon", **approval}]
-    path.write_text(json.dumps(batch), encoding="utf-8")
+    _write_batch(
+        ledger,
+        "batch-abandoned",
+        "failed",
+        abandoned={
+            **approval,
+            "reason": "The owner stopped this attempt.",
+            "abandoned_at": approval["approved_at"],
+        },
+        coordinator_decisions=[{"decision": "abandon", **approval}],
+    )
     _write_batch(ledger, "batch-retryable", "failed")
 
     result = checks.check_unfinished_batches(
@@ -242,8 +296,8 @@ def test_unfinished_batches_excludes_legacy_operator_abandonment(
 
 def test_blocked_batches_warns_and_names_only_the_blocked_batch(
     tmp_path: Path,
+    ledger: StoreLedger,
 ) -> None:
-    ledger = _ledger(tmp_path)
     _write_batch(ledger, "batch-blocked", "blocked")
     _write_batch(ledger, "batch-active", "active")
 
@@ -254,8 +308,9 @@ def test_blocked_batches_warns_and_names_only_the_blocked_batch(
     assert "batch-active" not in result.message
 
 
-def test_blocked_batches_ok_when_none_are_blocked(tmp_path: Path) -> None:
-    ledger = _ledger(tmp_path)
+def test_blocked_batches_ok_when_none_are_blocked(
+    tmp_path: Path, ledger: StoreLedger
+) -> None:
     _write_batch(ledger, "batch-active", "active")
 
     result = checks.check_blocked_batches(_context(tmp_path, lock=_ORCHESTRATION_LOCK))
@@ -276,8 +331,9 @@ def test_blocked_batches_fails_on_an_unreadable_ledger(tmp_path: Path) -> None:
 # --- orchestration.stale_dispatches (DoD 3, architect risk #3) ---------------------------------
 
 
-def test_stale_dispatches_warns_past_the_threshold(tmp_path: Path) -> None:
-    ledger = _ledger(tmp_path)
+def test_stale_dispatches_warns_past_the_threshold(
+    tmp_path: Path, ledger: StoreLedger
+) -> None:
     _write_batch(
         ledger,
         "batch-live",
@@ -300,8 +356,9 @@ def test_stale_dispatches_warns_past_the_threshold(tmp_path: Path) -> None:
     assert "dispatch-stale" in result.message
 
 
-def test_stale_dispatches_ok_when_heartbeat_is_recent(tmp_path: Path) -> None:
-    ledger = _ledger(tmp_path)
+def test_stale_dispatches_ok_when_heartbeat_is_recent(
+    tmp_path: Path, ledger: StoreLedger
+) -> None:
     recent = datetime.now(UTC).isoformat()
     _write_batch(
         ledger,
@@ -322,8 +379,8 @@ def test_stale_dispatches_ok_when_heartbeat_is_recent(tmp_path: Path) -> None:
 
 def test_stale_dispatches_ignores_dispatches_of_terminal_batches(
     tmp_path: Path,
+    ledger: StoreLedger,
 ) -> None:
-    ledger = _ledger(tmp_path)
     _write_batch(
         ledger,
         "batch-done",
@@ -349,10 +406,10 @@ def test_stale_dispatches_ignores_dispatches_of_terminal_batches(
 
 def test_stale_dispatches_uses_the_project_configured_threshold_over_the_default(
     tmp_path: Path,
+    ledger: StoreLedger,
 ) -> None:
     """Architect risk #3: the threshold must actually come from
     .harness/orchestration.json when set, not silently fall back to the built-in default."""
-    ledger = _ledger(tmp_path)
     ten_minutes_ago = (datetime.now(UTC) - timedelta(seconds=600)).isoformat()
     _write_batch(
         ledger,
@@ -475,23 +532,11 @@ def test_orphaned_worktrees_ok_when_registered_by_git_worktree_list(
 
 def test_orphaned_worktrees_ok_when_referenced_by_an_active_batch(
     tmp_path: Path,
+    ledger: StoreLedger,
 ) -> None:
-    _init_repo(tmp_path)
-    ledger = _ledger(tmp_path)
     worktree_path = tmp_path / ".harness" / ".sandboxes" / "worktrees" / "active-1"
     worktree_path.mkdir(parents=True)
-    generation = ledger.records_root()
-    record: JsonObject = {
-        "batch_id": "batch-active",
-        "state": "active",
-        "coordinator_approval": None,
-        "dispatches": [],
-        "worktree": str(worktree_path),
-    }
-    ledger.write_immutable(
-        generation / "plans" / "batch-active.json", {"batch_id": "batch-active"}
-    )
-    ledger.write_immutable(generation / "batches" / "batch-active.json", record)
+    _write_batch(ledger, "batch-active", "active", worktree=str(worktree_path))
 
     result = checks.check_orphaned_worktrees(
         _context(tmp_path, lock=_ORCHESTRATION_LOCK)

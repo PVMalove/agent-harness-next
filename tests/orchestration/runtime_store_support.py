@@ -3,6 +3,7 @@ and the real ``harness-runtime`` binary."""
 
 from __future__ import annotations
 
+import atexit
 import collections
 import contextlib
 import hashlib
@@ -17,10 +18,12 @@ import sys
 import tempfile
 import threading
 import time
+import unittest
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from unittest import mock
 
 import pytest
 
@@ -33,12 +36,14 @@ from harness.orchestration.ledger.lifecycle import (
     DispatchStatusRecord,
     JsonObject,
     JsonValue,
+    RECORD_DIRECTORIES,
     LifecycleLedger,
     PlanRecord,
     _canonical,
 )
 
 from .fake_clock import SITE, FakeClock
+from .legacy_state import seed_file_ledger
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE_REL = Path(".harness/orchestration/state")
@@ -111,8 +116,7 @@ def build_state(
 ) -> LifecycleLedger:
     """A repository whose state directory a 1.x installation wrote: one batch of two dispatches,
     the first reported."""
-    ledger = LifecycleLedger(repo / STATE_REL)
-    ledger.ensure()
+    ledger = seed_file_ledger(repo / STATE_REL)
     generation = ledger.records_root()
     first, second = DISPATCH_IDS
     dispatches = [
@@ -422,16 +426,21 @@ def add_coordinator_batch(
     ticket: str,
     dispatch: bool = True,
     allowed_paths: tuple[str, ...] = ("**",),
+    seed: bool = True,
 ) -> tuple[dict[str, str], JsonObject]:
     """A planned and approved batch of the file ledger of ``repo`` with one approved architect
     dispatch, in its own issue branch and ``worktree``: the ids and the brief. Without
-    ``dispatch`` the batch stays planned, and the ids and the brief name no dispatch."""
+    ``dispatch`` the batch stays planned, and the ids and the brief name no dispatch. A repository
+    without state gets an empty file ledger first, unless ``seed`` is false."""
     import argparse
 
     from harness.orchestration import coordinator
 
     branch = f"feature/issue-{ticket.removeprefix('#')}-seam"
     _git(repo, "worktree", "add", "-b", branch, str(worktree), "master")
+    if seed and LifecycleLedger(repo / STATE_REL).is_new_project():
+        # The file ledger of installation 1.x, the source of a migration (ADR 0036).
+        seed_file_ledger(repo / STATE_REL)
 
     def args(**values: object) -> argparse.Namespace:
         return argparse.Namespace(repo=str(repo), state_dir=None, **values)
@@ -695,6 +704,147 @@ class ServingRuntime:
                     pass
         if self.host_runtime_dir is None:
             shutil.rmtree(self.xdg, ignore_errors=True)
+
+
+# -- the runtime store of a new project (ADR 0036) ----------------------------------------------------
+
+_STORE_TEMPLATE: list[Path] = []
+
+
+def store_template() -> Path:
+    """The state directory of an empty runtime store, made once per test process by
+    ``harness-runtime init``: a test copies it instead of paying for the init."""
+    if not _STORE_TEMPLATE:
+        base = Path(tempfile.mkdtemp(prefix="store-template-"))
+        atexit.register(shutil.rmtree, base, True)
+        result = subprocess.run(
+            [str(runtime_binary()), "init", "--repo", str(base), *MIGRATE_APPROVAL],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        _STORE_TEMPLATE.append(base / STATE_REL)
+    return _STORE_TEMPLATE[0]
+
+
+def new_project_store(repo: Path) -> Path:
+    """Give ``repo``, a repository without orchestration state, the runtime store
+    ``harness-runtime init`` would create: a copy of ``store_template``. Returns the state
+    directory."""
+    state = repo / STATE_REL
+    state.mkdir(parents=True, exist_ok=True)
+    # A project ignores its state directory; `info/exclude` keeps the committed tree unchanged.
+    exclude = Path(_git(repo, "rev-parse", "--git-path", "info/exclude"))
+    exclude = exclude if exclude.is_absolute() else repo / exclude
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a", encoding="utf-8") as handle:
+        handle.write(f"/{STATE_REL.as_posix()}/\n")
+    for name in ("runtime.db", "AUTHORITY.json", "ledger.json"):
+        shutil.copyfile(store_template() / name, state / name)
+    return state
+
+
+def serve_new_project(repo: Path) -> ServingRuntime:
+    """``new_project_store`` and a runtime serving it; the caller stops it."""
+    new_project_store(repo)
+    return ServingRuntime(repo)
+
+
+def serve_new_project_for(
+    case: unittest.TestCase,
+    repo: Path,
+    *,
+    register: Callable[[Callable[[], object]], object] | None = None,
+) -> ServingRuntime:
+    """``serve_new_project`` for a ``unittest`` case: the runtime stops at its cleanup, and the
+    in-process coordinator of the case reaches it through ``XDG_RUNTIME_DIR``. ``register`` takes
+    the cleanups instead of ``case.addCleanup``."""
+    cleanup = register or case.addCleanup
+    runtime = serve_new_project(repo)
+    cleanup(runtime.stop)
+    patch = mock.patch.dict(os.environ, runtime.environ)
+    patch.start()
+    cleanup(patch.stop)
+    return runtime
+
+
+def bind_store_view_for(
+    case: unittest.TestCase,
+    repo: Path,
+    *,
+    register: Callable[[Callable[[], object]], object] | None = None,
+) -> StoreRecords:
+    """Bind one read view of the store of ``repo`` for the whole ``unittest`` case, as the view of
+    one command (``command_state``) is bound: every coordinator block refreshes it, and the record
+    readers of the coordinator answer from it. Returns the ``StoreRecords`` of the case.
+    ``register`` takes the cleanups instead of ``case.addCleanup``."""
+    cleanup = register or case.addCleanup
+    from harness.orchestration.core import state_view
+    from harness.orchestration.ledger import ledger_ops
+
+    view = state_view.StateView((repo / STATE_REL).resolve(), ledger_ops._runtime_fetch(repo))
+    bound = state_view.bind(view)
+    bound.__enter__()
+    cleanup(lambda: bound.__exit__(None, None, None))
+    records = StoreRecords(repo, view)
+    cleanup(lambda: shutil.rmtree(records.snapshot, True))
+    return records
+
+
+class StoreRecords:
+    """The store counterpart of ``LifecycleLedger.records_root()`` for a test.
+
+    Calling it reads every record collection of the store in one ``state.read`` and the text
+    artifacts from ``runtime.db`` read-only, and writes them into a real directory in the layout of
+    the file ledger, so a test reads them with ``pathlib``. The copy is a snapshot: a test that
+    writes into it does not change the store."""
+
+    def __init__(self, repo: Path, view: object) -> None:
+        self.repo = repo
+        self.view = view
+        self.snapshot = Path(tempfile.mkdtemp(prefix="store-records-"))
+        self.virtual_root = (repo / STATE_REL).resolve() / "runtime.db"
+
+    def __call__(self) -> Path:
+        import sqlite3
+
+        from harness.orchestration.ledger import ledger_ops
+
+        refresh = getattr(self.view, "refresh", None)
+        if refresh is not None:
+            refresh()
+        fetched, _, _ = ledger_ops._runtime_fetch(self.repo)(STORE_RECORD_COLLECTIONS, [], None)
+        shutil.rmtree(self.snapshot, ignore_errors=True)
+        for name in STORE_RECORD_COLLECTIONS:
+            (self.snapshot / name).mkdir(parents=True)
+        for relative, record in fetched.items():
+            path = self.snapshot / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        database = self.repo / STATE_REL / "runtime.db"
+        with contextlib.closing(
+            sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        ) as connection:
+            for relative, data in connection.execute("SELECT path, bytes FROM artifact"):
+                path = self.snapshot / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data if isinstance(data, bytes) else str(data).encode("utf-8"))
+        return self.snapshot
+
+    def stored(self, path: Path | str) -> Path:
+        """The snapshot copy of ``path``, a virtual store path a coordinator answer names (such as
+        the ``report`` of ``report complete``); a real path stays as it is."""
+        try:
+            relative = Path(path).relative_to(self.virtual_root)
+        except ValueError:
+            return Path(path)
+        return self() / relative
+
+
+# The record collections of the store a test snapshot holds: the record directories of the file
+# ledger, which the runtime serves as collections (``audit`` is the chain and the imported audit).
+STORE_RECORD_COLLECTIONS = RECORD_DIRECTORIES
 
 
 class RuntimeHandle(Protocol):
