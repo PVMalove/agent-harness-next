@@ -157,7 +157,7 @@ outcome completed|blocked|failed, checks_run result pass|fail|not_run, and statu
 Then run {cli} report submit --file {shlex.quote(brief['report_staging_path'])}.
 If submission fails, preserve the original file and return the exact command and error.
 If the result includes completion, relay it for report complete; never submit again.
-Do not produce extra progress messages for the monitor. Existing runtime events are sufficient.
+The monitor reads the runtime events of this session; write text only for a blocker and the final result.
 """
 
 

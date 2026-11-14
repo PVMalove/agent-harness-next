@@ -225,7 +225,7 @@ does not change the ledger.
 
 ## 7. The full `/implement` route
 
-Option A of task #971 was selected: the author works beside an external developer in its worker
+The author works beside an external developer in its worker
 worktree, with the runtime, model and effort of the developer brief. The supported adapter starts
 the developer in that checkout, so the runtime, the scoped hook and the runner refer to the same
 code. Install the harness in the worker checkout and enable `test_paths` and `test_runner` there; do

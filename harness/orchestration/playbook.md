@@ -356,7 +356,7 @@ dispatch, and the reference keeps the batch that holds the report. The
 validated against the new batch, its Definition of Done and its `allowed_paths`, and pinned as on an
 architect accept; a plan path outside the new `allowed_paths` refuses the create. The superseding
 batch may therefore be planned with a wider scope than the abandoned one and keep its architect
-report; widening the scope of a live batch without a new batch is a separate route (#1017).
+report; widening the scope of a live batch without a new batch is a separate route.
 
 ## Recovery route table
 
@@ -455,7 +455,7 @@ accepted developer report, and names it: an unsent one is cancelled with `dispat
 sent one leaves the defect to the decision on its report, and one whose report is already decided
 takes the finding through `batch decide --findings-file` when the next developer report is accepted.
 
-After a fix-forward, the coordinator chooses the scope of the next code-review itself (issue #625).
+After a fix-forward, the coordinator chooses the scope of the next code-review itself.
 `dispatch create --role code-review` without `--delta-review-of` computes `delta_review_scope` when
 the candidate is the `commit_sha` of the batch's latest accepted developer work report, that report
 is a developer-retry whose chain of directly retried developer-retry attempts was routed
@@ -1506,8 +1506,8 @@ The report must include:
   exception). A completed report must carry it, a blocked or failed one may, and no other report
   may. A missing, unknown or repeated item, an empty
   reason, an empty commit list, an unresolvable SHA or a commit the chain did not create is refused,
-  with or without a `commit_plan`. A completed report recorded before issue #503 without the field
-  is still decided: every item is `omitted` and a carried gap.
+  with or without a `commit_plan`. A completed report recorded by an older harness without the
+  field is still decided: every item is `omitted` and a carried gap.
   A `not_closed` item is a carried gap: no policy accepts the report, plain `accept` is refused,
   and only `override-warning` with a note other than `none` (recorded as `carried_items_gap`) or
   `retry` decides it. Without a rebase target (the brief's non-null `rebase_target_commit`, or the
@@ -1594,7 +1594,7 @@ unclean, and the decision records it as `commit_plan_divergence`. Any `not_cover
 clean: no policy accepts it automatically, plain `accept` is refused, and the report can be
 accepted only by `override-warning` with a note other than `none`, or returned with `retry`.
 
-A change outside the approved scope is a warning, not a rejection (issue #633). A completed
+A change outside the approved scope is a warning, not a rejection. A completed
 developer report whose `changed_files` lie outside the brief's `write_paths` is recorded by
 `report submit`; `batch decision-packet` lists those paths as `scope_warnings`. Such a report is never
 auto-accepted, plain `accept` is refused, and it is accepted only by `override-warning` with a note
@@ -1669,7 +1669,7 @@ dispatch or report, or changes Git:
   worktree as they were. The old QA stays historical evidence. It does not depend on the
   developer-retry rebase route of ADR 0012, which still handles conflicts and developer work.
 - `integration local-qa --record <id> --ci-condition absent|unavailable|unusable --reason <text>`
-  (issue #536) is the fallback when combined-result CI cannot verify the pair. It pins an immutable
+  is the fallback when combined-result CI cannot verify the pair. It pins an immutable
   request (pair, reason, full `verification_commands`), runs the gate runner in an isolated
   clean-room checkout of the exact candidate through the shared FIFO QA lane, and links
   `local-qa` evidence with `verification: verified` only while the pair is still current. It never
@@ -1681,7 +1681,7 @@ dispatch or report, or changes Git:
   resolver results are attached. Each is its own immutable record with its own candidate/target pair
   and `verification: unverified`; the record's initial evidence keeps its original pair.
 - `integration resolve` hands a textual conflict between the candidate and the moved target to a
-  `conflict-resolver` (issue #534). It writes nothing to Git: it refuses a clean rebase (that is
+  `conflict-resolver`. It writes nothing to Git: it refuses a clean rebase (that is
   `integration refresh`), creates a new resolver batch (kind `resolver`) beside the finished batch
   of the ticket, and sets `next_action: resolve-conflict`. After the regular `batch approve` and
   `dispatch create --role conflict-resolver`, the brief carries an immutable `resolver` section: the
@@ -1707,7 +1707,7 @@ dispatch or report, or changes Git:
   to the plan entry). An accepted resolution takes the narrow route: no repeat code-review, but QA and
   CI or local-QA of the new candidate/target pair are still required.
 
-- `integration next --ticket T --branch B [--pull-request N]` (issue #537, ADR 0017) is the strictly
+- `integration next --ticket T --branch B [--pull-request N]` (ADR 0017) is the strictly
   read-only step of a PR continuation: it writes no Git, ledger, dispatch or PR and never asks the
   tracker. It classifies `status`, the evidence, open resolver batches and the budget events into
   `unavailable`, `resolver-open`, `refresh`, `route-failure`, `human-decision`, `confirm-pr`,

@@ -1,6 +1,6 @@
 # Karpathy coding guidelines
 
-Behavioral guidelines to reduce common LLM coding mistakes, adapted from [sendralt/karpathy-guidelines](https://github.com/sendralt/karpathy-guidelines) (MIT), itself derived from [Andrej Karpathy's observations](https://x.com/karpathy/status/2015883857489522876) on LLM coding pitfalls. Unscoped — no `paths:` — so it loads every session, like `CLAUDE.md`.
+Behavioral guidelines to reduce common LLM coding mistakes, adapted from [sendralt/karpathy-guidelines](https://github.com/sendralt/karpathy-guidelines) (MIT), itself derived from [Andrej Karpathy's observations](https://x.com/karpathy/status/2015883857489522876) on LLM coding pitfalls.
 
 **Tradeoff:** biases toward caution over speed. For trivial tasks, use judgment.
 
@@ -11,7 +11,7 @@ Don't assume. Don't hide confusion. Surface tradeoffs.
 - State assumptions explicitly.
 - If multiple interpretations exist, present them — don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
-- If something unclear would change the work, stop, name what's confusing, and ask.
+- If something unclear would change the work, stop, name what's confusing, and ask. A worker that no human can answer records the question as a blocker instead.
 
 ## 2. Simplicity first
 
