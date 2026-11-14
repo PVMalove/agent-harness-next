@@ -180,6 +180,8 @@ def _probe_run(
             str(ROOT / "pyproject.toml"),
             "--rootdir",
             str(tmp_path),
+            "--confcutdir",
+            str(tmp_path),
             "-p",
             "no:cacheprovider",
             str(probe),
@@ -223,3 +225,32 @@ def test_the_strict_mode_ends_a_run_that_misses_a_registered_scenario(
     assert strict.returncode == pytest.ExitCode.TESTS_FAILED, output
     assert "'a removed scenario' has no selected test test_probe.py::test_removed" in output
     assert "may not skip" not in output
+
+
+def test_probe_ignores_vanishing_sibling_during_windows_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    probe = tmp_path / "probe"
+    probe.mkdir()
+    (tmp_path / "vanishing-sibling").mkdir()
+    (probe / "race_plugin.py").write_text(
+        "import sys\n"
+        "import _pytest.main as main\n"
+        "class WindowsView:\n"
+        "    platform = 'win32'\n"
+        "    def __getattr__(self, name): return getattr(sys, name)\n"
+        "def pytest_sessionstart(session):\n"
+        "    main.sys = WindowsView()\n"
+        "    original = main.samefile_nofollow\n"
+        "    def samefile(a, b):\n"
+        "        if a.name == 'vanishing-sibling': raise FileNotFoundError(a)\n"
+        "        return original(a, b)\n"
+        "    main.samefile_nofollow = samefile\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYTEST_PLUGINS", "race_plugin")
+
+    result = _probe_run(probe, [("a probe", "test_probe.py::test_marked")], required=False)
+
+    assert result.returncode == pytest.ExitCode.OK, result.stdout + result.stderr
+    assert "1 skipped" in result.stdout
