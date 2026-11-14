@@ -13,6 +13,9 @@
 //! replaced: the commit point is behind). A failure cannot be injected at `pointer`, because
 //! the cutover is done by then.
 //!
+//! `init` passes `preconditions`, `locked`, `init` (the empty store is written and its
+//! transaction is still open), `renamed`, `authority`, `pointer-replace` and `pointer`.
+//!
 //! `rollback --to-legacy` has its own steps: `rollback-locked` (the legacy lock is held),
 //! `rollback-checked` (the store passed its preconditions), `rollback-archive` (the archive is
 //! installed), `rollback-generation` (the generation is written and checked), `rollback-audit`
@@ -24,7 +27,7 @@
 use crate::error::Error;
 use crate::error::Result;
 
-pub const STEPS: [&str; 22] = [
+pub const STEPS: [&str; 23] = [
     "preconditions",
     "locked",
     "snapshot",
@@ -47,6 +50,7 @@ pub const STEPS: [&str; 22] = [
     "approval-install",
     "approval-installed",
     "approval-authority",
+    "init",
 ];
 
 #[cfg(debug_assertions)]

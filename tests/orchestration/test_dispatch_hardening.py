@@ -17,6 +17,8 @@ import pytest
 
 from harness.orchestration import coordinator
 from harness.orchestration.core.utils import CoordinatorError
+from tests.orchestration import test_coordinator as coordinator_tests
+from tests.orchestration.legacy_state import seed_file_ledger
 from tests.orchestration.test_qa_preparation_e2e import PreparationFixture
 
 WORKFLOW = (
@@ -37,6 +39,21 @@ def test_the_workflow_module_guards_invariants_without_assert(module: str) -> No
 
 
 class PolicyRetryEvidenceTests(PreparationFixture):
+    def setUp(self) -> None:
+        # Rewrites a stored report file: a 1.x ledger (ADR 0036, section 5). The QA lane uses the
+        # repository state directory, so the ledger is seeded there.
+        class RepositoryFileLedger(coordinator_tests.CoordinatorRetryRoutingTests):
+            file_ledger = True
+
+            def setUp(self) -> None:
+                super().setUp()
+                seed_file_ledger(self.repo / coordinator.STATE_REL)
+
+        with mock.patch.object(
+            coordinator_tests, "CoordinatorRetryRoutingTests", RepositoryFileLedger
+        ):
+            super().setUp()
+
     def test_a_policy_retry_refuses_a_report_changed_after_its_decision(self) -> None:
         self.configure(preparation=[self.prepare])
         path = self.repo / ".harness/orchestration.json"

@@ -7,7 +7,7 @@ import sqlite3
 import pytest
 
 from harness.memory import build
-from harness.orchestration.ledger.lifecycle import LifecycleLedger
+from tests.orchestration.legacy_state import seed_file_ledger
 from harness.orchestration.workflow.context_package import _persist_context_package
 from harness.orchestration.workflow.history import _context_package_freshness
 from .test_build import configure, git, source
@@ -39,8 +39,9 @@ def test_frozen_memory_source_freshness(
         configure(working, min_similarity=0)
         source(working, "CONTEXT.md", "# Branch-local content")
     root = tmp_path / "state"
-    ledger = LifecycleLedger(root)
-    ledger.ensure()
+    # The memory index and the Context Package read records as files of a generation: a 1.x
+    # ledger (ADR 0036, section 5, rules 2 and 3).
+    ledger = seed_file_ledger(root)
     batch = {
         "batch_id": "batch-memory",
         "base_commit": snapshot,
@@ -140,8 +141,9 @@ def test_completion_pointer_uses_projected_type_and_source_eligibility(
     )
     build(tmp_path)
     root = tmp_path / "state"
-    ledger = LifecycleLedger(root)
-    ledger.ensure()
+    # The memory index and the Context Package read records as files of a generation: a 1.x
+    # ledger (ADR 0036, section 5, rules 2 and 3).
+    ledger = seed_file_ledger(root)
     batch = {
         "batch_id": "batch-memory",
         "base_commit": snapshot,

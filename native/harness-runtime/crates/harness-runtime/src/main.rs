@@ -75,6 +75,7 @@ const USAGE: &str = "usage: harness-runtime serve [--repo <path>] [--owner-sessi
     [--owner-pid <pid>] [--owner-ttl-seconds <n>]] | harness-runtime stop [--repo <path>] | \
     harness-runtime restart [--repo <path>] | harness-runtime migrate \
     [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
+    init [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | harness-runtime \
     rollback --to-legacy [--repo <path>] --approved-by <human> --approved-at <time> --reason <text> | \
     harness-runtime repair-import-approval [--check] [--repo <path>] \
     --approved-by <human> --approved-at <time> --reason <text>";
@@ -86,6 +87,7 @@ enum Command {
     Stop,
     Restart,
     Migrate,
+    Init,
     Rollback,
     RepairImportApproval,
 }
@@ -119,6 +121,7 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> 
         Some("stop") => Command::Stop,
         Some("restart") => Command::Restart,
         Some("migrate") => Command::Migrate,
+        Some("init") => Command::Init,
         Some("rollback") => Command::Rollback,
         Some("repair-import-approval") => Command::RepairImportApproval,
         _ => return Err(USAGE.to_owned()),
@@ -674,6 +677,27 @@ fn migrate(args: &Args) -> ExitCode {
     }
 }
 
+/// Create the store of a repository without orchestration state and print its outcome as one
+/// JSON line.
+fn init(args: &Args) -> ExitCode {
+    match state::init::run(&args.repo, &args.approval) {
+        Ok(outcome) => {
+            let mut stdout = std::io::stdout().lock();
+            match writeln!(stdout, "{}", outcome.to_json()).and_then(|()| stdout.flush()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(err) => Report::new(
+                    ErrorCode::Internal,
+                    format!("the store is created but the result cannot be written: {err}"),
+                    "repeat `harness-runtime init --repo <repo>`: a repeat after the commit \
+                     point answers already_initialized",
+                )
+                .print(EXIT_FAILED),
+            }
+        }
+        Err(error) => Report::new(error.code(), &error, error.remedy()).print(error.exit_code()),
+    }
+}
+
 /// A compatibility repair is offline and requires the same exclusion as rollback.
 fn repair_import_approval(args: &Args) -> ExitCode {
     let result =
@@ -768,7 +792,7 @@ fn main() -> ExitCode {
                 ErrorCode::MalformedRequest,
                 message,
                 "pass `serve`, `stop` or `restart` with an optional `--repo <path>`, `migrate` \
-                 with `--approved-by`, \
+                 or `init` with `--approved-by`, \
                  `--approved-at` and `--reason`, or `rollback --to-legacy` with the same three",
             )
             .print(EXIT_REFUSED);
@@ -784,6 +808,7 @@ fn main() -> ExitCode {
             }
         }
         Command::Migrate => return migrate(&args),
+        Command::Init => return init(&args),
         Command::Rollback => return rollback(&args),
         Command::RepairImportApproval => return repair_import_approval(&args),
         Command::Serve => {}
@@ -835,6 +860,27 @@ mod tests {
         assert_eq!(args.approval.approved_by, "human:a");
         assert_eq!(args.approval.approved_at, "2026-10-27T10:00:00+00:00");
         assert_eq!(args.approval.reason, "cut over");
+    }
+
+    #[test]
+    fn init_takes_the_approval_from_its_flags() {
+        let args = parse(&[
+            "init",
+            "--repo",
+            "/r",
+            "--approved-by",
+            "human:a",
+            "--approved-at",
+            "2026-10-27T10:00:00+00:00",
+            "--reason",
+            "new project",
+        ])
+        .unwrap();
+
+        assert_eq!(args.command, Command::Init);
+        assert_eq!(args.repo, PathBuf::from("/r"));
+        assert_eq!(args.approval.approved_by, "human:a");
+        assert_eq!(args.approval.reason, "new project");
     }
 
     #[test]
@@ -966,6 +1012,8 @@ mod tests {
             &["serve", "--owner-pid", "42"],
             &["serve", "--owner-session"],
             &["migrate", "--owner-session", "s"],
+            &["init", "--owner-session", "s"],
+            &["init", "--to-legacy"],
         ] {
             assert!(parse(words).is_err(), "{words:?}");
         }

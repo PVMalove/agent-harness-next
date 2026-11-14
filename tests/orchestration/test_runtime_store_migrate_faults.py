@@ -68,6 +68,9 @@ APPROVAL_STEPS = (
     "approval-authority",
 )
 
+# ``harness-runtime init`` fails at its own hook; test_runtime_store_init.py exercises it.
+INIT_STEPS = ("init",)
+
 
 def _legacy(repo: Path) -> dict[str, bytes]:
     """The legacy generations and the lock audit: migrate never rewrites or deletes them."""
@@ -95,7 +98,7 @@ def test_the_steps_the_tests_stop_at_are_the_steps_the_hooks_name() -> None:
 
     assert (
         tuple(part.split('"')[1] for part in block.split(",") if '"' in part)
-        == STEPS + ROLLBACK_STEPS + APPROVAL_STEPS
+        == STEPS + ROLLBACK_STEPS + APPROVAL_STEPS + INIT_STEPS
     )
 
 

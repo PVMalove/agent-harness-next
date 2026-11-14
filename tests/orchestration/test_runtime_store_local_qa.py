@@ -14,6 +14,7 @@ from harness.orchestration.core.utils import JsonObject
 from harness.orchestration.ledger.lifecycle import IntegrationLocalQaRecord
 from harness.orchestration.workflow import release_gate
 from tests.orchestration import runtime_store_support as support
+from tests.orchestration.legacy_state import seed_file_ledger
 from tests.orchestration.test_integration_record import PublishedBranch
 
 LOCAL_QA = "reports/integration-local-qa"
@@ -27,6 +28,8 @@ class LocalQaInTheStoreEpoch(unittest.TestCase):
         self.branch.fixture.state_dir = (
             self.branch.repo / ".harness/orchestration/state"
         )
+        # A 1.x history cut over to the store: publish needs runtime QA evidence (ADR 0036, section 5).
+        seed_file_ledger(self.branch.fixture.state_dir)
         self.branch.publish()
         self.prepared = self.branch.prepare()
         migrated = support.migrate(self.branch.repo)

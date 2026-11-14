@@ -12,15 +12,25 @@ file ledger to the Rust SQLite WAL store", sections 1, 5, and 6.
 - **`ledger.json` gets `version: 4`.** `harness-runtime migrate` writes it at the cutover commit
   point. After that point, a 1.x installation refuses with exit code 2.
 - **Until migrate, coordinator 2.0.0 runs on the file ledger.** It keeps running batches on
-  `ledger.json` version 3, and on a project without orchestration state it creates a version 3
-  ledger. The container QA, the docker executor, the `recovery` commands and the operational hold
+  `ledger.json` version 3. It creates no new ledger: a project without orchestration state gets the
+  runtime store from `harness-runtime init` (below). The container QA, the docker executor, the `recovery` commands and the operational hold
   run only on the runtime store: in the file epoch they exit with code 2, and the remedy names
   `harness-runtime migrate`.
 - **A human runs migrate and rollback.** Both commands require human approval. The agent does not
   run them.
 
-A project without backend orchestration (no `.harness/orchestration/state/`) has nothing to
-migrate: `harness update` is enough.
+A project without orchestration state (no `.harness/orchestration/state/ledger.json`) has nothing
+to migrate. After `harness update`, a human creates its runtime store once:
+
+```bash
+harness-runtime init --repo <repo> \
+  --approved-by <human> --approved-at <RFC 3339 time> --reason <text>
+```
+
+`init` checks the approval the way `migrate` does and refuses with exit code 2 when the state
+directory already holds a ledger. The coordinator does not create a file ledger on such a project:
+without `init`, `batch create` and `ledger reset` exit with code 2 and name this command in their
+remedy (ADR 0036).
 
 ## Before the upgrade
 

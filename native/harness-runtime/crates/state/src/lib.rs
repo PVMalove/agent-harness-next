@@ -21,6 +21,7 @@ pub mod identity;
 pub mod idle;
 pub mod import;
 pub mod import_approval;
+pub mod init;
 pub mod lease;
 pub mod legacy;
 pub mod lock;

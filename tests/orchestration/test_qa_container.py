@@ -31,6 +31,7 @@ from harness.orchestration.qa_execution import executable_check, gate_executable
 from harness.orchestration.workflow import qa_integration
 from tests.orchestration import test_coordinator as coordinator_tests
 from tests.orchestration.fake_clock import FakeClock
+from tests.orchestration.legacy_state import seed_file_ledger
 from tests.orchestration.runtime_store_support import (
     STATE_REL,
     RuntimeHandle,
@@ -94,6 +95,9 @@ class ContainerQa:
     ) -> None:
         gate = GATE if gate is None else gate
         self.fx = coordinator_tests.CoordinatorRetryRoutingTests()
+        # A 1.x history cut over by `migrate`: the runtime this class starts (scripted engine on
+        # its PATH, fake clock, autostart) is the only `serve` of the store (ADR 0036, section 5).
+        self.fx.file_ledger = True
         self.fx.setUp()
         repo = self.repo = self.fx.repo
         (repo / ".harness/project.json").write_text(
@@ -103,6 +107,7 @@ class ContainerQa:
         _git(repo, "commit", "-m", "declare the QA gate")
         _git(repo, "push", "origin", "master")
         self.fx.state_dir = repo / STATE_REL
+        seed_file_ledger(self.fx.state_dir)
         self.batch = str(self.fx._create_batch()["batch_id"])
         self.fx._accepted_architect(self.batch)
         self.candidate = self.fx._accepted_candidate(self.batch)

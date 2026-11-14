@@ -9,7 +9,7 @@ import pytest
 
 from harness.memory import build
 from harness.orchestration.core.utils import JsonObject
-from harness.orchestration.ledger.lifecycle import LifecycleLedger
+from tests.orchestration.legacy_state import seed_file_ledger
 from harness.orchestration.workflow.context_package import _persist_context_package
 from .test_build import configure, git, source
 
@@ -29,8 +29,9 @@ def test_bypass_and_disabled_never_open_index_and_do_not_reuse_enabled(
     ).strip()
     build(tmp_path)
     root = tmp_path / "state"
-    ledger = LifecycleLedger(root)
-    ledger.ensure()
+    # The memory index and the Context Package read records as files of a generation: a 1.x
+    # ledger (ADR 0036, section 5, rules 2 and 3).
+    ledger = seed_file_ledger(root)
     batch = {
         "batch_id": "batch-memory",
         "base_commit": snapshot,
@@ -87,8 +88,9 @@ def test_missing_index_is_frozen_without_creation_or_refresh(
         ["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True
     ).strip()
     root = tmp_path / "state"
-    ledger = LifecycleLedger(root)
-    ledger.ensure()
+    # The memory index and the Context Package read records as files of a generation: a 1.x
+    # ledger (ADR 0036, section 5, rules 2 and 3).
+    ledger = seed_file_ledger(root)
     batch = {
         "batch_id": "batch-memory",
         "base_commit": snapshot,

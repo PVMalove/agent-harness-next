@@ -145,7 +145,7 @@ impl Server {
                             return Ok(());
                         }
                     }
-                    thread::sleep(ACCEPT_POLL);
+                    wait_for_a_connection(&self.listener);
                 }
                 Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
                 Err(err) => return Err(err),
@@ -236,6 +236,21 @@ fn serve_unix_stream(
     let permitted = peer_uid(&stream).is_ok_and(|uid| same_user(uid, own));
     let pid = peer_pid(&stream);
     serve_connection(&mut stream, permitted, pid, shared, shutdown)
+}
+
+/// Wait until a client connects or `ACCEPT_POLL` passes, whichever comes first: the loop sees the
+/// stop flag at least that often, and a connection is accepted as soon as it arrives instead of at
+/// the next tick.
+fn wait_for_a_connection(listener: &UnixListener) {
+    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+    use std::os::fd::AsFd;
+
+    let timeout = PollTimeout::try_from(ACCEPT_POLL).unwrap_or(PollTimeout::MAX);
+    let mut fds = [PollFd::new(listener.as_fd(), PollFlags::POLLIN)];
+    if poll(&mut fds, timeout).is_err() {
+        // EINTR or a failed poll: fall back to the old tick, so the loop never spins.
+        thread::sleep(ACCEPT_POLL);
+    }
 }
 
 #[cfg(test)]

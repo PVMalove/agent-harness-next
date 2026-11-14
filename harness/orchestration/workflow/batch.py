@@ -493,10 +493,15 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
             repo_map_policy if isinstance(repo_map_policy, dict) else {}
         )
     _reject_sensitive(record, "batch")
+    ledger = LifecycleLedger(root)
+    try:
+        # Before the snapshot of the runtime: a refused batch leaves nothing behind.
+        ledger.refuse_new_project(repo)
+    except LedgerError as exc:
+        raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
     _store_runtime_snapshot(
         root, _runtime_snapshot_root(repo).parent, record["harness_runtime_sha256"]
     )
-    ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         try:
             ledger.ensure()

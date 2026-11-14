@@ -108,6 +108,15 @@ def serve_command(repo_root: Path) -> str:
     return f"harness-runtime serve --repo {shlex.quote(str(repo_root.resolve()))}"
 
 
+def init_command(repo_root: Path) -> str:
+    """The shell command that gives ``repo_root``, a repository without orchestration state, its
+    runtime store (ADR 0036); a human fills in the approval."""
+    return (
+        f"harness-runtime init --repo {shlex.quote(str(repo_root.resolve()))} "
+        "--approved-by <human> --approved-at <RFC 3339> --reason <text>"
+    )
+
+
 class RuntimeClientError(HarnessError):
     """The runtime refused a request, or did not answer it.
 

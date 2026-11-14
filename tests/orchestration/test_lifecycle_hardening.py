@@ -9,6 +9,7 @@ import pytest
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY
 from harness.orchestration.ledger.lifecycle import LedgerError, LifecycleLedger
+from tests.orchestration.legacy_state import seed_file_ledger
 
 _LIVE = "dispatch-0001"
 _ORPHAN = "dispatch-0002"
@@ -20,8 +21,8 @@ def _write(path: Path, value: object) -> None:
 
 
 def _generation(tmp_path: Path) -> tuple[LifecycleLedger, Path]:
-    ledger = LifecycleLedger(tmp_path / "state")
-    ledger.ensure()
+    # The file ledger itself (generation files, clean, pointer): a 1.x ledger (ADR 0036, section 5).
+    ledger = seed_file_ledger(tmp_path / "state")
     return ledger, ledger.records_root()
 
 

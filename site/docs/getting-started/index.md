@@ -306,13 +306,20 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
 
 ## 5. Runtime {#runtime}
 
-Раздел нужен, если установлена `backend-orchestration`. После однократной миграции состояние
-оркестрации хранит runtime store, и записывает в него только процесс `harness-runtime serve`.
-Миграцию `harness-runtime migrate` выполняют один раз, и её одобряет человек. Порядок описан в
-[руководстве по backend-оркестрации](../backend-orchestration.md).
+Раздел нужен, если установлена `backend-orchestration`. Состояние оркестрации хранит runtime
+store, и записывает в него только процесс `harness-runtime serve`. Новый проект получает store
+одной командой. Её выполняет человек и сам указывает approval:
 
-После миграции `serve` должен работать всё время, пока вы пользуетесь оркестрацией. Запускайте его
-вне песочницы агента:
+```bash {.ah-code-wrap}
+harness-runtime init --repo /path/to/repository \
+  --approved-by <человек> --approved-at <время RFC 3339> --reason <текст>
+```
+
+Проекту с ledger установки 1.x нужна однократная миграция `harness-runtime migrate`, тоже с
+одобрения человека. Порядок описан в [руководстве по миграции на 2.0](../guides/upgrade-2-0.md).
+
+После `init` или миграции `serve` должен работать всё время, пока вы пользуетесь оркестрацией.
+Запускайте его вне песочницы агента:
 
 ```bash {.ah-code-wrap}
 harness-runtime serve --repo /path/to/repository

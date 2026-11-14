@@ -182,7 +182,7 @@ def test_qa_runner_preserves_report_if_gate_breaks_live_configuration() -> None:
         )
 
         assert result["state"] == "reported"
-        assert Path(result["report"]).is_file()
+        assert case._stored(result["report"]).is_file()
         assert result["transition_blocked"] is True
         assert "next_dispatch_id" not in result
     finally:
