@@ -8,8 +8,9 @@ import re
 import sys
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal, TypeGuard
 
 from harness.orchestration.core.utils import JsonObject
 
@@ -17,9 +18,14 @@ PROTOCOL = "harness-worker-v1"
 STARTUP_TIMEOUT_SECONDS = 120
 
 
+def _is_pid(pid: object) -> TypeGuard[int]:
+    """A process id: a positive ``int`` that is no ``bool``."""
+    return isinstance(pid, int) and not isinstance(pid, bool) and pid >= 1
+
+
 def process_identity(pid: int) -> JsonObject | None:
     """Linux PID plus boot/start identity; other hosts remain explicitly unobserved."""
-    if not sys.platform.startswith("linux") or isinstance(pid, bool) or pid < 1:
+    if not sys.platform.startswith("linux") or not _is_pid(pid):
         return None
     try:
         fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
@@ -52,9 +58,7 @@ def observe_process(receipt: object, dispatch_id: object) -> JsonObject | None:
     if (
         not sys.platform.startswith("linux")
         or identity.get("host") != socket.gethostname()
-        or not isinstance(pid, int)
-        or isinstance(pid, bool)
-        or pid < 1
+        or not _is_pid(pid)
         or not isinstance(identity.get("start_time"), str)
         or not str(identity.get("start_time", "")).isdigit()
         or not isinstance(identity.get("boot_id"), str)
@@ -318,22 +322,57 @@ _UNKNOWN_SECTION = "?"  # any section outside the allowlist; it is never visible
 # A stamped line, or any line that opens with ``[`` or an escape sequence, starts a section.
 _PLAIN_STAMPED = re.compile(r"\[[^\]\n]*\]\s*(?P<rest>.*)")
 _PLAIN_BARE_LABEL = re.compile(r"[A-Za-z][\w .-]*:")
+# The log a step page reads: stream-json events, or the plain text of a worker log.
+StepSource = Literal["structured", "plain"]
 
 
-def unavailable_page(source: str, reason: str, offset: int = 0) -> JsonObject:
-    """An explicit observation state; it never decides or changes the worker outcome."""
+@dataclass
+class _Section:
+    """The section of a plain log the next line belongs to; one page reading carries it."""
+
+    name: str = ""
+
+
+def _step_page(
+    source: str,
+    *,
+    state: str,
+    reason: str | None,
+    steps: list[JsonObject],
+    offset: int,
+    reset: bool,
+    more: bool,
+    age: int | None,
+) -> JsonObject:
+    """One step page; a ``reason`` names the message of an unavailable page."""
     return {
         "source": source,
         "structure": "available" if source == "structured" else "unavailable",
-        "state": "unavailable",
+        "state": state,
         "reason": reason,
-        "message": STEP_REASON_MESSAGES[reason],
-        "steps": [],
-        "offset": max(0, offset),
-        "reset": False,
-        "more": False,
-        "last_step_age_seconds": None,
+        "message": "" if reason is None else STEP_REASON_MESSAGES[reason],
+        "steps": steps,
+        "offset": offset,
+        "reset": reset,
+        "more": more,
+        "last_step_age_seconds": age,
     }
+
+
+def unavailable_page(
+    source: str, reason: str, offset: int = 0, *, reset: bool = False
+) -> JsonObject:
+    """An explicit observation state; it never decides or changes the worker outcome."""
+    return _step_page(
+        source,
+        state="unavailable",
+        reason=reason,
+        steps=[],
+        offset=max(0, offset),
+        reset=reset,
+        more=False,
+        age=None,
+    )
 
 
 def structured_log_path(
@@ -394,7 +433,7 @@ def external_log_path(
     return path, None
 
 
-def _structured_line(line: bytes, _section: list[str]) -> list[JsonObject]:
+def _structured_line(line: bytes, _section: _Section) -> list[JsonObject]:
     import json
 
     try:
@@ -437,7 +476,7 @@ def _plain_segments(line: bytes) -> list[str]:
     return line.decode("utf-8", errors="replace").removesuffix("\n").split("\r")
 
 
-def _plain_line(line: bytes, section: list[str]) -> list[JsonObject]:
+def _plain_line(line: bytes, section: _Section) -> list[JsonObject]:
     """Fail closed: only agent-message lines and tool section names are visible."""
     import json
 
@@ -445,11 +484,11 @@ def _plain_line(line: bytes, section: list[str]) -> list[JsonObject]:
     for text in _plain_segments(line):
         header = _plain_header(text)
         if header is not None:
-            section[0] = header
+            section.name = header
             if header in _PLAIN_TOOL_SECTIONS:
                 steps.append({"kind": "tool", "text": header})
             continue
-        if section[0] != "codex" or not text.strip():
+        if section.name != "codex" or not text.strip():
             continue
         try:
             if isinstance(json.loads(text), (dict, list)):
@@ -567,8 +606,8 @@ def _read_step_page(
     path: Path,
     offset: int,
     budget: int,
-    source: str,
-    parse_line: Callable[[bytes, list[str]], list[JsonObject]],
+    source: StepSource,
+    parse_line: Callable[[bytes, _Section], list[JsonObject]],
 ) -> JsonObject:
     """``budget`` bounds the encoded size of the page's steps, so the reply stays bounded."""
     offset = max(0, offset)
@@ -578,17 +617,16 @@ def _read_step_page(
             reset = offset > size
             position = 0 if reset else offset
             if source == "plain" and _plain_log_unrecognised(stream, size):
-                return {
-                    **unavailable_page(source, "log_unrecognised", position),
-                    "reset": reset,
-                }
+                return unavailable_page(
+                    source, "log_unrecognised", position, reset=reset
+                )
             aligned = _line_start(stream, position)
             position = position if aligned is None else aligned
-            section = [
+            section = _Section(
                 _plain_section_before(stream, position)
                 if source == "plain" and position
                 else ""
-            ]
+            )
             # An unfinished line under the offset: wait at the offset, read nothing.
             stream.seek(size if aligned is None else position)
             steps: list[JsonObject] = []
@@ -608,7 +646,7 @@ def _read_step_page(
                         break  # oversized and unfinished: wait at its start
                     position = stream.tell()  # oversized records are never parsed
                     # Its section is unknown, so it hides what follows until a header.
-                    section[0] = _UNKNOWN_SECTION
+                    section.name = _UNKNOWN_SECTION
                     continue
                 found = parse_line(line, section)
                 cost = sum(_step_cost(step) for step in found)
@@ -630,18 +668,16 @@ def _read_step_page(
         return unavailable_page(source, "log_missing", offset)
     except OSError:
         return unavailable_page(source, "log_unreadable", offset)
-    return {
-        "source": source,
-        "structure": "available" if source == "structured" else "unavailable",
-        "state": "connected" if size else "waiting",
-        "reason": None,
-        "message": "",
-        "steps": steps,
-        "offset": position,
-        "reset": reset,
-        "more": more,
-        "last_step_age_seconds": age,
-    }
+    return _step_page(
+        source,
+        state="connected" if size else "waiting",
+        reason=None,
+        steps=steps,
+        offset=position,
+        reset=reset,
+        more=more,
+        age=age,
+    )
 
 
 def read_structured_steps(path: Path, offset: int, budget: int) -> JsonObject:
