@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, fields
 from typing import TypeVar
 
 from .data import DashboardData
+from .json_shape import json_bool, json_int, json_list, json_str
 from .protocol import ID_BYTES, MESSAGE_BYTES, _clip
 from .repo_map import RepoMapView
 from .repo_map_settings import MemoryStatus
@@ -282,27 +283,19 @@ def _fields(payload: object, kind: type) -> dict[str, object]:
 
 
 def _int(value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"not an integer: {value!r}")
-    return value
+    return json_int(value, lambda found: f"not an integer: {found!r}")
 
 
 def _str(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError(f"not a string: {value!r}")
-    return value
+    return json_str(value, lambda found: f"not a string: {found!r}")
 
 
 def _bool(value: object) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError(f"not a boolean: {value!r}")
-    return value
+    return json_bool(value, lambda found: f"not a boolean: {found!r}")
 
 
 def _list(value: object) -> list[object]:
-    if not isinstance(value, list):
-        raise ValueError(f"not a list: {value!r}")
-    return value
+    return json_list(value, lambda found: f"not a list: {found!r}")
 
 
 def _optional(value: object, parse: Callable[[object], _T]) -> _T | None:

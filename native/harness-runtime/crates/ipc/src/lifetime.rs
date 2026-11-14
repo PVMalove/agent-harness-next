@@ -10,11 +10,12 @@
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use state::identity::{Identity, Verdict};
+use state::mutex::lock_unpoisoned;
 
 /// The time to live of an owner that never attaches again, unless `serve` names another.
 pub const DEFAULT_OWNER_TTL: Duration = Duration::from_secs(3600);
@@ -76,7 +77,7 @@ impl Lifetime {
     }
 
     fn owners(&self) -> MutexGuard<'_, BTreeMap<String, Owner>> {
-        self.owners.lock().unwrap_or_else(PoisonError::into_inner)
+        lock_unpoisoned(&self.owners)
     }
 
     pub fn is_owned(&self) -> bool {

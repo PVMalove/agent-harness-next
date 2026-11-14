@@ -52,6 +52,7 @@ CHECK_ID = "hooks.policy"
 HOOK_CAPABILITIES = ("engineering-suite", BACKEND_ORCHESTRATION_CAPABILITY)
 HOOKS_DIR = ".claude/hooks"
 ENVELOPE_REL = f"{HOOKS_DIR}/hook_response.py"
+ENVELOPE_SOURCE_REL = f"{HOOKS_DIR}/hook-envelope.sh"
 TEST_AUTHOR_AGENT = ".claude/agents/test-author.md"
 DEFAULT_SOURCE = "по умолчанию"
 PROJECT_JSON_SOURCE = ".harness/project.json"
@@ -957,6 +958,32 @@ def _wired_scripts(repo: Path) -> set[str]:
     return wired
 
 
+def _envelope_files_part(repo: Path, fails: list[str], warns: list[str]) -> None:
+    """Файлы конверта, которых нет, хотя скрипты hooks его вызывают: такой скрипт молча отвечает
+    без JSON-конверта и политики hooks. `hook_response.py` нужен каждому скрипту с hook_id,
+    `hook-envelope.sh` — скриптам, которые его подключают. Подключённый скрипт даёт fail."""
+    users: dict[str, list[str]] = {ENVELOPE_REL: [], ENVELOPE_SOURCE_REL: []}
+    for script in sorted((repo / HOOKS_DIR).glob("*.sh")):
+        try:
+            source = script.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if script_envelope_id(source) is None:
+            continue
+        users[ENVELOPE_REL].append(script.name)
+        if '/hook-envelope.sh"' in source:
+            users[ENVELOPE_SOURCE_REL].append(script.name)
+    wired = _wired_scripts(repo)
+    for relative, scripts in users.items():
+        if not scripts or (repo / relative).is_file():
+            continue
+        text = (
+            f"{relative}: файл отсутствует, скрипты hooks ({len(scripts)}) отвечают "
+            "без JSON-конверта"
+        )
+        (fails if wired.intersection(scripts) else warns).append(text)
+
+
 def _envelope_part(
     context: HealthContext, fails: list[str], warns: list[str]
 ) -> Fix | None:
@@ -1035,5 +1062,6 @@ def check_policy(context: HealthContext) -> CheckResult:
     else:
         _script_drift(context, warns)
     _policy_file(context, problem is not None, fails, warns)
+    _envelope_files_part(context.repo, fails, warns)
     envelope_fix = _envelope_part(context, fails, warns)
     return _result(context, fails, warns, advisory, notes, envelope_fix)

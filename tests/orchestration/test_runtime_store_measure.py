@@ -155,11 +155,18 @@ def _copy_store_state(source: Path, state: Path) -> None:
     """A consistent read-only copy of a runtime-store state directory.
 
     The SQLite backup API takes the ``runtime.db`` snapshot, WAL included, of the live store; the
-    small JSON files beside it are the epoch pointers, not records, and are copied as they are. The
+    small JSON files beside it are the epoch pointers, not records, and are copied as they are. So
+    are the ``teardown.json`` records of the executions: without them the runtime of the copy
+    repeats, through the container engine, the removal of every exited container execution at
+    each reconcile and each ``execution.observe``, which the runtime of the source does not. The
     source is opened ``mode=ro`` and is never written."""
     state.mkdir(parents=True)
     for name in ("ledger.json", "AUTHORITY.json"):
         (state / name).write_bytes((source / name).read_bytes())
+    for record in source.glob("executions/*/teardown.json"):
+        target = state / record.relative_to(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(record.read_bytes())
     with (
         contextlib.closing(
             sqlite3.connect(f"file:{source / 'runtime.db'}?mode=ro", uri=True)

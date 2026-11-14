@@ -1,9 +1,9 @@
 # Тест-автор в worktree developer: корень проекта из Git и доверие worktree
 
-**Статус: ACCEPTED (2026-11-13).** Тикет #1122. Документ заменяет три решения ADR 0014:
+**Статус: ACCEPTED (2026-11-13).** Тикет #1122. Документ заменяет три решения ADR 0035:
 обязательный `CLAUDE_PROJECT_DIR` и доверие только к точному пути проекта (абзац «Активация и fallback»
 и раздел «Автор в worker worktree: вариант A»), а также отказ `checkout_mismatch` как штатный исход для
-in-process developer (тот же раздел). Guard, runner, цикл Red → Green и выбор исполнителя ADR 0014
+in-process developer (тот же раздел). Guard, runner, цикл Red → Green и выбор исполнителя ADR 0035
 не меняются.
 
 ## Контекст системы

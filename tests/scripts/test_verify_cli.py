@@ -52,7 +52,8 @@ def test_an_unknown_argument_is_refused_before_any_stage(
 @pytest.mark.parametrize(
     ("argv", "stages"),
     [
-        ([], ["mypy", "pytest", "clean-room"]),
+        # The full run starts the clean-room stage next to pytest, once mypy has passed.
+        ([], ["mypy", "clean-room", "pytest"]),
         (["--only", "tests"], ["mypy", "pytest"]),
         (["--only", "pytest"], ["pytest"]),
         (["--only", "clean-room"], ["clean-room"]),
@@ -70,6 +71,13 @@ def test_only_selects_the_stages_to_run(
     monkeypatch.setattr(
         verify, "run_stage", lambda name, cmd, **kwargs: started.append(name)
     )
+
+    class Overlapped:
+        def __init__(self, name: str, cmd: list[str], **kwargs: object) -> None:
+            started.append(name)
+
+    monkeypatch.setattr(verify, "_OverlappedStage", Overlapped)
+    monkeypatch.setattr(verify, "_finish_overlapped", lambda recorder, stage: 0)
     monkeypatch.setattr(verify, "remove_tree", lambda path: None)
     verify.main(argv)
     assert started == stages

@@ -27,6 +27,7 @@ from ..kernel.discovery import ServerEndpoint
 from ..kernel.harness_facts import HarnessState
 from ..kernel.health_report import report_from_payload
 from ..kernel.home_snapshot import HomeSnapshot, Problem, problems_from_text
+from ..kernel.json_shape import json_object
 from ..kernel.maintenance import MaintenanceView
 from ..kernel.protocol import (
     CONFIGURATION_REQUEST,
@@ -355,9 +356,7 @@ def job_start_fits(
 
 
 def _object(value: object, what: str) -> dict[str, object]:
-    if not isinstance(value, dict):
-        raise MalformedReply(f"{what} сервера консоли не по схеме")
-    return cast(dict[str, object], value)
+    return json_object(value, f"{what} сервера консоли не по схеме", error=MalformedReply)
 
 
 def _lock_of(value: object) -> tuple[JsonObject | None, str | None]:

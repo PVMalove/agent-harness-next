@@ -5,6 +5,8 @@ commands (ADR 0023, sections 4 and 5)."""
 from __future__ import annotations
 
 import hashlib
+import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -93,7 +95,7 @@ def test_failed_first_is_recorded_as_the_full_selection(
     assert (tmp_path / "ff").is_dir()
 
 
-def test_a_failed_pytest_stage_lists_its_exact_nodeids_and_the_rest_is_not_run(
+def test_a_failed_pytest_stage_lists_its_exact_nodeids_and_the_clean_room_run_still_reports(
     project: Path, tmp_path: Path
 ) -> None:
     _use_tests(project, **{"test_bad.py": BAD_TEST})
@@ -105,7 +107,7 @@ def test_a_failed_pytest_stage_lists_its_exact_nodeids_and_the_rest_is_not_run(
     assert [(s.stage_id, s.result) for s in stages] == [
         ("mypy", "pass"),
         ("pytest", "fail"),
-        ("clean-room", "not_run"),
+        ("clean-room", "pass"),
     ]
     assert stages[1].exit_code == 1
     assert sorted(stages[1].failed_nodeids) == [
@@ -113,7 +115,93 @@ def test_a_failed_pytest_stage_lists_its_exact_nodeids_and_the_rest_is_not_run(
         "tests/test_bad.py::test_bad",
         "tests/test_bad.py::test_param[a/b]",
     ]
-    assert stages[2].exit_code is None and stages[2].stdout is None
+    assert stages[2].exit_code == 0
+    assert "clean-room-out" in stream(evidence, 2)
+
+
+def _waits_for(markers: Path, own: str, other: str) -> str:
+    """Python that leaves its own marker, then waits up to 30 s for the other stage's marker."""
+    return (
+        "import pathlib, sys, time\n"
+        f"markers = pathlib.Path({str(markers)!r})\n"
+        f"(markers / {own!r}).touch()\n"
+        "deadline = time.monotonic() + 30\n"
+        f"while not (markers / {other!r}).exists():\n"
+        "    if time.monotonic() > deadline:\n"
+        f"        sys.exit('{other} never ran next to {own}')\n"
+        "    time.sleep(0.05)\n"
+    )
+
+
+def test_the_clean_room_stage_runs_next_to_pytest_and_replays_its_output_after_it(
+    project: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    markers = tmp_path / "markers"
+    markers.mkdir()
+    # Each side waits for the other: a sequential run would time out in its first stage.
+    _use_tests(
+        project,
+        **{
+            "test_overlap.py": "def test_overlap():\n"
+            + textwrap.indent(_waits_for(markers, "pytest", "clean-room"), "    ")
+        },
+    )
+    clean_room = (
+        _waits_for(markers, "clean-room", "pytest") + "print('clean-room-out')\n"
+    )
+    monkeypatch.setattr(
+        verify, "clean_room_command", lambda: [sys.executable, "-c", clean_room]
+    )
+    evidence = tmp_path / "evidence"
+
+    assert _run("--evidence-dir", str(evidence)) == 0
+
+    assert [(s.stage_id, s.result) for s in _document(evidence).stages] == [
+        ("mypy", "pass"),
+        ("pytest", "pass"),
+        ("clean-room", "pass"),
+    ]
+    out = capsys.readouterr().out
+    pytest_line = out.index("[verify] pytest: passed in ")
+    assert (
+        pytest_line
+        < out.index("clean-room-out")
+        < out.index("[verify] clean-room: passed in ")
+    )
+
+
+def test_a_failed_clean_room_stage_next_to_a_passing_pytest_exits_with_its_code(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        verify, "clean_room_command", lambda: fake_stage("clean-room", 6)
+    )
+    evidence = tmp_path / "evidence"
+
+    assert _run("--evidence-dir", str(evidence)) == 6
+
+    assert [
+        (s.stage_id, s.result, s.exit_code) for s in _document(evidence).stages
+    ] == [("mypy", "pass", 0), ("pytest", "pass", 0), ("clean-room", "fail", 6)]
+
+
+def test_when_both_overlapped_stages_fail_the_pytest_exit_code_wins(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_tests(project, **{"test_bad.py": BAD_TEST})
+    monkeypatch.setattr(
+        verify, "clean_room_command", lambda: fake_stage("clean-room", 6)
+    )
+    evidence = tmp_path / "evidence"
+
+    assert _run("--evidence-dir", str(evidence)) == 1
+
+    assert [
+        (s.stage_id, s.result, s.exit_code) for s in _document(evidence).stages
+    ] == [("mypy", "pass", 0), ("pytest", "fail", 1), ("clean-room", "fail", 6)]
 
 
 def test_a_failed_mypy_stage_leaves_pytest_and_clean_room_not_run(

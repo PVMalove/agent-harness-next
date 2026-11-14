@@ -13,6 +13,7 @@ from types import ModuleType
 
 import pytest
 
+from harness.health.hook_settings import script_envelope_id
 from harness.orchestration.contract import ContractError
 from harness.orchestration import hook_policy
 from harness.orchestration.hook_policy import parse_hook_response
@@ -740,7 +741,7 @@ def test_a_hook_without_the_helper_decides_alone(tmp_path: Path) -> None:
 def test_every_managed_event_hook_runs_through_the_envelope(hook_id: str) -> None:
     text = (HOOKS / f"{hook_id}.sh").read_text(encoding="utf-8")
 
-    assert f'hook_response.py" run {hook_id} ' in text
+    assert script_envelope_id(text) == hook_id
 
 
 def test_a_shell_write_refusal_becomes_ask_only_where_the_runtime_understands_it(

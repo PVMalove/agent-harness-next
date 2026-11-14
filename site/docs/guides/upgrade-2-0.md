@@ -11,8 +11,11 @@ store», разделы 1, 5 и 6.
   команда отвечает `runtime_unavailable` с кодом 2.
 - **`ledger.json` получает `version: 4`.** Эту версию записывает `harness-runtime migrate` в точке
   фиксации cutover. После этого установка 1.x отказывает с кодом 2.
-- **Coordinator 2.0.0 не работает на файловом ledger.** На `ledger.json` версий 1–3 он завершается
-  с кодом 2, а remedy называет `harness-runtime migrate`.
+- **До migrate coordinator 2.0.0 работает на файловом ledger.** Он продолжает вести batch на
+  `ledger.json` версии 3, а на проекте без состояния оркестрации создаёт ledger версии 3.
+  Контейнерный QA, docker-исполнитель, команды `recovery` и operational hold работают только на
+  runtime store: в файловой эпохе они завершаются с кодом 2, а remedy называет
+  `harness-runtime migrate`.
 - **Migrate и откат выполняет человек.** Обе команды требуют human approval. Агент их не запускает.
 
 Проекту без backend-оркестрации (нет `.harness/orchestration/state/`) миграция не нужна, достаточно
