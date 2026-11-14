@@ -1,4 +1,9 @@
-"""Базовый замер производительности 1.x: история `/implement` из ledger и время команд."""
+"""Замер производительности: история `/implement` из ledger и время команд.
+
+`--epoch file` (по умолчанию) — замер 1.x на копии файлового ledger (#795). `--epoch store` — замер
+2.0 на копии runtime store, которую обслуживает `harness-runtime serve` одноразового checkout; метрики
+batch и QA берутся из поколения отката копии (`--export-generation`, #814).
+"""
 
 from __future__ import annotations
 
@@ -488,6 +493,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--full-verify", action="store_true", help="один прогон `make verify`"
     )
+    parser.add_argument(
+        "--epoch",
+        choices=("file", "store"),
+        default="file",
+        help="эпоха state: файловый ledger (замер 1.x) или runtime store (замер 2.0, #814)",
+    )
+    parser.add_argument(
+        "--runtime-binary",
+        type=Path,
+        help="harness-runtime для эпохи store; по умолчанию HARNESS_RUNTIME_BIN или "
+        "release-сборка checkout",
+    )
+    parser.add_argument(
+        "--export-generation",
+        type=Path,
+        help="поколение v3, которое записал `rollback --to-legacy` копии store: источник метрик "
+        "batch и QA в эпохе store",
+    )
     args = parser.parse_args(argv)
     repo, out = args.repo.resolve(), args.out.resolve()
     state = repo / STATE_REL
@@ -501,23 +524,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     started = time.perf_counter()
     _dump(out, "environment.json", _environment(repo))
+    if args.epoch == "store":
+        _measure_store(repo, out, args)
+    else:
+        _measure_file_ledger(repo, out, args)
+    if args.full_verify:
+        _dump(out, "make-verify.json", _full_verify(repo, out, replacements))
+    _dump(out, "run.json", {"elapsed_seconds": time.perf_counter() - started})
+    return 0
+
+
+def _measure_file_ledger(repo: Path, out: Path, args: argparse.Namespace) -> None:
+    """Замер 1.x: копия файлового ledger в checkout, метрики поколения, команды coordinator."""
+    state = repo / STATE_REL
     shutil.copytree(
         args.state_dir, state, ignore=shutil.ignore_patterns(".coordinator.lock")
     )
     try:
-        generation = _generation(state)
-        _dump(out, "implement-runs.json", implement_runs(generation))
-        _dump(out, "local-qa.json", local_qa_results(generation))
-        _dump(out, "qa-artifact-stages.json", qa_artifact_stages(generation))
-        _dump(
-            out,
-            "ledger-size.json",
-            {
-                directory.name: sum(1 for _ in directory.iterdir())
-                for directory in sorted(generation.iterdir())
-                if directory.is_dir()
-            },
-        )
+        _dump_generation_metrics(out, _generation(state))
         _dump(out, "audit.json", _audit_timing(repo, state, repeats=args.slow_repeats))
         _dump(
             out,
@@ -526,18 +550,157 @@ def main(argv: Sequence[str] | None = None) -> int:
                 repo, state, repeats=args.repeats, slow_repeats=args.slow_repeats
             ),
         )
-        with tempfile.TemporaryDirectory(prefix="perf-baseline-") as tmp:
-            _dump(
-                out,
-                "pytest.json",
-                _pytest_timings(repo, Path(tmp), repeats=args.test_repeats),
-            )
+        _dump_pytest(repo, out, args)
     finally:
         shutil.rmtree(state)
-    if args.full_verify:
-        _dump(out, "make-verify.json", _full_verify(repo, out, replacements))
-    _dump(out, "run.json", {"elapsed_seconds": time.perf_counter() - started})
-    return 0
+
+
+def _dump_generation_metrics(out: Path, generation: Path) -> None:
+    _dump(out, "implement-runs.json", implement_runs(generation))
+    _dump(out, "local-qa.json", local_qa_results(generation))
+    _dump(out, "qa-artifact-stages.json", qa_artifact_stages(generation))
+    _dump(
+        out,
+        "ledger-size.json",
+        {
+            directory.name: sum(1 for _ in directory.iterdir())
+            for directory in sorted(generation.iterdir())
+            if directory.is_dir()
+        },
+    )
+
+
+def _dump_pytest(repo: Path, out: Path, args: argparse.Namespace) -> None:
+    with tempfile.TemporaryDirectory(prefix="perf-baseline-") as tmp:
+        _dump(
+            out,
+            "pytest.json",
+            _pytest_timings(repo, Path(tmp), repeats=args.test_repeats),
+        )
+
+
+# Метрика без замера: явное «нет данных» с причиной, никогда не ноль.
+def _not_measured(reason: str) -> dict[str, str]:
+    return {"status": "нет данных", "reason": reason}
+
+
+def copy_store(source: Path, target: Path) -> None:
+    """Консистентная копия runtime store: `runtime.db` через SQLite backup API (живой serve
+    продолжает писать) и указатели `ledger.json`, `AUTHORITY.json` рядом с ним."""
+    import sqlite3
+
+    target.mkdir(parents=True)
+    uri = (source / "runtime.db").resolve().as_uri() + "?mode=ro"
+    with (
+        sqlite3.connect(uri, uri=True) as origin,
+        sqlite3.connect(target / "runtime.db") as copy,
+    ):
+        origin.backup(copy)
+    for name in ("ledger.json", "AUTHORITY.json"):
+        shutil.copy2(source / name, target / name)
+
+
+def _runtime_binary(repo: Path, configured: Path | None) -> Path:
+    if configured is not None:
+        return configured
+    environment = os.environ.get("HARNESS_RUNTIME_BIN")
+    if environment:
+        return Path(environment)
+    return repo / "native/harness-runtime/target/release/harness-runtime"
+
+
+def _measure_store(repo: Path, out: Path, args: argparse.Namespace) -> None:
+    """Замер 2.0 (#814): те же команды coordinator на копии runtime store, которую обслуживает
+    `harness-runtime serve` одноразового checkout. Метрики batch и QA берутся из поколения, которое
+    записал откат копии (`--export-generation`); без него они «нет данных»."""
+    state = repo / STATE_REL
+    copy_store(args.state_dir, state)
+    runtime_dir = Path(
+        tempfile.mkdtemp(prefix="hr", dir="/tmp" if os.name != "nt" else None)
+    )
+    environment = {**os.environ, "XDG_RUNTIME_DIR": str(runtime_dir)}
+    binary = _runtime_binary(repo, args.runtime_binary)
+    serve = subprocess.Popen(
+        [str(binary), "serve", "--repo", str(repo)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=environment,
+    )
+    previous = os.environ.get("XDG_RUNTIME_DIR")
+    os.environ["XDG_RUNTIME_DIR"] = str(runtime_dir)
+    try:
+        assert serve.stdout is not None
+        if '"ready"' not in serve.stdout.readline():
+            raise SystemExit(f"{binary} serve did not report ready for {repo}")
+        if args.export_generation is not None:
+            _dump_generation_metrics(out, args.export_generation.resolve())
+        else:
+            reason = "в эпохе store нет файлов поколения: передайте --export-generation"
+            for name in (
+                "implement-runs.json",
+                "local-qa.json",
+                "qa-artifact-stages.json",
+                "ledger-size.json",
+            ):
+                _dump(out, name, _not_measured(reason))
+        _dump(
+            out,
+            "audit.json",
+            _not_measured(
+                "audit-цепочку store проверяет runtime внутри `ledger validate`; его время — "
+                "в coordinator.json"
+            ),
+        )
+        _dump(out, "coordinator.json", _store_coordinator_timings(repo, args))
+        _dump_pytest(repo, out, args)
+    finally:
+        if previous is None:
+            os.environ.pop("XDG_RUNTIME_DIR", None)
+        else:
+            os.environ["XDG_RUNTIME_DIR"] = previous
+        subprocess.run(
+            [str(binary), "stop", "--repo", str(repo)],
+            env=environment,
+            capture_output=True,
+            check=False,
+        )
+        try:
+            serve.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            serve.kill()
+            serve.wait(timeout=30)
+        shutil.rmtree(state)
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+
+
+def _store_coordinator_timings(
+    repo: Path, args: argparse.Namespace
+) -> dict[str, object]:
+    base = [
+        sys.executable,
+        str(repo / "harness/orchestration/coordinator.py"),
+        "--repo",
+        str(repo),
+    ]
+    timings: dict[str, object] = {}
+    for name, command in COORDINATOR_COMMANDS:
+        timings[name] = _timed_entry(
+            [*base, *command],
+            cwd=repo,
+            repeats=args.repeats,
+            slow_repeats=args.slow_repeats,
+        ) | {"argv": list(command)}
+    # A copy has no live worker, and the store has no file to make one live: the heartbeat is
+    # measured by tests/orchestration/test_runtime_store_measure.py on a serving store.
+    timings["dispatch heartbeat"] = {
+        "argv": ["dispatch", "heartbeat"],
+        "summary": {
+            "status": "not_run",
+            "reason": "no live dispatch in a store copy; see test_runtime_store_measure.py",
+        },
+    }
+    return timings
 
 
 def _read_json(path: Path) -> JsonObject:
