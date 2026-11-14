@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 from scripts.perf import baseline
 
@@ -587,16 +589,25 @@ class StoreEpochTests(_StubCheckout, unittest.TestCase):
 
     def _runtime(self, tmp: Path) -> Path:
         """A stand-in `harness-runtime`: `serve` reports ready and waits, `stop` succeeds."""
-        stub = tmp / "harness-runtime"
+        stub = tmp / "harness-runtime.py"
         self._write(
             stub,
-            f"#!{sys.executable}\n"
             "import json, sys, time\n"
             "if sys.argv[1] == 'serve':\n"
             "    print(json.dumps({'status': 'ready'}), flush=True)\n"
             "    time.sleep(60)\n",
         )
-        stub.chmod(0o755)
+        real_popen = subprocess.Popen
+
+        def launch(  # type: ignore[explicit-any]
+            argv: list[str], *args: Any, **kwargs: Any
+        ) -> subprocess.Popen[Any]:
+            # Windows cannot execute a Python shebang; only the test stub needs an interpreter.
+            if isinstance(argv, list) and argv and argv[0] == str(stub):
+                argv = [sys.executable, *argv]
+            return real_popen(argv, *args, **kwargs)
+
+        self.enterContext(patch.object(subprocess, "Popen", side_effect=launch))
         return stub
 
     def test_the_store_is_copied_through_the_backup_api_with_its_pointers(self) -> None:
