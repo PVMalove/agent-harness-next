@@ -68,6 +68,7 @@ from harness.memory import (
     rebuild as memory_rebuild,
     sync as memory_sync,
 )
+from harness import runtime_cutover
 from harness.storage import storage_path
 from harness.runtime_adapters import adapter_problem, is_adapter
 from harness.seed_links import propose_contract_links, print_contract_proposals
@@ -1530,6 +1531,9 @@ def cmd_update(args: argparse.Namespace) -> int:
                 "run it without --force, --force-managed-files and --force-seed-file(s)"
             )
         return record_seed_baseline(repo, lock)
+    # Harness 2.0.0 runs only on the runtime store: a version-3 ledger is cut over by this update,
+    # and every refusal comes before the first installed file (ADR 0020, section 6).
+    cutover = runtime_cutover.prepare(repo, args)
     selected = selected_capabilities(args.capability or lock.get("capabilities"))
     result = snapshot_diff(repo, selected)
     current_files = package_files(selected)
@@ -1592,6 +1596,8 @@ def cmd_update(args: argparse.Namespace) -> int:
     print(f"updated agent-harness to {version()} in {repo}")
     print(f"managed files: {len(written)}")
     print_contract_proposals(propose_contract_links(repo, PROJECT_TEMPLATE_DIR))
+    if cutover is not None:
+        runtime_cutover.run(repo, cutover)
     return 0
 
 
@@ -2053,6 +2059,7 @@ def parser() -> argparse.ArgumentParser:
         help="only record a seed_files baseline for seed files without one; change no file",
     )
     _add_engineering_args(update)
+    runtime_cutover.add_arguments(update)
     update.set_defaults(func=cmd_update)
 
     registry = commands.add_parser("registry")
