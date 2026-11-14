@@ -79,4 +79,4 @@ brief architect, получает один тест и санитизирова�
 В полном маршруте этот цикл доступен external и in-process developer в его worker worktree
 после preflight `ok` и разрешения вызова автора в утверждённом brief. Корень проекта, доверие
 worktree и вызов автора у in-process developer задаёт ADR 0033; guard, runner и выбор
-исполнителя задаёт ADR 0014. Rust authority не меняется.
+исполнителя задаёт ADR 0035. Rust authority не меняется.

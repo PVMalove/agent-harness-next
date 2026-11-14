@@ -12,9 +12,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .container_route import JsonObject, State, _items, _obj, _text
+from .container_route.model import JsonObject, State, _text
 from .coordinator_api import ApiResult, CoordinatorApi, CoordinatorCalls, Outcome
 from .home_snapshot import _bool, _fields, _int, _list, _str
+from .json_fields import items_or_empty
+from .json_fields import mapping_or_empty
 from .runner import CommandRunner, capturing_runner
 
 
@@ -115,7 +117,8 @@ def load_history(api: CoordinatorCalls) -> History:
     if not result.ok or result.document is None:
         return History(unavailable=result.problem_text or result.outcome.value)
     items = [
-        HistoryBatch.of(_obj(item)) for item in _items(result.document.get("batches"))
+        HistoryBatch.of(mapping_or_empty(item))
+        for item in items_or_empty(result.document.get("batches"))
     ]
     items = [item for item in items if item.batch_id]
     items.sort(key=lambda item: item.created_at, reverse=True)
@@ -126,21 +129,21 @@ def recovery_reason(document: JsonObject) -> str:
     """Why the core wants recovery for this batch, or `` `` when it reports nothing unfinished:
     a hold, an unfinished or interrupted action, a stopped batch or one needing attention, or any
     diagnostic."""
-    hold = _obj(document.get("hold"))
+    hold = mapping_or_empty(document.get("hold"))
     if hold:
         return _text(
             hold.get("message"), _text(hold.get("reason"), "удержание runtime")
         )
-    intent = _obj(document.get("intent"))
+    intent = mapping_or_empty(document.get("intent"))
     if _text(intent.get("status")) in ("pending", "interrupted"):
         return f"незавершённое действие recovery: {_text(intent.get('action'), '—')} ({_text(intent.get('status'))})"
-    lifecycle = _obj(document.get("lifecycle"))
+    lifecycle = mapping_or_empty(document.get("lifecycle"))
     if lifecycle.get("stopped") is True:
         return "batch остановлен"
     if lifecycle.get("needs_attention") is True:
         return _text(lifecycle.get("attention_reason"), "batch требует внимания")
-    for item in _items(document.get("diagnostics")):
-        data = _obj(item)
+    for item in items_or_empty(document.get("diagnostics")):
+        data = mapping_or_empty(item)
         return _text(data.get("message"), _text(data.get("code"), "есть диагностика"))
     return ""
 

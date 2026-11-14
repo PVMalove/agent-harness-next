@@ -74,7 +74,9 @@ EXECUTION_STATES = ("launching", "running", "stopping", "exited", "lost", "unkno
 # evidence of a Release Gate pair; minor 7 adds the ``filter`` field of ``state.read``, the
 # store-side selection of one batch or dispatch (ADR 0020, section 3).
 PROTOCOL_VERSION = (1, 7)
-# The protocol minor a filtered ``state.read`` needs (ADR 0020, section 3).
+# The protocol minor a filtered ``state.read`` needs (ADR 0020, section 3). A fixed floor, not
+# ``PROTOCOL_VERSION[1]``: a later minor keeps it. The floor of the recovery records, minor 5, is
+# ``RECOVERY_PROTOCOL`` in ``recovery_status/runtime.py``.
 FILTER_PROTOCOL_MINOR = 7
 # The runtime operation that judges the stored QA evidence of a Release Gate pair.
 QA_EVIDENCE_VERIFY = "qa.evidence.verify"
@@ -93,6 +95,7 @@ _UNSAFE_DIRECTORY_REMEDY = (
     "remove the runtime directory, or set XDG_RUNTIME_DIR to a private directory of this user, "
     "then restart harness-runtime"
 )
+_SAME_RELEASE_REMEDY = "update harness and harness-runtime to the same release"
 _NO_RUNTIME_REMEDY = (
     "start the runtime with `harness-runtime serve --repo <repo>` outside the agent sandbox; the "
     "coordinator never writes state without it. In Claude Code the runtime-autostart hook starts "
@@ -167,7 +170,7 @@ def _not_a_repository(repo_root: Path) -> RuntimeClientError:
         "runtime_unavailable",
         f"{repo_root} is not the root of a git working tree, so no runtime address exists for it",
         remedy="pass the root of the repository with --repo",
-        domain="environment_preparation",
+        domain=FailureDomain.ENVIRONMENT_PREPARATION,
     )
 
 
@@ -211,14 +214,9 @@ def runtime_directory(
     on Unix (the literal ``/tmp``, never ``TMPDIR``) and ``%LOCALAPPDATA%\\harness`` on Windows.
     ``None`` on Windows when neither variable is absolute.
     """
-    if platform != "win32":
-        if xdg_runtime_dir and xdg_runtime_dir.startswith("/"):
-            return str(PurePosixPath(xdg_runtime_dir) / "harness")
-        return f"/tmp/harness-{uid}"
-    for base in (xdg_runtime_dir, local_app_data):
-        if base and _WINDOWS_ABSOLUTE.match(base):
-            return base.rstrip("\\/") + "\\harness"
-    return None
+    return _transport_of(platform).runtime_directory(
+        xdg_runtime_dir, local_app_data, uid
+    )
 
 
 def runtime_paths(
@@ -247,29 +245,13 @@ def runtime_paths(
             "runtime_unavailable",
             "neither XDG_RUNTIME_DIR nor LOCALAPPDATA names an absolute runtime directory",
             remedy=_NO_DIRECTORY_REMEDY,
-            domain="environment_preparation",
+            domain=FailureDomain.ENVIRONMENT_PREPARATION,
         )
     directory = Path(chosen)
-    if platform == "win32":
-        # A pipe name is no file path, so the Unix socket limit does not apply.
-        return RuntimePaths(
-            repo_id=identity,
-            directory=directory,
-            socket=Path(pipe_name(identity)),
-            token=directory / f"{identity}.token",
-        )
-    sock = directory / f"{identity}.sock"
-    if len(os.fsencode(sock)) > MAX_SOCKET_PATH_BYTES:
-        raise RuntimeClientError(
-            "runtime_unavailable",
-            f"the socket path {sock} is longer than {MAX_SOCKET_PATH_BYTES} bytes",
-            remedy="set XDG_RUNTIME_DIR to a shorter absolute directory and restart the runtime",
-            domain="environment_preparation",
-        )
     return RuntimePaths(
         repo_id=identity,
         directory=directory,
-        socket=sock,
+        socket=_transport_of(platform).address(directory, identity),
         token=directory / f"{identity}.token",
     )
 
@@ -307,7 +289,7 @@ def _exchange(connection: _Transport, request: JsonObject) -> JsonObject:
         raise RuntimeClientError(
             "internal",
             f"the runtime announced a frame of {length} bytes",
-            remedy="update harness and harness-runtime to the same release",
+            remedy=_SAME_RELEASE_REMEDY,
             domain=FailureDomain.UNKNOWN,
         )
     try:
@@ -316,14 +298,14 @@ def _exchange(connection: _Transport, request: JsonObject) -> JsonObject:
         raise RuntimeClientError(
             "internal",
             "the runtime sent a response that is not JSON",
-            remedy="update harness and harness-runtime to the same release",
+            remedy=_SAME_RELEASE_REMEDY,
             domain=FailureDomain.UNKNOWN,
         ) from exc
     if not isinstance(answer, dict):
         raise RuntimeClientError(
             "internal",
             "the runtime sent a response that is not a JSON object",
-            remedy="update harness and harness-runtime to the same release",
+            remedy=_SAME_RELEASE_REMEDY,
             domain=FailureDomain.UNKNOWN,
         )
     return cast(JsonObject, answer)
@@ -590,47 +572,161 @@ def _require_minor(greeting: JsonObject, requires_minor: int) -> None:
             "protocol_unsupported",
             f"the runtime negotiated protocol 1.{minor}, but this request needs 1.{requires_minor}",
             remedy="update harness-runtime to the release that serves this request, then run it again",
-            domain="tooling",
+            domain=FailureDomain.TOOLING,
             facts={"negotiated_minor": minor, "required_minor": requires_minor},
         )
 
 
+class _TransportKind(Protocol):
+    """The transport of one platform: where its runtime listens, and how a client gets there."""
+
+    def runtime_directory(
+        self, xdg_runtime_dir: str | None, local_app_data: str | None, uid: int
+    ) -> str | None:
+        """The runtime directory of ADR 0021, section 2, or ``None`` when none is absolute."""
+
+    def address(self, directory: Path, identity: str) -> Path:
+        """The address the runtime of the repository ``identity`` listens on."""
+
+    def check_directory(self, directory: Path) -> None:
+        """Trust the runtime directory before its token, or refuse it."""
+
+    def prepare(self, directory: Path) -> None:
+        """Refuse a connection this platform cannot make, before the token is read."""
+
+    def connect(self, address: Path, remaining: Callable[[], float]) -> _Transport:
+        """Open a connection; ``remaining`` returns the seconds the operation may still take."""
+
+
+class _UnixSocket:
+    """A Unix domain socket in a runtime directory that belongs to this user only."""
+
+    def runtime_directory(
+        self, xdg_runtime_dir: str | None, local_app_data: str | None, uid: int
+    ) -> str | None:
+        """``$XDG_RUNTIME_DIR/harness`` when the variable is absolute, else ``/tmp/harness-<uid>``."""
+        if xdg_runtime_dir and xdg_runtime_dir.startswith("/"):
+            return str(PurePosixPath(xdg_runtime_dir) / "harness")
+        return f"/tmp/harness-{uid}"
+
+    def address(self, directory: Path, identity: str) -> Path:
+        """``<directory>/<repo-id>.sock``, within the socket path limit."""
+        sock = directory / f"{identity}.sock"
+        if len(os.fsencode(sock)) > MAX_SOCKET_PATH_BYTES:
+            raise RuntimeClientError(
+                "runtime_unavailable",
+                f"the socket path {sock} is longer than {MAX_SOCKET_PATH_BYTES} bytes",
+                remedy="set XDG_RUNTIME_DIR to a shorter absolute directory and restart the runtime",
+                domain=FailureDomain.ENVIRONMENT_PREPARATION,
+            )
+        return sock
+
+    def check_directory(self, directory: Path) -> None:
+        """A directory of this user that no one else may open. Another user could create
+        ``/tmp/harness-<uid>`` first and pose as the runtime (ADR 0021, section 2). A missing
+        directory is a runtime that does not run yet."""
+        try:
+            info = os.lstat(directory)
+        except FileNotFoundError as exc:
+            raise _TransportFailure(
+                f"the runtime directory {directory} does not exist"
+            ) from exc
+        except OSError as exc:
+            raise _TransportFailure(
+                f"cannot read the runtime directory: {exc}"
+            ) from exc
+        problem = (
+            "is a symbolic link"
+            if stat.S_ISLNK(info.st_mode)
+            else "is not a directory"
+            if not stat.S_ISDIR(info.st_mode)
+            else "belongs to another user"
+            if info.st_uid != os.getuid()
+            else "is open to the group or to others"
+            if info.st_mode & 0o077
+            else None
+        )
+        if problem:
+            raise RuntimeClientError(
+                "unauthorized_peer",
+                f"the runtime directory {directory} {problem}; its token is not trusted",
+                remedy=_UNSAFE_DIRECTORY_REMEDY,
+                domain=FailureDomain.POLICY,
+            )
+
+    def prepare(self, directory: Path) -> None:
+        """A platform without Unix domain sockets, or an untrusted directory, is refused."""
+        if not hasattr(socket, "AF_UNIX"):
+            raise RuntimeClientError(
+                "runtime_unavailable",
+                "this platform has no Unix domain sockets",
+                remedy="run the coordinator on Linux or macOS",
+                domain=FailureDomain.ENVIRONMENT_PREPARATION,
+            )
+        self.check_directory(directory)
+
+    def connect(self, address: Path, remaining: Callable[[], float]) -> _Transport:
+        """A socket whose connect and later operations time out with the time left."""
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            connection.settimeout(max(remaining(), 0.001))
+            connection.connect(str(address))
+        except BaseException:
+            connection.close()
+            raise
+        return connection
+
+
+class _NamedPipe:
+    """A Windows named pipe; its DACL, not the runtime directory, protects it."""
+
+    def runtime_directory(
+        self, xdg_runtime_dir: str | None, local_app_data: str | None, uid: int
+    ) -> str | None:
+        """The first absolute of ``XDG_RUNTIME_DIR`` and ``LOCALAPPDATA``, plus ``\\harness``."""
+        for base in (xdg_runtime_dir, local_app_data):
+            if base and _WINDOWS_ABSOLUTE.match(base):
+                return base.rstrip("\\/") + "\\harness"
+        return None
+
+    def address(self, directory: Path, identity: str) -> Path:
+        """The pipe of ``pipe_name``; a pipe name is no file path, so no path limit applies."""
+        return Path(pipe_name(identity))
+
+    def check_directory(self, directory: Path) -> None:
+        """Nothing to check: no POSIX owner or mode bits here; the DACL of the pipe protects it."""
+
+    def prepare(self, directory: Path) -> None:
+        """Nothing to refuse: every Windows has named pipes."""
+
+    def connect(self, address: Path, remaining: Callable[[], float]) -> _Transport:
+        """The pipe, waiting while every instance is busy."""
+        return _PipeConnection.open(str(address), remaining)
+
+
+_UNIX_SOCKET = _UnixSocket()
+_NAMED_PIPE = _NamedPipe()
+
+
+def _transport_of(platform: str) -> _TransportKind:
+    """The transport of ``platform``, a value of ``sys.platform``: the one platform switch.
+
+    It is looked up at each use, not at import, so a test can switch ``sys.platform``."""
+    return _NAMED_PIPE if platform == "win32" else _UNIX_SOCKET
+
+
 def _check_directory(directory: Path) -> None:
     """Trust the runtime directory before its token: a directory of this user that no one else
-    may open. Another user could create ``/tmp/harness-<uid>`` first and pose as the runtime
-    (ADR 0021, section 2). A missing directory is a runtime that does not run yet."""
-    if sys.platform == "win32":
-        return  # no POSIX owner or mode bits here; the DACL of the pipe protects it
-    try:
-        info = os.lstat(directory)
-    except FileNotFoundError as exc:
-        raise _TransportFailure(
-            f"the runtime directory {directory} does not exist"
-        ) from exc
-    except OSError as exc:
-        raise _TransportFailure(f"cannot read the runtime directory: {exc}") from exc
-    problem = (
-        "is a symbolic link"
-        if stat.S_ISLNK(info.st_mode)
-        else "is not a directory"
-        if not stat.S_ISDIR(info.st_mode)
-        else "belongs to another user"
-        if info.st_uid != os.getuid()
-        else "is open to the group or to others"
-        if info.st_mode & 0o077
-        else None
-    )
-    if problem:
-        raise RuntimeClientError(
-            "unauthorized_peer",
-            f"the runtime directory {directory} {problem}; its token is not trusted",
-            remedy=_UNSAFE_DIRECTORY_REMEDY,
-            domain="policy",
-        )
+    may open (ADR 0021, section 2). Windows has no such check; the DACL of the pipe protects it."""
+    _transport_of(sys.platform).check_directory(directory)
 
 
 class RuntimeClient:
-    """Asks ``harness-runtime`` for one operation, repeating it while the transport fails."""
+    """Asks ``harness-runtime`` for one operation, repeating it while the transport fails.
+
+    Each request opens its own connection, unless the client is used as a context manager: then
+    the requests until the exit share one connection after one ``hello``. A lost transport closes
+    that connection, and the repeat of the request opens a new one."""
 
     def __init__(
         self,
@@ -645,6 +741,27 @@ class RuntimeClient:
         self.paths = runtime_paths(self.repo_root, environ)
         self._clock = clock
         self._sleep = sleep
+        # The deadline of the request in flight; the transport reads it for every operation.
+        self._deadline = 0.0
+        self._keeps = False
+        self._kept: tuple[_Transport, JsonObject] | None = None
+
+    def __enter__(self) -> RuntimeClient:
+        """Keep one connection, and its ``hello``, for the requests until the exit."""
+        self._keeps = True
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self._keeps = False
+        if self._kept is not None:
+            connection, _ = self._kept
+            self._kept = None
+            connection.close()
 
     def call(
         self,
@@ -701,23 +818,47 @@ class RuntimeClient:
             "runtime_unavailable",
             f"harness-runtime does not answer on {self.paths.socket}: {reason}",
             remedy=_NO_RUNTIME_REMEDY,
-            domain="infrastructure",
+            domain=FailureDomain.INFRASTRUCTURE,
             retryable=True,
         )
 
     def _attempt(
         self, request: JsonObject, deadline: float, requires_minor: int = 0
     ) -> RuntimeReply:
-        """One connection: ``hello`` with the token, then the request."""
-        if sys.platform != "win32" and not hasattr(socket, "AF_UNIX"):
-            raise RuntimeClientError(
-                "runtime_unavailable",
-                "this platform has no Unix domain sockets",
-                remedy="run the coordinator on Linux or macOS",
-                domain="environment_preparation",
-            )
-        if sys.platform != "win32":
-            _check_directory(self.paths.directory)
+        """The request over the kept connection, or over a new one after ``hello``."""
+        self._deadline = deadline
+        connection, greeting = self._kept or self._open(request, deadline)
+        self._kept = None
+        keep = False
+        try:
+            _require_minor(greeting, requires_minor)
+            if isinstance(connection, socket.socket):
+                connection.settimeout(max(deadline - self._clock(), 0.001))
+            answer = _exchange(connection, request)
+            keep = self._keeps
+        except OSError as exc:
+            raise _TransportFailure(str(exc)) from exc
+        finally:
+            if keep:
+                self._kept = (connection, greeting)
+            else:
+                connection.close()
+        if answer.get("status") != "ok":
+            raise _typed_error(answer)
+        hello = greeting.get("result")
+        result = answer.get("result")
+        revision = answer.get("revision")
+        return RuntimeReply(
+            hello=cast(JsonObject, hello) if isinstance(hello, dict) else {},
+            result=cast(JsonObject, result) if isinstance(result, dict) else {},
+            revision=revision if isinstance(revision, int) else None,
+        )
+
+    def _open(
+        self, request: JsonObject, deadline: float
+    ) -> tuple[_Transport, JsonObject]:
+        """A new connection after ``hello`` with the token, and the answer to ``hello``."""
+        _transport_of(sys.platform).prepare(self.paths.directory)
         try:
             token = self.paths.token.read_text(encoding="utf-8").strip()
         except OSError as exc:
@@ -732,38 +873,21 @@ class RuntimeClient:
             greeting = _exchange(connection, self._hello(request, token))
             if greeting.get("status") != "ok":
                 raise _typed_error(greeting)
-            _require_minor(greeting, requires_minor)
-            answer = _exchange(connection, request)
         except OSError as exc:
-            raise _TransportFailure(str(exc)) from exc
-        finally:
             connection.close()
-        if answer.get("status") != "ok":
-            raise _typed_error(answer)
-        hello = greeting.get("result")
-        result = answer.get("result")
-        revision = answer.get("revision")
-        return RuntimeReply(
-            hello=cast(JsonObject, hello) if isinstance(hello, dict) else {},
-            result=cast(JsonObject, result) if isinstance(result, dict) else {},
-            revision=revision if isinstance(revision, int) else None,
-        )
-
-    def _connect(self, deadline: float) -> _Transport:
-        """Open the transport of this platform; every operation obeys ``deadline``."""
-        if sys.platform == "win32":
-            return _PipeConnection.open(
-                str(self.paths.socket),
-                lambda: deadline - self._clock(),
-            )
-        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        try:
-            connection.settimeout(max(deadline - self._clock(), 0.001))
-            connection.connect(str(self.paths.socket))
+            raise _TransportFailure(str(exc)) from exc
         except BaseException:
             connection.close()
             raise
-        return connection
+        return connection, greeting
+
+    def _connect(self, deadline: float) -> _Transport:
+        """Open the transport of this platform; every operation obeys ``deadline``."""
+        self._deadline = deadline
+        # A kept pipe obeys the deadline of the request in flight, not of the first one.
+        return _transport_of(sys.platform).connect(
+            self.paths.socket, lambda: self._deadline - self._clock()
+        )
 
     def _hello(self, request: JsonObject, token: str) -> JsonObject:
         major, minor = PROTOCOL_VERSION

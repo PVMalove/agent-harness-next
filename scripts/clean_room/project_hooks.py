@@ -77,6 +77,10 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit(
             "engineering-suite init did not scaffold the hook_response.py envelope"
         )
+    if not (pv_project / ".claude" / "hooks" / "hook-envelope.sh").is_file():
+        sys.exit(
+            "engineering-suite init did not scaffold the hook-envelope.sh verdict envelope"
+        )
     check_change_impact_hooks(pv_project)
     check_runtime_autostart_hook(pv_project)
     if json.loads(project_json.read_text(encoding="utf-8")).get("hook_policy") != {

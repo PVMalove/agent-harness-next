@@ -52,11 +52,8 @@ const END_WAIT: Duration = Duration::from_secs(30);
 const COMMAND_MARGIN_SECONDS: i64 = 60;
 
 fn malformed(detail: &str) -> ErrorBody {
-    ErrorBody::new(
-        ErrorCode::MalformedRequest,
-        FailureDomain::Tooling,
-        false,
-        format!("the request is not valid: {detail}"),
+    ErrorBody::malformed(
+        detail,
         "send {\"dispatch_id\", \"attempt\", \"run_root\", \"workdir\", \"tmpdir\", \"groups\"} as the payload of qa.run",
     )
 }
@@ -788,11 +785,8 @@ impl Supervisor {
             _ => (None, None),
         };
         let (Some(dispatch_id), Some(attempt)) = (dispatch_id, attempt) else {
-            return Err(ErrorBody::new(
-                ErrorCode::MalformedRequest,
-                FailureDomain::Tooling,
-                false,
-                "the request is not valid: the payload is {\"dispatch_id\", \"attempt\"}",
+            return Err(ErrorBody::malformed(
+                "the payload is {\"dispatch_id\", \"attempt\"}",
                 "send the dispatch id and the attempt of the QA run to stop",
             ));
         };

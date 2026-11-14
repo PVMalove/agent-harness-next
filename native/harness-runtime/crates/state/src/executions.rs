@@ -24,6 +24,7 @@ use crate::audit;
 use crate::authority::{Epoch, STORE_NAME, epoch};
 use crate::identity::{Identity, Verdict};
 use crate::schema;
+use crate::store_error::invariant;
 use crate::write::{failure, sqlite};
 
 /// Whether no transition leaves `state`.
@@ -262,16 +263,6 @@ pub struct Change {
     pub lease_owner: Option<Value>,
     /// What the audit record says about the transition; `null` when there is nothing to add.
     pub facts: Value,
-}
-
-fn invariant(message: impl Into<String>) -> ErrorBody {
-    failure(
-        ErrorCode::InvariantViolation,
-        FailureDomain::Tooling,
-        false,
-        message,
-        "nothing was written; run `coordinator.py ledger validate --full` and report the defect",
-    )
 }
 
 /// One audit record of a transition, and the checkpoint moved to it: the transaction verified

@@ -58,4 +58,4 @@ Guard разрешает ровно три вида вызовов:
 [test_guard.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_guard.py),
 [test_compatibility.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_compatibility.py),
 [docs/agents/test-author.md](../agents/test-author.md),
-ADR 0014
+ADR 0035

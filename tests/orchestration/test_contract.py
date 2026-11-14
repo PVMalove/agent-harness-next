@@ -86,8 +86,8 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         self.assertIn("tests/orchestration/test_docker_smoke.py", smoke)
         self.assertIn('HARNESS_REQUIRE_DOCKER_SMOKE: "1"', smoke)
         self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', smoke)
-        # The smoke runs the one debug build of the `rust` job.
-        self.assertIn("needs: rust", smoke)
+        # The smoke runs the one debug build of the `runtime-build` job.
+        self.assertIn("needs: [lint, runtime-build]", smoke)
         self.assertIn("name: harness-runtime-linux-debug", smoke)
         for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy"):
             self.assertIn(f"-f harness/container/{dockerfile}", smoke)
@@ -159,11 +159,11 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         self.assertIn("tests/orchestration\n", job)
         self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', job)
         self.assertIn('HARNESS_REQUIRE_FAULT_INJECTION: "1"', job)
-        # The test hooks of the runtime exist only in a debug build: the `rust` job builds it.
-        self.assertIn("needs: rust", job)
+        # The test hooks of the runtime exist only in a debug build: `runtime-build` builds it.
+        self.assertIn("needs: [lint, runtime-build]", job)
         self.assertIn("name: harness-runtime-linux-debug", job)
-        self.assertIn("run: cargo build --locked --bin harness-runtime\n", blocks["rust"])
-        self.assertNotIn("--release", blocks["rust"])
+        self.assertIn("run: cargo build --locked --bin harness-runtime\n", blocks["runtime-build"])
+        self.assertNotIn("--release", blocks["runtime-build"])
         self.assertIn("native/harness-runtime/target/debug/harness-runtime", job)
         self.assertNotIn("--release", job)
         self.assertIn("--junitxml=.harness/.sandboxes/logs/junit-fault-injection.xml", job)

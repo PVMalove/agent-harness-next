@@ -11,8 +11,11 @@ file ledger to the Rust SQLite WAL store", sections 1, 5, and 6.
   runtime gives `runtime_unavailable` and exit code 2.
 - **`ledger.json` gets `version: 4`.** `harness-runtime migrate` writes it at the cutover commit
   point. After that point, a 1.x installation refuses with exit code 2.
-- **Coordinator 2.0.0 does not run on the file ledger.** On `ledger.json` versions 1–3 it exits with
-  code 2, and its remedy names `harness-runtime migrate`.
+- **Until migrate, coordinator 2.0.0 runs on the file ledger.** It keeps running batches on
+  `ledger.json` version 3. It creates no new ledger: a project without orchestration state gets the
+  runtime store from `harness-runtime init` (below). The container QA, the docker executor, the `recovery` commands and the operational hold
+  run only on the runtime store: in the file epoch they exit with code 2, and the remedy names
+  `harness-runtime migrate`.
 - **A human runs migrate and rollback.** Both commands require human approval. The agent does not
   run them.
 

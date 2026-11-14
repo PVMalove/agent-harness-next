@@ -19,6 +19,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -137,10 +138,22 @@ def _check_path_budget(test_root):
 
 
 def _run(test_root: Path):
-    """Выполнить все сценарии по порядку с общим контекстом, начиная с корня `test_root`."""
+    """Выполнить все сценарии по порядку с общим контекстом, начиная с корня `test_root`.
+
+    После каждого сценария печатается `[clean-room] <сценарий>: X s`, после упавшего —
+    `[clean-room] <сценарий>: failed after X s`: так видно, куда уходит время прогона.
+    """
     context = SimpleNamespace(test_root=test_root)
     for scenario in SCENARIOS:
-        scenario.run(context)
+        name = scenario.__name__.rpartition(".")[2]
+        started = time.perf_counter()
+        try:
+            scenario.run(context)
+        except BaseException:
+            elapsed = time.perf_counter() - started
+            print(f"[clean-room] {name}: failed after {elapsed:.2f} s", flush=True)
+            raise
+        print(f"[clean-room] {name}: {time.perf_counter() - started:.2f} s", flush=True)
 
 
 def main():

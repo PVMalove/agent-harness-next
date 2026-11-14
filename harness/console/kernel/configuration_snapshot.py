@@ -31,6 +31,7 @@ from .configuration import (
     default_document,
     preview_runtime_adapters,
 )
+from .json_shape import json_object, json_str
 
 STORE_DIR = ".harness/config_versions"
 _FIELDS = frozenset(
@@ -141,15 +142,11 @@ class ConfigurationFacts:
 
 
 def _object(value: object, fields: frozenset[str] | None = None) -> dict[str, object]:
-    if not isinstance(value, dict) or (fields is not None and set(value) != fields):
-        raise ValueError("configuration snapshot off the schema")
-    return cast(dict[str, object], value)
+    return json_object(value, "configuration snapshot off the schema", fields)
 
 
 def _str(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError("configuration snapshot string")
-    return value
+    return json_str(value, "configuration snapshot string")
 
 
 def _file(value: object) -> ConfigFile:

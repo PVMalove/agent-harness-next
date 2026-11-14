@@ -19,11 +19,8 @@ use crate::Supervisor;
 use crate::launch::sql;
 
 fn malformed(detail: &str) -> ErrorBody {
-    ErrorBody::new(
-        ErrorCode::MalformedRequest,
-        FailureDomain::Tooling,
-        false,
-        format!("the request is not valid: {detail}"),
+    ErrorBody::malformed(
+        detail,
         "send {\"engines\": [\"docker\"|\"podman\", ...]} or {\"objects\": [{\"engine\", \"id\"}, ...]}",
     )
 }

@@ -143,9 +143,42 @@ def _resolve(repo: Path, sha: object, field: str) -> str:
         ) from exc
 
 
+PatchIds = dict[tuple[str, str | None], str | None]
+
+
 def validate_report(repo: Path, dispatch: JsonObject, report: JsonObject) -> None:
     """The ``rebase_check`` block of a rebaser report, recomputed from Git: required on a
-    completed rebaser report, forbidden on any other role's report."""
+    completed rebaser report, forbidden on any other role's report.
+
+    The checks run in order: the block's shape, the bases, the copies, the patch-ids of the
+    rebased pairs and of their files, and the range-diff. One call runs ``git patch-id`` once
+    per commit and path."""
+    block = _report_block(dispatch, report)
+    if block is None:
+        return
+    target, snapshot, previous_base = _check_bases(repo, dispatch, block)
+    head = _resolve(repo, report.get("commit_sha"), "commit_sha")
+    rebased = _check_copies(repo, block, target, snapshot, previous_base, head)
+    patch_ids: PatchIds = {}
+    mismatches = _check_patch_ids(repo, block, rebased, patch_ids)
+    _check_mismatched_files(repo, block, mismatches, patch_ids)
+    _check_range_diff(block, mismatches, previous_base, snapshot, target, head)
+
+
+def _cached_patch_id(
+    repo: Path, patch_ids: PatchIds, commit: str, path: str | None = None
+) -> str | None:
+    """``_patch_id`` of one commit (and path), computed once per ``validate_report`` call."""
+    key = (commit, path)
+    if key not in patch_ids:
+        patch_ids[key] = _patch_id(repo, commit, path)
+    return patch_ids[key]
+
+
+def _report_block(dispatch: JsonObject, report: JsonObject) -> JsonObject | None:
+    """The report's ``rebase_check`` block with exactly its fields, or ``None`` when there is
+    nothing to check: another role's report without the block, or an incomplete rebaser report
+    without it."""
     block = report.get(REPORT_FIELD)
     if dispatch.get("role") != REBASER_ROLE:
         if REPORT_FIELD in report:
@@ -153,15 +186,23 @@ def validate_report(repo: Path, dispatch: JsonObject, report: JsonObject) -> Non
                 "only a rebaser report carries the rebase_check block",
                 remedy="drop the rebase_check field from this report",
             )
-        return
+        return None
     if report.get("outcome") != "completed" and block is None:
-        return
+        return None
     if not isinstance(block, dict) or set(block) != REBASE_CHECK_FIELDS:
         raise CoordinatorError(
             "a completed rebaser report must carry the rebase_check block with exactly: "
             + ", ".join(sorted(REBASE_CHECK_FIELDS)),
             remedy=REPORT_REMEDY,
         )
+    return block
+
+
+def _check_bases(
+    repo: Path, dispatch: JsonObject, block: JsonObject
+) -> tuple[str, str, str]:
+    """``(target, snapshot, previous_base)`` of the brief; the block names the same target and
+    previous base."""
     target = plan_rules.rebase_target(dispatch)
     snapshot = dispatch.get("snapshot_commit")
     if target is None or not isinstance(snapshot, str):
@@ -180,7 +221,19 @@ def validate_report(repo: Path, dispatch: JsonObject, report: JsonObject) -> Non
             remedy=f"report rebase_target_commit {target} and previous_base_commit "
             f"{previous_base}",
         )
-    head = _resolve(repo, report.get("commit_sha"), "commit_sha")
+    return target, snapshot, previous_base
+
+
+def _check_copies(
+    repo: Path,
+    block: JsonObject,
+    target: str,
+    snapshot: str,
+    previous_base: str,
+    head: str,
+) -> list[tuple[str, str, object]]:
+    """The rebased ``(original, copy, reported patch_id_match)`` pairs; with the dropped
+    commits they map every previous commit onto the commits above the target."""
     rebased = [
         (
             _resolve(repo, entry["rebased_from"], "rebased[].rebased_from"),
@@ -202,10 +255,23 @@ def validate_report(repo: Path, dispatch: JsonObject, report: JsonObject) -> Non
         _commits_between(repo, previous_base, snapshot),
         partial(_candidate_commit, repo),
     )
+    return rebased
+
+
+def _check_patch_ids(
+    repo: Path,
+    block: JsonObject,
+    rebased: list[tuple[str, str, object]],
+    patch_ids: PatchIds,
+) -> list[tuple[str, str]]:
+    """The rebased ``(original, copy)`` pairs whose patch-id differs; the block reports every
+    pair's match and lists exactly these pairs, in order."""
     mismatches: list[tuple[str, str]] = []
     for original, copy, reported in rebased:
-        original_id = _patch_id(repo, original)
-        match = original_id is not None and original_id == _patch_id(repo, copy)
+        original_id = _cached_patch_id(repo, patch_ids, original)
+        match = original_id is not None and original_id == _cached_patch_id(
+            repo, patch_ids, copy
+        )
         if reported is not match:
             raise CoordinatorError(
                 f"rebase_check reports patch_id_match {reported!r} for {copy} (rebased from "
@@ -228,6 +294,17 @@ def validate_report(repo: Path, dispatch: JsonObject, report: JsonObject) -> Non
             "rebase_check patch_id_mismatches must list exactly the pairs whose patch-id differs",
             remedy="list every rebased pair with patch_id_match false, in order",
         )
+    return mismatches
+
+
+def _check_mismatched_files(
+    repo: Path,
+    block: JsonObject,
+    mismatches: list[tuple[str, str]],
+    patch_ids: PatchIds,
+) -> None:
+    """A mismatched copy changes only the files the block lists as resolved conflicts or as
+    generated files."""
     allowed = set(_strings(block["resolved_conflicts"], "resolved_conflicts")) | set(
         _strings(block["generated_files"], "generated_files")
     )
@@ -239,7 +316,8 @@ def validate_report(repo: Path, dispatch: JsonObject, report: JsonObject) -> Non
         changed = [
             path
             for path in files
-            if _patch_id(repo, original, path) != _patch_id(repo, copy, path)
+            if _cached_patch_id(repo, patch_ids, original, path)
+            != _cached_patch_id(repo, patch_ids, copy, path)
             and path not in allowed
         ]
         if changed:
@@ -250,6 +328,18 @@ def validate_report(repo: Path, dispatch: JsonObject, report: JsonObject) -> Non
                 "resolved_conflicts or generated_files when the rebase really resolved or "
                 "regenerated it; a change of behaviour belongs to a developer",
             )
+
+
+def _check_range_diff(
+    block: JsonObject,
+    mismatches: list[tuple[str, str]],
+    previous_base: str,
+    snapshot: str,
+    target: str,
+    head: str,
+) -> None:
+    """A rebase with patch-id mismatches attaches its bounded range-diff; one without them
+    reports none."""
     range_diff = block["range_diff"]
     if mismatches:
         if not isinstance(range_diff, str) or not range_diff.strip():

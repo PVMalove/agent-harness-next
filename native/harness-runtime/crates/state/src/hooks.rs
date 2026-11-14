@@ -92,13 +92,15 @@ pub fn reach(_step: &str) -> Result<()> {
 /// process reaches it. A serving runtime handles many requests, and a test wants the hook at one.
 #[cfg(debug_assertions)]
 fn first_asked(step: &str, variables: &[&str]) -> bool {
-    use std::sync::{Mutex, PoisonError};
+    use std::sync::Mutex;
+
+    use crate::mutex::lock_unpoisoned;
 
     static FIRED: Mutex<Vec<String>> = Mutex::new(Vec::new());
     if !variables.iter().any(|variable| selected(variable, step)) {
         return false;
     }
-    let mut fired = FIRED.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut fired = lock_unpoisoned(&FIRED);
     if fired.iter().any(|done| done == step) {
         return false;
     }
