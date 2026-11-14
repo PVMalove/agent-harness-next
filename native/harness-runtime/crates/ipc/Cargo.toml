@@ -18,7 +18,7 @@ state = { version = "0.1.0", path = "../state" }
 supervisor = { version = "0.1.0", path = "../supervisor" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31.3", default-features = false, features = ["socket", "user"] }
+nix = { version = "0.31.3", default-features = false, features = ["poll", "socket", "user"] }
 
 [target.'cfg(windows)'.dependencies]
 platform-ffi = { version = "0.1.0", path = "../platform-ffi" }
