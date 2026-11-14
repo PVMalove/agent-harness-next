@@ -15,8 +15,17 @@ store», разделы 1, 5 и 6.
   с кодом 2, а remedy называет `harness-runtime migrate`.
 - **Migrate и откат выполняет человек.** Обе команды требуют human approval. Агент их не запускает.
 
-Проекту без backend-оркестрации (нет `.harness/orchestration/state/`) миграция не нужна, достаточно
-`harness update`.
+Проекту без состояния оркестрации (нет `.harness/orchestration/state/ledger.json`) миграция не
+нужна. После `harness update` человек один раз создаёт ему runtime store:
+
+```bash
+harness-runtime init --repo <repo> \
+  --approved-by <человек> --approved-at <время RFC 3339> --reason <текст>
+```
+
+`init` проверяет approval так же, как `migrate`, и отказывает с кодом 2, если в state-каталоге уже
+есть ledger. Coordinator на таком проекте файловый ledger не создаёт: без `init` команды
+`batch create` и `ledger reset` завершаются с кодом 2 и называют эту команду в remedy (ADR 0036).
 
 ## Перед обновлением
 

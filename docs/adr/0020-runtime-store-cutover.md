@@ -65,6 +65,10 @@ Operational state живёт ровно в одной эпохе:
 `LifecycleLedger` в `harness/orchestration/ledger/lifecycle.py` пишет файловый ledger, если
 `store_is_authority` не выбирает эпоху `runtime-store`.
 
+**Заменено ADR 0036 (#1146) для проекта без состояния оркестрации:** coordinator не создаёт
+ledger версий 1–3 и отказывает с remedy `harness-runtime init`; Python пишет только существующий
+ledger 1.x до `migrate`.
+
 ### 2. Разделение ответственности
 
 - **Python** (policy-слой, остаётся после cutover): семантика переходов batch/dispatch, approval,
@@ -222,7 +226,8 @@ cutover snapshot остаётся отдельным разрушительны�
    с префиксом `policy:` отклоняется (`policy_denied`), `--approved-at` — время RFC 3339 не в
    будущем. Затем предусловия: нет живого QA-lease и записей очереди QA; нет dispatch в
    `sent`/`working` с живым worker-ом; `ledger validate` проходит; Rust store отсутствует или в
-   состоянии `importing` от прерванной попытки.
+   состоянии `importing` от прерванной попытки. **Заменено ADR 0036 (#1146):** проекту без
+   ledger `migrate` не нужен; `nothing_to_migrate` ведёт к `harness-runtime init`.
 2. **Захват legacy-замка** по существующему протоколу (`owner.json` с `operation:
    runtime-cutover`) плюс удержание flock на файле внутри `.coordinator.lock/` на всё время
    операции (критерии #777, реализация в Rust-мигратор). Живой
@@ -335,7 +340,8 @@ Python-реализации. Python-доработки файлового ledger
 Harness Next, определяет ADR 0026, раздел 1.
 
 **Обновление до 2.0.0.** `harness update` устанавливает файлы, но cutover не выполняет: `migrate`
-запускает человек с approval (раздел 5). Пока cutover не выполнен или если migrate прервался
+запускает человек с approval (раздел 5). Проект без состояния оркестрации получает store
+командой `harness-runtime init` (ADR 0036). Пока cutover не выполнен или если migrate прервался
 (код 3 или 4), authority остаётся у файлового ledger, coordinator 2.0.0 отказывает с кодом 2, а
 remedy — повтор `migrate` или возврат на 1.x.
 

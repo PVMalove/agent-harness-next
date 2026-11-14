@@ -304,13 +304,20 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
 
 ## 5. Runtime {#runtime}
 
-This section applies when `backend-orchestration` is installed. After a one-time migration, the
-runtime store holds the orchestration state, and only the `harness-runtime serve` process can write
-it. A human approves and runs `harness-runtime migrate` once; the
-[backend orchestration guide](../backend-orchestration.md) describes the procedure.
+This section applies when `backend-orchestration` is installed. The runtime store holds the
+orchestration state, and only the `harness-runtime serve` process can write it. A new project gets
+its store with one command, which a human runs with their own approval:
 
-After the migration, `serve` must keep running while you use orchestration. Start it outside the
-agent sandbox:
+```bash {.ah-code-wrap}
+harness-runtime init --repo /path/to/repository \
+  --approved-by <human> --approved-at <RFC 3339 time> --reason <text>
+```
+
+A project with a 1.x ledger needs a one-time `harness-runtime migrate` instead, also approved by a
+human; the [upgrade guide](../guides/upgrade-2-0.md) describes the procedure.
+
+After `init` or the migration, `serve` must keep running while you use orchestration. Start it
+outside the agent sandbox:
 
 ```bash {.ah-code-wrap}
 harness-runtime serve --repo /path/to/repository
