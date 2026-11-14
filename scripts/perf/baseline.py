@@ -588,12 +588,13 @@ def copy_store(source: Path, target: Path) -> None:
     """Консистентная копия runtime store: `runtime.db` через SQLite backup API (живой serve
     продолжает писать) и указатели `ledger.json`, `AUTHORITY.json` рядом с ним."""
     import sqlite3
+    from contextlib import closing
 
     target.mkdir(parents=True)
     uri = (source / "runtime.db").resolve().as_uri() + "?mode=ro"
     with (
-        sqlite3.connect(uri, uri=True) as origin,
-        sqlite3.connect(target / "runtime.db") as copy,
+        closing(sqlite3.connect(uri, uri=True)) as origin,
+        closing(sqlite3.connect(target / "runtime.db")) as copy,
     ):
         origin.backup(copy)
     for name in ("ledger.json", "AUTHORITY.json"):

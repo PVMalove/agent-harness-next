@@ -1,5 +1,5 @@
 {
- "version": 10,
+ "version": 11,
  "engine": "sqlite3 FTS5 bm25, path tie-break",
  "corpus": "Tracked ADRs and CONTEXT.md; excludes task archives and tracker snapshots",
  "k_values": [
@@ -12,12 +12,12 @@
  "max_noise_ratio": 0.7,
  "dataset_hash": "27ae576158e8a67a0524831467f2e4d157f5beb707d8c7bf2ed5c24c04060d17",
  "source_hashes": {
-  "CONTEXT.md": "226054f6acc828b950d5e46ccff4098f718dc156d0df7c318a0f3cf2eb42e336",
+  "CONTEXT.md": "e7958f392fe134d7645b8402246f33c3c96e928d5fc878b10cd06caf42e53515",
   "docs/adr/0001-portable-capability-delivery.md": "7f35b9513f2a9b63ad081ef5ade53b971a39aa94743167b426b6e7be5611c602",
   "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
   "docs/adr/0003-orchestration-core.md": "e6522ae291e82560e5b12a48131652b5cfdc3025fd4ac383122c274735c879a6",
   "docs/adr/0004-role-assignments.md": "acf8f9b02353f8e59dd38066a273b3e9b5cd1db970b3dc260f332fcbb5f791c9",
-  "docs/adr/0005-implement-pipeline.md": "63d75838528f55c8656d90f5e136dcf4bb36b034e0e5d69e7962bcd8d1b9c947",
+  "docs/adr/0005-implement-pipeline.md": "736203ddb2fd0fdf7d6e40aaa4d116de0f475d6c2d9a86e2313403f5cc0ddf92",
   "docs/adr/0006-scratch-artifacts.md": "67fea598a768ec5513a0818654e98b7e9c3bc9605161a33d85b2e66ab98c870f",
   "docs/adr/0007-python-quality.md": "866c0aa5cddae54238750e54733e281d0ed8cdd5e4c4336713c82ca4f30a6677",
   "docs/adr/0008-repo-map.md": "a1efc331e1f698c964b04593c8665595e667a0f24acc5a3bc8d0b447ccdc329e",
@@ -483,5 +483,5 @@
   "gate_passed": true
  },
  "annotation_revision": "Version 2 corrected source-grounded multi-label annotations; versions 3, 4 and 5 re-evaluate updated corpora. Initial single-label measurement remains unchanged in baseline_fts5_initial.json.",
- "corpus_revision": "Issue #716 updates worker observation/recovery in CONTEXT.md and ADR 0003, and session scratchpad binding in ADR 0006; issue #555 updates the test author in CONTEXT.md and ADR 0005; the import of integration/console-redesign into Harness Next merges them with the Harness Next CONTEXT.md and ADR 0003 changes (#635, #662, #786, #789). Re-evaluated the merged source set; dataset, labels, engine, windows and thresholds are unchanged. The initial corpus remains preserved in tests/memory/fixtures/initial-corpus.json. Issue #978 moves the public docs under site/docs and renames the repository; only the CONTEXT.md source hash changes and the report is identical. PR #892 merges the web console and runtime reliability corpora, including the external developer test-author route (#971) and canonical configuration/recovery terms (#685). Re-evaluated the merged source bytes with the dataset, labels, engine, windows and thresholds unchanged. Version 9 re-evaluates the corpus after the CONTEXT.md edits of a7d6c65 and cf188dd on integration/web-console; only the CONTEXT.md source hash changes and the report is identical to version 8. Version 10 (#1142) re-evaluates the corpus after the ADR audit edits ADR 0003, 0004, 0005, 0009 and 0010; recall, noise and the gate are unchanged; only the ranked top-5 paths of queries 345, 394, 422, 423 and 459 change. ADR 0004, 0009 and 0010 keep their original bytes in fixtures/initial-corpus.json."
+ "corpus_revision": "Issue #716 updates worker observation/recovery in CONTEXT.md and ADR 0003, and session scratchpad binding in ADR 0006; issue #555 updates the test author in CONTEXT.md and ADR 0005; the import of integration/console-redesign into Harness Next merges them with the Harness Next CONTEXT.md and ADR 0003 changes (#635, #662, #786, #789). Re-evaluated the merged source set; dataset, labels, engine, windows and thresholds are unchanged. The initial corpus remains preserved in tests/memory/fixtures/initial-corpus.json. Issue #978 moves the public docs under site/docs and renames the repository; only the CONTEXT.md source hash changes and the report is identical. PR #892 merges the web console and runtime reliability corpora, including the external developer test-author route (#971) and canonical configuration/recovery terms (#685). Re-evaluated the merged source bytes with the dataset, labels, engine, windows and thresholds unchanged. Version 9 re-evaluates the corpus after the CONTEXT.md edits of a7d6c65 and cf188dd on integration/web-console; only the CONTEXT.md source hash changes and the report is identical to version 8. Version 10 (#1142) re-evaluates the corpus after the ADR audit edits ADR 0003, 0004, 0005, 0009 and 0010; recall, noise and the gate are unchanged; only the ranked top-5 paths of queries 345, 394, 422, 423 and 459 change. ADR 0004, 0009 and 0010 keep their original bytes in fixtures/initial-corpus.json. Version 11 (#1150) re-evaluates CONTEXT.md and ADR 0005 after release changes."
 }
