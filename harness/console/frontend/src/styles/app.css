@@ -47,6 +47,9 @@
    the copy confirmation beside the command button. */
 .diag-page > .command-refusal { margin-bottom: 12px; }
 .diag-fixes { margin-top: 20px; }
+/* Inside the v3 panels of Diagnostics · Проверки the list and the detail drop their own frame. */
+.ds-diag-checks .diag-list-bare,
+.ds-diag-checks .diag-detail-panel { border: 0; border-radius: 0; }
 .diag-fixes .panel-head { padding: 12px 16px; }
 .diag-fixes-list { margin: 0; padding: 12px 16px 12px 32px; font-size: var(--fs-1); line-height: 1.6; }
 .diag-commands { margin-top: 20px; }

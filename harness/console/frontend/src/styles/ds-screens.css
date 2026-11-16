@@ -1,4 +1,4 @@
-/* Design system v3: the layout of the three moved screens (Repo Map, Harness, Help). General rules
+/* Design system v3: the layout of the moved screens (Repo Map, Harness, Help, Diagnostics). General rules
    live in ds-components.css; nothing here restyles a shared component. */
 .ds-tabpanel { display: flex; flex-direction: column; flex: 1; gap: 12px; min-height: 0; }
 .ds-tabpanel[hidden] { display: none; }
@@ -94,6 +94,31 @@
 .ds-faq summary { font-weight: 600; cursor: pointer; }
 .ds-faq p { margin: 4px 0 0; color: var(--ds-muted); }
 
+/* Diagnostics: the Features tab (list, detail, switch plan) and the Checks tab (list, detail) */
+.ds-feature-filters { flex-wrap: wrap; }
+.ds-feature-filters .ds-filter button { display: inline-flex; align-items: center; gap: 4px; }
+.ds-feature-filters .ds-status { width: 20px; height: 20px; }
+.ds-feature-category { display: inline-flex; }
+.ds-feature-note { margin-left: auto; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-features { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr) minmax(240px, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-group-title { margin: 0; padding: 8px 12px 4px; color: var(--ds-muted); font-size: var(--ds-fs-1); font-weight: 600; }
+.ds-feature-detail { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.ds-feature-detail > .ds-note,
+.ds-feature-detail > .ds-alert,
+.ds-feature-detail > .ds-pipe { margin: 0 12px; }
+.ds-feature-head { display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.ds-feature-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--ds-muted); }
+.ds-feature-links { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px; }
+.ds-feature-plan { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.ds-feature-ba { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 8px 12px; padding: 0 12px; color: var(--ds-muted); }
+.ds-feature-counts { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
+.ds-feature-counts > span { display: inline-flex; align-items: center; gap: 4px; color: var(--ds-fg); }
+.ds-feature-counts .ds-status { width: 20px; height: 20px; }
+.ds-faint { color: var(--ds-faint); }
+#features-list .ds-row-button { min-height: 44px; }
+.ds-diag-checks { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-diag-checks .ds-legacy-island { overflow: visible; min-height: 100%; }
+
 /* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
    The page subtitle goes, the installation rows put their caption on the title line and the tile
    captions take one line, so every panel shows all its rows. */
@@ -114,6 +139,8 @@
   .ds-container-stats { grid-template-columns: minmax(0, 1fr); }
   .ds-files,
   .ds-split,
+  .ds-features,
+  .ds-diag-checks,
   .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
   .ds-file-rel { border-left: 0; }
 }

@@ -242,6 +242,7 @@
 .ds-status-err { background: var(--ds-err-bg); color: var(--ds-err); }
 .ds-status-info { background: var(--ds-accent-bg); color: var(--ds-accent); }
 .ds-status-wait { background: var(--ds-hover); color: var(--ds-muted); }
+.ds-status-off { background: none; color: var(--ds-faint); }
 
 /* Tiles */
 .ds-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 8px; }

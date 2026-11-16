@@ -5,6 +5,7 @@ import { mergeOutput, parseCommands, parseJobSnapshot, parseJobSummary } from ".
 import type { CommandDescriptor, JobSummary, LocalJob } from "./jobs";
 import type {
   ErrorReply,
+  FeaturesSnapshotReply,
   HarnessOverviewReply,
   HomeSnapshotReply,
   HomeSnapshotRequest,
@@ -86,6 +87,7 @@ export type ScreenType =
   | "diagnostics.snapshot"
   | "harness.maintenance"
   | "harness.overview"
+  | "features.snapshot"
   | "reports.snapshot"
   | "reports.report"
   | "reports.timeline"
@@ -100,6 +102,8 @@ export type ScreenType =
   | "task_board.specs"
   | "task_board.snapshot";
 
+/** The typed replies: one frame with the cache facts, no snapshot pages. */
+const TYPED_TYPES: ReadonlySet<string> = new Set(["harness.overview", "features.snapshot"]);
 /** The paged replies without cache facts: a report body, a batch chronology and a file diff. */
 const UNCACHED_TYPES: ReadonlySet<string> = new Set(["reports.report", "reports.timeline", "update_harness.diff"]);
 /** The requests without a `force` field besides the uncached ones: the server refuses it. */
@@ -358,9 +362,9 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       screenFailed(key, error?.code ?? "unknown", error?.message ?? "");
       return;
     }
-    if (reply.type === "harness.overview") {
+    if (TYPED_TYPES.has(String(reply.type))) {
       const { v: _v, id: _id, type: _type, ok: _ok, cached, age_seconds, ...value } =
-        reply as unknown as HarnessOverviewReply;
+        reply as unknown as HarnessOverviewReply | FeaturesSnapshotReply;
       if (typeof cached !== "boolean" || typeof age_seconds !== "number") {
         screenFailed(key, "invalid", "");
         return;
