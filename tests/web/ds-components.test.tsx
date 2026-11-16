@@ -160,4 +160,25 @@ describe("Drawer", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
   });
+
+  test("a click on the backdrop closes it: closedby=any, with a fallback where it is missing", () => {
+    const onClose = vi.fn();
+    render(
+      <Drawer title="Ящик" closeLabel="Закрыть" onClose={onClose}>
+        <p>Содержимое</p>
+      </Drawer>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Ящик" });
+    expect(dialog.getAttribute("closedby")).toBe("any");
+    // A click inside the panel keeps it open.
+    fireEvent.click(screen.getByText("Содержимое"));
+    expect(onClose).not.toHaveBeenCalled();
+    // jsdom has no closedBy: the fallback reads a click on the dialog outside its box as the backdrop.
+    const box = { top: 0, left: 600, width: 400, height: 800, right: 1000, bottom: 800, x: 600, y: 0, toJSON: () => ({}) };
+    dialog.getBoundingClientRect = () => box as DOMRect;
+    fireEvent.click(dialog, { clientX: 700, clientY: 100 });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(dialog, { clientX: 100, clientY: 100 });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

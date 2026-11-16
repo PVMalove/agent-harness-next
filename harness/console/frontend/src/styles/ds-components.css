@@ -346,7 +346,10 @@
   font-family: var(--ds-sans);
 }
 .ds-drawer:not([open]) { display: none; }
-.ds-drawer::backdrop { background: rgb(0 0 0 / 0.5); }
+/* A scroll gesture over the drawer or its backdrop never scrolls the page behind it
+   (ui-behaviors/prevent-page-scroll-under-modal-dialog); the root overflow stays untouched. */
+.ds-drawer:modal { overscroll-behavior: contain; }
+.ds-drawer::backdrop { background: rgb(0 0 0 / 0.5); overflow: hidden; overscroll-behavior: contain; }
 .ds-drawer[open] { animation: ds-drawer-in 0.16s ease-out both; }
 @keyframes ds-drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .ds-drawer-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ds-line); }
