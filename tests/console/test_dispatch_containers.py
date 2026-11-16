@@ -8,8 +8,28 @@ from harness.json_types import JsonObject
 from harness.console.kernel.dispatch_containers import container_payload
 from harness.console.kernel.reports import LedgerView, StageEntry
 
-EXECUTION: JsonObject = {"supervisor": "harness-runtime", "timeout_seconds": 3600}
-QA_EXECUTION: JsonObject = {"supervisor": "harness-runtime", "command_timeout_seconds": 900}
+# The sections in the form the ledger writes them (`dispatch.py`, `runtime_access.py`): every
+# external worker under the runtime store carries `execution`, only a container pins its images.
+EXECUTION: JsonObject = {
+    "poll_interval_seconds": 15,
+    "stop_grace_seconds": 30,
+    "supervisor": "harness-runtime",
+    "timeout_seconds": 14400,
+}
+QA_EXECUTION: JsonObject = {
+    "command_timeout_seconds": 3600,
+    "poll_interval_seconds": 15,
+    "stop_grace_seconds": 30,
+    "supervisor": "harness-runtime",
+}
+IMAGES: JsonObject = {"proxy": "sha256:bb", "worker": "sha256:aa"}
+ACCESS: JsonObject = {
+    "container": {
+        "engine": "docker",
+        "proxy_image": "harness-proxy:local",
+        "worker_image": "harness-qa:local",
+    }
+}
 
 
 def _view(*items: tuple[str, JsonObject, str, str]) -> LedgerView:
@@ -49,14 +69,22 @@ def test_a_dispatch_without_an_execution_section_is_not_a_container() -> None:
     assert container_payload(view) == {"containers": [], "counts": {}}
 
 
+def test_an_external_worker_supervised_without_images_is_not_a_container() -> None:
+    view = _view(
+        ("d-1", _record("developer", execution=EXECUTION), "working", "2026-11-16T10:01:00Z")
+    )
+    assert container_payload(view) == {"containers": [], "counts": {}}
+
+
 def test_worker_and_qa_containers_carry_their_facts() -> None:
     view = _view(
         (
             "d-1",
             _record(
                 "developer",
-                execution={**EXECUTION, "engine": "docker"},
-                runtime_images={"worker": "sha256:aa", "proxy": "sha256:bb"},
+                execution=EXECUTION,
+                runtime_access=ACCESS,
+                runtime_images=IMAGES,
             ),
             "working",
             "2026-11-16T10:01:00Z",
@@ -111,7 +139,9 @@ def test_worker_and_qa_containers_carry_their_facts() -> None:
 def test_the_container_state_comes_from_the_stage_state(
     stage_state: str, heartbeat: str, expected: str
 ) -> None:
-    view = _view(("d-1", _record("developer", execution=EXECUTION), stage_state, heartbeat))
+    view = _view(
+        ("d-1", _record("developer", runtime_images=IMAGES), stage_state, heartbeat)
+    )
     payload = container_payload(view)
     containers = payload["containers"]
     assert isinstance(containers, list)
