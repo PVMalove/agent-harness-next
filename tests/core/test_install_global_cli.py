@@ -1,11 +1,13 @@
 """`install-global.py --cli` installs a `harness` launcher that runs this checkout's CLI."""
 
+import importlib.util
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_GLOBAL = [sys.executable, str(REPO_ROOT / "bin" / "install-global.py")]
@@ -84,6 +86,40 @@ class InstallGlobalCliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("--runtime", result.stderr)
+
+
+def load_installer() -> ModuleType:
+    """Импортировать bin/install-global.py как модуль (имя файла содержит дефис)."""
+    spec = importlib.util.spec_from_file_location(
+        "install_global", REPO_ROOT / "bin" / "install-global.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class WindowsLauncherTests(unittest.TestCase):
+    """The CRLF `harness.cmd` launcher is current on a repeated install and under --check."""
+
+    def test_windows_launcher_is_idempotent(self) -> None:
+        """Повторная установка и --check принимают свой harness.cmd с CRLF."""
+        installer = load_installer()
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+
+            self.assertTrue(
+                installer.install_launcher(REPO_ROOT, False, False, home, "win32")
+            )
+            launcher = home / ".local" / "bin" / "harness.cmd"
+            self.assertIn(b"\r\n", launcher.read_bytes())
+            self.assertIn(b"harness.py", launcher.read_bytes())
+            self.assertTrue(
+                installer.install_launcher(REPO_ROOT, False, False, home, "win32")
+            )
+            self.assertTrue(
+                installer.install_launcher(REPO_ROOT, True, False, home, "win32")
+            )
 
 
 if __name__ == "__main__":

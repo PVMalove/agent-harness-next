@@ -68,6 +68,8 @@ def run(ctx: SimpleNamespace) -> None:
         encoding="utf-8"
     ):
         sys.exit("--cli launcher does not run this checkout's harness.py")
+    if sys.platform != "win32":
+        run_ok([str(launcher), "--help"])
     for rel in (
         ".agents/skills/project-harness-bootstrap",
         ".hermes/skills/skill-library",

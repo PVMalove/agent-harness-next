@@ -56,7 +56,13 @@ class SourceCheckoutUpdateTests(unittest.TestCase):
         answer = update_source_checkout(self.source, None)
 
         self.assertEqual(
-            answer, {"ref": "main", "previous": self.start, "current": newer}
+            answer,
+            {
+                "ref": "main",
+                "previous": self.start,
+                "previous_head": "main",
+                "current": newer,
+            },
         )
         self.assertEqual(git(self.source, "rev-parse", "HEAD"), newer)
         self.assertEqual(
@@ -106,6 +112,55 @@ class SourceCheckoutUpdateTests(unittest.TestCase):
 
         self.assertIn("--ref", str(raised.exception))
         self.assertEqual(git(self.source, "rev-parse", "HEAD"), self.start)
+
+    def test_unpushed_commit_on_branch_is_refused(self) -> None:
+        """Ветка с коммитом, которого нет в origin: отказ, ветка и HEAD на месте."""
+        git(self.source, "config", "user.name", "Test")
+        git(self.source, "config", "user.email", "test@example.invalid")
+        (self.source / "local.txt").write_text("local\n", encoding="utf-8")
+        git(self.source, "add", ".")
+        git(self.source, "commit", "-q", "-m", "test: local work")
+        local = git(self.source, "rev-parse", "HEAD")
+
+        with self.assertRaises(SourceCheckoutError) as raised:
+            update_source_checkout(self.source, None)
+
+        self.assertIn("not on origin", str(raised.exception))
+        self.assertEqual(git(self.source, "rev-parse", "HEAD"), local)
+        self.assertEqual(git(self.source, "symbolic-ref", "--short", "HEAD"), "main")
+
+    def test_directory_inside_another_repository_is_refused(self) -> None:
+        """Каталог внутри чужого репозитория не считается checkout харнесса."""
+        nested = self.source / "vendored-harness"
+        nested.mkdir()
+
+        with self.assertRaises(SourceCheckoutError) as raised:
+            update_source_checkout(nested, None)
+
+        self.assertIn("not the top of a git checkout", str(raised.exception))
+        self.assertEqual(git(self.source, "rev-parse", "HEAD"), self.start)
+
+    def test_invalid_branch_name_is_refused(self) -> None:
+        """--ref с недопустимым именем ветки (refspec) отклоняется до fetch."""
+        with self.assertRaises(SourceCheckoutError) as raised:
+            update_source_checkout(self.source, "main:evil")
+
+        self.assertIn("not a branch name", str(raised.exception))
+        self.assertEqual(
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(self.source),
+                    "rev-parse",
+                    "--verify",
+                    "-q",
+                    "refs/heads/evil",
+                ],
+                check=False,
+            ).returncode,
+            1,
+        )
 
 
 if __name__ == "__main__":

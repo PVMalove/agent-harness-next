@@ -33,6 +33,14 @@ def _git(checkout: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
         raise SourceCheckoutError(f"git did not run in {checkout}: {exc}") from exc
 
 
+def _git_checked(checkout: Path, error: str, *arguments: str) -> str:
+    """Run git and return its stdout; a failure raises `error` with git's stderr."""
+    result = _git(checkout, *arguments)
+    if result.returncode != 0:
+        raise SourceCheckoutError(f"{error}: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
 def _default_ref(checkout: Path) -> str:
     result = _git(checkout, "symbolic-ref", "-q", "refs/remotes/origin/HEAD")
     target = result.stdout.strip()
@@ -46,27 +54,68 @@ def _default_ref(checkout: Path) -> str:
 
 def update_source_checkout(checkout: Path, ref: str | None) -> dict[str, str]:
     """Fetch `ref` (default: the branch of origin/HEAD) and detach `checkout` at it."""
-    status = _git(checkout, "status", "--porcelain", "--untracked-files=no")
-    if status.returncode != 0:
+    top = _git_checked(
+        checkout, f"not a git checkout: {checkout}", "rev-parse", "--show-toplevel"
+    )
+    if Path(top).resolve() != checkout.resolve():
         raise SourceCheckoutError(
-            f"not a git checkout: {checkout}: {status.stderr.strip()}"
+            f"{checkout} is not the top of a git checkout (it lies inside {top}); "
+            "run self-update from a dedicated harness clone"
         )
-    if status.stdout.strip():
+    status = _git_checked(
+        checkout,
+        "cannot read the checkout status",
+        "status",
+        "--porcelain",
+        "--untracked-files=no",
+    )
+    if status:
         raise SourceCheckoutError(
             f"the harness source checkout {checkout} has uncommitted changes; "
             "commit or discard them, then retry"
         )
+    unpushed = _git_checked(
+        checkout,
+        "cannot compare HEAD with origin",
+        "rev-list",
+        "--max-count=1",
+        "HEAD",
+        "--not",
+        "--remotes=origin",
+    )
+    if unpushed:
+        raise SourceCheckoutError(
+            f"HEAD of {checkout} has commits that are not on origin; push them or move them "
+            "to another checkout, then retry"
+        )
     branch = ref or _default_ref(checkout)
-    previous = _git(checkout, "rev-parse", "HEAD").stdout.strip()
-    fetch = _git(checkout, "fetch", "--quiet", "origin", f"refs/heads/{branch}")
-    if fetch.returncode != 0:
-        raise SourceCheckoutError(
-            f"cannot fetch branch {branch!r} from origin: {fetch.stderr.strip()}"
-        )
-    switch = _git(checkout, "checkout", "--quiet", "--detach", "FETCH_HEAD")
-    if switch.returncode != 0:
-        raise SourceCheckoutError(
-            f"cannot check out {branch!r}: {switch.stderr.strip()}"
-        )
-    current = _git(checkout, "rev-parse", "HEAD").stdout.strip()
-    return {"ref": branch, "previous": previous, "current": current}
+    if _git(checkout, "check-ref-format", "--branch", branch).returncode != 0:
+        raise SourceCheckoutError(f"{branch!r} is not a branch name")
+    previous = _git_checked(checkout, "cannot read HEAD", "rev-parse", "HEAD")
+    head = (
+        _git(checkout, "symbolic-ref", "-q", "--short", "HEAD").stdout.strip()
+        or "detached"
+    )
+    _git_checked(
+        checkout,
+        f"cannot fetch branch {branch!r} from origin",
+        "fetch",
+        "--quiet",
+        "origin",
+        f"refs/heads/{branch}",
+    )
+    _git_checked(
+        checkout,
+        f"cannot check out {branch!r}",
+        "checkout",
+        "--quiet",
+        "--detach",
+        "FETCH_HEAD",
+    )
+    current = _git_checked(checkout, "cannot read HEAD", "rev-parse", "HEAD")
+    return {
+        "ref": branch,
+        "previous": previous,
+        "previous_head": head,
+        "current": current,
+    }

@@ -12,7 +12,6 @@ models, plugins, credentials, or permissions."""
 from __future__ import annotations
 
 import argparse
-import filecmp
 import os
 import shlex
 import shutil
@@ -57,16 +56,22 @@ def backup_target(target: Path, target_home: Path):
     print(f"  {C_YELLOW}[BACKUP]{C_RESET} Moved existing to {backup_dest}")
 
 
-def install_file(
-    source: Path, target: Path, check: bool, replace: bool, target_home: Path
+def install_content(
+    content: bytes,
+    target: Path,
+    check: bool,
+    replace: bool,
+    target_home: Path,
+    what: str,
 ) -> bool:
+    """Place `content` at `target` under the installer's conflict policy; True when current."""
     if target.exists() or target.is_symlink():
         if (
             target.is_file()
             and not target.is_symlink()
-            and filecmp.cmp(source, target, shallow=False)
+            and target.read_bytes() == content
         ):
-            print(f"  {C_GREEN}[OK]{C_RESET} Profile already matches: {target}")
+            print(f"  {C_GREEN}[OK]{C_RESET} {what} already matches: {target}")
             return True
         if check or not replace:
             print(
@@ -81,9 +86,17 @@ def install_file(
         return False
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, target)
-    print(f"  {C_GREEN}[WRITE]{C_RESET} Copied profile to: {target}")
+    target.write_bytes(content)
+    print(f"  {C_GREEN}[WRITE]{C_RESET} Wrote {what.lower()} to: {target}")
     return True
+
+
+def install_file(
+    source: Path, target: Path, check: bool, replace: bool, target_home: Path
+) -> bool:
+    return install_content(
+        source.read_bytes(), target, check, replace, target_home, "Profile"
+    )
 
 
 def install_link(
@@ -130,49 +143,37 @@ def install_link(
         return False
 
 
-def launcher_text(harness_py: Path) -> str:
-    """Text of the `harness` launcher that runs `harness_py` with the user's Python."""
-    if sys.platform == "win32":
-        return f'@echo off\r\nrem managed-by: agent-harness\r\npython -B "{harness_py}" %*\r\n'
+def launcher_name(platform: str) -> str:
+    """File name of the `harness` launcher on `platform`."""
+    return "harness.cmd" if platform == "win32" else "harness"
+
+
+def launcher_text(harness_py: Path, platform: str) -> bytes:
+    """Launcher that runs `harness_py` with the user's Python on `platform`."""
+    if platform == "win32":
+        return f'@echo off\r\npython -B "{harness_py}" %*\r\n'.encode("utf-8")
     return (
-        "#!/bin/sh\n# managed-by: agent-harness\n"
-        f'exec python3 -B {shlex.quote(str(harness_py))} "$@"\n'
-    )
+        f'#!/bin/sh\nexec python3 -B {shlex.quote(str(harness_py))} "$@"\n'
+    ).encode("utf-8")
 
 
 def install_launcher(
-    kit_root: Path, check: bool, replace: bool, target_home: Path
+    kit_root: Path,
+    check: bool,
+    replace: bool,
+    target_home: Path,
+    platform: str = sys.platform,
 ) -> bool:
     """Install `~/.local/bin/harness` (`harness.cmd` on Windows) for this checkout's CLI."""
-    name = "harness.cmd" if sys.platform == "win32" else "harness"
-    target = target_home / ".local" / "bin" / name
-    text = launcher_text(kit_root / "harness" / "bin" / "harness.py")
-    if target.exists() or target.is_symlink():
-        if (
-            target.is_file()
-            and not target.is_symlink()
-            and target.read_text(encoding="utf-8", errors="replace") == text
-        ):
-            print(f"  {C_GREEN}[OK]{C_RESET} Launcher already matches: {target}")
-            return True
-        if check or not replace:
-            print(
-                f"  {C_RED}[CONFLICT]{C_RESET} File differs: {target} "
-                "(re-run with --replace-conflicts to back it up and replace it)",
-                file=sys.stderr,
-            )
-            return False
-        backup_target(target, target_home)
-    elif check:
-        print(f"  {C_RED}[MISSING]{C_RESET} {target}", file=sys.stderr)
+    target = target_home / ".local" / "bin" / launcher_name(platform)
+    content = launcher_text(kit_root / "harness" / "bin" / "harness.py", platform)
+    if not install_content(content, target, check, replace, target_home, "Launcher"):
         return False
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text, encoding="utf-8", newline="")
-    target.chmod(0o755)
-    print(f"  {C_GREEN}[WRITE]{C_RESET} Installed launcher: {target}")
-    if str(target.parent) not in os.environ.get("PATH", "").split(os.pathsep):
-        print(f"  {C_YELLOW}[INFO]{C_RESET} Add {target.parent} to PATH")
+    if not check:
+        target.chmod(0o755)
+    path_dirs = [Path(entry) for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    if target.parent not in path_dirs:
+        print(f"  {C_YELLOW}[INFO]{C_RESET} {target.parent} is not on PATH; add it to run `harness`")
     return True
 
 
