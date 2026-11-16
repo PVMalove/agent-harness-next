@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from ...kernel.batch_history import History
+from ...kernel.dispatch_containers import container_payload
 from ...kernel.help_text import help_sections
 from ...kernel.pipeline_kpi import (
     evidence_payload,
@@ -255,18 +256,20 @@ class ScreenService:
         return {"lock": state, "error": None}
 
     async def orchestration(self, *, force: bool = False) -> Paged:
-        """The ledger of the Orchestration screen with the ledger lock state and the pipeline
-        KPIs computed from that ledger."""
+        """The ledger of the Orchestration screen with the ledger lock state, the pipeline
+        KPIs and the dispatch containers computed from that ledger."""
         ledger, cached, age = await self._cached_ledger(force)
         lock = await self.lock()
         kpi = await asyncio.to_thread(pipeline_kpi, ledger.view)
         analytics = await asyncio.to_thread(pipeline_analytics, ledger.view)
+        containers = await asyncio.to_thread(container_payload, ledger.view)
         return await self._paged(
             {
                 "ledger": ledger.payload,
                 "lock": lock,
                 "kpi": kpi.to_payload(),
                 "analytics": analytics.to_payload(),
+                "containers": containers,
             },
             cached,
             age,

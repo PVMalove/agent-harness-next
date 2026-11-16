@@ -156,6 +156,36 @@
       "unfinished": 2
     }
   },
+  "containers": {
+    "containers": [
+      {
+        "batch_id": "b-887",
+        "dispatch_id": "d-qa",
+        "engine": "",
+        "image": "",
+        "kind": "qa",
+        "role": "qa",
+        "stage_state": "reported",
+        "state": "stopped",
+        "ticket": "#887"
+      },
+      {
+        "batch_id": "b-887",
+        "dispatch_id": "d-wip",
+        "engine": "",
+        "image": "",
+        "kind": "worker",
+        "role": "developer",
+        "stage_state": "working",
+        "state": "running",
+        "ticket": "#887"
+      }
+    ],
+    "counts": {
+      "running": 1,
+      "stopped": 1
+    }
+  },
   "kpi": {
     "awaiting_approval": 0,
     "batches": 3,
