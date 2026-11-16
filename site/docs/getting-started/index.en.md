@@ -116,10 +116,11 @@ permissions.
 
 ### The `harness` command
 
-`--cli` installs a `harness` command into `~/.local/bin` (`harness.cmd` on Windows). It runs
+`--cli` installs a `harness` command into `~/.local/bin` (`harness.cmd` on Windows). That directory
+must be on `PATH`; the installer reminds you when it is not. The command runs
 `harness/bin/harness.py` of the clone the installer ran from. Keep a separate clone for this that
-nobody develops in, for example `~/.local/share/agent-harness`. Then switching branches in a working
-checkout does not change the code that updates your projects.
+nobody develops in, for example `~/.local/share/agent-harness`. Then switching branches in your
+development clone does not change the code that updates your projects.
 
 ```bash {.ah-code-wrap}
 python3 ~/.local/share/agent-harness/bin/install-global.py --target-home "$HOME" --cli
@@ -129,8 +130,9 @@ harness update /path/to/repository
 ```
 
 `harness self-update` fetches the branch from `origin` and detaches the clone at its latest commit.
-If the clone has uncommitted changes or `origin` has no such branch, the command refuses and leaves
-the clone unchanged.
+The command refuses and leaves the clone unchanged when the clone has uncommitted changes or
+commits that are not on `origin`, when `origin` has no such branch, or when the CLI lies inside
+another repository.
 
 The agent sandbox does not allow writes to `.claude/hooks`, `.claude/settings*.json` or the skills
 directory, so `harness update` run by an agent fails with `Read-only file system`. An exemption by

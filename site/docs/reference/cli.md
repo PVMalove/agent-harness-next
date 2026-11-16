@@ -22,7 +22,7 @@
 | `cleanup` | План и удаление одноразовых данных `.harness` и брошенных ресурсов контейнеров | только с `--apply` |
 | `worktree-remove` | Удаляет управляемый worktree, сохраняя ветку | да |
 | `worktree-venv` | Связывает `.harness/.venv` worktree задачи с venv основного checkout, если `uv.lock` и `pyproject.toml` совпадают | да |
-| `self-update` | Ставит клон harness, из которого запущен CLI, на свежий коммит ветки `origin` (`--ref`, по умолчанию `origin/HEAD`); `<repo>` не принимает | да, в клоне harness |
+| `self-update` | Переводит клон harness, из которого запущен CLI, на последний коммит ветки `origin` (`--ref`, по умолчанию `origin/HEAD`); `<repo>` не принимает | да, в клоне harness |
 | `uninstall` | План и полное удаление harness из проекта | только с `--apply` |
 | `console` | Интерактивная консоль: TUI; с `--web` поднимает сервер | через выбранные команды |
 | `console-server` | Запускает сервер консоли без интерактивной оболочки | нет |

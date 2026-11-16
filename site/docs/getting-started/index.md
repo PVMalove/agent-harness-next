@@ -117,10 +117,11 @@ python3 bin/install-global.py --target-home "$HOME" \
 
 ### Команда `harness`
 
-`--cli` ставит команду `harness` в `~/.local/bin` (`harness.cmd` в Windows). Она запускает
+`--cli` ставит команду `harness` в `~/.local/bin` (`harness.cmd` в Windows). Каталог должен быть
+в `PATH`; если его там нет, установщик напоминает об этом. Команда запускает
 `harness/bin/harness.py` того клона, из которого запущен установщик. Держите для этого отдельный
 клон, в котором не ведётся разработка, например `~/.local/share/agent-harness`. Тогда смена веток в
-рабочем checkout не меняет код, которым обновляются проекты.
+клоне для разработки не меняет код, которым обновляются проекты.
 
 ```bash {.ah-code-wrap}
 python3 ~/.local/share/agent-harness/bin/install-global.py --target-home "$HOME" --cli
@@ -129,9 +130,10 @@ harness self-update --ref <ветка>   # другая ветка origin
 harness update /path/to/repository
 ```
 
-`harness self-update` получает ветку из `origin` и ставит клон на её последний коммит в detached
-HEAD. Если в клоне есть незакоммиченные правки или ветки нет в `origin`, команда отказывает и
-клон не трогает.
+`harness self-update` получает ветку из `origin` и переводит клон на её последний коммит в
+detached HEAD. Команда отказывает и клон не трогает, если в нём есть незакоммиченные правки или
+коммиты, которых нет в `origin`, если ветки нет в `origin` или если CLI лежит внутри другого
+репозитория.
 
 Песочница агента не даёт записывать в `.claude/hooks`, `.claude/settings*.json` и каталог skills,
 поэтому `harness update` из агента падает с `Read-only file system`. Исключение по имени команды не

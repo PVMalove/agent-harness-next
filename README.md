@@ -49,8 +49,10 @@ python3 harness/bin/harness.py health /path/to/repository
 управляемого snapshot, `harness update` обновляет его и сохраняет локальные правки.
 
 `install-global.py --cli` ставит команду `harness` в `~/.local/bin`; она запускает CLI клона, из
-которого запущен установщик. `harness self-update [--ref <ветка>]` ставит этот клон на свежий коммит
-ветки `origin`. Отдельный клон и исключение песочницы по имени команды описаны в
+которого запущен установщик. `harness self-update [--ref <ветка>]` переводит этот клон на последний
+коммит ветки `origin`. Чтобы агент мог запускать `harness update`, добавьте в
+`sandbox.excludedCommands` шаблоны `harness update *`, `harness health *` и `harness self-update *`.
+Исключённая команда всё равно проходит проверку разрешений runtime. Подробнее — в
 [быстром старте](https://pvmalove.github.io/agent-harness-next/getting-started/).
 
 ## Состав `engineering-suite`
