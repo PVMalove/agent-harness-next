@@ -59,8 +59,8 @@
 .diag-facts dd code { color: var(--selfg); font: var(--fs-1) var(--mono); word-break: break-all; }
 /* Harness · Обзор: the maintenance panel under the installation and pipeline usage panels. */
 .harness-page > .command-refusal { margin-bottom: 12px; }
-.harness-maintenance .panel-head { padding: 12px 16px; }
-.harness-maintenance-actions { display: flex; gap: 8px; }
+.harness-maintenance .panel-head { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+.harness-maintenance-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .harness-maintenance-actions .btn { padding: 4px 8px; font-size: var(--fs-1); }
 .harness-maintenance-body { padding: 12px 16px 12px; font-size: var(--fs-1); }
 .harness-maintenance-body h3 { margin: 8px 0 4px; color: var(--muted); font-size: var(--fs-1); }
