@@ -159,6 +159,41 @@ def build_parser(
     )
     runtime_status.set_defaults(handler=handlers.runtime_status)
 
+    worktree = commands.add_parser(
+        "worktree",
+        help="create or remove a managed issue worktree through harness-runtime, which "
+        "works outside the agent sandbox",
+    )
+    worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
+    worktree_create = worktree_commands.add_parser(
+        "create", help="Create a new branch from --base in a managed worktree"
+    )
+    worktree_create.add_argument("--branch", required=True, help="the new issue branch")
+    worktree_create.add_argument(
+        "--base", required=True, help="the commit or ref the branch starts from"
+    )
+    worktree_create.add_argument(
+        "--path",
+        help="worktree directory; default: .harness/.sandboxes/worktrees/<last branch segment>",
+    )
+    worktree_create.set_defaults(handler=handlers.create_worktree)
+    worktree_remove = worktree_commands.add_parser(
+        "remove", help="Remove a clean managed worktree; its branch stays"
+    )
+    worktree_remove.add_argument("--path", required=True, help="worktree directory")
+    worktree_remove.set_defaults(handler=handlers.remove_worktree)
+    for worktree_command in (worktree_create, worktree_remove):
+        # The runtime serves one repository and reads no coordinator state: no `--state-dir` here.
+        worktree_command.add_argument(
+            "--repo", default=argparse.SUPPRESS, help="target project root"
+        )
+        worktree_command.add_argument(
+            "--timeout",
+            type=float,
+            default=120.0,
+            help="seconds to wait for the runtime to finish the git command",
+        )
+
     batch = commands.add_parser("batch")
     batch_commands = batch.add_subparsers(dest="batch_command", required=True)
     create = batch_commands.add_parser("create", aliases=["plan"])

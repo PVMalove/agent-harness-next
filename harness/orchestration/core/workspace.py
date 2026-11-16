@@ -90,9 +90,10 @@ def _registered_worktrees(repo: Path) -> set[Path]:
 
 WORKTREE_WRITE_REMEDY = (
     "the session cannot write to that directory; run the coordinator from a session rooted in the "
-    "main checkout that can write to the issue worktree and its git metadata (for a sandboxed "
-    "session: a worktree the session did not create stays read-only under .git/worktrees), or use "
-    "the single-session route (/fast-implement)"
+    "main checkout that can write to the issue worktree and its git metadata. A sandboxed session "
+    "cannot write a worktree it did not create until it opens that access: in Claude Code call "
+    "EnterWorktree with path=<issue worktree>, then ExitWorktree with action=keep, and repeat the "
+    "command from the main checkout. Otherwise use the single-session route (/fast-implement)"
 )
 
 
@@ -373,5 +374,7 @@ def _validate_worktree(repo: Path, worktree: str) -> None:
     if resolved not in _registered_worktrees(repo):
         raise CoordinatorError(
             f"worktree {worktree!r} is not registered by git worktree",
-            remedy=f"run 'git worktree add' for {worktree}, or pass a worktree already registered by git worktree",
+            remedy=f"create {worktree} with 'worktree create' (harness-runtime runs git outside the "
+            "agent sandbox) or with 'git worktree add', or pass a worktree already registered by "
+            "git worktree",
         )
