@@ -167,6 +167,9 @@
   90% { --ds-fade-end: 24px; }
   to { --ds-fade-start: 24px; --ds-fade-end: 0px; }
 }
+/* Sub-tabs inside a panel (the «Как обновить» aside, a file's tabs) wrap instead: in a narrow
+   column a scrolling row would always hide one of a few tabs under the panel edge. */
+.ds-panel .ds-pipe { flex-wrap: wrap; overflow-x: visible; mask: none; animation: none; }
 .ds-pipe-tab {
   position: relative;
   flex: none;
