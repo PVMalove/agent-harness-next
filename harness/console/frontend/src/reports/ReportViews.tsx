@@ -3,10 +3,11 @@
    (`evidence` of the snapshot, pipeline_kpi.py `evidence_matrix`); a column without a source shows
    no data. */
 import type { ReactNode } from "react";
+import { StatusIcon } from "../ds";
+import type { Tone } from "../ds";
 import { useI18n } from "../i18n";
 import { Bar, NoData } from "../steps/ActivityViews";
 import type {
-  Analytics,
   EvidenceCell,
   EvidenceRow,
   Ledger,
@@ -198,46 +199,60 @@ export function EvidenceTab({ rows }: { rows: readonly EvidenceRow[] }) {
   );
 }
 
-const record = (figure: unknown): Record<string, number> =>
-  figure && typeof figure === "object" && !Array.isArray(figure) ? (figure as Record<string, number>) : {};
-
-export function QualityTab({ ledger, analytics }: { ledger: ReportsSnapshot; analytics: Analytics | null }) {
+/** The Quality tab reads reports.snapshot only: results by role from the report heads, first-pass
+    QA and the QA attempts. Findings by severity and stage latency are not in reports.* and stay on
+    Orchestration; their cards say so instead of borrowing another snapshot. */
+export function QualityTab({ ledger }: { ledger: ReportsSnapshot }) {
   const { t } = useI18n();
-  const findings = record(analytics?.quality.findings_by_severity);
-  const maxFindings = Math.max(1, ...Object.values(findings));
-  const p50 = record(analytics?.flow.stage_p50_by_role);
-  const p95 = record(analytics?.flow.stage_p95_by_role);
-  const maxLatency = Math.max(1, ...Object.values(p95));
   const passed = ledger.reports_kpi.qa_first_pass;
   const total = ledger.reports_kpi.qa_tickets;
   const attempts = new Map<string, number>();
   for (const attempt of ledger.qa_attempts) attempts.set(attempt.dispatch_id, (attempts.get(attempt.dispatch_id) ?? 0) + 1);
-  const minutes = (seconds: number) => Math.round(seconds / 60);
+  const roles = [...new Set(ledger.reports.map((report) => report.role))].sort();
+  const notInSnapshot = <p className="orch-note">{t("нет данных в снимке отчётов")}</p>;
   return (
     <section className="panel report-analytics" id="reports-quality">
       <div className="orch-analytics-head">
         <h2>{t("Качество")}</h2>
-        <span>findings · {t("попытки")} · latency</span>
+        <span>{t("результаты по ролям")} · {t("попытки")}</span>
       </div>
       <div className="orch-analytics-grid">
+        <article className="orch-chart" id="reports-results-by-role">
+          <div className="orch-chart-head">
+            <h3>{t("Результаты по ролям")}</h3>
+            <span>{t("{count} отчётов", { count: ledger.reports.length })}</span>
+          </div>
+          {roles.length === 0 ? (
+            <p className="orch-note">{t("Отчётов нет")}</p>
+          ) : (
+            roles.map((role) => {
+              const counts = reportCounts(ledger.reports.filter((report) => report.role === role));
+              return (
+                <div className="work-stat-row" key={role} data-role={role}>
+                  <span>{role}</span>
+                  <span className="report-role-stack">
+                    <span className="ds-status-line">
+                      <StatusIcon tone="ok" label={t("Пройдено")} /> {counts.passed}
+                    </span>
+                    <span className="ds-status-line">
+                      <StatusIcon tone="warn" label={t("Внимание")} /> {counts.attention}
+                    </span>
+                    <span className="ds-status-line">
+                      <StatusIcon tone="err" label={t("Заблокировано")} /> {counts.blocked}
+                    </span>
+                  </span>
+                  <b>{counts.all}</b>
+                </div>
+              );
+            })
+          )}
+        </article>
         <article className="orch-chart">
           <div className="orch-chart-head">
             <h3>{t("Findings по severity")}</h3>
-            <span>{Object.values(findings).reduce((sum, value) => sum + value, 0)} findings</span>
+            <span>{t("на экране «Оркестрация»")}</span>
           </div>
-          {analytics === null ? (
-            <NoData />
-          ) : Object.keys(findings).length === 0 ? (
-            <p className="orch-note">{t("Findings нет")}</p>
-          ) : (
-            Object.entries(findings).map(([label, value]) => (
-              <div className="work-stat-row" key={label}>
-                <span>{label}</span>
-                <Bar value={value} max={maxFindings} tone="violet" />
-                <b>{value}</b>
-              </div>
-            ))
-          )}
+          {notInSnapshot}
         </article>
         <article className="orch-chart">
           <div className="orch-chart-head">
@@ -280,37 +295,9 @@ export function QualityTab({ ledger, analytics }: { ledger: ReportsSnapshot; ana
         <article className="orch-chart wide">
           <div className="orch-chart-head">
             <h3>{t("Длительность этапа p50 / p95")}</h3>
-            <span>{t("минуты")}</span>
+            <span>{t("на экране «Оркестрация»")}</span>
           </div>
-          {Object.keys(p50).length === 0 ? (
-            <p className="orch-note">{t("нет данных")}</p>
-          ) : (
-            Object.keys(p50).map((role) => (
-              <div className="report-latency-row" key={role}>
-                <span>{role}</span>
-                <div className="work-age-bars">
-                  <div>
-                    <Bar value={minutes(p50[role]!)} max={minutes(maxLatency)} tone="cyan" />
-                    <small>{minutes(p50[role]!)}</small>
-                  </div>
-                  <div>
-                    <Bar value={minutes(p95[role] ?? 0)} max={minutes(maxLatency)} tone="violet" />
-                    <small>{p95[role] === undefined ? "—" : minutes(p95[role]!)}</small>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-          <div className="orch-legend">
-            <span>
-              <i className="cyan" />
-              p50
-            </span>
-            <span>
-              <i className="violet" />
-              p95
-            </span>
-          </div>
+          {notInSnapshot}
         </article>
       </div>
     </section>
@@ -328,7 +315,23 @@ export const VERDICT_TONE: Record<PublishEntry["verdict"], "mint" | "violet" | "
   unknown: "blue",
 };
 
-export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
+/** The StatusIcon tone of a mockup tone word. */
+export const ICON_TONE: Readonly<Record<string, Tone>> = { mint: "ok", violet: "err", blue: "off", lavender: "warn" };
+
+/** A status as a StatusIcon with its word beside it; the word is hidden from assistive technology
+    because the icon already carries it. */
+export function StatusWord({ tone, word, verdict }: { tone: string; word: string; verdict?: string }) {
+  return (
+    <span className="ds-status-line">
+      <StatusIcon tone={ICON_TONE[tone] ?? "off"} label={word} />
+      <span aria-hidden="true" data-verdict={verdict}>
+        {word}
+      </span>
+    </span>
+  );
+}
+
+export function ReadinessTab({ ledger, onOpen }: { ledger: ReportsSnapshot; onOpen?: (batchId: string) => void }) {
   const { t, state } = useI18n();
   const blocked = ledger.publish.filter((entry) => entry.refusals.length > 0);
   return (
@@ -358,14 +361,22 @@ export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
               {ledger.publish.map((entry) => {
                 const [label, tone] = tree(entry.head_matches);
                 return (
-                  <div className="report-ready-row" key={entry.batch_id}>
-                    <b>{entry.candidate ? entry.candidate.slice(0, 12) : "—"}</b>
+                  <div className="report-ready-row" key={entry.batch_id} data-batch={entry.batch_id}>
+                    <b>
+                      {onOpen ? (
+                        <button type="button" className="ds-btn ds-btn-sm report-ready-open" title={t("Открыть кандидата")} onClick={() => onOpen(entry.batch_id)}>
+                          {entry.candidate ? entry.candidate.slice(0, 12) : entry.ticket || entry.batch_id}
+                        </button>
+                      ) : entry.candidate ? (
+                        entry.candidate.slice(0, 12)
+                      ) : (
+                        "—"
+                      )}
+                    </b>
                     <span>{entry.target ? entry.target.slice(0, 12) : "—"}</span>
-                    <span className={`orch-pill ${tone}`}>{t(label)}</span>
+                    <StatusWord tone={tone} word={t(label)} />
                     <span>{entry.qa ? state(entry.qa.outcome) : "—"}</span>
-                    <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`} data-verdict={entry.verdict}>
-                      {state(entry.verdict)}
-                    </span>
+                    <StatusWord tone={VERDICT_TONE[entry.verdict]} word={state(entry.verdict)} verdict={entry.verdict} />
                     <small>{entry.refusals.join(" · ") || "—"}</small>
                   </div>
                 );
@@ -385,7 +396,7 @@ export function ReadinessTab({ ledger }: { ledger: ReportsSnapshot }) {
               blocked.map((entry) => (
                 <div key={entry.batch_id}>
                   <span>{entry.ticket || entry.batch_id}</span>
-                  <b className="orch-pill lavender">{entry.refusals[0]}</b>
+                  <StatusWord tone="lavender" word={entry.refusals[0]!} />
                 </div>
               ))
             )}

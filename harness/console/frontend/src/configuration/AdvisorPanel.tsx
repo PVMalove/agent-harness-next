@@ -3,7 +3,8 @@
    model call); «Спросить ИИ» sends advisor.ask with the file and path of the parameter only;
    «Отменить», another parameter or another provider cancel the ask. An accepted advice goes into
    the draft only; a refusal, a timeout or an invalid answer shows the console recommendation and
-   leaves the draft as it was. */
+   leaves the draft as it was. While the draft of the file cannot be parsed «Принять совет ИИ» is
+   disabled with the reason, and a draft that refuses the value shows it too. */
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { useConsole } from "../useConsole";
@@ -27,7 +28,17 @@ const CAUSES: Readonly<Record<FallbackCause, string>> = {
 
 const stage = (value: boolean | null) => (value === null ? "не проверено" : value ? "да" : "нет");
 
-export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept: (value: unknown) => void }) {
+export function AdvisorPanel({
+  param,
+  refusal,
+  onAccept,
+}: {
+  param: WizardParam;
+  /** Why the draft cannot take a value now (broken JSON), or null. */
+  refusal: string | null;
+  /** Puts the value into the draft; false when the draft refused it. */
+  onAccept: (value: unknown) => boolean;
+}) {
   const { t } = useI18n();
   const { client } = useConsole();
   const [choice, setChoice] = useState<Choice>("none");
@@ -37,20 +48,22 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [fallback, setFallback] = useState<{ cause: FallbackCause; reason: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refused, setRefused] = useState(false);
   const pending = useRef<string | null>(null);
+  // The id of the check of the current choice; a status or error of any other check is stale.
+  const pendingCheck = useRef<string | null>(null);
   const paramKey = `${param.file}:${param.path.join(".")}`;
 
   useEffect(
     () =>
       client.subscribeAdvisor((event) => {
-        if (event.type === "advisor-status") {
+        if (event.type === "advisor-status" || (event.type === "advisor-error" && event.request === "check")) {
+          if (event.requestId === null || event.requestId !== pendingCheck.current) return;
+          pendingCheck.current = null;
           setChecking(false);
-          setStatus(event.status);
-          return;
-        }
-        if (event.type === "advisor-error" && event.request === "check") {
-          setChecking(false);
-          setError(event.message || event.code);
+          if (event.type === "advisor-status") setStatus(event.status);
+          else if (event.code === "closed") setError(t(CAUSES.closed));
+          else setError(event.message || event.code);
           return;
         }
         if (event.type === "advisor-error" && event.request === "cancel") return;
@@ -61,7 +74,7 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
         else if (event.type === "advisor-fallback") setFallback({ cause: event.cause, reason: event.reason });
         else setFallback({ cause: "refused", reason: event.message || event.code });
       }),
-    [client],
+    [client, t],
   );
 
   const cancel = () => {
@@ -75,22 +88,29 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
   useEffect(() => {
     setAdvice(null);
     setFallback(null);
+    setRefused(false);
     return cancel;
     // `cancel` reads the ref only.
   }, [paramKey]);
 
   const choose = (next: Choice) => {
     cancel();
+    pendingCheck.current = null;
+    setChecking(false);
     setChoice(next);
     setStatus(null);
     setAdvice(null);
     setFallback(null);
     setError(null);
+    setRefused(false);
   };
   const check = () => {
     if (choice === "none") return;
     setError(null);
-    setChecking(client.checkAdvisor(choice));
+    const id = client.checkAdvisor(choice);
+    pendingCheck.current = id;
+    setChecking(id !== null);
+    if (id === null) setError(t("Нет соединения с сервером консоли"));
   };
   const ask = () => {
     if (choice === "none") return;
@@ -103,6 +123,8 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
     if (id === null) setError(t("Нет соединения с сервером консоли"));
   };
   const recommendation = param.recommendation ?? null;
+  const reason = refusal ?? (refused ? t("Черновик файла не разобран: исправьте JSON на вкладке JSON.") : null);
+  const accept = (value: unknown) => setRefused(!onAccept(value));
 
   return (
     <article className="ds-wz-param ds-advisor" id="configuration-advisor" aria-label={t("ИИ-подсказки")}>
@@ -170,9 +192,20 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
               ))}
             </ul>
           )}
-          <button className="ds-btn ds-btn-sm ds-btn-primary" type="button" onClick={() => onAccept(advice.value)}>
+          <button
+            className="ds-btn ds-btn-sm ds-btn-primary"
+            type="button"
+            disabled={refusal !== null}
+            aria-describedby={reason === null ? undefined : "configuration-advice-refusal"}
+            onClick={() => accept(advice.value)}
+          >
             {t("Принять совет ИИ")}
           </button>
+          {reason !== null && (
+            <p className="ds-alert ds-alert-err" role="alert" id="configuration-advice-refusal">
+              {reason}
+            </p>
+          )}
         </div>
       )}
       {fallback && (

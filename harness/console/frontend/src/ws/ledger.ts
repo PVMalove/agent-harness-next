@@ -154,11 +154,34 @@ export interface LockState {
   error: string | null;
 }
 
+/** The state of a dispatch container as the ledger tells it, never runtime liveness. */
+export type ContainerState = "running" | "not-created" | "stopped" | "unknown";
+export const CONTAINER_STATES: readonly ContainerState[] = ["running", "not-created", "stopped", "unknown"];
+
+export interface DispatchContainer {
+  dispatch_id: string;
+  batch_id: string;
+  ticket: string;
+  role: string;
+  kind: "worker" | "qa";
+  engine: string;
+  image: string;
+  stage_state: string;
+  state: ContainerState;
+}
+
+export interface ContainerSnapshot {
+  containers: DispatchContainer[];
+  counts: Partial<Record<ContainerState, number>>;
+}
+
 export interface OrchestrationSnapshot {
   ledger: ReportsSnapshot;
   lock: LockState;
   kpi: Figures;
   analytics: Analytics;
+  /** The dispatch containers of the ledger; null from a server older than the field. */
+  containers: ContainerSnapshot | null;
 }
 
 export interface TimelineEvent {
@@ -319,6 +342,22 @@ const section: Check = (value) => isObject(value) && Object.values(value).every(
 const analytics = exact(Object.fromEntries(ANALYTICS_SECTIONS.map((name) => [name, section])));
 const lock = exact({ lock: nullable(isObject), error: nullable(string) });
 const orchestration = exact({ ledger: reportsSnapshot, lock, kpi: figures(KPI_KEYS), analytics });
+const containerState: Check = (value) => CONTAINER_STATES.includes(value as ContainerState);
+const container = exact({
+  dispatch_id: string,
+  batch_id: string,
+  ticket: string,
+  role: string,
+  kind: (value) => value === "worker" || value === "qa",
+  engine: string,
+  image: string,
+  stage_state: string,
+  state: containerState,
+});
+const containers = exact({
+  containers: list(container),
+  counts: (value) => isObject(value) && Object.entries(value).every(([key, n]) => containerState(key) && count(n)),
+});
 
 const event = exact({ at: string, kind: string, text: string, role: nullable(string) });
 const timeline = exact({ batch, role_flow: list(string), events: list(event) });
@@ -330,7 +369,10 @@ export function parseReports(value: unknown): ReportsSnapshot | null {
 
 /** The orchestration.snapshot payload, or null for any other shape. */
 export function parseOrchestration(value: unknown): OrchestrationSnapshot | null {
-  return orchestration(value) ? (value as unknown as OrchestrationSnapshot) : null;
+  if (!isObject(value)) return null;
+  const { containers: found, ...rest } = value;
+  if (!orchestration(rest) || (found !== undefined && !containers(found))) return null;
+  return { ...(rest as unknown as Omit<OrchestrationSnapshot, "containers">), containers: (found as ContainerSnapshot | undefined) ?? null };
 }
 
 /** The reports.timeline payload, or null for any other shape. */

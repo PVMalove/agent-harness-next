@@ -115,20 +115,20 @@ const PAGES: PageSpec[] = [
   {
     route: "orchestration",
     title: "Оркестрация",
-    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-scheme", "#orch-batch-cards", "#orch-dispatch", "#qa-lane", "#orch-tickets", "#batch-history"],
-    tabs: ["Схема", "Поток", "Качество", "Runtime", "Гейты"],
+    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-tabs", "#orch-stage-strip", "#orch-dispatch", "#orch-tickets", "#orch-batch-cards"],
+    tabs: ["1Конвейер", "2Поток", "3Качество", "4Runtime", "5Контейнер", "0Решения"],
   },
   {
     route: "reports",
     title: "Отчёты",
-    blocks: ["#reports-summary", "#reports-kpi", "#report-types", "#report-detail", "#qa-lane"],
-    tabs: ["Отчёты", "Evidence", "Качество", "Готовность"],
+    blocks: ["#reports-summary", "#reports-kpi", "#reports-tabs", "#report-types", "#report-detail", "#qa-lane"],
+    tabs: ["1Отчёты", "2Evidence", "3Качество", "4Готовность"],
   },
   {
     route: "publish",
     title: "Публикация",
-    blocks: ["#publish-kpis", "#publish-candidate", "#publish-batch", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
-    tabs: ["Обзор", "Preflight", "PR / MR", "Evidence"],
+    blocks: ["#publish-kpis", "#publish-tabs", "#publish-candidates", "#publish-candidate", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
+    tabs: ["1Обзор", "2Preflight", "3PR / MR", "4Evidence"],
   },
   { route: "recovery?batch=b-887", title: "Восстановление", blocks: ["#recovery-note", "#recovery-summary", "#recovery-history"] },
   { route: "container-route?batch=b-887", title: "Контейнерный запуск", blocks: ["#route-summary", "#route-stages", "#route-env"] },
@@ -212,7 +212,7 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "orchestration", width);
-    await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Решения/ }).click();
     await expect(page.locator("#orch-gate-trend circle")).toHaveCount(2);
     expect(await noOverflow(page)).toBe(true);
 

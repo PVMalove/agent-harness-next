@@ -2,10 +2,11 @@
    role and ticket over the short id and outcome, the status words in their tone, and the time.
    Every field is untrusted ledger text, rendered as text. */
 import { useI18n } from "../i18n";
+import { StatusIcon } from "../ds";
 import { Icon } from "../icons";
 import { roleIcon } from "../steps/ActivityViews";
 import type { ReportHead, StageHead } from "../ws/ledger";
-import { kindTone, shortId, stageStatus, statusWords, timestamp } from "./format";
+import { KIND_TONE, kindTone, shortId, stageStatus, statusWords, timestamp } from "./format";
 import type { StageFilters } from "./format";
 
 const two = (value: number) => String(value).padStart(2, "0");
@@ -114,6 +115,7 @@ export function StageList({
                 {shortId(stage.dispatch_id, "dispatch-")} · {stage.batch_id || "—"} · {report?.outcome || stage.state}
               </small>
             </span>
+            <StatusIcon tone={KIND_TONE[status.kind]} label={statusWords(status, language)} />
             <span className={`report-status ${kindTone(status.kind)}`}>{statusWords(status, language)}</span>
             <span className="report-time">{clockTime(stage.at)}</span>
           </button>

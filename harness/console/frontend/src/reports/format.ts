@@ -35,6 +35,16 @@ export const statusWords = (status: Status, language: Language): string => (lang
 export const kindTone = (kind: StatusKind): "passed" | "attention" | "blocked" =>
   kind === "accepted" ? "passed" : kind === "error" ? "blocked" : "attention";
 
+/** The StatusIcon tone of a status kind (design system v3): a shape, not a pill. */
+export const KIND_TONE: Readonly<Record<StatusKind, "ok" | "info" | "wait" | "err" | "warn">> = {
+  accepted: "ok",
+  running: "info",
+  paused: "wait",
+  not_started: "wait",
+  error: "err",
+  warning: "warn",
+};
+
 const OUTCOMES: Readonly<Record<string, [StatusKind, string, string]>> = {
   completed: ["accepted", "завершено", "completed"],
   blocked: ["warning", "заблокировано", "blocked"],

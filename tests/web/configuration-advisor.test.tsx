@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
+import { AdvisorPanel } from "../../harness/console/frontend/src/configuration/AdvisorPanel";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
+import { ConsoleProvider } from "../../harness/console/frontend/src/useConsole";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import { FakeSocket, ManualClock, screenPage } from "./fake-socket";
 import CONFIGURATION from "./fixtures/configuration.json";
@@ -64,6 +66,40 @@ describe("the AI hints of the Parameters tab", () => {
     expect(rows).toEqual(["да", "да", "нет", STATUS.message]);
   });
 
+  test("a late status of the previously selected CLI is not shown after a switch", () => {
+    const { socket, panel } = renderParameters();
+    pick(panel(), "Codex CLI");
+    press(panel(), "Проверить CLI");
+    const first = socket.request("advisor.check");
+    pick(panel(), "Claude Code CLI");
+    act(() => socket.reply({ v: 1, id: first.id, type: "advisor.check", ok: true, status: STATUS }));
+    expect(document.querySelector("#configuration-advisor-status")).toBeNull();
+    press(panel(), "Проверить CLI");
+    const second = socket.request("advisor.check");
+    expect(second.provider).toBe("claude");
+    act(() => socket.reply({ v: 1, id: second.id, type: "advisor.check", ok: true, status: { ...STATUS, provider: "claude", message: "Claude готов." } }));
+    expect(document.querySelector("#configuration-advisor-status")?.textContent).toContain("Claude готов.");
+  });
+
+  test("switching the CLI while a check is pending re-enables Check CLI", () => {
+    const { panel } = renderParameters();
+    pick(panel(), "Codex CLI");
+    press(panel(), "Проверить CLI");
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", true);
+    pick(panel(), "Claude Code CLI");
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", false);
+  });
+
+  test("a connection drop during a check re-enables Check CLI", () => {
+    const { socket, panel } = renderParameters();
+    pick(panel(), "Codex CLI");
+    press(panel(), "Проверить CLI");
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", true);
+    act(() => socket.close());
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", false);
+    expect(document.querySelector("#configuration-advisor-status")).toBeNull();
+  });
+
   test("Ask AI names the parameter only, and an accepted advice changes the draft only", () => {
     const { socket, panel } = renderParameters();
     pick(panel(), "Claude Code CLI");
@@ -81,6 +117,47 @@ describe("the AI hints of the Parameters tab", () => {
     expect(starts(socket)).toEqual([]);
     expect(changes()).toEqual(['project.json → language "en"']);
     expect(starts(socket)).toEqual([]);
+  });
+
+  test("with broken draft JSON Accept AI advice is disabled with the reason and the draft stays unchanged", () => {
+    const { socket, panel } = renderParameters();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /JSON$/ })));
+    act(() => fireEvent.change(screen.getByRole("textbox", { name: "project.json" }), { target: { value: "{" } }));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Параметры$/ })));
+    pick(panel(), "Codex CLI");
+    press(panel(), "Спросить ИИ");
+    const ask = socket.request("advisor.ask");
+    act(() => socket.reply({ v: 1, id: ask.id, type: "advisor.ask", ok: true, outcome: "advice", advice: { value: "en", why: "w", impact: "i", comparison: [] } }));
+    const accept = within(panel()).getByRole("button", { name: "Принять совет ИИ" }) as HTMLButtonElement;
+    expect(accept.disabled).toBe(true);
+    const reason = document.getElementById(accept.getAttribute("aria-describedby") ?? "");
+    expect(reason?.textContent).toContain("Черновик файла не разобран");
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /JSON$/ })));
+    expect((screen.getByRole("textbox", { name: "project.json" }) as HTMLTextAreaElement).value).toBe("{");
+  });
+
+  test("a refused accept shows the reason and keeps the advice", () => {
+    const clock = new ManualClock();
+    const client = createConsoleClient({ url: "ws://127.0.0.1:1/ws", WebSocket: FakeSocket, timers: clock, probeHealth: async () => false });
+    const accepted: unknown[] = [];
+    render(
+      <LanguageProvider>
+        <ConsoleProvider client={client}>
+          <AdvisorPanel param={WIZARD[0] as never} refusal={null} onAccept={(value) => (accepted.push(value), false)} />
+        </ConsoleProvider>
+      </LanguageProvider>,
+    );
+    const socket = FakeSocket.last;
+    act(() => socket.open());
+    const panel = document.querySelector("#configuration-advisor") as HTMLElement;
+    pick(panel, "Codex CLI");
+    press(panel, "Спросить ИИ");
+    const ask = socket.request("advisor.ask");
+    act(() => socket.reply({ v: 1, id: ask.id, type: "advisor.ask", ok: true, outcome: "advice", advice: { value: "en", why: "w", impact: "i", comparison: [] } }));
+    press(panel, "Принять совет ИИ");
+    expect(accepted).toEqual(["en"]);
+    expect(within(panel).getByRole("alert").textContent).toContain("Черновик файла не разобран");
+    expect(document.querySelector("#configuration-advice")).not.toBeNull();
   });
 
   test("a fallback shows the reason and the console recommendation and keeps the draft", () => {

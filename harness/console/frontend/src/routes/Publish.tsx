@@ -1,20 +1,25 @@
-/* Publication: the mockup's #publish over the read-only publish view of reports.snapshot
-   (kernel/publish_view.py). The batch selector sits in the Release candidate head and defaults to
-   the latest batch with a review report (H1). "Решение человека" words the verdict and its reasons
-   (gate refusals and every preflight row that is not ok); the live ledger decisions (report-decision
-   and attention, with their confirmations) follow as their own panel when there are any. The
-   console never creates a PR: "Подготовить PR" stays disabled, merge is the human's. */
+/* Publication on the design system v3 over the read-only publish view of reports.snapshot
+   (kernel/publish_view.py): the page header (refresh and links on the right), the summary (publish
+   entries by verdict; the selected candidate, its target and PR receipt as facts), the pipeline
+   tabs Обзор / Preflight / PR / MR / Evidence, the candidate list and the selected candidate's
+   detail. The list defaults to the latest batch with a review report (H1); «Открыть кандидата»
+   opens the candidate drawer shared with Reports. "Решение человека" words the verdict and its
+   reasons (gate refusals and every preflight row that is not ok); the live ledger decisions keep
+   their old look inside a `ds-legacy-island`. The console never creates a PR: "Подготовить PR"
+   stays disabled, merge is the human's. */
 import { useState } from "react";
 import { DecisionPanel } from "../decisions/DecisionPanel";
+import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
 import { Icon } from "../icons";
-import { TabList, TabPanels } from "../views/Tabs";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
-import { VERDICT_TONE, tree } from "../reports/ReportViews";
+import { CandidateDrawer } from "../reports/CandidateDrawer";
+import { StatusWord, VERDICT_TONE, tree } from "../reports/ReportViews";
 import { Timeline } from "../reports/Timeline";
 import { useScreen } from "../screens/useScreen";
 import { NoData } from "../steps/ActivityViews";
 import { snapshotClock } from "../update/format";
+import { TabPanel } from "../views/Tabs";
 import { parseReports } from "../ws/ledger";
 import type { PublishEntry } from "../ws/ledger";
 
@@ -68,7 +73,6 @@ export function preflightRows(entry: PublishEntry, word: (state: string) => stri
   ];
 }
 
-/** A preflight row passes on "ok", and the gate row on the verdict "ready". */
 const passes = (row: Check) => row.status === "ok" || row.status === "ready";
 
 /** The reasons a PR is not ready: the gate refusals, then every preflight row that is not ok. */
@@ -86,7 +90,7 @@ function Preflight({ entry }: { entry: PublishEntry }) {
     <div className="publish-preflight">
       {rows.map((row) => (
         <div className="publish-check" key={row.label}>
-          <span className={`orch-pill ${row.tone}`}>{state(row.status)}</span>
+          <StatusWord tone={row.tone} word={state(row.status)} />
           <div>
             <b>{row.label}</b>
             <small>{row.detail}</small>
@@ -100,104 +104,130 @@ function Preflight({ entry }: { entry: PublishEntry }) {
 export function Publish() {
   const { t, section, tab: tabLabel, state: stateText, language } = useI18n();
   const screen = useScreen({ type: "reports.snapshot" }, parseReports);
-  const entries = screen.data?.publish ?? [];
+  const ledger = screen.data;
+  const entries = ledger?.publish ?? [];
   const [chosen, setChosen] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
   const [why, setWhy] = useState(false);
+  const [drawer, setDrawer] = useState(false);
   const batch = chosen ?? defaultBatch(entries);
   const entry = entries.find((item) => item.batch_id === batch) ?? null;
   const blocked = entry ? preflightRows(entry).some((row) => !passes(row)) : true;
   const targetRef = entry ? (entry.integration_ref ?? (entry.target ? short(entry.target) : t("нет данных"))) : "";
   const reasons = entry ? blockingReasons(entry) : [t("Batch для публикации нет")];
-  const tabs: [Tab, string][] = [
-    ["overview", tabLabel("Обзор")],
-    ["preflight", "Preflight"],
-    ["pr", "PR / MR"],
-    ["evidence", "Evidence"],
+  const verdicts = (verdict: PublishEntry["verdict"]) => (ledger ? entries.filter((item) => item.verdict === verdict).length : "—");
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "overview", label: tabLabel("Обзор") },
+    { id: "preflight", label: "Preflight" },
+    { id: "pr", label: "PR / MR" },
+    { id: "evidence", label: "Evidence" },
   ];
 
   return (
-    <div className="publish-page work-page" data-section="Публикация">
-      <div className="page-title publish-title">
-        <div>
-          <h1>{section("Публикация")}</h1>
-          <p>{t("Candidate → target, PR/MR и evidence. Merge и публикация остаются человеку.")}</p>
-          {entry && (
-            <div className="home-facts" id="publish-facts">
-              <span>{short(entry.candidate)}</span>
-              <span>target {targetRef}</span>
-              <span>QA {entry.qa ? stateText(entry.qa.outcome) : "—"}</span>
-              <span>Release Gate · {stateText(entry.verdict)}</span>
-              <span id="publish-updated" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
-                {snapshotClock(screen.ageSeconds, language)}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="actions">
-          <button id="publish-refresh" className="btn" type="button" onClick={() => screen.refresh(true)}>
-            <Icon name="refresh" /> {t("Проверить")}
-          </button>
-          <a className="btn" href={href("reports")}>
-            <Icon name="reports" /> {section("Reports")}
-          </a>
-          <a className="btn" href={href("orchestration")}>
-            <Icon name="orchestration" /> {section("Orchestration")}
-          </a>
-        </div>
-      </div>
+    <div className="ds-page ds-fit publish-page" data-section="Публикация">
+      <PageHeader
+        title={section("Публикация")}
+        subtitle={t("Candidate → target, PR/MR и evidence. Merge и публикация остаются человеку.")}
+        actions={
+          <>
+            <button id="publish-refresh" className="ds-btn ds-btn-icon" type="button" aria-label={t("Проверить")} title={t("Проверить")} onClick={() => screen.refresh(true)}>
+              <Icon name="refresh" className="ds-ic-sm" />
+            </button>
+            <a className="ds-btn" href={href("reports")}>
+              <Icon name="reports" className="ds-ic-sm" /> {section("Reports")}
+            </a>
+            <a className="ds-btn" href={href("orchestration")}>
+              <Icon name="orchestration" className="ds-ic-sm" /> {section("Orchestration")}
+            </a>
+          </>
+        }
+      />
 
-      {screen.error && !screen.data && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
+      {screen.error && !ledger && (
+        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
           {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
         </p>
       )}
 
-      <div className="publish-kpis" id="publish-kpis">
-        <div>
-          <span>Candidate</span>
-          <b className="cyan">{entry ? short(entry.candidate) : <NoData />}</b>
-          <small>{entry ? `${entry.ticket} · target ${targetRef}` : "—"}</small>
-        </div>
-        <div>
-          <span>Release Gate</span>
-          <b className={entry ? VERDICT_TONE[entry.verdict] : undefined} id="publish-verdict">
-            {entry ? stateText(entry.verdict) : <NoData />}
-          </b>
-          <small>{entry?.refusals[0] ?? "—"}</small>
-        </div>
-        <div>
-          <span>QA source</span>
-          <b className="mint">{entry?.qa ? stateText(entry.qa.outcome) : <NoData />}</b>
-          <small>candidate / target pair</small>
-        </div>
-        <div>
-          <span>PR receipt</span>
-          <b className="lavender">{stateText(entry?.pr_url ? entry.pr_state || "found" : "missing")}</b>
-          <small>{entry?.pr_url || t("создание не выполнялось")}</small>
-        </div>
-      </div>
+      <Summary
+        id="publish-kpis"
+        label={t("Сводка публикации")}
+        stats={[
+          { label: t("Готово"), value: verdicts("ready"), caption: "Release Gate" },
+          { label: t("Заблокировано"), value: verdicts("blocked"), caption: "Release Gate" },
+          { label: t("Неизвестно"), value: verdicts("unknown"), caption: "Release Gate" },
+        ]}
+        facts={
+          entry ? (
+            <span className="publish-facts" id="publish-facts">
+              <span>
+                Candidate <b>{short(entry.candidate)}</b>
+              </span>
+              <span>target {targetRef}</span>
+              <span>
+                Release Gate · <b id="publish-verdict">{stateText(entry.verdict)}</b>
+              </span>
+              <span>PR receipt · {stateText(entry.pr_url ? entry.pr_state || "found" : "missing")}</span>
+            </span>
+          ) : null
+        }
+        snapshot={
+          ledger ? (
+            <span title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+              <Icon name="clock" className="ds-ic-sm" /> {t("Снимок")} <span id="publish-updated">{snapshotClock(screen.ageSeconds, language)}</span>
+            </span>
+          ) : undefined
+        }
+      />
 
-      <TabList id="publish" label={section("Публикация")} className="orch-tabbar publish-tabbar" tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
+      <PipeTabs id="publish" label={section("Публикация")} tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
 
-      <TabPanels id="publish" tabs={tabs} value={tab}>
-      {tab === "overview" && (
-        <>
-          {entry ? (
-            <div className="publish-grid">
-              <section className="panel publish-candidate" id="publish-candidate">
-                <div className="panel-head">
-                  <h2>Release candidate</h2>
-                  <span className="publish-batch" id="publish-batch">
-                    <select aria-label="batch" value={batch ?? ""} onChange={(event) => setChosen(event.target.value || null)}>
-                      {entries.map((item) => (
-                        <option key={item.batch_id} value={item.batch_id}>
-                          {item.ticket || item.batch_id} · {stateText(item.state)}
-                        </option>
-                      ))}
-                    </select>
+      <div className="ds-split publish-workspace">
+        <Panel title={t("Кандидаты")} count={entries.length} fill scroll="list" id="publish-candidates" label={t("Кандидаты")}>
+          {entries.length === 0 ? (
+            <p className="ds-empty">{t("Batch для публикации нет")}</p>
+          ) : (
+            entries.map((item) => {
+              const rows = preflightRows(item);
+              return (
+                <button
+                  key={item.batch_id}
+                  type="button"
+                  className="ds-row ds-row-button"
+                  data-batch={item.batch_id}
+                  aria-pressed={item.batch_id === batch}
+                  onClick={() => setChosen(item.batch_id)}
+                >
+                  <StatusWord tone={VERDICT_TONE[item.verdict]} word={stateText(item.verdict)} />
+                  <span className="ds-row-main">
+                    <span className="ds-row-title">{`${item.ticket || item.batch_id} · ${short(item.candidate)}`}</span>
+                    <span className="ds-row-sub">{item.branch || "—"}</span>
                   </span>
-                </div>
+                  <span className="ds-row-end">{t("{passed} / {total} пройдено", { passed: rows.filter(passes).length, total: rows.length })}</span>
+                </button>
+              );
+            })
+          )}
+        </Panel>
+
+        <Panel
+          title="Release candidate"
+          fill
+          scroll="text"
+          id="publish-candidate"
+          className="publish-candidate"
+          label="Release candidate"
+          actions={
+            entry ? (
+              <button id="publish-open-candidate" className="ds-btn ds-btn-sm" type="button" onClick={() => setDrawer(true)}>
+                {t("Открыть кандидата")}
+              </button>
+            ) : null
+          }
+        >
+          <TabPanel id="publish" tab="overview" value={tab} className="publish-tab">
+            {entry ? (
+              <>
                 <div className="publish-candidate-body">
                   <code className="publish-sha">{entry.candidate ?? "—"}</code>
                   <h3>{[entry.ticket || entry.batch_id, entry.branch].filter(Boolean).join(" · ")}</h3>
@@ -209,26 +239,11 @@ export function Publish() {
                     <span>target {targetRef}</span>
                     <span>QA {entry.qa ? stateText(entry.qa.outcome) : "—"}</span>
                   </div>
-                  <div className="publish-candidate-actions">
-                    <a className="btn" href={href("orchestration")}>
-                      <Icon name="orchestration" /> {section("Orchestration")}
-                    </a>
-                    <a className="btn" href={href("reports")}>
-                      <Icon name="reports" /> {section("Reports")}
-                    </a>
-                  </div>
                 </div>
-              </section>
-              <section className="panel publish-gate" id="publish-gate">
-                <div className="panel-head">
-                  <h2>Release Gate</h2>
-                  <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{stateText(entry.verdict)}</span>
-                </div>
-                <div className="publish-gate-body">
-                  <div className="publish-gate-verdict">
-                    <b>{stateText(entry.verdict)}</b>
-                    <span>{entry.refusals[0] ?? t("Отказов гейта нет")}</span>
-                  </div>
+                <section className="publish-gate" id="publish-gate" aria-label="Release Gate">
+                  <h3 className="ds-group-title">
+                    Release Gate · <StatusWord tone={VERDICT_TONE[entry.verdict]} word={stateText(entry.verdict)} />
+                  </h3>
                   <div className="publish-gate-facts">
                     <div>
                       <span>tree</span>
@@ -247,154 +262,139 @@ export function Publish() {
                       <b>{t("только человек")}</b>
                     </div>
                   </div>
+                </section>
+                <section className="publish-preflight-panel" id="publish-preflight-overview" aria-label="Preflight">
+                  <h3 className="ds-group-title">
+                    Preflight · {t("{passed} / {total} пройдено", { passed: preflightRows(entry).filter(passes).length, total: preflightRows(entry).length })}
+                  </h3>
+                  <Preflight entry={entry} />
+                </section>
+              </>
+            ) : (
+              <p className="ds-empty">{t("Batch для публикации нет")}</p>
+            )}
+            <section className="publish-decision" id="publish-decision" aria-label={t("Решение человека")}>
+              <h3 className="ds-group-title">
+                {t("Решение человека")} · <StatusWord tone={blocked ? "violet" : "mint"} word={stateText(blocked ? "blocked" : "ready")} />
+              </h3>
+              <div className="publish-decision-body">
+                <div className={`publish-decision-text ${blocked ? "blocked" : "ready"}`}>
+                  <b>{blocked ? t("PR не готов к созданию") : t("PR готов к созданию")}</b>
+                  <p>{reasons.length ? reasons.join(" · ") : t("Отказов гейта нет")}</p>
+                  {why && reasons.length > 0 && (
+                    <ul className="publish-why" id="publish-why">
+                      {reasons.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="publish-decision-actions">
+                  <button className="ds-btn ds-btn-primary" type="button" disabled aria-disabled="true" title={t("Консоль не создаёт PR: merge выполняет человек")}>
+                    {t("Подготовить PR")}
+                  </button>
+                  <button className="ds-btn" type="button" aria-expanded={why} onClick={() => setWhy(!why)}>
+                    {t("Почему")}
+                  </button>
+                  <a className="ds-btn" href={href("reports")}>
+                    <Icon name="reports" className="ds-ic-sm" /> {section("Reports")}
+                  </a>
+                </div>
+              </div>
+            </section>
+            <div className="publish-decisions ds-legacy-island" id="publish-decisions">
+              <DecisionPanel kinds={["report-decision", "attention"]} hideWhenEmpty />
+            </div>
+          </TabPanel>
+
+          <TabPanel id="publish" tab="preflight" value={tab} className="publish-tab">
+            {entry ? (
+              <section className="publish-preflight-panel" id="publish-preflight" aria-label="Preflight">
+                <h3 className="ds-group-title">
+                  Preflight · <StatusWord tone={VERDICT_TONE[entry.verdict]} word={stateText(entry.verdict)} />
+                </h3>
+                <Preflight entry={entry} />
+                <p className="ds-note">{t("Publish evidence должен быть привязан к candidate SHA и target SHA. Merge остаётся человеку.")}</p>
+              </section>
+            ) : (
+              <p className="ds-empty">{t("Batch для публикации нет")}</p>
+            )}
+          </TabPanel>
+
+          <TabPanel id="publish" tab="pr" value={tab} className="publish-tab">
+            <div className="publish-pr-grid" id="publish-pr">
+              <section className="publish-pr" aria-label="PR / MR">
+                <h3 className="ds-group-title">PR / MR</h3>
+                <div className="publish-pr-body">
+                  <div className="publish-pr-field">
+                    <span>base</span>
+                    <b>{entry?.integration_ref ?? "—"}</b>
+                  </div>
+                  {["title", "labels", "body"].map((field) => (
+                    <div className="publish-pr-field" key={field}>
+                      <span>{field}</span>
+                      <NoData why={t("Черновик PR консоль не формирует")} />
+                    </div>
+                  ))}
+                  <div className="publish-pr-actions">
+                    <button className="ds-btn ds-btn-primary" type="button" disabled>
+                      {t("Подготовить PR")}
+                    </button>
+                  </div>
+                </div>
+              </section>
+              <section className="publish-pr-side" aria-label="Publication">
+                <h3 className="ds-group-title">Publication</h3>
+                <div className="publish-side-body">
+                  <div>
+                    <span>Provider</span>
+                    <NoData />
+                  </div>
+                  <div>
+                    <span>Repo</span>
+                    <NoData />
+                  </div>
+                  <div>
+                    <span>PR</span>
+                    <b>{entry?.pr_url || "—"}</b>
+                  </div>
+                  <p className="orch-note">{t("Консоль не создаёт PR: merge выполняет человек")}</p>
                 </div>
               </section>
             </div>
-          ) : (
-            <section className="panel">
-              <div className="report-empty">{t("Batch для публикации нет")}</div>
-            </section>
-          )}
-          {entry && (
-            <section className="panel publish-preflight-panel" id="publish-preflight-overview">
-              <div className="panel-head">
-                <h2>Preflight</h2>
-                <span className="small muted">
-                  {t("{passed} / {total} пройдено", { passed: preflightRows(entry).filter(passes).length, total: preflightRows(entry).length })}
-                </span>
-              </div>
-              <Preflight entry={entry} />
-            </section>
-          )}
-          <section className="panel publish-decision" id="publish-decision">
-            <div className="panel-head">
-              <h2>{t("Решение человека")}</h2>
-              <span className={`orch-pill ${blocked ? "violet" : "mint"}`}>{stateText(blocked ? "blocked" : "ready")}</span>
-            </div>
-            <div className="publish-decision-body">
-              <div className={`publish-decision-text ${blocked ? "blocked" : "ready"}`}>
-                <b>{blocked ? t("PR не готов к созданию") : t("PR готов к созданию")}</b>
-                <p>{reasons.length ? reasons.join(" · ") : t("Отказов гейта нет")}</p>
-                {why && reasons.length > 0 && (
-                  <ul className="publish-why" id="publish-why">
-                    {reasons.map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="publish-decision-actions">
-                <button
-                  className="btn primary"
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  title={t("Консоль не создаёт PR: merge выполняет человек")}
-                >
-                  {t("Подготовить PR")}
-                </button>
-                <button className="btn" type="button" aria-expanded={why} onClick={() => setWhy(!why)}>
-                  {t("Почему")}
-                </button>
-                <a className="btn" href={href("reports")}>
-                  <Icon name="reports" /> {section("Reports")}
-                </a>
-              </div>
-            </div>
-          </section>
-          <div className="publish-decisions" id="publish-decisions">
-            <DecisionPanel kinds={["report-decision", "attention"]} hideWhenEmpty />
-          </div>
-        </>
-      )}
+          </TabPanel>
 
-      {tab === "preflight" && entry && (
-        <section className="panel publish-preflight-panel" id="publish-preflight">
-          <div className="panel-head">
-            <h2>Preflight</h2>
-            <span className={`orch-pill ${VERDICT_TONE[entry.verdict]}`}>{stateText(entry.verdict)}</span>
-          </div>
-          <Preflight entry={entry} />
-          <div className="publish-preflight-foot">
-            {t("Publish evidence должен быть привязан к candidate SHA и target SHA. Merge остаётся человеку.")}
-          </div>
-        </section>
-      )}
-
-      {tab === "pr" && (
-        <div className="publish-pr-grid" id="publish-pr">
-          <section className="panel publish-pr">
-            <div className="panel-head">
-              <h2>PR / MR</h2>
-            </div>
-            <div className="publish-pr-body">
-              <div className="publish-pr-field">
-                <span>base</span>
-                <b>{entry?.integration_ref ?? "—"}</b>
-              </div>
-              {["title", "labels", "body"].map((field) => (
-                <div className="publish-pr-field" key={field}>
-                  <span>{field}</span>
-                  <NoData why={t("Черновик PR консоль не формирует")} />
-                </div>
-              ))}
-              <div className="publish-pr-actions">
-                <button className="btn primary" type="button" disabled>
-                  {t("Подготовить PR")}
-                </button>
-              </div>
-            </div>
-          </section>
-          <aside className="panel publish-pr-side">
-            <div className="panel-head">
-              <h2>Publication</h2>
-            </div>
-            <div className="publish-side-body">
-              <div>
-                <span>Provider</span>
-                <NoData />
-              </div>
-              <div>
-                <span>Repo</span>
-                <NoData />
-              </div>
-              <div>
-                <span>PR</span>
-                <b>{entry?.pr_url || "—"}</b>
-              </div>
-              <p className="orch-note">{t("Консоль не создаёт PR: merge выполняет человек")}</p>
-            </div>
-          </aside>
-        </div>
-      )}
-
-      {tab === "evidence" && entry && (
-        <>
-          <section className="panel publish-evidence" id="publish-evidence">
-            <div className="panel-head">
-              <h2>Publish evidence</h2>
-            </div>
-            <div className="publish-evidence-table">
-              <div className="publish-evidence-head">
-                <span>{t("артефакт")}</span>
-                <span>{t("статус")}</span>
-                <span>{t("детали")}</span>
-              </div>
-              {preflightRows(entry)
-                .filter((row) => ["QA evidence", "Review", "Release Gate"].includes(row.label))
-                .map((row) => (
-                  <div className="publish-evidence-row" key={row.label}>
-                    <b>{row.label}</b>
-                    <span className={`orch-pill ${row.tone}`}>{stateText(row.status)}</span>
-                    <small>{row.detail}</small>
+          <TabPanel id="publish" tab="evidence" value={tab} className="publish-tab">
+            {entry ? (
+              <>
+                <section className="publish-evidence" id="publish-evidence" aria-label="Publish evidence">
+                  <h3 className="ds-group-title">Publish evidence</h3>
+                  <div className="publish-evidence-table">
+                    <div className="publish-evidence-head">
+                      <span>{t("артефакт")}</span>
+                      <span>{t("статус")}</span>
+                      <span>{t("детали")}</span>
+                    </div>
+                    {preflightRows(entry)
+                      .filter((row) => ["QA evidence", "Review", "Release Gate"].includes(row.label))
+                      .map((row) => (
+                        <div className="publish-evidence-row" key={row.label}>
+                          <b>{row.label}</b>
+                          <StatusWord tone={row.tone} word={stateText(row.status)} />
+                          <small>{row.detail}</small>
+                        </div>
+                      ))}
                   </div>
-                ))}
-            </div>
-          </section>
-          <Timeline key={entry.batch_id} batchId={entry.batch_id} />
-        </>
-      )}
-      </TabPanels>
+                </section>
+                <Timeline key={entry.batch_id} batchId={entry.batch_id} />
+              </>
+            ) : (
+              <p className="ds-empty">{t("Batch для публикации нет")}</p>
+            )}
+          </TabPanel>
+        </Panel>
+      </div>
+      {ledger && entry && drawer && <CandidateDrawer entry={entry} ledger={ledger} onClose={() => setDrawer(false)} />}
     </div>
   );
 }

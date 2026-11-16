@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
@@ -9,6 +9,7 @@ import { FakeSocket, ManualClock, screenPage } from "./fake-socket";
 import FACTS from "./fixtures/reports-facts.json";
 import REPORT from "./fixtures/reports-report.json";
 import REPORTS from "./fixtures/reports.json";
+import TIMELINE from "./fixtures/reports-timeline.json";
 
 const answered = new Set<unknown>();
 
@@ -90,7 +91,7 @@ describe("the Reports route", () => {
     expect(socket.request("reports.snapshot")).toMatchObject({ force: false });
     expect(socket.request("reports.report")).toMatchObject({ dispatch_id: "d-qa" });
     const list = content();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Качество" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Качество$/ })));
     const shown = list + content();
     // An Evidence row shows the check command and its evidence as name and detail.
     const missing = (FACTS as string[]).filter(
@@ -117,14 +118,19 @@ describe("the Reports route", () => {
     expect(content()).toContain("<img src=x onerror=alert(1)>");
   });
 
-  test("the mockup order: two title actions, 4 + 4 KPI, one filter row, compact rows, detail, then the QA lane", () => {
-    renderReports();
-    const title = document.querySelector(".reports-title .actions")!;
+  test("the v3 order: header actions on the right, summary with 4 stats and 4 KPI facts, filter row, rows, detail with the QA lane", () => {
+    const socket = renderReports();
+    expect(document.querySelector(".ds-page.ds-fit[data-section=Reports]")).not.toBeNull();
+    // Reports reads reports.* only: no orchestration snapshot is asked for.
+    expect(socket.sent.filter((body) => body.type === "orchestration.snapshot")).toEqual([]);
+    const title = document.querySelector(".ds-page-head .ds-head-actions")!;
     expect([...title.children].map((item) => item.id)).toEqual(["reports-refresh", "reports-export"]);
     expect(title.querySelector("#reports-export use, #reports-export svg")).not.toBeNull();
     expect(document.querySelector("#reports-updated")!.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     expect(content()).not.toContain("Новый снимок");
-    expect(document.querySelectorAll("#reports-summary > div")).toHaveLength(4);
+    expect(document.querySelectorAll("#reports-summary .ds-stat")).toHaveLength(4);
+    expect(document.querySelectorAll("#reports-tabs .ds-pipe-tab")).toHaveLength(4);
+    expect(document.querySelector("main .orch-pill")).toBeNull();
     const kpi = [...document.querySelectorAll("#reports-kpi > div > span")].map((item) => item.textContent);
     expect(kpi).toEqual(["Evidence полно", "Stale evidence", "Задержка отчёта", "QA с первого раза"]);
     expect(document.querySelector("#reports-kpi")!.textContent).not.toContain("С рисками");
@@ -138,6 +144,7 @@ describe("the Reports route", () => {
     expect([...first.children].map((item) => item.className.split(" ")[0])).toEqual([
       "report-type-icon",
       "report-row-main",
+      "ds-status",
       "report-status",
       "report-time",
     ]);
@@ -151,11 +158,10 @@ describe("the Reports route", () => {
     expect(detail.querySelector(".report-meta")!.textContent).not.toMatch(/T\d{2}:/);
     expect(detail.querySelectorAll(".report-evidences .report-evidence")).toHaveLength(3);
     expect(detail.querySelector(".report-actions a")!.getAttribute("href")).toBe("#/orchestration");
-    const grid = document.querySelector(".reports-grid")!;
-    expect(grid.nextElementSibling?.id).toBe("qa-lane");
+    expect(document.querySelector("#reports-detail #report-detail + #qa-lane")).not.toBeNull();
     expect(document.querySelector("#qa-lane details#report-qa-log")).not.toBeNull();
     expect(document.querySelector("#batch-list")).toBeNull();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Качество" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Качество$/ })));
     expect(document.querySelector("#reports-quality-kpi")!.textContent).toContain("С рисками");
     expect(document.querySelector("#reports-quality-kpi")!.textContent).toContain("С блокерами");
   });
@@ -191,24 +197,52 @@ describe("the Reports route", () => {
     expect(document.querySelector("#reports-summary")!.textContent).toContain("Отчётов4");
     expect(document.querySelector("#qa-lane")!.textContent).toContain("QA lane · #887");
     expect(document.querySelector("#report-conclusion p")!.textContent).toBe("developer-retry");
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Evidence$/ })));
     const matrix = document.querySelector("#reports-evidence")!;
     expect(matrix.querySelectorAll(".report-evidence-row").length).toBeGreaterThan(0);
     expect(matrix.textContent).toContain("receipt");
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Качество" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Качество$/ })));
     expect(document.querySelector("#reports-quality")).not.toBeNull();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Готовность" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Готовность$/ })));
     expect(document.querySelector("#reports-readiness")!.textContent).toContain("Release Gate");
     // The QA report of #887 records a blocker: the kernel's verdict is "blocked".
     expect(document.querySelector("#reports-readiness [data-verdict]")!.textContent).toBe("Заблокировано");
     expect(document.querySelector("#reports-readiness .report-ready-row")!.textContent).not.toMatch(/\b(match|failed|blocked)\b/);
   });
 
-  test("the title facts are words, and every report row carries its role icon", () => {
+  test("Quality reads reports.snapshot only: results by role, and no findings or latency borrowed from Orchestration", () => {
     renderReports();
-    const facts = [...document.querySelectorAll(".reports-title .home-facts span")].map((item) => item.textContent);
-    expect(facts.slice(1, 4).join(" ")).not.toMatch(/passed|attention|blocked/);
-    expect(facts.slice(1, 4).every((fact) => /^\d+ \S/.test(fact ?? ""))).toBe(true);
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Качество$/ })));
+    const roles = [...document.querySelectorAll("#reports-results-by-role [data-role]")].map((row) => row.getAttribute("data-role"));
+    expect(roles).toEqual(["developer", "qa", "review"]);
+    expect(document.querySelector("#reports-quality")!.textContent).toContain("нет данных в снимке отчётов");
+  });
+
+  test("a Readiness row opens the candidate drawer with Evidence, Quality and Readiness tabs from reports.*", () => {
+    const socket = renderReports();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Готовность$/ })));
+    act(() => fireEvent.click(document.querySelector('#reports-readiness [data-batch="b-887"] .report-ready-open') as HTMLElement));
+    const drawer = screen.getByRole("dialog", { name: /Кандидат · #887/ });
+    expect([...within(drawer).getAllByRole("tab")].map((tab) => tab.textContent)).toEqual(["Evidence", "Качество", "Готовность"]);
+    expect(drawer.querySelector("#candidate-evidence")!.textContent).toContain("developer");
+    answer(socket, "reports.timeline", TIMELINE);
+    expect(drawer.querySelector("#report-timeline")).not.toBeNull();
+    act(() => fireEvent.click(within(drawer).getByRole("tab", { name: /Качество$/ })));
+    expect([...drawer.querySelectorAll("#candidate-reports [data-dispatch]")].map((row) => row.getAttribute("data-dispatch")).sort()).toEqual(["d-dev", "d-qa", "d-rev"]);
+    act(() => fireEvent.click(within(drawer).getByRole("tab", { name: /Готовность$/ })));
+    expect(drawer.querySelector("#candidate-readiness [data-verdict]")!.textContent).toBe("Заблокировано");
+    expect(drawer.querySelectorAll("#candidate-readiness [data-check]")).toHaveLength(5);
+    expect(socket.sent.filter((body) => body.type === "orchestration.snapshot")).toEqual([]);
+    act(() => fireEvent.click(within(drawer).getByRole("button", { name: "Закрыть" })));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("the summary stats are words with figures, and every report row carries its role icon", () => {
+    renderReports();
+    const labels = [...document.querySelectorAll("#reports-summary .ds-stat-label")].map((item) => item.textContent);
+    expect(labels).toEqual(["Отчётов", "Пройдено", "Внимание", "Заблокировано"]);
+    const values = [...document.querySelectorAll("#reports-summary .ds-stat-value")].map((item) => item.textContent);
+    expect(values.every((value) => /^\d+$/.test(value ?? ""))).toBe(true);
     const rows = [...document.querySelectorAll("#report-list .report-row")];
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((row) => row.querySelector(".report-type-icon svg") !== null)).toBe(true);
@@ -230,28 +264,28 @@ describe("the Reports route", () => {
     expect(document.querySelector("#publish-verdict")?.textContent).toBe("Заблокировано");
     expect(main()).not.toContain("название");
     expect(main()).not.toMatch(/\b(unknown|missing|blocked|human only|match)\b/);
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Preflight" })));
-    const pills = [...document.querySelectorAll("#publish-preflight .publish-check .orch-pill")].map((pill) => pill.textContent);
-    expect(pills).toEqual(["Заблокировано", "Норма", "Заблокировано", "Норма", "Неизвестно"]);
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Preflight$/ })));
+    const words = [...document.querySelectorAll("#publish-preflight .publish-check .ds-status-line > span[aria-hidden=true]")].map((word) => word.textContent);
+    expect(words).toEqual(["Заблокировано", "Норма", "Заблокировано", "Норма", "Неизвестно"]);
   });
 
   test("the evidence matrix shows the kernel's cells", () => {
     renderReports();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Evidence$/ })));
     expect(evidenceMarks()).toEqual(["✓✓✓✓··", "————··", "✓———··"]);
   });
 
   test("the client does not recompute a cell the kernel marked stale", () => {
     const stale = { ...REPORTS, evidence: REPORTS.evidence.map((row) => ({ ...row, qa_run: "stale" })) };
     renderReports("", stale);
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Evidence" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Evidence$/ })));
     expect(evidenceMarks()).toEqual(["✓✓✓!··", "———!··", "✓——!··"]);
   });
 
   test("English labels come from the catalog", () => {
     renderReports("?lang=en");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Reports");
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Reports", "Evidence", "Quality", "Readiness"]);
+    expect([...document.querySelectorAll("#reports-tabs .ds-pipe-label")].map((tab) => tab.textContent)).toEqual(["Reports", "Evidence", "Quality", "Readiness"]);
     expect(content()).toContain("report received · failed");
     expect(content()).toContain("Evidence complete");
   });
