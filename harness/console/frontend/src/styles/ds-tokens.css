@@ -46,7 +46,7 @@
 .ds-app *:where(:not(.ds-main--legacy *)),
 .ds-app *::before:where(:not(.ds-main--legacy *)),
 .ds-app *::after:where(:not(.ds-main--legacy *)) { box-sizing: border-box; }
-.ds-app :focus-visible:where(:not(.ds-main--legacy *)) { outline: 2px solid var(--ds-accent); outline-offset: 2px; border-radius: 4px; }
+.ds-app :focus-visible:where(:not(.ds-main--legacy *)) { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
 .ds-app code:where(:not(.ds-main--legacy *)),
 .ds-mono { font-family: var(--ds-mono); font-size: inherit; }
 .ds-sr {

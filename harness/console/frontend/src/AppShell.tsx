@@ -79,6 +79,8 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
 
   useEffect(() => {
     document.body.classList.toggle("nav-open", open);
+    // The opened mobile rail takes the focus; closed, it is hidden and leaves the tab order.
+    if (open) document.querySelector<HTMLElement>("#navigation [aria-current=page], #navigation a")?.focus();
   }, [open]);
 
   useEffect(() => {
@@ -103,10 +105,14 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input,textarea,select,[contenteditable=true]")) return;
       if (event.key === "Escape") {
-        setOpen(false);
+        if (document.body.classList.contains("nav-open")) {
+          setOpen(false);
+          document.getElementById("menu-toggle")?.focus();
+        }
         return;
       }
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      // A key typed in an open dialog (a confirmation, a drawer) belongs to it, never to navigation.
+      if (event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]")) return;
       const route = SHORTCUTS[event.key];
       if (route !== undefined) navigate(`/${route}`);
     },
