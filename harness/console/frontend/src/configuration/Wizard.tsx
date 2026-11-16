@@ -1,12 +1,13 @@
 /* The Parameters tab of «Настройки»: the mockup wizard over the kernel parameter catalog
    (kernel/configuration_wizard.py). Each parameter is a real schema path with the schema's type,
-   choices and default, and the console recommendation of the shared wizard steps. An answer only
-   changes the shared draft (configuration/draft.ts); writing stays on the Changes tab behind the
-   confirmed configuration job. */
+   choices and default, the console recommendation of the shared wizard steps and the AI hints
+   (AdvisorPanel). An answer or an accepted hint only changes the shared draft
+   (configuration/draft.ts); writing stays on the Changes tab behind the confirmed configuration
+   job. */
 import { useState } from "react";
-import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
 import type { ConfigurationFacts, JsonObject, WizardParam } from "../ws/projectScreens";
+import { AdvisorPanel } from "./AdvisorPanel";
 import { valueAt } from "./draft";
 import type { ConfigurationDraft } from "./draft";
 
@@ -72,16 +73,7 @@ function ValueField({ param, value, onChange }: { param: WizardParam; value: unk
   );
 }
 
-export function Wizard({
-  facts,
-  draft,
-  advisor,
-}: {
-  facts: ConfigurationFacts;
-  draft: ConfigurationDraft;
-  /** The AI hints of the selected parameter, beside the console recommendation. */
-  advisor?: (param: WizardParam) => ReactNode;
-}) {
+export function Wizard({ facts, draft }: { facts: ConfigurationFacts; draft: ConfigurationDraft }) {
   const { t } = useI18n();
   const params = facts.wizard ?? null;
   const [index, setIndex] = useState(0);
@@ -191,7 +183,7 @@ export function Wizard({
             </button>
           </div>
         </article>
-        {advisor?.(param)}
+        <AdvisorPanel param={param} onAccept={set} />
       </section>
     </div>
   );

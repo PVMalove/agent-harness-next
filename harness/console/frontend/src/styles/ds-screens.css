@@ -226,6 +226,9 @@
 .ds-wz-toggle { display: inline-flex; align-items: center; gap: 8px; }
 .ds-wz-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ds-wz-empty { padding: 12px; }
+.ds-advisor-choices { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ds-advisor-status { padding: 0; }
+.ds-advisor-compare { margin: 0; padding-left: 16px; color: var(--ds-muted); }
 
 /* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
    The page subtitle goes, the installation rows put their caption on the title line and the tile
