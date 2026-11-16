@@ -509,7 +509,19 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .orch-scheme .orch-map { display: block; width: 100%; min-width: 0; height: auto; max-height: clamp(200px, 27vh, 280px); margin: 0 auto; padding: 8px 12px; }
 .orch-scheme .orch-map-statusbar { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 16px; }
 .orch-tickets { padding-top: 8px; }
+/* Hidden status words (.ds-sr) are absolutely positioned: a scrolling body keeps them inside, so a
+   row below the fold of a list never makes the page scroll. */
+.orch-page .ds-panel-body { position: relative; }
+/* The newest batch cards share the Pipeline tab with the dispatch queue: one card per row, so a card
+   keeps its head, links and footer inside its frame at every window width. */
+#orch-batch-cards { grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 8px; }
+#orch-batch-cards .orch-batch-foot { flex-wrap: wrap; }
+/* The batch history buttons: no UA button face under the text, which kept the contrast too low. */
+.orch-history .orch-batch { min-width: 0; border: 1px solid var(--rule); border-top-width: 2px; border-radius: 6px; background: transparent; color: var(--fg); font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.orch-history .orch-batch:hover { background: var(--row); }
+.orch-history .orch-batch.on { background: var(--sel); border-color: var(--primary); }
+.orch-history .orch-batch.on .orch-batch-id { color: var(--fg); }
 @media (max-width: 900px) {
-  .orch-scheme .ds-panel-body { overflow-x: auto; }
+  .orch-scheme .orch-map-scroll { overflow-x: auto; }
   .orch-scheme .orch-map { min-width: 760px; max-height: none; }
 }

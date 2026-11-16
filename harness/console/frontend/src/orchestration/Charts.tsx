@@ -382,6 +382,8 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
   );
   return (
     <DsPanel title={t("Пайплайн")} meta={status} id="orch-scheme" className="orch-map-panel orch-scheme">
+      {/* A phone scrolls the map sideways inside this focusable region, so the keyboard reaches it (WCAG 2.1.1). */}
+      <div className="orch-map-scroll" role="region" tabIndex={0} aria-label={t("Пайплайн")}>
         <svg className="orch-map" viewBox="0 0 1200 270" role="img" aria-label={t("Схема ролей оркестрации")}>
           <defs>
             {(
@@ -437,6 +439,7 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
           {edge("M1022 132V144", "aqua")}
           {edge("M1022 186V198", "aqua")}
         </svg>
+      </div>
     </DsPanel>
   );
 }
