@@ -103,6 +103,32 @@ class LocalQaContractTests(unittest.TestCase):
         self.assertIn(result["candidate_sha"], result["checks_run"][0]["evidence"])
         self.assert_history_unchanged(before)
 
+    @unittest.skipIf(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        "a privileged process is not denied by file permissions",
+    )
+    @unittest.skipIf(os.name == "nt", "Windows does not deny writes by POSIX mode bits")
+    def test_a_read_only_git_worktrees_directory_keeps_local_qa_working_and_unchanged(
+        self,
+    ) -> None:
+        common = Path(
+            _git(self.branch.repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        )
+        registry = common / "worktrees"
+        registry.mkdir(exist_ok=True)
+        listing = sorted(path.name for path in registry.iterdir())
+        registry.chmod(0o555)
+        try:
+            result = coordinator.integration_local_qa(self.args())
+            after = sorted(path.name for path in registry.iterdir())
+        finally:
+            registry.chmod(0o755)
+        self.assertEqual(result["state"], "completed")
+        self.assertEqual(
+            [check["result"] for check in result["checks_run"]], ["pass"]
+        )
+        self.assertEqual(after, listing)
+
     def test_missing_reason_or_invalid_ci_assertion_is_rejected(self) -> None:
         for changes in ({"reason": " "}, {"ci_condition": "available"}):
             with self.subTest(changes=changes), self.assertRaises(CoordinatorError):
