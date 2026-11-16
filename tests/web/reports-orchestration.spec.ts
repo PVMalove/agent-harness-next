@@ -15,16 +15,17 @@
    - [ ] QA lane full width under the grid with the QA log folded inside.
    - Deviations: the batch history and chronology stay on Orchestration; «Открыть отчёт» has no
      reader in the web console (docs/design/web-console-mockups/parity-1066.md).
-   #orchestration
-   - [ ] Title with links «Восстановление», «Контейнерный маршрут», «Ход работы», «Отчёты».
-   - [ ] KPI row (`orch-kpis`) of the eight TUI tiles.
-   - [ ] «Аналитика» with tabs Поток работ / Качество / Runtime / Гейты; «Состояние и
-         статистика»; «Lock ledger».
-   - [ ] «История batch» with the state filter; a chosen batch opens its chronology and is carried
-         to Recovery and Container route.
-   - [ ] «Решения»: the pending human decisions with their confirmations.
-   - Deviations: no flow map, heatmap or gate charts (no TUI facts); the TUI command menu is not
-     reproduced (decisions cover the human gate).
+   #orchestration (v3 shell, docs/rfc/web-console-v3/mockup)
+   - [ ] Page header with the refresh icon and «Отчёты» on the right; the summary (batches,
+         dispatch, active, attention) with the pipeline KPI facts and the snapshot time.
+   - [ ] Six pipe tabs: Конвейер (stage strip, dispatch queue with the Активные / Все scope and
+         every ticket, batch cards), Поток (the compact pipeline map 1200×270 and the flow figures),
+         Качество (figures, QA lane), Runtime (figures, «Lock ledger», Recovery / Container route,
+         «История batch»), Контейнер (dispatch containers by ledger state or the empty state),
+         Решения (gate figures and the pending human decisions).
+   - [ ] A chosen batch opens its chronology and is carried to Recovery and Container route.
+   - Deviations: the container state is the ledger's, not runtime liveness; the TUI command menu
+     is not reproduced (decisions cover the human gate).
    #recovery (hidden)
    - [ ] No menu item; «Оркестрация» highlighted; reached from Orchestration with the batch.
    - [ ] History, the recovery gate (mark and reason) and «Открыть recovery».
@@ -158,25 +159,26 @@ for (const width of [1440, 390]) {
     await mockSocket(page);
     await open(page, "orchestration", width, "#orch-mockup-kpis");
     await expect(page.locator("main [role=tablist]")).toHaveCount(1);
-    await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
+    // The Pipeline tab: three batch cards, five-column dispatch rows and every ticket.
+    await expect(page.locator(".orch-batches > article.orch-batch")).toHaveCount(3);
+    const children = await page.locator(".orch-dispatch-row").evaluateAll((rows) => rows.map((row) => row.children.length));
+    expect(children.every((count) => count === 5)).toBe(true);
+    await expect(page.locator(".orch-ticket-table .orch-ticket-row")).toHaveCount(3);
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Решения/ }).click();
     await expect(page.getByRole("heading", { name: "Ожидающие решения" })).toBeVisible();
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Контейнер/ }).click();
+    await expect(page.locator("#orch-containers [data-container]")).toHaveCount(2);
     await page.locator("#orch-tabs").getByRole("tab", { name: "Runtime" }).click();
     await expect(page.locator("#ledger-lock")).toContainText("Lock ledger занят: report submit");
     await page.locator('#batch-history [data-batch="b-887"]').click();
     await expect(page.locator("#open-recovery")).toHaveAttribute("href", "#/recovery?batch=b-887");
     expect(await noOverflow(page)).toBe(true);
-    // The blocks after the diagram: three batch cards (one row on a wide screen) and five-column dispatch rows.
-    const cards = await page.locator(".orch-batches > article.orch-batch").evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().top)));
-    expect(cards).toHaveLength(3);
-    if (width > 1100) expect(new Set(cards).size).toBe(1);
-    const children = await page.locator(".orch-dispatch-row").evaluateAll((rows) => rows.map((row) => row.children.length));
-    expect(children.every((count) => count === 5)).toBe(true);
-    await expect(page.locator(".orch-ticket-table .orch-ticket-row")).toHaveCount(3);
   });
 
   test(`orchestration at ${width} px: only the live step moves, and never under reduced motion`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "orchestration", width, "#orch-mockup-kpis");
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Поток/ }).click();
     const animations = () =>
       page.locator("#orch-scheme").evaluate((map) => ({
         edges: [...map.querySelectorAll(".orch-map-edge.active")].map((edge) => getComputedStyle(edge).animationName),

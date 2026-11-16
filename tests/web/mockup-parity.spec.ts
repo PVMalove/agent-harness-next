@@ -115,8 +115,8 @@ const PAGES: PageSpec[] = [
   {
     route: "orchestration",
     title: "Оркестрация",
-    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-scheme", "#orch-batch-cards", "#orch-dispatch", "#qa-lane", "#orch-tickets", "#batch-history"],
-    tabs: ["Схема", "Поток", "Качество", "Runtime", "Гейты"],
+    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-tabs", "#orch-stage-strip", "#orch-dispatch", "#orch-tickets", "#orch-batch-cards"],
+    tabs: ["1Конвейер", "2Поток", "3Качество", "4Runtime", "5Контейнер", "0Решения"],
   },
   {
     route: "reports",
@@ -212,7 +212,7 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "orchestration", width);
-    await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Решения/ }).click();
     await expect(page.locator("#orch-gate-trend circle")).toHaveCount(2);
     expect(await noOverflow(page)).toBe(true);
 

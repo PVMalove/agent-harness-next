@@ -68,5 +68,17 @@
   "Тип реализации": "Implementation type",
   "Открытый блокер": "Open blocker",
   "Соседние события одного источника": "Adjacent events of one source",
-  "Длительность": "Duration"
+  "Длительность": "Duration",
+  "Контейнеров нет: ни один dispatch не запускался через контейнерный исполнитель": "No containers: no dispatch ran through the container executor",
+  "состояние по ledger": "state from the ledger",
+  "контейнерный QA": "container QA",
+  "worker под runtime": "runtime-supervised worker",
+  "Этап в ledger": "Ledger stage",
+  "Состояние выведено из этапа dispatch в ledger. Живость контейнера наблюдает runtime: откройте «Контейнерный маршрут».": "The state comes from the dispatch stage in the ledger. The runtime observes container liveness: open Container route.",
+  "нет открытых": "none open",
+  "Охват": "Scope",
+  "Конвейер": "Pipeline",
+  "Контейнер": "Container",
+  "Сводка оркестрации": "Orchestration summary",
+  "новые batch: шаги и переходы": "newest batches: steps and links"
 }
