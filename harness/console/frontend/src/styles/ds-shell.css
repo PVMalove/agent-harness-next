@@ -283,6 +283,7 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
   .ds-top-end .ds-seg { display: none; }
   .ds-nav-collapse,
   .ds-where,
+  #branch.ds-where,
   .ds-channel,
   .ds-version,
   .ds-keys { display: none; }
@@ -305,4 +306,10 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
   body.nav-collapsed .ds-app { --ds-rail-w: 236px; }
   body.nav-collapsed .ds-nav-label,
   body.nav-collapsed .ds-nav-text { display: initial; }
+}
+
+/* A phone header has room for the logo, the connection state, the language and Help: the brand
+   name stays the link's accessible name but is hidden from view. */
+@media (max-width: 480px) {
+  .ds-brand b { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
