@@ -133,6 +133,31 @@ Moving to another step cancels the pending result.
 Taking the answer into the draft is a separate action. Checks and write confirmation remain required.
 Unsupported CLI versions, network, authentication or response errors leave plain hints available.
 
+## Settings in the web console
+
+The web console "Settings" section (`#/configuration`) has five tabs:
+
+- "Overview": the state of `project.json` and `orchestration.json`, the resolved policy values and
+  the runtime adapters with a confirmed update.
+- "Parameters": the wizard by groups. Each parameter shows the schema default, the current value and
+  the console recommendation with its reason. "Accept the console recommendation" changes the draft only.
+- "JSON": both files as text, one tab per file. A JSON edit and an answer on the "Parameters" tab
+  change the same draft.
+- "Changes": the change list of the draft, the version description and the "Save the draft as a
+  version" and "Apply" buttons. Writes start only here, always after a confirmation.
+- "History": the saved versions in `.harness/config_versions/` and the JSON of the selected version
+  with secrets masked. A version that cannot be read shows the reason instead of an empty panel.
+  Restoring a version is available in the TUI only.
+
+AI hints on the "Parameters" tab are off by default: choose "Codex CLI" or "Claude Code CLI" instead
+of "No AI". "Check CLI" shows CLI presence, version support and authorization separately and never
+calls a model. A request is sent only by the "Ask AI" button. The browser sends the server only the
+file and path of the parameter; the server reads the saved files and sends the CLI the same
+allowlisted facts as the TUI. An answer is bounded by 90 seconds. "Cancel", moving to another
+parameter or switching the CLI cancels the request. "Accept AI advice" changes the draft only. On a
+refusal, a timeout or an invalid answer, the reason and the console recommendation are shown and the
+draft does not change.
+
 ## What is not checked automatically
 
 Automated checks do not prove an external tracker, a real model request or actual worker permissions
