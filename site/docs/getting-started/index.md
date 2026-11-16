@@ -115,6 +115,35 @@ python3 bin/install-global.py --target-home "$HOME" \
 файлы и сохраняет их резервные копии. MCP, модели, плагины, credentials и permissions установщик
 не трогает.
 
+### Команда `harness`
+
+`--cli` ставит команду `harness` в `~/.local/bin` (`harness.cmd` в Windows). Она запускает
+`harness/bin/harness.py` того клона, из которого запущен установщик. Держите для этого отдельный
+клон, в котором не ведётся разработка, например `~/.local/share/agent-harness`. Тогда смена веток в
+рабочем checkout не меняет код, которым обновляются проекты.
+
+```bash {.ah-code-wrap}
+python3 ~/.local/share/agent-harness/bin/install-global.py --target-home "$HOME" --cli
+harness self-update                 # ветка origin/HEAD
+harness self-update --ref <ветка>   # другая ветка origin
+harness update /path/to/repository
+```
+
+`harness self-update` получает ветку из `origin` и ставит клон на её последний коммит в detached
+HEAD. Если в клоне есть незакоммиченные правки или ветки нет в `origin`, команда отказывает и
+клон не трогает.
+
+Песочница агента не даёт записывать в `.claude/hooks`, `.claude/settings*.json` и каталог skills,
+поэтому `harness update` из агента падает с `Read-only file system`. Исключение по имени команды не
+зависит от пути к клону. Добавьте в `sandbox.excludedCommands` в `~/.claude/settings.json`:
+
+```json
+["harness update *", "harness health *", "harness self-update *"]
+```
+
+Исключённая команда по-прежнему проходит проверку разрешений runtime. Запись в `.claude/` может
+потребовать подтверждения.
+
 ??? quote ah-skill-text "Промпт для агента: глобальный слой"
 
     ```text

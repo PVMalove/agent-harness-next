@@ -114,6 +114,36 @@ python3 bin/install-global.py --target-home "$HOME" \
 saves a backup of them first. The installer does not touch MCP, models, plugins, credentials, or
 permissions.
 
+### The `harness` command
+
+`--cli` installs a `harness` command into `~/.local/bin` (`harness.cmd` on Windows). It runs
+`harness/bin/harness.py` of the clone the installer ran from. Keep a separate clone for this that
+nobody develops in, for example `~/.local/share/agent-harness`. Then switching branches in a working
+checkout does not change the code that updates your projects.
+
+```bash {.ah-code-wrap}
+python3 ~/.local/share/agent-harness/bin/install-global.py --target-home "$HOME" --cli
+harness self-update                  # the branch of origin/HEAD
+harness self-update --ref <branch>   # another origin branch
+harness update /path/to/repository
+```
+
+`harness self-update` fetches the branch from `origin` and detaches the clone at its latest commit.
+If the clone has uncommitted changes or `origin` has no such branch, the command refuses and leaves
+the clone unchanged.
+
+The agent sandbox does not allow writes to `.claude/hooks`, `.claude/settings*.json` or the skills
+directory, so `harness update` run by an agent fails with `Read-only file system`. An exemption by
+command name does not depend on the clone path. Add to `sandbox.excludedCommands` in
+`~/.claude/settings.json`:
+
+```json
+["harness update *", "harness health *", "harness self-update *"]
+```
+
+An excluded command still goes through the runtime permission check. A write into `.claude/` may
+ask for confirmation.
+
 ??? quote ah-skill-text "Agent prompt: global layer"
 
     ```text

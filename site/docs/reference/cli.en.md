@@ -22,6 +22,7 @@ repository at that path and copies a verifiable snapshot into it.
 | `cleanup` | Plan and removal of disposable `.harness` data and abandoned container resources | only with `--apply` |
 | `worktree-remove` | Removes a managed worktree and keeps the branch | yes |
 | `worktree-venv` | Links an issue worktree's `.harness/.venv` to the main checkout's venv when `uv.lock` and `pyproject.toml` match | yes |
+| `self-update` | Moves the harness clone this CLI runs from to the latest commit of an `origin` branch (`--ref`, default `origin/HEAD`); takes no `<repo>` | yes, in the harness clone |
 | `uninstall` | Plan and full removal of harness from the project | only with `--apply` |
 | `console` | Interactive console: TUI; `--web` starts a server | through the selected commands |
 | `console-server` | Starts the console server without the interactive shell | no |

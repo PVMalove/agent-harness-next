@@ -48,6 +48,11 @@ python3 harness/bin/harness.py health /path/to/repository
 Без `--capability` устанавливается `project-foundation`. `harness diff` показывает изменения
 управляемого snapshot, `harness update` обновляет его и сохраняет локальные правки.
 
+`install-global.py --cli` ставит команду `harness` в `~/.local/bin`; она запускает CLI клона, из
+которого запущен установщик. `harness self-update [--ref <ветка>]` ставит этот клон на свежий коммит
+ветки `origin`. Отдельный клон и исключение песочницы по имени команды описаны в
+[быстром старте](https://pvmalove.github.io/agent-harness-next/getting-started/).
+
 ## Состав `engineering-suite`
 
 В `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
