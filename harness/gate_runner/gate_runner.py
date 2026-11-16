@@ -130,7 +130,7 @@ class CleanRoomPolicy:
         temporary_parent = storage_path(self.repository, "runs", "qa")
         try:
             temporary_parent.mkdir(parents=True, exist_ok=True)
-            worktree_root = Path(
+            checkout_root = Path(
                 tempfile.mkdtemp(prefix="agent-harness-qa-", dir=temporary_parent)
             )
         except OSError as exc:
@@ -138,7 +138,7 @@ class CleanRoomPolicy:
                 f"could not prepare clean QA checkout storage {temporary_parent}: {sanitise(str(exc))}",
                 remedy=_environment_remedy(temporary_parent),
             ) from exc
-        checkout = worktree_root / "checkout"
+        checkout = checkout_root / "checkout"
         try:
             self._populate(checkout)
             resolved: subprocess.CompletedProcess[str] = _run_git(
@@ -149,7 +149,7 @@ class CleanRoomPolicy:
                 or resolved.stdout.strip() != self.candidate_commit
             ):
                 raise GateRunnerError(
-                    "clean QA worktree HEAD does not match the pinned candidate commit",
+                    "clean QA checkout HEAD does not match the pinned candidate commit",
                     remedy=f"verify commit {self.candidate_commit} exists and resolves cleanly, then retry",
                 )
             status: subprocess.CompletedProcess[str] = _run_git(
@@ -164,11 +164,11 @@ class CleanRoomPolicy:
             )
             if status.returncode != 0 or status.stdout:
                 raise GateRunnerError(
-                    "clean QA worktree contains mutable files",
+                    "clean QA checkout contains mutable files",
                     remedy=(
-                        "inspect the 'git status' error above and fix the worktree/repository before retrying"
+                        "inspect the 'git status' error above and fix the repository before retrying"
                         if status.returncode != 0
-                        else "the freshly created clean-room worktree should start clean -- "
+                        else "the freshly created clean QA checkout should start clean -- "
                         + INTERNAL_INVARIANT_REMEDY
                     ),
                 )
@@ -176,7 +176,7 @@ class CleanRoomPolicy:
         finally:
             # The checkout is a standalone repository: removing the directory leaves nothing
             # registered in the main repository's .git.
-            shutil.rmtree(worktree_root, ignore_errors=True)
+            shutil.rmtree(checkout_root, ignore_errors=True)
 
     def _populate(self, checkout: Path) -> None:
         """Build a standalone repository at the candidate without writing to the main repository's .git.

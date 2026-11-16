@@ -213,7 +213,7 @@ class GateRunnerTests(unittest.TestCase):
 
             for candidate, expected_message in (
                 (unknown_commit, "is not a commit in"),
-                (abbreviated_commit, "does not match the pinned candidate commit"),
+                (abbreviated_commit, "clean QA checkout HEAD does not match the pinned candidate commit"),
             ):
                 with self.subTest(candidate=candidate):
                     with self.assertRaises(GateRunnerError) as raised:
@@ -272,7 +272,7 @@ class GateRunnerTests(unittest.TestCase):
             for status_result, expected_remedy in (
                 (
                     subprocess.CompletedProcess([], 128, stdout="", stderr="fatal"),
-                    "inspect the 'git status' error",
+                    "inspect the 'git status' error above and fix the repository before retrying",
                 ),
                 (
                     subprocess.CompletedProcess(
@@ -293,8 +293,9 @@ class GateRunnerTests(unittest.TestCase):
                             CleanRoomPolicy(repo, candidate_commit),
                             stop_on_failure=True,
                         )
-                    self.assertIn("contains mutable files", raised.exception.message)
+                    self.assertIn("clean QA checkout contains mutable files", raised.exception.message)
                     self.assertIn(expected_remedy, raised.exception.remedy)
+                    self.assertNotIn("worktree", raised.exception.remedy)
 
     def test_clean_room_python_prefers_harness_venv_over_root_venv(self) -> None:
         """Проверить, что clean room python отдает предпочтение .harness/.venv перед корневым .venv."""
