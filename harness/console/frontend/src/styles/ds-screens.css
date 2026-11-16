@@ -189,6 +189,8 @@
    height, the wizard of the Parameters tab and the JSON editor. */
 .ds-settings-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
 .ds-settings-col { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+/* A panel that is not the column's last one shows all its rows; the fill panel below takes the rest. */
+.ds-settings-col > .ds-panel:not(.ds-panel-fill) { flex: none; }
 .ds-settings-json { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .ds-settings-files { flex: none; }
 .ds-settings-editor .ds-panel-body { display: flex; flex-direction: column; gap: 8px; }
@@ -234,7 +236,8 @@
    The page subtitle goes, the installation rows put their caption on the title line and the tile
    captions take one line, so every panel shows all its rows. */
 @media (max-height: 960px) and (min-width: 901px) {
-  .ds-page[data-section="Harness"] .ds-sub { display: none; }
+  .ds-page[data-section="Harness"] .ds-sub,
+  .ds-page[data-section="Configuration"] .ds-sub { display: none; }
   .ds-overview .ds-install .ds-row { min-height: 28px; padding-block: 2px; }
   .ds-overview .ds-install .ds-row-main { display: flex; align-items: baseline; gap: 8px; }
   .ds-overview .ds-install .ds-row-title { flex: none; }
