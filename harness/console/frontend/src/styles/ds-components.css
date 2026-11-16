@@ -430,3 +430,18 @@
   .ds-page-head { flex-wrap: wrap; }
 }
 .ds-table-wrap { overflow-x: auto; margin-bottom: 8px; }
+
+/* Data tables (the Evidence matrix, the Release Gate): row and column headers, one line per cell,
+   the wrapper scrolls sideways on a narrow screen (modern-web-guidance ui-atoms/responsive-table). */
+.ds-table { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-2); }
+.ds-table caption { padding: 8px 12px; color: var(--ds-muted); font-size: var(--ds-fs-1); text-align: left; }
+.ds-table th,
+.ds-table td { padding: 8px 12px; border-top: 1px solid var(--ds-line); text-align: left; vertical-align: middle; white-space: nowrap; }
+.ds-table thead th { border-top: 0; color: var(--ds-muted); font-size: var(--ds-fs-1); font-weight: 600; }
+.ds-table tbody th { font-weight: 600; }
+.ds-table-wrapcell { min-width: 12rem; white-space: normal; overflow-wrap: anywhere; }
+.ds-evidence-cell[data-cell="none"] { color: var(--ds-faint); }
+.ds-report-tab { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 12px; }
+.ds-report-block { display: flex; flex-direction: column; gap: 8px; padding: 0 12px; }
+.ds-report-sub { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: var(--ds-fs-2); font-weight: 600; }
+.ds-report-sub .ds-muted { font-size: var(--ds-fs-1); font-weight: 400; }

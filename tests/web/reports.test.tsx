@@ -76,9 +76,11 @@ const TUI_ONLY = new Set([
 /** A TUI status is a symbol plus words; the mockup's rows show the words only. */
 const words = (fact: string) => fact.replace(/^[✔▶Ⅱ○✖⚠] /, "");
 const evidenceMarks = () =>
-  [...document.querySelectorAll("#reports-evidence .report-evidence-row")].map((row) =>
-    [...row.querySelectorAll(".report-evidence-cell")].map((cell) => cell.textContent).join(""),
+  [...document.querySelectorAll("#reports-evidence .ds-evidence-row")].map((row) =>
+    [...row.querySelectorAll(".ds-evidence-cell")].map((cell) => MARKS[cell.getAttribute("data-cell")!]).join(""),
   );
+/** A cell's state as one character, so a row of the matrix reads at a glance in the expectations. */
+const MARKS: Record<string, string> = { present: "✓", stale: "!", missing: "—", none: "·" };
 
 describe("the Reports route", () => {
   beforeEach(() => {
@@ -199,7 +201,7 @@ describe("the Reports route", () => {
     expect(document.querySelector("#report-conclusion p")!.textContent).toBe("developer-retry");
     act(() => fireEvent.click(screen.getByRole("tab", { name: /Evidence$/ })));
     const matrix = document.querySelector("#reports-evidence")!;
-    expect(matrix.querySelectorAll(".report-evidence-row").length).toBeGreaterThan(0);
+    expect(matrix.querySelectorAll(".ds-evidence-row").length).toBeGreaterThan(0);
     expect(matrix.textContent).toContain("receipt");
     act(() => fireEvent.click(screen.getByRole("tab", { name: /Качество$/ })));
     expect(document.querySelector("#reports-quality")).not.toBeNull();
@@ -207,7 +209,7 @@ describe("the Reports route", () => {
     expect(document.querySelector("#reports-readiness")!.textContent).toContain("Release Gate");
     // The QA report of #887 records a blocker: the kernel's verdict is "blocked".
     expect(document.querySelector("#reports-readiness [data-verdict]")!.textContent).toBe("Заблокировано");
-    expect(document.querySelector("#reports-readiness .report-ready-row")!.textContent).not.toMatch(/\b(match|failed|blocked)\b/);
+    expect(document.querySelector("#reports-readiness .ds-ready-row")!.textContent).not.toMatch(/\b(match|failed|blocked)\b/);
   });
 
   test("Quality reads reports.snapshot only: results by role, and no findings or latency borrowed from Orchestration", () => {
@@ -273,6 +275,18 @@ describe("the Reports route", () => {
     renderReports();
     act(() => fireEvent.click(screen.getByRole("tab", { name: /Evidence$/ })));
     expect(evidenceMarks()).toEqual(["✓✓✓✓··", "————··", "✓———··"]);
+  });
+
+  test("the evidence matrix is a table with headers, and every cell says its state in words", () => {
+    renderReports();
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Evidence$/ })));
+    const table = screen.getByRole("table", { name: /Coverage по batch/ });
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["batch", "developer", "review", "qa", "QA run", "receipt", "publish"]);
+    const first = within(table).getAllByRole("row")[1]!;
+    expect(within(first).getByRole("rowheader").textContent).toBe("#887");
+    expect(within(first).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["есть", "есть", "есть", "есть", "впереди", "впереди"]);
+    // One frame: the tab's panel carries the only "Evidence" heading.
+    expect(document.querySelectorAll("#reports-evidence h2")).toHaveLength(0);
   });
 
   test("the client does not recompute a cell the kernel marked stale", () => {

@@ -95,7 +95,7 @@
 .qa-lane-panel .report-qa-log { border-top: 1px solid var(--rule); }
 .qa-lane-panel .report-qa-log > summary { padding: 8px 16px; color: var(--muted); font-size: var(--fs-1); cursor: pointer; }
 #reports-quality-kpi { margin-bottom: 12px; }
-.report-ready-row .orch-pill, #reports-readiness .orch-pill { white-space: nowrap; min-width: max-content; }
+#reports-readiness .orch-pill { white-space: nowrap; min-width: max-content; }
 /* Publication: the batch selector sits in the Release candidate head, a preflight pill column
    fits its widest word, and the human decision words its reasons. */
 .publish-batch select { max-width: 220px; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 5px; background: #1a1e24; color: var(--fg); font: var(--fs-1) var(--mono); }
