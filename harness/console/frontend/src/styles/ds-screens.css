@@ -1,4 +1,4 @@
-/* Design system v3: the layout of the moved screens (Repo Map, Harness, Help, Diagnostics). General rules
+/* Design system v3: the layout of the moved screens (Repo Map, Harness, Help, Diagnostics, Update). General rules
    live in ds-components.css; nothing here restyles a shared component. */
 .ds-tabpanel { display: flex; flex-direction: column; flex: 1; gap: 12px; min-height: 0; }
 .ds-tabpanel[hidden] { display: none; }
@@ -119,6 +119,28 @@
 .ds-diag-checks { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
 .ds-diag-checks .ds-legacy-island { overflow: visible; min-height: 100%; }
 
+/* Update: the files by drift kind, the selected file and the aside «Как обновить» */
+.ds-update { display: grid; grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr) minmax(280px, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-update-file,
+.ds-update-how { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.ds-update-file > .ds-pipe,
+.ds-update-how > .ds-pipe { margin: 0 12px; }
+.ds-diff { margin: 0 12px; overflow-x: auto; white-space: pre; }
+.ds-diff-line { display: block; }
+.ds-diff-add { color: var(--ds-ok); }
+.ds-diff-del { color: var(--ds-err); }
+.ds-diff-file .ds-diff-path { font-family: var(--ds-mono); font-weight: 500; }
+.ds-update-decide { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px; }
+.ds-update-mode { cursor: pointer; }
+.ds-update-mode[data-on="true"] { background: var(--ds-accent-bg); box-shadow: inset 2px 0 0 var(--ds-accent); }
+.ds-update-count b { min-width: 24px; text-align: right; }
+.ds-verdict-ok { color: var(--ds-ok); }
+.ds-verdict-warn { color: var(--ds-warn); }
+.ds-panel-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--ds-line); }
+.ds-panel-foot .ds-note { flex: 1 1 100%; padding: 0; }
+#update-how .ds-panel-body { display: flex; flex-direction: column; }
+#update-how .ds-update-how { flex: 1; min-height: 0; overflow: auto; }
+
 /* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
    The page subtitle goes, the installation rows put their caption on the title line and the tile
    captions take one line, so every panel shows all its rows. */
@@ -141,6 +163,7 @@
   .ds-split,
   .ds-features,
   .ds-diag-checks,
+  .ds-update,
   .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
   .ds-file-rel { border-left: 0; }
 }

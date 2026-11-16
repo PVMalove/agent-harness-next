@@ -3020,6 +3020,25 @@ EN.update(
     }
 )
 
+# Update Harness on the design system v3 (web console).
+EN.update(
+    {
+        "Seed-файл: «взять версию пакета» отмечает его для перезаписи выбранных seed-файлов, «оставить мой файл» снимает отметку.": "A seed file: \"take the package version\" ticks it for the overwrite of the selected seed files, \"keep my file\" unticks it.",
+        "Seed-файлы перезаписывает только режим «С перезаписью выбранных seed-файлов».": "Only the mode \"Overwrite the selected seed files\" overwrites seed files.",
+        "«Взять версию пакета» — режим с перезаписью управляемых файлов; «оставить мой файл» — обычное обновление, которое сохраняет правки и останавливается на конфликтах.": "\"Take the package version\" is the overwrite of the managed files; \"keep my file\" is the normal update, which keeps local edits and stops on conflicts.",
+        "Взять версию пакета": "Take the package version",
+        "Оставить мой файл": "Keep my file",
+        "Выбрать этот режим": "Choose this mode",
+        "Длительность шагов": "Step durations",
+        "Изменения": "Changes",
+        "Как обновить": "How to update",
+        "Миграция": "Migration",
+        "Расхождения": "Drift",
+        "Решение": "Decision",
+        "Строк +/−": "Lines +/−",
+    }
+)
+
 def state_labels() -> dict[str, dict[str, str]]:
     """The state labels as the SPA reads them: state -> {\"ru\": ..., \"en\": ...}."""
     return {state: {"ru": ru, "en": en} for state, (ru, en) in STATE_LABELS.items()}

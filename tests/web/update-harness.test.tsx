@@ -43,11 +43,12 @@ const content = () => document.querySelector("main#content")?.textContent ?? "";
 const starts = (socket: FakeSocket) => socket.sent.filter((body) => body.type === "job.start");
 const run = () => document.querySelector("#update-run") as HTMLButtonElement;
 const countRows = () =>
-  [...document.querySelectorAll("#update-changes .update-count-row")].map((row) => [
-    row.querySelector(".count-value")?.textContent,
-    row.querySelector(".count-label")?.textContent,
-    row.querySelector(".count-icon svg") !== null,
+  [...document.querySelectorAll("#update-changes .ds-update-count")].map((row) => [
+    row.querySelector("b")?.textContent,
+    row.querySelector(".ds-row-main")?.textContent,
+    row.querySelector(".ds-status svg") !== null,
   ]);
+const howTab = (name: string) => act(() => fireEvent.click(document.querySelector(`#update-how-tab-${name}-button`)!));
 const mode = (name: string) => act(() => fireEvent.click(screen.getByRole("radio", { name })));
 
 describe("the Update Harness route", () => {
@@ -65,37 +66,73 @@ describe("the Update Harness route", () => {
     expect(FACTS.page.filter((fact) => !drift.test(fact) && !fact.startsWith("отмечено") && !content().includes(words(fact)))).toEqual([]);
     expect(countRows()).toEqual(counted.map(([value, label]) => [value, label, true]));
     // As in the mockup the first file is open, so only its diff is read.
-    const first = document.querySelector("#update-diff .diff-file") as HTMLElement;
+    const first = document.querySelector("#update-diff .ds-diff-file") as HTMLElement;
     expect(first.getAttribute("aria-selected")).toBe("true");
     expect(socket.sent.filter((body) => body.type === "update_harness.diff").map((body) => body.path)).toEqual([first.dataset.path]);
     act(() => fireEvent.click(document.querySelector('#update-diff [data-path="AGENTS.md"]') as HTMLElement));
     const diff = answer(socket, "update_harness.diff", DIFF);
     expect(diff).toEqual({ id: diff.id, type: "update_harness.diff", path: "AGENTS.md" });
     expect(FACTS.diff.filter((fact) => !content().includes(fact))).toEqual([]);
-    expect(document.querySelector(".diff-line.add")?.textContent).toBe("+Package rule.\n");
-    expect(document.querySelector(".diff-line.del")?.textContent).toBe("-Local rule.\n");
+    expect(document.querySelector(".ds-diff-add")?.textContent).toBe("+Package rule.\n");
+    expect(document.querySelector(".ds-diff-del")?.textContent).toBe("-Local rule.\n");
   });
 
-  test("lays out the mockup blocks: versions with changes, modes with the plan, seeds only in the seed mode", () => {
+  test("lays out the v3 blocks: summary, files, the selected file and the aside «Как обновить»", () => {
     renderPage();
-    const grid = document.querySelector(".update-top-grid") as HTMLElement;
-    expect([...grid.children].map((child) => child.id)).toEqual(["update-versions", "update-modes-card"]);
-    expect(grid.querySelector("#update-versions #update-changes")).not.toBeNull();
-    expect(grid.querySelector("#update-modes-card #update-plan-command")).not.toBeNull();
-    const facts = [...document.querySelectorAll(".update-title .home-facts span")].map((item) => item.textContent);
-    expect(facts.slice(0, 4)).toEqual(["1.5.1 → 2.0.0", "259 управляемых файлов", "32 навыка", "schema 3 → 4"]);
-    expect(facts[4]).toMatch(/^\d{2}:\d{2}:\d{2}$/);
-    expect(document.querySelector(".update-title .home-facts span:last-child")?.getAttribute("title")).toBe("Новый снимок · 0 s");
-    expect(document.querySelector("#update-versions .update-pill")?.textContent).toBe("доступно");
-    expect([...document.querySelectorAll(".update-mode-card")].map((card) => [card.querySelector("b")?.textContent, card.querySelector(".mode-tag")?.textContent])).toEqual([
+    const grid = document.querySelector(".ds-update") as HTMLElement;
+    expect([...grid.children].map((child) => child.id)).toEqual(["update-diff", "update-diff-view", "update-how"]);
+    const stats = [...document.querySelectorAll("#update-versions .ds-stat")].map((stat) => [
+      stat.querySelector(".ds-stat-label")?.textContent,
+      stat.querySelector(".ds-stat-value")?.textContent,
+    ]);
+    expect(stats).toEqual([
+      ["Установлено", "1.5.1"],
+      ["Доступно", "2.0.0"],
+      ["Расхождения", "7"],
+      ["Runtime store", "schema 3 → 4"],
+    ]);
+    expect(document.querySelector("#update-versions .ds-verdict-warn")?.textContent).toBe("Доступно обновление");
+    expect(document.querySelector("#update-cache")?.textContent?.trim()).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(document.querySelector("#update-cache")?.getAttribute("title")).toBe("Новый снимок · 0 s");
+    const tabs = [...document.querySelectorAll("#update-how [role=tab]")].map((tab) => tab.textContent);
+    expect(tabs).toEqual(["1Режим", "–Seed", "3План", "4Миграция"]);
+    expect([...document.querySelectorAll(".ds-update-mode")].map((card) => [card.querySelector(".ds-row-title")?.textContent, card.querySelector(".ds-tag")?.textContent])).toEqual([
       ["Обычное", "рекомендуется"],
       ["С перезаписью управляемых файлов", "опасно"],
       ["С перезаписью выбранных seed-файлов", "выборочно"],
     ]);
-    expect(document.querySelector("#update-seeds")).toBeNull();
-    expect(document.querySelector('.update-title a[href="#/diagnostics"]')).not.toBeNull();
+    // A seed switch works only in the seed mode.
+    howTab("seed");
+    expect((screen.getByRole("switch", { name: ".harness/project.json" }) as HTMLButtonElement).disabled).toBe(true);
+    howTab("mode");
     mode("С перезаписью выбранных seed-файлов");
-    expect(document.querySelector("#update-seeds")).not.toBeNull();
+    howTab("seed");
+    expect((screen.getByRole("switch", { name: ".harness/project.json" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(document.querySelector('.ds-page-head a[href="#/diagnostics"]')).not.toBeNull();
+  });
+
+  test("the fields the snapshot lacks are marked «нет данных», never invented", () => {
+    renderPage();
+    const view = document.querySelector("#update-diff-view") as HTMLElement;
+    expect(within(view).getAllByText("нет данных")).toHaveLength(2);
+    expect(within(document.querySelector("#update-versions") as HTMLElement).getByText(/pre-release/).textContent).toContain("нет данных");
+    expect(within(document.querySelector("#update-migration") as HTMLElement).getByText("Длительность шагов").nextElementSibling?.textContent).toBe("нет данных");
+  });
+
+  test("the decision of a conflict maps only to the real update modes", () => {
+    renderPage();
+    const decide = () => act(() => fireEvent.click(document.querySelector("#update-file-tab-decide-button")!));
+    const choose = (name: string) =>
+      act(() => fireEvent.click(within(document.querySelector("#update-decision") as HTMLElement).getByRole("button", { name })));
+    act(() => fireEvent.click(document.querySelector('#update-diff [data-path="AGENTS.md"]') as HTMLElement));
+    decide();
+    choose("Взять версию пакета");
+    expect(document.querySelector("#update-plan-command")?.textContent).toBe("harness update /work/project --force-managed-files");
+    choose("Оставить мой файл");
+    expect(document.querySelector("#update-plan-command")?.textContent).toBe("harness update /work/project");
+    act(() => fireEvent.click(document.querySelector('#update-diff [data-path=".harness/project.json"]') as HTMLElement));
+    choose("Взять версию пакета");
+    expect(document.querySelector("#update-plan-command")?.textContent).toBe("harness update /work/project --force-seed-file .harness/project.json");
   });
 
   test("the plan follows the mode: command, warning and the seed selection", () => {
@@ -109,6 +146,7 @@ describe("the Update Harness route", () => {
     mode("С перезаписью выбранных seed-файлов");
     expect(run().disabled).toBe(true);
     expect(content()).toContain("Отметьте хотя бы один файл");
+    howTab("seed");
     act(() => fireEvent.click(screen.getByRole("button", { name: "Выбрать все" })));
     expect(document.querySelector("#update-seed-count")?.textContent).toBe("отмечено 2 из 2");
     expect(plan()).toBe(
@@ -129,7 +167,8 @@ describe("the Update Harness route", () => {
     act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" })));
     expect(starts(socket)).toEqual([]);
     mode("С перезаписью выбранных seed-файлов");
-    act(() => fireEvent.click(screen.getByLabelText(".harness/project.json")));
+    howTab("seed");
+    act(() => fireEvent.click(screen.getByRole("switch", { name: ".harness/project.json" })));
     act(() => fireEvent.click(run()));
     dialog = screen.getByRole("dialog");
     act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Запустить" })));
@@ -152,67 +191,62 @@ describe("the Update Harness route", () => {
     expect(socket.request("update_harness.snapshot")).toMatchObject({ force: true });
   });
 
-  test("the diff lists one compact row per file: status icon, path and the kind word", () => {
+  test("the files are grouped by what the update does, one compact row each: status icon, path and the kind word", () => {
     renderPage();
-    expect(document.querySelector("#update-diff")?.classList.contains("diff-panel")).toBe(true);
-    expect(document.querySelector("#update-diff .panel-head .small")?.textContent).toMatch(/^выбор файла · 7 файлов · \d{2}:\d{2}:\d{2}$/);
-    const rows = [...document.querySelectorAll("#update-diff .diff-file")];
+    expect(document.querySelector("#update-diff .ds-panel-meta")?.textContent).toBe("7 файлов");
+    const groups = [...document.querySelectorAll("#update-diff [data-kind]")].map((group) => group.getAttribute("data-kind"));
+    expect(groups).toEqual(["conflict", "package_changed", "added", "local_changed", "seed_differing"]);
+    const rows = [...document.querySelectorAll("#update-diff .ds-diff-file")];
     expect(rows.length).toBe(7);
     for (const row of rows) {
-      expect([...row.children].map((child) => child.className.split(" ")[0])).toEqual(["diff-status", "diff-path", "diff-kind"]);
-      expect(row.querySelector(".diff-kind")?.textContent).not.toMatch(/[✔⚠✖○]/);
-      expect(row.querySelector(".diff-kind")?.className).toMatch(/ (ok|warn|err|active|muted)$/);
+      expect([...row.children].map((child) => child.className.split(" ")[0])).toEqual(["ds-status", "ds-row-main", "ds-row-end"]);
+      expect(row.querySelector(".ds-diff-kind")?.textContent).not.toMatch(/[✔⚠✖○]/);
     }
-    expect(document.querySelector("#update-diff .diff-detail .diff-detail-head")).not.toBeNull();
   });
 
-  test("versions carry the schema row and a refresh in the foot, without doubled glyphs", () => {
+  test("the summary carries the version rows and the plan warning has no doubled glyph", () => {
     const { socket } = renderPage();
-    const versions = document.querySelector("#update-versions") as HTMLElement;
-    const rows = [...versions.querySelectorAll(".version-facts > div")].map((row) => [row.querySelector("dt")?.textContent, row.querySelector("dd")?.textContent]);
-    expect(rows).toContainEqual(["Schema", "3 → 4"]);
-    expect(versions.querySelector(".version-status")?.textContent?.trim()).toBe("Доступно обновление");
+    const facts = [...document.querySelectorAll("#update-versions .ds-facts-main span")].map((item) => item.textContent);
+    expect(facts).toContain("Скилов: 32");
+    expect(facts).toContain("Lock обновлён: 2026-11-05 10:00 UTC");
     expect(document.querySelector("#update-warning b")?.textContent).not.toMatch(/^⚠/);
-    const refresh = versions.querySelector(".changes-foot button") as HTMLButtonElement;
     const before = socket.sent.filter((body) => body.type === "update_harness.snapshot").length;
-    act(() => fireEvent.click(refresh));
+    act(() => fireEvent.click(document.querySelector("#update-recheck")!));
     expect(socket.sent.filter((body) => body.type === "update_harness.snapshot").length).toBe(before + 1);
   });
 
   test("the runtime-store migration panel shows the plan of a file-ledger project, never a run button", () => {
     renderPage();
-    const panel = document.querySelector("#update-migration.migration-panel") as HTMLElement;
-    expect(panel.querySelector(".panel-head .small")?.textContent).toBe("schema 3 → 4");
-    const steps = [...panel.querySelectorAll(".migration-step")].map((step) => [
-      step.querySelector(".migration-num")?.textContent,
-      step.querySelector("b")?.textContent,
-      step.querySelector(".migration-state")?.textContent,
+    const panel = document.querySelector("#update-migration") as HTMLElement;
+    const steps = [...panel.querySelectorAll(".ds-steps .ds-row")].map((step) => [
+      step.querySelector(".ds-row-title")?.textContent,
+      step.querySelector(".ds-row-end")?.textContent,
     ]);
     expect(steps).toEqual([
-      ["01", "Backup", "ожидает"],
-      ["02", "Schema 3 → 4", "ожидает"],
-      ["03", "Cutover", "ожидает"],
-      ["04", "Health", "после миграции"],
+      ["01 · Backup", "ожидает"],
+      ["02 · Schema 3 → 4", "ожидает"],
+      ["03 · Cutover", "ожидает"],
+      ["04 · Health", "после миграции"],
     ]);
-    const facts = Object.fromEntries([...panel.querySelectorAll(".migration-facts > div")].map((row) => [row.querySelector("span")?.textContent, row.querySelector("b")?.textContent]));
-    expect(facts).toEqual({ authority: "file-ledger", generation: "generation-0007", audit: "128", cutover: "нет данных" });
+    const facts = Object.fromEntries([...panel.querySelectorAll(".ds-kv-row")].map((row) => [row.querySelector("dt")?.textContent, row.querySelector("dd")?.textContent]));
+    expect(facts).toEqual({ schema: "3 → 4", authority: "file-ledger", generation: "generation-0007", audit: "128", cutover: "нет данных", "Длительность шагов": "нет данных" });
     expect(panel.querySelector("button")).toBeNull();
     expect(panel.querySelector('a[href="#/diagnostics"]')).not.toBeNull();
   });
 
   test("a runtime-store project shows schema and cutover done and an honest backup gap", () => {
     renderPage({ ...UPDATE, store: { ...UPDATE.store, authority: "runtime-store", schema: 4, cutover_at: "2026-10-27T18:38:00Z" } });
-    const states = [...document.querySelectorAll("#update-migration .migration-state")].map((item) => item.textContent);
+    const states = [...document.querySelectorAll("#update-migration .ds-steps .ds-row-end")].map((item) => item.textContent);
     expect(states).toEqual(["нет данных", "выполнено", "выполнено", "после миграции"]);
-    expect(document.querySelector("#update-migration .migration-step small")?.textContent).toBe("факт резервной копии в указателе не хранится");
+    expect(document.querySelector("#update-migration .ds-steps .ds-row-sub")?.textContent).toBe("факт резервной копии в указателе не хранится");
   });
 
   test("the last run result is an in-panel honest empty state before any run of this console", () => {
     renderPage();
-    const panel = document.querySelector("#update-result.result-panel") as HTMLElement;
-    expect(panel.querySelector(".panel-head h2")?.textContent).toBe("Результат последнего запуска");
-    expect(panel.querySelector(".result-empty")?.textContent).toContain("Ещё не запускалось в этой консоли");
-    expect(panel.querySelector(".result-empty")?.textContent).toContain("harness update");
+    const panel = document.querySelector("#update-result") as HTMLElement;
+    expect(panel.querySelector("h3")?.textContent).toBe("Результат последнего запуска");
+    expect(panel.querySelector(".ds-note")?.textContent).toContain("Ещё не запускалось в этой консоли");
+    expect(panel.querySelector(".ds-note")?.textContent).toContain("harness update");
   });
 
   test("a project without the harness cannot be updated", () => {
