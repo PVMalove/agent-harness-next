@@ -297,6 +297,7 @@ REASONS_RU = {
     "worktree newer than minimum age": "worktree моложе 24 ч",
     "worktree status unavailable": "статус Git недоступен",
     "worktree has uncommitted changes": "есть незакоммиченные изменения",
+    "worktree is locked": "worktree заблокирован (`git worktree lock`)",
     "local commits are not preserved on origin": "коммиты не сохранены на origin",
     "active or newer than minimum age": "активные данные или моложе 24 ч",
     "registered QA worktree or Git unavailable": "зарегистрированный QA worktree или Git недоступен",

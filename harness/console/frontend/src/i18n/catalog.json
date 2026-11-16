@@ -2141,6 +2141,7 @@
     "runtime does not answer: start `harness-runtime serve --repo <repo>`": "runtime не отвечает: запустите `harness-runtime serve --repo <repo>`",
     "unowned local branch": "ветка вне шаблона проекта",
     "worktree has uncommitted changes": "есть незакоммиченные изменения",
+    "worktree is locked": "worktree заблокирован (`git worktree lock`)",
     "worktree is not registered": "worktree не зарегистрирован",
     "worktree newer than minimum age": "worktree моложе 24 ч",
     "worktree status unavailable": "статус Git недоступен"

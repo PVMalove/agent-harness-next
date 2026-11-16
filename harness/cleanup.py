@@ -34,6 +34,12 @@ _INSTALL_DIR_RE = re.compile(
 )
 # Bound of each local git call; generous because `git worktree remove` deletes a whole checkout.
 GIT_TIMEOUT_SECONDS = 300
+# Where the agent application keeps the worktrees it creates itself (Claude Code `EnterWorktree`).
+# `git worktree move` cannot bring one into `.sandboxes/worktrees` inside the agent sandbox (#1180).
+AGENT_WORKTREES = Path(".claude") / "worktrees"
+# The protocol minor of `worktree.remove`, and the answers of a runtime that does not serve it.
+WORKTREE_PROTOCOL_MINOR = 8
+_NO_WORKTREE_OPERATION = frozenset({"protocol_unsupported", "unknown_operation"})
 # Why the worktrees stay when the batches that own them were not read: the general reason, and the
 # runtime-store one that names the process to start. Each is a key of the console's REASONS_RU.
 LEDGER_UNAVAILABLE = "Git or ledger state unavailable"
@@ -122,13 +128,9 @@ def _worktree_fact(
             if record[0] in "RC" or record[1:2] in ("R", "C"):
                 next(records, None)
     reason = ""
-    managed = (sandboxes_root(checkout) / "worktrees", root / "worktrees")
     if path == checkout:
         reason = "current checkout"
-    elif not _inside(root, path) or not any(
-        not parent.is_symlink() and path.parent == parent.resolve()
-        for parent in managed
-    ):
+    elif not _managed_worktree(checkout, root, path):
         reason = "not a direct managed worktree"
     elif isinstance(active, _Unread):
         reason = active.reason
@@ -142,6 +144,8 @@ def _worktree_fact(
         reason = "worktree status unavailable"
     elif dirty:
         reason = "worktree has uncommitted changes"
+    elif _locked(path):
+        reason = "worktree is locked"
     elif not _worktree_preserved(checkout, path, branch):
         reason = "local commits are not preserved on origin"
     return WorktreeFact(path, branch, dirty if status.returncode == 0 else None, reason)
@@ -163,6 +167,56 @@ def worktree_facts(repo: Path, *, min_age_hours: float = 24) -> list[WorktreeFac
     ]
 
 
+def _managed_worktree_parents(checkout: Path, root: Path) -> tuple[Path, ...]:
+    """The directories whose direct children the cleanup may remove as worktrees."""
+    return (
+        sandboxes_root(checkout) / "worktrees",
+        root / "worktrees",
+        checkout / AGENT_WORKTREES,
+    )
+
+
+def _managed_worktree(checkout: Path, root: Path, path: Path) -> bool:
+    """A real directory that is a direct child of a managed parent that is no symlink."""
+    return not path.is_symlink() and any(
+        not parent.is_symlink() and path.parent == parent.resolve()
+        for parent in _managed_worktree_parents(checkout, root)
+    )
+
+
+def _locked(worktree: Path) -> bool:
+    """Whether `git worktree lock` protects the worktree; a live agent session locks its own."""
+    git_dir = _git(worktree, "rev-parse", "--absolute-git-dir")
+    return git_dir.returncode == 0 and (Path(git_dir.stdout.strip()) / "locked").exists()
+
+
+def _remove_registered_worktree(checkout: Path, root: Path, path: Path) -> None:
+    """Remove one registered worktree, keeping its branch; OSError names why it stays.
+
+    With the runtime store the runtime removes it: it works outside the agent sandbox, where
+    `.git/worktrees` is read-only (#1180). A runtime that does not serve the operation, and the
+    file-ledger epoch, leave the removal to the local git.
+    """
+    if store_is_authority(root / "orchestration" / "state"):
+        try:
+            RuntimeClient(checkout).call(
+                "worktree.remove",
+                operation_id=f"cleanup.worktree-remove-{uuid.uuid4().hex}",
+                payload={"path": str(path)},
+                timeout_seconds=120,
+                requires_minor=WORKTREE_PROTOCOL_MINOR,
+            )
+            return
+        except RuntimeClientError as exc:
+            if exc.code not in _NO_WORKTREE_OPERATION:
+                raise OSError(
+                    f"harness-runtime did not remove it: [{exc.code}] {exc.message}"
+                ) from exc
+    result = _git(checkout, "worktree", "remove", str(path))
+    if result.returncode != 0:
+        raise OSError(result.stderr.strip() or "git worktree remove failed")
+
+
 def remove_worktree(repo: Path, path: Path) -> None:
     """Recheck every protection at execution; remove only the checkout, keeping its branch."""
     target = path.expanduser()
@@ -170,9 +224,11 @@ def remove_worktree(repo: Path, path: Path) -> None:
     fact = next((item for item in worktree_facts(repo) if item.path == target), None)
     if fact is None or not fact.removable:
         raise ValueError(fact.reason if fact else "worktree is not registered")
-    result = _git(repo, "worktree", "remove", str(target))
-    if result.returncode:
-        raise ValueError(result.stderr.strip() or "git worktree remove failed")
+    checkout = repo.expanduser().resolve()
+    try:
+        _remove_registered_worktree(checkout, storage_root(checkout), target)
+    except OSError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def _git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -787,6 +843,7 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
         worktree_roots = [sandboxes / "worktrees"]
         if (root / "worktrees").resolve() != (sandboxes / "worktrees").resolve():
             worktree_roots.append(root / "worktrees")
+        worktree_roots.append(checkout / AGENT_WORKTREES)
 
         batches = _worktree_batches(root)
         active = _active_paths(batches)
@@ -867,7 +924,11 @@ def apply_cleanup(
             containers.append(item)
             continue
         path = Path(item["path"])
-        if not _inside(root, path):
+        if not (
+            _managed_worktree(checkout, root, path)
+            if item["kind"] == "worktree"
+            else _inside(root, path)
+        ):
             failed.append({"path": str(path), "reason": "path escaped storage root"})
             continue
         try:
@@ -877,9 +938,7 @@ def apply_cleanup(
                 branch = item["branch"]
                 if not _worktree_preserved(checkout, path, branch):
                     raise OSError("worktree is no longer preserved on origin")
-                result = _git(checkout, "worktree", "remove", str(path))
-                if result.returncode != 0:
-                    raise OSError(result.stderr.strip() or "git worktree remove failed")
+                _remove_registered_worktree(checkout, root, path)
                 if branch is not None:
                     result = _git(checkout, "branch", "-D", branch)
                     if result.returncode != 0:
