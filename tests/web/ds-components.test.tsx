@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, test, vi } from "vitest";
-import { PageHeader, Panel, PipeTabs, RelatedTiles, StatusIcon, Summary, Switch } from "../../harness/console/frontend/src/ds";
+import { Drawer, PageHeader, Panel, PipeTabs, RelatedTiles, StatusIcon, Summary, Switch } from "../../harness/console/frontend/src/ds";
 
 describe("Switch", () => {
   test("is a role=switch button that toggles and reports the next value", () => {
@@ -106,5 +106,50 @@ describe("Panel, PageHeader and Summary", () => {
     expect(within(summary).getByText("Схема 6")).not.toBeNull();
     expect(summary.querySelectorAll(".ds-stat-caption")).toHaveLength(1);
     expect(within(summary).getByText("Снимок 22:01")).not.toBeNull();
+  });
+});
+
+describe("Drawer", () => {
+  test("is a labelled dialog docked right with a close button, body and footer", () => {
+    const onClose = vi.fn();
+    render(
+      <Drawer title="Кандидат" closeLabel="Закрыть" onClose={onClose} footer={<button type="button">Действие</button>}>
+        <p>Содержимое</p>
+      </Drawer>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Кандидат" });
+    expect(dialog.tagName).toBe("DIALOG");
+    expect(dialog.className).toContain("ds-drawer");
+    expect(dialog.hasAttribute("open")).toBe(true);
+    expect(within(dialog).getByText("Содержимое").closest(".ds-drawer-body")).not.toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Действие" }).closest(".ds-drawer-foot")).not.toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Закрыть" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test("Escape closes it and the opener gets the focus back on unmount", () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Открыть
+          </button>
+          {open && (
+            <Drawer title="Ящик" closeLabel="Закрыть" onClose={() => setOpen(false)}>
+              <p>x</p>
+            </Drawer>
+          )}
+        </>
+      );
+    }
+    render(<Host />);
+    const opener = screen.getByRole("button", { name: "Открыть" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Ящик" });
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
   });
 });

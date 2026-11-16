@@ -1,3 +1,5 @@
+export { Drawer } from "./Drawer";
+export type { DrawerProps } from "./Drawer";
 export { Panel } from "./Panel";
 export type { PanelProps } from "./Panel";
 export { PageHeader, Summary } from "./PageHeader";
