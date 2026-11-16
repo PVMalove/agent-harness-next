@@ -198,11 +198,10 @@ export function QualityTab({ ledger }: { ledger: ReportsSnapshot }) {
   const roles = [...new Set(ledger.reports.map((report) => report.role))].sort();
   const notInSnapshot = <p className="orch-note">{t("нет данных в снимке отчётов")}</p>;
   return (
-    <section className="panel report-analytics" id="reports-quality">
-      <div className="orch-analytics-head">
-        <h2>{t("Качество")}</h2>
-        <span>{t("результаты по ролям")} · {t("попытки")}</span>
-      </div>
+    <div className="report-analytics ds-analytics" id="reports-quality">
+      <p className="ds-note">
+        {t("результаты по ролям")} · {t("попытки")}
+      </p>
       <div className="orch-analytics-grid">
         <article className="orch-chart" id="reports-results-by-role">
           <div className="orch-chart-head">
@@ -287,7 +286,7 @@ export function QualityTab({ ledger }: { ledger: ReportsSnapshot }) {
           {notInSnapshot}
         </article>
       </div>
-    </section>
+    </div>
   );
 }
 

@@ -43,9 +43,9 @@ export function CheckDetail({
     );
   };
   return (
-    <section className="panel diag-detail-panel" data-check={check.id}>
+    <section className="diag-detail-panel" data-check={check.id}>
+      {/* The v3 panel around the detail carries its title; this row keeps only the actions. */}
       <div className="panel-head">
-        <h2>{t("Детали проверки")}</h2>
         <div className="diag-detail-head-actions">
           <button
             className="btn primary diag-fix-btn"

@@ -99,11 +99,15 @@ export function countItems(markdown: string): number {
   return blocks(markdown).reduce((n, block) => n + (block.kind === "list" ? block.items.length : block.kind === "table" ? Math.max(block.rows.length - 1, 0) : 0), 0);
 }
 
-/** `match` keeps only the blocks that contain the (lower-cased) query. */
-export function Markdown({ text, match = "" }: { text: string; match?: string }) {
+/** `match` keeps only the blocks that contain the (lower-cased) query. `title` is the heading of
+    the panel around the text: a leading heading that repeats it is not drawn a second time. */
+export function Markdown({ text, match = "", title }: { text: string; match?: string; title?: string }) {
+  const list = blocks(text);
+  const first = list[0];
+  if (title && first?.kind === "heading" && first.text.trim().toLowerCase() === title.trim().toLowerCase()) list.shift();
   return (
     <div className="ds-md">
-      {blocks(text).filter((block) => !match || blockText(block).includes(match)).map((block, index) => {
+      {list.filter((block) => !match || blockText(block).includes(match)).map((block, index) => {
         if (block.kind === "heading") {
           // The page title is the only h1: a guide title and its sections are h2, a subsection h3.
           const Tag = (["h2", "h2", "h3"] as const)[block.level - 1]!;
