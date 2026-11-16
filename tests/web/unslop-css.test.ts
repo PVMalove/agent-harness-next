@@ -129,9 +129,9 @@ describe("the design system v3 sheets", () => {
     });
   }
 
-  test("the type scale tokens are 11, 13, 16, 20 and 28 px", () => {
+  test("the type scale tokens are 11, 13, 16, 20 and 28 px in rem, so they follow the OS text scale", () => {
     const tokens = read(`${STYLES}/ds-tokens.css`);
-    const scale = [...tokens.matchAll(/--ds-fs-(\d):\s*(\d+)px/g)].map((m) => [m[1], Number(m[2])]);
+    const scale = [...tokens.matchAll(/--ds-fs-(\d):\s*(\d+(?:\.\d+)?)rem/g)].map((m) => [m[1], Number(m[2]) * 16]);
     expect(scale).toEqual([["1", 11], ["2", 13], ["3", 16], ["4", 20], ["5", 28]]);
   });
 

@@ -65,4 +65,18 @@ describe("the design system v3 palette", () => {
       expect(contrast(ds[tone]!, ds[surface]!)).toBeGreaterThanOrEqual(4.5);
     });
   }
+  // A selected or hovered row keeps its secondary text readable (review of the v3 mockup, 2026-11-16).
+  for (const tone of ["ds-muted", "ds-faint", "ds-accent"]) {
+    for (const surface of ["ds-accent-bg", "ds-hover"]) {
+      test(`--${tone} text reaches 4.5:1 on the row background --${surface}`, () => {
+        expect(contrast(ds[tone]!, ds[surface]!)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+  // The border of a field or a switch track is a non-text control edge: 3:1 (WCAG 1.4.11).
+  for (const surface of ["ds-bg", "ds-surface", "ds-raised"]) {
+    test(`the control border --ds-control reaches 3:1 on --${surface}`, () => {
+      expect(contrast(ds["ds-control"]!, ds[surface]!)).toBeGreaterThanOrEqual(3);
+    });
+  }
 });

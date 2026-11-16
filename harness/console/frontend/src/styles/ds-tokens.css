@@ -1,6 +1,8 @@
 /* Design system v3 (RFC docs/rfc/web-console-v3.md): tokens and base rules. Every class and custom
    property carries the ds- prefix, so the stylesheet of the not yet moved screens
-   (/execution-console.css, loaded first) keeps its meaning. Dark theme only. */
+   (/execution-console.css, loaded first) keeps its meaning. Dark theme only: the not yet moved
+   screens and their sheet are dark, so a light or system theme waits until they move.
+   Sizes are rem, so the type follows the browser and OS text scale. */
 :root {
   --ds-bg: #11141b;
   --ds-rail: #151922;
@@ -9,9 +11,12 @@
   --ds-hover: #272f3f;
   --ds-line: #2a3242;
   --ds-line-strong: #3b4558;
+  /* The edge of a field or a switch track: 3:1 on every surface (WCAG 1.4.11). */
+  --ds-control: #6b7889;
   --ds-fg: #e8ebf2;
   --ds-muted: #a3acbe;
-  --ds-faint: #8891a5;
+  /* 4.5:1 on a selected (--ds-accent-bg) and a hovered row too. */
+  --ds-faint: #959eb2;
   --ds-accent: #8b97ff;
   --ds-accent-bg: #252b4f;
   --ds-on-accent: #0d1030;
@@ -27,11 +32,11 @@
   --ds-rail-w: 236px;
   --ds-top-h: 56px;
   --ds-foot-h: 32px;
-  --ds-fs-1: 11px;
-  --ds-fs-2: 13px;
-  --ds-fs-3: 16px;
-  --ds-fs-4: 20px;
-  --ds-fs-5: 28px;
+  --ds-fs-1: 0.6875rem;
+  --ds-fs-2: 0.8125rem;
+  --ds-fs-3: 1rem;
+  --ds-fs-4: 1.25rem;
+  --ds-fs-5: 1.75rem;
 }
 
 .ds-app {
