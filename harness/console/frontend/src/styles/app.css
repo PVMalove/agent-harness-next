@@ -198,7 +198,7 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
    jumps to a column, and a sideways scroll of the columns never chains to the page. */
 .board-jump { display: none; }
 @media (max-width: 1100px) {
-  .board-jump { display: flex; gap: 8px; margin-bottom: 8px; overflow-x: auto; scrollbar-width: thin; }
+  .board-jump { display: flex; flex: none; gap: 8px; margin-bottom: 8px; overflow-x: auto; scrollbar-width: thin; }
   .board-jump button { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 999px; background: none; color: var(--fg); font-size: var(--fs-1); font-weight: 600; cursor: pointer; }
   .board-jump button:hover { background: var(--panel); }
   .board-jump-n { color: var(--muted); font-family: var(--mono); }

@@ -225,8 +225,9 @@ export function BoardColumns({
         {t("{shown} из {total}", { shown: shown.length, total: board.tickets.length })}
       </div>
       {/* Where the columns scroll sideways (narrow screens), an index of them with their counters
-          brings one into view; the page itself never scrolls sideways. */}
-      <nav className="board-jump" aria-label={t("Колонки доски")}>
+          brings one into view; the page itself never scrolls sideways. A div, not <nav>: the old
+          sheet styles every nav element as the side menu. */}
+      <div className="board-jump" role="navigation" aria-label={t("Колонки доски")}>
         {BOARD_COLUMNS.map((id) => (
           <button
             key={id}
@@ -239,7 +240,7 @@ export function BoardColumns({
             <span className="board-jump-n">{shown.filter((card) => card.column === id).length}</span>
           </button>
         ))}
-      </nav>
+      </div>
       <div id="board-columns">
         <div className="board-columns">
           {BOARD_COLUMNS.map((id) => {
