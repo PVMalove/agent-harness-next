@@ -216,6 +216,10 @@ class CleanRoomPolicy:
         try:
             alternates.parent.mkdir(parents=True, exist_ok=True)
             alternates.write_text(f"{common / 'objects'}\n", encoding="utf-8")
+            # A shallow source ends its history at a boundary; the checkout must share it,
+            # as a linked worktree would, or history walks stop at missing parents.
+            if (common / "shallow").is_file():
+                shutil.copyfile(common / "shallow", checkout / ".git" / "shallow")
         except OSError as exc:
             raise _checkout_failure(
                 "alternates", sanitise(str(exc)), alternates.parent, self.candidate_commit, refused=True

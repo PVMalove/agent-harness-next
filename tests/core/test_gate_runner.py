@@ -907,6 +907,28 @@ def test_the_clean_checkout_is_a_detached_candidate_with_the_source_refs(
     assert content == "unreferenced"
 
 
+def test_the_clean_checkout_of_a_shallow_clone_keeps_its_history_walkable(
+    tmp_path: Path,
+) -> None:
+    source, _ = _committed_repo(tmp_path)
+    (source / "candidate.txt").write_text("second\n", encoding="utf-8")
+    subprocess.run(["git", "commit", "-qam", "test: second"], cwd=source, check=True)
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", source.as_uri(), str(shallow)], check=True
+    )
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=shallow, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    assert (shallow / ".git" / "shallow").is_file()
+    result = run_gate(
+        ["git log --oneline", "git fsck --connectivity-only"],
+        CleanRoomPolicy(shallow, head),
+        stop_on_failure=True,
+    )
+    assert result.passed, result
+
+
 def test_an_unlaunchable_git_during_diagnosis_keeps_the_stage_evidence(
     tmp_path: Path,
 ) -> None:
