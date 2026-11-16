@@ -525,3 +525,17 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .orch-scheme .orch-map-scroll { overflow-x: auto; }
   .orch-scheme .orch-map { min-width: 760px; max-height: none; }
 }
+
+/* Reports on the v3 shell: the split takes the free height without the mockup's bottom margin, the
+   hidden status words stay inside the scrolling bodies, and a report row has a column for the status
+   shape next to the status words, so the row is one line on a desktop. A phone puts the words and
+   the time under the title. */
+.reports-page .reports-grid { margin-bottom: 0; }
+.reports-page .ds-panel-body { position: relative; }
+.reports-page .report-row { grid-template-columns: 22px minmax(0, 1fr) 24px auto 44px; }
+@media (max-width: 600px) {
+  .reports-page .report-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .reports-page .report-row > .ds-status { grid-column: 3; grid-row: 1; }
+  .reports-page .report-row > .report-status { display: block; grid-column: 2; grid-row: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .reports-page .report-row > .report-time { grid-column: 3; grid-row: 2; text-align: right; }
+}
