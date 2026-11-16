@@ -36,7 +36,7 @@ export function Summary({ stats, facts, snapshot, id, label }: {
           <div className="ds-stat" key={index}>
             <span className="ds-stat-label">{stat.label}</span>
             <b className="ds-stat-value">{stat.value}</b>
-            {stat.caption ? <small className="ds-stat-caption">{stat.caption}</small> : null}
+            {stat.caption ? <small className="ds-stat-caption" title={typeof stat.caption === "string" ? stat.caption : undefined}>{stat.caption}</small> : null}
           </div>
         ))}
       </div>

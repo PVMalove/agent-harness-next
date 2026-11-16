@@ -114,16 +114,16 @@
 .ds-stat {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) fit-content(55%);
+  grid-template-columns: minmax(0, 1fr) fit-content(60%);
   grid-template-areas: "label value" "caption value";
   column-gap: 12px;
   padding: 8px 16px;
   align-items: center;
 }
 .ds-stat + .ds-stat { border-left: 1px solid var(--ds-line); }
-.ds-stat-label { grid-area: label; overflow-wrap: anywhere; color: var(--ds-muted); font-size: var(--ds-fs-2); }
-.ds-stat-value { grid-area: value; min-width: 0; text-align: right; overflow-wrap: break-word; font-size: var(--ds-fs-5); line-height: 1.2; font-weight: 600; }
-.ds-stat-caption { overflow-wrap: anywhere; grid-area: caption; color: var(--ds-faint); font-size: var(--ds-fs-1); }
+.ds-stat-label { grid-area: label; overflow-wrap: break-word; color: var(--ds-muted); font-size: var(--ds-fs-2); }
+.ds-stat-value { grid-area: value; min-width: 0; text-align: right; overflow-wrap: break-word; font-size: var(--ds-fs-4); line-height: 1.25; font-weight: 600; }
+.ds-stat-caption { grid-area: caption; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-faint); font-size: var(--ds-fs-1); }
 .ds-facts {
   flex-wrap: wrap;
   display: flex;
@@ -409,7 +409,7 @@
   overflow: auto;
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--mono);
+  font-family: var(--text);
   font-size: var(--fs-2);
   line-height: 1.55;
 }

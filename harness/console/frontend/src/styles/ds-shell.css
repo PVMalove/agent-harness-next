@@ -237,12 +237,12 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
   line-height: 1.5;
 }
 .ds-main:focus { outline: none; }
-/* Screens that are not moved yet keep the old look: padding and the monospace face of the old sheet. */
+/* Screens that are not moved yet keep the old sheet: its padding and its running-text face (--text). */
 .ds-main--legacy {
   padding: 20px 24px 24px;
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--mono);
+  font-family: var(--text);
   line-height: 1.55;
 }
 
