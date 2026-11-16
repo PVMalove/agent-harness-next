@@ -3,7 +3,8 @@
 **Статус: PROPOSED (2026-11-16).** Эпик #1154, тикет #1155. Карта описывает состояние ветки
 `integration/harness-runtime-reliability` на коммите `6729c976`. Она задаёт владельца каждого
 раздела инструкций до переноса и правила совместимости для тикетов эпика #1160, #1162, #1156,
-#1161, #1157, #1158 и #1159.
+#1161, #1157, #1158 и #1159. Ссылки `путь:строка` верны на этом коммите; при расхождении ищите
+названный рядом символ.
 
 ## Контекст системы
 
@@ -39,6 +40,10 @@
 - **Таблица разделов:** раздел; класс; область (всегда, по путям, по skill, по роли, по запросу);
   потребители (runtime, skill, роль, hook, код с `путь:строка`); срез миграции (тикет эпика или
   «без переноса»).
+
+Гранулярность — раздел `##`, а для смешанных разделов — группа пунктов одного класса. Соседние
+разделы одного класса, области и среза объединены в одну строку: так записаны трекеры в
+`issue-tracker.md`, разделы оператора в `container-executor.md` и разделы playbook.
 
 Режимы установки определены кодом:
 
@@ -77,7 +82,9 @@
 | Subagents | mandatory rule | всегда, этот репозиторий | Claude Code, Codex | без переноса |
 
 **`CLAUDE.md`** — repo-only; импортирует `@AGENTS.md` и ссылается на `.claude/rules/`. Указатель,
-собственных правил нет; срез — без переноса.
+собственных правил нет; срез — без переноса. В этом репозитории `.claude/rules/*.md` — seed-копии
+`harness/project/rules/`, которые в Git не хранятся (`.gitignore`: `/.claude/*`). Редактируемый
+источник правил — `harness/project/rules/`.
 
 **`harness/project/AGENTS.md.tmpl`** — render-once → `AGENTS.md` проекта; плейсхолдеры
 заполняет `start-project` или `integrate-project`. Совместимость: существующий `AGENTS.md`
@@ -110,11 +117,7 @@ Frontmatter `paths:` нет, поэтому Claude Code грузит файл в
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| Вступление и Tradeoff | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
-| 1. Think before coding | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
-| 2. Simplicity first | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
-| 3. Surgical changes | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
-| 4. Goal-driven execution | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
+| Вступление, Tradeoff, 1. Think before coding, 2. Simplicity first, 3. Surgical changes, 4. Goal-driven execution | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
 
 **`harness/project/rules/token-efficiency.md`** — seed → `.claude/rules/token-efficiency.md`, без
 `paths:`. Совместимость — политика `SeedInstall`.
@@ -204,8 +207,9 @@ Windows, правила тестов и QA). Это допустимое отл�
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| Вступление, When to use it, Conventions | shared procedure | по запросу | skills implement, fast-implement | без переноса |
-| Conventions: имя ветки worktree | automatic enforcement | EnterWorktree | `check-worktree-branch-name.sh` (только Claude Code) | без переноса |
+| Вступление, When to use it; Conventions: Base ref, Cleanup, Managed harness worktrees | shared procedure | по запросу | skills implement, fast-implement | без переноса |
+| Conventions: provisioning-сессия не входит в worktree; не менять конфигурацию инструментов ради worktree; git-workflow действует в worktree | mandatory rule | при работе в worktree | Claude Code, Codex | #1160 |
+| Conventions: Branch naming still applies | automatic enforcement | EnterWorktree | `check-worktree-branch-name.sh` (только Claude Code) | без переноса |
 | Coordinator issue worktree | skill-specific procedure (implement) | по skill | implement | #1162 |
 
 **`harness/project/instructions/container-executor.md`** — managed →
@@ -213,7 +217,8 @@ Windows, правила тестов и QA). Это допустимое отл�
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| Все разделы (образы, кеши, сеть, cleanup, адаптер, distrobox) | shared procedure для оператора | по запросу | `harness/health/checks/orchestration.py:790`, `harness/container/Dockerfile.qa`, `scripts/clean_room/backend_orchestration.py` | без переноса |
+| Agent adapter in a container → Project hooks | shared procedure; фиксирует, что managed hooks в issue worktree не доставляются, — enforcement там не обещан | по запросу | оператор, coordinator | без переноса |
+| Остальные разделы (окружения, prerequisites, конфигурация, образы, кеши, сеть, blockers, cleanup, отчёты, адаптер, distrobox) | shared procedure для оператора | по запросу | `harness/health/checks/orchestration.py:790`, `harness/container/Dockerfile.qa`, `scripts/clean_room/backend_orchestration.py` | без переноса |
 
 ### 5. Инвентарь: orchestration и агенты
 
@@ -225,8 +230,10 @@ Configuration validation and pinned evidence), поэтому перенос ф�
 
 | Файл | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| `harness/orchestration/roles/_common.md` | orchestration contract | каждая роль | `harness/orchestration/adapters/claude_code.py:137`, `harness/orchestration/workflow/context_package.py:172` | #1161 (только ссылка на developer skill, если нужна общая) |
-| `harness/orchestration/roles/developer.md` | orchestration contract | роль developer | coordinator, implement | #1161 |
+| `harness/orchestration/roles/_common.md` (без разделов `##`) | orchestration contract | каждая роль | `harness/orchestration/adapters/claude_code.py:137`, `harness/orchestration/workflow/context_package.py:172` | #1161 (только ссылка на developer skill, если нужна общая) |
+| `harness/orchestration/roles/developer.md`: манифест и основной контракт | orchestration contract | роль developer | coordinator, implement | #1161 |
+| `harness/orchestration/roles/developer.md`: Red-Green-Refactor with the optional test author | orchestration contract; единственный источник маршрута test-author в `/implement` (см. `test-author.md` §7) | роль developer | developer, test-author | #1162 |
+| `harness/orchestration/roles/developer.md`: Rerunning only the failed tests | orchestration contract | роль developer | developer | без переноса |
 | `harness/orchestration/roles/rebaser.md` | orchestration contract | маршрут `rebase` | `harness/orchestration/workflow/rebaser.py:54`, `harness/orchestration/core/constants.py:299` | #1158 |
 | `harness/orchestration/roles/conflict-resolver.md` | orchestration contract | маршрут `resolve-conflict` | `harness/orchestration/core/constants.py:297`, `harness/orchestration/workflow/resolver_state.py:37` | #1158 (сохранить маршрут) |
 | `harness/orchestration/roles/database-migrations.md` | orchestration contract без маршрута | — | `harness/orchestration/runtime_attestation.py:29` | #1159 |
@@ -236,7 +243,7 @@ Configuration validation and pinned evidence), поэтому перенос ф�
 | `harness/orchestration/roles/qa.md` | orchestration contract | роль qa | coordinator | без переноса |
 | `harness/orchestration/roles/verification.md` | orchestration contract | роль verification | coordinator | без переноса |
 | `harness/orchestration/playbook.md`: Immutable handoff brief, Developer-retry handoff, Role order, liveness, and transport | orchestration contract | coordinator | implement, coordinator | #1161 (чтение, без нового источника) |
-| `harness/orchestration/playbook.md`: остальные разделы (Authority, Configuration, Lifecycle, Retry routing, Recovery, Automatic path, Operator recovery, Approvals, Context Package, Ledger, External workers, Completion report, Parallel work, Integration accounting, Baseline metrics) | orchestration contract | coordinator | implement, coordinator | без переноса |
+| `harness/orchestration/playbook.md`: остальные разделы — Authority and invariants; Configuration validation and pinned evidence; Lifecycle; Retry routing and abandon; Recovery route table; Automatic path; Operator recovery; Approvals bound to the transition digest; Explicit Context Package inputs; Read-only retry idempotency; Context pressure; Attention state; Pluggable operational interfaces; Versioned lifecycle ledger; Observable external workers; Delivering a worker report after a tool refusal; Completion report; Parallel work and quality gates; Integration accounting; Baseline metrics | orchestration contract | coordinator | implement, coordinator | без переноса |
 | `harness/orchestration/README.md` | orchestration contract (справочник оператора, русский) | по запросу | оператор | без переноса |
 | `harness/orchestration/pilot.md` | orchestration contract (процедура пилота) | по запросу | оператор | без переноса |
 
@@ -274,8 +281,21 @@ Configuration validation and pinned evidence), поэтому перенос ф�
 
 First-party skills — skill → `.harness/skills/<name>/`; в engineering-suite они заменяют vendor
 skills с тем же именем (`overrides`) или добавляются (`additions`, `harness/CAPABILITIES.json`).
-Класс — skill-specific procedure. Совместимость: `update` заменяет снапшот skills целиком; правки
-проекта внутри `.harness/skills/` не сохраняются.
+Класс — skill-specific procedure. Совместимость: `update` перезаписывает каждый файл снапшота
+без проверки локальных правок (`write_snapshot`, `harness/bin/harness.py:476-512`); правки проекта
+внутри `.harness/skills/` не сохраняются.
+
+Кроме `SKILL.md` skill может содержать файлы, которые тоже принадлежат ему:
+
+- `agents/openai.yaml` — метаданные Codex; есть у 13 из 19 first-party skills. У ask-matt,
+  to-spec, delivery-stats, to-tickets, implement, wayfinder, triage и fast-implement стоит
+  `policy.allow_implicit_invocation: false`. В Claude Code тот же запрет задаёт
+  `disable-model-invocation: true` во frontmatter `SKILL.md`; у 14 skills он есть, и наборы не
+  совпадают (например, у architect, to-guide и to-pull-requests запрет есть только для Claude Code).
+  Выравнивание наборов — вне эпика; карта фиксирует различие.
+- `scripts/` — исполняемые части qa-gate и diagnosing-bugs.
+- Ресурсы `ask-matt/PHASE-BOUNDARIES.md`, `tdd/examples.md`, `triage/OUT-OF-SCOPE.md`,
+  `triage/AGENT-BRIEF.md`.
 
 | Skill | Срез | Разделы, которые повторяют общий источник или противоречат правилу |
 | --- | --- | --- |
@@ -299,8 +319,7 @@ skills с тем же именем (`overrides`) или добавляются (
 | `skills/first-party/engineering/triage/SKILL.md` | #1157 | Строка 16 требует пометку `> *This was generated by AI during triage.*`; это противоречит project-only metadata (`AGENTS.md`, `git-workflow.md` §1). Исправляется в first-party override; vendor snapshot не меняется |
 | `skills/first-party/engineering/wayfinder/SKILL.md` | без переноса | — |
 
-Вспомогательные файлы skills (`ask-matt/PHASE-BOUNDARIES.md`, `tdd/examples.md`,
-`triage/OUT-OF-SCOPE.md`, `triage/AGENT-BRIEF.md`) принадлежат своему skill; срез — без переноса.
+Вспомогательные файлы skills из списка выше принадлежат своему skill; срез — без переноса.
 
 Global skills — global → `~/.claude/skills/`, `~/.agents/skills/` и другие каталоги из
 `bin/install-global.py`.
@@ -375,42 +394,57 @@ Helpers без собственного события: `harness/project/hooks/h
 | mandatory rule (проект) | `CLAUDE.md` → `@AGENTS.md`; `.claude/rules/*.md` автоматически, с `paths:` — по путям | `AGENTS.md` проекта; `.claude/rules/` не читает — нужно явное чтение по указателю из `AGENTS.md` |
 | mandatory rule (глобально) | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` |
 | shared procedure | по ссылке из `AGENTS.md`, `SKILL.md` или роли; явное чтение | так же |
-| skill-specific procedure | `.claude/skills` → `.harness/skills`; агенты `.claude/agents/` | `.agents/skills` → `.harness/skills`; агентов нет, нужно явное чтение |
+| skill-specific procedure | `.claude/skills` → `.harness/skills`; запрет неявного вызова — `disable-model-invocation`; агенты `.claude/agents/` | `.agents/skills` → `.harness/skills`; запрет неявного вызова — `agents/openai.yaml`; агентов нет, нужно явное чтение |
 | orchestration contract | бриф и `.harness/orchestration/roles/`; адаптер требует чтения `_common.md` и манифеста | бриф и роли; явное чтение |
-| automatic enforcement | `.claude/settings.local.json`, все hooks таблицы раздела 7 | `.codex/hooks.json` после доверия; подмножество из раздела 7 |
+| automatic enforcement | `.claude/settings.local.json`, hooks таблицы раздела 7 с колонкой «Claude Code: да»; строгость поведенческих hooks задаёт `hook_policy` | `.codex/hooks.json` после доверия; hooks с колонкой «Codex: да» |
 
 Runtime без механизма загрузки получает требование явного чтения. Автоматическую загрузку или
-enforcement для такого runtime карта не обещает.
+enforcement для такого runtime карта не обещает. Поддерживает ли Codex правила по путям через
+вложенные `AGENTS.md`, карта не утверждает: #1160 проверяет это по документации Codex до того, как
+выбрать механизм.
 
 ### 9. Совместимость при миграции
 
 1. Старые пути `docs/agents/*.md`, `.harness/instructions/*.md` и `.claude/rules/*.md` продолжают
    работать после переноса: остаётся сгенерированная копия или файл-указатель на новый источник.
    Вывод старого пути из обращения — отдельное решение после проверки всех потребителей.
-2. Код, который читает старый путь, переводится в том же тикете, что и перенос файла. Список:
-   `harness/health/checks/tracker.py:57`, `harness/health/labels_table.py`,
-   `harness/console/backend/domain/task_board.py:141`, `harness/project/hooks/direct_commits.py:39`,
-   `harness/project/hooks/tracker-issue.py:31`, `harness/reporting/delivery_stats.py:258,430`,
-   `harness/orchestration/workflow/rebaser.py:54`, `harness/orchestration/workflow/context_package.py:172`,
-   `harness/orchestration/adapters/claude_code.py:136-137`, `harness/seed_links.py:29`.
+2. Код, скрипты и тесты, которые читают переносимый путь, переводятся в том же тикете, что и
+   перенос файла. Источник списка — колонка «Потребители» таблиц §3–§7; перед переносом тикет
+   повторяет поиск `rg -n '<старый путь>' harness scripts tests skills global-skills`, потому что
+   тесты и clean-room сценарии (`scripts/clean_room/*`) в карте перечислены не полностью.
 3. Seed-файл, изменённый проектом, не перезаписывается молча: работают `SeedInstall`,
    `--force-seed-file`, `--force-seed-files` и `--record-seed-baseline`. Новый seed получает
    baseline в `.harness/harness.lock`.
-4. `AGENTS.md` и `CLAUDE.md` проекта не перезаписываются. Изменение шаблона доходит до
-   существующих проектов только предложением (`propose_contract_links` в `harness/seed_links.py`)
-   или ручной правкой.
-5. Снапшоты конфигурации, проекта и ролей в закреплённых batch не меняются; перенос действует на
+4. `AGENTS.md` и `CLAUDE.md` проекта не перезаписываются. Новый текст `AGENTS.md.tmpl` доходит до
+   существующего проекта только ручной правкой. `propose_contract_links` (`harness/seed_links.py`)
+   предлагает одну вставку — обязательное чтение Technical English — и другие изменения шаблона
+   не доставляет. Если #1160 добавляет в раздел Runtime указатель на rules, он выбирает одно из
+   двух: расширить предложения `harness diff` для этого указателя или явно оставить ручную правку и
+   сообщить о ней в выводе `harness update`.
+5. Смена способа установки seed-файла:
+   - **seed заменяется указателем.** Если проект не менял файл, `SeedInstall` заменяет его
+     указателем с бэкапом. Если менял, файл остаётся со старым текстом, а `update` печатает
+     предупреждение о локальной правке. Тикет добавляет в это предупреждение, что источник
+     переехал, чтобы старый и новый тексты не расходились незаметно.
+   - **seed становится managed.** Managed-файл `update` перезаписывает без проверки правок
+     (`write_snapshot`). Перевод разрешён только вместе с переносом пути: старый seed-путь
+     остаётся под политикой `SeedInstall`, новый managed-путь получает новый файл. Перевести
+     существующий seed-путь в `MANAGED_INSTRUCTIONS` без такого переноса нельзя.
+   - **seed удалён из шаблонов.** `seed_sources` больше не видит файл, поэтому `update` его не
+     трогает, а `harness uninstall` не удаляет. Тикет, который удаляет шаблон, либо оставляет его
+     указателем до решения о выводе пути, либо документирует ручное удаление.
+6. Снапшоты конфигурации, проекта и ролей в закреплённых batch не меняются; перенос действует на
    следующие dispatch.
-6. Корневой `docs/` этого репозитория в целевые проекты не копируется. Копии `docs/agents/`
+7. Корневой `docs/` этого репозитория в целевые проекты не копируется. Копии `docs/agents/`
    этого репозитория обновляются вместе с шаблонами, иначе падает `docs_sync.py`.
-7. Vendor snapshot не правится вручную.
+8. Vendor snapshot не правится вручную.
 
 ### 10. Срезы миграции
 
 | Срез | Тикет | Что забирает из карты | Зависит от | Параллельно |
 | --- | --- | --- | --- | --- |
-| Runtime rules | #1160 | `harness/project/rules/*`, Runtime в `AGENTS.md.tmpl`, `git-workflow.md` §1 (mandatory rule), пробел Codex | — | да |
-| Workflow rules и процедуры | #1162 | `git-workflow.md` §2, `artifacts.md` (процедура), `test-author.md` §6–§7, `worktrees.md` → Coordinator issue worktree, повторы в to-guide, to-pull-requests, fast-implement, implement | #1160 (граница правила и процедуры в `git-workflow.md`) | после #1160 |
+| Runtime rules | #1160 | `harness/project/rules/*`, Runtime в `AGENTS.md.tmpl`, `git-workflow.md` §1 (mandatory rule), правила из `worktrees.md` → Conventions, пробел Codex | — | да |
+| Workflow rules и процедуры | #1162 | `git-workflow.md` §2, `artifacts.md` (процедура), `test-author.md` §6–§7 и `roles/developer.md` → Red-Green-Refactor, `worktrees.md` → Coordinator issue worktree, повторы в to-guide, to-pull-requests, fast-implement, implement | #1160 (граница правила и процедуры в `git-workflow.md`) | после #1160 |
 | Developer skill | #1156 | новый first-party skill; fast-implement как потребитель | — | да |
 | Developer dispatch | #1161 | `roles/developer.md`, `roles/_common.md`, разделы playbook о брифе, implement | #1156 | после #1156 |
 | Triage и attribution | #1157 | `skills/first-party/engineering/triage/SKILL.md:16` | — | да |
@@ -421,11 +455,26 @@ enforcement для такого runtime карта не обещает.
 
 ### 11. Решение человека
 
-Ожидает одобрения. Одобрил: —. Независимые срезы: —.
+Ожидает одобрения. Человек одобряет карту целиком или с правками и подтверждает решения:
+
+- [ ] Классы спорных разделов: `git-workflow.md` §1, `worktrees.md` → Conventions,
+  `test-author.md` §6–§7.
+- [ ] Единственный источник маршрута test-author в `/implement` — `roles/developer.md`, а
+  `test-author.md` §7 ссылается на роль.
+- [ ] Правила совместимости §9, включая три случая смены способа установки (п. 5).
+- [ ] Доставка указателя на rules в существующие проекты (§9 п. 4): расширение `harness diff`
+  или ручная правка.
+- [ ] Срезы §10: независимые — #1160, #1156, #1157, #1158, #1159; #1162 после #1160; #1161
+  после #1156.
+
+При одобрении статус меняется на ACCEPTED с датой, а здесь записываются одобривший и принятый
+набор независимых срезов.
 
 ## Операционные последствия
 
-- Тикет, который переносит раздел, обновляет строку этой карты в том же PR.
+- Тикет, который переносит раздел, обновляет строку этой карты в том же PR. Он же обновляет
+  русские описания на сайте (`site/docs/agents/`, `site/docs/hooks/`, `site/docs/skills/`, файлы
+  `*.md` и `*.en.md`), если они называют перенесённый путь или раздел.
 - Перенос seed-файла проверяется сценариями install/update и clean-room: свежая установка,
   обновление, старый путь, изменённый проектом файл, закреплённый batch.
 - Тикет, который меняет загрузку правил, проверяет оба runtime: Claude Code — через
