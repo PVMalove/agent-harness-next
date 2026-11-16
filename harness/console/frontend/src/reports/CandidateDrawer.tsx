@@ -7,9 +7,9 @@
 import { useState } from "react";
 import { Drawer } from "../ds";
 import { useI18n } from "../i18n";
-import { preflightRows } from "../routes/Publish";
 import { TabList, TabPanel } from "../views/Tabs";
 import type { PublishEntry, ReportsSnapshot } from "../ws/ledger";
+import { preflightRows } from "./preflight";
 import { EVIDENCE_COLUMNS, StatusWord, VERDICT_TONE, reportState } from "./ReportViews";
 import { Timeline } from "./Timeline";
 

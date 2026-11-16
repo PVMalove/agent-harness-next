@@ -94,6 +94,18 @@ describe("the Task Board route", () => {
     expect(content()).toContain("блокеров: 1");
   });
 
+  test("a narrow screen jumps between the scrolling columns from an index with their counters", () => {
+    renderBoard();
+    const index = screen.getByRole("navigation", { name: "Колонки доски" });
+    const jumps = [...index.querySelectorAll("button")];
+    expect(jumps.map((jump) => jump.textContent)).toEqual(["Бэклог2", "Готово к работе2", "В работе1", "Review / QA1", "Готово1"]);
+    const review = document.querySelector<HTMLElement>('[data-board-col="review"]')!;
+    const scrolled = vi.fn();
+    review.scrollIntoView = scrolled;
+    act(() => fireEvent.click(jumps[3]!));
+    expect(scrolled).toHaveBeenCalledWith({ block: "nearest", inline: "start" });
+  });
+
   test("remembers the chosen spec in this browser", () => {
     window.localStorage.setItem(SPEC_KEY, "#502");
     const socket = renderBoard({ board: null });

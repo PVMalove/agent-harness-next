@@ -33,7 +33,7 @@
 .ds-select {
   min-height: 36px;
   padding: 4px 12px;
-  border: 1px solid var(--ds-line);
+  border: 1px solid var(--ds-control);
   border-radius: 8px;
   background: var(--ds-bg);
   box-shadow: none;
@@ -51,7 +51,7 @@
   flex: 1;
   min-width: 0;
   padding: 0 12px;
-  border: 1px solid var(--ds-line);
+  border: 1px solid var(--ds-control);
   border-radius: 8px;
   background: var(--ds-bg);
   color: var(--ds-faint);
@@ -114,16 +114,16 @@
 .ds-stat {
   min-width: 0;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) fit-content(60%);
   grid-template-areas: "label value" "caption value";
   column-gap: 12px;
   padding: 8px 16px;
   align-items: center;
 }
 .ds-stat + .ds-stat { border-left: 1px solid var(--ds-line); }
-.ds-stat-label { grid-area: label; color: var(--ds-muted); font-size: var(--ds-fs-2); }
-.ds-stat-value { grid-area: value; font-size: var(--ds-fs-5); line-height: 1.2; font-weight: 600; }
-.ds-stat-caption { overflow-wrap: break-word; grid-area: caption; color: var(--ds-faint); font-size: var(--ds-fs-1); }
+.ds-stat-label { grid-area: label; overflow-wrap: break-word; color: var(--ds-muted); font-size: var(--ds-fs-2); }
+.ds-stat-value { grid-area: value; min-width: 0; text-align: right; overflow-wrap: break-word; font-size: var(--ds-fs-4); line-height: 1.25; font-weight: 600; }
+.ds-stat-caption { grid-area: caption; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-faint); font-size: var(--ds-fs-1); }
 .ds-facts {
   flex-wrap: wrap;
   display: flex;
@@ -139,9 +139,41 @@
 .ds-facts-main span,
 .ds-facts-end { display: inline-flex; align-items: center; gap: 4px; }
 
-/* Pipeline tabs */
-.ds-pipe { display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
+/* Pipeline tabs: one row; when it does not fit it scrolls inside itself, and the edges fade while
+   there is more to scroll (modern-web-guidance ui-components/tabs, "Handling tabs that don't fit"). */
+@property --ds-fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --ds-fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.ds-pipe {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 24px;
+  scrollbar-width: thin;
+}
+@supports (animation-timeline: scroll()) {
+  .ds-pipe {
+    mask: linear-gradient(to right, transparent, #000 var(--ds-fade-start), #000 calc(100% - var(--ds-fade-end)), transparent);
+    animation: ds-pipe-fades linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+@keyframes ds-pipe-fades {
+  from { --ds-fade-start: 0px; --ds-fade-end: 24px; }
+  10% { --ds-fade-start: 24px; }
+  90% { --ds-fade-end: 24px; }
+  to { --ds-fade-start: 24px; --ds-fade-end: 0px; }
+}
+/* Sub-tabs inside a panel (the «Как обновить» aside, a file's tabs) wrap instead: in a narrow
+   column a scrolling row would always hide one of a few tabs under the panel edge. */
+.ds-panel .ds-pipe { flex-wrap: wrap; overflow-x: visible; mask: none; animation: none; }
 .ds-pipe-tab {
+  position: relative;
+  flex: none;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -172,7 +204,11 @@
   font-size: var(--ds-fs-1);
   font-weight: 600;
 }
-.ds-pipe-tab.ds-on { color: var(--ds-fg); font-weight: 600; }
+/* The selection changes no size: colour, the filled marker and an underline drawn with a border,
+   which forced-colors mode keeps. */
+.ds-pipe-tab.ds-on { color: var(--ds-fg); }
+.ds-pipe-tab.ds-on::after { content: ""; position: absolute; right: 4px; bottom: 0; left: 4px; border-bottom: 2px solid var(--ds-accent); }
+.ds-pipe-tab + .ds-pipe-tab.ds-on::after { left: 28px; }
 .ds-pipe-tab.ds-on .ds-pipe-n { background: var(--ds-accent); border-color: var(--ds-accent); color: var(--ds-on-accent); }
 .ds-pipe-tab:hover { color: var(--ds-fg); }
 
@@ -269,31 +305,42 @@
 .ds-tile-desc { display: block; color: var(--ds-muted); font-size: var(--ds-fs-1); line-height: 1.4; }
 .ds-tile-go { color: var(--ds-faint); }
 
-/* Switch */
+/* Switch: 40 by 24 px, the track edge at 3:1 (--ds-control), a check mark on the knob when on */
 .ds-sw {
   position: relative;
-  width: 34px;
-  height: 20px;
+  width: 40px;
+  height: 24px;
   flex: none;
   padding: 0;
-  border: 1px solid var(--ds-line-strong);
-  border-radius: 10px;
+  border: 1px solid var(--ds-control);
+  border-radius: 12px;
   background: var(--ds-raised);
   cursor: pointer;
 }
 .ds-sw[aria-checked="true"] { background: var(--ds-accent); border-color: var(--ds-accent); }
 .ds-sw-knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--ds-fg);
   transition: transform 0.15s ease;
 }
-.ds-sw[aria-checked="true"] .ds-sw-knob { transform: translateX(14px); background: var(--ds-on-accent); }
-.ds-sw:disabled { opacity: 0.5; cursor: default; }
+.ds-sw[aria-checked="true"] .ds-sw-knob { transform: translateX(16px); background: var(--ds-on-accent); }
+.ds-sw[aria-checked="true"] .ds-sw-knob::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--ds-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.ds-sw[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 
 /* Drawer: a modal dialog docked to the right edge; only its body scrolls */
 .ds-drawer {
@@ -313,7 +360,10 @@
   font-family: var(--ds-sans);
 }
 .ds-drawer:not([open]) { display: none; }
-.ds-drawer::backdrop { background: rgb(0 0 0 / 0.5); }
+/* A scroll gesture over the drawer or its backdrop never scrolls the page behind it
+   (ui-behaviors/prevent-page-scroll-under-modal-dialog); the root overflow stays untouched. */
+.ds-drawer:modal { overscroll-behavior: contain; }
+.ds-drawer::backdrop { background: rgb(0 0 0 / 0.5); overflow: hidden; overscroll-behavior: contain; }
 .ds-drawer[open] { animation: ds-drawer-in 0.16s ease-out both; }
 @keyframes ds-drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .ds-drawer-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ds-line); }
@@ -359,7 +409,7 @@
   overflow: auto;
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--mono);
+  font-family: var(--text);
   font-size: var(--fs-2);
   line-height: 1.55;
 }
@@ -383,3 +433,18 @@
   .ds-page-head { flex-wrap: wrap; }
 }
 .ds-table-wrap { overflow-x: auto; margin-bottom: 8px; }
+
+/* Data tables (the Evidence matrix, the Release Gate): row and column headers, one line per cell,
+   the wrapper scrolls sideways on a narrow screen (modern-web-guidance ui-atoms/responsive-table). */
+.ds-table { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-2); }
+.ds-table caption { padding: 8px 12px; color: var(--ds-muted); font-size: var(--ds-fs-1); text-align: left; }
+.ds-table th,
+.ds-table td { padding: 8px 12px; border-top: 1px solid var(--ds-line); text-align: left; vertical-align: middle; white-space: nowrap; }
+.ds-table thead th { border-top: 0; color: var(--ds-muted); font-size: var(--ds-fs-1); font-weight: 600; }
+.ds-table tbody th { font-weight: 600; }
+.ds-table-wrapcell { min-width: 12rem; white-space: normal; overflow-wrap: anywhere; }
+.ds-evidence-cell[data-cell="none"] { color: var(--ds-faint); }
+.ds-report-tab { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 12px; }
+.ds-report-block { display: flex; flex-direction: column; gap: 8px; padding: 0 12px; }
+.ds-report-sub { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: var(--ds-fs-2); font-weight: 600; }
+.ds-report-sub .ds-muted { font-size: var(--ds-fs-1); font-weight: 400; }

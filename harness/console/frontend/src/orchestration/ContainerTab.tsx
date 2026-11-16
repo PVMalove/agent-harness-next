@@ -79,7 +79,7 @@ export function ContainerTab({ containers }: { containers: ContainerSnapshot | n
           <div className="ds-kv-row">
             <dt>{t("Состояние")}</dt>
             <dd className="ds-status-line">
-              <StatusIcon tone={STATE_TONE[current.state]} label={t(STATE_LABEL[current.state])} /> {t(STATE_LABEL[current.state])}
+              <StatusIcon tone={STATE_TONE[current.state]} /> {t(STATE_LABEL[current.state])}
             </dd>
           </div>
           <div className="ds-kv-row">

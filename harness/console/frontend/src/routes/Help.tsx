@@ -104,7 +104,7 @@ export function Help() {
   const guideBody = (at: number, label: string, extra?: React.ReactNode) => (
     <Panel id={`help-section-${at}`} fill scroll="text" title={sections[at]?.title ?? label} label={sections[at]?.title ?? label}>
       {extra}
-      {sections[at] ? <Markdown text={sections[at]!.markdown} /> : <p className="ds-empty">{screen.error ? "" : t("Справка загружается…")}</p>}
+      {sections[at] ? <Markdown text={sections[at]!.markdown} title={sections[at]!.title} /> : <p className="ds-empty">{screen.error ? "" : t("Справка загружается…")}</p>}
     </Panel>
   );
   const hits = needle

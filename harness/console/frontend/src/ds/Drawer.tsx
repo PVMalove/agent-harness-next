@@ -1,8 +1,19 @@
 /* The drawer of the v3 shell: a native modal <dialog> docked to the right edge with a title, a close
-   button, a body that scrolls and an optional footer. Escape closes it through the dialog's cancel
-   event. The caller unmounts it to close, so the element that opened it gets the focus back. */
+   button, a body that scrolls and an optional footer. Escape, the back gesture and a click on the
+   backdrop (closedby="any") close it through the dialog's cancel event; a browser without closedBy
+   gets the click-outside fallback of modern-web-guidance ui-behaviors/light-dismiss-a-dialog. The
+   caller unmounts it to close, so the element that opened it gets the focus back. */
 import { useEffect, useId, useRef } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
+
+const LIGHT_DISMISS_NATIVE = typeof HTMLDialogElement !== "undefined" && "closedBy" in HTMLDialogElement.prototype;
+
+/** Whether a click on the dialog element itself landed outside its box, on the backdrop. */
+function onBackdrop(event: MouseEvent<HTMLDialogElement>): boolean {
+  if (event.target !== event.currentTarget) return false;
+  const box = event.currentTarget.getBoundingClientRect();
+  return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+}
 import { Icon } from "../icons";
 
 export interface DrawerProps {
@@ -37,9 +48,13 @@ export function Drawer({ title, closeLabel, onClose, id, footer, children }: Dra
       id={id}
       className="ds-drawer"
       aria-labelledby={titleId}
+      {...({ closedby: "any" } as object)}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
+      }}
+      onClick={(event) => {
+        if (!LIGHT_DISMISS_NATIVE && onBackdrop(event)) onClose();
       }}
     >
       <div className="ds-drawer-head">

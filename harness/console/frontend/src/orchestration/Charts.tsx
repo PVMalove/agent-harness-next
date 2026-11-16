@@ -124,15 +124,14 @@ function Missing({ title, why }: { title: string; why: string }) {
   );
 }
 
-function Panel({ tab, title, note, children }: { tab: string; title: string; note: string; children: React.ReactNode }) {
+/** The body of an analytics tab. The v3 panel around it carries the tab's title, so this draws no
+    frame and no heading of its own, only the tab's note above the charts. */
+function Panel({ tab, note, children }: { tab: string; title: string; note: string; children: React.ReactNode }) {
   return (
-    <section className="panel orch-analytics" id="orch-tab-view" data-tab={tab}>
-      <div className="orch-analytics-head">
-        <h2>{title}</h2>
-        <span>{note}</span>
-      </div>
+    <div className="orch-analytics ds-analytics" id="orch-tab-view" data-tab={tab}>
+      <p className="ds-note">{note}</p>
       <div className="orch-analytics-grid">{children}</div>
-    </section>
+    </div>
   );
 }
 

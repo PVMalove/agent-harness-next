@@ -168,12 +168,12 @@ export function Reports() {
         {ledger && (
           <div className="ds-split reports-grid">
             <Panel
-              title={t("Отчёты")}
+              title={t("Список отчётов")}
               count={<span id="reports-count">{t("{shown} из {total}", { shown: shown.length, total: ledger.stages.length })}</span>}
               fill
               scroll="list"
               id="reports-list"
-              label={t("Отчёты")}
+              label={t("Список отчётов")}
             >
               <div className="report-filters">
                 <div className="chips" id="report-types">

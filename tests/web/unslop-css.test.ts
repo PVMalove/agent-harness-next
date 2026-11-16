@@ -129,9 +129,9 @@ describe("the design system v3 sheets", () => {
     });
   }
 
-  test("the type scale tokens are 11, 13, 16, 20 and 28 px", () => {
+  test("the type scale tokens are 11, 13, 16, 20 and 28 px in rem, so they follow the OS text scale", () => {
     const tokens = read(`${STYLES}/ds-tokens.css`);
-    const scale = [...tokens.matchAll(/--ds-fs-(\d):\s*(\d+)px/g)].map((m) => [m[1], Number(m[2])]);
+    const scale = [...tokens.matchAll(/--ds-fs-(\d):\s*(\d+(?:\.\d+)?)rem/g)].map((m) => [m[1], Number(m[2]) * 16]);
     expect(scale).toEqual([["1", 11], ["2", 13], ["3", 16], ["4", 20], ["5", 28]]);
   });
 
@@ -142,12 +142,12 @@ describe("the design system v3 sheets", () => {
     expect(block).toMatch(/transition:\s*none/);
   });
 
-  test("the switch is 34 by 20 px", () => {
+  test("the switch is 40 by 24 px, a 24 px target (WCAG 2.5.8)", () => {
     const css = sheets.map(([, text]) => text).join("\n");
     const rule = rules(css).filter(([selector]) => /^\.ds-sw\b/.test(selector) && !selector.includes("::") && !/[ >+~:]/.test(selector.slice(1).replace(/^ds-sw/, ""))).map(([, body]) => body).join(";");
     if (DS_SHEETS.includes("ds-components.css")) {
-      expect(rule).toMatch(/width:\s*34px/);
-      expect(rule).toMatch(/height:\s*20px/);
+      expect(rule).toMatch(/width:\s*40px/);
+      expect(rule).toMatch(/height:\s*24px/);
     }
   });
 });

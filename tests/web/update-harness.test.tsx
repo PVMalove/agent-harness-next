@@ -103,11 +103,13 @@ describe("the Update Harness route", () => {
     ]);
     // A seed switch works only in the seed mode.
     howTab("seed");
-    expect((screen.getByRole("switch", { name: ".harness/project.json" }) as HTMLButtonElement).disabled).toBe(true);
+    const locked = screen.getByRole("switch", { name: ".harness/project.json" });
+    expect(locked.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(locked.getAttribute("aria-describedby")!)?.textContent).toContain("Seed-файлы перезаписывает только режим");
     howTab("mode");
     mode("С перезаписью выбранных seed-файлов");
     howTab("seed");
-    expect((screen.getByRole("switch", { name: ".harness/project.json" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole("switch", { name: ".harness/project.json" }).hasAttribute("aria-disabled")).toBe(false);
     expect(document.querySelector('.ds-page-head a[href="#/diagnostics"]')).not.toBeNull();
   });
 

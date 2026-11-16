@@ -57,6 +57,7 @@ body.nav-collapsed .ds-app { --ds-rail-w: 60px; }
 }
 .ds-app .ds-icon-btn:hover { background: var(--ds-hover); color: var(--ds-fg); }
 .ds-menu-toggle { display: none; }
+.ds-lang-one { display: none; border-color: var(--ds-line); font-size: var(--ds-fs-2); font-weight: 600; }
 .ds-brand {
   display: flex;
   align-items: center;
@@ -236,12 +237,12 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
   line-height: 1.5;
 }
 .ds-main:focus { outline: none; }
-/* Screens that are not moved yet keep the old look: padding and the monospace face of the old sheet. */
+/* Screens that are not moved yet keep the old sheet: its padding and its running-text face (--text). */
 .ds-main--legacy {
   padding: 20px 24px 24px;
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--mono);
+  font-family: var(--text);
   line-height: 1.55;
 }
 
@@ -277,14 +278,19 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
 
 @media (max-width: 900px) {
   .ds-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--ds-top-h) auto minmax(0, 1fr) var(--ds-foot-h); }
-  .ds-menu-toggle { display: inline-grid; }
+  .ds-menu-toggle,
+  .ds-lang-one { display: inline-grid; }
+  .ds-top-end .ds-seg { display: none; }
   .ds-nav-collapse,
   .ds-where,
+  #branch.ds-where,
   .ds-channel,
+  .ds-version,
   .ds-keys { display: none; }
   .ds-banner,
   .ds-main { grid-column: 1; }
   .ds-main { padding: 16px; }
+  /* Closed, the rail is hidden, so its links leave the tab order; it slides in when opened. */
   .ds-rail {
     position: fixed;
     top: var(--ds-top-h);
@@ -292,11 +298,18 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
     left: 0;
     width: 260px;
     transform: translateX(-100%);
+    visibility: hidden;
     transition: transform 0.18s ease;
   }
-  body.nav-open .ds-rail { transform: translateX(0); }
+  body.nav-open .ds-rail { transform: translateX(0); visibility: visible; }
   body.nav-open .ds-scrim { display: block; position: fixed; inset: var(--ds-top-h) 0 var(--ds-foot-h) 0; z-index: 20; background: var(--ds-bg); opacity: 0.6; }
   body.nav-collapsed .ds-app { --ds-rail-w: 236px; }
   body.nav-collapsed .ds-nav-label,
   body.nav-collapsed .ds-nav-text { display: initial; }
+}
+
+/* A phone header has room for the logo, the connection state, the language and Help: the brand
+   name stays the link's accessible name but is hidden from view. */
+@media (max-width: 480px) {
+  .ds-brand b { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }

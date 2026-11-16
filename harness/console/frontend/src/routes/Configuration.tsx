@@ -155,7 +155,7 @@ function Overview({ facts, store, onRun }: { facts: ConfigurationFacts; store: S
                   );
                 })}
               </div>
-              <pre className="ds-code">{preview.text}</pre>
+              <pre className="ds-code" tabIndex={0} role="region" aria-label={t("Команда")}>{preview.text}</pre>
               <p className="ds-note">{preview.blocked ? t(preview.reason) : t("Установка и обновление требуют просмотра и подтверждения. Консоль не включает force и не меняет transport.")}</p>
             </>
           )}
@@ -272,7 +272,7 @@ function VersionView({ id }: { id: string }) {
         return (
           <section key={name} data-file={name}>
             <h3 className="ds-settings-vfile">{`${name} · sha256 ${shortDigest(file?.digest ?? "")}`}</h3>
-            {file?.exists ? <pre className="ds-code">{pretty(file.document)}</pre> : <p className="ds-note">{t("Файла нет в этой версии")}</p>}
+            {file?.exists ? <pre className="ds-code" tabIndex={0} role="region" aria-label={name}>{pretty(file.document)}</pre> : <p className="ds-note">{t("Файла нет в этой версии")}</p>}
           </section>
         );
       })}

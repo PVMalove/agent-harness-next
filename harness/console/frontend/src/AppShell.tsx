@@ -79,6 +79,8 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
 
   useEffect(() => {
     document.body.classList.toggle("nav-open", open);
+    // The opened mobile rail takes the focus; closed, it is hidden and leaves the tab order.
+    if (open) document.querySelector<HTMLElement>("#navigation [aria-current=page], #navigation a")?.focus();
   }, [open]);
 
   useEffect(() => {
@@ -103,10 +105,14 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input,textarea,select,[contenteditable=true]")) return;
       if (event.key === "Escape") {
-        setOpen(false);
+        if (document.body.classList.contains("nav-open")) {
+          setOpen(false);
+          document.getElementById("menu-toggle")?.focus();
+        }
         return;
       }
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      // A key typed in an open dialog (a confirmation, a drawer) belongs to it, never to navigation.
+      if (event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]")) return;
       const route = SHORTCUTS[event.key];
       if (route !== undefined) navigate(`/${route}`);
     },
@@ -182,7 +188,6 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
               <button
                 key={option}
                 type="button"
-                lang={option}
                 aria-pressed={option === language}
                 aria-label={`${option.toUpperCase()} · ${option === "ru" ? t("Русский язык") : t("Английский язык")}`}
                 onClick={() => setLanguage(option)}
@@ -191,6 +196,16 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
               </button>
             ))}
           </div>
+          {/* A narrow header has room for one button: it shows the current language and switches. */}
+          <button
+            id="language-toggle"
+            className="ds-icon-btn ds-lang-one"
+            type="button"
+            aria-label={`${language.toUpperCase()} · ${language === "ru" ? t("Переключить на английский") : t("Переключить на русский")}`}
+            onClick={() => setLanguage(language === "ru" ? "en" : "ru")}
+          >
+            {language.toUpperCase()}
+          </button>
           <a className="ds-icon-btn" href={href("help")} aria-label={section("Help")} title={section("Help")}>
             <Icon name="help" className="ds-ic" />
           </a>
@@ -229,11 +244,12 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
         ))}
       </div>
       <div id="nav-scrim" className="ds-scrim" hidden={!open} onClick={() => setOpen(false)} />
-      <main id="content" tabIndex={-1} className={legacyPage ? "ds-main ds-main--legacy" : "ds-main"}>
+      {/* The open mobile menu is modal: the page behind it takes no focus and no clicks. */}
+      <main id="content" tabIndex={-1} className={legacyPage ? "ds-main ds-main--legacy" : "ds-main"} inert={open}>
         {children}
       </main>
 
-      <footer className="ds-foot">
+      <footer className="ds-foot" inert={open}>
         <div className="ds-keys">
           <span>
             <b className="ds-kbd">?</b> {section("Help")}

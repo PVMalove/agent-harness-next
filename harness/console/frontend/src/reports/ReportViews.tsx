@@ -116,86 +116,73 @@ export const EVIDENCE_COLUMNS: readonly [Exclude<keyof EvidenceRow, "batch_id" |
   ["publish", "publish"],
 ];
 
-const MARK: Record<EvidenceCell, string> = { present: "✓", stale: "!", missing: "—", none: "·" };
+/** An evidence cell as a status shape and a word, never a glyph whose meaning lives in a title. */
+const CELL_TONE: Record<EvidenceCell, Tone> = { present: "ok", stale: "warn", missing: "err", none: "off" };
+const CELL_WORD: Record<EvidenceCell, string> = { present: "есть", stale: "устарело", missing: "нет", none: "впереди" };
 
+/** The Evidence tab inside its panel: the matrix as a table with row and column headers, then the
+    completeness of every batch. */
 export function EvidenceTab({ rows }: { rows: readonly EvidenceRow[] }) {
   const { t } = useI18n();
   const known = 4;
   const cells = (row: EvidenceRow) => EVIDENCE_COLUMNS.map(([field]) => row[field]);
   return (
-    <section className="panel report-analytics" id="reports-evidence">
-      <div className="orch-analytics-head">
-        <h2>Evidence</h2>
-        <span>present / stale / missing</span>
-      </div>
-      <div className="orch-analytics-grid">
-        <article className="orch-chart wide">
-          <div className="orch-chart-head">
-            <h3>{t("Coverage по batch")}</h3>
-            <span>{t("обязательные артефакты")}</span>
-          </div>
-          {rows.length === 0 ? (
-            <p className="orch-note">{t("Batch в ledger нет")}</p>
-          ) : (
-            <div className="report-evidence-matrix" role="region" tabIndex={0} aria-label="Evidence matrix">
-              <div className="report-evidence-head">
-                <span>batch</span>
+    <div className="ds-report-tab" id="reports-evidence">
+      {rows.length === 0 ? (
+        <p className="ds-empty">{t("Batch в ledger нет")}</p>
+      ) : (
+        <div className="ds-table-wrap" role="region" tabIndex={0} aria-labelledby="reports-evidence-caption">
+          <table className="ds-table">
+            <caption id="reports-evidence-caption">
+              {t("Coverage по batch")} · {t("обязательные артефакты")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">batch</th>
                 {EVIDENCE_COLUMNS.map(([field, column]) => (
-                  <span key={field}>{column}</span>
+                  <th scope="col" key={field}>
+                    {column}
+                  </th>
                 ))}
-              </div>
+              </tr>
+            </thead>
+            <tbody>
               {rows.map((row) => (
-                <div className="report-evidence-row" key={row.batch_id} data-batch={row.batch_id}>
-                  <b>{row.ticket || row.batch_id}</b>
+                <tr className="ds-evidence-row" key={row.batch_id} data-batch={row.batch_id}>
+                  <th scope="row">{row.ticket || row.batch_id}</th>
                   {cells(row).map((cell, index) => (
-                    <span
-                      key={index}
-                      className={`report-evidence-cell ${cell === "none" ? "missing" : cell}`}
-                      title={cell === "none" ? t("Источника нет") : `${EVIDENCE_COLUMNS[index]![1]}: ${cell}`}
-                    >
-                      {MARK[cell]}
-                    </span>
+                    <td key={EVIDENCE_COLUMNS[index]![0]} className="ds-evidence-cell" data-cell={cell}>
+                      <span className="ds-status-line">
+                        <StatusIcon tone={CELL_TONE[cell]} />
+                        {t(CELL_WORD[cell])}
+                      </span>
+                    </td>
                   ))}
-                </div>
+                </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <section className="ds-report-block" aria-labelledby="reports-complete-title">
+        <h3 className="ds-report-sub" id="reports-complete-title">
+          {t("Полнота")} <span className="ds-muted">{`${t("есть")} / ${known}`}</span>
+        </h3>
+        {rows.map((row) => {
+          const present = cells(row).filter((cell) => cell === "present").length;
+          return (
+            <div className="report-complete-row" key={row.batch_id}>
+              <span>{row.ticket || row.batch_id}</span>
+              <Bar value={present} max={known} tone={present === known ? "mint" : "lavender"} />
+              <b>
+                {present} / {known}
+              </b>
             </div>
-          )}
-          <div className="orch-legend">
-            <span>
-              <i className="mint" />
-              present
-            </span>
-            <span>
-              <i className="lavender" />
-              stale
-            </span>
-            <span>
-              <i className="muted" />
-              missing
-            </span>
-          </div>
-        </article>
-        <article className="orch-chart wide">
-          <div className="orch-chart-head">
-            <h3>Completeness</h3>
-            <span>present / {known}</span>
-          </div>
-          {rows.map((row) => {
-            const present = cells(row).filter((cell) => cell === "present").length;
-            return (
-              <div className="report-complete-row" key={row.batch_id}>
-                <span>{row.ticket || row.batch_id}</span>
-                <Bar value={present} max={known} tone={present === known ? "mint" : "lavender"} />
-                <b>
-                  {present} / {known}
-                </b>
-              </div>
-            );
-          })}
-          <p className="orch-note">{t("Stale evidence остаётся видимым, но не считается актуальным доказательством.")}</p>
-        </article>
-      </div>
-    </section>
+          );
+        })}
+        <p className="ds-note">{t("Stale evidence остаётся видимым, но не считается актуальным доказательством.")}</p>
+      </section>
+    </div>
   );
 }
 
@@ -211,11 +198,10 @@ export function QualityTab({ ledger }: { ledger: ReportsSnapshot }) {
   const roles = [...new Set(ledger.reports.map((report) => report.role))].sort();
   const notInSnapshot = <p className="orch-note">{t("нет данных в снимке отчётов")}</p>;
   return (
-    <section className="panel report-analytics" id="reports-quality">
-      <div className="orch-analytics-head">
-        <h2>{t("Качество")}</h2>
-        <span>{t("результаты по ролям")} · {t("попытки")}</span>
-      </div>
+    <div className="report-analytics ds-analytics" id="reports-quality">
+      <p className="ds-note">
+        {t("результаты по ролям")} · {t("попытки")}
+      </p>
       <div className="orch-analytics-grid">
         <article className="orch-chart" id="reports-results-by-role">
           <div className="orch-chart-head">
@@ -300,7 +286,7 @@ export function QualityTab({ ledger }: { ledger: ReportsSnapshot }) {
           {notInSnapshot}
         </article>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -335,34 +321,29 @@ export function ReadinessTab({ ledger, onOpen }: { ledger: ReportsSnapshot; onOp
   const { t, state } = useI18n();
   const blocked = ledger.publish.filter((entry) => entry.refusals.length > 0);
   return (
-    <section className="panel report-analytics" id="reports-readiness">
-      <div className="orch-analytics-head">
-        <h2>{t("Готовность")}</h2>
-        <span>Release Gate · publish blockers</span>
-      </div>
-      <div className="orch-analytics-grid">
-        <article className="orch-chart wide">
-          <div className="orch-chart-head">
-            <h3>Release Gate</h3>
-            <span>candidate / target / tree</span>
-          </div>
-          {ledger.publish.length === 0 ? (
-            <p className="orch-note">{t("Batch для публикации нет")}</p>
-          ) : (
-            <div className="report-ready-table" role="region" tabIndex={0} aria-label="Readiness">
-              <div className="report-ready-head">
-                <span>candidate</span>
-                <span>target</span>
-                <span>tree</span>
-                <span>QA</span>
-                <span>verdict</span>
-                <span>blocker</span>
-              </div>
+    <div className="ds-report-tab" id="reports-readiness">
+      {ledger.publish.length === 0 ? (
+        <p className="ds-empty">{t("Batch для публикации нет")}</p>
+      ) : (
+        <div className="ds-table-wrap" role="region" tabIndex={0} aria-labelledby="reports-ready-caption">
+          <table className="ds-table">
+            <caption id="reports-ready-caption">Release Gate</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Кандидат")}</th>
+                <th scope="col">{t("Цель")}</th>
+                <th scope="col">{t("Дерево")}</th>
+                <th scope="col">QA</th>
+                <th scope="col">{t("Вердикт")}</th>
+                <th scope="col">{t("Блокер")}</th>
+              </tr>
+            </thead>
+            <tbody>
               {ledger.publish.map((entry) => {
                 const [label, tone] = tree(entry.head_matches);
                 return (
-                  <div className="report-ready-row" key={entry.batch_id} data-batch={entry.batch_id}>
-                    <b>
+                  <tr className="ds-ready-row" key={entry.batch_id} data-batch={entry.batch_id}>
+                    <th scope="row">
                       {onOpen ? (
                         <button type="button" className="ds-btn ds-btn-sm report-ready-open" title={t("Открыть кандидата")} onClick={() => onOpen(entry.batch_id)}>
                           {entry.candidate ? entry.candidate.slice(0, 12) : entry.ticket || entry.batch_id}
@@ -372,37 +353,40 @@ export function ReadinessTab({ ledger, onOpen }: { ledger: ReportsSnapshot; onOp
                       ) : (
                         "—"
                       )}
-                    </b>
-                    <span>{entry.target ? entry.target.slice(0, 12) : "—"}</span>
-                    <StatusWord tone={tone} word={t(label)} />
-                    <span>{entry.qa ? state(entry.qa.outcome) : "—"}</span>
-                    <StatusWord tone={VERDICT_TONE[entry.verdict]} word={state(entry.verdict)} verdict={entry.verdict} />
-                    <small>{entry.refusals.join(" · ") || "—"}</small>
-                  </div>
+                    </th>
+                    <td className="ds-mono">{entry.target ? entry.target.slice(0, 12) : "—"}</td>
+                    <td>
+                      <StatusWord tone={tone} word={t(label)} />
+                    </td>
+                    <td>{entry.qa ? state(entry.qa.outcome) : "—"}</td>
+                    <td>
+                      <StatusWord tone={VERDICT_TONE[entry.verdict]} word={state(entry.verdict)} verdict={entry.verdict} />
+                    </td>
+                    <td className="ds-table-wrapcell">{entry.refusals.join(" · ") || "—"}</td>
+                  </tr>
                 );
               })}
-            </div>
+            </tbody>
+          </table>
+        </div>
+      )}
+      <section className="ds-report-block" aria-labelledby="reports-blockers-title">
+        <h3 className="ds-report-sub" id="reports-blockers-title">
+          Publish blockers <span className="ds-muted">{t("{count} в очереди", { count: blocked.length })}</span>
+        </h3>
+        <div className="report-blockers">
+          {blocked.length === 0 ? (
+            <p className="ds-note">{t("Блокеров публикации нет")}</p>
+          ) : (
+            blocked.map((entry) => (
+              <div key={entry.batch_id}>
+                <span>{entry.ticket || entry.batch_id}</span>
+                <StatusWord tone="lavender" word={entry.refusals[0]!} />
+              </div>
+            ))
           )}
-        </article>
-        <article className="orch-chart wide">
-          <div className="orch-chart-head">
-            <h3>Publish blockers</h3>
-            <span>{t("{count} в очереди", { count: blocked.length })}</span>
-          </div>
-          <div className="report-blockers">
-            {blocked.length === 0 ? (
-              <p className="orch-note">{t("Блокеров публикации нет")}</p>
-            ) : (
-              blocked.map((entry) => (
-                <div key={entry.batch_id}>
-                  <span>{entry.ticket || entry.batch_id}</span>
-                  <StatusWord tone="lavender" word={entry.refusals[0]!} />
-                </div>
-              ))
-            )}
-          </div>
-        </article>
-      </div>
-    </section>
+        </div>
+      </section>
+    </div>
   );
 }

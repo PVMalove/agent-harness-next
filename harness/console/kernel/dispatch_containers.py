@@ -1,7 +1,10 @@
 """The dispatch containers of the Orchestration screen, projected from the ledger records.
 
-A dispatch runs in a container when its approved record carries the execution the runtime
-supervises (``execution``, ADR 0022) or a container QA (``qa_execution``). The state shown is
+A dispatch runs in a container when its approved record pins the container images
+(``runtime_images``, which a docker dispatch and a container QA pin) or a container QA
+(``qa_execution``). The ``execution`` section is no evidence: every external worker under the
+runtime store carries it, with or without a container. The engine is the one of the record's
+container plan (``runtime_access.container``). The state shown is
 derived from the dispatch stage state in the ledger, never from runtime liveness: the console
 reads only the records the ledger view already holds and calls no runtime or coordinator.
 Standard library only."""
@@ -49,20 +52,13 @@ def container_payload(view: LedgerView) -> dict[str, object]:
     """The containers of the ledger view with their counts by state; empty when none ran."""
     stages = {stage.dispatch_id: stage for stage in view.stages}
     containers: list[dict[str, str]] = []
-    for dispatch_id, record in view._dispatches.items():
-        execution = _section(record, "execution")
+    for dispatch_id, record in view.dispatches_by_id().items():
+        images = _section(record, "runtime_images")
         qa_execution = _section(record, "qa_execution")
-        if execution is None and qa_execution is None:
+        if images is None and qa_execution is None:
             continue
-        images = _section(record, "runtime_images") or {}
-        engine = next(
-            (
-                _text(section.get("engine"))
-                for section in (execution, qa_execution, images)
-                if section is not None and _text(section.get("engine"))
-            ),
-            "",
-        )
+        access = _section(record, "runtime_access") or {}
+        container = _section(access, "container") or {}
         stage = stages.get(dispatch_id)
         containers.append(
             {
@@ -71,8 +67,8 @@ def container_payload(view: LedgerView) -> dict[str, object]:
                 "ticket": stage.ticket if stage else _text(record.get("ticket")),
                 "role": stage.role if stage else _text(record.get("role")),
                 "kind": "qa" if qa_execution is not None else "worker",
-                "engine": engine,
-                "image": _text(images.get("worker")),
+                "engine": _text(container.get("engine")),
+                "image": _text((images or {}).get("worker")),
                 "stage_state": stage.state if stage else "",
                 "state": _state(stage),
             }

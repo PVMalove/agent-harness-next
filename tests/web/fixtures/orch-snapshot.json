@@ -161,8 +161,8 @@
       {
         "batch_id": "b-887",
         "dispatch_id": "d-qa",
-        "engine": "",
-        "image": "",
+        "engine": "docker",
+        "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "kind": "qa",
         "role": "qa",
         "stage_state": "reported",
@@ -172,8 +172,8 @@
       {
         "batch_id": "b-887",
         "dispatch_id": "d-wip",
-        "engine": "",
-        "image": "",
+        "engine": "docker",
+        "image": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "kind": "worker",
         "role": "developer",
         "stage_state": "working",
