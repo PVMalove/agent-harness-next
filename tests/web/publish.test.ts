@@ -6,7 +6,8 @@ import { LanguageProvider, stateLabel } from "../../harness/console/frontend/src
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import { FakeSocket, ManualClock, screenPage } from "./fake-socket";
 import REPORTS from "./fixtures/reports.json";
-import { blockingReasons, defaultBatch, preflightRows } from "../../harness/console/frontend/src/routes/Publish";
+import { blockingReasons, preflightRows } from "../../harness/console/frontend/src/reports/preflight";
+import { defaultBatch } from "../../harness/console/frontend/src/routes/Publish";
 import type { PublishEntry } from "../../harness/console/frontend/src/ws/ledger";
 
 const entry = (batch_id: string, reviewed: boolean): PublishEntry => ({
