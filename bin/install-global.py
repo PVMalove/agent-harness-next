@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import os
+import shlex
 import shutil
 import sys
 from datetime import datetime
@@ -128,6 +130,52 @@ def install_link(
         return False
 
 
+def launcher_text(harness_py: Path) -> str:
+    """Text of the `harness` launcher that runs `harness_py` with the user's Python."""
+    if sys.platform == "win32":
+        return f'@echo off\r\nrem managed-by: agent-harness\r\npython -B "{harness_py}" %*\r\n'
+    return (
+        "#!/bin/sh\n# managed-by: agent-harness\n"
+        f'exec python3 -B {shlex.quote(str(harness_py))} "$@"\n'
+    )
+
+
+def install_launcher(
+    kit_root: Path, check: bool, replace: bool, target_home: Path
+) -> bool:
+    """Install `~/.local/bin/harness` (`harness.cmd` on Windows) for this checkout's CLI."""
+    name = "harness.cmd" if sys.platform == "win32" else "harness"
+    target = target_home / ".local" / "bin" / name
+    text = launcher_text(kit_root / "harness" / "bin" / "harness.py")
+    if target.exists() or target.is_symlink():
+        if (
+            target.is_file()
+            and not target.is_symlink()
+            and target.read_text(encoding="utf-8", errors="replace") == text
+        ):
+            print(f"  {C_GREEN}[OK]{C_RESET} Launcher already matches: {target}")
+            return True
+        if check or not replace:
+            print(
+                f"  {C_RED}[CONFLICT]{C_RESET} File differs: {target} "
+                "(re-run with --replace-conflicts to back it up and replace it)",
+                file=sys.stderr,
+            )
+            return False
+        backup_target(target, target_home)
+    elif check:
+        print(f"  {C_RED}[MISSING]{C_RESET} {target}", file=sys.stderr)
+        return False
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8", newline="")
+    target.chmod(0o755)
+    print(f"  {C_GREEN}[WRITE]{C_RESET} Installed launcher: {target}")
+    if str(target.parent) not in os.environ.get("PATH", "").split(os.pathsep):
+        print(f"  {C_YELLOW}[INFO]{C_RESET} Add {target.parent} to PATH")
+    return True
+
+
 def install_entries(
     destination: Path, kit_root: Path, check: bool, replace: bool, target_home: Path
 ) -> bool:
@@ -192,9 +240,14 @@ def main():
     parser.add_argument(
         "--runtime",
         action="append",
-        required=True,
+        default=[],
         choices=["codex", "claude", "kimi", "opencode", "hermes"],
         help="Target runtime(s)",
+    )
+    parser.add_argument(
+        "--cli",
+        action="store_true",
+        help="Install the `harness` launcher into ~/.local/bin for this checkout's CLI",
     )
     parser.add_argument(
         "--check", action="store_true", help="Dry run, only check status"
@@ -209,6 +262,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if not args.runtime and not args.cli:
+        parser.error("pass at least one --runtime, or --cli")
 
     target_home = args.target_home.resolve()
     if not target_home.is_dir():
@@ -266,6 +321,13 @@ def main():
             status = 1
         if not install_entries(
             skills_dest, kit_root, args.check, args.replace_conflicts, target_home
+        ):
+            status = 1
+
+    if args.cli:
+        print(f"\n{C_CYAN}>>> Installing the harness launcher{C_RESET}")
+        if not install_launcher(
+            kit_root, args.check, args.replace_conflicts, target_home
         ):
             status = 1
 

@@ -53,6 +53,7 @@ sys.path.insert(0, str(ROOT))
 from harness.errors import HarnessError, print_and_exit
 from harness.cleanup import apply_cleanup, plan_cleanup, plan_digest, remove_worktree
 from harness.worktree_venv import WorktreeVenvError, link_worktree_venv
+from harness.source_checkout import SourceCheckoutError, update_source_checkout
 from harness.uninstall import (
     CLAUDE_MD_SEED,
     CONFIRM_WORD,
@@ -1861,6 +1862,16 @@ def cmd_worktree_venv(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_self_update(args: argparse.Namespace) -> int:
+    """Move this harness source checkout to the latest commit of an `origin` branch."""
+    try:
+        result = update_source_checkout(ROOT, args.ref)
+    except SourceCheckoutError as exc:
+        fail(str(exc))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_uninstall(args: argparse.Namespace) -> int:
     """Показать план полного удаления харнесса или применить его с подтверждением."""
     repo = Path(args.repo).expanduser().resolve()
@@ -2004,6 +2015,15 @@ def parser() -> argparse.ArgumentParser:
     worktree_venv.add_argument("repo")
     worktree_venv.add_argument("worktree")
     worktree_venv.set_defaults(func=cmd_worktree_venv)
+
+    self_update = commands.add_parser(
+        "self-update",
+        help="fetch an origin branch and detach the harness checkout this CLI runs from at it",
+    )
+    self_update.add_argument(
+        "--ref", help="origin branch to follow (default: the branch of origin/HEAD)"
+    )
+    self_update.set_defaults(func=cmd_self_update)
 
     uninstall = commands.add_parser(
         "uninstall", help="preview or remove everything the harness installed"
