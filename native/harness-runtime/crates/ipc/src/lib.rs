@@ -24,6 +24,7 @@ mod session;
 #[path = "../tests/support/runtime_dir.rs"]
 mod test_runtime_dir;
 mod token;
+mod worktree;
 
 #[cfg(unix)]
 pub use client::{Client, ClientError};

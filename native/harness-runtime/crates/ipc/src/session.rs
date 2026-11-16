@@ -77,7 +77,7 @@ impl Feature {
 /// The features `hello` lists, in this order, before the supervisor's. `Session::handle` serves
 /// the operations of this table and of `supervisor::FEATURES` only; a unit test checks that it
 /// routes each of them.
-const FEATURES: [Feature; 10] = [
+const FEATURES: [Feature; 12] = [
     // The owners of the runtime (ADR 0031): every runtime answers them, a manual one too.
     Feature::always("status"),
     Feature::always("shutdown"),
@@ -91,6 +91,10 @@ const FEATURES: [Feature; 10] = [
     Feature::store_capability("state.recovery"),
     // The verdict on the stored QA evidence of a Release Gate pair (ADR 0021, section 7).
     Feature::of_store("qa.evidence.verify"),
+    // The managed issue worktrees that a sandboxed coordinator cannot create or remove itself
+    // (issue #1180).
+    Feature::of_store("worktree.create"),
+    Feature::of_store("worktree.remove"),
 ];
 
 /// The answer to one frame.
@@ -234,6 +238,12 @@ impl Session {
             "qa.lane.inspect" => qa_lane_inspect(shared, &request),
             "qa.evidence.verify" => qa_evidence_verify(shared, &request),
             "state.validate" => state_validate(shared, &request),
+            "worktree.create" => {
+                worktree_operation(shared, &request, negotiated.minor, crate::worktree::create)
+            }
+            "worktree.remove" => {
+                worktree_operation(shared, &request, negotiated.minor, crate::worktree::remove)
+            }
             "execution.launch" => answer(&request, shared.supervisor.launch(&request)),
             "execution.observe" => answer(&request, shared.supervisor.observe(&request)),
             "container.observe" => answer(&request, shared.supervisor.container_observe(&request)),
@@ -719,6 +729,46 @@ fn state_validate(shared: &Shared, request: &Request) -> Reply {
     }
 }
 
+/// The protocol minor the worktree operations need: version 8 added `worktree.create` and
+/// `worktree.remove` (issue #1180). A peer that negotiated an older minor gets a typed
+/// `protocol_unsupported` for an operation its protocol does not define. It is the minor that
+/// introduced the operations, not `PROTOCOL_VERSION.minor`: a later minor keeps it.
+const WORKTREE_SINCE_MINOR: u32 = 8;
+const _: () = assert!(WORKTREE_SINCE_MINOR <= PROTOCOL_VERSION.minor);
+
+/// `worktree.create` or `worktree.remove`: a managed issue worktree that a sandboxed coordinator
+/// cannot create or remove itself, because its sandbox mounts `.git/worktrees` read-only
+/// (issue #1180). `serve` is the operation of `crate::worktree`.
+fn worktree_operation(
+    shared: &Shared,
+    request: &Request,
+    negotiated_minor: u32,
+    serve: fn(Option<&Path>, Option<&Value>) -> Result<Value, ErrorBody>,
+) -> Reply {
+    if negotiated_minor < WORKTREE_SINCE_MINOR {
+        return failure(
+            &request.operation_id,
+            ErrorBody::new(
+                ErrorCode::ProtocolUnsupported,
+                FailureDomain::Tooling,
+                false,
+                format!(
+                    "the operation {} needs a newer protocol minor",
+                    request.operation
+                ),
+                "update harness or harness-runtime so that both speak protocol 1.8, then send the request again",
+            )
+            .with_fact("negotiated_minor", negotiated_minor)
+            .with_fact("required_minor", WORKTREE_SINCE_MINOR),
+            false,
+        );
+    }
+    answer(
+        request,
+        serve(shared.state_dir.as_deref(), request.payload.as_ref()),
+    )
+}
+
 /// A client names its repository by a working tree root. The runtime serves the repository, not
 /// one checkout: a linked worktree has the repo-id of its main checkout (ADR 0021, section 2),
 /// the id that picked this socket, so it is the same repository.
@@ -847,7 +897,7 @@ mod tests {
 
         assert_eq!(code(&reply), ErrorCode::ProtocolUnsupported);
         let error = reply.response.error.unwrap();
-        assert_eq!(error.facts["server"], json!({"major": 1, "minor": 7}));
+        assert_eq!(error.facts["server"], json!({"major": 1, "minor": 8}));
         assert!(error.remedy.contains("update harness"));
         assert!(reply.close);
     }
@@ -1205,6 +1255,8 @@ mod tests {
             "qa.lane.inspect",
             "state.recovery",
             "qa.evidence.verify",
+            "worktree.create",
+            "worktree.remove",
         ];
         // The supervisor serves its operations where the platform supervises processes.
         if supervisor::Supervisor::supported() {
@@ -1317,6 +1369,93 @@ mod tests {
 
         assert_eq!(code(&reply), ErrorCode::MalformedRequest);
         assert!(!reply.close);
+    }
+
+    /// A session whose `hello` negotiated exactly the protocol minor `minor`.
+    fn authenticated_at(shared: &Shared, root: &Path, minor: u32) -> Session {
+        let version = json!({"major": 1, "minor": minor});
+        let body = serde_json::to_vec(&json!({
+            "protocol_version": version,
+            "operation_id": "h",
+            "operation": "hello",
+            "request_deadline": NOW + 1,
+            "payload": {
+                "protocol": {"min": version, "max": version},
+                "client_version": "1",
+                "repo_root": root,
+                "token": "secret",
+            },
+        }))
+        .unwrap();
+        let mut session = Session::new();
+        let reply = session.handle(shared, &body, NOW);
+        assert_eq!(
+            reply.response.result.unwrap()["protocol"]["minor"],
+            json!(minor)
+        );
+        session
+    }
+
+    fn worktree_body(operation: &str, payload: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "protocol_version": {"major": 1, "minor": 8},
+            "operation_id": "t",
+            "operation": operation,
+            "request_deadline": NOW + 1,
+            "payload": payload,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_worktree_operations_are_routed_to_their_own_refusals() {
+        let (mut shared, root) = setup();
+        shared.state_dir = Some(root.join(state::migrate::STATE_REL));
+        let mut session = authenticated_at(&shared, &root, 8);
+        let outside = json!({"path": root.join("elsewhere")});
+
+        let unknown_field = session.handle(
+            &shared,
+            &worktree_body("worktree.create", json!({"surprise": true})),
+            NOW,
+        );
+        let removed = session.handle(&shared, &worktree_body("worktree.remove", outside), NOW);
+
+        assert_eq!(code(&unknown_field), ErrorCode::MalformedRequest);
+        assert!(!unknown_field.close);
+        assert_eq!(code(&removed), ErrorCode::PolicyDenied);
+        assert!(!removed.close);
+    }
+
+    #[test]
+    fn a_worktree_operation_of_a_runtime_that_serves_no_state_is_an_invariant_violation() {
+        let (shared, root) = setup();
+        let mut session = authenticated_at(&shared, &root, 8);
+        let payload = json!({"path": root.join(".harness/.sandboxes/worktrees/issue-1")});
+
+        let reply = session.handle(&shared, &worktree_body("worktree.remove", payload), NOW);
+
+        assert_eq!(code(&reply), ErrorCode::InvariantViolation);
+        assert_eq!(
+            reply.response.error.unwrap().domain,
+            FailureDomain::EnvironmentPreparation
+        );
+    }
+
+    #[test]
+    fn a_worktree_operation_from_an_older_protocol_minor_is_protocol_unsupported() {
+        let (mut shared, root) = setup();
+        shared.state_dir = Some(root.join(state::migrate::STATE_REL));
+        let mut session = authenticated_at(&shared, &root, 7);
+
+        for operation in ["worktree.create", "worktree.remove"] {
+            let reply = session.handle(&shared, &worktree_body(operation, json!({})), NOW);
+
+            assert_eq!(code(&reply), ErrorCode::ProtocolUnsupported, "{operation}");
+            let facts = reply.response.error.unwrap().facts;
+            assert_eq!(facts["negotiated_minor"], 7);
+            assert_eq!(facts["required_minor"], 8);
+        }
     }
 
     #[test]
