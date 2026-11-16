@@ -10,7 +10,7 @@ import type { Tone } from "../ds";
 import { useI18n } from "../i18n";
 import { FEATURE_CATEGORIES, FEATURE_STATES, stateCounts } from "../ws/features";
 import type { Feature, FeatureCategory, FeatureState, FeaturesSnapshot } from "../ws/features";
-import { countsAfter, stateAfter } from "./togglePlan";
+import { STATE_WORD, countsAfter, stateAfter } from "./togglePlan";
 
 export const STATE_TONE: Readonly<Record<FeatureState, Tone>> = {
   working: "ok",
@@ -18,12 +18,7 @@ export const STATE_TONE: Readonly<Record<FeatureState, Tone>> = {
   not_working: "err",
   disabled: "off",
 };
-export const STATE_LABEL: Readonly<Record<FeatureState, string>> = {
-  working: "Работает",
-  partial: "Частично",
-  not_working: "Не работает",
-  disabled: "Выключена",
-};
+const STATE_LABEL = STATE_WORD;
 const FILTER_LABEL: Readonly<Record<FeatureState, string>> = {
   working: "Работают",
   partial: "Частично",

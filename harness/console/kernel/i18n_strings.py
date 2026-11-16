@@ -3006,6 +3006,20 @@ EN.update(
     }
 )
 
+# Switching a Diagnostics feature through the confirmed configuration write (web console).
+EN.update(
+    {
+        "Включить «{name}». Заработает не сразу: {blockers}": "Enable \"{name}\". It will not work right away: {blockers}",
+        "Включить «{name}». Функция начнёт использоваться при следующем запуске.": "Enable \"{name}\". The feature takes effect on the next run.",
+        "Выключить «{name}». {effect}": "Disable \"{name}\". {effect}",
+        "Перестанут работать: {names}": "Will stop working: {names}",
+        "Включить функцию «{name}»": "Enable the feature \"{name}\"",
+        "Выключить функцию «{name}»": "Disable the feature \"{name}\"",
+        "Конфликт версии конфигурации": "Configuration version conflict",
+        "Запись конфигурации отклонена": "Configuration write refused",
+    }
+)
+
 def state_labels() -> dict[str, dict[str, str]]:
     """The state labels as the SPA reads them: state -> {\"ru\": ..., \"en\": ...}."""
     return {state: {"ru": ru, "en": en} for state, (ru, en) in STATE_LABELS.items()}

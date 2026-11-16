@@ -2,7 +2,7 @@
    (harness/console/kernel/features.py) with the configuration digests a toggle writes against.
    The types are those of protocol.gen.ts; the parser checks the shape the screen relies on and
    never recomputes a state. */
-import type { FeaturePayload, FeaturesSnapshotReply } from "./protocol.gen";
+import type { FeaturePayload } from "./protocol.gen";
 
 export type Feature = FeaturePayload;
 export type FeatureState = Feature["state"];
@@ -10,7 +10,8 @@ export type FeatureCategory = Feature["category"];
 
 export interface FeaturesSnapshot {
   features: Feature[];
-  config_digests: FeaturesSnapshotReply["config_digests"];
+  /** File name -> SHA-256 of the file the registry was read from; empty for a missing file. */
+  config_digests: Readonly<Record<string, string>>;
   transaction_pending: boolean;
 }
 
@@ -71,7 +72,7 @@ export function parseFeatures(value: unknown): FeaturesSnapshot | null {
   if (typeof transaction_pending !== "boolean") return null;
   return {
     features,
-    config_digests: config_digests as FeaturesSnapshot["config_digests"],
+    config_digests: config_digests as Record<string, string>,
     transaction_pending,
   };
 }

@@ -12,6 +12,7 @@ import { CheckList, visibleChecks } from "../diagnostics/CheckList";
 import type { CheckFilter } from "../diagnostics/CheckList";
 import { downloadJson, exportName, exportPayload } from "../diagnostics/exportReport";
 import { FeaturesView } from "../diagnostics/FeaturesView";
+import { togglePlan } from "../diagnostics/togglePlan";
 import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
 import { Icon } from "../icons";
 import { checkTitle, groupLabel, useI18n } from "../i18n";
@@ -19,6 +20,7 @@ import { href } from "../navigation";
 import { useScreen } from "../screens/useScreen";
 import type { LocalJob } from "../ws/jobs";
 import { parseFeatures } from "../ws/features";
+import type { Feature } from "../ws/features";
 import { checkTotal, parseHealthReport } from "../ws/screens";
 import type { HealthReport } from "../ws/screens";
 import { snapshotClock } from "../update/format";
@@ -31,6 +33,22 @@ export const FIX_COMMANDS: Readonly<Record<string, boolean>> = {
 };
 
 const cliLine = (online: boolean) => (online ? "harness health . --online" : "harness health .");
+
+/** Exit codes of `configuration_cli.py`: a stale file and any other refusal. */
+const STALE_EXIT = 3;
+const REFUSED_EXIT = 2;
+
+/** The refusal a finished configuration write printed to stderr, or null when it succeeded. The
+    text is the server's, shown as is. */
+export function writeRefusal(job: LocalJob): { stale: boolean; text: string } | null {
+  if (job.returncode !== STALE_EXIT && job.returncode !== REFUSED_EXIT) return null;
+  const text = job.output
+    .filter((fragment) => fragment.channel === "stderr")
+    .map((fragment) => fragment.text)
+    .join("")
+    .trim();
+  return { stale: job.returncode === STALE_EXIT, text: text || job.error || "" };
+}
 
 /** The report a finished fix job printed, or null when it has none. */
 export function fixReport(job: LocalJob): HealthReport | null {
@@ -57,6 +75,8 @@ export function Diagnostics() {
   const [fixed, setFixed] = useState<HealthReport | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
   const [request, setRequest] = useState<RunRequest | null>(null);
+  const [toggle, setToggle] = useState<RunRequest | null>(null);
+  const [refusal, setRefusal] = useState<{ stale: boolean; text: string } | null>(null);
   const [filter, setFilter] = useState<CheckFilter>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -103,6 +123,26 @@ export function Diagnostics() {
     setFixError(job.error || t("Отчёт не построен"));
     setFixed(null);
     screen.refresh(true);
+  };
+  // A switch goes only through the confirmed configuration write: the configuration command panel
+  // opens its confirmation with the plan; cancelling it sends nothing.
+  const onToggle = (feature: Feature, enabled: boolean) => {
+    if (!features.data) return;
+    const plan = togglePlan(features.data, feature, enabled, t);
+    if (plan === null) return;
+    setRefusal(null);
+    setToggle({
+      command_id: "configuration-apply",
+      values: { request: plan.request },
+      reason: plan.reason,
+      context: plan.context,
+      nonce: Date.now(),
+    });
+  };
+  const onWriteDone = (job: LocalJob) => {
+    if (job.command_id !== "configuration-apply") return;
+    setRefusal(writeRefusal(job));
+    features.refresh(true);
   };
   const exportReport = () => {
     if (report) downloadJson(exportName(new Date()), exportPayload(report, filter, query, visible));
@@ -157,10 +197,23 @@ export function Diagnostics() {
           </p>
         )}
         {snapshot ? (
-          <FeaturesView snapshot={snapshot} />
+          <FeaturesView
+            snapshot={snapshot}
+            onToggle={onToggle}
+            alert={
+              refusal && (
+                <p className="ds-alert ds-alert-err" role="alert" id="feature-write-error" data-stale={refusal.stale}>
+                  {refusal.stale ? t("Конфликт версии конфигурации") : t("Запись конфигурации отклонена")}: {refusal.text}
+                </p>
+              )
+            }
+          />
         ) : (
           !features.error && <p className="ds-empty">{t("Функции загружаются…")}</p>
         )}
+        <div className="ds-legacy-island ds-feature-commands">
+          <CommandPanel section="configuration" confirmAll listed={false} request={toggle} onJobDone={onWriteDone} />
+        </div>
       </TabPanel>
 
       <TabPanel id="diagnostics" tab="checks" value={tab} className="ds-tabpanel">

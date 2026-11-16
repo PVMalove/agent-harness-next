@@ -7,6 +7,7 @@ import { fixReport } from "../../harness/console/frontend/src/routes/Diagnostics
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
 import { CANCEL_REASON, FakeSocket, HEALTH_REPORT, ManualClock, jobReply, screenPage } from "./fake-socket";
 import FEATURES from "./fixtures/features-snapshot.json";
+import CONFIGURATION_CATALOG from "./fixtures/configuration-catalog.json";
 
 const FIX = {
   command_id: "diagnostics-fix",
@@ -250,8 +251,9 @@ describe("the Diagnostics Features tab", () => {
     expect(memory.getAttribute("data-state")).toBe("disabled");
     expect(within(memory).getAllByText("Выключена").length).toBeGreaterThan(0);
     expect(memory.querySelector(".ds-status-off")).toBeTruthy();
-    // No command panel of the configuration or diagnostics section is asked for on this tab.
-    expect(socket.sent.filter((body) => body.type === "job.catalog")).toEqual([]);
+    // This tab mounts the configuration command panel only, never the diagnostics one.
+    const sections = socket.sent.filter((body) => body.type === "job.catalog").map((body) => body.section);
+    expect(sections).toEqual(["configuration"]);
   });
 
   test("filters by state and category and searches", () => {
@@ -299,5 +301,91 @@ describe("the Diagnostics Features tab", () => {
     expect(count("feature-plan-before", "disabled")).toBe("4");
     expect(count("feature-plan-after", "disabled")).toBe("3");
     expect(count("feature-plan-after", "working")).toBe(String(Number(count("feature-plan-before", "working")) + 1));
+  });
+});
+
+/** Opens the Features tab and answers the configuration catalog its command panel asks for. */
+function renderToggle(snapshot: unknown = FEATURES) {
+  const { socket } = renderFeatures(snapshot);
+  const catalog = socket.request("job.catalog");
+  expect(catalog).toMatchObject({ section: "configuration" });
+  act(() => socket.reply({ v: 1, id: catalog.id, type: "job.catalog", ok: true, ...CONFIGURATION_CATALOG }));
+  return { socket };
+}
+
+const starts = (socket: FakeSocket) => socket.sent.filter((body) => body.type === "job.start");
+
+describe("switching a feature", () => {
+  beforeEach(() => FakeSocket.reset());
+
+  test("disabling a feature others need asks first and shows what stops and the before/after plan", () => {
+    const snapshot = {
+      ...FEATURES,
+      features: FEATURES.features.map((item) =>
+        item.id === "attestation" ? { ...item, required_by: ["containers", "memory"] } : item,
+      ),
+    };
+    const { socket } = renderToggle(snapshot);
+    pick("attestation");
+    act(() => fireEvent.click(screen.getByRole("switch")));
+    const dialog = screen.getByRole("dialog");
+    // Only the dependents that work today stop: memory is already disabled.
+    expect(within(dialog).getByText(/Перестанут работать: Контейнерный executor$/)).toBeTruthy();
+    expect(within(dialog).getByText(/Состояние worker принимается без подтверждения\./)).toBeTruthy();
+    const context = dialog.querySelector("pre")!.textContent!;
+    expect(context).toContain("orchestration.json › worker_attestation_required: true → false");
+    expect(context).toContain("Worker attestation: Работает → Выключена");
+    expect(starts(socket)).toEqual([]);
+    act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" })));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(starts(socket)).toEqual([]);
+  });
+
+  test("a confirmed switch is the configuration-apply job with the snapshot digests", () => {
+    const { socket } = renderToggle();
+    pick("memory");
+    act(() => fireEvent.click(screen.getByRole("switch")));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("configuration-apply")).toBeTruthy();
+    act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Запустить" })));
+    const [start] = starts(socket);
+    expect(start).toMatchObject({ command_id: "configuration-apply", confirmed: true });
+    const request = JSON.parse(String((start.values as Record<string, string>).request));
+    expect(request.changes).toEqual([{ file: "project.json", path: ["memory", "enabled"], value: true }]);
+    expect(request.expected).toEqual({ "project.json": FEATURES.config_digests["project.json"] });
+    // The write finished: the registry is read again from the server, bypassing its cache.
+    act(() =>
+      socket.reply(
+        jobReply(start.id, "job.start", { command_id: "configuration-apply", mutating: true, phase: "completed", done: true, returncode: 0 }),
+      ),
+    );
+    expect(socket.request("features.snapshot")).toMatchObject({ force: true });
+    expect(document.querySelector("#feature-write-error")).toBeNull();
+  });
+
+  test("a stale file refusal shows the server's text next to the feature", () => {
+    const { socket } = renderToggle();
+    pick("retry");
+    act(() => fireEvent.click(screen.getByRole("switch")));
+    act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Запустить" })));
+    const [start] = starts(socket);
+    const stale = "Файл изменён другим процессом; загрузите внешние изменения и заново просмотрите итог";
+    act(() =>
+      socket.reply(
+        jobReply(start.id, "job.start", {
+          command_id: "configuration-apply",
+          mutating: true,
+          phase: "failed",
+          done: true,
+          returncode: 3,
+          cursor: 1,
+          output: [{ channel: "stderr", text: `${stale}\n` }],
+        }),
+      ),
+    );
+    replyFeatures(socket);
+    const alert = document.querySelector("#feature-write-error") as HTMLElement;
+    expect(alert.getAttribute("data-stale")).toBe("true");
+    expect(alert.textContent).toBe(`Конфликт версии конфигурации: ${stale}`);
   });
 });
