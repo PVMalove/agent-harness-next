@@ -2621,6 +2621,26 @@ EN.update(
     }
 )
 
+# Web console #1094: Settings in five tabs, the console recommendation and the version history.
+EN.update(
+    {
+        "Параметры": "Parameters",
+        "Сводка настроек": "Settings summary",
+        "Сервер не прислал список версий": "The server sent no version list",
+        "Изменения черновика": "Draft changes",
+        "Черновик файла не разобран: исправьте JSON на вкладке JSON.": "The file draft cannot be parsed: fix the JSON on the JSON tab.",
+        "Рекомендация консоли:": "Console recommendation:",
+        "нет рекомендации": "no recommendation",
+        "Принять рекомендацию консоли": "Accept the console recommendation",
+        "Читаю версию…": "Reading the version…",
+        "Файла нет в этой версии": "This version has no such file",
+        "Сохранённых версий нет.": "There are no saved versions.",
+        "Восстановление версии доступно в TUI.": "Restoring a version is available in the TUI.",
+        "Содержимое версии": "Version content",
+        "Выберите версию в списке.": "Choose a version in the list.",
+    }
+)
+
 # Web console #1066: Help tabs after the mockup (Start, Screens, Commands, Hotkeys, Boundaries).
 EN.update(
     {

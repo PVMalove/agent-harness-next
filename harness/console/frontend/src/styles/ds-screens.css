@@ -185,6 +185,48 @@
 .ds-kv dd[data-tone="err"] { color: var(--ds-err); }
 .ds-tag[data-on="true"] { background: var(--ds-ok-bg); color: var(--ds-ok); }
 
+/* Settings: five tabs; the overview and history in two columns whose last panel takes the free
+   height, the wizard of the Parameters tab and the JSON editor. */
+.ds-settings-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-settings-col { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.ds-settings-json { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.ds-settings-files { flex: none; }
+.ds-settings-editor .ds-panel-body { display: flex; flex-direction: column; gap: 8px; }
+.ds-settings-text { flex: 1 1 240px; width: 100%; min-height: 240px; resize: none; font-family: var(--ds-mono); font-size: var(--ds-fs-2); line-height: 1.5; }
+.ds-settings-desc { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-settings-changes code { font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.ds-settings-vfile { margin: 0; padding: 8px 12px 0; color: var(--ds-muted); font-size: var(--ds-fs-2); font-weight: 600; }
+.ds-settings [data-tone="ok"] { color: var(--ds-ok); }
+.ds-settings [data-tone="warn"] { color: var(--ds-warn); }
+.ds-settings [data-tone="err"] { color: var(--ds-err); }
+.ds-settings .ds-tag[data-tone="ok"] { background: var(--ds-ok-bg); }
+.ds-settings .ds-tag[data-tone="warn"] { background: var(--ds-warn-bg); }
+.ds-settings .ds-tag[data-tone="err"] { background: var(--ds-err-bg); }
+.ds-wz { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: 12px; padding: 8px 12px; }
+.ds-wz-side { display: flex; flex-direction: column; gap: 8px; }
+.ds-wz-side-head { display: flex; justify-content: space-between; color: var(--ds-muted); font-size: var(--ds-fs-2); }
+.ds-wz-groups { display: flex; flex-direction: column; gap: 4px; }
+.ds-wz-group { display: flex; justify-content: space-between; min-height: 28px; padding: 2px 8px; border: 1px solid var(--ds-line); border-radius: 8px; background: none; color: var(--ds-fg); font-size: var(--ds-fs-2); text-align: left; cursor: pointer; }
+.ds-wz-group[aria-pressed="true"] { background: var(--ds-accent-bg); border-color: var(--ds-accent); }
+.ds-wz-group:disabled { opacity: 0.5; cursor: default; }
+.ds-wz-progress { display: flex; flex-direction: column; gap: 4px; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-wz-bar { height: 6px; overflow: hidden; border-radius: 4px; background: var(--ds-hover); }
+.ds-wz-bar i { display: block; height: 100%; background: var(--ds-accent); }
+.ds-wz-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ds-wz-step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--ds-muted); font-size: var(--ds-fs-2); }
+.ds-wz-step .ds-select { flex: 1 1 240px; min-width: 0; }
+.ds-wz-param { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-surface); }
+.ds-wz-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-weight: 600; }
+.ds-wz-head code,
+.ds-wz-line code { font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.ds-wz-desc { margin: 0; color: var(--ds-muted); }
+.ds-wz-line { color: var(--ds-fg); font-size: var(--ds-fs-2); }
+.ds-wz-rec { padding: 8px; border-radius: 8px; background: var(--ds-accent-bg); }
+.ds-wz-muted { color: var(--ds-muted); }
+.ds-wz-toggle { display: inline-flex; align-items: center; gap: 8px; }
+.ds-wz-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ds-wz-empty { padding: 12px; }
+
 /* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
    The page subtitle goes, the installation rows put their caption on the title line and the tile
    captions take one line, so every panel shows all its rows. */
@@ -212,6 +254,9 @@
   .ds-project-install,
   .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
   .ds-file-rel { border-left: 0; }
+  .ds-settings-cols,
+  .ds-wz { grid-template-columns: minmax(0, 1fr); }
+  .ds-settings-cols { flex: none; }
   /* The page scrolls on a phone: the grids take their content height, never a share of the window. */
   .ds-features,
   .ds-diag-checks,

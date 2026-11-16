@@ -90,6 +90,26 @@ export interface WizardParam {
   default: unknown;
   minimum: number | null;
   description: string;
+  /** The console recommendation of the shared wizard steps; null without one. Absent from a
+      server older than the console. */
+  recommendation?: { value: unknown; reason: string } | null;
+}
+
+/** A saved configuration version of `.harness/config_versions` (ConfigurationStore.versions). */
+export interface ConfigVersion {
+  id: string;
+  created_at: string;
+  description: string;
+  files: string[];
+  package_version: string;
+  problem: string;
+}
+
+/** The masked content of the selected version, or `files` empty with the reason in `error`. */
+export interface SelectedVersion {
+  id: string;
+  error: string;
+  files: Partial<Record<ConfigName, ConfigFile>>;
 }
 
 export interface ConfigurationFacts {
@@ -101,6 +121,10 @@ export interface ConfigurationFacts {
   adapters: { preview: AdapterPreview | null; error: string };
   /** The wizard parameter catalog; absent or null from a server without it. */
   wizard?: WizardParam[] | null;
+  /** The saved versions, newest first; absent from a server without them. */
+  versions?: ConfigVersion[];
+  /** The content of the version a `version` request selected. */
+  version?: SelectedVersion;
 }
 
 export interface HelpSection {
@@ -183,7 +207,7 @@ export function parseUpdateDiff(value: unknown): UpdateDiff | null {
   return updateDiff(value) ? (value as UpdateDiff) : null;
 }
 
-const wizardParam = exact({
+const wizardFields: Record<string, Check> = {
   group: string,
   file: (value) => (CONFIG_NAMES as readonly unknown[]).includes(value),
   path: list(string),
@@ -193,15 +217,37 @@ const wizardParam = exact({
   default: () => true,
   minimum: (value) => value === null || typeof value === "number",
   description: string,
+};
+const wizardParam = exact(wizardFields);
+const recommended = exact({
+  ...wizardFields,
+  recommendation: nullable(exact({ value: () => true, reason: string })),
+});
+const configVersion = exact({
+  id: string,
+  created_at: string,
+  description: string,
+  files: strings,
+  package_version: string,
+  problem: string,
+});
+const selectedVersion = exact({
+  id: string,
+  error: string,
+  files: (value) =>
+    isObject(value) && Object.entries(value).every(([name, file]) => (CONFIG_NAMES as readonly string[]).includes(name) && configFile(file)),
 });
 
 /** The facts of a configuration.snapshot reply, or null for any other shape. */
 export function parseConfiguration(value: unknown): ConfigurationFacts | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  const { wizard, ...facts } = value as Record<string, unknown>;
+  const { wizard, versions, version, ...facts } = value as Record<string, unknown>;
   if (!configuration(facts)) return null;
-  if (wizard !== undefined && wizard !== null && !list(wizardParam)(wizard)) return null;
-  return wizard === undefined ? (facts as unknown as ConfigurationFacts) : ({ ...facts, wizard } as unknown as ConfigurationFacts);
+  if (wizard !== undefined && wizard !== null && !list((item) => wizardParam(item) || recommended(item))(wizard)) return null;
+  if (versions !== undefined && !list(configVersion)(versions)) return null;
+  if (version !== undefined && !selectedVersion(version)) return null;
+  const extra = Object.fromEntries(Object.entries({ wizard, versions, version }).filter(([, item]) => item !== undefined));
+  return { ...facts, ...extra } as unknown as ConfigurationFacts;
 }
 
 /** The guide of a help.snapshot reply, or null for any other shape. */
