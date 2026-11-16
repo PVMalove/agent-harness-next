@@ -30,6 +30,7 @@ from harness.gate_runner.gate_runner import (
     GateRunnerError,
     LocalPolicy,
     PlannedStage,
+    STAGE_ENV_COLD,
     _clean_room_python,
     diagnose,
     format_evidence_trailer,
@@ -1096,26 +1097,52 @@ def test_the_clean_room_gate_is_marked_cold_and_each_command_has_its_own_junit_p
     assert first[1] != second[1] and first[1].endswith(".junit.xml")
 
 
+_OPEN_CACHE = (
+    "import os,sys; sys.path.insert(0, sys.argv[2]); from pathlib import Path; "
+    "from scripts.verification.cache import open_cache; "
+    "open(sys.argv[1],'w').write(str(open_cache(Path(sys.argv[3]), os.environ).directory))"
+)
+
+
 def test_a_local_run_through_the_bounded_wrapper_is_not_cold_and_may_use_the_worktree_cache(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The test itself may run inside a cold clean-room QA run, whose mark every child inherits;
+    # this test is about what a local run adds, so it starts from a caller that is not cold.
+    monkeypatch.delenv(STAGE_ENV_COLD, raising=False)
     repo, _ = _committed_repo(tmp_path)
     seen = tmp_path / "seen"
     source = Path(__file__).resolve().parents[2]
-    open_cache = (
-        "import os,sys; sys.path.insert(0, sys.argv[2]); from pathlib import Path; "
-        "from scripts.verification.cache import open_cache; "
-        "open(sys.argv[1],'w').write(str(open_cache(Path(sys.argv[3]), os.environ).directory))"
-    )
 
     result = run_gate(
-        [[sys.executable, "-c", open_cache, str(seen), str(source), str(repo)]],
+        [[sys.executable, "-c", _OPEN_CACHE, str(seen), str(source), str(repo)]],
         LocalPolicy(repo),
         stop_on_failure=True,
     )
 
     assert result.passed, result.checks
     assert Path(seen.read_text()).is_dir()
+
+
+def test_a_local_run_inside_a_cold_clean_room_run_stays_cold_and_refuses_the_worktree_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The environment a clean-room QA run gives its commands: a nested local gate run, such as
+    # the bounded wrapper, must not escape the cold mark of the QA run that started it.
+    monkeypatch.setenv(STAGE_ENV_COLD, "1")
+    repo, _ = _committed_repo(tmp_path)
+    seen = tmp_path / "seen"
+    source = Path(__file__).resolve().parents[2]
+
+    result = run_gate(
+        [[sys.executable, "-c", _OPEN_CACHE, str(seen), str(source), str(repo)]],
+        LocalPolicy(repo),
+        stop_on_failure=True,
+    )
+
+    assert not result.passed
+    assert "must not use a worktree cache" in result.artifact
+    assert seen.read_text() == ""
 
 
 def test_a_local_run_without_an_evidence_context_has_no_stage_evidence(
