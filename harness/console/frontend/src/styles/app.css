@@ -539,3 +539,9 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .reports-page .report-row > .report-status { display: block; grid-column: 2; grid-row: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .reports-page .report-row > .report-time { grid-column: 3; grid-row: 2; text-align: right; }
 }
+
+/* Publication on the v3 shell: the candidate facts of the summary wrap, and a long target ref breaks,
+   so the summary keeps its width on a phone. */
+.ds-facts-main .publish-facts { flex-wrap: wrap; gap: 4px 16px; min-width: 0; max-width: 100%; }
+.ds-facts-main .publish-facts > span { display: block; min-width: 0; overflow-wrap: anywhere; }
+.publish-page .ds-panel-body { position: relative; }
