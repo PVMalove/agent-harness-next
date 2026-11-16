@@ -6,9 +6,11 @@ QA проверяет закреплённый candidate в чистой сре�
 
 ## Clean-room QA lane {#clean-room-qa-lane}
 
-Одобренный `qa` dispatch coordinator выполняет сам, во временном Git worktree, отсоединённом ровно
-на `candidate_commit`. Команды он берёт дословно из `verification_commands` неизменяемого brief.
-Если HEAD не совпадает или worktree грязный, проверка останавливается. Запуск не передаётся
+Одобренный `qa` dispatch coordinator выполняет сам, во временном отдельном Git-репозитории
+(clean QA checkout) в `.harness/.sandboxes/runs/qa`, отсоединённом ровно на `candidate_commit`.
+Checkout берёт объекты исходного репозитория через alternates и не регистрируется в
+`.git/worktrees`. Команды coordinator берёт дословно из `verification_commands` неизменяемого brief.
+Если HEAD не совпадает или checkout грязный, проверка останавливается. Запуск не передаётся
 runtime adapter:
 
 ```bash

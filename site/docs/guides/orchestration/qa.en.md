@@ -6,9 +6,11 @@ QA checks the pinned candidate in a clean environment. Distinguish preparation f
 
 ## Clean-room QA lane {#clean-room-qa-lane}
 
-The coordinator itself runs the approved `qa` dispatch in a separate temporary Git worktree,
-detached exactly at `candidate_commit`. The commands come verbatim from `verification_commands` of the
-immutable brief, and a HEAD mismatch or a dirty worktree stops the check. The run is not
+The coordinator itself runs the approved `qa` dispatch in a temporary standalone Git repository
+(the clean QA checkout) under `.harness/.sandboxes/runs/qa`, detached exactly at `candidate_commit`.
+The checkout borrows the source repository's objects through alternates and is not registered in
+`.git/worktrees`. The commands come verbatim from `verification_commands` of the
+immutable brief, and a HEAD mismatch or a dirty checkout stops the check. The run is not
 passed to a runtime adapter:
 
 ```bash
