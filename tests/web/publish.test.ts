@@ -72,13 +72,28 @@ describe("the Publication page in the mockup's order", () => {
     act(() => socket.reply(screenPage(body.id, "reports.snapshot", JSON.stringify(REPORTS), { cached: false, age: 0 })));
   }
 
-  test("facts end with the snapshot time; the batch selector sits in the Release candidate head", () => {
+  test("the v3 page: header actions on the right, summary by verdict with the snapshot time, pipe tabs, candidate list and detail", () => {
     renderPublish();
-    const facts = [...document.querySelectorAll("#publish-facts span")].map((item) => item.textContent);
-    expect(facts.at(-1)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
-    const select = document.querySelector(".publish-candidate .panel-head #publish-batch select")!;
-    expect(select.getAttribute("aria-label")).toBe("batch");
-    expect(document.querySelector("#publish-kpis")!.previousElementSibling?.classList.contains("page-title")).toBe(true);
+    expect(document.querySelector(".ds-page.ds-fit.publish-page")).not.toBeNull();
+    expect(document.querySelector("#publish-kpis")!.previousElementSibling?.classList.contains("ds-page-head")).toBe(true);
+    const actions = [...document.querySelectorAll(".ds-page-head .ds-head-actions > *")];
+    expect(actions.map((item) => item.getAttribute("aria-label") ?? item.textContent?.trim())).toEqual(["Проверить", "Отчёты", "Оркестрация"]);
+    expect([...document.querySelectorAll("#publish-kpis .ds-stat-label")].map((item) => item.textContent)).toEqual(["Готово", "Заблокировано", "Неизвестно"]);
+    expect(document.querySelector("#publish-updated")!.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect([...document.querySelectorAll("#publish-tabs .ds-pipe-label")].map((item) => item.textContent)).toEqual(["Обзор", "Preflight", "PR / MR", "Evidence"]);
+    expect(document.querySelector("main .orch-pill")).toBeNull();
+    // The list selects the newest reviewed batch and words its verdict with a StatusIcon.
+    const rows = [...document.querySelectorAll("#publish-candidates [data-batch]")];
+    expect(rows.map((row) => [row.getAttribute("data-batch"), row.getAttribute("aria-pressed")])).toEqual([["b-887", "true"]]);
+    expect(rows[0]!.querySelector(".ds-status")).not.toBeNull();
+    expect(rows[0]!.querySelector(".ds-row-end")!.textContent).toMatch(/^\d \/ 5 пройдено$/);
+  });
+
+  test("Open candidate shows the shared drawer with Evidence, Quality and Readiness", () => {
+    renderPublish();
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Открыть кандидата" })));
+    const drawer = screen.getByRole("dialog", { name: /Кандидат · #887/ });
+    expect([...drawer.querySelectorAll("[role=tab]")].map((tab) => tab.textContent)).toEqual(["Evidence", "Качество", "Готовность"]);
   });
 
   test("Release candidate: ticket and branch, then branch icon, target and QA in that order", () => {

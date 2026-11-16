@@ -127,8 +127,8 @@ const PAGES: PageSpec[] = [
   {
     route: "publish",
     title: "Публикация",
-    blocks: ["#publish-kpis", "#publish-candidate", "#publish-batch", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
-    tabs: ["Обзор", "Preflight", "PR / MR", "Evidence"],
+    blocks: ["#publish-kpis", "#publish-tabs", "#publish-candidates", "#publish-candidate", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
+    tabs: ["1Обзор", "2Preflight", "3PR / MR", "4Evidence"],
   },
   { route: "recovery?batch=b-887", title: "Восстановление", blocks: ["#recovery-note", "#recovery-summary", "#recovery-history"] },
   { route: "container-route?batch=b-887", title: "Контейнерный запуск", blocks: ["#route-summary", "#route-stages", "#route-env"] },

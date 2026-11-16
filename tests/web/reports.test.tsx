@@ -265,8 +265,8 @@ describe("the Reports route", () => {
     expect(main()).not.toContain("название");
     expect(main()).not.toMatch(/\b(unknown|missing|blocked|human only|match)\b/);
     act(() => fireEvent.click(screen.getByRole("tab", { name: /Preflight$/ })));
-    const pills = [...document.querySelectorAll("#publish-preflight .publish-check .orch-pill")].map((pill) => pill.textContent);
-    expect(pills).toEqual(["Заблокировано", "Норма", "Заблокировано", "Норма", "Неизвестно"]);
+    const words = [...document.querySelectorAll("#publish-preflight .publish-check .ds-status-line > span[aria-hidden=true]")].map((word) => word.textContent);
+    expect(words).toEqual(["Заблокировано", "Норма", "Заблокировано", "Норма", "Неизвестно"]);
   });
 
   test("the evidence matrix shows the kernel's cells", () => {

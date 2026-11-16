@@ -137,23 +137,26 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
   });
 
-  test(`publication at ${width} px: five preflight rows whose pill never covers the title`, async ({ page }) => {
+  test(`publication at ${width} px: five preflight rows whose status never covers the title`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "publish", width, "#publish-kpis");
     await expect(page.locator("#publish-preflight-overview .publish-check")).toHaveCount(5);
     const overlaps = await page.evaluate(() =>
       [...document.querySelectorAll("#publish-preflight-overview .publish-check")].filter((row) => {
-        const pill = row.querySelector(".orch-pill")!.getBoundingClientRect();
+        const status = row.querySelector(".ds-status-line")!.getBoundingClientRect();
         const title = row.querySelector("b")!.getBoundingClientRect();
-        return pill.right > title.left;
+        return status.right > title.left;
       }).length,
     );
     expect(overlaps).toBe(0);
-    await expect(page.locator(".publish-candidate .panel-head #publish-batch select")).toBeVisible();
+    await expect(page.locator('#publish-candidates [data-batch="b-887"]')).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Почему" }).click();
     await expect(page.locator("#publish-why li")).toHaveCount(3);
+    await page.getByRole("button", { name: "Открыть кандидата" }).click();
+    await expect(page.getByRole("dialog", { name: /Кандидат · #887/ })).toBeVisible();
+    await page.keyboard.press("Escape");
     const wide = await page.evaluate(() =>
-      [...document.querySelectorAll(".publish-page .panel, .publish-kpis")].filter((box) => box.scrollWidth > box.clientWidth + 1).map((box) => box.className),
+      [...document.querySelectorAll(".publish-page .ds-panel, .publish-page .ds-summary")].filter((box) => box.scrollWidth > box.clientWidth + 1).map((box) => box.className),
     );
     expect(wide).toEqual([]);
     expect(await noOverflow(page)).toBe(true);
