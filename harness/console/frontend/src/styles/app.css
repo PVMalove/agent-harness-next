@@ -194,6 +194,16 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .board-card h3, .board-card p, .board-spec-meta, .board-banner span { overflow-wrap: anywhere; }
 .board-specbar select { max-width: 100%; }
 .board-specbar label { min-width: 0; max-width: 100%; }
+/* Task Board on a narrow screen (the mockup scrolls the columns from 1100px down): the column index
+   jumps to a column, and a sideways scroll of the columns never chains to the page. */
+.board-jump { display: none; }
+@media (max-width: 1100px) {
+  .board-jump { display: flex; gap: 8px; margin-bottom: 8px; overflow-x: auto; scrollbar-width: thin; }
+  .board-jump button { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 999px; background: none; color: var(--fg); font-size: var(--fs-1); font-weight: 600; cursor: pointer; }
+  .board-jump button:hover { background: var(--panel); }
+  .board-jump-n { color: var(--muted); font-family: var(--mono); }
+  .board-columns { overscroll-behavior-x: contain; scroll-padding-inline: 2px; }
+}
 /* Task Board status change: the move notice and the confirmation wrap ticket text in place; the
    status select fits a narrow modal. */
 .board-move-notice { margin: 4px 0; overflow-wrap: anywhere; }

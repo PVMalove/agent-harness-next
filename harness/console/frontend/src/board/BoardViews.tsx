@@ -224,6 +224,22 @@ export function BoardColumns({
       <div className="board-count" id="board-count">
         {t("{shown} из {total}", { shown: shown.length, total: board.tickets.length })}
       </div>
+      {/* Where the columns scroll sideways (narrow screens), an index of them with their counters
+          brings one into view; the page itself never scrolls sideways. */}
+      <nav className="board-jump" aria-label={t("Колонки доски")}>
+        {BOARD_COLUMNS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() =>
+              document.querySelector<HTMLElement>(`[data-board-col="${id}"]`)?.scrollIntoView({ block: "nearest", inline: "start" })
+            }
+          >
+            {labels[id].name}
+            <span className="board-jump-n">{shown.filter((card) => card.column === id).length}</span>
+          </button>
+        ))}
+      </nav>
       <div id="board-columns">
         <div className="board-columns">
           {BOARD_COLUMNS.map((id) => {
