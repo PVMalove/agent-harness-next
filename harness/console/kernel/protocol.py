@@ -54,6 +54,8 @@ UPDATE_DIFF_REQUEST = "update_harness.diff"
 # «Настройка»: the configuration files with their secrets masked and their digests, the version
 # store, a pending transaction and the runtime adapter preview; never written or recovered.
 CONFIGURATION_REQUEST = "configuration.snapshot"
+# A saved version `configuration.snapshot` may select, as the version store names it.
+CONFIGURATION_VERSION_ID = r"[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}"
 # AI advice in «Настройка»: a CLI check that never invokes a model, an advice request about one
 # parameter sent only on an explicit button press, and its cancellation. An ask is bounded by
 # ADVICE_TIMEOUT_SECONDS, a check by CHECK_TIMEOUT_SECONDS.

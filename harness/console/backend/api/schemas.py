@@ -13,7 +13,12 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
-from ...kernel.protocol import MAX_ID_CHARS, MAX_PATH_CHARS, MAX_SKIPPED
+from ...kernel.protocol import (
+    CONFIGURATION_VERSION_ID,
+    MAX_ID_CHARS,
+    MAX_PATH_CHARS,
+    MAX_SKIPPED,
+)
 from .request_router import RequestRouter
 
 REGENERATE = "python -m harness.console.backend.api.schemas"
@@ -267,6 +272,10 @@ class ConfigurationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["configuration.snapshot"]
     force: bool = False
+    # A saved version whose masked content the reply adds as `version`.
+    version: (
+        Annotated[str, Field(pattern=f"^{CONFIGURATION_VERSION_ID}$")] | None
+    ) = None
 
 
 AdvisorProvider = Literal["codex", "claude"]

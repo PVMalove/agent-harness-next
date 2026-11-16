@@ -125,6 +125,13 @@ class ConfigurationCollector(Protocol):
     def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
+class ConfigurationVersionCollector(Protocol):
+    """One saved configuration version of «Настройка» (`read_version`): its masked files, or
+    `files` empty with the reason in `error`; blocks until read and never writes."""
+
+    def __call__(self, repo: Path, identifier: str, /) -> dict[str, object]: ...
+
+
 class FeaturesCollector(Protocol):
     """The Diagnostics features (`kernel.features.collect_features`): the feature registry, the
     configuration digests it was read from and a pending configuration transaction; blocks until

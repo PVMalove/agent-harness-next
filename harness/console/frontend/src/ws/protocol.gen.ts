@@ -112,6 +112,7 @@ export type TypedConfirmation = string | null;
 export type Force = boolean;
 export type Id7 = string | number | null;
 export type Type7 = "configuration.snapshot";
+export type Version = string | null;
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "ConsoleReply".
@@ -249,7 +250,7 @@ export type ImagesProblem = string | null;
 export type InfoProblem = string | null;
 export type Rootless = boolean | null;
 export type Selinux = boolean | null;
-export type Version = string | null;
+export type Version1 = string | null;
 export type Volumes = number | null;
 export type VolumesProblem = string | null;
 export type Drift = string;
@@ -771,6 +772,7 @@ export interface ConfigurationSnapshotRequest {
   force?: Force;
   id?: Id7;
   type: Type7;
+  version?: Version;
 }
 /**
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
@@ -996,7 +998,7 @@ export interface ContainersPayload {
   info_problem: InfoProblem;
   rootless: Rootless;
   selinux: Selinux;
-  version: Version;
+  version: Version1;
   volumes: Volumes;
   volumes_problem: VolumesProblem;
 }

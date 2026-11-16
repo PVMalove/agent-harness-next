@@ -4,10 +4,12 @@ Harness, the Diagnostics features, Repo Map, «Открыть проект», «
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 
 from ....kernel.protocol import (
     CONFIGURATION_REQUEST,
+    CONFIGURATION_VERSION_ID,
     DIAGNOSTICS_REQUEST,
     FEATURES_REQUEST,
     HARNESS_OVERVIEW_REQUEST,
@@ -75,8 +77,9 @@ _FIELDS: dict[str, frozenset[str]] = {
     UPDATE_HARNESS_REQUEST: frozenset({"force"}),
     # The path is checked against the drift report before anything is read.
     UPDATE_DIFF_REQUEST: frozenset({"path", "force"}),
-    # Read only: a pending transaction is reported, never recovered.
-    CONFIGURATION_REQUEST: frozenset({"force"}),
+    # Read only: a pending transaction is reported, never recovered. `version` adds the masked
+    # content of one saved version.
+    CONFIGURATION_REQUEST: frozenset({"force", "version"}),
 }
 # The replies that carry whether they came from the cache and how old it is.
 _CACHED_TYPES = frozenset(
@@ -206,7 +209,14 @@ def _call(
         return lambda: screens.update_diff(path, force=force)
     if kind == CONFIGURATION_REQUEST:
         force = _flag(body, "force")
-        return lambda: screens.configuration(force=force)
+        version = body.get("version")
+        if version is not None and not (
+            isinstance(version, str) and re.fullmatch(CONFIGURATION_VERSION_ID, version)
+        ):
+            raise _Bad("version")
+        return lambda: screens.configuration(
+            force=force, version=version if isinstance(version, str) else None
+        )
     batch, role = _id(body, "batch", ""), _id(body, "role", "developer")
     runtime = _id(body, "runtime", "")
     if not role:

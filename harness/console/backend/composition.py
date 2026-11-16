@@ -38,6 +38,7 @@ from .application.live_steps import LiveSteps
 from .application.ports import (
     Clock,
     ConfigurationCollector,
+    ConfigurationVersionCollector,
     CommandSpec,
     FeaturesCollector,
     HarnessCollector,
@@ -79,6 +80,7 @@ from .infrastructure.screen_facts import (
     collect_ledger,
     collect_ledger_online,
     configuration_facts,
+    configuration_version_facts,
     features_facts,
     harness_facts,
     maintenance_facts,
@@ -132,6 +134,7 @@ def screen_service(
     update_harness: UpdateHarnessCollector | None = None,
     update_diff: UpdateDiffReader | None = None,
     configuration: ConfigurationCollector | None = None,
+    configuration_version: ConfigurationVersionCollector | None = None,
     features: FeaturesCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
@@ -158,6 +161,11 @@ def screen_service(
         ),
         update_diff=read_update_diff if update_diff is None else update_diff,
         configuration=configuration_facts if configuration is None else configuration,
+        configuration_version=(
+            configuration_version_facts
+            if configuration_version is None
+            else configuration_version
+        ),
         features=features_facts if features is None else features,
         board=(
             TaskBoardService(

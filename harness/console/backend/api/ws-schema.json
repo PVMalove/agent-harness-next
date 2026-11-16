@@ -714,6 +714,19 @@
           "const": "configuration.snapshot",
           "title": "Type",
           "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
         }
       },
       "required": [
