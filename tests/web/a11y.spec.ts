@@ -1,8 +1,9 @@
 /* WCAG 2.1 AA in the real build (#1066): axe-core finds no violation on the shell and Home, the
    skip link is the first Tab stop, and a tab list follows the WAI-ARIA Tabs pattern with the
-   arrow keys. Diagnostics, Update, Project and Settings are checked at the five window sizes of
-   console-fit.spec.ts in every tab and every inner tab (the feature detail, "how to update", the
-   JSON file).
+   arrow keys. Orchestration, Reports, Publication, Diagnostics, Update, Project and Settings are
+   checked at the five window sizes of console-fit.spec.ts in every tab and every inner tab (the
+   feature detail, "how to update", the JSON file); the candidate drawer of Reports and Publication
+   is checked opened, in each of its tabs.
    The page sweep over every section lives in pages.spec.ts. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -67,8 +68,15 @@ const fixture = (name: string) => JSON.parse(readFileSync(resolve(__dirname, "fi
 const PAGED: Readonly<Record<string, unknown>> = {
   "diagnostics.snapshot": fixture("diagnostics-report.json"),
   "update_harness.snapshot": fixture("update-harness.json"),
-  "update_harness.diff": fixture("update-harness-diff.json"),
   "open_project.snapshot": fixture("open-project.json"),
+  "reports.snapshot": fixture("reports.json"),
+  "orchestration.snapshot": fixture("orch-snapshot.json"),
+};
+/** Paged replies the server sends without cache facts. */
+const UNCACHED: Readonly<Record<string, unknown>> = {
+  "update_harness.diff": fixture("update-harness-diff.json"),
+  "reports.report": fixture("reports-report.json"),
+  "reports.timeline": fixture("reports-timeline.json"),
 };
 
 const VERSION_ID = "20261116T101500Z-0123456789ab";
@@ -94,8 +102,12 @@ async function mockScreens(page: Page) {
       else if (type === "features.snapshot") send(fixture("features-snapshot.json"));
       else if (type in PAGED) {
         const text = JSON.stringify(PAGED[type]);
-        send({ snapshot_id: 1, text, next: text.length, done: true, ...(type === "update_harness.diff" ? {} : { cached: false, age_seconds: 0 }) });
-      } else if (type === "job.catalog") send({ commands: [], cancel_reason: "" });
+        send({ snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
+      } else if (type in UNCACHED) {
+        const text = JSON.stringify(UNCACHED[type]);
+        send({ snapshot_id: 1, text, next: text.length, done: true });
+      } else if (type === "decisions.snapshot") send({ snapshot: { version: 1, items: [], total: 0, unavailable: false } });
+      else if (type === "job.catalog") send({ commands: [], cancel_reason: "" });
       else if (type === "job.list") send({ jobs: [] });
     });
   });
@@ -108,9 +120,15 @@ const NESTED: Readonly<Record<string, readonly string[]>> = {
   "update-harness": ["Как обновить"],
   "open-project": [],
   configuration: ["Файл"],
+  orchestration: [],
+  reports: [],
+  publish: [],
 };
 
 for (const [route, ready] of [
+  ["orchestration", "#orch-dispatch-list .orch-dispatch-row"],
+  ["reports", "#report-list [data-stage]"],
+  ["publish", "#publish-candidates [data-batch]"],
   ["diagnostics", "#features-list [data-feature]"],
   ["update-harness", "#update-diff .ds-diff-file"],
   ["open-project", "#open-project-list [data-path]"],
@@ -140,6 +158,29 @@ for (const [route, ready] of [
         }
       }
       expect([...reached].sort()).toEqual([...NESTED[route]].sort());
+    });
+  }
+}
+
+for (const [route, opener] of [
+  ["reports", "#reports-tabs [role=tab]:has-text('Готовность')"],
+  ["publish", "#publish-open-candidate"],
+] as const) {
+  for (const [width, height] of SIZES) {
+    test(`the candidate drawer of ${route} at ${width}x${height} has no WCAG 2.1 AA violation in its tabs`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await mockScreens(page);
+      await page.goto(`${base()}/#/${route}`);
+      await page.locator(opener).click({ timeout: 20000 });
+      if (route === "reports") await page.locator('#reports-readiness [data-batch="b-887"] .report-ready-open').click();
+      const drawer = page.getByRole("dialog", { name: /Кандидат · #887/ });
+      await expect(drawer).toBeVisible();
+      const tabs = drawer.getByRole("tab");
+      await expect(tabs).toHaveCount(3);
+      for (let index = 0; index < 3; index++) {
+        await tabs.nth(index).click();
+        expect(await axeViolations(page), `${route} drawer tab ${index + 1}`).toEqual([]);
+      }
     });
   }
 }

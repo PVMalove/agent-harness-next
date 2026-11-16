@@ -1,6 +1,7 @@
 /* Window fit of the screens moved to the design system v3: Help (7 tabs), Harness (5) and Repo Map
    (3) of #1091, Diagnostics (Функции, Проверки), Update (the file tabs Изменения, Решение),
-   Project (the five wizard steps) and Settings (5 tabs, the JSON file tabs) at five window sizes. Every other tab list on the screen is
+   Project (the five wizard steps), Settings (5 tabs, the JSON file tabs), Orchestration (6 tabs),
+   Reports (4) and Publication (4) at five window sizes. Every other tab list on the screen is
    walked in each of these tabs too: the feature detail (Готовность / Конфигурация / Связи) of
    Diagnostics and "how to update" (Режим / Seed / План / Миграция) of Update. In every tab the page does not
    scroll, main does not scroll and the empty strip under the last block is at most 24 px (RFC
@@ -37,7 +38,13 @@ const PAGED: Readonly<Record<string, Body>> = {
   "update_harness.snapshot": read("update-harness.json"),
   "update_harness.diff": read("update-harness-diff.json"),
   "open_project.snapshot": read("open-project.json"),
+  "reports.snapshot": read("reports.json"),
+  "orchestration.snapshot": read("orch-snapshot.json"),
+  "reports.report": read("reports-report.json"),
+  "reports.timeline": read("reports-timeline.json"),
 };
+/** Paged replies the server sends without cache facts. */
+const UNCACHED = new Set(["update_harness.diff", "reports.report", "reports.timeline"]);
 
 const SIZES: readonly [number, number][] = [[1920, 1080], [1920, 1010], [1920, 950], [1680, 950], [1440, 900]];
 /** Route and the number of tabs the design promises. */
@@ -49,6 +56,9 @@ const SCREENS: readonly [route: string, tabs: number][] = [
   ["update-harness", 2],
   ["open-project", 5],
   ["configuration", 5],
+  ["orchestration", 6],
+  ["reports", 4],
+  ["publish", 4],
 ];
 /** Route -> the tab lists inside its tabs (aria-label) and their tab counts. */
 const NESTED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
@@ -77,7 +87,8 @@ async function mockSocket(page: Page) {
       else if (type === "features.snapshot") send(ws, { id, type, ...FEATURES });
       else if (type === "configuration.snapshot")
         paged(ws, id, type, request.version ? { ...CONFIGURATION, version: { id: VERSION_ID, error: "", files: CONFIGURATION.files } } : CONFIGURATION);
-      else if (typeof type === "string" && type in PAGED) paged(ws, id, type, PAGED[type], type === "update_harness.diff" ? { cached: undefined, age_seconds: undefined } : {});
+      else if (typeof type === "string" && type in PAGED) paged(ws, id, type, PAGED[type], UNCACHED.has(type) ? { cached: undefined, age_seconds: undefined } : {});
+      else if (type === "decisions.snapshot") send(ws, { id, type, snapshot: { version: 1, items: [], total: 0, unavailable: false } });
       else if (type === "job.catalog") send(ws, { id, type, ...CATALOG });
       else if (type === "job.list") send(ws, { id, type, jobs: [] });
     });
