@@ -1188,7 +1188,7 @@
     },
     "FeatureToggle": {
       "additionalProperties": false,
-      "description": "The boolean configuration key that switches the feature and its current value.",
+      "description": "The boolean configuration key that switches the feature, its current value and the\nkernel's forecast: the state and requirements of the feature once the key is flipped.",
       "properties": {
         "enabled": {
           "title": "Enabled",
@@ -1209,12 +1209,31 @@
           "minItems": 1,
           "title": "Path",
           "type": "array"
+        },
+        "requirements_after": {
+          "items": {
+            "$ref": "#/$defs/FeatureRequirement"
+          },
+          "title": "Requirements After",
+          "type": "array"
+        },
+        "state_after": {
+          "enum": [
+            "working",
+            "partial",
+            "not_working",
+            "disabled"
+          ],
+          "title": "State After",
+          "type": "string"
         }
       },
       "required": [
         "file",
         "path",
-        "enabled"
+        "enabled",
+        "state_after",
+        "requirements_after"
       ],
       "title": "FeatureToggle",
       "type": "object"

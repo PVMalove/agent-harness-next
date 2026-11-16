@@ -643,11 +643,14 @@ class FeatureSetting(_Strict):  # type: ignore[explicit-any]
 
 
 class FeatureToggle(_Strict):  # type: ignore[explicit-any]
-    """The boolean configuration key that switches the feature and its current value."""
+    """The boolean configuration key that switches the feature, its current value and the
+    kernel's forecast: the state and requirements of the feature once the key is flipped."""
 
     file: ConfigName
     path: Annotated[list[str], Field(min_length=1)]
     enabled: bool
+    state_after: Literal["working", "partial", "not_working", "disabled"]
+    requirements_after: list[FeatureRequirement]
 
 
 class FeaturePayload(_Strict):  # type: ignore[explicit-any]

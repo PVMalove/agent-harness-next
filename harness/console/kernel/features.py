@@ -5,17 +5,20 @@ runtime hook settings and the keys of `.harness/project.json` and `.harness/orch
 Every feature has a category, a state (`working`, `partial`, `not_working`, `disabled`), the
 features it depends on and is required by, its sources, its requirements and its settings rows.
 Three features have a boolean configuration key that switches them; the console toggles them only
-through the confirmed `configuration-apply` job, never here. Collecting reads files and asks
+through the confirmed `configuration-apply` job, never here. For each of them the registry also
+forecasts the state and requirements after the switch by evaluating the feature again with the
+key flipped, so the page never re-implements the state rule. Collecting reads files and asks
 `shutil.which`; it never writes, never runs a subprocess and never touches the network. Names,
 descriptions, off effects and requirement titles are Russian source strings; `detail` holds paths
 and values only."""
 
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -684,6 +687,37 @@ def _settings_rows(
     return result
 
 
+def _requirements(feature: _Feature) -> list[dict[str, str]]:
+    return [
+        {"title": title, "state": level, "detail": detail}
+        for title, level, detail in feature.requirements
+    ]
+
+
+def _toggled(facts: Facts, feature: _Feature) -> _Feature:
+    """`feature` evaluated again with its boolean key flipped in the configuration it reads. A
+    missing file is read as an empty document; an unreadable one stays unreadable, so the
+    switched feature keeps its configuration error."""
+    assert feature.toggle is not None
+    file, path = feature.toggle
+    value = not feature.enabled
+    config = facts.configs[file]
+    if config.document is not None or not config.exists:
+        document: dict[str, object] = copy.deepcopy(dict(config.document or {}))
+        node = document
+        for key in path[:-1]:
+            child = node.get(key)
+            if not isinstance(child, dict):
+                child = {}
+                node[key] = child
+            node = child
+        node[path[-1]] = value
+        facts = replace(facts, configs={**facts.configs, file: replace(config, document=document)})
+    after = next(item for item in _all(facts) if item.id == feature.id)
+    after.enabled = value
+    return after
+
+
 def feature_payloads(facts: Facts) -> list[dict[str, object]]:
     """Every feature as its wire object, in category order."""
     features = sorted(_all(facts), key=lambda item: CATEGORIES.index(item.category))
@@ -696,7 +730,14 @@ def feature_payloads(facts: Facts) -> list[dict[str, object]]:
         toggle = None
         if item.toggle is not None:
             file, path = item.toggle
-            toggle = {"file": file, "path": list(path), "enabled": item.enabled}
+            after = _toggled(facts, item)
+            toggle = {
+                "file": file,
+                "path": list(path),
+                "enabled": item.enabled,
+                "state_after": _state(after),
+                "requirements_after": _requirements(after),
+            }
         payloads.append(
             {
                 "id": item.id,
@@ -708,10 +749,7 @@ def feature_payloads(facts: Facts) -> list[dict[str, object]]:
                 "depends_on": list(item.depends_on),
                 "required_by": required_by[item.id],
                 "sources": [{"kind": kind, "path": path} for kind, path in item.sources],
-                "requirements": [
-                    {"title": title, "state": level, "detail": detail}
-                    for title, level, detail in item.requirements
-                ],
+                "requirements": _requirements(item),
                 "settings": _settings_rows(facts, item.settings),
                 "toggle": toggle,
             }

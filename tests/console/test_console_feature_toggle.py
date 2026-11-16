@@ -55,7 +55,9 @@ def _memory(repo: Path) -> dict[str, object]:
 
 def test_the_page_request_switches_the_feature_through_apply(tmp_path: Path) -> None:
     repo = _project(tmp_path)
-    assert _memory(repo)["state"] == "disabled"
+    before = _memory(repo)
+    assert before["state"] == "disabled"
+    forecast = cast(dict[str, object], before["toggle"])["state_after"]
 
     message = apply(repo, _request(repo, True))
 
@@ -63,7 +65,7 @@ def test_the_page_request_switches_the_feature_through_apply(tmp_path: Path) -> 
     document = json.loads((repo / ".harness/project.json").read_text(encoding="utf-8"))
     assert document["memory"] == {"enabled": True}
     assert document["base_branch"] == "main"
-    assert _memory(repo)["state"] == "partial"
+    assert _memory(repo)["state"] == forecast == "partial"
 
 
 def test_a_file_changed_after_the_snapshot_is_the_stale_exit(

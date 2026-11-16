@@ -293,14 +293,30 @@ describe("the Diagnostics Features tab", () => {
     expect(document.querySelector("#feature-switch-reason")?.textContent).toBe("Есть незавершённая запись конфигурации");
   });
 
-  test("the switch plan counts the states before and after", () => {
+  test("the switch plan shows the kernel's forecast: memory without sources becomes partial", () => {
     renderFeatures();
     pick("memory");
-    const count = (id: string, state: string) =>
-      document.querySelector(`#${id} [data-state="${state}"] b`)?.textContent;
-    expect(count("feature-plan-before", "disabled")).toBe("4");
-    expect(count("feature-plan-after", "disabled")).toBe("3");
-    expect(count("feature-plan-after", "working")).toBe(String(Number(count("feature-plan-before", "working")) + 1));
+    const count = (id: string, state: string) => Number(document.querySelector(`#${id} [data-state="${state}"] b`)?.textContent);
+    const plan = document.querySelector("#feature-plan") as HTMLElement;
+    expect(within(plan).getByText("Выключена → Частично")).toBeTruthy();
+    expect(count("feature-plan-before", "disabled")).toBe(4);
+    expect(count("feature-plan-after", "disabled")).toBe(3);
+    expect(count("feature-plan-after", "partial")).toBe(count("feature-plan-before", "partial") + 1);
+    expect(count("feature-plan-after", "working")).toBe(count("feature-plan-before", "working"));
+  });
+
+  test("the forecast is the server's toggle.state_after, not a rule of the page", () => {
+    const snapshot = {
+      ...FEATURES,
+      features: FEATURES.features.map((item) =>
+        item.id === "retry" && item.toggle ? { ...item, toggle: { ...item.toggle, state_after: "not_working" } } : item,
+      ),
+    };
+    renderFeatures(snapshot);
+    pick("retry");
+    const count = (id: string, state: string) => Number(document.querySelector(`#${id} [data-state="${state}"] b`)?.textContent);
+    expect(within(document.querySelector("#feature-plan") as HTMLElement).getByText("Выключена → Не работает")).toBeTruthy();
+    expect(count("feature-plan-after", "not_working")).toBe(count("feature-plan-before", "not_working") + 1);
   });
 });
 
@@ -318,6 +334,21 @@ const starts = (socket: FakeSocket) => socket.sent.filter((body) => body.type ==
 describe("switching a feature", () => {
   beforeEach(() => FakeSocket.reset());
 
+  test("disabling a real-fixture feature names its off effect and the forecast; no registry dependent stops", () => {
+    const { socket } = renderToggle();
+    pick("attestation");
+    act(() => fireEvent.click(screen.getByRole("switch")));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/^Выключить «Worker attestation»\. Состояние worker принимается без подтверждения\.$/)).toBeTruthy();
+    expect(within(dialog).queryByText(/Перестанут работать/)).toBeNull();
+    const context = dialog.querySelector("pre")!.textContent!;
+    expect(context).toContain("orchestration.json › worker_attestation_required: true → false");
+    expect(context).toContain("Worker attestation: Работает → Выключена");
+    act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" })));
+    expect(starts(socket)).toEqual([]);
+  });
+
+  // `required_by` is fabricated here: no feature of the real registry depends on a switchable one.
   test("disabling a feature others need asks first and shows what stops and the before/after plan", () => {
     const snapshot = {
       ...FEATURES,
@@ -347,6 +378,12 @@ describe("switching a feature", () => {
     act(() => fireEvent.click(screen.getByRole("switch")));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("configuration-apply")).toBeTruthy();
+    expect(
+      within(dialog).getByText(
+        "Включить «Память проекта». Будет работать частично: Память включена без источников (memory_policy.source_types, memory_policy.allow_paths)",
+      ),
+    ).toBeTruthy();
+    expect(dialog.querySelector("pre")!.textContent).toContain("Память проекта: Выключена → Частично");
     act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Запустить" })));
     const [start] = starts(socket);
     expect(start).toMatchObject({ command_id: "configuration-apply", confirmed: true });

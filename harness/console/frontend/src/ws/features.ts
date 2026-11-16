@@ -1,7 +1,7 @@
 /* The features.snapshot reply of Diagnostics: the Harness feature registry
    (harness/console/kernel/features.py) with the configuration digests a toggle writes against.
    The types are those of protocol.gen.ts; the parser checks the shape the screen relies on and
-   never recomputes a state. */
+   never recomputes a state: the state after a switch is the kernel's `toggle.state_after`. */
 import type { FeaturePayload } from "./protocol.gen";
 
 export type Feature = FeaturePayload;
@@ -34,6 +34,10 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 
+const requirementList = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every((item) => isObject(item) && typeof item.title === "string" && LEVELS.has(String(item.state)) && typeof item.detail === "string");
+
 function feature(value: unknown): value is Feature {
   if (!isObject(value)) return false;
   const { id, name, category, state, description, off_effect, depends_on, required_by, sources, requirements, settings, toggle } = value;
@@ -41,12 +45,7 @@ function feature(value: unknown): value is Feature {
   if (!FEATURE_CATEGORIES.includes(category as FeatureCategory) || !FEATURE_STATES.includes(state as FeatureState)) return false;
   if (!strings(depends_on) || !strings(required_by)) return false;
   if (!Array.isArray(sources) || !sources.every((item) => isObject(item) && typeof item.kind === "string" && typeof item.path === "string")) return false;
-  if (
-    !Array.isArray(requirements) ||
-    !requirements.every((item) => isObject(item) && typeof item.title === "string" && LEVELS.has(String(item.state)) && typeof item.detail === "string")
-  ) {
-    return false;
-  }
+  if (!requirementList(requirements)) return false;
   if (
     !Array.isArray(settings) ||
     !settings.every(
@@ -60,7 +59,15 @@ function feature(value: unknown): value is Feature {
   ) {
     return false;
   }
-  return toggle === null || (isObject(toggle) && FILES.has(String(toggle.file)) && strings(toggle.path) && typeof toggle.enabled === "boolean");
+  return (
+    toggle === null ||
+    (isObject(toggle) &&
+      FILES.has(String(toggle.file)) &&
+      strings(toggle.path) &&
+      typeof toggle.enabled === "boolean" &&
+      FEATURE_STATES.includes(toggle.state_after as FeatureState) &&
+      requirementList(toggle.requirements_after))
+  );
 }
 
 /** The snapshot of a features.snapshot reply without its envelope, or null off the shape. */
@@ -75,6 +82,13 @@ export function parseFeatures(value: unknown): FeaturesSnapshot | null {
     config_digests: config_digests as Record<string, string>,
     transaction_pending,
   };
+}
+
+/** The count of each state among `features` once `feature` takes the state the kernel forecast
+    for its switch (`toggle.state_after`); the other states stay as the server reported them. */
+export function countsAfterToggle(features: readonly Feature[], feature: Feature): Record<FeatureState, number> {
+  const after = feature.toggle?.state_after ?? feature.state;
+  return stateCounts(features.map((item) => (item.id === feature.id ? { ...item, state: after } : item)));
 }
 
 /** The count of each state among `features`. */

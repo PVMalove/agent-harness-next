@@ -9,9 +9,9 @@ import { Panel, PipeTabs, StatusIcon, Switch } from "../ds";
 import type { Tone } from "../ds";
 import { useI18n } from "../i18n";
 import { TabPanel } from "../views/Tabs";
-import { FEATURE_CATEGORIES, FEATURE_STATES, stateCounts } from "../ws/features";
+import { FEATURE_CATEGORIES, FEATURE_STATES, countsAfterToggle, stateCounts } from "../ws/features";
 import type { Feature, FeatureCategory, FeatureState, FeaturesSnapshot } from "../ws/features";
-import { STATE_WORD, countsAfter, stateAfter } from "./togglePlan";
+import { STATE_WORD } from "./togglePlan";
 
 export const STATE_TONE: Readonly<Record<FeatureState, Tone>> = {
   working: "ok",
@@ -339,7 +339,7 @@ export function FeaturesView({
                 <div className="ds-kv-row">
                   <dt>{t("Состояние")}</dt>
                   <dd>
-                    {t(STATE_LABEL[current.state])} → {t(STATE_LABEL[stateAfter(current, !on)])}
+                    {t(STATE_LABEL[current.state])} → {t(STATE_LABEL[current.toggle.state_after])}
                   </dd>
                 </div>
               </dl>
@@ -347,7 +347,7 @@ export function FeaturesView({
                 <span>{t("Сейчас")}</span>
                 <Counts counts={counts} id="feature-plan-before" />
                 <span>{t("После")}</span>
-                <Counts counts={countsAfter(features, current, !on)} id="feature-plan-after" />
+                <Counts counts={countsAfterToggle(features, current)} id="feature-plan-after" />
               </div>
               <p className="ds-note">{t("Запись идёт через подтверждённое применение конфигурации; отмена ничего не меняет.")}</p>
             </div>

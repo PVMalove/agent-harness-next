@@ -249,6 +249,8 @@ export type File1 = "project.json" | "orchestration.json";
  * @minItems 1
  */
 export type Path3 = [string, ...string[]];
+export type RequirementsAfter = FeatureRequirement[];
+export type StateAfter = "working" | "partial" | "not_working" | "disabled";
 export type Features = FeaturePayload[];
 export type Id14 = string | number | null;
 export type Ok11 = true;
@@ -955,7 +957,8 @@ export interface FeatureSource {
   path: Path2;
 }
 /**
- * The boolean configuration key that switches the feature and its current value.
+ * The boolean configuration key that switches the feature, its current value and the
+ * kernel's forecast: the state and requirements of the feature once the key is flipped.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "FeatureToggle".
@@ -964,6 +967,8 @@ export interface FeatureToggle {
   enabled: Enabled;
   file: File1;
   path: Path3;
+  requirements_after: RequirementsAfter;
+  state_after: StateAfter;
 }
 /**
  * The first page of a report body, a batch chronology or an update diff as JSON text.

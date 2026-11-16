@@ -297,6 +297,7 @@
     "Вид символа считается только для карты из кэша сервера": "The symbol kind is derived only for the server's cached map",
     "Включено — да; выключено — нет": "On — yes; off — no",
     "Включить": "Enable",
+    "Включить «{name}». Будет работать частично: {issues}": "Enable \"{name}\". It will work partially: {issues}",
     "Включить «{name}». Заработает не сразу: {blockers}": "Enable \"{name}\". It will not work right away: {blockers}",
     "Включить «{name}». Функция начнёт использоваться при следующем запуске.": "Enable \"{name}\". The feature takes effect on the next run.",
     "Включить функцию «{name}»": "Enable the feature \"{name}\"",

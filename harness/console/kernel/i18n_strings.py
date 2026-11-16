@@ -3011,6 +3011,7 @@ EN.update(
     {
         "Включить «{name}». Заработает не сразу: {blockers}": "Enable \"{name}\". It will not work right away: {blockers}",
         "Включить «{name}». Функция начнёт использоваться при следующем запуске.": "Enable \"{name}\". The feature takes effect on the next run.",
+        "Включить «{name}». Будет работать частично: {issues}": "Enable \"{name}\". It will work partially: {issues}",
         "Выключить «{name}». {effect}": "Disable \"{name}\". {effect}",
         "Перестанут работать: {names}": "Will stop working: {names}",
         "Включить функцию «{name}»": "Enable the feature \"{name}\"",

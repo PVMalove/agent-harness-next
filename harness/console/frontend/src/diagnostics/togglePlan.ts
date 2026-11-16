@@ -1,27 +1,13 @@
-/* What switching a feature changes: the state it takes, the state counts before and after and the
-   `configuration-apply` request of the switch. The state rule is the kernel's
-   (harness/console/kernel/features.py `_state`): a disabled feature is `disabled`; an enabled one
-   is `not_working` with an `err` requirement, `partial` with a `warn` one and `working` otherwise.
-   Pure functions over the snapshot; nothing is sent from here: the page hands the request to the
-   configuration command panel, whose confirmation starts the existing confirmed write. */
+/* What switching a feature changes: the `configuration-apply` request of the switch, what its
+   confirmation says and the before/after lines it shows. The state and requirements after the
+   switch are the kernel's forecast (`toggle.state_after` and `toggle.requirements_after` of
+   features.snapshot, computed in harness/console/kernel/features.py with the key flipped); nothing
+   here derives a state. Pure functions over the snapshot; nothing is sent from here: the page hands
+   the request to the configuration command panel, whose confirmation starts the existing
+   confirmed write. */
 import { draftRequest } from "../configuration/changes";
 import type { Change } from "../configuration/changes";
-import { stateCounts } from "../ws/features";
 import type { Feature, FeatureState, FeaturesSnapshot } from "../ws/features";
-
-/** The state `feature` takes when it is switched to `enabled`, from its current requirements. */
-export function stateAfter(feature: Feature, enabled: boolean): FeatureState {
-  if (!enabled) return "disabled";
-  const levels = new Set(feature.requirements.map((item) => item.state));
-  if (levels.has("err")) return "not_working";
-  if (levels.has("warn")) return "partial";
-  return "working";
-}
-
-/** The state counts of `features` once `feature` is switched to `enabled`. */
-export function countsAfter(features: readonly Feature[], feature: Feature, enabled: boolean): Record<FeatureState, number> {
-  return stateCounts(features.map((item) => (item.id === feature.id ? { ...item, state: stateAfter(item, enabled) } : item)));
-}
 
 /** A feature switch as the confirmed configuration write sends it: the one boolean change, the
     `configuration-apply` request built with the digests of the snapshot the user saw, what the
@@ -42,7 +28,8 @@ export const STATE_WORD: Readonly<Record<FeatureState, string>> = {
   disabled: "Выключена",
 };
 
-/** The plan of switching `feature` to `enabled`; null for a feature without a boolean key. */
+/** The plan of switching `feature` to `enabled`, the opposite of the `toggle.enabled` the forecast
+    was computed for; null for a feature without a boolean key or for no change. */
 export function togglePlan(
   snapshot: FeaturesSnapshot,
   feature: Feature,
@@ -50,19 +37,23 @@ export function togglePlan(
   t: Translate,
 ): TogglePlan | null {
   const toggle = feature.toggle;
-  if (toggle === null) return null;
+  if (toggle === null || toggle.enabled === enabled) return null;
   const changes: Change[] = [{ file: toggle.file, path: [...toggle.path], value: enabled }];
   const name = t(feature.name);
   const byId = new Map(snapshot.features.map((item) => [item.id, item]));
   let reason: string;
   if (enabled) {
-    const blockers = feature.requirements.filter((item) => item.state === "err");
-    reason = blockers.length
-      ? t("Включить «{name}». Заработает не сразу: {blockers}", {
-          name,
-          blockers: blockers.map((item) => (item.detail ? `${t(item.title)} (${item.detail})` : t(item.title))).join("; "),
-        })
-      : t("Включить «{name}». Функция начнёт использоваться при следующем запуске.", { name });
+    const issues = (level: "err" | "warn") =>
+      toggle.requirements_after
+        .filter((item) => item.state === level)
+        .map((item) => (item.detail ? `${t(item.title)} (${item.detail})` : t(item.title)))
+        .join("; ");
+    reason =
+      toggle.state_after === "not_working"
+        ? t("Включить «{name}». Заработает не сразу: {blockers}", { name, blockers: issues("err") })
+        : toggle.state_after === "partial"
+          ? t("Включить «{name}». Будет работать частично: {issues}", { name, issues: issues("warn") })
+          : t("Включить «{name}». Функция начнёт использоваться при следующем запуске.", { name });
   } else {
     const dependents = feature.required_by
       .map((id) => byId.get(id))
@@ -73,7 +64,7 @@ export function togglePlan(
   }
   const context = [
     `${toggle.file} › ${toggle.path.join(".")}: ${JSON.stringify(toggle.enabled)} → ${JSON.stringify(enabled)}`,
-    `${name}: ${t(STATE_WORD[feature.state])} → ${t(STATE_WORD[stateAfter(feature, enabled)])}`,
+    `${name}: ${t(STATE_WORD[feature.state])} → ${t(STATE_WORD[toggle.state_after])}`,
   ].join("\n");
   const description = t(enabled ? "Включить функцию «{name}»" : "Выключить функцию «{name}»", { name });
   return { changes, request: draftRequest(changes, snapshot.config_digests, description), reason, context };

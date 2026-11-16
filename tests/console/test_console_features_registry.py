@@ -93,12 +93,14 @@ def test_a_feature_without_its_boolean_key_is_disabled_with_a_toggle(
 
     memory = features["memory"]
     assert memory["state"] == "disabled"
-    assert memory["toggle"] == {
+    memory_toggle = cast(dict[str, object], memory["toggle"])
+    assert {key: memory_toggle[key] for key in ("file", "path", "enabled")} == {
         "file": "project.json",
         "path": ["memory", "enabled"],
         "enabled": False,
     }
-    assert features["attestation"]["toggle"] == {
+    attestation_toggle = cast(dict[str, object], features["attestation"]["toggle"])
+    assert {key: attestation_toggle[key] for key in ("file", "path", "enabled")} == {
         "file": "orchestration.json",
         "path": ["worker_attestation_required"],
         "enabled": False,
@@ -165,6 +167,42 @@ def test_enabled_memory_without_sources_is_partial(tmp_path: Path) -> None:
 
     assert features["memory"]["state"] == "partial"
     assert cast(dict[str, object], features["memory"]["toggle"])["enabled"] is True
+
+
+def test_enabling_memory_without_sources_is_forecast_partial(tmp_path: Path) -> None:
+    # The "memory enabled without sources" requirement exists only once memory is enabled, so the
+    # forecast evaluates the feature with the key flipped instead of reusing today's requirements.
+    memory = _by_id(_project(tmp_path, {"base_branch": "main"}))["memory"]
+
+    assert memory["state"] == "disabled"
+    assert memory["requirements"] == []
+    toggle = cast(dict[str, object], memory["toggle"])
+    assert toggle["state_after"] == "partial"
+    assert toggle["requirements_after"] == [
+        {
+            "title": "Память включена без источников",
+            "state": "warn",
+            "detail": "memory_policy.source_types, memory_policy.allow_paths",
+        }
+    ]
+
+
+def test_the_forecast_follows_the_other_keys_and_the_switch_direction(tmp_path: Path) -> None:
+    repo = _project(
+        tmp_path,
+        {"memory_policy": {"source_types": ["adr"], "allow_paths": ["docs/adr/"]}},
+    )
+    _write(
+        repo / ".harness/orchestration.json",
+        json.dumps({"worker_attestation_required": True}),
+    )
+
+    features = _by_id(repo)
+
+    assert cast(dict[str, object], features["memory"]["toggle"])["state_after"] == "working"
+    assert features["attestation"]["state"] == "working"
+    assert cast(dict[str, object], features["attestation"]["toggle"])["state_after"] == "disabled"
+    assert cast(dict[str, object], features["retry"]["toggle"])["state_after"] == "working"
 
 
 def test_settings_values_are_masked_and_clipped(tmp_path: Path) -> None:

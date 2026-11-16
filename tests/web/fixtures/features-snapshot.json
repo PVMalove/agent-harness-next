@@ -133,7 +133,9 @@
         "path": [
           "worker_attestation_required"
         ],
-        "enabled": true
+        "enabled": true,
+        "state_after": "disabled",
+        "requirements_after": []
       }
     },
     {
@@ -664,7 +666,15 @@
           "memory",
           "enabled"
         ],
-        "enabled": false
+        "enabled": false,
+        "state_after": "partial",
+        "requirements_after": [
+          {
+            "title": "Память включена без источников",
+            "state": "warn",
+            "detail": "memory_policy.source_types, memory_policy.allow_paths"
+          }
+        ]
       }
     },
     {
@@ -795,7 +805,9 @@
           "infrastructure_retry_policy",
           "enabled"
         ],
-        "enabled": false
+        "enabled": false,
+        "state_after": "working",
+        "requirements_after": []
       }
     },
     {
