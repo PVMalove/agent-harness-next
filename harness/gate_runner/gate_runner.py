@@ -51,7 +51,7 @@ SENSITIVE_OUTPUT: tuple[
 )
 
 
-# Bound for one Git plumbing command of the clean checkout: `worktree add` checks out a full tree.
+# Bound for one Git plumbing command of the clean checkout: `checkout` writes a full tree.
 GIT_TIMEOUT_SECONDS = 300
 _PYTHON_LAUNCHERS = frozenset({"python", "python3", "py"})
 # The first word of a shell command when it is a bare token: no quote, escape or whitespace.
@@ -110,14 +110,14 @@ class LocalPolicy:
 
 @dataclass(frozen=True)
 class CleanRoomPolicy:
-    """Запуск проверок качества в изолированном worktree, привязанном к коммиту-кандидату."""
+    """Запуск проверок качества в изолированном checkout, привязанном к коммиту-кандидату."""
 
     repository: Path
     candidate_commit: str
 
     @contextmanager
     def checkout(self) -> Iterator[Path]:
-        """Создать временное изолированное worktree для коммита-кандидата и удалить его при выходе."""
+        """Создать временный отдельный репозиторий на коммите-кандидате и удалить его при выходе."""
         if (
             not isinstance(self.candidate_commit, str)
             or re.fullmatch(r"[0-9a-fA-F]{7,64}", self.candidate_commit.strip()) is None
@@ -140,25 +140,7 @@ class CleanRoomPolicy:
             ) from exc
         checkout = worktree_root / "checkout"
         try:
-            created: subprocess.CompletedProcess[str] = _run_git(
-                [
-                    "git",
-                    "-C",
-                    str(self.repository),
-                    "worktree",
-                    "add",
-                    "--detach",
-                    str(checkout),
-                    "--",
-                    self.candidate_commit,
-                ],
-            )
-            if created.returncode != 0:
-                detail: str = sanitise((created.stderr or created.stdout).strip())
-                raise GateRunnerError(
-                    f"could not create clean QA worktree: {detail or 'unknown error'}",
-                    remedy=f"inspect the git worktree error above and fix the repository/candidate commit {self.candidate_commit} before retrying",
-                )
+            self._populate(checkout)
             resolved: subprocess.CompletedProcess[str] = _run_git(
                 ["git", "-C", str(checkout), "rev-parse", "--verify", "HEAD^{commit}"]
             )
@@ -192,25 +174,79 @@ class CleanRoomPolicy:
                 )
             yield checkout
         finally:
-            if checkout.exists():
-                try:
-                    _run_git(
-                        [
-                            "git",
-                            "-C",
-                            str(self.repository),
-                            "worktree",
-                            "remove",
-                            "--force",
-                            "--",
-                            str(checkout),
-                        ]
-                    )
-                except GateRunnerError:
-                    # Best-effort cleanup must not mask the QA outcome; the directory is still
-                    # removed below and `git worktree prune` drops the stale registration.
-                    pass
+            # The checkout is a standalone repository: removing the directory leaves nothing
+            # registered in the main repository's .git.
             shutil.rmtree(worktree_root, ignore_errors=True)
+
+    def _populate(self, checkout: Path) -> None:
+        """Build a standalone repository at the candidate without writing to the main repository's .git.
+
+        The checkout borrows objects through alternates and copies the local and remote-tracking
+        refs, so `git status` and `merge-base HEAD origin/<branch>` behave as in a linked worktree.
+        """
+        repository = str(self.repository)
+        self._require(
+            _run_git(
+                [
+                    "git",
+                    "-C",
+                    repository,
+                    "cat-file",
+                    "-e",
+                    f"{self.candidate_commit}^{{commit}}",
+                ]
+            )
+        )
+        common_dir = _run_git(
+            ["git", "-C", repository, "rev-parse", "--path-format=absolute", "--git-common-dir"]
+        )
+        self._require(common_dir)
+        common = Path(common_dir.stdout.strip())
+        self._require(_run_git(["git", "init", "--quiet", "--template=", str(checkout)]))
+        (checkout / ".git" / "objects" / "info").mkdir(parents=True, exist_ok=True)
+        (checkout / ".git" / "objects" / "info" / "alternates").write_text(
+            f"{common / 'objects'}\n", encoding="utf-8"
+        )
+        self._require(
+            _run_git(
+                [
+                    "git",
+                    "-C",
+                    str(checkout),
+                    "fetch",
+                    "--quiet",
+                    "--no-tags",
+                    "--update-head-ok",
+                    str(common),
+                    "+refs/heads/*:refs/heads/*",
+                    "+refs/remotes/*:refs/remotes/*",
+                ]
+            )
+        )
+        self._require(
+            _run_git(
+                [
+                    "git",
+                    "-C",
+                    str(checkout),
+                    "-c",
+                    "advice.detachedHead=false",
+                    "checkout",
+                    "--quiet",
+                    "--detach",
+                    self.candidate_commit,
+                ]
+            )
+        )
+
+    def _require(self, completed: subprocess.CompletedProcess[str]) -> None:
+        """Raise a gate error when one Git step of the clean checkout failed."""
+        if completed.returncode != 0:
+            detail: str = sanitise((completed.stderr or completed.stdout).strip())
+            raise GateRunnerError(
+                f"could not create clean QA worktree: {detail or 'unknown error'}",
+                remedy=f"inspect the git error above and fix the repository/candidate commit {self.candidate_commit} before retrying",
+            )
 
 
 @dataclass(frozen=True)
@@ -486,7 +522,7 @@ def concise_evidence(text: str) -> str:
 
 
 @contextmanager
-def _command_environment(checkout: Path) -> Iterator[dict[str, str]]:
+def _command_environment(storage_owner: Path) -> Iterator[dict[str, str]]:
     """The environment of the QA commands: temporary data in a fresh directory of the harness
     storage (`.harness/.sandboxes/runs/qa/tmp-*`), removed afterwards.
 
@@ -495,7 +531,7 @@ def _command_environment(checkout: Path) -> Iterator[dict[str, str]]:
     there never finds the checkout's own.
     """
     try:
-        parent = storage_path(checkout, "runs", "qa")
+        parent = storage_path(storage_owner, "runs", "qa")
         parent.mkdir(parents=True, exist_ok=True)
         directory = Path(tempfile.mkdtemp(prefix="tmp-", dir=parent))
     except (OSError, ValueError) as exc:
@@ -723,16 +759,23 @@ def _runs(group: CommandGroup, failed: bool) -> bool:
     return True
 
 
+@dataclass(frozen=True)
 class HostExecutor:
     """The groups as host processes of the coordinator, in one temporary directory: the
-    historical behaviour of ``run_gate`` and ``run_qa_stages``."""
+    historical behaviour of ``run_gate`` and ``run_qa_stages``.
+
+    ``repository`` owns the harness storage of the temporary directory; without it the checkout
+    does. A clean checkout is a standalone repository, so its storage is the source repository's.
+    """
+
+    repository: Path | None = None
 
     def run_groups(
         self, groups: Sequence[CommandGroup], checkout: Path, run: GroupContext
     ) -> list[GroupRun]:
         runs: list[GroupRun] = []
         failed = False
-        with _command_environment(checkout) as env:
+        with _command_environment(self.repository or checkout) as env:
             for group in groups:
                 if not _runs(group, failed):
                     unreached = [approved_command_text(item) for item in group.commands]
@@ -761,7 +804,11 @@ class HostExecutor:
 
 def _executor(policy: ExecutionPolicy) -> GroupExecutor:
     """The policy's own executor of command groups, or the host one."""
-    return policy if isinstance(policy, GroupExecutor) else HostExecutor()
+    if isinstance(policy, GroupExecutor):
+        return policy
+    if isinstance(policy, CleanRoomPolicy):
+        return HostExecutor(policy.repository)
+    return HostExecutor()
 
 
 def run_gate(

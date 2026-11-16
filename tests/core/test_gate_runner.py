@@ -430,6 +430,32 @@ def test_an_unwritable_checkout_storage_is_a_gate_error_not_an_os_error(
     assert "write access" in raised.value.remedy
 
 
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="a privileged process is not denied by file permissions",
+)
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows does not deny writes by POSIX mode bits"
+)
+def test_a_read_only_git_worktrees_directory_still_gives_a_clean_checkout(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    registry = repo / ".git" / "worktrees"
+    registry.mkdir()
+    registry.chmod(0o555)
+    try:
+        result = run_gate(
+            ["git rev-parse HEAD"], CleanRoomPolicy(repo, head), stop_on_failure=True
+        )
+        assert list(registry.iterdir()) == []
+    finally:
+        registry.chmod(0o755)
+    assert result.passed
+    runs = storage_path(repo, "runs", "qa")
+    assert list(runs.iterdir()) == []
+
+
 def test_an_unlaunchable_git_is_a_gate_error_and_leaves_no_checkout_directory(
     tmp_path: Path,
 ) -> None:
@@ -729,7 +755,7 @@ def test_a_hung_git_is_a_gate_error_and_leaves_no_checkout_directory(
     with mock.patch(
         "harness.gate_runner.gate_runner.subprocess.run",
         side_effect=_git_failing_run(
-            "worktree", subprocess.TimeoutExpired(["git"], 300)
+            "fetch", subprocess.TimeoutExpired(["git"], 300)
         ),
     ):
         with pytest.raises(GateRunnerError) as raised:

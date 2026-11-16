@@ -23,6 +23,7 @@
 
 ### Fixed
 
+- **[Clean QA checkout в песочнице]:** `qa run` и `integration local-qa` больше не вызывают `git worktree add` для clean checkout кандидата и не пишут в `.git/worktrees` основного репозитория, поэтому QA проходит при read-only git-метаданных. Checkout — отдельный репозиторий в `.harness/.sandboxes/` с объектами через alternates и копией локальных и `origin/*` ссылок; проверки SHA кандидата и чистоты `git status` сохранены (#1187).
 - **[Статус dispatch при закрытии batch в runtime store]:** `batch abandon` и `batch not-required` в эпохе runtime store закрывали dispatch только в записи batch, а запись `dispatch-status` оставалась `dispatched`/`working`: проверка существования шла по файлу, которого у store нет. Теперь статус получает `abandoned` или `cancelled`, как в файловом ledger (#814).
 - **[delivery-stats на runtime store]:** Метрики оркестрации `delivery-stats` после cutover читали оставшиеся файлы поколения файлового ledger — устаревшие данные — или отвечали «нет данных». Теперь записи `batches` и `dispatches` читаются через `state.read` runtime проекта; без работающего runtime отчёт называет `harness-runtime serve` (#814).
 - **[Задержка ответа serve]:** `harness-runtime serve` принимал соединение только на следующем такте опроса (до 25 мс), а клиент открывает соединение на каждый запрос, поэтому каждая команда coordinator ждала. Цикл accept теперь ждёт соединение через `poll(2)`: `state.read` на пустом store — около 3,4 мс вместо 25 мс; флаг остановки проверяется не реже, чем раньше (#1146).
