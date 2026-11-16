@@ -424,6 +424,110 @@ class CleanupTests(unittest.TestCase):
         self.assertFalse(result["failed"])
         self.assertEqual(result["worktrees"], [expected])
 
+    def _agent_worktree(self, name: str, branch: str) -> Path:
+        """Создать worktree в каталоге агентского приложения и отправить его ветку на origin."""
+        tree = self.repo / ".claude" / "worktrees" / name
+        tree.parent.mkdir(parents=True, exist_ok=True)
+        git(self.repo, "worktree", "add", "-b", branch, str(tree), "HEAD")
+        git(self.repo, "push", "-u", "origin", branch)
+        return tree
+
+    def test_hard_removes_a_clean_pushed_worktree_of_the_agent_application(self) -> None:
+        """Проверить, что hard cleanup удаляет worktree из `.claude/worktrees` и его ветку."""
+        self._add_origin()
+        branch = "feature/issue-5-five"
+        tree = self._agent_worktree("feature+issue-5-five", branch)
+        plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+        self.assertIn(
+            {"kind": "worktree", "path": str(tree), "branch": branch}, plan["remove"]
+        )
+        result = apply_cleanup(self.repo, plan, confirm="HARD")
+        self.assertFalse(result["failed"])
+        self.assertFalse(tree.exists())
+        self.assertEqual(git(self.repo, "branch", "--list", branch), "")
+
+    def test_hard_keeps_an_agent_worktree_on_a_branch_outside_the_pattern(self) -> None:
+        """Проверить, что worktree субагента с веткой вне шаблона проекта остаётся."""
+        self._add_origin()
+        tree = self._agent_worktree("agent-a1", "worktree-agent-a1")
+        plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+        self.assertIn(
+            {"path": str(tree), "reason": "unowned local branch"}, plan["skipped"]
+        )
+
+    def test_hard_keeps_a_locked_worktree(self) -> None:
+        """Проверить, что заблокированный worktree живой сессии остаётся и причина названа."""
+        self._add_origin()
+        tree = self._agent_worktree("feature+issue-6-six", "feature/issue-6-six")
+        git(self.repo, "worktree", "lock", str(tree))
+        plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+        self.assertIn(
+            {"path": str(tree), "reason": "worktree is locked"}, plan["skipped"]
+        )
+        self.assertIn("worktree is locked", REASONS_RU)
+
+    def _store_worktree(self) -> Path:
+        """Создать worktree в репозитории, где authority — runtime store."""
+        tree = self._worktrees_dir() / "issue-7-seven"
+        git(self.repo, "worktree", "add", "-b", "feature/issue-7-seven", str(tree), "HEAD")
+        state = self.repo / ".harness" / "orchestration" / "state"
+        state.mkdir(parents=True, exist_ok=True)
+        (state / "ledger.json").write_text(
+            json.dumps({"version": STORE_LEDGER_VERSION}), encoding="utf-8"
+        )
+        return tree
+
+    def test_the_runtime_removes_a_worktree_when_the_store_is_the_authority(
+        self,
+    ) -> None:
+        """Проверить, что при runtime store удаление идёт через `worktree.remove`, а не через git."""
+        tree = self._store_worktree()
+        with mock.patch("harness.cleanup.RuntimeClient") as client:
+            cleanup._remove_registered_worktree(
+                self.repo, self.repo / ".harness", tree
+            )
+        call = client.return_value.call.call_args
+        self.assertEqual(call.args, ("worktree.remove",))
+        self.assertEqual(call.kwargs["payload"], {"path": str(tree)})
+        self.assertEqual(call.kwargs["requires_minor"], 8)
+        self.assertTrue(tree.exists())
+
+    def test_git_removes_a_worktree_when_the_runtime_does_not_serve_the_operation(
+        self,
+    ) -> None:
+        """Проверить, что runtime без `worktree.remove` оставляет удаление локальному git."""
+        tree = self._store_worktree()
+        for code in ("unknown_operation", "protocol_unsupported"):
+            with self.subTest(code=code):
+                if not tree.exists():
+                    git(self.repo, "worktree", "add", str(tree), "feature/issue-7-seven")
+                with mock.patch("harness.cleanup.RuntimeClient") as client:
+                    client.return_value.call.side_effect = RuntimeClientError(
+                        code, "old runtime", remedy="update", domain="tooling"
+                    )
+                    cleanup._remove_registered_worktree(
+                        self.repo, self.repo / ".harness", tree
+                    )
+                self.assertFalse(tree.exists())
+
+    def test_a_refusal_of_the_runtime_keeps_the_worktree(self) -> None:
+        """Проверить, что отказ runtime не подменяется локальным git и называет код ошибки."""
+        tree = self._store_worktree()
+        with mock.patch("harness.cleanup.RuntimeClient") as client:
+            client.return_value.call.side_effect = RuntimeClientError(
+                "invariant_violation",
+                "git refused",
+                remedy="commit the changes",
+                domain="tooling",
+            )
+            with self.assertRaisesRegex(
+                OSError, r"\[invariant_violation\] git refused"
+            ):
+                cleanup._remove_registered_worktree(
+                    self.repo, self.repo / ".harness", tree
+                )
+        self.assertTrue(tree.exists())
+
     def test_hard_removes_clean_integration_worktree_only_when_pushed(self) -> None:
         """Проверить, что worktree с `integration/*` удаляется только после push на origin."""
         self._add_origin()

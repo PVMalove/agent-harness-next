@@ -72,8 +72,10 @@ EXECUTION_STATES = ("launching", "running", "stopping", "exited", "lost", "unkno
 # of a batch, the feature ``state.recovery`` (ADR 0026); minor 6 adds the read-only
 # ``qa.evidence.verify`` (``qa_evidence_verify`` of ADR 0021, section 7), the verdict on the stored QA
 # evidence of a Release Gate pair; minor 7 adds the ``filter`` field of ``state.read``, the
-# store-side selection of one batch or dispatch (ADR 0020, section 3).
-PROTOCOL_VERSION = (1, 7)
+# store-side selection of one batch or dispatch (ADR 0020, section 3); minor 8 adds
+# ``worktree.create`` and ``worktree.remove``, the managed issue worktrees a sandboxed coordinator
+# cannot create or remove itself (ADR 0038).
+PROTOCOL_VERSION = (1, 8)
 # The protocol minor a filtered ``state.read`` needs (ADR 0020, section 3). A fixed floor, not
 # ``PROTOCOL_VERSION[1]``: a later minor keeps it. The floor of the recovery records, minor 5, is
 # ``RECOVERY_PROTOCOL`` in ``recovery_status/runtime.py``.

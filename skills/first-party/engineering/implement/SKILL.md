@@ -34,14 +34,18 @@ Do not infer or repair an opt-in capability. Process one ticket to a terminal ba
 beginning another.
 
 Before any tracker write (the `status::*` label swap), confirm that this session is rooted in the
-main checkout and can write every directory the pipeline writes: `.git/worktrees` (for an existing
-issue worktree, its git metadata directory from `git -C <worktree> rev-parse --absolute-git-dir`),
-the issue worktree directory when it exists, and `.harness/.sandboxes/scratch/inbox/`. Probe each by
-creating and removing one temporary file. A sandboxed session writes only inside its own directory,
-and a worktree another session created stays read-only under `.git/worktrees` even from the main
-checkout. On a failure, stop with one message that names the directory and the action: open the
-session in the main checkout, one that can write the issue worktree and its git metadata. Touch
-neither the tracker nor the ledger. `batch create`, and `dispatch preflight` and `dispatch send` for a write role,
+main checkout and can write every directory the pipeline writes: for an existing issue worktree,
+its directory and its git metadata directory from `git -C <worktree> rev-parse --absolute-git-dir`,
+and `.harness/.sandboxes/scratch/inbox/`. Probe each by creating and removing one temporary file.
+For an issue worktree that does not exist yet, `runtime status` must list the feature
+`worktree.create`, or the session must be able to write `.git/worktrees`. A sandboxed session writes
+only inside its own directory, and a worktree it did not create stays read-only under
+`.git/worktrees` even from the main checkout until the session opens that access: in Claude Code
+call `EnterWorktree` with `path` set to the issue worktree, then `ExitWorktree` with `action: keep`
+(`docs/agents/worktrees.md` → Session write access), and probe again. On a failure the two calls do
+not repair, stop with one message that names the directory and the action: open the session in the
+main checkout, one that can write the issue worktree and its git metadata. Touch neither the
+tracker nor the ledger. `batch create`, and `dispatch preflight` and `dispatch send` for a write role,
 refuse an issue worktree or git metadata directory the session cannot write.
 
 If another batch holds the same unfinished ticket, branch or worktree, or the `concurrency_budget`
@@ -76,8 +80,11 @@ Start these steps only after the ticket pre-flight in "Coordinator contract" (bl
    A missing value for a ticket that has a parent epic is a blocker; do not infer it from the
    checkout or from memory. A ticket without a parent epic uses `base_branch`: omit `--integration-ref`.
 2. **Issue worktree.** Create it before `batch create`. `batch create` refuses a worktree that
-   `git worktree list` does not show. Use the exact commands, and the recovery after a half-done
-   `git worktree add -b`, in `docs/agents/worktrees.md` → Coordinator issue worktree. Stay in the main checkout.
+   `git worktree list` does not show. Use `worktree create` and the exact commands in
+   `docs/agents/worktrees.md` → Coordinator issue worktree; the recovery after a half-done manual
+   `git worktree add -b` is there too. If the answer has `session_write_access.writable: false`,
+   open the access with the two calls of Session write access before `batch create`. Stay in the
+   main checkout.
 3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`
    and `--prohibited-change`. Keep commands, paths, and IDs verbatim.
