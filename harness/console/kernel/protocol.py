@@ -54,6 +54,14 @@ UPDATE_DIFF_REQUEST = "update_harness.diff"
 # «Настройка»: the configuration files with their secrets masked and their digests, the version
 # store, a pending transaction and the runtime adapter preview; never written or recovered.
 CONFIGURATION_REQUEST = "configuration.snapshot"
+# AI advice in «Настройка»: a CLI check that never invokes a model, an advice request about one
+# parameter sent only on an explicit button press, and its cancellation. An ask is bounded by
+# ADVICE_TIMEOUT_SECONDS, a check by CHECK_TIMEOUT_SECONDS.
+ADVISOR_CHECK_REQUEST = "advisor.check"
+ADVISOR_ASK_REQUEST = "advisor.ask"
+ADVISOR_CANCEL_REQUEST = "advisor.cancel"
+ADVICE_TIMEOUT_SECONDS = 90
+CHECK_TIMEOUT_SECONDS = 15
 # The longest project-relative path a request may name.
 MAX_PATH_CHARS = 512
 # Worker steps: one page of a dispatch's worker log from a byte offset the client keeps, and a

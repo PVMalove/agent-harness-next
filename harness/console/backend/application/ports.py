@@ -311,3 +311,26 @@ class StepsLogReader(Protocol):
         budget: int,
         /,
     ) -> Mapping[str, object]: ...
+
+
+class AdviceNotFound(LookupError):
+    """The configuration has no wizard parameter at the requested file and path."""
+
+
+class AdvisorPort(Protocol):
+    """AI advice through the user's own CLI login; both calls block and stop soon after `cancel`
+    is set. `check` runs only the presence, version and login checks and returns the `CliStatus`
+    fields; it never invokes a model. `ask` reads the saved configuration on the server, sends
+    only the allowlisted facts of that one parameter and returns `{"outcome": "advice",
+    "advice": {...}}` or `{"outcome": "fallback", "cause": "refused" | "invalid", "reason"}`;
+    it raises `AdviceNotFound` for an unknown parameter and never writes."""
+
+    def check(self, provider: str, cancel: threading.Event) -> Mapping[str, object]: ...
+
+    def ask(
+        self,
+        provider: str,
+        file: str,
+        path: tuple[str, ...],
+        cancel: threading.Event,
+    ) -> Mapping[str, object]: ...

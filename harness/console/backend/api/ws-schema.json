@@ -37,6 +37,417 @@
       "title": "AdapterPayload",
       "type": "object"
     },
+    "AdviceComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "option": {
+          "title": "Option",
+          "type": "string"
+        },
+        "tradeoff": {
+          "title": "Tradeoff",
+          "type": "string"
+        }
+      },
+      "required": [
+        "option",
+        "tradeoff"
+      ],
+      "title": "AdviceComparison",
+      "type": "object"
+    },
+    "AdvicePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "comparison": {
+          "items": {
+            "$ref": "#/$defs/AdviceComparison"
+          },
+          "maxItems": 4,
+          "title": "Comparison",
+          "type": "array"
+        },
+        "impact": {
+          "title": "Impact",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "why": {
+          "title": "Why",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "why",
+        "impact",
+        "comparison"
+      ],
+      "title": "AdvicePayload",
+      "type": "object"
+    },
+    "AdvisorAdviceReply": {
+      "additionalProperties": false,
+      "properties": {
+        "advice": {
+          "$ref": "#/$defs/AdvicePayload"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "outcome": {
+          "const": "advice",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.ask",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "outcome",
+        "advice"
+      ],
+      "title": "AdvisorAdviceReply",
+      "type": "object"
+    },
+    "AdvisorAskRequest": {
+      "additionalProperties": false,
+      "description": "Asks for advice about one parameter; only the file and path travel, never a value.",
+      "properties": {
+        "file": {
+          "enum": [
+            "project.json",
+            "orchestration.json"
+          ],
+          "title": "File",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Id"
+        },
+        "path": {
+          "items": {
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Path",
+          "type": "array"
+        },
+        "provider": {
+          "enum": [
+            "codex",
+            "claude"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.ask",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "provider",
+        "file",
+        "path"
+      ],
+      "title": "AdvisorAskRequest",
+      "type": "object"
+    },
+    "AdvisorCancelReply": {
+      "additionalProperties": false,
+      "properties": {
+        "cancelled": {
+          "title": "Cancelled",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "advisor.cancel",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "cancelled"
+      ],
+      "title": "AdvisorCancelReply",
+      "type": "object"
+    },
+    "AdvisorCancelRequest": {
+      "additionalProperties": false,
+      "description": "Cancels an `advisor.ask` of the same connection.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "advisor.cancel",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "request_id"
+      ],
+      "title": "AdvisorCancelRequest",
+      "type": "object"
+    },
+    "AdvisorCheckReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/CliStatusPayload"
+        },
+        "type": {
+          "const": "advisor.check",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "status"
+      ],
+      "title": "AdvisorCheckReply",
+      "type": "object"
+    },
+    "AdvisorCheckRequest": {
+      "additionalProperties": false,
+      "description": "Checks CLI presence, version and login; never invokes a model.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "provider": {
+          "enum": [
+            "codex",
+            "claude"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.check",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "provider"
+      ],
+      "title": "AdvisorCheckRequest",
+      "type": "object"
+    },
+    "AdvisorFallbackReply": {
+      "additionalProperties": false,
+      "description": "No advice: the ordinary hints are shown and the draft does not change.",
+      "properties": {
+        "cause": {
+          "enum": [
+            "refused",
+            "invalid",
+            "timeout",
+            "cancelled"
+          ],
+          "title": "Cause",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "outcome": {
+          "const": "fallback",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.ask",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "outcome",
+        "cause",
+        "reason"
+      ],
+      "title": "AdvisorFallbackReply",
+      "type": "object"
+    },
     "AgentStep": {
       "additionalProperties": false,
       "description": "A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.",
@@ -99,6 +510,60 @@
         "observed_at"
       ],
       "title": "AgentStep",
+      "type": "object"
+    },
+    "CliStatusPayload": {
+      "additionalProperties": false,
+      "description": "What the CLI check learned; null for a stage it did not reach.",
+      "properties": {
+        "authorized": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Authorized"
+        },
+        "found": {
+          "title": "Found",
+          "type": "boolean"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "ready": {
+          "title": "Ready",
+          "type": "boolean"
+        },
+        "version_supported": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version Supported"
+        }
+      },
+      "required": [
+        "provider",
+        "found",
+        "version_supported",
+        "authorized",
+        "ready",
+        "message"
+      ],
+      "title": "CliStatusPayload",
       "type": "object"
     },
     "CommandDescriptor": {
@@ -312,12 +777,27 @@
         },
         {
           "$ref": "#/$defs/StepsReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCheckReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorAdviceReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorFallbackReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCancelReply"
         }
       ]
     },
     "ConsoleRequest": {
       "discriminator": {
         "mapping": {
+          "advisor.ask": "#/$defs/AdvisorAskRequest",
+          "advisor.cancel": "#/$defs/AdvisorCancelRequest",
+          "advisor.check": "#/$defs/AdvisorCheckRequest",
           "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "container_route.view": "#/$defs/ContainerRouteViewRequest",
@@ -453,6 +933,15 @@
         },
         {
           "$ref": "#/$defs/ConfigurationSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCheckRequest"
+        },
+        {
+          "$ref": "#/$defs/AdvisorAskRequest"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCancelRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"

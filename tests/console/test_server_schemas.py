@@ -410,3 +410,46 @@ def test_step_models_match_the_live_step_items_and_refuse_extra_fields() -> None
             )
     with pytest.raises(ValueError):
         schemas.REQUESTS.validate_python({"type": "steps.subscribe", "cursor": "x"})
+
+
+def test_advisor_models_have_the_field_sets_of_the_advisor_protocol() -> None:
+    from harness.console.backend.api.protocol import advisor
+
+    by_type: dict[str, type[BaseModel]] = {
+        "advisor.check": schemas.AdvisorCheckRequest,
+        "advisor.ask": schemas.AdvisorAskRequest,
+        "advisor.cancel": schemas.AdvisorCancelRequest,
+    }
+    assert set(by_type) == set(advisor._FIELDS)
+    for kind, model in by_type.items():
+        assert _fields(model) == advisor._FIELDS[kind], kind
+    ask = {
+        "id": "a",
+        "type": "advisor.ask",
+        "provider": "codex",
+        "file": "project.json",
+        "path": ["language"],
+    }
+    assert schemas.REQUESTS.validate_python(ask).type == "advisor.ask"
+    for broken in (
+        {**ask, "id": None},
+        {**ask, "value": "ru"},
+        {**ask, "path": ["../x"]},
+        {**ask, "provider": "other"},
+    ):
+        with pytest.raises(ValueError):
+            schemas.REQUESTS.validate_python(broken)
+    envelope = {"v": 1, "id": "a", "type": "advisor.ask", "ok": True}
+    for reply in (
+        {**envelope, "outcome": "fallback", "cause": "timeout", "reason": "r"},
+        {
+            **envelope,
+            "outcome": "advice",
+            "advice": {"value": "en", "why": "w", "impact": "i", "comparison": []},
+        },
+    ):
+        assert schemas.REPLIES.validate_python(reply).type == "advisor.ask"
+    with pytest.raises(ValueError):
+        schemas.REPLIES.validate_python(
+            {**envelope, "outcome": "fallback", "cause": "other", "reason": "r"}
+        )
