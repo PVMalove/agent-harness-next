@@ -343,14 +343,24 @@ class ConfigurationStep:
             target = target[part]
         return copy.deepcopy(target)
 
+    def _rule_recommendation(self, draft: ConfigurationDraft) -> Recommendation:
+        rule = _RECOMMENDERS.get(self.path[-1])
+        return None if rule is None else rule(self, draft, project_facts(draft.repo))
+
+    def _default_recommendation(self) -> tuple[object, str]:
+        return self.schema.get(
+            "default"
+        ), "Штатное значение схемы; проверьте его пригодность для вашего проекта."
+
+    def fact_recommendation(self, draft: ConfigurationDraft) -> tuple[object, str]:
+        """The rule from project facts, else the schema default; never the current value."""
+        advice = self._rule_recommendation(draft)
+        return advice if advice is not None else self._default_recommendation()
+
     def recommendation(self, draft: ConfigurationDraft) -> tuple[object, str]:
-        key = self.path[-1]
-        facts = project_facts(draft.repo)
-        rule = _RECOMMENDERS.get(key)
-        if rule is not None:
-            advice = rule(self, draft, facts)
-            if advice is not None:
-                return advice
+        advice = self._rule_recommendation(draft)
+        if advice is not None:
+            return advice
         value = self.value(draft)
         if value is not None and self.present(draft):
             try:
@@ -364,9 +374,7 @@ class ConfigurationStep:
                 value,
                 "Сохранить текущую настройку проекта; без дополнительных данных нет основания автоматически её менять.",
             )
-        return self.schema.get(
-            "default"
-        ), "Штатное значение схемы; проверьте его пригодность для вашего проекта."
+        return self._default_recommendation()
 
     def effect(self, value: object) -> str:
         if isinstance(value, bool):

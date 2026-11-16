@@ -17,7 +17,7 @@ from harness.console.kernel.configuration_advisor import (
     build_request,
     parse_response,
 )
-from harness.console.kernel.configuration_steps import steps_for
+from harness.console.kernel.configuration_steps import ConfigurationStep, steps_for
 from tests.console._configuration_fixture import installed_project
 
 
@@ -217,6 +217,224 @@ def test_a_rejected_response_names_the_reason(tmp_path: Path) -> None:
     ):
         with pytest.raises(AdvisorUnavailable, match=reason):
             parse_response(raw, field)
+
+
+_REQUEST_KEYS = {
+    "file",
+    "parameter",
+    "type",
+    "choices",
+    "more_choices",
+    "description",
+    "platform",
+    "project_markers",
+    "qa_command_detected",
+    "value_already_set",
+    "console_recommendation",
+}
+
+
+def _two_values(field: ConfigurationStep) -> tuple[object, object] | None:
+    if field.kind == "array" and field.choices:
+        candidates: list[object] = [[field.choices[0]], list(field.choices[:2])]
+    elif field.choices:
+        candidates = list(field.choices)
+    elif field.kind == "boolean":
+        candidates = [True, False]
+    elif field.kind in {"integer", "number"}:
+        candidates = [1, 2, 3, 5, 10, 60, 600, 3600]
+    elif field.kind == "string":
+        candidates = ["alpha-value", "beta-value"]
+    else:
+        return None
+    valid = []
+    for candidate in candidates:
+        try:
+            field.validate(candidate)
+        except ValueError:
+            continue
+        valid.append(candidate)
+    return (valid[0], valid[1]) if len(valid) >= 2 else None
+
+
+def test_the_request_carries_no_secret_path_command_model_or_current_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from harness.console.kernel.configuration_advisor import request_context
+    from harness.health import project_tracker
+    from tests.console._configuration_fixture import _orchestration_project
+
+    monkeypatch.setattr(
+        project_tracker,
+        "resolve_project_tracker",
+        lambda _repo: SimpleNamespace(effective=SimpleNamespace(type="local")),
+    )
+    _orchestration_project(tmp_path)
+    draft = ConfigurationDraft.load(tmp_path, ("project.json", "orchestration.json"))
+    sentinels = (
+        "sentinel-private-qa-command",
+        "/opt/sentinel/absolute/path",
+        str(tmp_path),
+        "sentinel-model-name-x9",
+        "ghp_SentinelTokenValue0123456789abcdefABCD",
+        "sentinel-branch-current",
+    )
+    draft.set_value(
+        "project.json", ("qa_gate_commands",), ["sentinel-private-qa-command"]
+    )
+    draft.set_value("project.json", ("base_branch",), "sentinel-branch-current")
+    draft.set_value("project.json", ("branch_pattern",), "/opt/sentinel/absolute/path")
+    draft.set_value(
+        "orchestration.json",
+        ("assignment_plans", "architect", "runtimes", "claude", "model"),
+        "sentinel-model-name-x9",
+    )
+    draft.set_value(
+        "orchestration.json",
+        ("developer_verification_commands",),
+        ["ghp_SentinelTokenValue0123456789abcdefABCD"],
+    )
+    steps = steps_for(draft)
+    assert len(steps) > 10
+    checked = 0
+    for field in steps:
+        request = build_request(draft, field)
+        for sentinel in sentinels:
+            assert sentinel not in request, (field.path, sentinel)
+        context = request_context(draft, field)
+        assert set(context) == _REQUEST_KEYS, field.path
+        values = _two_values(field)
+        if values is None:
+            continue
+        snapshots = []
+        for value in values:
+            draft.set_value(field.file, field.path, value)
+            snapshots.append(request_context(draft, field))
+        assert snapshots[0] == snapshots[1], field.path
+        assert snapshots[0]["value_already_set"] is True
+        checked += 1
+    assert checked > 5
+
+
+def test_the_language_recommendation_does_not_echo_the_current_value(
+    tmp_path: Path,
+) -> None:
+    from harness.console.kernel.configuration_advisor import request_context
+
+    installed_project(tmp_path)
+    draft = ConfigurationDraft.load(tmp_path, ("project.json",))
+    field = next(s for s in steps_for(draft) if s.path == ("language",))
+    recommendations = set()
+    for value in ("ru", "en"):
+        draft.set_value("project.json", ("language",), value)
+        recommendations.add(request_context(draft, field)["console_recommendation"])
+        # The wizard text still offers to keep the current setting.
+        assert field.recommendation(draft)[0] == value
+    assert len(recommendations) == 1
+
+
+def _fake_cli(
+    monkeypatch: pytest.MonkeyPatch,
+    help_text: str,
+    status: str,
+    seen: list[list[str]],
+) -> None:
+    from harness.console.kernel import configuration_advisor as advisor
+
+    def run(
+        argv: list[str],
+        cwd: Path,
+        prompt: str,
+        cancel: Event,
+        timeout: float,
+        **_: object,
+    ) -> str:
+        seen.append(argv)
+        if "--help" in argv:
+            return help_text
+        if "login" in argv or "auth" in argv:
+            return status
+        raise AssertionError("check_cli must never call a model")
+
+    monkeypatch.setattr(advisor, "_run", run)
+
+
+_CODEX_HELP = (
+    "--ignore-user-config --ignore-rules --ephemeral --output-schema --disable"
+)
+_CLAUDE_HELP = (
+    "--safe-mode --tools --strict-mcp-config --no-session-persistence --json-schema"
+)
+
+
+@pytest.mark.parametrize(
+    ("provider", "which", "help_text", "status", "expected"),
+    [
+        ("codex", None, _CODEX_HELP, "Logged in", (False, None, None, False)),
+        ("codex", "/bin/codex", "--disable", "Logged in", (True, False, None, False)),
+        ("codex", "/bin/codex", _CODEX_HELP, "Not logged in", (True, True, False, False)),
+        ("codex", "/bin/codex", _CODEX_HELP, "Logged in", (True, True, True, True)),
+        ("claude", "/bin/claude", "--tools", '{"loggedIn": true}', (True, False, None, False)),
+        ("claude", "/bin/claude", _CLAUDE_HELP, '{"loggedIn": false}', (True, True, False, False)),
+        ("claude", "/bin/claude", _CLAUDE_HELP, "garbage", (True, True, None, False)),
+        ("claude", "/bin/claude", _CLAUDE_HELP, '{"loggedIn": true}', (True, True, True, True)),
+    ],
+)
+def test_check_cli_reports_presence_version_and_authorization_without_a_model(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    which: str | None,
+    help_text: str,
+    status: str,
+    expected: tuple[bool, bool | None, bool | None, bool],
+) -> None:
+    from harness.console.kernel import configuration_advisor as advisor
+
+    seen: list[list[str]] = []
+    _fake_cli(monkeypatch, help_text, status, seen)
+    monkeypatch.setattr(shutil, "which", lambda _: which)
+    result = advisor.check_cli(provider, Event())
+    assert (
+        result.found,
+        result.version_supported,
+        result.authorized,
+        result.ready,
+    ) == expected
+    assert result.provider == provider and result.message
+    assert advisor.availability(provider, Event()) == result.message
+    assert all("--help" in argv or "status" in argv for argv in seen), seen
+
+
+def test_failures_are_typed_and_keep_their_messages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console.kernel import configuration_advisor as advisor
+
+    installed_project(tmp_path)
+    draft = ConfigurationDraft.load(tmp_path, ("project.json",))
+    field = steps_for(draft)[0]
+    for error in (
+        advisor.CliMissing,
+        advisor.CliUnsupported,
+        advisor.CliUnauthorized,
+        advisor.AdviceRejected,
+    ):
+        assert issubclass(error, AdvisorUnavailable)
+    with pytest.raises(advisor.AdviceRejected, match="не в формате JSON"):
+        parse_response("не JSON", field)
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    with pytest.raises(advisor.CliMissing, match="CLI не найден"):
+        advise("codex", draft, field, Event())
+    seen: list[list[str]] = []
+    monkeypatch.setattr(shutil, "which", lambda _: "/bin/codex")
+    _fake_cli(monkeypatch, "--disable", "Logged in", seen)
+    with pytest.raises(advisor.CliUnsupported, match="не поддерживает"):
+        advise("codex", draft, field, Event())
+    _fake_cli(monkeypatch, _CODEX_HELP, "Not logged in", seen)
+    with pytest.raises(advisor.CliUnauthorized, match="авторизации Codex"):
+        advise("codex", draft, field, Event())
 
 
 @pytest.fixture(autouse=True)
