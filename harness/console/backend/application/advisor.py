@@ -40,6 +40,9 @@ class AdvisorService:
         self._timeout = timeout
         self._check_timeout = check_timeout
         self._running = 0
+        # The check of each provider that is running now: concurrent callers share it, so many tabs
+        # or repeated clicks never queue more CLI checks than there are providers on the executor.
+        self._checks: dict[str, asyncio.Future[Mapping[str, object]]] = {}
 
     async def _bounded(
         self,
@@ -60,6 +63,17 @@ class AdvisorService:
                 cancel.set()
 
     async def check(self, provider: str) -> Mapping[str, object]:
+        """The CLI status of `provider`; a check already running for it is shared, not repeated.
+        A finished check is not kept: the next call runs the CLI again."""
+        running = self._checks.get(provider)
+        if running is None:
+            running = asyncio.ensure_future(self._check_once(provider))
+            self._checks[provider] = running
+            running.add_done_callback(lambda _done: self._checks.pop(provider, None))
+        # One caller going away does not cancel the check the others wait for.
+        return await asyncio.shield(running)
+
+    async def _check_once(self, provider: str) -> Mapping[str, object]:
         cancel = threading.Event()
         task = asyncio.ensure_future(
             asyncio.to_thread(self._port.check, provider, cancel)

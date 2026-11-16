@@ -142,6 +142,46 @@ def test_check_reports_the_cli_status_and_never_asks() -> None:
     asyncio.run(scenario())
 
 
+class SlowCheckPort(FakePort):
+    """A check that holds its thread until `release`, counting the checks that run at once."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.running = 0
+        self.peak = 0
+        self._lock = threading.Lock()
+
+    def check(self, provider: str, cancel: threading.Event) -> Mapping[str, object]:
+        with self._lock:
+            self.running += 1
+            self.peak = max(self.peak, self.running)
+        self.release.wait(5)
+        with self._lock:
+            self.running -= 1
+        return super().check(provider, cancel)
+
+
+def test_concurrent_checks_of_a_provider_share_one_cli_run() -> None:
+    """Many tabs or repeated clicks never queue more CLI checks than there are providers."""
+
+    async def scenario() -> None:
+        port = SlowCheckPort()
+        service = AdvisorService(port)
+        checks = [asyncio.create_task(service.check("codex")) for _ in range(6)]
+        checks += [asyncio.create_task(service.check("claude")) for _ in range(3)]
+        await asyncio.sleep(0.2)
+        port.release.set()
+        statuses = await asyncio.gather(*checks)
+        assert sorted(port.checked) == ["claude", "codex"]
+        assert port.peak <= 2
+        assert [status["provider"] for status in statuses] == ["codex"] * 6 + ["claude"] * 3
+        # A finished check is not cached: the next one runs the CLI again.
+        await service.check("codex")
+        assert sorted(port.checked) == ["claude", "codex", "codex"]
+
+    asyncio.run(scenario())
+
+
 def test_an_ask_returns_the_advice_of_the_named_parameter() -> None:
     async def scenario() -> None:
         port, wire = FakePort(), Wire()
