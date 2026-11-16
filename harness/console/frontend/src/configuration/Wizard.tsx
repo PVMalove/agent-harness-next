@@ -77,6 +77,8 @@ export function Wizard({ facts, draft }: { facts: ConfigurationFacts; draft: Con
   const { t } = useI18n();
   const params = facts.wizard ?? null;
   const [index, setIndex] = useState(0);
+  // The parameter whose last value the draft refused; another parameter clears the refusal.
+  const [refusedKey, setRefusedKey] = useState<string | null>(null);
   if (!params || params.length === 0) {
     return (
       <section className="ds-panel ds-wz-empty" id="configuration-wizard">
@@ -93,7 +95,13 @@ export function Wizard({ facts, draft }: { facts: ConfigurationFacts; draft: Con
     return document === null ? currentValue(facts, item) : valueAt(document, item.path);
   };
   const broken = draft.document(param.file) === null;
-  const set = (next: unknown) => draft.setValue(param.file, param.path, next);
+  // A draft that cannot take the value says why instead of silently doing nothing.
+  const set = (next: unknown) => {
+    const taken = draft.setValue(param.file, param.path, next);
+    setRefusedKey(taken ? null : keyOf(param));
+    return taken;
+  };
+  const refused = refusedKey === keyOf(param);
   const answered = params.filter((item) => value(item) !== undefined).length;
   const recommendation = param.recommendation ?? null;
 
@@ -156,7 +164,7 @@ export function Wizard({ facts, draft }: { facts: ConfigurationFacts; draft: Con
             <b>{t("Сейчас:")}</b> <code>{shown(currentValue(facts, param))}</code>
           </div>
           <ValueField param={param} value={value(param)} onChange={set} />
-          {broken && (
+          {(broken || refused) && (
             <p className="ds-alert ds-alert-err" role="alert">
               {t("Черновик файла не разобран: исправьте JSON на вкладке JSON.")}
             </p>
@@ -183,7 +191,7 @@ export function Wizard({ facts, draft }: { facts: ConfigurationFacts; draft: Con
             </button>
           </div>
         </article>
-        <AdvisorPanel param={param} onAccept={set} />
+        <AdvisorPanel param={param} refusal={broken ? t("Черновик файла не разобран: исправьте JSON на вкладке JSON.") : null} onAccept={set} />
       </section>
     </div>
   );
