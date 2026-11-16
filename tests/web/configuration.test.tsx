@@ -33,39 +33,52 @@ function renderPage(value: unknown = CONFIGURATION) {
 
 const content = () => document.querySelector("main#content")?.textContent ?? "";
 const starts = (socket: FakeSocket) => socket.sent.filter((body) => body.type === "job.start");
-const tab = (name: string) => act(() => fireEvent.click(screen.getByRole("tab", { name })));
+const tab = (name: string) => act(() => fireEvent.click(screen.getByRole("tab", { name: new RegExp(`${name}$`) })));
 const button = (command: string) => document.querySelector(`[data-run="${command}"]`) as HTMLButtonElement;
 const confirm = () => act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Запустить" })));
 const edit = (name: string, document: unknown) =>
   act(() => fireEvent.change(screen.getByRole("textbox", { name }), { target: { value: JSON.stringify(document, null, 2) } }));
+const changeRows = () => [...document.querySelectorAll("#configuration-changes li")].map((item) => item.textContent);
 const PROJECT = CONFIGURATION.files["project.json"].document;
 const WIZARD = [
   { group: "orchestrator", file: "orchestration.json", path: ["approval_policy"], label: "Политика согласования", type: "enum",
-    choices: ["manual_all", "milestone", "low_risk", "auto"], default: "manual_all", minimum: null, description: "Политика согласования шагов." },
-  { group: "project", file: "project.json", path: ["language"], label: "Язык отчётов", type: "enum", choices: ["ru", "en"], default: null, minimum: null, description: "" },
+    choices: ["manual_all", "milestone", "low_risk", "auto"], default: "manual_all", minimum: null, description: "Политика согласования шагов.",
+    recommendation: { value: "manual_all", reason: "Ручное согласование безопасно для первой настройки." } },
+  { group: "project", file: "project.json", path: ["language"], label: "Язык отчётов", type: "enum", choices: ["ru", "en"], default: null, minimum: null, description: "",
+    recommendation: null },
   { group: "qa", file: "orchestration.json", path: ["execution_policy", "qa_lease_seconds"], label: "Аренда QA lane, с", type: "integer",
-    choices: [], default: 1800, minimum: 1, description: "Срок аренды QA lane в секундах." },
+    choices: [], default: 1800, minimum: 1, description: "Срок аренды QA lane в секундах.", recommendation: null },
   { group: "dispatch", file: "orchestration.json", path: ["execution_policy", "dispatch_poll_interval_seconds"], label: "Интервал опроса dispatch, с",
-    type: "integer", choices: [], default: 5, minimum: 1, description: "" },
-  { group: "hooks", file: "project.json", path: ["branch_pattern"], label: "Шаблон имени ветки", type: "string", choices: [], default: null, minimum: null, description: "" },
+    type: "integer", choices: [], default: 5, minimum: 1, description: "", recommendation: null },
+  { group: "hooks", file: "project.json", path: ["branch_pattern"], label: "Шаблон имени ветки", type: "string", choices: [], default: null, minimum: null, description: "",
+    recommendation: null },
+];
+const VERSION_ID = "20261116T101500Z-0123456789ab";
+const VERSIONS = [
+  { id: VERSION_ID, created_at: "2026-11-16T10:15:00+00:00", description: "перед QA", files: ["project.json"], package_version: "2.1.0", problem: "" },
 ];
 
 describe("the Configuration route", () => {
   beforeEach(() => FakeSocket.reset());
 
-  test("shows every fact the TUI shows on the overview and the history tab", () => {
+  test("has five tabs: Overview, Parameters, JSON, Changes, History", () => {
+    renderPage({ ...CONFIGURATION, wizard: WIZARD });
+    expect(screen.getAllByRole("tab").map((item) => item.textContent)).toEqual(["1Обзор", "2Параметры", "3JSON", "4Изменения", "5История"]);
+    expect(document.querySelectorAll("main [role=tablist]")).toHaveLength(1);
+  });
+
+  test("shows every fact the TUI shows on the overview and the store root in the history", () => {
     renderPage();
     const store = CONFIGURATION.store_root;
     expect((FACTS as string[]).filter((fact) => fact !== store && !content().includes(fact))).toEqual([]);
     tab("История");
     expect(content()).toContain(store);
-    expect(content()).toContain("Список версий и восстановление доступны в TUI.");
+    expect(content()).toContain("Восстановление версии доступно в TUI.");
   });
 
   test("the leaf change set is that of the TUI draft; an untouched masked secret is not sent", () => {
     const edited = { ...PROJECT, tracker: { ...PROJECT.tracker, kind: "gitlab" }, qa_gate_commands: ["make lint", "make test"] };
     const { branch_pattern: _removed, ...rest } = edited;
-    // Base keys first, in their order (the fixture's keys are sorted), as `_changed_paths` walks them.
     expect(leafChanges(PROJECT, rest, "project.json")).toEqual([
       { file: "project.json", path: ["branch_pattern"], remove: true },
       { file: "project.json", path: ["qa_gate_commands"], value: ["make lint", "make test"] },
@@ -75,11 +88,17 @@ describe("the Configuration route", () => {
     expect(draftRequest([], {}, "")).toBe('{"changes":[],"expected":{},"description":""}');
   });
 
-  test("apply sends the changes and only the changed file's digest after a confirmation", () => {
+  test("a JSON edit is applied from the Changes tab with only the changed file's digest after a confirmation", () => {
     const { socket } = renderPage();
-    tab("project.json");
+    tab("Изменения");
     expect(button("configuration-apply").disabled).toBe(true);
+    tab("JSON");
+    expect(screen.getAllByRole("tab", { name: /json$/ }).map((item) => item.textContent)).toEqual(["project.json", "orchestration.json"]);
+    expect(screen.getByRole("tablist", { name: "Файл" })).toBeTruthy();
     edit("project.json", { ...PROJECT, tracker: { ...PROJECT.tracker, kind: "gitlab" } });
+    expect(starts(socket)).toEqual([]);
+    tab("Изменения");
+    expect(changeRows()).toEqual(['project.json → tracker.kind "gitlab"']);
     act(() => fireEvent.click(button("configuration-apply")));
     act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Отмена" })));
     expect(starts(socket)).toEqual([]);
@@ -96,11 +115,16 @@ describe("the Configuration route", () => {
 
   test("a mask typed into a value and broken JSON are refused in the page", () => {
     const { socket } = renderPage();
-    tab("orchestration.json");
+    tab("JSON");
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "orchestration.json" })));
     edit("orchestration.json", { roles: { developer: { model: "••••••" } } });
     expect(content()).toContain("Скрытое значение нельзя записать: введите его заново");
+    tab("Изменения");
     expect(button("configuration-save-draft").disabled).toBe(true);
+    tab("JSON");
+    act(() => fireEvent.click(screen.getByRole("tab", { name: "orchestration.json" })));
     act(() => fireEvent.change(screen.getByRole("textbox", { name: "orchestration.json" }), { target: { value: "{" } }));
+    tab("Изменения");
     expect(button("configuration-apply").disabled).toBe(true);
     expect(starts(socket)).toEqual([]);
   });
@@ -130,85 +154,103 @@ describe("the Configuration route", () => {
     });
   });
 
-  test("the tabs follow the mockup: Overview, Settings, project.json, orchestration.json, History", () => {
-    renderPage({ ...CONFIGURATION, wizard: WIZARD });
-    expect(screen.getAllByRole("tab").map((item) => item.textContent)).toEqual(["Обзор", "Настройки", "project.json", "orchestration.json", "История"]);
-  });
-
-  test("the Settings wizard asks group by group and sends the answer as a confirmed draft", () => {
+  test("a Parameters answer and the console recommendation change only the draft; Changes writes it", () => {
     const { socket } = renderPage({ ...CONFIGURATION, wizard: WIZARD });
-    tab("Настройки");
-    const groups = [...document.querySelectorAll("#configuration-wizard .wizard-group")];
-    expect(groups.map((item) => item.querySelector("b")?.textContent)).toEqual(["Оркестратор", "Проект", "QA", "Dispatch", "Хуки"]);
+    tab("Параметры");
     const wizard = document.querySelector("#configuration-wizard") as HTMLElement;
-    expect(wizard.querySelector(".wizard-param-head code")?.textContent).toBe("orchestration.json → approval_policy");
-    expect(wizard.textContent).toContain("Политика согласования");
-    expect(wizard.textContent).toContain("manual_all");
-    act(() => fireEvent.change(within(wizard).getByLabelText("Политика согласования"), { target: { value: "milestone" } }));
-    act(() => fireEvent.click(groups[2]!));
-    expect(wizard.querySelector(".wizard-param-head code")?.textContent).toBe("orchestration.json → execution_policy.qa_lease_seconds");
+    expect([...wizard.querySelectorAll(".ds-wz-group b")].map((item) => item.textContent)).toEqual(["Оркестратор", "Проект", "QA", "Dispatch", "Хуки"]);
+    expect(wizard.querySelector(".ds-wz-head code")?.textContent).toBe("orchestration.json → approval_policy");
+    expect(wizard.querySelector("#configuration-recommendation")?.textContent).toContain("Ручное согласование безопасно");
+    expect(wizard.querySelectorAll("[data-run]")).toHaveLength(0);
+    act(() => fireEvent.click(within(wizard).getByRole("button", { name: "Принять рекомендацию консоли" })));
+    act(() => fireEvent.click(wizard.querySelectorAll(".ds-wz-group")[2]!));
+    expect(wizard.querySelector(".ds-wz-head code")?.textContent).toBe("orchestration.json → execution_policy.qa_lease_seconds");
+    expect(within(wizard).getByRole("button", { name: "Принять рекомендацию консоли" })).toHaveProperty("disabled", true);
     act(() => fireEvent.change(within(wizard).getByLabelText("Аренда QA lane, с"), { target: { value: "900" } }));
-    expect([...wizard.querySelectorAll(".configuration-changes li")].map((item) => item.textContent)).toEqual([
-      'orchestration.json → approval_policy "milestone"',
-      "orchestration.json → execution_policy.qa_lease_seconds 900",
+    expect(starts(socket)).toEqual([]);
+    tab("Изменения");
+    expect(changeRows()).toEqual([
+      'orchestration.json → approval_policy "manual_all"',
+      "orchestration.json → execution_policy {\"qa_lease_seconds\":900}",
     ]);
-    act(() => fireEvent.click(within(wizard).getByRole("button", { name: "Применить" })));
+    act(() => fireEvent.click(button("configuration-apply")));
     confirm();
     const [start] = starts(socket);
     expect(start).toMatchObject({ command_id: "configuration-apply", confirmed: true });
-    expect(JSON.parse(String((start!.values as Record<string, string>).request))).toEqual({
-      changes: [
-        { file: "orchestration.json", path: ["approval_policy"], value: "milestone" },
-        { file: "orchestration.json", path: ["execution_policy", "qa_lease_seconds"], value: 900 },
-      ],
+    expect(JSON.parse(String((start!.values as Record<string, string>).request))).toMatchObject({
       expected: { "orchestration.json": CONFIGURATION.files["orchestration.json"].digest },
       description: "",
     });
   });
 
-  test("without a wizard catalog the Settings tab says why", () => {
+  test("a JSON edit and a Parameters answer share one draft", () => {
+    renderPage({ ...CONFIGURATION, wizard: WIZARD });
+    tab("Параметры");
+    act(() => fireEvent.click(document.querySelectorAll("#configuration-wizard .ds-wz-group")[4]!));
+    act(() => fireEvent.change(screen.getByLabelText("Шаблон имени ветки"), { target: { value: "feature/{id}" } }));
+    tab("JSON");
+    expect((screen.getByRole("textbox", { name: "project.json" }) as HTMLTextAreaElement).value).toContain('"branch_pattern": "feature/{id}"');
+    tab("Изменения");
+    expect(changeRows()).toEqual(['project.json → branch_pattern "feature/{id}"']);
+  });
+
+  test("without a wizard catalog the Parameters tab says why", () => {
     renderPage({ ...CONFIGURATION, wizard: null });
-    tab("Настройки");
+    tab("Параметры");
     expect(document.querySelector("#configuration-wizard")?.textContent).toContain("нет данных");
   });
 
-  test("the page follows the mockup: header, four KPIs, one tab bar, overview, editor and history panels", () => {
-    renderPage();
-    const actions = [...document.querySelectorAll(".settings-title .actions > *")];
-    expect(actions.map((item) => item.textContent?.trim())).toEqual(["Проверить", "Экспорт", "Диагностика"]);
-    expect(actions.every((item) => item.querySelector("svg"))).toBe(true);
-    const facts = [...document.querySelectorAll(".settings-title .home-facts > span")].map((item) => item.textContent);
-    expect(facts).toContain("1 config");
-    expect(facts.at(-1)).toMatch(/^\d\d:\d\d:\d\d$/);
-    const kpis = [...document.querySelectorAll("#configuration-kpi > div")];
-    expect(kpis.map((card) => card.querySelector("span")?.textContent)).toEqual(["project.json", "orchestration.json", "Hook policy", "Runtime store"]);
-    expect(kpis.map((card) => card.querySelector("b")?.textContent)).toEqual(["valid", "нет файла", "нет данных", "нет данных"]);
-    expect(document.querySelector("#configuration-kpi")?.textContent).not.toMatch(/[✔✖○⚠]/);
-    expect(document.querySelectorAll("main [role=tablist]")).toHaveLength(1);
-    expect(document.querySelector("main [role=tablist]")?.className).toBe("orch-tabbar settings-tabbar");
-    const rows = [...document.querySelectorAll("#configuration-files .settings-config-row")];
-    expect(rows.map((row) => row.querySelector("b")?.textContent)).toEqual(["project.json", "orchestration.json", "hook-policy.json", "runtime-store"]);
-    expect(rows.every((row) => row.querySelector("svg") && row.querySelector(".orch-pill"))).toBe(true);
-    const policy = document.querySelector("#configuration-policy") as HTMLElement;
-    expect(policy.querySelector("h2")?.textContent).toBe("Политики");
-    expect(within(policy).getByText("Шаблон имени ветки").nextElementSibling?.textContent).toBe("feature/issue-{id}-{slug}");
-    expect(policy.querySelectorAll(".settings-policy-chips .orch-pill").length).toBeGreaterThan(0);
-    expect(document.querySelector(".settings-note-body a[href='#/diagnostics']")).toBeTruthy();
-    tab("project.json");
-    expect(document.querySelector("section.settings-editor .panel-head h2")?.textContent).toBe("Редактор · project.json");
-    expect(document.querySelector("section.settings-editor .settings-file-line code")?.textContent).toBe(".harness/project.json");
-    expect(document.querySelector("aside.settings-editor-side .panel-head h2")?.textContent).toBe("Schema");
-    expect(document.querySelector("aside.settings-editor-side [data-run='configuration-apply']")).toBeTruthy();
+  test("History lists the versions and shows the JSON of the selected one", () => {
+    const { socket } = renderPage({ ...CONFIGURATION, versions: VERSIONS });
     tab("История");
-    const head = document.querySelector("#configuration-history > .panel-head") as HTMLElement;
-    expect(head.className).toBe("panel-head");
-    expect(head.querySelector("h2")?.textContent).toBe("История");
+    expect(document.querySelector(`[data-version="${VERSION_ID}"]`)?.getAttribute("aria-pressed")).toBe("true");
+    const asked = socket.sent.filter((body) => body.type === "configuration.snapshot" && body.version === VERSION_ID);
+    expect(asked).toHaveLength(1);
+    const version = {
+      id: VERSION_ID,
+      error: "",
+      files: {
+        "project.json": { exists: true, digest: "a".repeat(64), document: { language: "ru", tracker: { token: "••••••" } }, error: "" },
+        "orchestration.json": { exists: false, digest: "", document: {}, error: "" },
+      },
+    };
+    act(() => socket.reply(screenPage(asked[0]!.id, "configuration.snapshot", JSON.stringify({ ...CONFIGURATION, versions: VERSIONS, version }))));
+    const shown = document.querySelector("#configuration-version-json")?.textContent ?? "";
+    expect(shown).toContain('"language": "ru"');
+    expect(shown).toContain("••••••");
+    expect(shown).toContain("Файла нет в этой версии");
+  });
+
+  test("a version that cannot be read is a clear error, not an empty panel", () => {
+    const { socket } = renderPage({ ...CONFIGURATION, versions: VERSIONS });
+    tab("История");
+    const asked = socket.sent.filter((body) => body.type === "configuration.snapshot" && body.version === VERSION_ID).at(-1)!;
+    const version = { id: VERSION_ID, error: `Версия «${VERSION_ID}» не найдена в .harness/config_versions.`, files: {} };
+    act(() => socket.reply(screenPage(asked.id, "configuration.snapshot", JSON.stringify({ ...CONFIGURATION, versions: VERSIONS, version }))));
+    const alert = document.querySelector("#configuration-version-error");
+    expect(alert?.getAttribute("role")).toBe("alert");
+    expect(alert?.textContent).toContain("не найдена в .harness/config_versions");
+  });
+
+  test("the page is built on the design system: header, summary, pipe tabs and panels", () => {
+    renderPage();
+    const actions = [...document.querySelectorAll(".ds-page-head .ds-head-actions > *")];
+    expect(actions.map((item) => item.textContent?.trim())).toEqual(["Проверить", "Экспорт", "Диагностика"]);
+    const stats = [...document.querySelectorAll("#configuration-kpi .ds-stat")];
+    expect(stats.map((card) => card.querySelector(".ds-stat-label")?.textContent)).toEqual(["project.json", "orchestration.json", "Версии", "Runtime store"]);
+    expect(stats.map((card) => card.querySelector(".ds-stat-value")?.textContent).slice(0, 2)).toEqual(["valid", "нет файла"]);
+    expect(document.querySelector("#configuration-kpi .ds-facts")?.textContent).toContain("1 config");
+    expect(document.querySelector("main [role=tablist]")?.className).toBe("ds-pipe");
+    const rows = [...document.querySelectorAll("#configuration-files [data-file]")];
+    expect(rows.map((row) => row.getAttribute("data-file"))).toEqual(["project.json", "orchestration.json", "hook-policy.json", "runtime-store"]);
+    expect(document.querySelector("#configuration-policy .ds-panel-title")?.textContent).toBe("Политики");
+    expect(document.querySelector("#configuration-adapters.ds-panel")).toBeTruthy();
   });
 
   test("without the schema no file can be written", () => {
     renderPage({ ...CONFIGURATION, schema_installed: false });
     expect(content()).toContain("Сначала установите engineering-suite или backend-orchestration через меню подключения проекта");
-    tab("project.json");
+    tab("Изменения");
     expect(button("configuration-apply").disabled).toBe(true);
   });
 });

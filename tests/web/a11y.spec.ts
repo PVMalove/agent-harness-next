@@ -1,7 +1,8 @@
 /* WCAG 2.1 AA in the real build (#1066): axe-core finds no violation on the shell and Home, the
    skip link is the first Tab stop, and a tab list follows the WAI-ARIA Tabs pattern with the
-   arrow keys. Diagnostics, Update and Project are checked at the five window sizes of
-   console-fit.spec.ts in every tab and every inner tab (the feature detail, "how to update").
+   arrow keys. Diagnostics, Update, Project and Settings are checked at the five window sizes of
+   console-fit.spec.ts in every tab and every inner tab (the feature detail, "how to update", the
+   JSON file).
    The page sweep over every section lives in pages.spec.ts. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -70,13 +71,26 @@ const PAGED: Readonly<Record<string, unknown>> = {
   "open_project.snapshot": fixture("open-project.json"),
 };
 
-/** Home, the feature registry and the paged snapshots of Diagnostics, Update and Project. */
+const VERSION_ID = "20261116T101500Z-0123456789ab";
+const CONFIGURATION: Record<string, unknown> = {
+  ...fixture("configuration.json"),
+  versions: [{ id: VERSION_ID, created_at: "2026-11-16T10:15:00+00:00", description: "перед QA", files: ["project.json"], package_version: "2.1.0", problem: "" }],
+};
+/** The Settings snapshot; a `version` request adds the content of the saved version. */
+const configuration = (version: unknown) =>
+  version ? { ...CONFIGURATION, version: { id: VERSION_ID, error: "", files: CONFIGURATION.files } } : CONFIGURATION;
+
+/** Home, the feature registry and the paged snapshots of Diagnostics, Update, Project and Settings. */
 async function mockScreens(page: Page) {
   await page.routeWebSocket("**/ws", (ws) => {
     ws.onMessage((message) => {
-      const { id, type } = JSON.parse(String(message)) as { id: string; type: string };
+      const { id, type, version } = JSON.parse(String(message)) as { id: string; type: string; version?: string };
       const send = (body: Record<string, unknown>) => ws.send(JSON.stringify({ v: 1, id, type, ok: true, ...body }));
       if (type === "home.snapshot") send({ cached: false, age_seconds: 0, snapshot: HOME });
+      else if (type === "configuration.snapshot") {
+        const text = JSON.stringify(configuration(version));
+        send({ snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
+      }
       else if (type === "features.snapshot") send(fixture("features-snapshot.json"));
       else if (type in PAGED) {
         const text = JSON.stringify(PAGED[type]);
@@ -93,12 +107,14 @@ const NESTED: Readonly<Record<string, readonly string[]>> = {
   diagnostics: ["Функция"],
   "update-harness": ["Как обновить"],
   "open-project": [],
+  configuration: ["Файл"],
 };
 
 for (const [route, ready] of [
   ["diagnostics", "#features-list [data-feature]"],
   ["update-harness", "#update-diff .ds-diff-file"],
   ["open-project", "#open-project-list [data-path]"],
+  ["configuration", "#configuration-files [data-file]"],
 ] as const) {
   for (const [width, height] of SIZES) {
     test(`${route} at ${width}x${height} has no WCAG 2.1 AA violation in any of its tabs and inner tabs`, async ({ page }) => {

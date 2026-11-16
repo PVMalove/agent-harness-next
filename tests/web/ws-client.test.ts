@@ -186,4 +186,32 @@ describe("the console client", () => {
     clock.advance(60000);
     expect(FakeSocket.instances).toHaveLength(1);
   });
+
+  test("an AI advice request waits 100 s; a closed socket ends it as a fallback", () => {
+    const { clock, client } = setup();
+    const socket = FakeSocket.last;
+    socket.open();
+    socket.reply({ v: 1, id: "1-1", type: "orchestration.subscribe", ok: true, kind: "source", cursor: null, source: null });
+    socket.reply(snapshotReply("1-2"));
+    const advisor: unknown[] = [];
+    client.subscribeAdvisor((event) => advisor.push(event));
+    const id = client.askAdvisor("codex", "project.json", ["language"]);
+    expect(socket.request("advisor.ask")).toEqual({ id, type: "advisor.ask", provider: "codex", file: "project.json", path: ["language"] });
+    clock.advance(99999);
+    expect(socket.readyState).toBe(1);
+    clock.advance(1);
+    expect(socket.readyState).toBe(3);
+    expect(advisor).toEqual([{ type: "advisor-fallback", requestId: id, cause: "closed", reason: "" }]);
+  });
+
+  test("an advisor check that is not answered keeps the ordinary 30 s timeout", () => {
+    const { clock, client } = setup();
+    const socket = FakeSocket.last;
+    socket.open();
+    socket.reply({ v: 1, id: "1-1", type: "orchestration.subscribe", ok: true, kind: "source", cursor: null, source: null });
+    socket.reply(snapshotReply("1-2"));
+    expect(client.checkAdvisor("claude")).toBe(true);
+    clock.advance(30000);
+    expect(socket.readyState).toBe(3);
+  });
 });

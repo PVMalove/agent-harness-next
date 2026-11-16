@@ -1,14 +1,15 @@
-/* The Settings tab of «Настройки»: the mockup wizard over the kernel parameter catalog
+/* The Parameters tab of «Настройки»: the mockup wizard over the kernel parameter catalog
    (kernel/configuration_wizard.py). Each parameter is a real schema path with the schema's type,
-   choices and default; the answers become one configuration draft that goes through the confirmed
-   write path (configuration-save-draft / configuration-apply). The mockup's AI hints are not built:
-   they would need a model call the console does not make. */
+   choices and default, the console recommendation of the shared wizard steps and the AI hints
+   (AdvisorPanel). An answer or an accepted hint only changes the shared draft
+   (configuration/draft.ts); writing stays on the Changes tab behind the confirmed configuration
+   job. */
 import { useState } from "react";
 import { useI18n } from "../i18n";
 import type { ConfigurationFacts, JsonObject, WizardParam } from "../ws/projectScreens";
-import { draftRequest } from "./changes";
-import type { Change } from "./changes";
-import { writeBlock } from "./format";
+import { AdvisorPanel } from "./AdvisorPanel";
+import { valueAt } from "./draft";
+import type { ConfigurationDraft } from "./draft";
 
 const GROUPS: readonly (readonly [string, string])[] = [
   ["orchestrator", "Оркестратор"],
@@ -18,7 +19,7 @@ const GROUPS: readonly (readonly [string, string])[] = [
   ["hooks", "Хуки"],
 ];
 
-const keyOf = (param: WizardParam) => `${param.file}:${param.path.join(".")}`;
+export const keyOf = (param: WizardParam) => `${param.file}:${param.path.join(".")}`;
 const nameOf = (param: WizardParam) => `${param.file} → ${param.path.join(".")}`;
 
 /** The current value of a parameter in its served document, or undefined when absent. */
@@ -38,7 +39,7 @@ function ValueField({ param, value, onChange }: { param: WizardParam; value: unk
   const label = t(param.label);
   if (param.type === "enum") {
     return (
-      <select className="settings-input" aria-label={label} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(param.choices.find((item) => String(item) === event.target.value))}>
+      <select className="ds-input" aria-label={label} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(param.choices.find((item) => String(item) === event.target.value))}>
         {value === undefined && <option value="">{t("не задано")}</option>}
         {param.choices.map((choice) => (
           <option key={String(choice)} value={String(choice)}>
@@ -50,7 +51,7 @@ function ValueField({ param, value, onChange }: { param: WizardParam; value: unk
   }
   if (param.type === "boolean") {
     return (
-      <label className="settings-toggle">
+      <label className="ds-wz-toggle">
         <input type="checkbox" aria-label={label} checked={value === true} onChange={(event) => onChange(event.target.checked)} /> <span>{value === true ? t("да") : t("нет")}</span>
       </label>
     );
@@ -58,7 +59,7 @@ function ValueField({ param, value, onChange }: { param: WizardParam; value: unk
   const numeric = param.type === "integer" || param.type === "number";
   return (
     <input
-      className="settings-input"
+      className="ds-input"
       aria-label={label}
       type={numeric ? "number" : "text"}
       min={param.minimum ?? undefined}
@@ -72,74 +73,63 @@ function ValueField({ param, value, onChange }: { param: WizardParam; value: unk
   );
 }
 
-export function Wizard({
-  facts,
-  onRun,
-}: {
-  facts: ConfigurationFacts;
-  onRun: (command: string, values: Record<string, string>, reason: string) => void;
-}) {
+export function Wizard({ facts, draft }: { facts: ConfigurationFacts; draft: ConfigurationDraft }) {
   const { t } = useI18n();
   const params = facts.wizard ?? null;
   const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
-  const [description, setDescription] = useState("");
   if (!params || params.length === 0) {
     return (
-      <section className="panel settings-wizard-empty" id="configuration-wizard">
-        <p className="harness-note">
-          <span className="muted no-data">{t("нет данных")}</span> · {t("Каталог параметров не получен: схема конфигурации не установлена или сервер старее консоли.")}
+      <section className="ds-panel ds-wz-empty" id="configuration-wizard">
+        <p className="ds-note">
+          <span className="ds-wz-muted">{t("нет данных")}</span> · {t("Каталог параметров не получен: схема конфигурации не установлена или сервер старее консоли.")}
         </p>
       </section>
     );
   }
   const param = params[Math.min(index, params.length - 1)]!;
   const group = GROUPS.findIndex(([id]) => id === param.group);
-  const value = (item: WizardParam) => (keyOf(item) in answers ? answers[keyOf(item)] : currentValue(facts, item));
-  const changes: Change[] = params
-    .filter((item) => keyOf(item) in answers && JSON.stringify(answers[keyOf(item)]) !== JSON.stringify(currentValue(facts, item)))
-    .map((item) => ({ file: item.file, path: item.path, value: answers[keyOf(item)] }));
-  const digests = Object.fromEntries(Object.entries(facts.files).map(([name, file]) => [name, file.digest]));
-  const block = writeBlock(facts);
-  const reason = block ?? (changes.length === 0 ? "Изменений нет" : null);
-  const summary = changes.map((change) => `± ${change.file}: ${change.path.join(".")}`).join("\n");
-  const request = () => draftRequest(changes, digests, description.trim());
+  const value = (item: WizardParam) => {
+    const document = draft.document(item.file);
+    return document === null ? currentValue(facts, item) : valueAt(document, item.path);
+  };
+  const broken = draft.document(param.file) === null;
+  const set = (next: unknown) => draft.setValue(param.file, param.path, next);
   const answered = params.filter((item) => value(item) !== undefined).length;
-  const set = (next: unknown) => setAnswers({ ...answers, [keyOf(param)]: next });
+  const recommendation = param.recommendation ?? null;
 
   return (
-    <div className="settings-wizard" id="configuration-wizard">
-      <aside className="wizard-side">
-        <div className="wizard-side-head">
+    <div className="ds-wz" id="configuration-wizard">
+      <aside className="ds-wz-side">
+        <div className="ds-wz-side-head">
           <span>{t("Группы")}</span>
           <b>{GROUPS.length}</b>
         </div>
-        <div className="wizard-groups">
+        <div className="ds-wz-groups">
           {GROUPS.map(([id, label], position) => {
             const first = params.findIndex((item) => item.group === id);
             const count = params.filter((item) => item.group === id).length;
             return (
-              <button key={id} type="button" className={`wizard-group${position === group ? " on" : ""}`} disabled={first < 0} aria-pressed={position === group} onClick={() => setIndex(first)}>
+              <button key={id} type="button" className="ds-wz-group" disabled={first < 0} aria-pressed={position === group} onClick={() => setIndex(first)}>
                 <b>{t(label)}</b>
                 <span>{count}</span>
               </button>
             );
           })}
         </div>
-        <div className="wizard-progress">
+        <div className="ds-wz-progress">
           <span>{t("Прогресс")}</span>
-          <div className="orch-bar">
-            <i className="cyan" style={{ width: `${Math.round((answered / params.length) * 100)}%` }} />
+          <div className="ds-wz-bar">
+            <i style={{ width: `${Math.round((answered / params.length) * 100)}%` }} />
           </div>
           <small>{t("{done} из {total} параметров заданы", { done: answered, total: params.length })}</small>
         </div>
       </aside>
-      <section className="wizard-main">
-        <div className="wizard-step">
+      <section className="ds-wz-main">
+        <div className="ds-wz-step">
           <span>{t("Шаг")}</span>
           <b>{t("Группа {current} / {total}", { current: group + 1, total: GROUPS.length })}</b>
           <b>{t("Параметр {current} / {total}", { current: index + 1, total: params.length })}</b>
-          <select className="wizard-param-select" aria-label={t("Выбрать параметр")} value={index} onChange={(event) => setIndex(Number(event.target.value))}>
+          <select className="ds-select" aria-label={t("Выбрать параметр")} value={index} onChange={(event) => setIndex(Number(event.target.value))}>
             {params.map((item, position) => (
               <option key={keyOf(item)} value={position}>
                 {`${t(item.label)} → ${item.path.join(".")}`}
@@ -147,13 +137,13 @@ export function Wizard({
             ))}
           </select>
         </div>
-        <article className="wizard-param">
-          <div className="wizard-param-head">
+        <article className="ds-wz-param">
+          <div className="ds-wz-head">
             <span>{t(param.label)}</span>
             <code>{nameOf(param)}</code>
           </div>
-          {param.description && <p className="wizard-desc">{param.description}</p>}
-          <div className="wizard-rec">
+          {param.description && <p className="ds-wz-desc">{param.description}</p>}
+          <div className="ds-wz-line">
             <b>{t("По умолчанию в схеме:")}</b> <code>{param.default === null ? t("не задано") : shown(param.default)}</code>
             {param.choices.length > 0 && (
               <>
@@ -162,46 +152,38 @@ export function Wizard({
               </>
             )}
           </div>
-          <div className="wizard-why">
+          <div className="ds-wz-line">
             <b>{t("Сейчас:")}</b> <code>{shown(currentValue(facts, param))}</code>
           </div>
           <ValueField param={param} value={value(param)} onChange={set} />
-          <div className="wizard-accept-row">
-            <button className="btn" type="button" disabled={param.default === null} onClick={() => set(param.default)}>
+          {broken && (
+            <p className="ds-alert ds-alert-err" role="alert">
+              {t("Черновик файла не разобран: исправьте JSON на вкладке JSON.")}
+            </p>
+          )}
+          <div className="ds-wz-line ds-wz-rec" id="configuration-recommendation">
+            <b>{t("Рекомендация консоли:")}</b>{" "}
+            {recommendation ? (
+              <>
+                <code>{shown(recommendation.value)}</code> <span className="ds-wz-muted">{recommendation.reason}</span>
+              </>
+            ) : (
+              <span className="ds-wz-muted">{t("нет рекомендации")}</span>
+            )}
+          </div>
+          <div className="ds-wz-actions">
+            <button className="ds-btn ds-btn-sm" type="button" disabled={!recommendation || broken} onClick={() => recommendation && set(recommendation.value)}>
+              {t("Принять рекомендацию консоли")}
+            </button>
+            <button className="ds-btn ds-btn-sm" type="button" disabled={param.default === null || broken} onClick={() => set(param.default)}>
               {t("Взять значение по умолчанию")}
             </button>
-            <button className="btn" type="button" disabled={index + 1 >= params.length} onClick={() => setIndex(index + 1)}>
+            <button className="ds-btn ds-btn-sm" type="button" disabled={index + 1 >= params.length} onClick={() => setIndex(index + 1)}>
               {t("Следующий параметр")}
             </button>
           </div>
         </article>
-        <article className="wizard-param">
-          <div className="wizard-param-head">
-            <span>{t("Различия")}</span>
-            <span>{changes.length}</span>
-          </div>
-          <ul className="settings-config-list configuration-changes">
-            {changes.length === 0 && <li className="muted">{t("Изменений нет")}</li>}
-            {changes.map((change) => (
-              <li key={`${change.file}:${change.path.join(".")}`}>
-                <code>{`${change.file} → ${change.path.join(".")}`}</code> <code>{JSON.stringify((change as { value: unknown }).value)}</code>
-              </li>
-            ))}
-          </ul>
-          <label className="field">
-            {t("Описание версии")}
-            <input className="settings-input" value={description} onChange={(event) => setDescription(event.target.value)} />
-          </label>
-          <div className="settings-editor-actions">
-            <button className="btn" type="button" disabled={reason !== null} onClick={() => onRun("configuration-save-draft", { request: request() }, summary)}>
-              {t("Сохранить черновик как версию")}
-            </button>
-            <button className="btn primary" type="button" disabled={reason !== null} onClick={() => onRun("configuration-apply", { request: request() }, summary)}>
-              {t("Применить")}
-            </button>
-          </div>
-          {reason && <p className="settings-note muted">{t(reason)}</p>}
-        </article>
+        <AdvisorPanel param={param} onAccept={set} />
       </section>
     </div>
   );

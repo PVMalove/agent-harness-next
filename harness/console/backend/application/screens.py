@@ -31,6 +31,7 @@ from ....json_types import JsonObject
 from .ports import (
     Clock,
     ConfigurationCollector,
+    ConfigurationVersionCollector,
     FeaturesCollector,
     HarnessCollector,
     HealthCollector,
@@ -166,6 +167,7 @@ class ScreenService:
         update_harness: UpdateHarnessCollector | None = None,
         update_diff: UpdateDiffReader | None = None,
         configuration: ConfigurationCollector | None = None,
+        configuration_version: ConfigurationVersionCollector | None = None,
         features: FeaturesCollector | None = None,
         board: TaskBoardService | None = None,
         publish_git: GitFacts | None = None,
@@ -185,6 +187,7 @@ class ScreenService:
         self._collect_update_harness = update_harness
         self._read_update_diff = update_diff
         self._collect_configuration = configuration
+        self._collect_version = configuration_version
         self._collect_features = features
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
@@ -476,15 +479,24 @@ class ScreenService:
         text = await asyncio.to_thread(reader, self._repo, path)
         return await self._paged({"path": path, "text": text})
 
-    async def configuration(self, *, force: bool = False) -> Paged:
+    async def configuration(
+        self, *, force: bool = False, version: str | None = None
+    ) -> Paged:
         """The masked configuration files with their digests, a pending transaction and the
-        runtime adapter preview of «Настройка»; `NotFound` without its collector."""
+        runtime adapter preview of «Настройка»; `NotFound` without its collector. A selected
+        `version` is read on every request and merged over the cached facts as `version`."""
         collect = self._collect_configuration
         if collect is None:
             raise NotFound("configuration")
         facts, cached, age = await self._configuration.get(
             lambda: collect(self._repo), force=force
         )
+        if version is not None:
+            read = self._collect_version
+            if read is None:
+                raise NotFound("configuration")
+            selected = await asyncio.to_thread(read, self._repo, version)
+            facts = {**facts, "version": selected}
         return await self._paged(facts, cached, age)
 
     async def task_board_specs(self, *, force: bool = False) -> Paged:

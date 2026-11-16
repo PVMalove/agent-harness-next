@@ -1,6 +1,6 @@
 /* Window fit of the screens moved to the design system v3: Help (7 tabs), Harness (5) and Repo Map
-   (3) of #1091, Diagnostics (Функции, Проверки), Update (the file tabs Изменения, Решение) and
-   Project (the five wizard steps) at five window sizes. Every other tab list on the screen is
+   (3) of #1091, Diagnostics (Функции, Проверки), Update (the file tabs Изменения, Решение),
+   Project (the five wizard steps) and Settings (5 tabs, the JSON file tabs) at five window sizes. Every other tab list on the screen is
    walked in each of these tabs too: the feature detail (Готовность / Конфигурация / Связи) of
    Diagnostics and "how to update" (Режим / Seed / План / Миграция) of Update. In every tab the page does not
    scroll, main does not scroll and the empty strip under the last block is at most 24 px (RFC
@@ -27,6 +27,11 @@ const CATALOG = read("job-catalog.json");
 const REPO_MAP = read("repo-map.json");
 const HELP = read("help-ru.json");
 const FEATURES = read("features-snapshot.json");
+const VERSION_ID = "20261116T101500Z-0123456789ab";
+const CONFIGURATION: Body = {
+  ...read("configuration.json"),
+  versions: [{ id: VERSION_ID, created_at: "2026-11-16T10:15:00+00:00", description: "перед QA", files: ["project.json"], package_version: "2.1.0", problem: "" }],
+};
 const PAGED: Readonly<Record<string, Body>> = {
   "diagnostics.snapshot": read("diagnostics-report-57.json"),
   "update_harness.snapshot": read("update-harness.json"),
@@ -43,11 +48,13 @@ const SCREENS: readonly [route: string, tabs: number][] = [
   ["diagnostics", 2],
   ["update-harness", 2],
   ["open-project", 5],
+  ["configuration", 5],
 ];
 /** Route -> the tab lists inside its tabs (aria-label) and their tab counts. */
 const NESTED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   diagnostics: { Функция: 3 },
   "update-harness": { "Как обновить": 4 },
+  configuration: { Файл: 2 },
 };
 const MAX_STRIP = 24;
 
@@ -68,6 +75,8 @@ async function mockSocket(page: Page) {
       else if (type === "repo_map.snapshot") paged(ws, id, type, REPO_MAP);
       else if (type === "help.snapshot") paged(ws, id, type, HELP);
       else if (type === "features.snapshot") send(ws, { id, type, ...FEATURES });
+      else if (type === "configuration.snapshot")
+        paged(ws, id, type, request.version ? { ...CONFIGURATION, version: { id: VERSION_ID, error: "", files: CONFIGURATION.files } } : CONFIGURATION);
       else if (typeof type === "string" && type in PAGED) paged(ws, id, type, PAGED[type], type === "update_harness.diff" ? { cached: undefined, age_seconds: undefined } : {});
       else if (type === "job.catalog") send(ws, { id, type, ...CATALOG });
       else if (type === "job.list") send(ws, { id, type, jobs: [] });

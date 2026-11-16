@@ -26,6 +26,8 @@ import { parseHomeActivity, parseHomeSnapshot } from "./types";
 import type { HomeActivity, HomeSnapshot } from "./types";
 import { repoMapReader } from "./repoMap";
 import type { RepoMapEvent } from "./repoMap";
+import { advisorReader } from "./advisor";
+import type { AdvisorEvent, AdvisorProvider } from "./advisor";
 import { decisionsReader } from "./decisions";
 import type { DecisionsEvent } from "./decisions";
 
@@ -204,6 +206,13 @@ export interface ConsoleClient {
       False when no socket is open. */
   requestScreen(request: ScreenRequest): boolean;
   subscribeScreens(listener: (event: ScreenEvent) => void): () => void;
+  /** Check a CLI's presence, version and login; never a model call. */
+  checkAdvisor(provider: AdvisorProvider): boolean;
+  /** Ask for AI advice about one parameter, by file and path only; the request id, or null. */
+  askAdvisor(provider: AdvisorProvider, file: string, path: readonly string[]): string | null;
+  /** Cancel an ask of this connection. */
+  cancelAdvice(requestId: string): boolean;
+  subscribeAdvisor(listener: (event: AdvisorEvent) => void): () => void;
 }
 
 const OPEN = 1;
@@ -222,6 +231,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   const jobListeners = new Set<(event: JobEvent) => void>();
   const mapListeners = new Set<(event: RepoMapEvent) => void>();
   const decisionListeners = new Set<(event: DecisionsEvent) => void>();
+  const advisorListeners = new Set<(event: AdvisorEvent) => void>();
   // The followed jobs by id: the held output and cursor survive reconnects.
   const followed = new Map<string, LocalJob | null>();
   // Open job requests of the current socket by request id.
@@ -279,13 +289,15 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     screenReads.clear();
   };
 
-  const send = (body: Record<string, unknown>): string | null => {
+  /** Sends one request; an unanswered one closes the socket after `timeout` (the AI advice
+      request waits longer than the others). */
+  const send = (body: Record<string, unknown>, timeout: number = timeoutMs): string | null => {
     if (!socket || socket.readyState !== OPEN) return null;
     const id = `${generation}-${++sequence}`;
     const current = socket;
     pending.set(
       id,
-      timers.setTimeout(() => current.close(), timeoutMs),
+      timers.setTimeout(() => current.close(), timeout),
     );
     current.send(JSON.stringify({ id, ...body }));
     return id;
@@ -302,6 +314,9 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   });
   const decisionReader = decisionsReader(send, settle, (event) => {
     for (const listener of [...decisionListeners]) listener(event);
+  });
+  const advisor = advisorReader(send, settle, (event) => {
+    for (const listener of [...advisorListeners]) listener(event);
   });
 
   const subscribeOrchestration = () => {
@@ -492,6 +507,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     if (typeof id !== "string" || !id.startsWith(`${generation}-`)) return;
     if (mapReader.reply(reply)) return;
     if (decisionReader.reply(reply)) return;
+    if (advisor.reply(reply)) return;
     if (jobRequests.has(id)) {
       onJobReply(id, reply);
       return;
@@ -617,6 +633,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       clearPending();
       mapReader.reset();
       decisionReader.reset();
+      advisor.reset();
       socket = null;
       stepsSubscription = null;
       attempt += 1;
@@ -724,6 +741,13 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     subscribeScreens(listener) {
       screenListeners.add(listener);
       return () => screenListeners.delete(listener);
+    },
+    checkAdvisor: advisor.check,
+    askAdvisor: advisor.ask,
+    cancelAdvice: advisor.cancel,
+    subscribeAdvisor(listener) {
+      advisorListeners.add(listener);
+      return () => advisorListeners.delete(listener);
     },
   };
 }

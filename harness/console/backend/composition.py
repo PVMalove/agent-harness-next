@@ -29,6 +29,7 @@ from ..kernel.catalog import (
 from ..kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from harness.orchestration.core.constants import LIVE_DISPATCH_STATES
 from .api.request_router import RequestRouter
+from .application.advisor import AdvisorService
 from .application.decisions import DecisionService
 from .application.events import POLL_INTERVAL_SECONDS, OrchestrationEvents
 from .application.jobs import JobService
@@ -37,6 +38,7 @@ from .application.live_steps import LiveSteps
 from .application.ports import (
     Clock,
     ConfigurationCollector,
+    ConfigurationVersionCollector,
     CommandSpec,
     FeaturesCollector,
     HarnessCollector,
@@ -62,6 +64,7 @@ from .application.worker_steps import POLL_SECONDS, WorkerStepsQuery
 from .domain.approvals import DecisionsSnapshot
 from .domain.snapshots import HOME_TTL_SECONDS
 from .infrastructure import command_journal
+from .infrastructure.advisor import CliAdvisor
 from .infrastructure.clock import monotonic, utc_now_iso
 from .infrastructure.discovery import Discovery
 from .infrastructure.event_journal import opener
@@ -77,6 +80,7 @@ from .infrastructure.screen_facts import (
     collect_ledger,
     collect_ledger_online,
     configuration_facts,
+    configuration_version_facts,
     features_facts,
     harness_facts,
     maintenance_facts,
@@ -130,6 +134,7 @@ def screen_service(
     update_harness: UpdateHarnessCollector | None = None,
     update_diff: UpdateDiffReader | None = None,
     configuration: ConfigurationCollector | None = None,
+    configuration_version: ConfigurationVersionCollector | None = None,
     features: FeaturesCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
@@ -156,6 +161,11 @@ def screen_service(
         ),
         update_diff=read_update_diff if update_diff is None else update_diff,
         configuration=configuration_facts if configuration is None else configuration,
+        configuration_version=(
+            configuration_version_facts
+            if configuration_version is None
+            else configuration_version
+        ),
         features=features_facts if features is None else features,
         board=(
             TaskBoardService(
@@ -334,6 +344,16 @@ def compose(
         screens,
         workers,
         steps,
-        RequestRouter(snapshots, jobs, decisions, events, screens, workers, steps, HomeActivityQuery(events, now=utc_now_iso)),
+        RequestRouter(
+            snapshots,
+            jobs,
+            decisions,
+            events,
+            screens,
+            workers,
+            steps,
+            HomeActivityQuery(events, now=utc_now_iso),
+            advisor=AdvisorService(CliAdvisor(repo)),
+        ),
         Discovery,
     )

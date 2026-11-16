@@ -13,7 +13,12 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
-from ...kernel.protocol import MAX_ID_CHARS, MAX_PATH_CHARS, MAX_SKIPPED
+from ...kernel.protocol import (
+    CONFIGURATION_VERSION_ID,
+    MAX_ID_CHARS,
+    MAX_PATH_CHARS,
+    MAX_SKIPPED,
+)
 from .request_router import RequestRouter
 
 REGENERATE = "python -m harness.console.backend.api.schemas"
@@ -267,6 +272,41 @@ class ConfigurationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["configuration.snapshot"]
     force: bool = False
+    # A saved version whose masked content the reply adds as `version`.
+    version: (
+        Annotated[str, Field(pattern=f"^{CONFIGURATION_VERSION_ID}$")] | None
+    ) = None
+
+
+AdvisorProvider = Literal["codex", "claude"]
+AdvisorPathPart = Annotated[str, Field(pattern="^[A-Za-z0-9_.-]{1,64}$")]
+RequiredId = Annotated[str, Field(min_length=1, max_length=64)] | int
+
+
+class AdvisorCheckRequest(_Strict):  # type: ignore[explicit-any]
+    """Checks CLI presence, version and login; never invokes a model."""
+
+    id: RequestId = None
+    type: Literal["advisor.check"]
+    provider: AdvisorProvider
+
+
+class AdvisorAskRequest(_Strict):  # type: ignore[explicit-any]
+    """Asks for advice about one parameter; only the file and path travel, never a value."""
+
+    id: RequiredId
+    type: Literal["advisor.ask"]
+    provider: AdvisorProvider
+    file: Literal["project.json", "orchestration.json"]
+    path: Annotated[list[AdvisorPathPart], Field(min_length=1, max_length=8)]
+
+
+class AdvisorCancelRequest(_Strict):  # type: ignore[explicit-any]
+    """Cancels an `advisor.ask` of the same connection."""
+
+    id: RequestId = None
+    type: Literal["advisor.cancel"]
+    request_id: RequiredId
 
 
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
@@ -333,6 +373,9 @@ ConsoleRequest = Annotated[
     | UpdateHarnessSnapshotRequest
     | UpdateHarnessDiffRequest
     | ConfigurationSnapshotRequest
+    | AdvisorCheckRequest
+    | AdvisorAskRequest
+    | AdvisorCancelRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
     | WorkerSubscribeRequest
@@ -826,6 +869,58 @@ class StepsReply(_Envelope):  # type: ignore[explicit-any]
     steps: list[Annotated[AgentStep | OrchestrationStep, Field(discriminator="origin")]]
 
 
+class CliStatusPayload(_Strict):  # type: ignore[explicit-any]
+    """What the CLI check learned; null for a stage it did not reach."""
+
+    provider: str
+    found: bool
+    version_supported: bool | None
+    authorized: bool | None
+    ready: bool
+    message: str
+
+
+class AdvisorCheckReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["advisor.check"]
+    ok: Literal[True]
+    status: CliStatusPayload
+
+
+class AdviceComparison(_Strict):  # type: ignore[explicit-any]
+    option: str
+    tradeoff: str
+
+
+class AdvicePayload(_Strict):  # type: ignore[explicit-any]
+    value: JsonValue
+    why: str
+    impact: str
+    comparison: Annotated[list[AdviceComparison], Field(max_length=4)]
+
+
+class AdvisorAdviceReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["advisor.ask"]
+    ok: Literal[True]
+    outcome: Literal["advice"]
+    advice: AdvicePayload
+
+
+class AdvisorFallbackReply(_Envelope):  # type: ignore[explicit-any]
+    """No advice: the ordinary hints are shown and the draft does not change."""
+
+    type: Literal["advisor.ask"]
+    ok: Literal[True]
+    outcome: Literal["fallback"]
+    cause: Literal["refused", "invalid", "timeout", "cancelled"]
+    reason: str
+
+
+class AdvisorCancelReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["advisor.cancel"]
+    ok: Literal[True]
+    cancelled: bool
+
+
 ConsoleReply = (
     ErrorReply
     | HomeSnapshotReply
@@ -845,6 +940,10 @@ ConsoleReply = (
     | WorkerStepsReply
     | StepsRosterReply
     | StepsReply
+    | AdvisorCheckReply
+    | AdvisorAdviceReply
+    | AdvisorFallbackReply
+    | AdvisorCancelReply
 )
 
 REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)

@@ -28,13 +28,15 @@
    - [ ] «Миграция runtime-store» from the store facts and «Результат последнего запуска» from this
      console's update jobs, with an in-panel honest «нет данных».
    #configuration (README «Настройки · шаг 11»)
-   - [ ] KPI: project.json, orchestration.json validity, schema/orchestration installed, pending write.
-   - [ ] Tabs Обзор / project.json / orchestration.json / История.
-   - [ ] JSON editor with syntax check, the change list and a confirmed apply / save as version.
+   - [ ] KPI: project.json, orchestration.json validity, saved versions, runtime store, pending write.
+   - [ ] Tabs Обзор / Параметры / JSON / Изменения / История.
+   - [ ] Параметры: the wizard with the console recommendation and the AI hints, into the draft only.
+   - [ ] JSON editor per file with syntax check; Изменения: the change list and a confirmed apply /
+     save as version.
    - [ ] Runtime adapters with a confirmed update.
-   - [ ] История: version store and «Сохранить текущую конфигурацию как версию».
-   - Deviations: no guided «Настройки» wizard, AI hints, version list or restore (not in the snapshot;
-     TUI only); no JSON export.
+   - [ ] История: the version list, the JSON of the selected version and «Сохранить текущую
+     конфигурацию как версию».
+   - Deviations: restore stays in the TUI.
    #help (README «Справка · шаг 12»)
    - [ ] Tabs from the guide sections; intro; hotkeys and safety from the guide text.
    - [ ] Follows the ru/en switch.
@@ -168,6 +170,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator("#configuration-adapters")).toContainText("⚠ требует обновления");
     expect(await noOverflow(page)).toBe(true);
     await shot(page, info, `configuration-${width}`);
+    await page.getByRole("tab", { name: /JSON$/ }).click();
     await page.getByRole("tab", { name: "project.json" }).click();
     await expect(page.getByRole("textbox", { name: "project.json" })).toHaveValue(/••••••/);
     expect(await noOverflow(page)).toBe(true);

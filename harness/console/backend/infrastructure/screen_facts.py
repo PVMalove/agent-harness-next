@@ -21,7 +21,11 @@ from ....repo_map.bundle_fetch import ParserStatus, parser_status
 from ....storage import storage_root
 from ...kernel import data as console_data
 from ...kernel.batch_history import History, load_history
-from ...kernel.configuration_snapshot import collect_configuration
+from ...kernel.configuration_snapshot import (
+    collect_configuration,
+    list_versions,
+    read_version,
+)
 from ...kernel.configuration_wizard import wizard_parameters
 from ...kernel.container_inventory import configured_engine, container_inventory
 from ...kernel.container_route import Authored, read_authored
@@ -364,8 +368,19 @@ def update_diff(repo: Path, relative: str) -> str:
 
 def configuration_facts(repo: Path) -> dict[str, object]:
     """The masked configuration files with their digests, a pending transaction and the runtime
-    adapter preview with the Settings wizard parameter catalog; never writes or recovers."""
-    return {**collect_configuration(repo).to_payload(), "wizard": wizard_parameters(repo)}
+    adapter preview with the Settings wizard parameter catalog and the saved versions; never
+    writes, recovers or creates the version store."""
+    facts = collect_configuration(repo)
+    return {
+        **facts.to_payload(),
+        "wizard": wizard_parameters(repo, facts),
+        "versions": list_versions(repo),
+    }
+
+
+def configuration_version_facts(repo: Path, identifier: str) -> dict[str, object]:
+    """The masked files of one saved configuration version, or the reason it cannot be read."""
+    return read_version(repo, identifier)
 
 
 def features_facts(repo: Path) -> dict[str, object]:

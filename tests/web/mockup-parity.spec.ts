@@ -97,8 +97,8 @@ const PAGES: PageSpec[] = [
   {
     route: "configuration",
     title: "Настройки",
-    blocks: ["#configuration-kpi", ".settings-tabbar", "#configuration-files", "#configuration-policy", ".settings-note", "#configuration-adapters"],
-    tabs: ["Обзор", "Настройки", "project.json", "orchestration.json", "История"],
+    blocks: ["#configuration-kpi", ".ds-pipe", "#configuration-files", "#configuration-policy", "#configuration-adapters"],
+    tabs: ["1Обзор", "2Параметры", "3JSON", "4Изменения", "5История"],
   },
   {
     route: "help",
