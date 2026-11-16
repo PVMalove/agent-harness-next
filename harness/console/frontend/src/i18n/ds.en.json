@@ -80,5 +80,20 @@
   "Конвейер": "Pipeline",
   "Контейнер": "Container",
   "Сводка оркестрации": "Orchestration summary",
-  "новые batch: шаги и переходы": "newest batches: steps and links"
+  "новые batch: шаги и переходы": "newest batches: steps and links",
+  "Кандидат": "Candidate",
+  "Отчёты batch": "Batch reports",
+  "Вердикт": "Verdict",
+  "Кандидат → цель": "Candidate → target",
+  "Отказы": "Refusals",
+  "нет данных в снимке отчётов": "no data in the reports snapshot",
+  "результаты по ролям": "results by role",
+  "Результаты по ролям": "Results by role",
+  "Отчётов нет": "No reports",
+  "на экране «Оркестрация»": "on the Orchestration screen",
+  "Открыть кандидата": "Open candidate",
+  "Экспорт JSON": "Export JSON",
+  "Сводка отчётов": "Reports summary",
+  "устарело": "stale",
+  "впереди": "ahead"
 }

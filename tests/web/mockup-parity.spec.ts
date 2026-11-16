@@ -121,8 +121,8 @@ const PAGES: PageSpec[] = [
   {
     route: "reports",
     title: "Отчёты",
-    blocks: ["#reports-summary", "#reports-kpi", "#report-types", "#report-detail", "#qa-lane"],
-    tabs: ["Отчёты", "Evidence", "Качество", "Готовность"],
+    blocks: ["#reports-summary", "#reports-kpi", "#reports-tabs", "#report-types", "#report-detail", "#qa-lane"],
+    tabs: ["1Отчёты", "2Evidence", "3Качество", "4Готовность"],
   },
   {
     route: "publish",

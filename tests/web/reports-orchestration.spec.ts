@@ -4,15 +4,17 @@
    confirmation that, cancelled, starts nothing. No screenshot baselines (ADR 0029).
 
    Manual mockup-conformance checklist (docs/design/web-console-mockups):
-   #reports
-   - [ ] Title: h1 «Отчёты», subtitle, facts ending with the snapshot time, actions «Обновить» and
-         «Экспорт» (download icon).
-   - [ ] `reports-summary` (4) and `report-kpis` (4): Evidence полно, Stale evidence, Задержка
-         отчёта, QA с первого раза; the risk and blocker tiles sit on the «Качество» tab.
-   - [ ] `reports-grid`: «Отчёты» with type chips, one row (status select, search) and the TUI
-         filters folded under «Ещё фильтры»; compact rows (icon, role · ticket, status words, HH:MM);
-         «Детали отчёта» in the mockup order (summary, Evidence, conclusion, actions).
-   - [ ] QA lane full width under the grid with the QA log folded inside.
+   #reports (v3 shell)
+   - [ ] Page header: h1 «Отчёты», subtitle, the refresh icon and «Экспорт JSON» on the right.
+   - [ ] `reports-summary`: 4 stats and the `report-kpis` facts (Evidence полно, Stale evidence,
+         Задержка отчёта, QA с первого раза) with the snapshot time; risk and blocker tiles sit on
+         the «Качество» tab.
+   - [ ] Pipe tabs Отчёты / Evidence / Качество / Готовность, data from reports.* only.
+   - [ ] «Отчёты»: the list panel with type chips, one row (status select, search) and the TUI
+         filters folded under «Ещё фильтры»; compact rows (icon, role · ticket, status, HH:MM);
+         «Детали отчёта» in the mockup order with the QA lane and its folded log.
+   - [ ] «Готовность»: Release Gate rows with StatusIcon; a candidate opens the shared drawer with
+         Evidence, Качество and Готовность tabs.
    - Deviations: the batch history and chronology stay on Orchestration; «Открыть отчёт» has no
      reader in the web console (docs/design/web-console-mockups/parity-1066.md).
    #orchestration (v3 shell, docs/rfc/web-console-v3/mockup)
@@ -117,7 +119,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator("#batch-list")).toHaveCount(0);
     // Every block of the page stays inside its frame, and a report row is one line.
     const wide = await page.evaluate(() =>
-      [...document.querySelectorAll(".reports-page .panel, .reports-page .report-kpis, .reports-page .reports-summary, .report-row, .report-section")]
+      [...document.querySelectorAll(".reports-page .ds-panel, .reports-page .panel, .reports-page .report-kpis, .reports-page .ds-summary, .report-row, .report-section")]
         .filter((box) => box.scrollWidth > box.clientWidth + 1)
         .map((box) => box.className),
     );
@@ -126,10 +128,12 @@ for (const width of [1440, 390]) {
     const rowHeight = await page.locator("#report-list .report-row").first().evaluate((row) => row.getBoundingClientRect().height);
     expect(rowHeight).toBeLessThanOrEqual(width > 600 ? 64 : 96);
     await page.getByRole("tab", { name: "Готовность" }).click();
-    const pills = await page.evaluate(() =>
-      [...document.querySelectorAll("#reports-readiness .orch-pill")].filter((pill) => pill.scrollWidth > pill.clientWidth + 1).length,
-    );
-    expect(pills).toBe(0);
+    await expect(page.locator("#reports-readiness .orch-pill")).toHaveCount(0);
+    await page.locator('#reports-readiness [data-batch="b-887"] .report-ready-open').click();
+    const drawer = page.getByRole("dialog", { name: /Кандидат · #887/ });
+    await expect(drawer.getByRole("tab")).toHaveText(["Evidence", "Качество", "Готовность"]);
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
     expect(await noOverflow(page)).toBe(true);
   });
 

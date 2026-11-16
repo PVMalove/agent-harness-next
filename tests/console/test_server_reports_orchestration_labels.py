@@ -60,6 +60,7 @@ ROUTE_SOURCES = (
     "orchestration/Charts.tsx",
     "orchestration/BatchHistory.tsx",
     "orchestration/ContainerTab.tsx",
+    "reports/CandidateDrawer.tsx",
     "routes/Recovery.tsx",
     "routes/ContainerRoute.tsx",
     "views/RowList.tsx",

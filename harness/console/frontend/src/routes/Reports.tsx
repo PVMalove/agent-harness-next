@@ -1,35 +1,29 @@
-/* Reports: the ledger of reports.snapshot laid out as the mockup's #reports. The KPI figures are
-   the server's (`reports_kpi`); the page only filters and orders the stages, opens one stage's
-   report (reports.report) with its QA log, and a batch's chronology (reports.timeline). The same
-   facts as the TUI Reports screen for the same snapshot; report text is untrusted and stays text.
-   The mockup's tabs Evidence, Quality and Readiness read the same snapshot and the ledger
-   analytics. The batch history and its chronology stay on the Orchestration page: the mockup has
-   no batch block on Reports. */
+/* Reports on the design system v3: the page header (refresh and the JSON export on the right), the
+   summary (reports by state; the Reports KPIs as facts) and four pipeline tabs over
+   reports.snapshot only. «Отчёты» filters and orders the stages and opens one stage's report
+   (reports.report) with the QA lane and its log; Evidence is the kernel's evidence matrix;
+   «Качество» the results by role, first-pass QA and the QA attempts; «Готовность» the Release Gate
+   rows, each opening the shared candidate drawer. The same facts as the TUI Reports screen for the
+   same snapshot; report text is untrusted and stays text. The batch history and its chronology
+   stay on Orchestration. */
 import { useMemo, useState } from "react";
+import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
+import { CandidateDrawer } from "../reports/CandidateDrawer";
 import { NO_FILTERS, reportsById, reportsKpiTiles, selectStages } from "../reports/format";
 import type { StageFilters, Tile } from "../reports/format";
 import { QaLogs } from "../reports/QaLogs";
 import { ReportDetail } from "../reports/ReportDetail";
 import { StageFilterBar, StageList } from "../reports/StageList";
-import {
-  EVIDENCE_COLUMNS,
-  EvidenceTab,
-  QaLane,
-  QualityTab,
-  ReadinessTab,
-  ReportsSummary,
-  reportCounts,
-  reportState,
-} from "../reports/ReportViews";
+import { EVIDENCE_COLUMNS, EvidenceTab, QaLane, QualityTab, ReadinessTab, reportCounts, reportState } from "../reports/ReportViews";
 import type { ReportState } from "../reports/ReportViews";
 import { useScreen } from "../screens/useScreen";
 import { snapshotClock } from "../update/format";
+import { TabPanel } from "../views/Tabs";
 import type { ReportHead, ReportsSnapshot, StageHead } from "../ws/ledger";
-import { TabList, TabPanels } from "../views/Tabs";
-import { parseOrchestration, parseReports } from "../ws/ledger";
+import { parseReports } from "../ws/ledger";
 
 type Tab = "list" | "evidence" | "quality" | "readiness";
 const TYPE_CHIPS: [string, string][] = [
@@ -47,7 +41,7 @@ function matchesQuery(stage: StageHead, report: ReportHead | undefined, query: s
   return [stage.ticket, stage.role, report?.outcome ?? "", stage.dispatch_id].some((field) => field.toLowerCase().includes(text));
 }
 
-/** The mockup's second KPI row: evidence completeness, stale evidence cells of the kernel's matrix,
+/** The mockup's KPI facts: evidence completeness, stale evidence cells of the kernel's matrix,
     report latency and first-pass QA; the risk and blocker tiles go to the Quality tab. */
 function kpiRow(ledger: ReportsSnapshot, tiles: readonly Tile[], t: (text: string) => string): Tile[] {
   const stale = ledger.evidence.reduce(
@@ -91,12 +85,12 @@ function exportSelection(stages: readonly unknown[], reports: readonly unknown[]
 export function Reports() {
   const { t, section, language, tab: tabLabel } = useI18n();
   const screen = useScreen({ type: "reports.snapshot" }, parseReports);
-  const orchestration = useScreen({ type: "orchestration.snapshot" }, parseOrchestration);
   const [tab, setTab] = useState<Tab>("list");
   const [filters, setFilters] = useState<StageFilters>(NO_FILTERS);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | ReportState>("all");
+  const [candidate, setCandidate] = useState<string | null>(null);
   const ledger = screen.data;
 
   const reports = useMemo(() => (ledger ? reportsById(ledger) : new Map<string, ReportHead>()), [ledger]);
@@ -113,165 +107,166 @@ export function Reports() {
   const current = shown.find((stage) => stage.dispatch_id === selected) ?? shown[0] ?? null;
   const tiles = ledger ? reportsKpiTiles(ledger.reports_kpi, t, language) : [];
   const counts = ledger ? reportCounts(ledger.reports) : null;
-  const tabs: [Tab, string][] = [
-    ["list", t("Отчёты")],
-    ["evidence", "Evidence"],
-    ["quality", t("Качество")],
-    ["readiness", t("Готовность")],
+  const opened = ledger && candidate ? (ledger.publish.find((entry) => entry.batch_id === candidate) ?? null) : null;
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "list", label: tabLabel(t("Отчёты")) },
+    { id: "evidence", label: "Evidence" },
+    { id: "quality", label: t("Качество") },
+    { id: "readiness", label: t("Готовность") },
   ];
 
   return (
-    <div className="reports-page" data-section="Reports">
-      <div className="page-title reports-title">
-        <div>
-          <h1>{section("Reports")}</h1>
-          <p>{t("Результаты ролей, QA evidence и события. Отчёты хранятся отдельно от решений человека.")}</p>
-          {ledger && counts && (
-            <div className="home-facts">
-              <span>{t("{count} отчётов", { count: counts.all })}</span>
-              <span>{t("{count} пройдено", { count: counts.passed })}</span>
-              <span>{t("{count} внимание", { count: counts.attention })}</span>
-              <span>{t("{count} заблокировано", { count: counts.blocked })}</span>
-              <span id="reports-updated" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
-                {snapshotClock(screen.ageSeconds, language)}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="actions">
-          <button id="reports-refresh" className="btn" type="button" onClick={() => screen.refresh(true)}>
-            <Icon name="refresh" /> {t("Обновить")}
-          </button>
-          <button
-            id="reports-export"
-            className="btn"
-            type="button"
-            disabled={!ledger}
-            onClick={() => exportSelection(shown, ledger ? ledger.reports : [])}
-          >
-            <Icon name="download" /> {t("Экспорт")}
-          </button>
-        </div>
-      </div>
+    <div className="ds-page ds-fit reports-page" data-section="Reports">
+      <PageHeader
+        title={section("Reports")}
+        subtitle={t("Результаты ролей, QA evidence и события. Отчёты хранятся отдельно от решений человека.")}
+        actions={
+          <>
+            <button id="reports-refresh" className="ds-btn ds-btn-icon" type="button" aria-label={t("Обновить")} title={t("Обновить")} onClick={() => screen.refresh(true)}>
+              <Icon name="refresh" className="ds-ic-sm" />
+            </button>
+            <button id="reports-export" className="ds-btn" type="button" disabled={!ledger} onClick={() => exportSelection(shown, ledger ? ledger.reports : [])}>
+              <Icon name="download" className="ds-ic-sm" /> {t("Экспорт JSON")}
+            </button>
+          </>
+        }
+      />
 
       {screen.error && !ledger && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
+        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
           {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
         </p>
       )}
       {ledger?.unavailable && (
-        <p className="command-refusal err" role="alert">
+        <p className="ds-alert ds-alert-err" role="alert">
           {ledger.unavailable}
         </p>
       )}
 
-      {ledger && <ReportsSummary reports={ledger.reports} />}
+      <Summary
+        id="reports-summary"
+        label={t("Сводка отчётов")}
+        stats={[
+          { label: t("Отчётов"), value: counts?.all ?? "—", caption: t("в выборке") },
+          { label: t("Пройдено"), value: counts?.passed ?? "—", caption: t("без рисков и блокеров") },
+          { label: t("Внимание"), value: counts?.attention ?? "—", caption: t("нужен просмотр") },
+          { label: t("Заблокировано"), value: counts?.blocked ?? "—", caption: t("решение человека") },
+        ]}
+        facts={ledger && tiles.length > 0 ? <KpiTiles id="reports-kpi" tiles={kpiRow(ledger, tiles, t)} /> : null}
+        snapshot={
+          ledger ? (
+            <span title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+              <Icon name="clock" className="ds-ic-sm" /> {t("Снимок")} <span id="reports-updated">{snapshotClock(screen.ageSeconds, language)}</span>
+            </span>
+          ) : undefined
+        }
+      />
 
-      {ledger && tiles.length > 0 && <KpiTiles id="reports-kpi" tiles={kpiRow(ledger, tiles, t)} />}
+      <PipeTabs id="reports" label={t("Отчёты")} tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
 
-      {ledger && (
-        <TabList
-          id="reports"
-          label={t("Отчёты")}
-          className="orch-tabbar report-tabbar"
-          tabs={tabs.map(([id, label]) => [id, id === "list" ? tabLabel(label) : label] as const)}
-          value={tab}
-          onChange={(id) => setTab(id as Tab)}
-        />
-      )}
-
-      {ledger && (
-      <TabPanels id="reports" tabs={tabs} value={tab}>
-      {ledger && tab === "evidence" && <EvidenceTab rows={ledger.evidence} />}
-      {ledger && tab === "quality" && (
-        <>
-          <KpiTiles id="reports-quality-kpi" tiles={tiles.slice(4)} />
-          <QualityTab ledger={ledger} analytics={orchestration.data?.analytics ?? null} />
-        </>
-      )}
-      {ledger && tab === "readiness" && <ReadinessTab ledger={ledger} />}
-
-      {ledger && tab === "list" && (
-        <div className="reports-grid">
-          <section className="panel reports-panel">
-            <div className="panel-head">
-              <h2>{t("Отчёты")}</h2>
-              <span className="small muted" id="reports-count">
-                {t("{shown} из {total}", { shown: shown.length, total: ledger.stages.length })}
-              </span>
-            </div>
-            <div className="report-filters">
-              <div className="chips" id="report-types">
-                {TYPE_CHIPS.map(([role, label]) => (
-                  <button
-                    key={label}
-                    type="button"
-                    className={`chip ${filters.role === role ? "on" : ""}`}
-                    aria-pressed={filters.role === role}
-                    onClick={() => setFilters({ ...filters, role })}
+      <TabPanel id="reports" tab="list" value={tab} className="ds-tabpanel">
+        {ledger && (
+          <div className="ds-split reports-grid">
+            <Panel
+              title={t("Отчёты")}
+              count={<span id="reports-count">{t("{shown} из {total}", { shown: shown.length, total: ledger.stages.length })}</span>}
+              fill
+              scroll="list"
+              id="reports-list"
+              label={t("Отчёты")}
+            >
+              <div className="report-filters">
+                <div className="chips" id="report-types">
+                  {TYPE_CHIPS.map(([role, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      className={`chip ${filters.role === role ? "on" : ""}`}
+                      aria-pressed={filters.role === role}
+                      onClick={() => setFilters({ ...filters, role })}
+                    >
+                      {role ? label : t(label)}
+                    </button>
+                  ))}
+                  <a className="chip" href={href("diagnostics")}>
+                    Health
+                  </a>
+                  <a className="chip" href={href("publish")}>
+                    Publish
+                  </a>
+                </div>
+                <div className="report-filter-row" id="report-filter-row">
+                  <select
+                    id="report-status"
+                    aria-label={t("Статус отчёта")}
+                    value={status}
+                    onChange={(event) => setStatus(event.target.value as "all" | ReportState)}
                   >
-                    {role ? label : t(label)}
-                  </button>
-                ))}
-                <a className="chip" href={href("diagnostics")}>
-                  Health
-                </a>
-                <a className="chip" href={href("publish")}>
-                  Publish
-                </a>
+                    <option value="all">{t("Все статусы")}</option>
+                    <option value="passed">{t("Пройдено")}</option>
+                    <option value="attention">{t("Внимание")}</option>
+                    <option value="blocked">{t("Заблокировано")}</option>
+                  </select>
+                  <label className="report-search">
+                    <Icon name="search" />
+                    <input
+                      id="reports-search"
+                      type="search"
+                      placeholder={t("Найти отчёт")}
+                      aria-label={t("Поиск отчёта")}
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <details className="report-more-filters" id="report-more-filters">
+                  <summary>{t("Ещё фильтры")}</summary>
+                  <StageFilterBar filters={filters} onChange={setFilters} />
+                </details>
               </div>
-              <div className="report-filter-row" id="report-filter-row">
-                <select
-                  id="report-status"
-                  aria-label={t("Статус отчёта")}
-                  value={status}
-                  onChange={(event) => setStatus(event.target.value as "all" | ReportState)}
-                >
-                  <option value="all">{t("Все статусы")}</option>
-                  <option value="passed">{t("Пройдено")}</option>
-                  <option value="attention">{t("Внимание")}</option>
-                  <option value="blocked">{t("Заблокировано")}</option>
-                </select>
-                <label className="report-search">
-                  <Icon name="search" />
-                  <input
-                    id="reports-search"
-                    type="search"
-                    placeholder={t("Найти отчёт")}
-                    aria-label={t("Поиск отчёта")}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
-              </div>
-              <details className="report-more-filters" id="report-more-filters">
-                <summary>{t("Ещё фильтры")}</summary>
-                <StageFilterBar filters={filters} onChange={setFilters} />
-              </details>
-            </div>
-            <StageList stages={shown} reports={reports} selected={current?.dispatch_id ?? null} onSelect={setSelected} />
-            <div className="report-list-foot">{t("Отчёты не заменяют решение; evidence доступен в деталях.")}</div>
-          </section>
-          {current ? (
-            <ReportDetail
-              key={current.dispatch_id}
-              stage={current}
-              report={current.report === null ? undefined : reports.get(current.report)}
-            />
-          ) : (
-            <section className="panel report-detail-panel" id="report-detail">
-              <div className="report-empty">{t("Ничего не найдено")}</div>
-            </section>
-          )}
-        </div>
-      )}
-      {ledger && tab === "list" && current && (
-        <QaLane ledger={ledger} ticket={current.ticket}>
-          <QaLogs ledger={ledger} dispatchId={current.dispatch_id} />
-        </QaLane>
-      )}
-      </TabPanels>
-      )}
+              <StageList stages={shown} reports={reports} selected={current?.dispatch_id ?? null} onSelect={setSelected} />
+              <div className="report-list-foot">{t("Отчёты не заменяют решение; evidence доступен в деталях.")}</div>
+            </Panel>
+            <Panel title={t("Детали отчёта")} fill scroll="text" id="reports-detail" label={t("Детали отчёта")}>
+              {current ? (
+                <>
+                  <ReportDetail key={current.dispatch_id} stage={current} report={current.report === null ? undefined : reports.get(current.report)} />
+                  <QaLane ledger={ledger} ticket={current.ticket}>
+                    <QaLogs ledger={ledger} dispatchId={current.dispatch_id} />
+                  </QaLane>
+                </>
+              ) : (
+                <p className="ds-empty" id="report-detail">
+                  {t("Ничего не найдено")}
+                </p>
+              )}
+            </Panel>
+          </div>
+        )}
+      </TabPanel>
+      <TabPanel id="reports" tab="evidence" value={tab} className="ds-tabpanel">
+        {ledger && (
+          <Panel title="Evidence" fill scroll="list" id="reports-evidence-panel" label="Evidence">
+            <EvidenceTab rows={ledger.evidence} />
+          </Panel>
+        )}
+      </TabPanel>
+      <TabPanel id="reports" tab="quality" value={tab} className="ds-tabpanel">
+        {ledger && (
+          <Panel title={t("Качество")} fill scroll="list" id="reports-quality-panel" label={t("Качество")}>
+            <KpiTiles id="reports-quality-kpi" tiles={tiles.slice(4)} />
+            <QualityTab ledger={ledger} />
+          </Panel>
+        )}
+      </TabPanel>
+      <TabPanel id="reports" tab="readiness" value={tab} className="ds-tabpanel">
+        {ledger && (
+          <Panel title={t("Готовность")} fill scroll="list" id="reports-readiness-panel" label={t("Готовность")}>
+            <ReadinessTab ledger={ledger} onOpen={setCandidate} />
+          </Panel>
+        )}
+      </TabPanel>
+      {ledger && opened && <CandidateDrawer entry={opened} ledger={ledger} onClose={() => setCandidate(null)} />}
     </div>
   );
 }
