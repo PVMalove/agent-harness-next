@@ -136,7 +136,7 @@ class CleanRoomPolicy:
         except OSError as exc:
             raise GateRunnerError(
                 f"could not prepare clean QA checkout storage {temporary_parent}: {sanitise(str(exc))}",
-                remedy=f"grant the coordinator process write access to {temporary_parent} and run the QA runner again",
+                remedy=_environment_remedy(temporary_parent),
             ) from exc
         checkout = worktree_root / "checkout"
         try:
@@ -185,28 +185,41 @@ class CleanRoomPolicy:
         refs, so `git status` and `merge-base HEAD origin/<branch>` behave as in a linked worktree.
         """
         repository = str(self.repository)
-        self._require(
-            _run_git(
-                [
-                    "git",
-                    "-C",
-                    repository,
-                    "cat-file",
-                    "-e",
-                    f"{self.candidate_commit}^{{commit}}",
-                ]
-            )
+        found = _run_git(
+            [
+                "git",
+                "-C",
+                repository,
+                "cat-file",
+                "-e",
+                f"{self.candidate_commit}^{{commit}}",
+            ]
         )
+        if found.returncode != 0 and not _is_environment_refusal(_git_detail(found)):
+            raise GateRunnerError(
+                f"candidate commit {self.candidate_commit} is not a commit in {self.repository}",
+                remedy=f"repository or candidate problem: commit {self.candidate_commit} is missing; "
+                "fetch or publish the candidate commit into the repository, then run the QA runner again",
+            )
+        self._require(found, "cat-file", self.repository)
         common_dir = _run_git(
             ["git", "-C", repository, "rev-parse", "--path-format=absolute", "--git-common-dir"]
         )
-        self._require(common_dir)
+        self._require(common_dir, "rev-parse", self.repository)
         common = Path(common_dir.stdout.strip())
-        self._require(_run_git(["git", "init", "--quiet", "--template=", str(checkout)]))
-        (checkout / ".git" / "objects" / "info").mkdir(parents=True, exist_ok=True)
-        (checkout / ".git" / "objects" / "info" / "alternates").write_text(
-            f"{common / 'objects'}\n", encoding="utf-8"
+        self._require(
+            _run_git(["git", "init", "--quiet", "--template=", str(checkout)]),
+            "init",
+            checkout,
         )
+        alternates = checkout / ".git" / "objects" / "info" / "alternates"
+        try:
+            alternates.parent.mkdir(parents=True, exist_ok=True)
+            alternates.write_text(f"{common / 'objects'}\n", encoding="utf-8")
+        except OSError as exc:
+            raise _checkout_failure(
+                "alternates", sanitise(str(exc)), alternates.parent, self.candidate_commit, refused=True
+            ) from exc
         self._require(
             _run_git(
                 [
@@ -221,7 +234,9 @@ class CleanRoomPolicy:
                     "+refs/heads/*:refs/heads/*",
                     "+refs/remotes/*:refs/remotes/*",
                 ]
-            )
+            ),
+            "fetch",
+            checkout,
         )
         self._require(
             _run_git(
@@ -236,17 +251,59 @@ class CleanRoomPolicy:
                     "--detach",
                     self.candidate_commit,
                 ]
-            )
+            ),
+            "checkout",
+            checkout,
         )
 
-    def _require(self, completed: subprocess.CompletedProcess[str]) -> None:
-        """Raise a gate error when one Git step of the clean checkout failed."""
+    def _require(
+        self, completed: subprocess.CompletedProcess[str], step: str, path: Path
+    ) -> None:
+        """Raise a classified gate error when one Git step of the clean checkout failed."""
         if completed.returncode != 0:
-            detail: str = sanitise((completed.stderr or completed.stdout).strip())
-            raise GateRunnerError(
-                f"could not create clean QA worktree: {detail or 'unknown error'}",
-                remedy=f"inspect the git error above and fix the repository/candidate commit {self.candidate_commit} before retrying",
-            )
+            raise _checkout_failure(step, _git_detail(completed), path, self.candidate_commit)
+
+
+# Git and OS wording of a write the environment refused (permissions, read-only mount, sandbox).
+_ENVIRONMENT_REFUSALS = (
+    "permission denied",
+    "read-only file system",
+    "operation not permitted",
+)
+
+
+def _git_detail(completed: subprocess.CompletedProcess[str]) -> str:
+    """The sanitised diagnostic of a finished Git command."""
+    return sanitise((completed.stderr or completed.stdout).strip())
+
+
+def _is_environment_refusal(detail: str) -> bool:
+    """Whether a failure text names a write the environment refused."""
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _ENVIRONMENT_REFUSALS)
+
+
+def _environment_remedy(path: Path) -> str:
+    """The REMEDY of an environment refusal: the refused path and a ready operator command."""
+    return (
+        f"environment refusal: grant the coordinator process write access to {path}; "
+        f"check it with `test -w {shlex.quote(str(path))} || ls -ld {shlex.quote(str(path))}`, "
+        "then run the same qa run or integration local-qa command again outside the sandbox"
+    )
+
+
+def _checkout_failure(
+    step: str, detail: str, path: Path, candidate: str, *, refused: bool = False
+) -> GateRunnerError:
+    """Classify a failed clean-checkout step as an environment refusal or a repository problem."""
+    message = f"could not create clean QA checkout ({step}): {detail or 'unknown error'}"
+    if refused or _is_environment_refusal(detail):
+        return GateRunnerError(message, remedy=_environment_remedy(path))
+    return GateRunnerError(
+        message,
+        remedy=f"repository or candidate problem: inspect the git error above and fix the "
+        f"repository or candidate commit {candidate} before retrying",
+    )
 
 
 @dataclass(frozen=True)

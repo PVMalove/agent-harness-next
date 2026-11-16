@@ -212,7 +212,7 @@ class GateRunnerTests(unittest.TestCase):
             abbreviated_commit = candidate_commit[:12]
 
             for candidate, expected_message in (
-                (unknown_commit, "could not create clean QA worktree"),
+                (unknown_commit, "is not a commit in"),
                 (abbreviated_commit, "does not match the pinned candidate commit"),
             ):
                 with self.subTest(candidate=candidate):
@@ -427,6 +427,7 @@ def test_an_unwritable_checkout_storage_is_a_gate_error_not_an_os_error(
     finally:
         harness.chmod(0o755)
     assert "could not prepare clean QA checkout storage" in raised.value.message
+    assert raised.value.remedy.startswith("environment refusal:")
     assert "write access" in raised.value.remedy
 
 
@@ -454,6 +455,91 @@ def test_a_read_only_git_worktrees_directory_still_gives_a_clean_checkout(
     assert result.passed
     runs = storage_path(repo, "runs", "qa")
     assert list(runs.iterdir()) == []
+
+
+def _git_step_answering(
+    step: str, completed: subprocess.CompletedProcess[str]
+) -> _RunFn:
+    real_run = cast(_RunFn, subprocess.run)
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[0] == "git" and step in command:
+            return completed
+        return real_run(command, **kwargs)
+
+    return run
+
+
+@pytest.mark.parametrize("step", ["init", "fetch", "checkout"])
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "fatal: could not create directory: Permission denied",
+        "error: unable to write file: Read-only file system",
+        "fatal: Operation not permitted",
+    ],
+)
+def test_a_refused_write_of_the_checkout_is_an_environment_refusal_with_an_operator_command(
+    tmp_path: Path, step: str, stderr: str
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    refused = subprocess.CompletedProcess(["git"], 128, stdout="", stderr=stderr)
+    with mock.patch(
+        "harness.gate_runner.gate_runner.subprocess.run",
+        side_effect=_git_step_answering(step, refused),
+    ):
+        with pytest.raises(GateRunnerError) as raised:
+            run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    runs = storage_path(repo, "runs", "qa")
+    assert raised.value.remedy.startswith("environment refusal:")
+    assert str(runs) in raised.value.remedy
+    assert "test -w" in raised.value.remedy
+    assert "outside the sandbox" in raised.value.remedy
+    assert list(runs.iterdir()) == []
+
+
+def test_an_unknown_candidate_commit_is_a_repository_or_candidate_problem(
+    tmp_path: Path,
+) -> None:
+    repo, _head = _committed_repo(tmp_path)
+    unknown = "0" * 40
+    with pytest.raises(GateRunnerError) as raised:
+        run_gate(["true"], CleanRoomPolicy(repo, unknown), stop_on_failure=True)
+    assert raised.value.remedy.startswith("repository or candidate problem:")
+    assert unknown in raised.value.remedy
+    assert "environment refusal" not in raised.value.remedy
+
+
+def test_a_git_error_without_a_refused_write_is_a_repository_or_candidate_problem(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    broken = subprocess.CompletedProcess(
+        ["git"], 128, stdout="", stderr="fatal: bad object refs/heads/broken"
+    )
+    with mock.patch(
+        "harness.gate_runner.gate_runner.subprocess.run",
+        side_effect=_git_step_answering("fetch", broken),
+    ):
+        with pytest.raises(GateRunnerError) as raised:
+            run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    assert "could not create clean QA checkout (fetch)" in raised.value.message
+    assert raised.value.remedy.startswith("repository or candidate problem:")
+    assert head in raised.value.remedy
+
+
+def test_an_unwritable_alternates_file_is_an_environment_refusal(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    with mock.patch(
+        "pathlib.Path.write_text", side_effect=PermissionError("Permission denied")
+    ):
+        with pytest.raises(GateRunnerError) as raised:
+            run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    assert "(alternates)" in raised.value.message
+    assert raised.value.remedy.startswith("environment refusal:")
+    assert "objects" in raised.value.remedy
 
 
 def test_an_unlaunchable_git_is_a_gate_error_and_leaves_no_checkout_directory(
