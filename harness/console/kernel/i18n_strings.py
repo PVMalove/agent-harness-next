@@ -3039,6 +3039,15 @@ EN.update(
     }
 )
 
+# Open Project on the design system v3 (web console).
+EN.update(
+    {
+        "project.json и orchestration.json настраиваются на странице «Настройка»: черновик, проверка и подтверждённая запись.": "project.json and orchestration.json are set up on the Configuration page: a draft, a check and a confirmed write.",
+        "Навыков": "Skills",
+        "Хуков": "Hooks",
+    }
+)
+
 def state_labels() -> dict[str, dict[str, str]]:
     """The state labels as the SPA reads them: state -> {\"ru\": ..., \"en\": ...}."""
     return {state: {"ru": ru, "en": en} for state, (ru, en) in STATE_LABELS.items()}

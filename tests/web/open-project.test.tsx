@@ -52,6 +52,8 @@ const SENT_TYPES = new Set([
   "home.snapshot",
 ]);
 
+const stepTo = (index: number) => act(() => fireEvent.click(document.querySelector(`#open-project-step-tab-${index}-button`)!));
+
 describe("the Open Project route", () => {
   beforeEach(() => FakeSocket.reset());
 
@@ -87,11 +89,15 @@ describe("the Open Project route", () => {
     expect([...flow.querySelectorAll(".install-flow-node b")].map((node) => node.textContent)).toEqual(["Проект", "Harness", "Capability", "Runtime", "Health"]);
     const capability = () => flow.querySelector("[data-flow-cap]")?.textContent;
     expect(capability()).toBe("engineering-suite");
+    stepTo(2);
     act(() => fireEvent.click(screen.getByRole("radio", { name: /backend-orchestration/ })));
     expect(capability()).toBe("backend-orchestration");
-    const bottom = document.querySelector(".install-bottom-grid") as HTMLElement;
-    expect([...bottom.children].map((child) => child.id)).toEqual(["open-project-plan", "open-project-capability", "open-project-checks"]);
+    const bottom = document.querySelector(".ds-project-install") as HTMLElement;
+    expect([...bottom.children].map((child) => child.id)).toEqual(["open-project-plan", "open-project-capability"]);
     expect(flow.compareDocumentPosition(bottom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The snapshot has no per-composition counts: they say so instead of a number.
+    const counts = [...document.querySelectorAll("#open-project-composition-counts dd")].map((item) => item.textContent);
+    expect(counts).toEqual(["нет данных", "нет данных", "нет данных"]);
   });
 
   test("another path becomes a copyable command in the browser; nothing is sent", () => {
@@ -130,6 +136,7 @@ describe("the Open Project route", () => {
 
   test("a blocked capability changes the plan and cannot be installed", () => {
     const { socket } = renderPage();
+    stepTo(2);
     act(() => fireEvent.click(screen.getByRole("radio", { name: /backend-orchestration/ })));
     expect(document.querySelector("#open-project-install-command")?.textContent).toBe(
       "harness update /work/project --capability backend-orchestration",
@@ -151,11 +158,17 @@ describe("the Open Project route", () => {
 
   test("the title and the current project follow the mockup: one action, name · branch · version and four KPIs", () => {
     renderPage();
-    expect([...document.querySelectorAll(".project-title .actions > *")].map((item) => item.textContent?.trim())).toEqual(["Диагностика"]);
-    expect([...document.querySelectorAll(".project-title .home-facts span")].map((item) => item.textContent)).toEqual(["claude-agent-harness", "feature/issue-7", "1.5.1"]);
-    const steps = [...document.querySelectorAll("#open-project-steps .install-step")];
-    expect(steps.map((step) => step.querySelector("svg")?.getAttribute("data-icon"))).toEqual(["check", "play", "clock", "clock", "clock"]);
-    expect(steps.map((step) => step.textContent).join("")).not.toMatch(/[✔▶○]/);
+    expect([...document.querySelectorAll(".ds-page-head .ds-head-actions > *")].map((item) => item.textContent?.trim())).toEqual(["Диагностика"]);
+    expect([...document.querySelectorAll("#open-project-facts .ds-facts-main span")].map((item) => item.textContent)).toEqual(["claude-agent-harness", "feature/issue-7", "1.5.1"]);
+    const steps = [...document.querySelectorAll("#open-project-steps [role=tab]")];
+    expect(steps.map((step) => step.textContent)).toEqual([
+      "✓Выбор проекта",
+      "2Предварительные проверки",
+      "3Установка / внедрение",
+      "4Настройка",
+      "5Итоговая диагностика",
+    ]);
+    expect(document.querySelector("#open-project-steps .ds-note")?.textContent).toBe("Шаг 2 из 5");
     const current = document.querySelector("#open-project-current") as HTMLElement;
     expect([...current.querySelectorAll(".current-project-meta svg")].map((icon) => icon.getAttribute("data-icon"))).toEqual(["branch", "github-mark"]);
     expect(current.querySelector(".current-project-meta")?.textContent).toContain("feature/issue-7");
@@ -169,7 +182,7 @@ describe("the Open Project route", () => {
 
   test("the project list has its count head and foot; a typed path is checked locally with «Проверить путь»", () => {
     const { socket } = renderPage();
-    expect(document.querySelector("#open-project-list .panel-head .small")?.textContent).toBe("3 найдено");
+    expect(document.querySelector("#open-project-list .ds-panel-meta")?.textContent).toBe("3 найдено");
     expect(document.querySelector("#open-project-list .project-list-foot")?.textContent).toBe("Выберите проект, чтобы увидеть проверки справа.");
     const before = socket.sent.length;
     act(() => fireEvent.change(screen.getByLabelText("Путь к локальному Git-проекту"), { target: { value: "relative/path" } }));
@@ -217,7 +230,7 @@ describe("the Open Project route", () => {
   test("the checks panel shows the Home health counts, the mode chips and the fix links", () => {
     renderPage();
     const checks = document.querySelector("#open-project-checks") as HTMLElement;
-    expect(checks.querySelector(".panel-head .small")?.textContent).toBe("45 из 56 проверено");
+    expect(checks.querySelector(".ds-panel-meta")?.textContent).toBe("45 из 56 проверено");
     expect([...checks.querySelectorAll(".install-check-actions .chip")].map((chip) => chip.textContent)).toEqual(["Офлайн", "Онлайн"]);
     expect(checks.querySelector('a[href="#/diagnostics"]')?.textContent?.trim()).toBe("Исправить");
     expect(checks.querySelector('a[href="#/configuration"]')?.textContent?.trim()).toBe("Настройка");

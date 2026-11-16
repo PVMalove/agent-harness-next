@@ -1,4 +1,4 @@
-/* Design system v3: the layout of the moved screens (Repo Map, Harness, Help, Diagnostics, Update). General rules
+/* Design system v3: the layout of the moved screens (Repo Map, Harness, Help, Diagnostics, Update, Project). General rules
    live in ds-components.css; nothing here restyles a shared component. */
 .ds-tabpanel { display: flex; flex-direction: column; flex: 1; gap: 12px; min-height: 0; }
 .ds-tabpanel[hidden] { display: none; }
@@ -141,6 +141,16 @@
 #update-how .ds-panel-body { display: flex; flex-direction: column; }
 #update-how .ds-update-how { flex: 1; min-height: 0; overflow: auto; }
 
+/* Project: the five-step wizard */
+.ds-wizard { display: flex; align-items: center; gap: 12px; }
+.ds-wizard .ds-pipe { flex: 1; min-width: 0; }
+.ds-wizard > .ds-note { flex: none; padding: 0; }
+.ds-project-step[hidden] { display: none; }
+.ds-project-select { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-project-left { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.ds-project-detail { min-height: 0; overflow: auto; border-radius: 8px; }
+.ds-project-install { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1 1 200px; min-height: 0; }
+
 /* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
    The page subtitle goes, the installation rows put their caption on the title line and the tile
    captions take one line, so every panel shows all its rows. */
@@ -164,6 +174,8 @@
   .ds-features,
   .ds-diag-checks,
   .ds-update,
+  .ds-project-select,
+  .ds-project-install,
   .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
   .ds-file-rel { border-left: 0; }
 }

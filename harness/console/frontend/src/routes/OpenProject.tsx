@@ -1,5 +1,8 @@
-/* Open Project (#/open-project): the project this console server serves, its installation plan
-   and the candidate projects of open_project.snapshot. The server is bound to one project and the
+/* Open Project (#/open-project) on the design system v3: a five-step wizard (Выбор проекта,
+   Предварительные проверки, Установка / внедрение, Настройка, Итоговая диагностика) over the
+   project this console server serves, its installation plan and the candidate projects of
+   open_project.snapshot. Counts the snapshot lacks (files, skills and hooks of a composition) are
+   marked «нет данных». The server is bound to one project and the
    page never asks it to switch: another project opens with its own command in a terminal, which
    the page only shows and copies. A typed path is turned into that command in the browser and is
    sent nowhere. The only change the page can start is the installation into the served project,
@@ -7,6 +10,9 @@
 import { Fragment, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
+import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
+import type { PipeTab } from "../ds";
+import { NoData } from "../harness/HarnessOverview";
 import { useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";
@@ -22,6 +28,7 @@ import {
   targetSummary,
 } from "../project/format";
 import { useScreen } from "../screens/useScreen";
+import { snapshotClock } from "../update/format";
 import type { LocalJob } from "../ws/jobs";
 import { parseOpenProject } from "../ws/projectScreens";
 import type { Candidate, OpenProjectFacts } from "../ws/projectScreens";
@@ -94,26 +101,6 @@ function flowNodes(facts: OpenProjectFacts, home: HomeSnapshot | null, chosen: s
       tone: "after",
     },
   ];
-}
-
-function Stepper({ stage }: { stage: number }) {
-  const { t } = useI18n();
-  return (
-    <div className="install-steps" id="open-project-steps" tabIndex={0} role="region" aria-label={t("Шаги установки")}>
-      <div className="install-steps-track">
-        {STAGES.map((name, index) => (
-          <Fragment key={name}>
-            <span className={`install-step ${index < stage ? "done" : index === stage ? "active" : "pending"}`}>
-              <Icon name={index < stage ? "check" : index === stage ? "play" : "clock"} />
-              {t(name)}
-            </span>
-            {index < STAGES.length - 1 && <i className="install-sep">—</i>}
-          </Fragment>
-        ))}
-      </div>
-      <span className="install-step-count">{t("Шаг {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
-    </div>
-  );
 }
 
 function useCopy(): [string, (text: string) => void] {
@@ -258,7 +245,7 @@ function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidat
 }
 
 export function OpenProject() {
-  const { t, section } = useI18n();
+  const { t, section, language } = useI18n();
   const { snapshot: home, client } = useConsole();
   const [online, setOnline] = useState(false);
   const [checked, setChecked] = useState("");
@@ -270,6 +257,7 @@ export function OpenProject() {
   const [copied, copy] = useCopy();
   const [request, setRequest] = useState<RunRequest | null>(null);
   const [installed, setInstalled] = useState(false);
+  const [chosenStep, setStep] = useState<string | null>(null);
 
   const target = facts?.target ?? null;
   const candidates = facts?.candidates ?? [];
@@ -278,6 +266,7 @@ export function OpenProject() {
   const blocked = facts?.blockers[chosen] ?? [];
   const summary = target ? targetSummary(target, t) : null;
   const stage = target === null ? 0 : installed ? 3 : 1;
+  const step = chosenStep ?? "0";
   const typed = path.trim();
   const reason = target === null ? t(facts?.error || "План появится после проверки пути.") : blocked.length ? t("заблокировано: {n}", { n: blocked.length }) : "";
   const health = home?.health ?? null;
@@ -303,82 +292,119 @@ export function OpenProject() {
     screen.refresh(true);
   };
 
-  return (
-    <div className="project-page work-page" data-section="Open project">
-      <div className="page-title project-title">
-        <div>
-          <h1>{t("Проект")}</h1>
-          <p>{t("Сервер консоли обслуживает один проект; другой проект открывается своей командой в терминале.")}</p>
-          {facts && (
-            <div className="home-facts" id="open-project-facts" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
-              <span>{home?.project?.name ?? projectName(facts.repo)}</span>
-              <span>{home?.project?.branch ?? t("ветка неизвестна")}</span>
-              <span>{home?.harness?.installed ? home.harness.installed_version : t("Harness не установлен")}</span>
-            </div>
-          )}
+  const steps: PipeTab[] = STAGES.map((name, index) => ({
+    id: String(index),
+    label: t(name),
+    count: index < stage ? "✓" : index + 1,
+  }));
+  const composition = (
+    <dl className="ds-kv" id="open-project-composition-counts">
+      {[t("Файлов"), t("Навыков"), t("Хуков")].map((label) => (
+        <div className="ds-kv-row" key={label}>
+          <dt>{label}</dt>
+          <dd>
+            <NoData />
+          </dd>
         </div>
-        <div className="actions">
-          <a className="btn" href={href("diagnostics")}>
-            <Icon name="pulse" /> {section("Diagnostics")}
-          </a>
-        </div>
-      </div>
+      ))}
+    </dl>
+  );
 
-      <Stepper stage={stage} />
+  return (
+    <div className="ds-page ds-fit" data-section="Open project">
+      <PageHeader
+        title={t("Проект")}
+        subtitle={t("Сервер консоли обслуживает один проект; другой проект открывается своей командой в терминале.")}
+        actions={
+          <a className="ds-btn" href={href("diagnostics")}>
+            <Icon name="pulse" className="ds-ic-sm" /> {section("Diagnostics")}
+          </a>
+        }
+      />
 
       {screen.error && !facts && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
+        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
           {t("Данные не получены")}: {screen.error.message || screen.error.code}
         </p>
       )}
 
-      {facts && (
-        <section className="panel current-project" id="open-project-current">
-          <div className="current-project-icon">
-            <Icon name="folder" />
-          </div>
-          <div className="current-project-main">
-            <span className="eyebrow">{t("Текущий проект")}</span>
-            <h2>{home?.project?.name ?? projectName(facts.repo)}</h2>
-            <code>{facts.repo}</code>
-            {target ? (
-              <div className="current-project-meta">
-                <Icon name="branch" /> {home?.project?.branch ?? t("ветка неизвестна")} · <Icon name={TRACKER_ICON[tracker] ?? "folder"} />{" "}
-                {TRACKER_NAME[tracker] ?? (tracker || t("трекер не определён"))}
-              </div>
-            ) : (
-              <p className="command-refusal err">{t(facts.error)}</p>
-            )}
-          </div>
-          <div className="current-project-stats" id="open-project-kpi">
-            <div>
-              <span>Harness</span>
-              <b>{home?.harness?.installed ? home.harness.installed_version : "—"}</b>
-            </div>
-            <div>
-              <span>{t("Скиллов")}</span>
-              <b>{home?.harness?.skills || "—"}</b>
-            </div>
-            <div>
-              <span>Managed</span>
-              <b>{home?.harness?.managed_files || "—"}</b>
-            </div>
-            <div>
-              <span>Health</span>
-              <b>{health && total ? `${health.ok}/${total}` : "—"}</b>
-            </div>
-          </div>
-        </section>
-      )}
+      <Summary
+        id="open-project-facts"
+        label={t("Текущий проект")}
+        stats={[
+          { label: "Harness", value: home?.harness?.installed ? home.harness.installed_version : "—", caption: home?.harness_version ? t("доступно {version}", { version: home.harness_version }) : <NoData /> },
+          { label: t("Скиллов"), value: home?.harness?.skills || "—" },
+          { label: "Managed", value: home?.harness?.managed_files || "—" },
+          { label: "Health", value: health && total ? `${health.ok}/${total}` : "—" },
+        ]}
+        facts={
+          facts ? (
+            <>
+              <span>{home?.project?.name ?? projectName(facts.repo)}</span>
+              <span>{home?.project?.branch ?? t("ветка неизвестна")}</span>
+              <span>{home?.harness?.installed ? home.harness.installed_version : t("Harness не установлен")}</span>
+            </>
+          ) : undefined
+        }
+        snapshot={
+          facts ? (
+            <span title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+              <Icon name="clock" className="ds-ic-sm" /> {snapshotClock(screen.ageSeconds, language)}
+            </span>
+          ) : undefined
+        }
+      />
+
+      <div className="ds-wizard" id="open-project-steps">
+        <PipeTabs id="open-project-step" label={t("Шаги установки")} tabs={steps} value={step} onChange={(id) => setStep(id)} />
+        <span className="ds-note">{t("Шаг {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
+      </div>
 
       {facts && (
-        <div className="project-grid">
-          <div className="project-left">
-            <section className="panel projects-panel" id="open-project-list">
-              <div className="panel-head">
-                <h2>{t("Проекты")}</h2>
-                <span className="small muted">{t("{count} найдено", { count: candidates.length })}</span>
-              </div>
+        <>
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "0"} data-step="0">
+            <div className="ds-project-select">
+              <div className="ds-project-left">
+                <Panel title={t("Текущий проект")} id="open-project-current">
+                  <div className="ds-legacy-island current-project">
+          <div className="current-project-icon">
+                      <Icon name="folder" />
+                    </div>
+                    <div className="current-project-main">
+                      <span className="eyebrow">{t("Текущий проект")}</span>
+                      <h2>{home?.project?.name ?? projectName(facts.repo)}</h2>
+                      <code>{facts.repo}</code>
+                      {target ? (
+                        <div className="current-project-meta">
+                          <Icon name="branch" /> {home?.project?.branch ?? t("ветка неизвестна")} · <Icon name={TRACKER_ICON[tracker] ?? "folder"} />{" "}
+                          {TRACKER_NAME[tracker] ?? (tracker || t("трекер не определён"))}
+                        </div>
+                      ) : (
+                        <p className="command-refusal err">{t(facts.error)}</p>
+                      )}
+                    </div>
+                    <div className="current-project-stats" id="open-project-kpi">
+                      <div>
+                        <span>Harness</span>
+                        <b>{home?.harness?.installed ? home.harness.installed_version : "—"}</b>
+                      </div>
+                      <div>
+                        <span>{t("Скиллов")}</span>
+                        <b>{home?.harness?.skills || "—"}</b>
+                      </div>
+                      <div>
+                        <span>Managed</span>
+                        <b>{home?.harness?.managed_files || "—"}</b>
+                      </div>
+                      <div>
+                        <span>Health</span>
+                        <b>{health && total ? `${health.ok}/${total}` : "—"}</b>
+                      </div>
+                    </div>
+                  </div>
+                </Panel>
+                <Panel title={t("Проекты")} id="open-project-list" meta={t("{count} найдено", { count: candidates.length })} fill scroll="list" label={t("Проекты")}>
+                  <div className="ds-legacy-island">
               <div className="project-list" role="listbox" aria-label={t("Проекты")}>
                 {candidates.length === 0 && <p className="harness-note">{t("Проектов для открытия не найдено")}</p>}
                 {candidates.map((item) => (
@@ -410,12 +436,10 @@ export function OpenProject() {
                 ))}
               </div>
               <div className="project-list-foot">{t("Выберите проект, чтобы увидеть проверки справа.")}</div>
-            </section>
-            <section className="panel project-path-panel" id="open-project-path">
-              <div className="panel-head">
-                <h2>{t("Путь к другому проекту")}</h2>
-                <span className="small muted">{t("без чтения Git")}</span>
-              </div>
+                  </div>
+                </Panel>
+                <Panel title={t("Путь к другому проекту")} id="open-project-path" meta={t("без чтения Git")}>
+                  <div className="ds-legacy-island">
               <div className="project-path-body">
                 <label className="field">
                   {t("Путь к локальному Git-проекту")}
@@ -445,129 +469,20 @@ export function OpenProject() {
                 <span id="open-project-path-status" role="status">{checked}</span>
                 <span className="project-hint">{t("Проверка пути не читает Git и .harness: команда открывает проект своим сервером.")}</span>
               </div>
-            </section>
-          </div>
-          {shown && <CandidateDetail item={shown} facts={facts} home={home} copied={copied} onCopy={copy} />}
-        </div>
-      )}
-
-      {facts && (
-        <section className="panel install-flow-panel" id="open-project-flow">
-          <div className="panel-head">
-            <h2>{t("Схема внедрения")}</h2>
-            <span className="small muted">{t("путь проекта → harness → capability → runtime → health")}</span>
-          </div>
-          <div className="install-flow">
-            {flowNodes(facts, home, chosen, blocked.length, t).map((node, index, nodes) => (
-              <Fragment key={node.label}>
-                <div className={`install-flow-node ${node.tone}`}>
-                  <span className="install-flow-num">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="install-flow-icon">
-                    <Icon name={node.icon} />
-                  </span>
-                  <b>{node.label}</b>
-                  <span className="install-flow-value" data-flow-cap={node.label === "Capability" ? "" : undefined}>
-                    {node.value}
-                  </span>
-                  <small>{node.sub}</small>
+                  </div>
+                </Panel>
+              </div>
+              {shown && (
+                <div className="ds-legacy-island ds-project-detail">
+                  <CandidateDetail item={shown} facts={facts} home={home} copied={copied} onCopy={copy} />
                 </div>
-                {index < nodes.length - 1 && <span className="install-flow-arrow">→</span>}
-              </Fragment>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {facts && (
-        <div className="install-bottom-grid">
-          <section className="panel install-plan" id="open-project-plan">
-            <div className="panel-head">
-              <h2>{t("План установки")}</h2>
-              {target && <span className="update-pill warn">{t(ACTION_WORDS[target.action])}</span>}
-            </div>
-            <div className="install-plan-body">
-              {target && summary ? (
-                <>
-                  <p className={`install-plan-summary ${summary.kind === "warning" ? "warn" : "ok"}`}>
-                    <b>{summary.first}</b> <span>{summary.facts}</span>
-                  </p>
-                  <dl className="install-plan-facts">
-                    <div>
-                      <dt>{t("Проект")}</dt>
-                      <dd>{projectName(target.repo)}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("Состав")}</dt>
-                      <dd>{`${CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![0]) : "Capability"} (${chosen})`}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("Конфликты")}</dt>
-                      <dd className={blocked.length ? "err" : target.conflicts.length ? "warn" : "ok"}>
-                        {blocked.length ? t("заблокировано: {n}", { n: blocked.length }) : target.conflicts.length ? target.conflicts.join(", ") : t("нет")}
-                      </dd>
-                    </div>
-                  </dl>
-                  {target.conflicts.length > 0 && <p className="plan-warning">{t("Force/replace не включены. При конфликте операция остановится.")}</p>}
-                  <div className="install-command-label">{t("Команда")}</div>
-                  <pre id="open-project-install-command" className="install-command">
-                    {installCommand(target, chosen)}
-                  </pre>
-                </>
-              ) : (
-                <p className="harness-note">{reason}</p>
               )}
-              <div className="install-plan-actions">
-                <button id="open-project-install" className="btn primary" type="button" disabled={!target || blocked.length > 0} title={reason || undefined} onClick={install}>
-                  <Icon name="download" /> {t("Установить")}
-                </button>
-                <span>{reason || t("Потребуется подтверждение")}</span>
-              </div>
             </div>
-          </section>
-          <section className="panel install-capabilities" id="open-project-capability">
-            <div className="panel-head">
-              <h2>{t("Состав Harness")}</h2>
-              <span className="small muted">{t("что будет установлено")}</span>
-            </div>
-            <div className="cap-list" role="radiogroup" aria-label={t("Состав Harness")}>
-              {Object.entries(facts.blockers).map(([name, paths]) => {
-                const [title, description] = CAPABILITY_TEXT[name] ?? [name, ""];
-                return (
-                  <label key={name} className={`cap-row${name === chosen ? " on" : ""}`}>
-                    <input type="radio" name="open-project-capability" aria-label={`${t(title)} (${name})`} checked={name === chosen} onChange={() => setCapability(name)} />
-                    <span className="cap-copy">
-                      <b>{t(title)}</b>
-                      {target?.capabilities.includes(name) && <span className="cap-status">{t("установлено")}</span>}
-                      <small>{description ? t(description) : name}</small>
-                      {paths.length > 0 && (
-                        <small className="cap-blocked">
-                          <Icon name="x" /> {t("заблокировано: {n}", { n: paths.length })}
-                        </small>
-                      )}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <p className="cap-footer">{CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![2]) : chosen}</p>
-            {blocked.length > 0 && (
-              <div className="plan-warning" id="open-project-blockers">
-                <p>{t("Установка заблокирована; проверьте собственные/изменённые пути:")}</p>
-                <ul>
-                  {blocked.map((item) => (
-                    <li key={item}>
-                      <code>{item}</code>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-          <section className="panel install-checks" id="open-project-checks">
-            <div className="panel-head">
-              <h2>{t("Проверки")}</h2>
-              <span className="small muted">{health ? t("{run} из {total} проверено", { run, total }) : t("нет данных")}</span>
-            </div>
+          </div>
+
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "1"} data-step="1">
+            <Panel title={t("Проверки")} id="open-project-checks" meta={health ? t("{run} из {total} проверено", { run, total }) : t("нет данных")} fill scroll="text">
+              <div className="ds-legacy-island">
             <div className="install-checks-body">
               <div className="install-check-actions">
                 <button className={`chip${online ? "" : " on"}`} type="button" aria-pressed={!online} onClick={() => mode(false)}>
@@ -611,11 +526,155 @@ export function OpenProject() {
               )}
               <p className="install-checks-note">{t("Онлайн — отдельная проверка трекера и прав доступа. Проверки песочницы анализируют настройки; фактические доступы могут остаться непроверенными.")}</p>
             </div>
-          </section>
-        </div>
+              </div>
+            </Panel>
+          </div>
+
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "2"} data-step="2">
+            <Panel title={t("Схема внедрения")} id="open-project-flow" meta={t("путь проекта → harness → capability → runtime → health")}>
+              <div className="ds-legacy-island">
+          <div className="install-flow">
+            {flowNodes(facts, home, chosen, blocked.length, t).map((node, index, nodes) => (
+              <Fragment key={node.label}>
+                <div className={`install-flow-node ${node.tone}`}>
+                  <span className="install-flow-num">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="install-flow-icon">
+                    <Icon name={node.icon} />
+                  </span>
+                  <b>{node.label}</b>
+                  <span className="install-flow-value" data-flow-cap={node.label === "Capability" ? "" : undefined}>
+                    {node.value}
+                  </span>
+                  <small>{node.sub}</small>
+                </div>
+                {index < nodes.length - 1 && <span className="install-flow-arrow">→</span>}
+              </Fragment>
+            ))}
+          </div>
+              </div>
+            </Panel>
+            <div className="ds-project-install">
+              <Panel title={t("План установки")} id="open-project-plan" meta={target ? t(ACTION_WORDS[target.action]) : undefined} fill scroll="text">
+                <div className="ds-legacy-island">
+            <div className="install-plan-body">
+              {target && summary ? (
+                <>
+                  <p className={`install-plan-summary ${summary.kind === "warning" ? "warn" : "ok"}`}>
+                    <b>{summary.first}</b> <span>{summary.facts}</span>
+                  </p>
+                  <dl className="install-plan-facts">
+                    <div>
+                      <dt>{t("Проект")}</dt>
+                      <dd>{projectName(target.repo)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("Состав")}</dt>
+                      <dd>{`${CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![0]) : "Capability"} (${chosen})`}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("Конфликты")}</dt>
+                      <dd className={blocked.length ? "err" : target.conflicts.length ? "warn" : "ok"}>
+                        {blocked.length ? t("заблокировано: {n}", { n: blocked.length }) : target.conflicts.length ? target.conflicts.join(", ") : t("нет")}
+                      </dd>
+                    </div>
+                  </dl>
+                  {target.conflicts.length > 0 && <p className="plan-warning">{t("Force/replace не включены. При конфликте операция остановится.")}</p>}
+                  <div className="install-command-label">{t("Команда")}</div>
+                  <pre id="open-project-install-command" className="install-command">
+                    {installCommand(target, chosen)}
+                  </pre>
+                </>
+              ) : (
+                <p className="harness-note">{reason}</p>
+              )}
+              <div className="install-plan-actions">
+                <button id="open-project-install" className="btn primary" type="button" disabled={!target || blocked.length > 0} title={reason || undefined} onClick={install}>
+                  <Icon name="download" /> {t("Установить")}
+                </button>
+                <span>{reason || t("Потребуется подтверждение")}</span>
+              </div>
+            </div>
+                </div>
+              </Panel>
+              <Panel title={t("Состав Harness")} id="open-project-capability" meta={t("что будет установлено")} fill scroll="list" label={t("Состав Harness")}>
+                <div className="ds-legacy-island">
+            <div className="cap-list" role="radiogroup" aria-label={t("Состав Harness")}>
+              {Object.entries(facts.blockers).map(([name, paths]) => {
+                const [title, description] = CAPABILITY_TEXT[name] ?? [name, ""];
+                return (
+                  <label key={name} className={`cap-row${name === chosen ? " on" : ""}`}>
+                    <input type="radio" name="open-project-capability" aria-label={`${t(title)} (${name})`} checked={name === chosen} onChange={() => setCapability(name)} />
+                    <span className="cap-copy">
+                      <b>{t(title)}</b>
+                      {target?.capabilities.includes(name) && <span className="cap-status">{t("установлено")}</span>}
+                      <small>{description ? t(description) : name}</small>
+                      {paths.length > 0 && (
+                        <small className="cap-blocked">
+                          <Icon name="x" /> {t("заблокировано: {n}", { n: paths.length })}
+                        </small>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="cap-footer">{CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![2]) : chosen}</p>
+            {blocked.length > 0 && (
+              <div className="plan-warning" id="open-project-blockers">
+                <p>{t("Установка заблокирована; проверьте собственные/изменённые пути:")}</p>
+                <ul>
+                  {blocked.map((item) => (
+                    <li key={item}>
+                      <code>{item}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+                </div>
+                {composition}
+              </Panel>
+            </div>
+          </div>
+
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "3"} data-step="3">
+            <Panel title={t("Настройка")} id="open-project-settings">
+              <p className="ds-note">{t("project.json и orchestration.json настраиваются на странице «Настройка»: черновик, проверка и подтверждённая запись.")}</p>
+              <div className="ds-update-decide">
+                <a className="ds-btn" href={href("configuration")}>
+                  <Icon name="settings" className="ds-ic-sm" /> {t("Настройка")}
+                </a>
+              </div>
+            </Panel>
+          </div>
+
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "4"} data-step="4">
+            <Panel title={t("Итоговая диагностика")} id="open-project-final">
+              {health ? (
+                <dl className="ds-kv">
+                  <div className="ds-kv-row"><dt>{t("пройдено")}</dt><dd>{health.ok}</dd></div>
+                  <div className="ds-kv-row"><dt>{t("внимание")}</dt><dd>{health.warn}</dd></div>
+                  <div className="ds-kv-row"><dt>{t("ошибки")}</dt><dd>{health.fail}</dd></div>
+                  <div className="ds-kv-row"><dt>{t("пропущено")}</dt><dd>{health.skipped}</dd></div>
+                </dl>
+              ) : (
+                <p className="ds-empty">
+                  <NoData />
+                </p>
+              )}
+              <div className="ds-update-decide">
+                <a className="ds-btn" href={href("diagnostics")}>
+                  <Icon name="pulse" className="ds-ic-sm" /> {section("Diagnostics")}
+                </a>
+              </div>
+            </Panel>
+          </div>
+        </>
       )}
 
-      <CommandPanel section="setup" confirmAll listed={false} request={request} onJobDone={onJobDone} />
+      <div className="ds-legacy-island">
+        <CommandPanel section="setup" confirmAll listed={false} request={request} onJobDone={onJobDone} />
+      </div>
     </div>
   );
 }
