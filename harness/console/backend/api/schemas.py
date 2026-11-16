@@ -220,6 +220,12 @@ class HarnessOverviewRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class FeaturesSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["features.snapshot"]
+    force: bool = False
+
+
 class HarnessMaintenanceRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["harness.maintenance"]
@@ -319,6 +325,7 @@ ConsoleRequest = Annotated[
     | DiagnosticsSnapshotRequest
     | HarnessSnapshotRequest
     | HarnessOverviewRequest
+    | FeaturesSnapshotRequest
     | HarnessMaintenanceRequest
     | RepoMapSnapshotRequest
     | OpenProjectSnapshotRequest
@@ -601,6 +608,88 @@ class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     age_seconds: float
 
 
+ConfigName = Literal["project.json", "orchestration.json"]
+
+
+class FeatureSource(_Strict):  # type: ignore[explicit-any]
+    kind: Literal[
+        "capabilities",
+        "hook",
+        "agent",
+        "project.json",
+        "orchestration.json",
+        "harness.lock",
+        "runtime",
+    ]
+    path: str
+
+
+class FeatureRequirement(_Strict):  # type: ignore[explicit-any]
+    """One readiness requirement: a Russian title, its level and the paths or values behind it."""
+
+    title: str
+    state: Literal["ok", "warn", "err"]
+    detail: str
+
+
+class FeatureSetting(_Strict):  # type: ignore[explicit-any]
+    """One configuration key the feature reads: its masked value as compact JSON clipped to 120
+    characters, or the default text (null: none) when the key is absent."""
+
+    file: ConfigName
+    path: list[str]
+    present: bool
+    value: str | None
+
+
+class FeatureToggle(_Strict):  # type: ignore[explicit-any]
+    """The boolean configuration key that switches the feature, its current value and the
+    kernel's forecast: the state and requirements of the feature once the key is flipped."""
+
+    file: ConfigName
+    path: Annotated[list[str], Field(min_length=1)]
+    enabled: bool
+    state_after: Literal["working", "partial", "not_working", "disabled"]
+    requirements_after: list[FeatureRequirement]
+
+
+class FeaturePayload(_Strict):  # type: ignore[explicit-any]
+    id: str
+    name: str
+    category: Literal[
+        "execution",
+        "roles",
+        "hooks",
+        "context",
+        "process",
+        "publication",
+        "capabilities",
+        "platform",
+    ]
+    state: Literal["working", "partial", "not_working", "disabled"]
+    description: str
+    off_effect: str
+    depends_on: list[str]
+    required_by: list[str]
+    sources: list[FeatureSource]
+    requirements: list[FeatureRequirement]
+    settings: list[FeatureSetting]
+    toggle: FeatureToggle | None
+
+
+class FeaturesSnapshotReply(_Envelope):  # type: ignore[explicit-any]
+    """The Harness feature registry of Diagnostics, the SHA-256 digests of the configuration
+    files it was read from (empty: missing file) and whether a configuration write is pending."""
+
+    type: Literal["features.snapshot"]
+    ok: Literal[True]
+    features: list[FeaturePayload]
+    config_digests: dict[ConfigName, str]
+    transaction_pending: bool
+    cached: bool
+    age_seconds: float
+
+
 class PagedReply(_Envelope):  # type: ignore[explicit-any]
     """The first page of a report body, a batch chronology or an update diff as JSON text."""
 
@@ -749,6 +838,7 @@ ConsoleReply = (
     | OrchestrationEventsReply
     | ScreenSnapshotReply
     | HarnessOverviewReply
+    | FeaturesSnapshotReply
     | PagedReply
     | SnapshotPageReply
     | OrchestrationLockReply

@@ -112,12 +112,14 @@ for (const width of [1440, 390]) {
     await expect(page.locator("#open-project-list [data-path]")).toHaveCount(3);
     await page.locator('[data-path="/work/billing"]').click();
     await expect(page.locator("#open-project-command")).toHaveText("harness console --web /work/billing");
+    await expect(page.locator("#open-project-detail-checks .ds-row")).toHaveCount(5);
+    // The title carries only «Диагностика»; the plan is in the step «Установка / внедрение» under the rollout scheme.
+    await expect(page.locator(".ds-page-head .ds-head-actions > *")).toHaveCount(1);
+    await page.getByRole("tab", { name: /Установка \/ внедрение/ }).click();
     await expect(page.locator("#open-project-install-command")).toHaveText("harness update /work/project --capability engineering-suite");
-    // As in the mockup the title carries only «Диагностика»; the plan is below the rollout scheme.
-    await expect(page.locator(".project-title .actions > *")).toHaveCount(1);
     await page.locator("#open-project-plan").scrollIntoViewIfNeeded();
     await expect(page.locator("#open-project-plan")).toBeInViewport();
-    await expect(page.locator("#open-project-detail .project-check")).toHaveCount(5);
+    await page.getByRole("tab", { name: /Выбор проекта/ }).click();
     const before = sent.length;
     await page.getByLabel("Путь к локальному Git-проекту").fill("/srv/other");
     await expect(page.locator("#open-project-path-command")).toHaveText("harness console --web /srv/other");
@@ -130,22 +132,24 @@ for (const width of [1440, 390]) {
   test(`update harness at ${width} px: a cancelled confirmation starts nothing`, async ({ page }, info) => {
     const sent = await mockSocket(page);
     await open(page, "update-harness", width, "#update-versions");
-    await expect(page.locator("#update-changes .update-count-row.err")).toContainText("в конфликте (нужна перезапись)");
+    await expect(page.locator('#update-changes .ds-update-count[data-tone="fail"]')).toContainText("в конфликте (нужна перезапись)");
     await expect(page.locator("#update-warning")).toContainText("Обычное обновление остановится: 1 конфликт");
-    // One compact line per diff entry (44 px); on a phone the mockup moves the kind under the path.
-    const rows = await page.locator("#update-diff .diff-file").evaluateAll(
+    // One compact line per diff entry (44 px); on a phone the kind may move under the path.
+    const rows = await page.locator("#update-diff .ds-diff-file").evaluateAll(
       (items, wide) =>
         items.map((row) => {
-          const path = row.querySelector(".diff-path")!.getBoundingClientRect();
-          const kind = row.querySelector(".diff-kind")!.getBoundingClientRect();
+          const path = row.querySelector(".ds-diff-path")!.getBoundingClientRect();
+          const kind = row.querySelector(".ds-diff-kind")!.getBoundingClientRect();
           return { height: row.getBoundingClientRect().height, sameLine: wide ? Math.abs(path.top - kind.top) < 4 : true };
         }),
       width > 720,
     );
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.filter((row) => row.height > (width > 720 ? 44 : 72) || !row.sameLine)).toEqual([]);
-    await expect(page.locator("#update-migration .migration-step")).toHaveCount(4);
-    await expect(page.locator("#update-result .result-empty")).toContainText("Ещё не запускалось");
+    await page.getByRole("tab", { name: /Миграция/ }).click();
+    await expect(page.locator("#update-migration .ds-steps .ds-row")).toHaveCount(4);
+    await page.getByRole("tab", { name: /План/ }).click();
+    await expect(page.locator("#update-result")).toContainText("Ещё не запускалось");
     await page.locator('#update-diff [data-path="AGENTS.md"]').click();
     await expect(page.locator("#update-diff-view")).toContainText("+Package rule.");
     expect(await noOverflow(page)).toBe(true);

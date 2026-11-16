@@ -81,7 +81,7 @@ const PAGES: PageSpec[] = [
     title: "Состояние харнесса",
     blocks: ["#home-chips", "#home-attention", "#home-context", "#home-tasks", "#home-health", "#home-contour"],
   },
-  { route: "diagnostics", title: "Диагностика", blocks: [".diag-summary", ".diag-grid"] },
+  { route: "diagnostics", title: "Диагностика", blocks: [".ds-page-head", ".ds-pipe"] },
   {
     route: "harness",
     title: "Harness",
@@ -191,6 +191,7 @@ for (const width of [1440, 390]) {
   test(`kernel sources at ${width} px fill the former no-data places`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "diagnostics", width);
+    await page.getByRole("tab", { name: /Проверки/ }).click();
     await page.locator('#diag-list [data-check="hooks.policy"]').click();
     await expect(page.locator(".diag-detail-panel .diag-rationale")).toHaveText(/^Без записанной политики хуков/);
     // An id the kernel catalog does not describe keeps the no-data state.

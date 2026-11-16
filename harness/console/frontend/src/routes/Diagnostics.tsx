@@ -1,7 +1,9 @@
-/* Diagnostics: the `harness health --json` report of the diagnostics.snapshot screen snapshot,
-   laid out as the mockup's #diagnostics. Counts come from the report's summary, never recounted.
+/* Diagnostics on the design system v3 with two tabs. «Функции»: the Harness feature registry of
+   features.snapshot (FeaturesView). «Проверки»: the `harness health --json` report of the
+   diagnostics.snapshot screen snapshot; counts come from the report's summary, never recounted.
    The fix commands of the section run as server jobs through the command panel; a finished fix
-   job's report (its stdout, with the fixes it applied) replaces the shown one, as in the TUI. */
+   job's report (its stdout, with the fixes it applied) replaces the shown one, as in the TUI.
+   The diagnostics command panel is mounted only in the Checks tab. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
@@ -9,15 +11,20 @@ import { CheckDetail } from "../diagnostics/CheckDetail";
 import { CheckList, visibleChecks } from "../diagnostics/CheckList";
 import type { CheckFilter } from "../diagnostics/CheckList";
 import { downloadJson, exportName, exportPayload } from "../diagnostics/exportReport";
+import { FeaturesView } from "../diagnostics/FeaturesView";
+import { togglePlan } from "../diagnostics/togglePlan";
+import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
 import { Icon } from "../icons";
 import { checkTitle, groupLabel, useI18n } from "../i18n";
 import { href } from "../navigation";
 import { useScreen } from "../screens/useScreen";
 import type { LocalJob } from "../ws/jobs";
+import { parseFeatures } from "../ws/features";
+import type { Feature } from "../ws/features";
 import { checkTotal, parseHealthReport } from "../ws/screens";
 import type { HealthReport } from "../ws/screens";
 import { snapshotClock } from "../update/format";
-import { HealthStrip } from "./Home";
+import { TabPanel } from "../views/Tabs";
 
 /** The catalog commands that run the internal fixers and print the new report. */
 export const FIX_COMMANDS: Readonly<Record<string, boolean>> = {
@@ -26,6 +33,22 @@ export const FIX_COMMANDS: Readonly<Record<string, boolean>> = {
 };
 
 const cliLine = (online: boolean) => (online ? "harness health . --online" : "harness health .");
+
+/** Exit codes of `configuration_cli.py`: a stale file and any other refusal. */
+const STALE_EXIT = 3;
+const REFUSED_EXIT = 2;
+
+/** The refusal a finished configuration write printed to stderr, or null when it succeeded. The
+    text is the server's, shown as is. */
+export function writeRefusal(job: LocalJob): { stale: boolean; text: string } | null {
+  if (job.returncode !== STALE_EXIT && job.returncode !== REFUSED_EXIT) return null;
+  const text = job.output
+    .filter((fragment) => fragment.channel === "stderr")
+    .map((fragment) => fragment.text)
+    .join("")
+    .trim();
+  return { stale: job.returncode === STALE_EXIT, text: text || job.error || "" };
+}
 
 /** The report a finished fix job printed, or null when it has none. */
 export function fixReport(job: LocalJob): HealthReport | null {
@@ -41,13 +64,19 @@ export function fixReport(job: LocalJob): HealthReport | null {
   }
 }
 
+type Tab = "features" | "checks";
+
 export function Diagnostics() {
   const { t, section, language } = useI18n();
+  const [tab, setTab] = useState<Tab>("features");
   const [online, setOnline] = useState(false);
   const screen = useScreen({ type: "diagnostics.snapshot", online }, parseHealthReport);
+  const features = useScreen({ type: "features.snapshot" }, parseFeatures);
   const [fixed, setFixed] = useState<HealthReport | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
   const [request, setRequest] = useState<RunRequest | null>(null);
+  const [toggle, setToggle] = useState<RunRequest | null>(null);
+  const [refusal, setRefusal] = useState<{ stale: boolean; text: string } | null>(null);
   const [filter, setFilter] = useState<CheckFilter>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -72,6 +101,7 @@ export function Diagnostics() {
     setFixed(null);
     setFixError(null);
     screen.refresh(true);
+    features.refresh(true);
   };
   const switchMode = (next: boolean) => {
     setFixed(null);
@@ -94,6 +124,26 @@ export function Diagnostics() {
     setFixed(null);
     screen.refresh(true);
   };
+  // A switch goes only through the confirmed configuration write: the configuration command panel
+  // opens its confirmation with the plan; cancelling it sends nothing.
+  const onToggle = (feature: Feature, enabled: boolean) => {
+    if (!features.data) return;
+    const plan = togglePlan(features.data, feature, enabled, t);
+    if (plan === null) return;
+    setRefusal(null);
+    setToggle({
+      command_id: "configuration-apply",
+      values: { request: plan.request },
+      reason: plan.reason,
+      context: plan.context,
+      nonce: Date.now(),
+    });
+  };
+  const onWriteDone = (job: LocalJob) => {
+    if (job.command_id !== "configuration-apply") return;
+    setRefusal(writeRefusal(job));
+    features.refresh(true);
+  };
   const exportReport = () => {
     if (report) downloadJson(exportName(new Date()), exportPayload(report, filter, query, visible));
   };
@@ -101,139 +151,172 @@ export function Diagnostics() {
   const summary = report?.summary;
   const total = summary ? checkTotal(summary) : 0;
   const groups = report ? new Set(report.checks.map((check) => check.group)).size : 0;
-  const counters: [keyof NonNullable<typeof summary>, string, string][] = [
-    ["ok", "ok", t("пройдено")],
-    ["warn", "warn", t("внимание")],
-    ["fail", "err", t("ошибки")],
-    ["skipped", "muted", t("пропущено")],
+  const counters: [keyof NonNullable<typeof summary>, string][] = [
+    ["ok", t("пройдено")],
+    ["warn", t("внимание")],
+    ["fail", t("ошибки")],
+    ["skipped", t("пропущено")],
   ];
+  const snapshot = features.data;
 
   return (
-    <div className="diag-page" data-section="Diagnostics">
-      <div className="page-title diag-title">
-        <div>
-          <h1>{section("Diagnostics")}</h1>
-          <p>{t("Отчёт harness health. Команды «Как исправить» консоль не выполняет — запустите их вручную.")}</p>
-          <div className="home-facts">
-            <span id="diag-total">{report ? t("{count} проверок", { count: total }) : t("Недоступно в текущем снимке")}</span>
-            {report && <span>{t("групп: {count}", { count: groups })}</span>}
-            <span id="diag-mode">{shownOnline ? t("онлайн") : t("офлайн")}</span>
-            {screen.data && !fixed && (
-              <span id="diag-cache" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
-                {snapshotClock(screen.ageSeconds, language)}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="actions">
-          <button id="diag-refresh" className="btn" type="button" onClick={refresh}>
-            <Icon name="refresh" /> {t("Проверить")}
-          </button>
-          <button id="diag-export" className="btn" type="button" disabled={!report} onClick={exportReport}>
-            <Icon name="reports" /> {t("Экспорт")}
-          </button>
-          <a className="btn primary" href={href("update-harness")}>
-            {t("Обновление")}
-          </a>
-        </div>
-      </div>
+    <div className="ds-page ds-fit" data-section="Diagnostics">
+      <PageHeader
+        title={section("Diagnostics")}
+        subtitle={t("Состояние функций Harness и отчёт harness health. Команды «Как исправить» консоль не выполняет — запустите их вручную.")}
+        actions={
+          <>
+            <button id="diag-refresh" className="ds-btn" type="button" onClick={refresh}>
+              <Icon name="refresh" className="ds-ic-sm" /> {t("Проверить")}
+            </button>
+            <button id="diag-export" className="ds-btn" type="button" disabled={!report} onClick={exportReport}>
+              <Icon name="reports" className="ds-ic-sm" /> {t("Экспорт")}
+            </button>
+            <a className="ds-btn ds-btn-primary" href={href("update-harness")}>
+              {t("Обновление")}
+            </a>
+          </>
+        }
+      />
 
-      {screen.error && !report && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
-      {fixError && (
-        <p className="command-refusal err" role="alert">
-          {t("Исправление не удалось")}: {fixError}
-        </p>
-      )}
+      <PipeTabs
+        id="diagnostics"
+        label={section("Diagnostics")}
+        value={tab}
+        onChange={(id) => setTab(id as Tab)}
+        tabs={[
+          { id: "features", label: t("Функции"), count: snapshot ? snapshot.features.length : "—" },
+          { id: "checks", label: t("Проверки"), count: summary ? total : "—" },
+        ]}
+      />
 
-      <section className="panel diag-summary">
-        <div className="panel-head">
-          <h2>{t("Сводка здоровья")}</h2>
-          <div className="health-mode">
-            <span className="small muted">{shownOnline ? t("онлайн") : t("офлайн")}</span>
-            <div className="seg">
-              <button className={online ? "" : "on"} type="button" aria-pressed={!online} onClick={() => switchMode(false)}>
-                {t("Офлайн")}
-              </button>
-              <button className={online ? "on" : ""} type="button" aria-pressed={online} onClick={() => switchMode(true)}>
-                {t("Онлайн")}
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="body">
-          <div className="health-summary">
-            {counters.map(([key, tone, label]) => (
-              <div className="hs-item" key={key}>
-                <span id={`diag-${key}`} className={tone}>
-                  {summary ? summary[key] : "—"}
-                </span>
-                <small>{label}</small>
-              </div>
-            ))}
-          </div>
-          {summary ? <HealthStrip health={summary} /> : null}
-          <div className="diag-summary-note">
-            <span id="diag-checked">
-              {clock} ·{" "}
-              {summary
-                ? t("проверено {checked} из {total}", { checked: total - summary.skipped, total })
-                : screen.loading
-                  ? t("Отчёт строится…")
-                  : t("Недоступно в текущем снимке")}
-            </span>
-            <span>
-              {t("Команды «Как исправить» консоль не выполняет — запустите их вручную.")} <code>{cliLine(shownOnline)}</code>
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {report && (
-        <div className="diag-grid">
-          <CheckList
-            report={report}
-            filter={filter}
-            query={query}
-            visible={visible}
-            selected={current?.id ?? null}
-            onFilter={setFilter}
-            onQuery={setQuery}
-            onSelect={setSelected}
-            cli={cliLine(report.online)}
+      <TabPanel id="diagnostics" tab="features" value={tab} className="ds-tabpanel">
+        {features.error && !snapshot && (
+          <p className="ds-alert ds-alert-err" role="alert" data-code={features.error.code}>
+            {t("Функции недоступны")}: {features.error.message || features.error.code}
+          </p>
+        )}
+        {snapshot ? (
+          <FeaturesView
+            snapshot={snapshot}
+            onToggle={onToggle}
+            alert={
+              refusal && (
+                <p className="ds-alert ds-alert-err" role="alert" id="feature-write-error" data-stale={refusal.stale}>
+                  {refusal.stale ? t("Конфликт версии конфигурации") : t("Запись конфигурации отклонена")}: {refusal.text}
+                </p>
+              )
+            }
           />
-          <div id="diag-detail">
-            <CheckDetail
-              check={current}
-              cli={cliLine(report.online)}
-              online={report.online}
-              clock={clock}
-              onFix={fix}
-            />
-          </div>
+        ) : (
+          !features.error && <p className="ds-empty">{t("Функции загружаются…")}</p>
+        )}
+        <div className="ds-legacy-island ds-feature-commands">
+          <CommandPanel section="configuration" confirmAll listed={false} request={toggle} onJobDone={onWriteDone} />
         </div>
-      )}
+      </TabPanel>
 
-      {report && report.fixes_applied.length > 0 && (
-        <section className="panel diag-fixes" id="diag-fixes">
-          <div className="panel-head">
-            <h2>{t("Применённые фиксы:")}</h2>
-            <span className="small muted">{report.fixes_applied.length}</span>
+      <TabPanel id="diagnostics" tab="checks" value={tab} className="ds-tabpanel">
+        {screen.error && !report && (
+          <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
+            {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
+          </p>
+        )}
+        {fixError && (
+          <p className="ds-alert ds-alert-err" role="alert">
+            {t("Исправление не удалось")}: {fixError}
+          </p>
+        )}
+        <Summary
+          id="diag-summary"
+          label={t("Сводка здоровья")}
+          stats={counters.map(([key, label]) => ({
+            label,
+            value: <span id={`diag-${key}`}>{summary ? summary[key] : "—"}</span>,
+          }))}
+          facts={
+            <>
+              <span id="diag-total">{report ? t("{count} проверок", { count: total }) : t("Недоступно в текущем снимке")}</span>
+              {report && <span>{t("групп: {count}", { count: groups })}</span>}
+              <span id="diag-checked">
+                {clock} ·{" "}
+                {summary
+                  ? t("проверено {checked} из {total}", { checked: total - summary.skipped, total })
+                  : screen.loading
+                    ? t("Отчёт строится…")
+                    : t("Недоступно в текущем снимке")}
+              </span>
+              <span className="ds-filter" role="group" aria-label={t("Режим проверки")}>
+                <button type="button" aria-pressed={!online} onClick={() => switchMode(false)}>
+                  {t("Офлайн")}
+                </button>
+                <button type="button" aria-pressed={online} onClick={() => switchMode(true)}>
+                  {t("Онлайн")}
+                </button>
+              </span>
+              <span id="diag-mode">{shownOnline ? t("онлайн") : t("офлайн")}</span>
+              <code>{cliLine(shownOnline)}</code>
+            </>
+          }
+          snapshot={
+            screen.data && !fixed ? (
+              <span id="diag-cache" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+                <Icon name="clock" className="ds-ic-sm" /> {snapshotClock(screen.ageSeconds, language)}
+              </span>
+            ) : undefined
+          }
+        />
+
+        {report && (
+          <div className="ds-diag-checks">
+            <Panel title={t("Проверки")} count={<span id="diag-count">{t("{shown} из {total}", { shown: visible.length, total: report.checks.length })}</span>} fill scroll="list" id="diag-checks" label={t("Список проверок")}>
+              <div className="ds-legacy-island">
+                <CheckList
+                  report={report}
+                  filter={filter}
+                  query={query}
+                  visible={visible}
+                  selected={current?.id ?? null}
+                  onFilter={setFilter}
+                  onQuery={setQuery}
+                  onSelect={setSelected}
+                  cli={cliLine(report.online)}
+                  bare
+                />
+              </div>
+            </Panel>
+            <Panel title={t("Детали проверки")} fill scroll="text" id="diag-detail-panel" label={t("Детали проверки")}>
+              <div className="ds-legacy-island">
+                <div id="diag-detail">
+                  <CheckDetail
+                    check={current}
+                    cli={cliLine(report.online)}
+                    online={report.online}
+                    clock={clock}
+                    onFix={fix}
+                  />
+                </div>
+                {report.fixes_applied.length > 0 && (
+                  <section className="panel diag-fixes" id="diag-fixes">
+                    <div className="panel-head">
+                      <h2>{t("Применённые фиксы:")}</h2>
+                      <span className="small muted">{report.fixes_applied.length}</span>
+                    </div>
+                    <ul className="diag-fixes-list">
+                      {report.fixes_applied.map((text, index) => (
+                        <li key={index}>{text}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                <div className="diag-commands">
+                  <CommandPanel section="diagnostics" request={request} onJobDone={onJobDone} />
+                </div>
+              </div>
+            </Panel>
           </div>
-          <ul className="diag-fixes-list">
-            {report.fixes_applied.map((text, index) => (
-              <li key={index}>{text}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <div className="diag-commands">
-        <CommandPanel section="diagnostics" request={request} onJobDone={onJobDone} />
-      </div>
+        )}
+      </TabPanel>
     </div>
   );
 }

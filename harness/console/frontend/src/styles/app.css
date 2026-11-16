@@ -47,6 +47,11 @@
    the copy confirmation beside the command button. */
 .diag-page > .command-refusal { margin-bottom: 12px; }
 .diag-fixes { margin-top: 20px; }
+/* Inside the v3 panels of Diagnostics · Проверки the list and the detail drop their own frame. */
+.ds-diag-checks .diag-list-bare,
+.ds-diag-checks .diag-detail-panel { border: 0; border-radius: 0; }
+/* The detail, the applied fixes and the command panel stack in the v3 detail panel. */
+.ds-diag-checks #diag-detail { display: block; }
 .diag-fixes .panel-head { padding: 12px 16px; }
 .diag-fixes-list { margin: 0; padding: 12px 16px 12px 32px; font-size: var(--fs-1); line-height: 1.6; }
 .diag-commands { margin-top: 20px; }
@@ -252,14 +257,10 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .route-steps-fill .route-step, .route-steps-fill .route-step.current .route-dot { animation: none; }
 }
 
-/* Page fit (#1066): on a desktop window the long lists of Diagnostics, Reports and the Agent
-   activity sessions scroll inside their block, so the page itself fits the window. */
+/* Page fit (#1066): on a desktop window the long lists of Reports and the Agent activity sessions
+   scroll inside their block, so the page itself fits the window. Diagnostics scrolls in its v3
+   panels (ds-screens.css). */
 @media (min-width: 981px) {
-  #diag-list { max-height: max(240px, calc(100dvh - 640px)); overflow-y: auto; }
-  /* The detail panel fits the window: its body scrolls, the command action stays in view. */
-  .diag-detail-panel { max-height: max(420px, calc(100dvh - 120px)); }
-  .diag-detail-body { min-height: 0; overflow-y: auto; }
-  .diag-detail-body .diag-action { position: sticky; bottom: -16px; padding: 8px 0; background: var(--surface); }
   .work-sessions .work-list { max-height: max(240px, calc(100dvh - 460px)); overflow-y: auto; }
   #report-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; }
   .report-timeline { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }
@@ -281,16 +282,8 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* Orchestration (#1066): long lists scroll inside their block; chart rows fit long role names. */
 #orch-dispatch-list, .orch-tickets { max-height: min(480px, calc(100dvh - 240px)); overflow-y: auto; }
 .orch-analytics .orch-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 40px; }
-/* axe sweep (#1066): muted text on a selected row is below 4.5:1 on --sel, and the mockup's
-   #7f8996 second project line is below it on --panel. */
-.diag-row[aria-pressed="true"] .diag-row-main small, .project-row.on .project-row-main small { color: var(--selfg); }
-.project-row-main small + small { color: var(--muted); }
-/* Project page: the plan summary in the type scale and a blocked capability as icon and word. */
-.install-plan-summary { margin: 0 0 12px; font-size: var(--fs-1); line-height: 1.5; }
-.install-plan-summary.ok b { color: var(--ok); } .install-plan-summary.warn b { color: var(--warn); }
-.cap-copy .cap-blocked { display: inline-flex; align-items: center; gap: 4px; color: var(--err); }
-.cap-copy .cap-blocked .hi { width: 12px; height: 12px; }
-.project-path-info #open-project-path-status:empty { display: none; }
+/* axe sweep (#1066): muted text on a selected row is below 4.5:1 on --sel. */
+.diag-row[aria-pressed="true"] .diag-row-main small { color: var(--selfg); }
 /* Agent activity: the grid aligned to its start, compact one-line event and step rows inside an
    in-block scroll, the sessions toggle and a timeline whose axis stays on top while it scrolls. */
 .work-grid { align-items: start; }

@@ -28,14 +28,14 @@ describe("Switch", () => {
 
 describe("StatusIcon", () => {
   test("each tone has its own shape and a hidden text: colour is not the only carrier", () => {
-    const tones = ["ok", "warn", "err", "info", "wait"] as const;
+    const tones = ["ok", "warn", "err", "info", "wait", "off"] as const;
     render(<div>{tones.map((tone) => <StatusIcon key={tone} tone={tone} label={`состояние ${tone}`} />)}</div>);
     const shapes = tones.map((tone) => {
       const node = screen.getByText(`состояние ${tone}`).parentElement!;
       expect(node.className).toContain(`ds-status-${tone}`);
       return node.querySelector("svg")!.getAttribute("data-icon");
     });
-    expect(new Set(shapes).size).toBe(5);
+    expect(new Set(shapes).size).toBe(6);
     expect(screen.getByText("состояние ok").className).toBe("ds-sr");
   });
 });

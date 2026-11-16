@@ -130,7 +130,7 @@ describe("the shell", () => {
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
 
-  test("the Diagnostics route renders the health report inside the shell, not a placeholder", async () => {
+  test("the Diagnostics route renders its Features and Checks tabs inside the shell, not a placeholder", async () => {
     renderApp();
     await act(async () => {
       window.location.hash = "#/diagnostics";
@@ -139,7 +139,8 @@ describe("the shell", () => {
     const current = within(navigation()).getByRole("link", { name: "Диагностика" });
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Диагностика");
-    expect(screen.getByRole("heading", { level: 2, name: "Сводка здоровья" }).closest("main")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Функции/ }).closest("main")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Проверки/ }).closest("main")).toBeTruthy();
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
 

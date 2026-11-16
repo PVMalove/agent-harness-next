@@ -228,7 +228,8 @@
 .ds-row-sub { display: block; color: var(--ds-muted); font-size: var(--ds-fs-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-row-end { color: var(--ds-muted); font-size: var(--ds-fs-1); white-space: nowrap; }
 .ds-row-button { width: 100%; border: 0; border-bottom: 1px solid var(--ds-line); background: none; color: inherit; text-align: left; cursor: pointer; }
-.ds-row-button[aria-pressed="true"] { background: var(--ds-accent-bg); box-shadow: inset 2px 0 0 var(--ds-accent); }
+.ds-row-button[aria-pressed="true"],
+.ds-row-button[aria-selected="true"] { background: var(--ds-accent-bg); box-shadow: inset 2px 0 0 var(--ds-accent); }
 .ds-row-button:hover { background: var(--ds-hover); }
 .ds-kv { display: grid; grid-template-columns: minmax(96px, max-content) 1fr; gap: 4px 16px; margin: 0; padding: 8px 12px; }
 .ds-kv-row { display: contents; }
@@ -242,6 +243,7 @@
 .ds-status-err { background: var(--ds-err-bg); color: var(--ds-err); }
 .ds-status-info { background: var(--ds-accent-bg); color: var(--ds-accent); }
 .ds-status-wait { background: var(--ds-hover); color: var(--ds-muted); }
+.ds-status-off { background: none; color: var(--ds-faint); }
 
 /* Tiles */
 .ds-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 8px; }

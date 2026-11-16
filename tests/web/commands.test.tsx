@@ -308,6 +308,14 @@ describe("the command panel inside a page", () => {
     expect(starts[0]).toMatchObject({ command_id: "diff", confirmed: true });
   });
 
+  test("a page's context shows in the confirmation under its reason", () => {
+    const request = { command_id: "diff", values: {}, nonce: 1, reason: "Выключить функцию.", context: "a › b: true → false\nРаботает → Выключена" };
+    renderPanel({ request, confirmAll: true });
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Выключить функцию.")).toBeTruthy();
+    expect(dialog.querySelector("pre")!.textContent).toBe("a › b: true → false\nРаботает → Выключена");
+  });
+
   test("the page learns once that the shown job finished", () => {
     const done = vi.fn();
     const { socket } = renderPanel({ onJobDone: done });

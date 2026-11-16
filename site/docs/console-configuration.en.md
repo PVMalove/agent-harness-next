@@ -30,6 +30,31 @@ After confirmation, "Fix" applies local health repairs and repeats diagnostics.
 `skipped` means a check did not run. Reading sandbox settings files does not prove actual worker
 access. See the [orchestration access chapter](guides/orchestration/access.md).
 
+### Harness features
+
+The "Features" tab of "Diagnostics" shows 26 Harness features in eight categories: execution,
+roles, hooks, context, process, publication, capabilities and platform. The console server builds
+the list (the `features.snapshot` message) from the package capability catalog, the
+`.claude/hooks` and `.claude/agents` files, the hook wiring in the runtime settings and the keys of
+`.harness/project.json` and `.harness/orchestration.json`. A feature is "Working", "Partial",
+"Not working" or "Disabled". A disabled feature is not an error.
+
+Three features with a boolean configuration key have a switch:
+
+| Feature | Key |
+| --- | --- |
+| Worker attestation | `orchestration.json` › `worker_attestation_required` |
+| Project memory | `project.json` › `memory.enabled` |
+| Retry and attention | `orchestration.json` › `infrastructure_retry_policy.enabled` |
+
+The other features show a disabled switch with the reason. The server computes the state after
+the switch and the requirements left unmet: it evaluates the feature again with the key flipped.
+For example, memory without `memory_policy.source_types` and `memory_policy.allow_paths` becomes
+"Partial" once enabled. A switch uses only the confirmed configuration write
+(`configuration-apply`): the confirmation shows what stops working and the before/after plan.
+"Cancel" changes nothing. When a file changed after the snapshot, the write is
+refused and the version conflict text appears next to the feature.
+
 ## Updating Harness
 
 Open "Update Harness" (`2`) and inspect the version, drift and diff of each changed file.

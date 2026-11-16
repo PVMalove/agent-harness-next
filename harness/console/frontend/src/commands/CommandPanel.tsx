@@ -23,6 +23,8 @@ export interface RunRequest {
   /** What the page says the run will do, shown in the confirmation instead of the server's
       class reason. */
   reason?: string;
+  /** Lines the confirmation shows under the reason, such as a before/after plan. */
+  context?: string;
 }
 
 type Pending =
@@ -117,7 +119,7 @@ export function CommandPanel({
   const digest = (command: CommandDescriptor) =>
     command.plan_required ? { plan_digest: planDigests[command.command_id] } : {};
 
-  const run = (command: CommandDescriptor, values: Record<string, string>, reason?: string) => {
+  const run = (command: CommandDescriptor, values: Record<string, string>, reason?: string, context?: string) => {
     setUnavailable(null);
     if (!command.needs_confirmation && !confirmAll) {
       jobs.start({ command_id: command.command_id, values, ...digest(command) });
@@ -133,6 +135,7 @@ export function CommandPanel({
         reason: reason ?? t(command.confirmation_reason ?? command.title),
         typed: command.typed_confirmation,
         action: t("Запустить"),
+        ...(context === undefined ? {} : { context }),
       },
     });
   };
@@ -175,7 +178,7 @@ export function CommandPanel({
       setUnavailable(blocked);
       return;
     }
-    run(command, request.values, request.reason);
+    run(command, request.values, request.reason, request.context);
     // `run` and `t` change with every render; the nonce decides.
   }, [request, commands]);
 

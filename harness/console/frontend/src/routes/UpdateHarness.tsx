@@ -1,12 +1,17 @@
-/* Update Harness (#/update-harness): the installed and available versions, the drift counters,
-   the three update modes with the plan, the seed files, the runtime-store migration plan, the last
-   run result and the file diffs of update_harness.snapshot. The diff of one file at a time is read
-   (update_harness.diff): the first file opens without a click, another one once it is clicked.
+/* Update Harness (#/update-harness) on the design system v3: the version summary, the files of
+   the drift report grouped by what happens to them, the selected file with the tabs Изменения
+   (its diff, update_harness.diff) / Решение (what each real update mode does with it), and the
+   aside «Как обновить» with the tabs Режим / Seed / План / Миграция. Only facts of
+   update_harness.snapshot are shown; a fact the snapshot lacks (per-file line counts, the
+   capability of a file, step durations, a pre-release tag) is marked «нет данных».
    «Обновить» runs only through the CommandPanel of the job section `update`, and every run opens
    the confirmation first: cancelling it starts nothing. */
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
+import { PageHeader, Panel, PipeTabs, StatusIcon, Summary, Switch } from "../ds";
+import type { Tone as DsTone } from "../ds";
+import { NoData } from "../harness/HarnessOverview";
 import { plural, useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";
@@ -14,7 +19,9 @@ import { useServedRepo } from "../project/format";
 import { useConsole } from "../useConsole";
 import type { JobSummary } from "../ws/jobs";
 import { useScreen } from "../screens/useScreen";
+import { TabPanel } from "../views/Tabs";
 import {
+  DIFF_KINDS,
   MODES,
   MODE_CARDS,
   MODE_CONSEQUENCES,
@@ -29,8 +36,6 @@ import {
   seedFiles,
   snapshotClock,
   stopWarning,
-  TONE_CLASS,
-  TONE_ICONS,
   updateCommand,
 } from "../update/format";
 import type { DiffFile, MigrationState, UpdateMode } from "../update/format";
@@ -38,7 +43,10 @@ import type { UpdateHarnessFacts } from "../ws/projectScreens";
 import { parseUpdateDiff, parseUpdateHarness } from "../ws/projectScreens";
 
 const lineClass = (line: string) =>
-  line.startsWith("+") && !line.startsWith("+++") ? "diff-line add" : line.startsWith("-") && !line.startsWith("---") ? "diff-line del" : "diff-line";
+  line.startsWith("+") && !line.startsWith("+++") ? "ds-diff-line ds-diff-add" : line.startsWith("-") && !line.startsWith("---") ? "ds-diff-line ds-diff-del" : "ds-diff-line";
+
+/** The ds tone of a drift tone. */
+const DS_TONE: Readonly<Record<string, DsTone>> = { ok: "ok", warn: "warn", fail: "err", skipped: "info" };
 
 /** One file's diff, read when it is mounted (a click on the file). */
 function DiffPane({ file }: { file: DiffFile }) {
@@ -47,22 +55,15 @@ function DiffPane({ file }: { file: DiffFile }) {
   const text = screen.data ? diffText(screen.data.text, language) : "";
   return (
     <>
-      <div className="diff-detail-head">
-        <span className={`diff-status ${TONE_CLASS[file.tone]}`}>
-          <Icon name={TONE_ICONS[file.tone]} />
-        </span>
-        <code>{file.path}</code>
-        <span className={`update-pill ${TONE_CLASS[file.tone]}`}>{t(file.tag)}</span>
-      </div>
-      <p className="diff-explain">{t(file.meaning)}</p>
+      <p className="ds-note">{t(file.meaning)}</p>
       {screen.error ? (
-        <p className="command-refusal err" role="alert">
+        <p className="ds-alert ds-alert-err" role="alert">
           {t("diff недоступен:")} {screen.error.message || screen.error.code}
         </p>
       ) : !screen.data ? (
-        <p className="harness-note">{t("загружается…")}</p>
+        <p className="ds-empty">{t("загружается…")}</p>
       ) : text ? (
-        <pre className="diff-code">
+        <pre className="ds-code ds-diff">
           {text.split("\n").map((line, index) => (
             <span key={index} className={lineClass(line)}>
               {line}
@@ -71,67 +72,68 @@ function DiffPane({ file }: { file: DiffFile }) {
           ))}
         </pre>
       ) : (
-        <p className="harness-note ok">{t("Файл уже совпадает с тем, что запишет обновление.")}</p>
+        <p className="ds-note">{t("Файл уже совпадает с тем, что запишет обновление.")}</p>
       )}
     </>
   );
 }
 
-const STEP_CLASS: Readonly<Record<MigrationState, string>> = { pending: "pending", done: "ready", nodata: "after", after: "after" };
+const STEP_TONE: Readonly<Record<MigrationState, DsTone>> = { pending: "wait", done: "ok", nodata: "info", after: "info" };
 const STEP_LABEL: Readonly<Record<MigrationState, string>> = { pending: "ожидает", done: "выполнено", nodata: "нет данных", after: "после миграции" };
 
 /** «Миграция runtime-store»: the plan read from the project's store facts. The console never
-    runs a migration; the coordinator command is shown as text only. */
-function MigrationPanel({ facts }: { facts: UpdateHarnessFacts }) {
+    runs a migration; the coordinator command is shown as text only. Step durations are not facts
+    of the snapshot. */
+function MigrationTab({ facts }: { facts: UpdateHarnessFacts }) {
   const { t } = useI18n();
   const store = facts.store;
   const target = facts.store_target_schema;
   const steps = migrationSteps(store, target, t);
   const none = t("нет данных");
   const cells: [string, string][] = [
+    ["schema", `${store?.schema ?? "?"} → ${target ?? "?"}`],
     ["authority", store?.authority ?? none],
     ["generation", store?.generation ?? none],
     ["audit", store?.audit_records === null || store?.audit_records === undefined ? none : String(store.audit_records)],
     ["cutover", store?.cutover_at ? store.cutover_at.slice(0, 10) : none],
   ];
   return (
-    <section className="panel migration-panel" id="update-migration">
-      <div className="panel-head">
-        <h2>{t("Миграция runtime-store")}</h2>
-        <span className="small muted">{`schema ${store?.schema ?? "?"} → ${target ?? "?"}`}</span>
-      </div>
-      <div className="body">
-        <div className="migration-track">
-          {steps.map((step, index) => (
-            <Fragment key={step.num}>
-              {index > 0 && <span className="migration-arrow" aria-hidden="true">→</span>}
-              <div className={`migration-step ${STEP_CLASS[step.state]}`}>
-                <span className="migration-num">{step.num}</span>
-                <b>{step.title}</b>
-                <small>{step.caption}</small>
-                {step.num === "04" ? (
-                  <a className="migration-state" href={href("diagnostics")}>{t(STEP_LABEL[step.state])}</a>
-                ) : (
-                  <span className="migration-state">{t(STEP_LABEL[step.state])}</span>
-                )}
-              </div>
-            </Fragment>
-          ))}
+    <div id="update-migration">
+      <ol className="ds-rows ds-steps">
+        {steps.map((step) => (
+          <li className="ds-row" key={step.num} data-state={step.state}>
+            <StatusIcon tone={STEP_TONE[step.state]} label={t(STEP_LABEL[step.state])} />
+            <span className="ds-row-main">
+              <span className="ds-row-title">
+                {step.num} · {step.title}
+              </span>
+              <span className="ds-row-sub">{step.caption}</span>
+            </span>
+            <span className="ds-row-end">
+              {step.num === "04" ? <a href={href("diagnostics")}>{t(STEP_LABEL[step.state])}</a> : t(STEP_LABEL[step.state])}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <dl className="ds-kv">
+        {cells.map(([label, value]) => (
+          <div className="ds-kv-row" key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+        <div className="ds-kv-row">
+          <dt>{t("Длительность шагов")}</dt>
+          <dd>
+            <NoData />
+          </dd>
         </div>
-        <div className="migration-facts">
-          {cells.map(([label, value]) => (
-            <div key={label}>
-              <span>{label}</span>
-              <b>{value}</b>
-            </div>
-          ))}
-        </div>
-        <p className="migration-note">
-          {store?.reason ? `${t("нет данных")} · ${store.reason}. ` : ""}
-          {t("Миграцию выполняет координатор (ledger migrate); консоль только показывает план и не мигрирует store.")}
-        </p>
-      </div>
-    </section>
+      </dl>
+      <p className="ds-note">
+        {store?.reason ? `${t("нет данных")} · ${store.reason}. ` : ""}
+        {t("Миграцию выполняет координатор (ledger migrate); консоль только показывает план и не мигрирует store.")}
+      </p>
+    </div>
   );
 }
 
@@ -154,36 +156,38 @@ function useUpdateJobs(): JobSummary[] {
   return jobs;
 }
 
-const PHASE_TONE: Readonly<Record<string, string>> = { completed: "ok", failed: "err", cancelled: "warn", running: "active" };
+const PHASE_TONE: Readonly<Record<string, DsTone>> = { completed: "ok", failed: "err", cancelled: "warn", running: "wait" };
 const PHASE_LABEL: Readonly<Record<string, string>> = { completed: "завершено", failed: "ошибка", cancelled: "отменено", running: "выполняется" };
 
 /** «Результат последнего запуска»: the newest update job of this console, or why there is none. */
-function ResultPanel() {
+function LastRun() {
   const { t } = useI18n();
   const jobs = useUpdateJobs();
   const last = jobs.at(-1) ?? null;
   return (
-    <section className="panel result-panel" id="update-result">
-      <div className="panel-head">
-        <h2>{t("Результат последнего запуска")}</h2>
-        <span className="small muted">{last ? last.command_id : t("ещё не запускалось")}</span>
-      </div>
+    <div id="update-result">
+      <h3 className="ds-group-title">{t("Результат последнего запуска")}</h3>
       {last ? (
-        <div className={`result-row ${PHASE_TONE[last.phase] ?? ""}`}>
-          <Icon name={last.phase === "completed" ? "check" : last.phase === "running" ? "play" : "x"} />
-          <b>{last.command_id}</b>
-          <span>{t(PHASE_LABEL[last.phase] ?? last.phase)}</span>
-          <span>{last.returncode === null ? "" : `${t("код")} ${last.returncode}`}</span>
-          {last.error && <small>{last.error}</small>}
+        <div className="ds-row" data-phase={last.phase}>
+          <StatusIcon tone={PHASE_TONE[last.phase] ?? "info"} label={t(PHASE_LABEL[last.phase] ?? last.phase)} />
+          <span className="ds-row-main">
+            <code className="ds-row-title">{last.command_id}</code>
+            <span className="ds-row-sub">
+              {t(PHASE_LABEL[last.phase] ?? last.phase)}
+              {last.returncode === null ? "" : ` · ${t("код")} ${last.returncode}`}
+              {last.error ? ` · ${last.error}` : ""}
+            </span>
+          </span>
         </div>
       ) : (
-        <div className="result-empty">
-          <Icon name="terminal" /> {t("Ещё не запускалось в этой консоли · запуски harness update вне консоли не записываются.")}
-        </div>
+        <p className="ds-note">{t("Ещё не запускалось в этой консоли · запуски harness update вне консоли не записываются.")}</p>
       )}
-    </section>
+    </div>
   );
 }
+
+type FileTab = "diff" | "decide";
+type HowTab = "mode" | "seed" | "plan" | "migration";
 
 export function UpdateHarness() {
   const { t, language } = useI18n();
@@ -194,6 +198,8 @@ export function UpdateHarness() {
   const [ticked, setTicked] = useState<string[]>([]);
   const [opened, setOpened] = useState<string | null>(null);
   const [request, setRequest] = useState<RunRequest | null>(null);
+  const [fileTab, setFileTab] = useState<FileTab>("diff");
+  const [howTab, setHowTab] = useState<HowTab>("mode");
 
   const drift = facts?.drift ?? null;
   const seeds = seedFiles(drift);
@@ -208,6 +214,8 @@ export function UpdateHarness() {
   const modeName = MODES.find(([key]) => key === mode)?.[1] ?? "";
   const versions = facts ? renderVersions(facts, t) : null;
   const changes = renderDrift(drift, t);
+  const unavailable = t("Недоступно в текущем снимке");
+  const state = facts?.state;
 
   const run = () => {
     if (!facts || reason !== null) return;
@@ -218,242 +226,318 @@ export function UpdateHarness() {
       reason: [command, t(consequence), ...(warning ?? [])].join("\n"),
     });
   };
-  const toggle = (path: string) => setTicked(ticked.includes(path) ? ticked.filter((item) => item !== path) : [...ticked, path]);
+  const toggle = (path: string, on: boolean) =>
+    setTicked(on ? [...ticked.filter((item) => item !== path), path] : ticked.filter((item) => item !== path));
+  /** «Взять версию пакета» for `item`: a seed file is ticked for the seed mode, any other file
+      needs the overwrite of the managed files. «Оставить мой файл»: the seed is unticked, or the
+      normal mode keeps the local edits. */
+  const take = (item: DiffFile) => {
+    if (seeds.includes(item.path)) {
+      setMode(SEED_MODE);
+      toggle(item.path, true);
+    } else {
+      setMode("update-force-managed");
+    }
+    setHowTab("plan");
+  };
+  const keep = (item: DiffFile) => {
+    if (seeds.includes(item.path)) toggle(item.path, false);
+    else setMode("update");
+    setHowTab("plan");
+  };
+  const groups = DIFF_KINDS.map(([field, tag, , kindTone]) => [field, tag, kindTone, files.filter((item) => item.field === field)] as const).filter(
+    ([, , , items]) => items.length > 0,
+  );
 
   return (
-    <div className="update-page work-page" data-section="Update Harness">
-      <div className="page-title update-title">
-        <div>
-          <h1>{t("Обновление")}</h1>
-          <p>{t("Сначала показываем, что изменится в управляемых файлах. Запуск — только после вашего подтверждения.")}</p>
-          {facts && (
-            <div className="home-facts">
-              {facts.state.installed && (
-                <>
-                  <span>{`${facts.state.installed_version} → ${facts.package_version}`}</span>
-                  <span>{plural(language, facts.state.managed_files, ["управляемый файл", "управляемых файла", "управляемых файлов"], ["managed file", "managed files"])}</span>
-                  <span>{plural(language, facts.state.skills, ["навык", "навыка", "навыков"], ["skill", "skills"])}</span>
-                  <span>{`schema ${facts.store?.schema ?? "?"} → ${facts.store_target_schema ?? "?"}`}</span>
-                </>
-              )}
-              <span id="update-cache" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
-                {clock}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="actions">
-          <button id="update-recheck" className="btn" type="button" onClick={() => screen.refresh(true)}>
-            <Icon name="refresh" /> {t("Проверить заново")}
-          </button>
-          <a className="btn" href={href("diagnostics")}>
-            <Icon name="pulse" /> {t("Диагностика")}
-          </a>
-        </div>
-      </div>
+    <div className="ds-page ds-fit" data-section="Update Harness">
+      <PageHeader
+        title={t("Обновление")}
+        subtitle={t("Сначала показываем, что изменится в управляемых файлах. Запуск — только после вашего подтверждения.")}
+        actions={
+          <>
+            <button id="update-recheck" className="ds-btn" type="button" onClick={() => screen.refresh(true)}>
+              <Icon name="refresh" className="ds-ic-sm" /> {t("Проверить заново")}
+            </button>
+            <a className="ds-btn" href={href("diagnostics")}>
+              <Icon name="pulse" className="ds-ic-sm" /> {t("Диагностика")}
+            </a>
+          </>
+        }
+      />
 
       {screen.error && !facts && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
+        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
           {t("Данные не получены")}: {screen.error.message || screen.error.code}
         </p>
       )}
 
-      {facts && versions && (
-        <div className="update-top-grid">
-          <section className="panel versions-card" id="update-versions">
-            <div className="panel-head">
-              <h2>{t("Версии")}</h2>
-              {versions.verdict && <span className={`update-pill ${versions.verdict.tone === "ok" ? "ok" : "warn"}`}>{versions.verdict.tone === "ok" ? t("актуально") : t("доступно")}</span>}
-            </div>
-            <div className="versions-body">
-              {versions.missing.map((line, index) => (
-                <p key={line} className={`harness-note${index === 0 ? " err" : ""}`}>
-                  {index === 0 && <Icon name="x" />} {line}
-                </p>
+      <Summary
+        id="update-versions"
+        label={t("Версии")}
+        stats={[
+          {
+            label: t("Установлено"),
+            value: state ? (state.installed ? state.installed_version : "—") : "—",
+            caption: versions?.missing[0] ?? (state ? plural(language, state.managed_files, ["управляемый файл", "управляемых файла", "управляемых файлов"], ["managed file", "managed files"]) : unavailable),
+          },
+          {
+            label: t("Доступно"),
+            value: facts ? facts.package_version : "—",
+            caption: versions?.verdict ? <span className={`ds-verdict-${versions.verdict.tone}`}>{versions.verdict.text}</span> : <NoData />,
+          },
+          {
+            label: t("Расхождения"),
+            value: facts ? files.length : "—",
+            caption: changes.line ? changes.line.text : changes.rows.map((row) => `${row.count} ${row.label}`).join(" · "),
+          },
+          {
+            label: "Runtime store",
+            value: facts ? `schema ${facts.store?.schema ?? "?"} → ${facts.store_target_schema ?? "?"}` : "—",
+            caption: facts?.store?.authority ?? <NoData />,
+          },
+        ]}
+        facts={
+          facts && state?.installed ? (
+            <>
+              <span>{`${state.installed_version} → ${facts.package_version}`}</span>
+              <span>{plural(language, state.skills, ["навык", "навыка", "навыков"], ["skill", "skills"])}</span>
+              {versions?.rows.map(([label, value]) => (
+                <span key={label}>
+                  {label}: {value}
+                </span>
               ))}
-              <div className="version-pair">
-                {versions.pairs.map(([label, value]) => (
-                  <div key={label}>
-                    <span>{label}</span>
-                    <b>{value}</b>
+              <span>
+                pre-release: <NoData />
+              </span>
+            </>
+          ) : undefined
+        }
+        snapshot={
+          facts ? (
+            <span id="update-cache" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+              <Icon name="clock" className="ds-ic-sm" /> {clock}
+            </span>
+          ) : undefined
+        }
+      />
+
+      {facts && (
+        <div className="ds-update">
+          <Panel title={t("Файлы")} count={files.length} fill scroll="list" id="update-diff" label={t("Файлы")} meta={filesText(files.length, language)}>
+            {files.length === 0 ? (
+              <p className="ds-empty">{t("Расхождений нет: показывать нечего.")}</p>
+            ) : (
+              <div>
+                {groups.map(([field, tag, kindTone, items]) => (
+                  <div key={field} data-kind={field}>
+                    <h3 className="ds-group-title">
+                      {t(tag)} · {items.length}
+                    </h3>
+                    {items.map((item) => (
+                      <button
+                        key={item.path}
+                        type="button"
+                        aria-pressed={item.path === file?.path}
+                        className="ds-row ds-row-button ds-diff-file"
+                        data-path={item.path}
+                        onClick={() => setOpened(item.path)}
+                      >
+                        <StatusIcon tone={DS_TONE[kindTone]} label={t(item.tag)} />
+                        <span className="ds-row-main">
+                          <code className="ds-row-title ds-diff-path">{item.path}</code>
+                        </span>
+                        <span className="ds-row-end ds-diff-kind">{t(item.tag)}</span>
+                      </button>
+                    ))}
                   </div>
                 ))}
               </div>
-              {versions.verdict && (
-                <div className={`version-status ${versions.verdict.tone}`}>
-                  <Icon name={versions.verdict.tone === "ok" ? "check" : "warning"} /> {versions.verdict.text}
+            )}
+          </Panel>
+
+          <Panel
+            title={file ? <code>{file.path}</code> : t("Файл")}
+            label={t("Файл")}
+            fill
+            scroll="text"
+            id="update-diff-view"
+            meta={file ? t(file.tag) : undefined}
+          >
+            {file ? (
+              <div className="ds-update-file">
+                <PipeTabs
+                  id="update-file"
+                  label={t("Файл")}
+                  value={fileTab}
+                  onChange={(id) => setFileTab(id as FileTab)}
+                  tabs={[
+                    { id: "diff", label: t("Изменения"), count: "±" },
+                    { id: "decide", label: t("Решение"), count: file.field === "conflict" ? "!" : "✓" },
+                  ]}
+                />
+                <TabPanel id="update-file" tab="diff" value={fileTab}>
+                    <DiffPane key={file.path} file={file} />
+                    <dl className="ds-kv">
+                      <div className="ds-kv-row">
+                        <dt>{t("Строк +/−")}</dt>
+                        <dd>
+                          <NoData />
+                        </dd>
+                      </div>
+                      <div className="ds-kv-row">
+                        <dt>Capability</dt>
+                        <dd>
+                          <NoData />
+                        </dd>
+                      </div>
+                    </dl>
+                </TabPanel>
+                <TabPanel id="update-file" tab="decide" value={fileTab}>
+                  <div id="update-decision" className="ds-pad">
+                    <p className={file.field === "conflict" ? "ds-alert ds-alert-err" : "ds-note"}>{t(file.meaning)}</p>
+                    <div className="ds-actions">
+                      <button type="button" className="ds-btn" onClick={() => take(file)}>
+                        {t("Взять версию пакета")}
+                      </button>
+                      <button type="button" className="ds-btn" onClick={() => keep(file)}>
+                        {t("Оставить мой файл")}
+                      </button>
+                    </div>
+                    <p className="ds-note">
+                      {seeds.includes(file.path)
+                        ? t("Seed-файл: «взять версию пакета» отмечает его для перезаписи выбранных seed-файлов, «оставить мой файл» снимает отметку.")
+                        : t("«Взять версию пакета» — режим с перезаписью управляемых файлов; «оставить мой файл» — обычное обновление, которое сохраняет правки и останавливается на конфликтах.")}
+                    </p>
+                  </div>
+                </TabPanel>
+              </div>
+            ) : (
+              <p className="ds-empty">{t("Выберите файл, чтобы увидеть его изменения.")}</p>
+            )}
+          </Panel>
+
+          <Panel title={t("Как обновить")} fill scroll="text" id="update-how" label={t("Как обновить")}>
+            <div className="ds-update-how">
+              <PipeTabs
+                id="update-how"
+                label={t("Как обновить")}
+                value={howTab}
+                onChange={(id) => setHowTab(id as HowTab)}
+                tabs={[
+                  { id: "mode", label: t("Режим"), count: MODES.findIndex(([key]) => key === mode) + 1 },
+                  { id: "seed", label: "Seed", count: mode === SEED_MODE ? selected.length : "–" },
+                  { id: "plan", label: t("План") },
+                  { id: "migration", label: t("Миграция") },
+                ]}
+              />
+                <TabPanel id="update-how" tab="mode" value={howTab} keepMounted>
+                <div className="ds-rows" role="radiogroup" aria-label={t("Режим обновления")} id="update-modes-card">
+                  {MODES.map(([key, label]) => {
+                    const [description, tag] = MODE_CARDS[key];
+                    return (
+                      <label key={key} className="ds-row ds-choice" data-on={key === mode}>
+                        <input type="radio" name="update-mode" checked={key === mode} onChange={() => setMode(key)} aria-label={t(label)} />
+                        <span className="ds-row-main">
+                          <span className="ds-row-title">{t(label)}</span>
+                          <span className="ds-row-sub">{t(description)}</span>
+                        </span>
+                        <span className="ds-tag">{t(tag)}</span>
+                      </label>
+                    );
+                  })}
                 </div>
-              )}
-              <dl className="kv version-facts">
-                {versions.rows.map(([label, value]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>{value}</dd>
+                </TabPanel>
+                <TabPanel id="update-how" tab="seed" value={howTab} keepMounted>
+                <div id="update-seeds">
+                  {mode !== SEED_MODE && (
+                    <p className="ds-note">
+                      {t("Seed-файлы перезаписывает только режим «С перезаписью выбранных seed-файлов».")}{" "}
+                      <button type="button" className="ds-btn ds-btn-sm" onClick={() => setMode(SEED_MODE)}>
+                        {t("Выбрать этот режим")}
+                      </button>
+                    </p>
+                  )}
+                  <p className="ds-note" id="update-seed-count">
+                    {t("отмечено {ticked} из {total}", { ticked: selected.length, total: seeds.length })}
+                  </p>
+                  <ul className="ds-rows">
+                    {seeds.map((path) => (
+                      <li key={path} className="ds-row">
+                        <Switch checked={selected.includes(path)} onChange={(next) => toggle(path, next)} label={path} disabled={mode !== SEED_MODE} />
+                        <code className="ds-row-main">{path}</code>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className={seeds.length ? "ds-alert ds-alert-warn" : "ds-note"}>
+                    {seeds.length ? t("Отмечены файлы, которые будут перезаписаны эталоном; их правки пропадут.") : t("Seed-файлы совпадают с шаблоном — перезаписывать нечего.")}
+                  </p>
+                  <div className="ds-actions">
+                    <button className="ds-btn ds-btn-sm" type="button" disabled={mode !== SEED_MODE} onClick={() => setTicked(seeds)}>
+                      {t("Выбрать все")}
+                    </button>
+                    <button className="ds-btn ds-btn-sm" type="button" disabled={mode !== SEED_MODE} onClick={() => setTicked([])}>
+                      {t("Снять выбор")}
+                    </button>
                   </div>
-                ))}
-                <div>
-                  <dt>Schema</dt>
-                  <dd>{`${facts.store?.schema ?? "?"} → ${facts.store_target_schema ?? "?"}`}</dd>
                 </div>
-              </dl>
-            </div>
-            <div className="versions-changes" id="update-changes">
-              <div className="integrated-head">
-                <h3>{t("Что изменится в управляемых файлах")}</h3>
-                <span>harness diff</span>
-              </div>
-              <div className="update-counts">
-                {changes.rows.map((row) => (
-                  <div className={`update-count-row ${TONE_CLASS[row.tone]}`} key={row.label}>
-                    <span className="count-value">{row.count}</span>
-                    <span className={`count-icon ${TONE_CLASS[row.tone]}`}>
-                      <Icon name={TONE_ICONS[row.tone]} />
-                    </span>
-                    <span className="count-label">{row.label}</span>
+                </TabPanel>
+                <TabPanel id="update-how" tab="plan" value={howTab} keepMounted>
+                <div id="update-plan">
+                  <h3 className="ds-group-title">
+                    {t("План")} · {t(modeName)}
+                  </h3>
+                  <pre className="ds-code">
+                    <code id="update-plan-command">{command}</code>
+                  </pre>
+                  <p className={tone === "warn" ? "ds-alert ds-alert-warn" : "ds-note"} id="update-mode-caption">
+                    {t(consequence)}
+                  </p>
+                  {warning && (
+                    <div className="ds-alert ds-alert-warn" id="update-warning">
+                      <div>
+                        <b>{warning[0]}</b>
+                        <p>{warning[1]}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div id="update-changes">
+                    <h3 className="ds-group-title">{t("Что изменится в управляемых файлах")}</h3>
+                    <ul className="ds-rows">
+                      {changes.rows.map((row) => (
+                        <li className="ds-row ds-update-count" data-tone={row.tone} key={row.label}>
+                          <StatusIcon tone={DS_TONE[row.tone]} label={row.label} />
+                          <b>{row.count}</b>
+                          <span className="ds-row-main">{row.label}</span>
+                        </li>
+                      ))}
+                      {changes.line && <li className="ds-row">{changes.line.text}</li>}
+                    </ul>
                   </div>
-                ))}
-                {changes.line && (
-                  <div className={`update-count-row ${changes.line.tone ? TONE_CLASS[changes.line.tone] : ""}`}>
-                    {changes.line.tone && <Icon name={TONE_ICONS[changes.line.tone]} />} {changes.line.text}
-                  </div>
-                )}
-              </div>
+                  <LastRun />
+                </div>
+                </TabPanel>
+              <TabPanel id="update-how" tab="migration" value={howTab} keepMounted>
+                <MigrationTab facts={facts} />
+              </TabPanel>
             </div>
-            <div className="changes-foot">
-              <span>{mode === SEED_MODE ? t("Seed-режим: отметьте файлы в панели Seed-файлы.") : t("Обычный режим сохранит локальные правки.")}</span>
-              <button className="btn" type="button" onClick={() => screen.refresh(true)}>
-                <Icon name="refresh" /> {t("Проверить заново")}
+            <div className="ds-panel-foot">
+              <span className="ds-note">
+                {t("Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.")}{" "}
+                {t("Перед запуском будет запрошено подтверждение.")}
+              </span>
+              {reason && <span className="ds-note">{t(reason)}</span>}
+              <button id="update-run" className="ds-btn ds-btn-primary" type="button" disabled={reason !== null} title={reason ? t(reason) : undefined} onClick={run}>
+                <Icon name="download" className="ds-ic-sm" /> {t("Обновить")}
               </button>
             </div>
-          </section>
-
-          <section className="panel modes-card" id="update-modes-card">
-            <div className="panel-head">
-              <h2>{t("Режим обновления")}</h2>
-            </div>
-            <div className="update-modes" role="radiogroup" aria-label={t("Режим обновления")}>
-              {MODES.map(([key, label]) => {
-                const [description, tag, tagTone] = MODE_CARDS[key];
-                return (
-                  <label key={key} className={`update-mode-card${key === mode ? " on" : ""}`}>
-                    <input type="radio" name="update-mode" checked={key === mode} onChange={() => setMode(key)} aria-label={t(label)} />
-                    <span className="mode-copy">
-                      <b>{t(label)}</b>
-                      <small>{t(description)}</small>
-                    </span>
-                    <span className={`mode-tag ${tagTone}`}>{t(tag)}</span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="modes-plan">
-              <div className="integrated-head">
-                <h3>{t("План")}</h3>
-                <span>{t(modeName)}</span>
-              </div>
-              <div className="update-plan-body">
-                <div className="plan-command">
-                  <span>$</span>
-                  <code id="update-plan-command">{command}</code>
-                </div>
-                <p className={`modes-foot${tone === "warn" ? " warn" : ""}`} id="update-mode-caption">
-                  {t(consequence)}
-                </p>
-                {warning && (
-                  <div className="plan-warning warn" id="update-warning">
-                    <Icon name="warning" />
-                    <div>
-                      <b>{warning[0]}</b>
-                      <p>{warning[1]}</p>
-                    </div>
-                  </div>
-                )}
-                <p className="plan-explain">
-                  {t("Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.")}{" "}
-                  {t("Перед запуском будет запрошено подтверждение.")}
-                </p>
-                <button id="update-run" className="btn primary update-apply" type="button" disabled={reason !== null} title={reason ? t(reason) : undefined} onClick={run}>
-                  <Icon name="download" /> {t("Обновить")}
-                </button>
-                {reason && <p className="plan-note">{t(reason)}</p>}
-              </div>
-            </div>
-          </section>
+          </Panel>
         </div>
       )}
 
-      {facts && mode === SEED_MODE && (
-        <section className="panel seed-panel" id="update-seeds">
-          <div className="panel-head">
-            <h2>{t("Seed-файлы")}</h2>
-            <span className="small muted" id="update-seed-count">
-              {t("отмечено {ticked} из {total}", { ticked: selected.length, total: seeds.length })}
-            </span>
-          </div>
-          <div className="seed-body">
-            {seeds.map((path) => (
-              <label key={path} className="seed-file">
-                <input type="checkbox" checked={selected.includes(path)} onChange={() => toggle(path)} />
-                <code>{path}</code>
-              </label>
-            ))}
-            <p className={`seed-warning${seeds.length ? " warn" : " ok"}`}>
-              <Icon name={seeds.length ? "warning" : "check"} />{" "}
-              {seeds.length ? t("Отмечены файлы, которые будут перезаписаны эталоном; их правки пропадут.") : t("Seed-файлы совпадают с шаблоном — перезаписывать нечего.")}
-            </p>
-            <div className="seed-actions">
-              <button className="btn small" type="button" onClick={() => setTicked(seeds)}>
-                {t("Выбрать все")}
-              </button>
-              <button className="btn small" type="button" onClick={() => setTicked([])}>
-                {t("Снять выбор")}
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {facts && (
-        <section className="panel diff-panel update-diff-panel" id="update-diff">
-          <div className="panel-head">
-            <h2>{t("Diff — что изменится в файлах")}</h2>
-            <span className="small muted">{`${t("выбор файла")} · ${filesText(files.length, language)} · ${clock}`}</span>
-          </div>
-          {files.length === 0 ? (
-            <p className="harness-note">{t("Расхождений нет: показывать нечего.")}</p>
-          ) : (
-            <div className="diff-layout">
-              <div className="diff-list" role="listbox" aria-label={t("Файлы")}>
-                {files.map((item) => (
-                  <button
-                    key={item.path}
-                    type="button"
-                    role="option"
-                    aria-selected={item.path === file?.path}
-                    className={`diff-file${item.path === file?.path ? " on" : ""}`}
-                    data-path={item.path}
-                    onClick={() => setOpened(item.path)}
-                  >
-                    <span className={`diff-status ${TONE_CLASS[item.tone]}`}>
-                      <Icon name={TONE_ICONS[item.tone]} />
-                    </span>
-                    <span className="diff-path">{item.path}</span>
-                    <span className={`diff-kind ${TONE_CLASS[item.tone]}`}>{t(item.tag)}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="diff-detail" id="update-diff-view">
-                {file ? <DiffPane key={file.path} file={file} /> : <p className="harness-note">{t("Выберите файл, чтобы увидеть его изменения.")}</p>}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {facts && <MigrationPanel facts={facts} />}
-      {facts && <ResultPanel />}
-
-      <CommandPanel section="update" confirmAll listed={false} request={request} onJobDone={() => screen.refresh(true)} />
+      <div className="ds-legacy-island">
+        <CommandPanel section="update" confirmAll listed={false} request={request} onJobDone={() => screen.refresh(true)} />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,11 @@
-/* Window fit of the three screens moved to the design system v3 (#1091): Help (7 tabs), Harness
-   (5) and Repo Map (3) at five window sizes. In every tab the page does not scroll, main does not
-   scroll and the empty strip under the last block is at most 24 px (RFC section 5).
+/* Window fit of the screens moved to the design system v3: Help (7 tabs), Harness (5) and Repo Map
+   (3) of #1091, Diagnostics (Функции, Проверки), Update (the file tabs Изменения, Решение) and
+   Project (the five wizard steps) at five window sizes. Every other tab list on the screen is
+   walked in each of these tabs too: the feature detail (Готовность / Конфигурация / Связи) of
+   Diagnostics and "how to update" (Режим / Seed / План / Миграция) of Update. In every tab the page does not
+   scroll, main does not scroll and the empty strip under the last block is at most 24 px (RFC
+   section 5). Diagnostics is measured with a 57-check report, whose list really scrolls inside its
+   panel at every size.
 
    Measurement mode: with CONSOLE_FIT_OUT=<dir> the spec writes fit-measurements.json and one PNG
    per screen and size there (the before/after evidence of the slice). Fixtures only, over a
@@ -21,10 +26,29 @@ const MAINTENANCE = read("harness-maintenance.json");
 const CATALOG = read("job-catalog.json");
 const REPO_MAP = read("repo-map.json");
 const HELP = read("help-ru.json");
+const FEATURES = read("features-snapshot.json");
+const PAGED: Readonly<Record<string, Body>> = {
+  "diagnostics.snapshot": read("diagnostics-report-57.json"),
+  "update_harness.snapshot": read("update-harness.json"),
+  "update_harness.diff": read("update-harness-diff.json"),
+  "open_project.snapshot": read("open-project.json"),
+};
 
 const SIZES: readonly [number, number][] = [[1920, 1080], [1920, 1010], [1920, 950], [1680, 950], [1440, 900]];
 /** Route and the number of tabs the design promises. */
-const SCREENS: readonly [route: string, tabs: number][] = [["help", 7], ["harness", 5], ["repo-map", 3]];
+const SCREENS: readonly [route: string, tabs: number][] = [
+  ["help", 7],
+  ["harness", 5],
+  ["repo-map", 3],
+  ["diagnostics", 2],
+  ["update-harness", 2],
+  ["open-project", 5],
+];
+/** Route -> the tab lists inside its tabs (aria-label) and their tab counts. */
+const NESTED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  diagnostics: { Функция: 3 },
+  "update-harness": { "Как обновить": 4 },
+};
 const MAX_STRIP = 24;
 
 const send = (ws: WebSocketRoute, body: Body) => ws.send(JSON.stringify({ v: 1, ok: true, ...body }));
@@ -43,6 +67,8 @@ async function mockSocket(page: Page) {
       else if (type === "harness.maintenance") paged(ws, id, type, MAINTENANCE);
       else if (type === "repo_map.snapshot") paged(ws, id, type, REPO_MAP);
       else if (type === "help.snapshot") paged(ws, id, type, HELP);
+      else if (type === "features.snapshot") send(ws, { id, type, ...FEATURES });
+      else if (typeof type === "string" && type in PAGED) paged(ws, id, type, PAGED[type], type === "update_harness.diff" ? { cached: undefined, age_seconds: undefined } : {});
       else if (type === "job.catalog") send(ws, { id, type, ...CATALOG });
       else if (type === "job.list") send(ws, { id, type, jobs: [] });
     });
@@ -123,25 +149,43 @@ for (const [route, expectedTabs] of SCREENS) {
       await expect(tabs.first()).toBeVisible({ timeout: 20000 });
       await page.evaluate(() => document.fonts.ready.then(() => undefined));
       const count = await tabs.count();
+      const topId = await page.locator("main#content [role=tablist]").first().getAttribute("id");
       const size = `${width}x${height}`;
       const fits: Fit[] = [];
-      for (let index = 0; index < count; index++) {
-        await tabs.nth(index).click();
+      const nested: Record<string, number> = {};
+      const check = async (name: string, tabCount: number) => {
         await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-        const name = ((await tabs.nth(index).textContent()) ?? "").trim();
         const fit = await measure(page);
-        fits.push({ route, tab: name, size, tabs: count, ...fit });
-        if (OUT && index === 0) {
-          mkdirSync(OUT, { recursive: true });
-          await page.screenshot({ path: resolve(OUT, `${route}-${size}.png`) });
-        }
+        fits.push({ route, tab: name, size, tabs: tabCount, ...fit });
         expect.soft(fit.pageScrolls, `${route}/${name} ${size}: the page scrolls`).toBe(false);
         expect.soft(fit.mainScrolls, `${route}/${name} ${size}: main scrolls`).toBe(false);
         expect.soft(fit.strip, `${route}/${name} ${size}: empty strip under the last block`).toBeLessThanOrEqual(MAX_STRIP);
         expect.soft(fit.clipped, `${route}/${name} ${size}: content cut off or behind an inner scroll`).toEqual([]);
+      };
+      for (let index = 0; index < count; index++) {
+        await tabs.nth(index).click();
+        const name = ((await tabs.nth(index).textContent()) ?? "").trim();
+        await check(name, count);
+        if (OUT && index === 0) {
+          mkdirSync(OUT, { recursive: true });
+          await page.screenshot({ path: resolve(OUT, `${route}-${size}.png`) });
+        }
+        // The other tab lists shown in this tab: every one of their tabs is measured as well.
+        const inner = page.locator(`main#content [role=tablist]:visible:not([id="${topId}"])`);
+        for (let list = 0; list < (await inner.count()); list++) {
+          const label = (await inner.nth(list).getAttribute("aria-label")) ?? "";
+          const innerTabs = inner.nth(list).getByRole("tab");
+          const innerCount = await innerTabs.count();
+          nested[label] = innerCount;
+          for (let item = 0; item < innerCount; item++) {
+            await innerTabs.nth(item).click();
+            await check(`${name} › ${label} › ${((await innerTabs.nth(item).textContent()) ?? "").trim()}`, innerCount);
+          }
+        }
       }
       record(fits);
       expect.soft(count, `${route}: tab count`).toBe(expectedTabs);
+      expect.soft(nested, `${route}: tab lists inside the tabs`).toEqual(NESTED[route] ?? {});
     });
   }
 }
@@ -166,3 +210,37 @@ test("harness at 390x800: the grids collapse to one column and a label shares it
   const wide = await page.locator("#harness-runtime .ds-kv").evaluate((list) => getComputedStyle(list).gridTemplateColumns.split(" ").length);
   expect(wide, "a two-column list of pairs").toBe(2);
 });
+
+/** Whether the body of the panel `selector` scrolls inside it while the page and main do not. */
+const innerScroll = (page: Page, selector: string) =>
+  page.locator(selector).evaluate((panel) => {
+    const body = panel.querySelector<HTMLElement>(".ds-panel-body")!;
+    const main = document.querySelector<HTMLElement>("main#content")!;
+    return {
+      scrolls: body.scrollHeight > body.clientHeight,
+      overflow: getComputedStyle(body).overflowY,
+      pageScrolls: document.scrollingElement!.scrollHeight > innerHeight,
+      mainScrolls: main.scrollHeight > main.clientHeight,
+    };
+  });
+const SCROLLS_INSIDE = { scrolls: true, overflow: "auto", pageScrolls: false, mainScrolls: false };
+
+test("diagnostics: the 26-feature list scrolls inside its panel at 1440x900", async ({ page }) => {
+  await mockSocket(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${base()}/#/diagnostics`);
+  await expect(page.locator("#features-list [data-feature]")).toHaveCount(26, { timeout: 20000 });
+  expect(await innerScroll(page, "#features-list")).toEqual(SCROLLS_INSIDE);
+});
+
+for (const [width, height] of SIZES) {
+  test(`diagnostics: the 57-check list scrolls inside its panel at ${width}x${height}`, async ({ page }) => {
+    await mockSocket(page);
+    await page.setViewportSize({ width, height });
+    await page.goto(`${base()}/#/diagnostics`);
+    await expect(page.locator("#features-list [data-feature]")).toHaveCount(26, { timeout: 20000 });
+    await page.getByRole("tab", { name: /Проверки/ }).click();
+    await expect(page.locator("#diag-list [data-check]")).toHaveCount(57);
+    expect(await innerScroll(page, "#diag-checks")).toEqual(SCROLLS_INSIDE);
+  });
+}

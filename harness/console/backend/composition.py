@@ -38,6 +38,7 @@ from .application.ports import (
     Clock,
     ConfigurationCollector,
     CommandSpec,
+    FeaturesCollector,
     HarnessCollector,
     HealthCollector,
     HomeCollector,
@@ -76,6 +77,7 @@ from .infrastructure.screen_facts import (
     collect_ledger,
     collect_ledger_online,
     configuration_facts,
+    features_facts,
     harness_facts,
     maintenance_facts,
     open_project_facts,
@@ -128,6 +130,7 @@ def screen_service(
     update_harness: UpdateHarnessCollector | None = None,
     update_diff: UpdateDiffReader | None = None,
     configuration: ConfigurationCollector | None = None,
+    features: FeaturesCollector | None = None,
     board: TaskBoardService | None = None,
 ) -> ScreenService:
     """The screen snapshot service; a port left out gets its infrastructure adapter."""
@@ -153,6 +156,7 @@ def screen_service(
         ),
         update_diff=read_update_diff if update_diff is None else update_diff,
         configuration=configuration_facts if configuration is None else configuration,
+        features=features_facts if features is None else features,
         board=(
             TaskBoardService(
                 repo, clock=clock, reader=TrackerBoardReader(), ledger=ledger

@@ -93,6 +93,7 @@ def test_screen_request_models_have_the_field_sets_of_the_screen_protocol() -> N
         "diagnostics.snapshot": schemas.DiagnosticsSnapshotRequest,
         "harness.snapshot": schemas.HarnessSnapshotRequest,
         "harness.overview": schemas.HarnessOverviewRequest,
+        "features.snapshot": schemas.FeaturesSnapshotRequest,
         "harness.maintenance": schemas.HarnessMaintenanceRequest,
         "repo_map.snapshot": schemas.RepoMapSnapshotRequest,
         "open_project.snapshot": schemas.OpenProjectSnapshotRequest,
@@ -130,6 +131,7 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"id": 19, "type": "harness.overview", "force": True},
         {"id": 20, "type": "recovery.view", "batch": "b-1", "skip": ["a1"]},
         {"id": 21, "type": "container_route.view", "batch": "b", "role": "qa"},
+        {"id": 22, "type": "features.snapshot", "force": True},
     ]
     for sample in samples:
         assert schemas.REQUESTS.validate_python(sample).type == sample["type"]
@@ -145,6 +147,7 @@ def test_screen_samples_parse_and_malformed_ones_are_refused() -> None:
         {"type": "harness.snapshot", "online": True},
         {"type": "harness.maintenance", "online": True},
         {"type": "harness.overview", "online": True},
+        {"type": "features.snapshot", "online": True},
         {"type": "open_project.snapshot", "repo": "/work/other"},
         {"type": "help.snapshot"},
         {"type": "help.snapshot", "language": "de"},
