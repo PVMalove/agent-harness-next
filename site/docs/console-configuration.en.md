@@ -47,9 +47,12 @@ Three features with a boolean configuration key have a switch:
 | Project memory | `project.json` › `memory.enabled` |
 | Retry and attention | `orchestration.json` › `infrastructure_retry_policy.enabled` |
 
-The other features show a disabled switch with the reason. A switch uses only the confirmed
-configuration write (`configuration-apply`): the confirmation shows what stops working and the
-before/after plan. "Cancel" changes nothing. When a file changed after the snapshot, the write is
+The other features show a disabled switch with the reason. The server computes the state after
+the switch and the requirements left unmet: it evaluates the feature again with the key flipped.
+For example, memory without `memory_policy.source_types` and `memory_policy.allow_paths` becomes
+"Partial" once enabled. A switch uses only the confirmed configuration write
+(`configuration-apply`): the confirmation shows what stops working and the before/after plan.
+"Cancel" changes nothing. When a file changed after the snapshot, the write is
 refused and the version conflict text appears next to the feature.
 
 ## Updating Harness
