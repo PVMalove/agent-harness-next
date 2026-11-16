@@ -210,7 +210,7 @@ describe("the console client", () => {
     socket.open();
     socket.reply({ v: 1, id: "1-1", type: "orchestration.subscribe", ok: true, kind: "source", cursor: null, source: null });
     socket.reply(snapshotReply("1-2"));
-    expect(client.checkAdvisor("claude")).toBe(true);
+    expect(client.checkAdvisor("claude")).toBe(socket.request("advisor.check").id);
     clock.advance(30000);
     expect(socket.readyState).toBe(3);
   });

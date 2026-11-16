@@ -64,6 +64,40 @@ describe("the AI hints of the Parameters tab", () => {
     expect(rows).toEqual(["да", "да", "нет", STATUS.message]);
   });
 
+  test("a late status of the previously selected CLI is not shown after a switch", () => {
+    const { socket, panel } = renderParameters();
+    pick(panel(), "Codex CLI");
+    press(panel(), "Проверить CLI");
+    const first = socket.request("advisor.check");
+    pick(panel(), "Claude Code CLI");
+    act(() => socket.reply({ v: 1, id: first.id, type: "advisor.check", ok: true, status: STATUS }));
+    expect(document.querySelector("#configuration-advisor-status")).toBeNull();
+    press(panel(), "Проверить CLI");
+    const second = socket.request("advisor.check");
+    expect(second.provider).toBe("claude");
+    act(() => socket.reply({ v: 1, id: second.id, type: "advisor.check", ok: true, status: { ...STATUS, provider: "claude", message: "Claude готов." } }));
+    expect(document.querySelector("#configuration-advisor-status")?.textContent).toContain("Claude готов.");
+  });
+
+  test("switching the CLI while a check is pending re-enables Check CLI", () => {
+    const { panel } = renderParameters();
+    pick(panel(), "Codex CLI");
+    press(panel(), "Проверить CLI");
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", true);
+    pick(panel(), "Claude Code CLI");
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", false);
+  });
+
+  test("a connection drop during a check re-enables Check CLI", () => {
+    const { socket, panel } = renderParameters();
+    pick(panel(), "Codex CLI");
+    press(panel(), "Проверить CLI");
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", true);
+    act(() => socket.close());
+    expect(within(panel()).getByRole("button", { name: "Проверить CLI" })).toHaveProperty("disabled", false);
+    expect(document.querySelector("#configuration-advisor-status")).toBeNull();
+  });
+
   test("Ask AI names the parameter only, and an accepted advice changes the draft only", () => {
     const { socket, panel } = renderParameters();
     pick(panel(), "Claude Code CLI");

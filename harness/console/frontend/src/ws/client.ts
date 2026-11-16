@@ -206,8 +206,8 @@ export interface ConsoleClient {
       False when no socket is open. */
   requestScreen(request: ScreenRequest): boolean;
   subscribeScreens(listener: (event: ScreenEvent) => void): () => void;
-  /** Check a CLI's presence, version and login; never a model call. */
-  checkAdvisor(provider: AdvisorProvider): boolean;
+  /** Check a CLI's presence, version and login; never a model call. The request id, or null. */
+  checkAdvisor(provider: AdvisorProvider): string | null;
   /** Ask for AI advice about one parameter, by file and path only; the request id, or null. */
   askAdvisor(provider: AdvisorProvider, file: string, path: readonly string[]): string | null;
   /** Cancel an ask of this connection. */

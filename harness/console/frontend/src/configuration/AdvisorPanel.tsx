@@ -38,19 +38,20 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
   const [fallback, setFallback] = useState<{ cause: FallbackCause; reason: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef<string | null>(null);
+  // The id of the check of the current choice; a status or error of any other check is stale.
+  const pendingCheck = useRef<string | null>(null);
   const paramKey = `${param.file}:${param.path.join(".")}`;
 
   useEffect(
     () =>
       client.subscribeAdvisor((event) => {
-        if (event.type === "advisor-status") {
+        if (event.type === "advisor-status" || (event.type === "advisor-error" && event.request === "check")) {
+          if (event.requestId === null || event.requestId !== pendingCheck.current) return;
+          pendingCheck.current = null;
           setChecking(false);
-          setStatus(event.status);
-          return;
-        }
-        if (event.type === "advisor-error" && event.request === "check") {
-          setChecking(false);
-          setError(event.message || event.code);
+          if (event.type === "advisor-status") setStatus(event.status);
+          else if (event.code === "closed") setError(t(CAUSES.closed));
+          else setError(event.message || event.code);
           return;
         }
         if (event.type === "advisor-error" && event.request === "cancel") return;
@@ -61,7 +62,7 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
         else if (event.type === "advisor-fallback") setFallback({ cause: event.cause, reason: event.reason });
         else setFallback({ cause: "refused", reason: event.message || event.code });
       }),
-    [client],
+    [client, t],
   );
 
   const cancel = () => {
@@ -81,6 +82,8 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
 
   const choose = (next: Choice) => {
     cancel();
+    pendingCheck.current = null;
+    setChecking(false);
     setChoice(next);
     setStatus(null);
     setAdvice(null);
@@ -90,7 +93,10 @@ export function AdvisorPanel({ param, onAccept }: { param: WizardParam; onAccept
   const check = () => {
     if (choice === "none") return;
     setError(null);
-    setChecking(client.checkAdvisor(choice));
+    const id = client.checkAdvisor(choice);
+    pendingCheck.current = id;
+    setChecking(id !== null);
+    if (id === null) setError(t("Нет соединения с сервером консоли"));
   };
   const ask = () => {
     if (choice === "none") return;

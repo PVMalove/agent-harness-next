@@ -29,7 +29,7 @@ export interface Advice {
 export type FallbackCause = "refused" | "invalid" | "timeout" | "cancelled" | "closed";
 
 export type AdvisorEvent =
-  | { type: "advisor-status"; status: CliStatus }
+  | { type: "advisor-status"; requestId: string; status: CliStatus }
   | { type: "advisor-advice"; requestId: string; advice: Advice }
   | { type: "advisor-fallback"; requestId: string; cause: FallbackCause; reason: string }
   | { type: "advisor-error"; request: "check" | "ask" | "cancel"; requestId: string | null; code: string; message: string };
@@ -80,13 +80,15 @@ export function advisorReader(
       for (const [id, kind] of open) {
         settle(id);
         if (kind === "ask") emit({ type: "advisor-fallback", requestId: id, cause: "closed", reason: "" });
+        else if (kind === "check") emit({ type: "advisor-error", request: "check", requestId: id, code: "closed", message: "" });
       }
       open.clear();
     },
-    check(provider: AdvisorProvider): boolean {
+    /** The request id of the check, or null when no socket is open. */
+    check(provider: AdvisorProvider): string | null {
       const id = send({ type: TYPES.check, provider });
       if (id !== null) open.set(id, "check");
-      return id !== null;
+      return id;
     },
     /** The request id of the ask, or null when no socket is open. */
     ask(provider: AdvisorProvider, file: string, path: readonly string[]): string | null {
@@ -106,13 +108,13 @@ export function advisorReader(
       open.delete(id);
       settle(id);
       if (reply.type !== TYPES[kind] || reply.ok !== true) {
-        error(kind, kind === "ask" ? id : null, reply);
+        error(kind, kind === "cancel" ? null : id, reply);
         return true;
       }
       if (kind === "check") {
         const status = parseCliStatus(reply.status);
-        if (status) emit({ type: "advisor-status", status });
-        else emit({ type: "advisor-error", request: kind, requestId: null, code: "invalid", message: "" });
+        if (status) emit({ type: "advisor-status", requestId: id, status });
+        else emit({ type: "advisor-error", request: kind, requestId: id, code: "invalid", message: "" });
       } else if (kind === "ask") {
         const advice = reply.outcome === "advice" ? parseAdvice(reply.advice) : null;
         if (advice) emit({ type: "advisor-advice", requestId: id, advice });
