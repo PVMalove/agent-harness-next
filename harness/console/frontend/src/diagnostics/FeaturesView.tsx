@@ -218,6 +218,7 @@ export function FeaturesView({
                   id="feature-switch"
                   checked={on}
                   disabled={blocked !== null || onToggle === undefined}
+                  describedBy={blocked !== null ? "feature-switch-reason" : undefined}
                   label={t("Функция «{name}»", { name: t(current.name) })}
                   onChange={(next) => onToggle?.(current, next)}
                 />

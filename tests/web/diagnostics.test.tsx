@@ -274,8 +274,9 @@ describe("the Diagnostics Features tab", () => {
     const detail = document.querySelector("#feature-detail") as HTMLElement;
     expect(within(detail).getAllByText("Файл хука отсутствует").length).toBe(1);
     expect(within(detail).getByText(".claude/hooks/block-pr-merge.sh")).toBeTruthy();
-    const toggle = screen.getByRole("switch") as HTMLButtonElement;
-    expect(toggle.disabled).toBe(true);
+    const toggle = screen.getByRole("switch");
+    expect(toggle.getAttribute("aria-disabled")).toBe("true");
+    expect(toggle.getAttribute("aria-describedby")).toBe("feature-switch-reason");
     expect(document.querySelector("#feature-switch-reason")?.textContent).toBe("Нет булевого ключа конфигурации для переключения");
     pick("memory");
     act(() => fireEvent.click(document.querySelector("#feature-detail-tab-config-button")!));
@@ -289,7 +290,7 @@ describe("the Diagnostics Features tab", () => {
   test("a pending configuration write disables every switch with its reason", () => {
     renderFeatures({ ...FEATURES, transaction_pending: true });
     pick("memory");
-    expect((screen.getByRole("switch") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("switch").getAttribute("aria-disabled")).toBe("true");
     expect(document.querySelector("#feature-switch-reason")?.textContent).toBe("Есть незавершённая запись конфигурации");
   });
 

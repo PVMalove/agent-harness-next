@@ -451,7 +451,7 @@ export function UpdateHarness() {
                 <TabPanel id="update-how" tab="seed" value={howTab} keepMounted>
                 <div id="update-seeds">
                   {mode !== SEED_MODE && (
-                    <p className="ds-note">
+                    <p className="ds-note" id="update-seed-locked">
                       {t("Seed-файлы перезаписывает только режим «С перезаписью выбранных seed-файлов».")}{" "}
                       <button type="button" className="ds-btn ds-btn-sm" onClick={() => setMode(SEED_MODE)}>
                         {t("Выбрать этот режим")}
@@ -464,7 +464,7 @@ export function UpdateHarness() {
                   <ul className="ds-rows">
                     {seeds.map((path) => (
                       <li key={path} className="ds-row">
-                        <Switch checked={selected.includes(path)} onChange={(next) => toggle(path, next)} label={path} disabled={mode !== SEED_MODE} />
+                        <Switch checked={selected.includes(path)} onChange={(next) => toggle(path, next)} label={path} disabled={mode !== SEED_MODE} describedBy="update-seed-locked" />
                         <code className="ds-row-main">{path}</code>
                       </li>
                     ))}

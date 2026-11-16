@@ -18,11 +18,22 @@ describe("Switch", () => {
     expect(onChange).toHaveBeenLastCalledWith(false);
   });
 
-  test("a disabled switch does not toggle", () => {
+  test("a disabled switch does not toggle, stays in the Tab order and names its reason", () => {
     const onChange = vi.fn();
-    render(<Switch checked={false} onChange={onChange} label="x" disabled />);
-    fireEvent.click(screen.getByRole("switch"));
+    render(
+      <>
+        <Switch checked={false} onChange={onChange} label="x" disabled describedBy="why" />
+        <p id="why">Недоступно в режиме seed</p>
+      </>,
+    );
+    const sw = screen.getByRole("switch", { name: "x" }) as HTMLButtonElement;
+    fireEvent.click(sw);
     expect(onChange).not.toHaveBeenCalled();
+    expect(sw.disabled).toBe(false);
+    expect(sw.getAttribute("aria-disabled")).toBe("true");
+    expect(sw.getAttribute("aria-describedby")).toBe("why");
+    sw.focus();
+    expect(document.activeElement).toBe(sw);
   });
 });
 

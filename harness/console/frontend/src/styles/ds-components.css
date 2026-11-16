@@ -302,31 +302,42 @@
 .ds-tile-desc { display: block; color: var(--ds-muted); font-size: var(--ds-fs-1); line-height: 1.4; }
 .ds-tile-go { color: var(--ds-faint); }
 
-/* Switch */
+/* Switch: 40 by 24 px, the track edge at 3:1 (--ds-control), a check mark on the knob when on */
 .ds-sw {
   position: relative;
-  width: 34px;
-  height: 20px;
+  width: 40px;
+  height: 24px;
   flex: none;
   padding: 0;
-  border: 1px solid var(--ds-line-strong);
-  border-radius: 10px;
+  border: 1px solid var(--ds-control);
+  border-radius: 12px;
   background: var(--ds-raised);
   cursor: pointer;
 }
 .ds-sw[aria-checked="true"] { background: var(--ds-accent); border-color: var(--ds-accent); }
 .ds-sw-knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--ds-fg);
   transition: transform 0.15s ease;
 }
-.ds-sw[aria-checked="true"] .ds-sw-knob { transform: translateX(14px); background: var(--ds-on-accent); }
-.ds-sw:disabled { opacity: 0.5; cursor: default; }
+.ds-sw[aria-checked="true"] .ds-sw-knob { transform: translateX(16px); background: var(--ds-on-accent); }
+.ds-sw[aria-checked="true"] .ds-sw-knob::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--ds-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.ds-sw[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 
 /* Drawer: a modal dialog docked to the right edge; only its body scrolls */
 .ds-drawer {
