@@ -57,6 +57,26 @@ describe("ds-*.css", () => {
   }
 });
 
+/** The body of the rule whose selector is exactly `selector` in a ds sheet. */
+function ruleBody(name: string, selector: string): string {
+  const css = readFileSync(join(STYLES, name), "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+  return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => m[1]!.trim() === selector).map((m) => m[2]!).join(";");
+}
+
+describe("pipeline tabs (review of the v3 mockup, 2026-11-16)", () => {
+  test("stay in one row and scroll inside their own block instead of wrapping", () => {
+    const pipe = ruleBody("ds-components.css", ".ds-pipe");
+    expect(pipe).toMatch(/flex-wrap:\s*nowrap/);
+    expect(pipe).toMatch(/overflow-x:\s*auto/);
+    expect(pipe).toMatch(/overscroll-behavior-x:\s*contain/);
+  });
+
+  test("the selected tab keeps its size and is marked by a shape, not by colour alone", () => {
+    expect(ruleBody("ds-components.css", ".ds-pipe-tab.ds-on")).not.toMatch(/font-weight|padding|margin|font-size|border/);
+    expect(ruleBody("ds-components.css", ".ds-pipe-tab.ds-on::after")).toMatch(/border-bottom:\s*2px solid var\(--ds-accent\)/);
+  });
+});
+
 test("docs/README.md links the web console RFC and the file exists", () => {
   const readme = readFileSync(join(REPO, "docs/README.md"), "utf-8");
   expect(readme).toContain("(./rfc/web-console-v3.md)");
