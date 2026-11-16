@@ -286,14 +286,16 @@ export function Diagnostics() {
               </div>
             </Panel>
             <Panel title={t("Детали проверки")} fill scroll="text" id="diag-detail-panel" label={t("Детали проверки")}>
-              <div id="diag-detail" className="ds-legacy-island">
-                <CheckDetail
-                  check={current}
-                  cli={cliLine(report.online)}
-                  online={report.online}
-                  clock={clock}
-                  onFix={fix}
-                />
+              <div className="ds-legacy-island">
+                <div id="diag-detail">
+                  <CheckDetail
+                    check={current}
+                    cli={cliLine(report.online)}
+                    online={report.online}
+                    clock={clock}
+                    onFix={fix}
+                  />
+                </div>
                 {report.fixes_applied.length > 0 && (
                   <section className="panel diag-fixes" id="diag-fixes">
                     <div className="panel-head">

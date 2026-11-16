@@ -362,7 +362,7 @@ export function OpenProject() {
 
       {facts && (
         <>
-          <div className="ds-tabpanel ds-project-step" hidden={step !== "0"} data-step="0">
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "0"} data-step="0" id="open-project-step-tab-0" role="tabpanel" aria-labelledby="open-project-step-tab-0-button">
             <div className="ds-project-select">
               <div className="ds-project-left">
                 <Panel title={t("Текущий проект")} id="open-project-current">
@@ -473,14 +473,14 @@ export function OpenProject() {
                 </Panel>
               </div>
               {shown && (
-                <div className="ds-legacy-island ds-project-detail">
+                <div className="ds-legacy-island ds-project-detail" role="region" tabIndex={0} aria-label={t("Детали проекта")}>
                   <CandidateDetail item={shown} facts={facts} home={home} copied={copied} onCopy={copy} />
                 </div>
               )}
             </div>
           </div>
 
-          <div className="ds-tabpanel ds-project-step" hidden={step !== "1"} data-step="1">
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "1"} data-step="1" id="open-project-step-tab-1" role="tabpanel" aria-labelledby="open-project-step-tab-1-button">
             <Panel title={t("Проверки")} id="open-project-checks" meta={health ? t("{run} из {total} проверено", { run, total }) : t("нет данных")} fill scroll="text">
               <div className="ds-legacy-island">
             <div className="install-checks-body">
@@ -530,7 +530,7 @@ export function OpenProject() {
             </Panel>
           </div>
 
-          <div className="ds-tabpanel ds-project-step" hidden={step !== "2"} data-step="2">
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "2"} data-step="2" id="open-project-step-tab-2" role="tabpanel" aria-labelledby="open-project-step-tab-2-button">
             <Panel title={t("Схема внедрения")} id="open-project-flow" meta={t("путь проекта → harness → capability → runtime → health")}>
               <div className="ds-legacy-island">
           <div className="install-flow">
@@ -637,8 +637,8 @@ export function OpenProject() {
             </div>
           </div>
 
-          <div className="ds-tabpanel ds-project-step" hidden={step !== "3"} data-step="3">
-            <Panel title={t("Настройка")} id="open-project-settings">
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "3"} data-step="3" id="open-project-step-tab-3" role="tabpanel" aria-labelledby="open-project-step-tab-3-button">
+            <Panel title={t("Настройка")} id="open-project-settings" fill>
               <p className="ds-note">{t("project.json и orchestration.json настраиваются на странице «Настройка»: черновик, проверка и подтверждённая запись.")}</p>
               <div className="ds-update-decide">
                 <a className="ds-btn" href={href("configuration")}>
@@ -648,8 +648,8 @@ export function OpenProject() {
             </Panel>
           </div>
 
-          <div className="ds-tabpanel ds-project-step" hidden={step !== "4"} data-step="4">
-            <Panel title={t("Итоговая диагностика")} id="open-project-final">
+          <div className="ds-tabpanel ds-project-step" hidden={step !== "4"} data-step="4" id="open-project-step-tab-4" role="tabpanel" aria-labelledby="open-project-step-tab-4-button">
+            <Panel title={t("Итоговая диагностика")} id="open-project-final" fill>
               {health ? (
                 <dl className="ds-kv">
                   <div className="ds-kv-row"><dt>{t("пройдено")}</dt><dd>{health.ok}</dd></div>

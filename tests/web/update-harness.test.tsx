@@ -67,7 +67,7 @@ describe("the Update Harness route", () => {
     expect(countRows()).toEqual(counted.map(([value, label]) => [value, label, true]));
     // As in the mockup the first file is open, so only its diff is read.
     const first = document.querySelector("#update-diff .ds-diff-file") as HTMLElement;
-    expect(first.getAttribute("aria-selected")).toBe("true");
+    expect(first.getAttribute("aria-pressed")).toBe("true");
     expect(socket.sent.filter((body) => body.type === "update_harness.diff").map((body) => body.path)).toEqual([first.dataset.path]);
     act(() => fireEvent.click(document.querySelector('#update-diff [data-path="AGENTS.md"]') as HTMLElement));
     const diff = answer(socket, "update_harness.diff", DIFF);

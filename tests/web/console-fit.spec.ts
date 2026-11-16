@@ -1,5 +1,6 @@
-/* Window fit of the three screens moved to the design system v3 (#1091): Help (7 tabs), Harness
-   (5) and Repo Map (3) at five window sizes. In every tab the page does not scroll, main does not
+/* Window fit of the screens moved to the design system v3: Help (7 tabs), Harness (5) and Repo Map
+   (3) of #1091, Diagnostics (Функции, Проверки), Update (the file tabs) and Project (the five wizard
+   steps) at five window sizes. The 26-feature list and the check list scroll inside their panel. In every tab the page does not scroll, main does not
    scroll and the empty strip under the last block is at most 24 px (RFC section 5).
 
    Measurement mode: with CONSOLE_FIT_OUT=<dir> the spec writes fit-measurements.json and one PNG
@@ -21,10 +22,24 @@ const MAINTENANCE = read("harness-maintenance.json");
 const CATALOG = read("job-catalog.json");
 const REPO_MAP = read("repo-map.json");
 const HELP = read("help-ru.json");
+const FEATURES = read("features-snapshot.json");
+const PAGED: Readonly<Record<string, Body>> = {
+  "diagnostics.snapshot": read("diagnostics-report.json"),
+  "update_harness.snapshot": read("update-harness.json"),
+  "update_harness.diff": read("update-harness-diff.json"),
+  "open_project.snapshot": read("open-project.json"),
+};
 
 const SIZES: readonly [number, number][] = [[1920, 1080], [1920, 1010], [1920, 950], [1680, 950], [1440, 900]];
 /** Route and the number of tabs the design promises. */
-const SCREENS: readonly [route: string, tabs: number][] = [["help", 7], ["harness", 5], ["repo-map", 3]];
+const SCREENS: readonly [route: string, tabs: number][] = [
+  ["help", 7],
+  ["harness", 5],
+  ["repo-map", 3],
+  ["diagnostics", 2],
+  ["update-harness", 2],
+  ["open-project", 5],
+];
 const MAX_STRIP = 24;
 
 const send = (ws: WebSocketRoute, body: Body) => ws.send(JSON.stringify({ v: 1, ok: true, ...body }));
@@ -43,6 +58,8 @@ async function mockSocket(page: Page) {
       else if (type === "harness.maintenance") paged(ws, id, type, MAINTENANCE);
       else if (type === "repo_map.snapshot") paged(ws, id, type, REPO_MAP);
       else if (type === "help.snapshot") paged(ws, id, type, HELP);
+      else if (type === "features.snapshot") send(ws, { id, type, ...FEATURES });
+      else if (typeof type === "string" && type in PAGED) paged(ws, id, type, PAGED[type], type === "update_harness.diff" ? { cached: undefined, age_seconds: undefined } : {});
       else if (type === "job.catalog") send(ws, { id, type, ...CATALOG });
       else if (type === "job.list") send(ws, { id, type, jobs: [] });
     });
@@ -165,4 +182,21 @@ test("harness at 390x800: the grids collapse to one column and a label shares it
   await page.setViewportSize({ width: 1440, height: 900 });
   const wide = await page.locator("#harness-runtime .ds-kv").evaluate((list) => getComputedStyle(list).gridTemplateColumns.split(" ").length);
   expect(wide, "a two-column list of pairs").toBe(2);
+});
+
+test("diagnostics: the 26-feature list and the check list scroll inside their panel at 1440x900", async ({ page }) => {
+  await mockSocket(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${base()}/#/diagnostics`);
+  await expect(page.locator("#features-list [data-feature]")).toHaveCount(26, { timeout: 20000 });
+  const inner = (selector: string) =>
+    page.locator(selector).evaluate((panel) => {
+      const body = panel.querySelector<HTMLElement>(".ds-panel-body")!;
+      return { scrolls: body.scrollHeight > body.clientHeight, overflow: getComputedStyle(body).overflowY };
+    });
+  expect(await inner("#features-list")).toEqual({ scrolls: true, overflow: "auto" });
+  await page.getByRole("tab", { name: /Проверки/ }).click();
+  await expect(page.locator("#diag-list [data-check]").first()).toBeVisible();
+  expect((await inner("#diag-checks")).overflow).toBe("auto");
+  expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= innerHeight)).toBe(true);
 });

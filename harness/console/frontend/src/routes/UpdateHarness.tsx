@@ -19,6 +19,7 @@ import { useServedRepo } from "../project/format";
 import { useConsole } from "../useConsole";
 import type { JobSummary } from "../ws/jobs";
 import { useScreen } from "../screens/useScreen";
+import { TabPanel } from "../views/Tabs";
 import {
   DIFF_KINDS,
   MODES,
@@ -327,7 +328,7 @@ export function UpdateHarness() {
             {files.length === 0 ? (
               <p className="ds-empty">{t("Расхождений нет: показывать нечего.")}</p>
             ) : (
-              <div role="listbox" aria-label={t("Файлы")}>
+              <div>
                 {groups.map(([field, tag, kindTone, items]) => (
                   <div key={field} data-kind={field}>
                     <h3 className="ds-group-title">
@@ -337,8 +338,6 @@ export function UpdateHarness() {
                       <button
                         key={item.path}
                         type="button"
-                        role="option"
-                        aria-selected={item.path === file?.path}
                         aria-pressed={item.path === file?.path}
                         className="ds-row ds-row-button ds-diff-file"
                         data-path={item.path}
@@ -377,8 +376,7 @@ export function UpdateHarness() {
                     { id: "decide", label: t("Решение"), count: file.field === "conflict" ? "!" : "✓" },
                   ]}
                 />
-                {fileTab === "diff" ? (
-                  <>
+                <TabPanel id="update-file" tab="diff" value={fileTab}>
                     <DiffPane key={file.path} file={file} />
                     <dl className="ds-kv">
                       <div className="ds-kv-row">
@@ -394,8 +392,8 @@ export function UpdateHarness() {
                         </dd>
                       </div>
                     </dl>
-                  </>
-                ) : (
+                </TabPanel>
+                <TabPanel id="update-file" tab="decide" value={fileTab}>
                   <div id="update-decision" className="ds-pad">
                     <p className={file.field === "conflict" ? "ds-alert ds-alert-err" : "ds-note"}>{t(file.meaning)}</p>
                     <div className="ds-update-decide">
@@ -412,7 +410,7 @@ export function UpdateHarness() {
                         : t("«Взять версию пакета» — режим с перезаписью управляемых файлов; «оставить мой файл» — обычное обновление, которое сохраняет правки и останавливается на конфликтах.")}
                     </p>
                   </div>
-                )}
+                </TabPanel>
               </div>
             ) : (
               <p className="ds-empty">{t("Выберите файл, чтобы увидеть его изменения.")}</p>
@@ -433,7 +431,8 @@ export function UpdateHarness() {
                   { id: "migration", label: t("Миграция") },
                 ]}
               />
-                <div className="ds-rows" role="radiogroup" aria-label={t("Режим обновления")} id="update-modes-card" hidden={howTab !== "mode"}>
+                <TabPanel id="update-how" tab="mode" value={howTab} keepMounted>
+                <div className="ds-rows" role="radiogroup" aria-label={t("Режим обновления")} id="update-modes-card">
                   {MODES.map(([key, label]) => {
                     const [description, tag] = MODE_CARDS[key];
                     return (
@@ -448,7 +447,9 @@ export function UpdateHarness() {
                     );
                   })}
                 </div>
-                <div id="update-seeds" hidden={howTab !== "seed"}>
+                </TabPanel>
+                <TabPanel id="update-how" tab="seed" value={howTab} keepMounted>
+                <div id="update-seeds">
                   {mode !== SEED_MODE && (
                     <p className="ds-note">
                       {t("Seed-файлы перезаписывает только режим «С перезаписью выбранных seed-файлов».")}{" "}
@@ -480,7 +481,9 @@ export function UpdateHarness() {
                     </button>
                   </div>
                 </div>
-                <div id="update-plan" hidden={howTab !== "plan"}>
+                </TabPanel>
+                <TabPanel id="update-how" tab="plan" value={howTab} keepMounted>
+                <div id="update-plan">
                   <h3 className="ds-group-title">
                     {t("План")} · {t(modeName)}
                   </h3>
@@ -513,9 +516,10 @@ export function UpdateHarness() {
                   </div>
                   <LastRun />
                 </div>
-              <div hidden={howTab !== "migration"}>
+                </TabPanel>
+              <TabPanel id="update-how" tab="migration" value={howTab} keepMounted>
                 <MigrationTab facts={facts} />
-              </div>
+              </TabPanel>
             </div>
             <div className="ds-panel-foot">
               <span className="ds-note">

@@ -50,6 +50,8 @@
 /* Inside the v3 panels of Diagnostics · Проверки the list and the detail drop their own frame. */
 .ds-diag-checks .diag-list-bare,
 .ds-diag-checks .diag-detail-panel { border: 0; border-radius: 0; }
+/* The detail, the applied fixes and the command panel stack in the v3 detail panel. */
+.ds-diag-checks #diag-detail { display: block; }
 .diag-fixes .panel-head { padding: 12px 16px; }
 .diag-fixes-list { margin: 0; padding: 12px 16px 12px 32px; font-size: var(--fs-1); line-height: 1.6; }
 .diag-commands { margin-top: 20px; }
@@ -255,14 +257,10 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .route-steps-fill .route-step, .route-steps-fill .route-step.current .route-dot { animation: none; }
 }
 
-/* Page fit (#1066): on a desktop window the long lists of Diagnostics, Reports and the Agent
-   activity sessions scroll inside their block, so the page itself fits the window. */
+/* Page fit (#1066): on a desktop window the long lists of Reports and the Agent activity sessions
+   scroll inside their block, so the page itself fits the window. Diagnostics scrolls in its v3
+   panels (ds-screens.css). */
 @media (min-width: 981px) {
-  #diag-list { max-height: max(240px, calc(100dvh - 640px)); overflow-y: auto; }
-  /* The detail panel fits the window: its body scrolls, the command action stays in view. */
-  .diag-detail-panel { max-height: max(420px, calc(100dvh - 120px)); }
-  .diag-detail-body { min-height: 0; overflow-y: auto; }
-  .diag-detail-body .diag-action { position: sticky; bottom: -16px; padding: 8px 0; background: var(--surface); }
   .work-sessions .work-list { max-height: max(240px, calc(100dvh - 460px)); overflow-y: auto; }
   #report-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; }
   .report-timeline { max-height: max(240px, calc(100dvh - 300px)); overflow-y: auto; }

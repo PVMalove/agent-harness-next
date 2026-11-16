@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { Panel, PipeTabs, StatusIcon, Switch } from "../ds";
 import type { Tone } from "../ds";
 import { useI18n } from "../i18n";
+import { TabPanel } from "../views/Tabs";
 import { FEATURE_CATEGORIES, FEATURE_STATES, stateCounts } from "../ws/features";
 import type { Feature, FeatureCategory, FeatureState, FeaturesSnapshot } from "../ws/features";
 import { STATE_WORD, countsAfter, stateAfter } from "./togglePlan";
@@ -250,7 +251,7 @@ export function FeaturesView({
                   { id: "links", label: t("Связи"), count: current.depends_on.length + current.required_by.length },
                 ]}
               />
-              {tab === "ready" && (
+              <TabPanel id="feature-detail" tab="ready" value={tab}>
                 <div id="feature-detail-ready">
                   {current.state === "disabled" && (
                     <p className="ds-alert">
@@ -273,8 +274,8 @@ export function FeaturesView({
                     </ul>
                   )}
                 </div>
-              )}
-              {tab === "config" && (
+              </TabPanel>
+              <TabPanel id="feature-detail" tab="config" value={tab}>
                 <div id="feature-detail-config">
                   {current.settings.length === 0 ? (
                     <p className="ds-empty">{t("Функция не читает ключей конфигурации")}</p>
@@ -300,8 +301,8 @@ export function FeaturesView({
                     ))}
                   </ul>
                 </div>
-              )}
-              {tab === "links" && (
+              </TabPanel>
+              <TabPanel id="feature-detail" tab="links" value={tab}>
                 <div id="feature-detail-links" className="ds-grid-2">
                   <div>
                     <h3 className="ds-group-title">{t("Зависит от")}</h3>
@@ -312,7 +313,7 @@ export function FeaturesView({
                     <div className="ds-feature-links">{current.required_by.length ? current.required_by.map(link) : <span className="ds-faint">{t("ничего")}</span>}</div>
                   </div>
                 </div>
-              )}
+              </TabPanel>
             </div>
           )}
         </Panel>

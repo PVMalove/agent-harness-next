@@ -116,6 +116,11 @@
 .ds-feature-counts .ds-status { width: 20px; height: 20px; }
 .ds-faint { color: var(--ds-faint); }
 #features-list .ds-row-button { min-height: 44px; }
+/* Hidden status words (.ds-sr) are absolutely positioned: a scrolling body keeps them inside. */
+.ds-features .ds-panel-body,
+.ds-diag-checks .ds-panel-body,
+.ds-update .ds-panel-body,
+.ds-project-step .ds-panel-body { position: relative; }
 .ds-diag-checks { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
 .ds-diag-checks .ds-legacy-island { overflow: visible; min-height: 100%; }
 
@@ -178,4 +183,10 @@
   .ds-project-install,
   .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
   .ds-file-rel { border-left: 0; }
+  /* The page scrolls on a phone: the grids take their content height, never a share of the window. */
+  .ds-features,
+  .ds-diag-checks,
+  .ds-update,
+  .ds-project-select,
+  .ds-project-install { flex: none; }
 }

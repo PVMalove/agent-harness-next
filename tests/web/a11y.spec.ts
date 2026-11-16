@@ -59,3 +59,46 @@ test("tabs move with the arrow keys and every tab controls an existing panel", a
     await expect(page.locator(`[id="${id}"][role="tabpanel"]`)).toHaveCount(1);
   }
 });
+
+const fixture = (name: string) => JSON.parse(readFileSync(resolve(__dirname, "fixtures", name), "utf-8")) as Record<string, unknown>;
+const PAGED: Readonly<Record<string, unknown>> = {
+  "diagnostics.snapshot": fixture("diagnostics-report.json"),
+  "update_harness.snapshot": fixture("update-harness.json"),
+  "update_harness.diff": fixture("update-harness-diff.json"),
+  "open_project.snapshot": fixture("open-project.json"),
+};
+
+/** Home, the feature registry and the paged snapshots of Diagnostics, Update and Project. */
+async function mockScreens(page: Page) {
+  await page.routeWebSocket("**/ws", (ws) => {
+    ws.onMessage((message) => {
+      const { id, type } = JSON.parse(String(message)) as { id: string; type: string };
+      const send = (body: Record<string, unknown>) => ws.send(JSON.stringify({ v: 1, id, type, ok: true, ...body }));
+      if (type === "home.snapshot") send({ cached: false, age_seconds: 0, snapshot: HOME });
+      else if (type === "features.snapshot") send(fixture("features-snapshot.json"));
+      else if (type in PAGED) {
+        const text = JSON.stringify(PAGED[type]);
+        send({ snapshot_id: 1, text, next: text.length, done: true, ...(type === "update_harness.diff" ? {} : { cached: false, age_seconds: 0 }) });
+      } else if (type === "job.catalog") send({ commands: [], cancel_reason: "" });
+      else if (type === "job.list") send({ jobs: [] });
+    });
+  });
+}
+
+for (const [route, ready] of [
+  ["diagnostics", "#features-list [data-feature]"],
+  ["update-harness", "#update-diff .ds-diff-file"],
+  ["open-project", "#open-project-list .project-row"],
+] as const) {
+  test(`${route} has no WCAG 2.1 AA violation in any of its tabs`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockScreens(page);
+    await page.goto(`${base()}/#/${route}`);
+    await expect(page.locator(ready).first()).toBeVisible({ timeout: 20000 });
+    const tabs = page.locator("main#content [role=tablist]").first().getByRole("tab");
+    for (let index = 0; index < (await tabs.count()); index++) {
+      await tabs.nth(index).click();
+      expect(await axeViolations(page), `${route} tab ${index + 1}`).toEqual([]);
+    }
+  });
+}
