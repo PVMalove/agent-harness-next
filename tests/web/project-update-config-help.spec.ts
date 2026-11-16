@@ -112,7 +112,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator("#open-project-list [data-path]")).toHaveCount(3);
     await page.locator('[data-path="/work/billing"]').click();
     await expect(page.locator("#open-project-command")).toHaveText("harness console --web /work/billing");
-    await expect(page.locator("#open-project-detail .project-check")).toHaveCount(5);
+    await expect(page.locator("#open-project-detail-checks .ds-row")).toHaveCount(5);
     // The title carries only «Диагностика»; the plan is in the step «Установка / внедрение» under the rollout scheme.
     await expect(page.locator(".ds-page-head .ds-head-actions > *")).toHaveCount(1);
     await page.getByRole("tab", { name: /Установка \/ внедрение/ }).click();

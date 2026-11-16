@@ -77,16 +77,16 @@ describe("the Open Project route", () => {
 
   test("lays out the mockup blocks: folder rows, the rollout scheme and the install plan under it", () => {
     renderPage();
-    const rows = [...document.querySelectorAll("#open-project-list .project-row")];
-    expect(rows.map((row) => [row.querySelector(".project-row-icon svg")?.getAttribute("data-icon"), row.querySelector(".project-row-main b")?.textContent, row.querySelector(".project-pill")?.textContent])).toEqual([
+    const rows = [...document.querySelectorAll("#open-project-list [data-path]")];
+    expect(rows.map((row) => [row.querySelector(".ds-project-icon svg")?.getAttribute("data-icon"), row.querySelector(".ds-row-title")?.textContent, row.querySelector(".ds-tag")?.textContent])).toEqual([
       ["folder", "project", "Открыт"],
       ["folder", "billing", "Не открыт"],
       ["folder", "new service", "Не открыт"],
     ]);
-    expect(document.querySelector("#open-project-current .current-project-icon svg")?.getAttribute("data-icon")).toBe("folder");
+    expect(document.querySelector("#open-project-current .ds-project-icon svg")?.getAttribute("data-icon")).toBe("folder");
     const flow = document.querySelector("#open-project-flow") as HTMLElement;
     expect(flow.querySelector("h2")?.textContent).toBe("Схема внедрения");
-    expect([...flow.querySelectorAll(".install-flow-node b")].map((node) => node.textContent)).toEqual(["Проект", "Harness", "Capability", "Runtime", "Health"]);
+    expect([...flow.querySelectorAll(".ds-loop-node b")].map((node) => node.textContent)).toEqual(["Проект", "Harness", "Capability", "Runtime", "Health"]);
     const capability = () => flow.querySelector("[data-flow-cap]")?.textContent;
     expect(capability()).toBe("engineering-suite");
     stepTo(2);
@@ -156,7 +156,7 @@ describe("the Open Project route", () => {
     expect((document.querySelector("#open-project-install") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  test("the title and the current project follow the mockup: one action, name · branch · version and four KPIs", () => {
+  test("the title and the current project follow the mockup: one action, name · branch · version and four KPIs shown once", () => {
     renderPage();
     expect([...document.querySelectorAll(".ds-page-head .ds-head-actions > *")].map((item) => item.textContent?.trim())).toEqual(["Диагностика"]);
     expect([...document.querySelectorAll("#open-project-facts .ds-facts-main span")].map((item) => item.textContent)).toEqual(["claude-agent-harness", "feature/issue-7", "1.5.1"]);
@@ -170,20 +170,27 @@ describe("the Open Project route", () => {
     ]);
     expect(document.querySelector("#open-project-steps .ds-note")?.textContent).toBe("Шаг 2 из 5");
     const current = document.querySelector("#open-project-current") as HTMLElement;
-    expect([...current.querySelectorAll(".current-project-meta svg")].map((icon) => icon.getAttribute("data-icon"))).toEqual(["branch", "github-mark"]);
-    expect(current.querySelector(".current-project-meta")?.textContent).toContain("feature/issue-7");
-    expect([...current.querySelectorAll(".current-project-stats > div")].map((kpi) => [kpi.querySelector("span")?.textContent, kpi.querySelector("b")?.textContent])).toEqual([
+    expect([...current.querySelectorAll(".ds-project-meta svg")].map((icon) => icon.getAttribute("data-icon"))).toEqual(["branch", "github-mark"]);
+    expect(current.querySelector(".ds-project-meta")?.textContent).toContain("feature/issue-7");
+    // The four KPIs live in the summary only; the current project panel does not repeat them.
+    const stats = [...document.querySelectorAll("#open-project-facts .ds-stat")].map((kpi) => [kpi.querySelector(".ds-stat-label")?.textContent, kpi.querySelector(".ds-stat-value")?.textContent]);
+    expect(stats).toEqual([
       ["Harness", "1.5.1"],
       ["Скиллов", "32"],
       ["Managed", "232"],
       ["Health", "42/56"],
     ]);
+    expect(current.textContent).not.toContain("Managed");
+    expect(current.textContent).not.toContain("42/56");
+    expect(document.querySelectorAll("main#content .ds-legacy-island")).toHaveLength(1);
+    expect(document.querySelector("main#content .ds-legacy-island #open-project-steps, main#content .ds-legacy-island .ds-panel")).toBeNull();
   });
 
   test("the project list has its count head and foot; a typed path is checked locally with «Проверить путь»", () => {
     const { socket } = renderPage();
     expect(document.querySelector("#open-project-list .ds-panel-meta")?.textContent).toBe("3 найдено");
-    expect(document.querySelector("#open-project-list .project-list-foot")?.textContent).toBe("Выберите проект, чтобы увидеть проверки справа.");
+    expect(document.querySelector("#open-project-list #open-project-list-foot")?.textContent).toBe("Выберите проект, чтобы увидеть проверки справа.");
+    expect(screen.getByLabelText("Путь к локальному Git-проекту").className).toBe("ds-input");
     const before = socket.sent.length;
     act(() => fireEvent.change(screen.getByLabelText("Путь к локальному Git-проекту"), { target: { value: "relative/path" } }));
     act(() => fireEvent.click(screen.getByRole("button", { name: "Проверить путь" })));
@@ -197,44 +204,82 @@ describe("the Open Project route", () => {
   test("the details of the served project show its tracker, facts and five checks; another one says what is not read", () => {
     renderPage();
     const detail = () => document.querySelector("#open-project-detail") as HTMLElement;
-    expect(detail().querySelector(".project-provider svg")?.getAttribute("data-icon")).toBe("github-mark");
-    expect(detail().querySelector(".project-meta")?.textContent).toContain("feature/issue-7");
-    expect(detail().querySelector(".project-meta")?.textContent).toContain("2 ошибки · 1 внимание");
-    const checks = () => [...detail().querySelectorAll(".project-check")].map((row) => [row.querySelector("b")?.textContent, row.querySelector(".project-check-state")?.className.split(" ")[1]]);
+    expect(detail().querySelector(".ds-project-provider svg")?.getAttribute("data-icon")).toBe("github-mark");
+    expect(detail().querySelector(".ds-project-meta")?.textContent).toContain("feature/issue-7");
+    expect(detail().querySelector(".ds-project-meta")?.textContent).toContain("2 ошибки · 1 внимание");
+    // Every check row is a StatusIcon (shape plus the spoken word), never a colour alone.
+    const checks = () =>
+      [...detail().querySelectorAll("#open-project-detail-checks .ds-row")].map((row) => [
+        row.querySelector(".ds-row-title")?.textContent,
+        row.querySelector(".ds-status")?.getAttribute("data-tone"),
+        row.querySelector(".ds-status .ds-sr")?.textContent,
+      ]);
     expect(checks()).toEqual([
-      ["Git repository", "ok"],
-      ["Harness config", "ok"],
-      ["Capability", "ok"],
-      ["Skills snapshot", "warn"],
-      ["Локальные правки управляемых файлов", "ok"],
+      ["Git repository", "ok", "пройдено"],
+      ["Harness config", "ok", "пройдено"],
+      ["Capability", "ok", "пройдено"],
+      ["Skills snapshot", "warn", "внимание"],
+      ["Локальные правки управляемых файлов", "ok", "пройдено"],
     ]);
     expect((within(detail()).getByRole("button", { name: "Уже открыт" }) as HTMLButtonElement).disabled).toBe(true);
     act(() => fireEvent.click(document.querySelector('[data-path="/work/billing"]') as HTMLElement));
-    expect(checks().map(([, state]) => state)).toEqual(["skip", "ok", "skip", "skip", "skip"]);
+    expect(checks().map(([, tone]) => tone)).toEqual(["wait", "ok", "wait", "wait", "wait"]);
     expect(detail().textContent).toContain("снимок читает только проект этого сервера");
   });
 
   test("the rollout scheme reads runtime and health from Home; capabilities carry descriptions and a footer", () => {
     renderPage();
-    const nodes = [...document.querySelectorAll("#open-project-flow .install-flow-node")].map((node) => [node.querySelector(".install-flow-value")?.textContent, node.querySelector("small")?.textContent]);
+    const nodes = [...document.querySelectorAll("#open-project-flow .ds-loop-node")].map((node) => [node.querySelector(".ds-project-flow-value")?.textContent, node.querySelector("small:last-of-type")?.textContent]);
     expect(nodes[1]).toEqual(["1.5.1 → 1.5.1", "обновление"]);
     expect(nodes[3]).toEqual(["schema 3", "generation-1a2b3c4d · audit 1240"]);
     expect(nodes[4]).toEqual(["42/56 пройдено", "проверки — на странице «Диагностика»"]);
-    const rows = [...document.querySelectorAll("#open-project-capability .cap-row")];
-    expect(rows.every((row) => (row.querySelector("small")?.textContent ?? "").length > 0)).toBe(true);
-    expect(document.querySelector("#open-project-capability .cap-footer")?.textContent).toBe(CAPABILITY_TEXT["engineering-suite"]![2]);
+    const rows = [...document.querySelectorAll("#open-project-capability .ds-choice")];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => (row.querySelector(".ds-row-sub")?.textContent ?? "").length > 0)).toBe(true);
+    expect(document.querySelector("#open-project-capability-footer")?.textContent).toBe(CAPABILITY_TEXT["engineering-suite"]![2]);
     const catalog = JSON.parse(readFileSync(resolve(__dirname, "../../harness/CAPABILITIES.json"), "utf-8")) as Record<string, unknown>;
     expect(Object.keys(catalog).filter((id) => !(id in CAPABILITY_TEXT))).toEqual([]);
   });
 
-  test("the checks panel shows the Home health counts, the mode chips and the fix links", () => {
-    renderPage();
+  test("the checks panel shows the Home health counts, the mode filter and the fix links", () => {
+    const { socket } = renderPage();
+    stepTo(1);
     const checks = document.querySelector("#open-project-checks") as HTMLElement;
     expect(checks.querySelector(".ds-panel-meta")?.textContent).toBe("45 из 56 проверено");
-    expect([...checks.querySelectorAll(".install-check-actions .chip")].map((chip) => chip.textContent)).toEqual(["Офлайн", "Онлайн"]);
+    const modes = within(checks).getByRole("group", { name: "Режим проверки" });
+    expect(modes.className).toBe("ds-filter");
+    expect([...modes.querySelectorAll("button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([
+      ["Офлайн", "true"],
+      ["Онлайн", "false"],
+    ]);
+    act(() => fireEvent.click(within(modes).getByRole("button", { name: "Онлайн" })));
+    expect(socket.sent.filter((body) => body.type === "home.snapshot").at(-1)).toMatchObject({ force: true, online: true });
+    expect(within(modes).getByRole("button", { name: "Онлайн" }).getAttribute("aria-pressed")).toBe("true");
     expect(checks.querySelector('a[href="#/diagnostics"]')?.textContent?.trim()).toBe("Исправить");
     expect(checks.querySelector('a[href="#/configuration"]')?.textContent?.trim()).toBe("Настройка");
-    expect([...checks.querySelectorAll(".install-health > span")].map((item) => item.textContent?.trim())).toEqual(["42 пройдено", "1 внимание", "2 ошибки", "11 не проверено"]);
-    expect(checks.querySelectorAll(".install-health-bar span").length).toBe(4);
+    const counters = [...checks.querySelectorAll("#open-project-health .ds-row")].map((row) => [row.querySelector(".ds-status")?.getAttribute("data-tone"), row.querySelector(".ds-row-main")?.textContent]);
+    expect(counters).toEqual([
+      ["ok", "42 пройдено"],
+      ["warn", "1 внимание"],
+      ["err", "2 ошибки"],
+      ["wait", "11 не проверено"],
+    ]);
+    expect(checks.querySelectorAll(".ds-project-bar span").length).toBe(4);
+  });
+
+  test("the wizard steps are TabPanels that keep their content mounted while hidden", () => {
+    renderPage();
+    const panels = [...document.querySelectorAll('[id^="open-project-step-tab-"][role="tabpanel"]')];
+    expect(panels.map((panel) => [panel.id, panel.hasAttribute("hidden")])).toEqual([
+      ["open-project-step-tab-0", false],
+      ["open-project-step-tab-1", true],
+      ["open-project-step-tab-2", true],
+      ["open-project-step-tab-3", true],
+      ["open-project-step-tab-4", true],
+    ]);
+    expect(panels.every((panel) => panel.childElementCount > 0)).toBe(true);
+    stepTo(4);
+    expect(document.querySelector("#open-project-step-tab-4")?.hasAttribute("hidden")).toBe(false);
+    expect(document.querySelector("#open-project-step-tab-0")?.hasAttribute("hidden")).toBe(true);
   });
 });

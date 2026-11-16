@@ -135,12 +135,13 @@
 .ds-diff-add { color: var(--ds-ok); }
 .ds-diff-del { color: var(--ds-err); }
 .ds-diff-file .ds-diff-path { font-family: var(--ds-mono); font-weight: 500; }
-.ds-update-decide { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px; }
-.ds-update-mode { cursor: pointer; }
-.ds-update-mode[data-on="true"] { background: var(--ds-accent-bg); box-shadow: inset 2px 0 0 var(--ds-accent); }
+.ds-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 12px; }
+.ds-choice { cursor: pointer; }
+.ds-choice[data-on="true"] { background: var(--ds-accent-bg); box-shadow: inset 2px 0 0 var(--ds-accent); }
 .ds-update-count b { min-width: 24px; text-align: right; }
 .ds-verdict-ok { color: var(--ds-ok); }
 .ds-verdict-warn { color: var(--ds-warn); }
+.ds-verdict-err { color: var(--ds-err); }
 .ds-panel-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--ds-line); }
 .ds-panel-foot .ds-note { flex: 1 1 100%; padding: 0; }
 #update-how .ds-panel-body { display: flex; flex-direction: column; }
@@ -153,8 +154,36 @@
 .ds-project-step[hidden] { display: none; }
 .ds-project-select { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
 .ds-project-left { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.ds-project-detail { min-height: 0; overflow: auto; border-radius: 8px; }
+.ds-project-detail { display: flex; flex-direction: column; min-height: 0; }
 .ds-project-install { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1 1 200px; min-height: 0; }
+.ds-project-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 8px; background: var(--ds-hover); color: var(--ds-muted); }
+.ds-project-current { border-bottom: 0; }
+.ds-project-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.ds-project-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.ds-project-about { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; }
+.ds-project-provider { display: flex; align-items: center; gap: 8px; }
+.ds-project-name { margin: 0; font-size: var(--ds-fs-3); font-weight: 600; }
+.ds-project-command { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; }
+.ds-project-command > code { margin: 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--ds-bg); font-family: var(--ds-mono); overflow-wrap: anywhere; white-space: pre-wrap; }
+.ds-project-command > .ds-note { padding-block: 0; }
+.ds-project-path { align-items: flex-end; padding-block: 8px; }
+.ds-project-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; min-width: 0; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-project-check-actions { padding-block: 8px; }
+.ds-project-bar { display: flex; height: 8px; margin: 4px 12px; overflow: hidden; border-radius: 4px; background: var(--ds-hover); }
+.ds-project-bar [data-tone="ok"] { background: var(--ds-ok); }
+.ds-project-bar [data-tone="warn"] { background: var(--ds-warn); }
+.ds-project-bar [data-tone="err"] { background: var(--ds-err); }
+.ds-project-bar [data-tone="wait"] { background: var(--ds-faint); }
+.ds-project-flow { grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; list-style: none; }
+.ds-project-flow-value { display: block; color: var(--ds-fg); font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.ds-project-flow [data-tone="ok"] > .ds-ic-sm { color: var(--ds-ok); }
+.ds-project-flow [data-tone="warn"] > .ds-ic-sm { color: var(--ds-warn); }
+.ds-project-flow [data-tone="active"] > .ds-ic-sm { color: var(--ds-accent); }
+.ds-project-caps .ds-row-sub { white-space: normal; }
+.ds-kv dd[data-tone="ok"] { color: var(--ds-ok); }
+.ds-kv dd[data-tone="warn"] { color: var(--ds-warn); }
+.ds-kv dd[data-tone="err"] { color: var(--ds-err); }
+.ds-tag[data-on="true"] { background: var(--ds-ok-bg); color: var(--ds-ok); }
 
 /* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
    The page subtitle goes, the installation rows put their caption on the title line and the tile

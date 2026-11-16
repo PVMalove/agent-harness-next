@@ -98,7 +98,7 @@ const NESTED: Readonly<Record<string, readonly string[]>> = {
 for (const [route, ready] of [
   ["diagnostics", "#features-list [data-feature]"],
   ["update-harness", "#update-diff .ds-diff-file"],
-  ["open-project", "#open-project-list .project-row"],
+  ["open-project", "#open-project-list [data-path]"],
 ] as const) {
   for (const [width, height] of SIZES) {
     test(`${route} at ${width}x${height} has no WCAG 2.1 AA violation in any of its tabs and inner tabs`, async ({ page }) => {

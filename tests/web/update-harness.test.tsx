@@ -96,7 +96,7 @@ describe("the Update Harness route", () => {
     expect(document.querySelector("#update-cache")?.getAttribute("title")).toBe("Новый снимок · 0 s");
     const tabs = [...document.querySelectorAll("#update-how [role=tab]")].map((tab) => tab.textContent);
     expect(tabs).toEqual(["1Режим", "–Seed", "3План", "4Миграция"]);
-    expect([...document.querySelectorAll(".ds-update-mode")].map((card) => [card.querySelector(".ds-row-title")?.textContent, card.querySelector(".ds-tag")?.textContent])).toEqual([
+    expect([...document.querySelectorAll(".ds-choice")].map((card) => [card.querySelector(".ds-row-title")?.textContent, card.querySelector(".ds-tag")?.textContent])).toEqual([
       ["Обычное", "рекомендуется"],
       ["С перезаписью управляемых файлов", "опасно"],
       ["С перезаписью выбранных seed-файлов", "выборочно"],

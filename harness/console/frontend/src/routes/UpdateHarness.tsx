@@ -396,7 +396,7 @@ export function UpdateHarness() {
                 <TabPanel id="update-file" tab="decide" value={fileTab}>
                   <div id="update-decision" className="ds-pad">
                     <p className={file.field === "conflict" ? "ds-alert ds-alert-err" : "ds-note"}>{t(file.meaning)}</p>
-                    <div className="ds-update-decide">
+                    <div className="ds-actions">
                       <button type="button" className="ds-btn" onClick={() => take(file)}>
                         {t("Взять версию пакета")}
                       </button>
@@ -436,7 +436,7 @@ export function UpdateHarness() {
                   {MODES.map(([key, label]) => {
                     const [description, tag] = MODE_CARDS[key];
                     return (
-                      <label key={key} className="ds-row ds-update-mode" data-on={key === mode}>
+                      <label key={key} className="ds-row ds-choice" data-on={key === mode}>
                         <input type="radio" name="update-mode" checked={key === mode} onChange={() => setMode(key)} aria-label={t(label)} />
                         <span className="ds-row-main">
                           <span className="ds-row-title">{t(label)}</span>
@@ -472,7 +472,7 @@ export function UpdateHarness() {
                   <p className={seeds.length ? "ds-alert ds-alert-warn" : "ds-note"}>
                     {seeds.length ? t("Отмечены файлы, которые будут перезаписаны эталоном; их правки пропадут.") : t("Seed-файлы совпадают с шаблоном — перезаписывать нечего.")}
                   </p>
-                  <div className="ds-update-decide">
+                  <div className="ds-actions">
                     <button className="ds-btn ds-btn-sm" type="button" disabled={mode !== SEED_MODE} onClick={() => setTicked(seeds)}>
                       {t("Выбрать все")}
                     </button>
