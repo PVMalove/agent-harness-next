@@ -211,7 +211,7 @@ export function BatchCards({ data, now = Date.now() }: { data: OrchestrationSnap
             <div className="orch-batch-head">
               <span className="orch-batch-id">{batch.batch_id}</span>
               <span className="orch-state" data-state={batch.state}>
-                <StatusIcon tone={tone} label={label} /> {label}
+                <StatusIcon tone={tone} /> {label}
               </span>
             </div>
             <h3 title={t("Названия тикета в ledger нет: показан номер и ветка")}>{`${batch.ticket || batch.batch_id} · ${batch.branch || "—"}`}</h3>
@@ -315,7 +315,7 @@ export function DispatchQueue({ data, now = Date.now() }: { data: OrchestrationS
                 <small>{`${stage.batch_id} · ${roleName(stage.role)} · ${t("старт")} ${clock(stage.started_at || stage.at, language)}`}</small>
               </span>
               <span className="orch-state">
-                <StatusIcon tone={STATUS_TONE[statusOf(stage)] ?? "off"} label={stateText(stage.state)} /> {stateText(stage.state)}
+                <StatusIcon tone={STATUS_TONE[statusOf(stage)] ?? "off"} /> {stateText(stage.state)}
               </span>
               <span className="orch-heartbeat" title={t("с последнего heartbeat или события")}>
                 {/* The 44px column of the mockup holds the largest unit only («3 дн», «12 мин»). */}
@@ -369,7 +369,7 @@ export function TicketList({ data, now = Date.now() }: { data: OrchestrationSnap
                 </div>
                 <span>{last ? `${roleName(last.role)} · ${stateText(last.state)}` : "—"}</span>
                 <a className="orch-state" href={`${href("recovery")}?batch=${encodeURIComponent(batch.batch_id)}`}>
-                  <StatusIcon tone={tone} label={stateText(batch.state)} /> {stateText(batch.state)}
+                  <StatusIcon tone={tone} /> {stateText(batch.state)}
                 </a>
                 <span>{duration(ageSeconds(batch.created_at, now))}</span>
                 <span>{last ? clock(last.at || last.started_at, language) : "—"}</span>

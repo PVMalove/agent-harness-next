@@ -38,6 +38,14 @@ describe("StatusIcon", () => {
     expect(new Set(shapes).size).toBe(6);
     expect(screen.getByText("состояние ok").className).toBe("ds-sr");
   });
+
+  test("without a label the icon is decorative and the visible word is read once", () => {
+    const { container } = render(<p><StatusIcon tone="ok" /> работает</p>);
+    const icon = container.querySelector(".ds-status")!;
+    expect(icon.getAttribute("aria-hidden")).toBe("true");
+    expect(icon.querySelector(".ds-sr")).toBeNull();
+    expect(container.textContent).toBe(" работает");
+  });
 });
 
 describe("RelatedTiles", () => {

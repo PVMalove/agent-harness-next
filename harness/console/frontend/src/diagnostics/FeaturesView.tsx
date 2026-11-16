@@ -135,7 +135,7 @@ export function FeaturesView({
           </button>
           {FEATURE_STATES.map((state) => (
             <button key={state} type="button" aria-pressed={filter === state} data-feature-filter={state} onClick={() => setFilter(state)}>
-              <StatusIcon tone={STATE_TONE[state]} label={t(FILTER_LABEL[state])} /> {t(FILTER_LABEL[state])} <b>{counts[state]}</b>
+              <StatusIcon tone={STATE_TONE[state]} /> {t(FILTER_LABEL[state])} <b>{counts[state]}</b>
             </button>
           ))}
         </div>
