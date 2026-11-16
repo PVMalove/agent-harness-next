@@ -1,5 +1,5 @@
 """The screen snapshot requests of Reports, Orchestration, Recovery, Container route, Diagnostics,
-Harness, Repo Map, «Открыть проект», «Справка», «Обновить Harness» and «Настройка» and the
+Harness, the Diagnostics features, Repo Map, «Открыть проект», «Справка», «Обновить Harness» and «Настройка» and the
 `snapshot.page` request that completes them: parsing and the replies."""
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from ....kernel.protocol import (
     CONFIGURATION_REQUEST,
     DIAGNOSTICS_REQUEST,
+    FEATURES_REQUEST,
     HARNESS_OVERVIEW_REQUEST,
     HARNESS_REQUEST,
     HELP_REQUEST,
@@ -64,6 +65,8 @@ _FIELDS: dict[str, frozenset[str]] = {
     HARNESS_REQUEST: frozenset({"force"}),
     # A typed reply, not paged: the state, the drift and the pipeline usage counts.
     HARNESS_OVERVIEW_REQUEST: frozenset({"force"}),
+    # A typed reply, not paged: the feature registry of Diagnostics.
+    FEATURES_REQUEST: frozenset({"force"}),
     MAINTENANCE_REQUEST: frozenset({"force"}),
     REPO_MAP_REQUEST: frozenset({"force"}),
     # No project field: the server serves one project and never switches it.
@@ -178,6 +181,9 @@ def _call(
     if kind == HARNESS_OVERVIEW_REQUEST:
         force = _flag(body, "force")
         return lambda: screens.harness_overview(force=force)
+    if kind == FEATURES_REQUEST:
+        force = _flag(body, "force")
+        return lambda: screens.features(force=force)
     if kind == MAINTENANCE_REQUEST:
         force = _flag(body, "force")
         return lambda: screens.maintenance(force=force)

@@ -36,6 +36,10 @@ MAINTENANCE_REQUEST = "harness.maintenance"
 # The Harness screen of the Web console: the same state and drift as `harness.snapshot` with the
 # pipeline usage counted on the server, one typed reply instead of the paged ledger.
 HARNESS_OVERVIEW_REQUEST = "harness.overview"
+# The Diagnostics features: the Harness feature registry with its states, dependencies, sources
+# and settings rows, and the configuration digests a feature toggle writes against. One typed
+# reply, read only: a toggle is the confirmed `configuration-apply` job.
+FEATURES_REQUEST = "features.snapshot"
 # The Repo Map screen: HEAD, its cached map, the tier, the parser bundle and the memory status.
 REPO_MAP_REQUEST = "repo_map.snapshot"
 # «Открыть проект»: the installation state of the served project and the candidate projects, each

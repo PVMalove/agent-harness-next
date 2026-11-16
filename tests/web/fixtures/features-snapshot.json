@@ -1,0 +1,1067 @@
+{
+  "features": [
+    {
+      "id": "orchestration",
+      "name": "Оркестрация",
+      "category": "execution",
+      "state": "working",
+      "description": "Батчи, dispatch и роли: путь задачи от плана до PR.",
+      "off_effect": "Задачи нельзя запускать через batch и dispatch.",
+      "depends_on": [
+        "capability:backend-orchestration"
+      ],
+      "required_by": [
+        "containers",
+        "attestation",
+        "roles",
+        "context-package",
+        "approval",
+        "retry",
+        "preflight"
+      ],
+      "sources": [
+        {
+          "kind": "harness.lock",
+          "path": ".harness/orchestration/coordinator.py"
+        },
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Файл конфигурации на месте",
+          "state": "ok",
+          "detail": ".harness/orchestration.json"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "containers",
+      "name": "Контейнерный executor",
+      "category": "execution",
+      "state": "not_working",
+      "description": "Worker запускается в изолированном контейнере (Docker или Podman), а не на хосте.",
+      "off_effect": "Worker будут запускаться на хосте без изоляции.",
+      "depends_on": [
+        "orchestration"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Движок контейнеров не найден в PATH",
+          "state": "err",
+          "detail": "podman"
+        }
+      ],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "access_policy",
+            "defaults",
+            "container",
+            "engine"
+          ],
+          "present": true,
+          "value": "\"podman\""
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "access_policy",
+            "defaults",
+            "container",
+            "worker_image"
+          ],
+          "present": true,
+          "value": "\"harness-worker:local\""
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "access_policy",
+            "defaults",
+            "container",
+            "proxy_image"
+          ],
+          "present": true,
+          "value": "\"harness-proxy:local\""
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "attestation",
+      "name": "Worker attestation",
+      "category": "execution",
+      "state": "working",
+      "description": "Worker подтверждает себя через dispatch self-report и heartbeat.",
+      "off_effect": "Состояние worker принимается без подтверждения.",
+      "depends_on": [
+        "orchestration"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "worker_attestation_required"
+          ],
+          "present": true,
+          "value": "true"
+        }
+      ],
+      "toggle": {
+        "file": "orchestration.json",
+        "path": [
+          "worker_attestation_required"
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "id": "worktrees",
+      "name": "Изолированные worktree",
+      "category": "execution",
+      "state": "working",
+      "description": "Каждая задача идёт в своём worktree и ветке по шаблону.",
+      "off_effect": "Задачи будут идти в общем рабочем дереве.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "project.json",
+          "path": ".harness/project.json"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/check-branch-name.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/check-worktree-branch-name.sh"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/check-branch-name.sh"
+        },
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/check-worktree-branch-name.sh"
+        }
+      ],
+      "settings": [
+        {
+          "file": "project.json",
+          "path": [
+            "branch_pattern"
+          ],
+          "present": true,
+          "value": "\"^issue/[0-9]+-[a-z0-9-]+$\""
+        },
+        {
+          "file": "project.json",
+          "path": [
+            "base_branch"
+          ],
+          "present": true,
+          "value": "\"main\""
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "test-author",
+      "name": "Test author",
+      "category": "roles",
+      "state": "working",
+      "description": "Агент пишет один поведенческий тест для шага Red в TDD и запускает его через защищённый runner.",
+      "off_effect": "Тесты для шага Red пишет разработчик сам.",
+      "depends_on": [
+        "qa-gate"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "project.json",
+          "path": ".harness/project.json"
+        },
+        {
+          "kind": "agent",
+          "path": ".claude/agents/test-author.md"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/test-author-guard.py"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/test-author-preflight.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/run-test.sh"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Агент установлен",
+          "state": "ok",
+          "detail": ".claude/agents/test-author.md"
+        },
+        {
+          "title": "Файл установлен",
+          "state": "ok",
+          "detail": ".claude/hooks/test-author-guard.py"
+        },
+        {
+          "title": "Файл установлен",
+          "state": "ok",
+          "detail": ".claude/hooks/test-author-preflight.sh"
+        },
+        {
+          "title": "Файл установлен",
+          "state": "ok",
+          "detail": ".claude/hooks/run-test.sh"
+        }
+      ],
+      "settings": [
+        {
+          "file": "project.json",
+          "path": [
+            "test_author"
+          ],
+          "present": true,
+          "value": "{\"runtime\":\"claude\",\"model\":\"sonnet\",\"effort\":\"high\"}"
+        },
+        {
+          "file": "project.json",
+          "path": [
+            "test_runner"
+          ],
+          "present": false,
+          "value": null
+        },
+        {
+          "file": "project.json",
+          "path": [
+            "test_paths"
+          ],
+          "present": true,
+          "value": "[\"tests/**\"]"
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "code-review",
+      "name": "Code review",
+      "category": "roles",
+      "state": "working",
+      "description": "Два ревьюера: по спецификации (code-review-spec) и по стандартам (code-review-standards).",
+      "off_effect": "Ревью выполняется вручную.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "agent",
+          "path": ".claude/agents/code-review-spec.md"
+        },
+        {
+          "kind": "agent",
+          "path": ".claude/agents/code-review-standards.md"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Агент установлен",
+          "state": "ok",
+          "detail": ".claude/agents/code-review-spec.md"
+        },
+        {
+          "title": "Агент установлен",
+          "state": "ok",
+          "detail": ".claude/agents/code-review-standards.md"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "pr-composer",
+      "name": "PR composer",
+      "category": "roles",
+      "state": "working",
+      "description": "Заполняет тело PR по шаблону из diff, коммитов и результата qa-gate.",
+      "off_effect": "Тело PR пишется вручную.",
+      "depends_on": [
+        "qa-gate"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "agent",
+          "path": ".claude/agents/pr-composer.md"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Агент установлен",
+          "state": "ok",
+          "detail": ".claude/agents/pr-composer.md"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "roles",
+      "name": "Роли Architect / Developer / QA",
+      "category": "roles",
+      "state": "working",
+      "description": "Профили провайдеров и назначение ролей по этапам.",
+      "off_effect": "Роли назначаются только вручную.",
+      "depends_on": [
+        "orchestration"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "provider_profiles"
+          ],
+          "present": true,
+          "value": "{\"claude\":{\"runtime\":\"claude\"}}"
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "assignment_plans"
+          ],
+          "present": false,
+          "value": null
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "git-guard",
+      "name": "Git-защита",
+      "category": "hooks",
+      "state": "not_working",
+      "description": "Блокирует опасные git-команды, прямые коммиты в основную ветку, слияние PR и неверные имена веток.",
+      "off_effect": "Опасные git-операции не блокируются.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/block-dangerous-git.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/block-direct-master.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/block-pr-merge.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/check-branch-name.sh"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/block-dangerous-git.sh"
+        },
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/block-direct-master.sh"
+        },
+        {
+          "title": "Файл хука отсутствует",
+          "state": "err",
+          "detail": ".claude/hooks/block-pr-merge.sh"
+        },
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/check-branch-name.sh"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "attribution",
+      "name": "Публичная атрибуция",
+      "category": "hooks",
+      "state": "working",
+      "description": "Отклоняет подписи ассистентов в коммитах и PR.",
+      "off_effect": "Подписи ассистентов не проверяются.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/block-public-attribution.sh"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/block-public-attribution.sh"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "artifact-location",
+      "name": "Расположение артефактов",
+      "category": "hooks",
+      "state": "working",
+      "description": "Черновики задач пишутся только в docs/tasks/ и .harness/.sandboxes/.",
+      "off_effect": "Черновики можно писать в любой каталог.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/block-scratch-outside-docs-tasks.sh"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/block-scratch-outside-docs-tasks.sh"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "qa-gate",
+      "name": "QA gate",
+      "category": "hooks",
+      "state": "working",
+      "description": "Полная проверка перед PR: require-qa-gate, ограниченный по времени запуск, запись результата.",
+      "off_effect": "PR можно создать без полной проверки.",
+      "depends_on": [],
+      "required_by": [
+        "test-author",
+        "pr-composer",
+        "preflight"
+      ],
+      "sources": [
+        {
+          "kind": "project.json",
+          "path": ".harness/project.json"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/require-qa-gate.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/require-bounded-check.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/mark-qa-gate-passed.sh"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/require-qa-gate.sh"
+        },
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/require-bounded-check.sh"
+        },
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/mark-qa-gate-passed.sh"
+        }
+      ],
+      "settings": [
+        {
+          "file": "project.json",
+          "path": [
+            "qa_gate_commands"
+          ],
+          "present": true,
+          "value": "[\"make lint\",\"make test\"]"
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "hook-policy",
+      "name": "Защита hook-policy",
+      "category": "hooks",
+      "state": "partial",
+      "description": "Запрещает агентам менять политику хуков и перепроверяет чувствительные пути.",
+      "off_effect": "Политику хуков может менять любой агент.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "project.json",
+          "path": ".harness/project.json"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/protect-hook-policy.sh"
+        },
+        {
+          "kind": "hook",
+          "path": ".claude/hooks/sensitive-path-recheck.sh"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Хук установлен и подключён",
+          "state": "ok",
+          "detail": ".claude/hooks/protect-hook-policy.sh"
+        },
+        {
+          "title": "Хук не подключён",
+          "state": "warn",
+          "detail": ".claude/hooks/sensitive-path-recheck.sh"
+        }
+      ],
+      "settings": [
+        {
+          "file": "project.json",
+          "path": [
+            "hook_policy",
+            "profile"
+          ],
+          "present": false,
+          "value": "standard (по умолчанию)"
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "repo-map",
+      "name": "Repo Map",
+      "category": "context",
+      "state": "working",
+      "description": "Индекс файлов, символов и связей для поиска и контекста агентов.",
+      "off_effect": "Агенты ищут по коду без индекса.",
+      "depends_on": [],
+      "required_by": [
+        "context-package"
+      ],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "repo_map_policy"
+          ],
+          "present": false,
+          "value": null
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "memory",
+      "name": "Память проекта",
+      "category": "context",
+      "state": "disabled",
+      "description": "Долговременные заметки и решения, которые подмешиваются в контекст.",
+      "off_effect": "Контекст собирается без памяти проекта.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "project.json",
+          "path": ".harness/project.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "project.json",
+          "path": [
+            "memory",
+            "enabled"
+          ],
+          "present": true,
+          "value": "false"
+        },
+        {
+          "file": "project.json",
+          "path": [
+            "memory_policy",
+            "source_types"
+          ],
+          "present": false,
+          "value": null
+        },
+        {
+          "file": "project.json",
+          "path": [
+            "memory_policy",
+            "allow_paths"
+          ],
+          "present": false,
+          "value": null
+        }
+      ],
+      "toggle": {
+        "file": "project.json",
+        "path": [
+          "memory",
+          "enabled"
+        ],
+        "enabled": false
+      }
+    },
+    {
+      "id": "context-package",
+      "name": "Пакет контекста",
+      "category": "context",
+      "state": "working",
+      "description": "Что получает worker: стартовые файлы, граф символов и связанные тесты.",
+      "off_effect": "Worker получает минимальный контекст.",
+      "depends_on": [
+        "orchestration",
+        "repo-map"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "context_package_policy"
+          ],
+          "present": false,
+          "value": null
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "approval",
+      "name": "Одобрение человеком",
+      "category": "process",
+      "state": "working",
+      "description": "Переходы между этапами и публикация требуют решения человека.",
+      "off_effect": "Переходы выполняются по политике без запроса.",
+      "depends_on": [
+        "orchestration"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "approval_policy"
+          ],
+          "present": true,
+          "value": "{\"mode\":\"human\"}"
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "human_approval_gate"
+          ],
+          "present": true,
+          "value": "true"
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "approval_ttl_seconds"
+          ],
+          "present": true,
+          "value": "3600"
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "retry",
+      "name": "Retry и внимание",
+      "category": "process",
+      "state": "disabled",
+      "description": "Ограниченные повторы при сбоях инфраструктуры и сигналы «требует внимания».",
+      "off_effect": "Сбои инфраструктуры не повторяются автоматически.",
+      "depends_on": [
+        "orchestration"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "infrastructure_retry_policy",
+            "enabled"
+          ],
+          "present": true,
+          "value": "false"
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "retry_policy"
+          ],
+          "present": false,
+          "value": null
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "attention_policy"
+          ],
+          "present": false,
+          "value": null
+        }
+      ],
+      "toggle": {
+        "file": "orchestration.json",
+        "path": [
+          "infrastructure_retry_policy",
+          "enabled"
+        ],
+        "enabled": false
+      }
+    },
+    {
+      "id": "preflight",
+      "name": "Preflight и подготовка QA",
+      "category": "process",
+      "state": "working",
+      "description": "Проверка окружения перед запуском роли и подготовка QA.",
+      "off_effect": "Роли стартуют без предварительных проверок.",
+      "depends_on": [
+        "orchestration",
+        "qa-gate"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "orchestration.json",
+          "path": ".harness/orchestration.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "orchestration.json",
+          "path": [
+            "preflight_policy"
+          ],
+          "present": false,
+          "value": null
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "qa_environment_probes"
+          ],
+          "present": false,
+          "value": null
+        },
+        {
+          "file": "orchestration.json",
+          "path": [
+            "qa_project_file_checks"
+          ],
+          "present": false,
+          "value": null
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "tracker",
+      "name": "Трекер задач",
+      "category": "publication",
+      "state": "working",
+      "description": "Источник задач, статусы и публикация PR через CLI трекера.",
+      "off_effect": "Задачи и PR недоступны из консоли.",
+      "depends_on": [],
+      "required_by": [
+        "ci-checks"
+      ],
+      "sources": [
+        {
+          "kind": "project.json",
+          "path": ".harness/project.json"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "CLI трекера найден",
+          "state": "ok",
+          "detail": "gh"
+        }
+      ],
+      "settings": [
+        {
+          "file": "project.json",
+          "path": [
+            "tracker"
+          ],
+          "present": true,
+          "value": "{\"type\":\"github\"}"
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "ci-checks",
+      "name": "Обязательные CI-проверки",
+      "category": "publication",
+      "state": "disabled",
+      "description": "Проверки CI, которые должны пройти, чтобы CI заменил повтор локального QA.",
+      "off_effect": "Вместо CI повторяется полное локальное QA.",
+      "depends_on": [
+        "tracker"
+      ],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "project.json",
+          "path": ".harness/project.json"
+        }
+      ],
+      "requirements": [],
+      "settings": [
+        {
+          "file": "project.json",
+          "path": [
+            "ci_required_checks"
+          ],
+          "present": false,
+          "value": null
+        }
+      ],
+      "toggle": null
+    },
+    {
+      "id": "capability:project-foundation",
+      "name": "project-foundation",
+      "category": "capabilities",
+      "state": "disabled",
+      "description": "Основа — небольшой набор инструкций и навыков",
+      "off_effect": "Файлы этой capability не установлены в проект.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "capabilities",
+          "path": "CAPABILITIES.json"
+        },
+        {
+          "kind": "harness.lock",
+          "path": ".harness/harness.lock"
+        }
+      ],
+      "requirements": [],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "capability:mattpocock-suite",
+      "name": "mattpocock-suite",
+      "category": "capabilities",
+      "state": "working",
+      "description": "Upstream — полный закреплённый набор навыков",
+      "off_effect": "Файлы этой capability не установлены в проект.",
+      "depends_on": [],
+      "required_by": [
+        "capability:engineering-suite"
+      ],
+      "sources": [
+        {
+          "kind": "capabilities",
+          "path": "CAPABILITIES.json"
+        },
+        {
+          "kind": "harness.lock",
+          "path": ".harness/harness.lock"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Записана в harness.lock",
+          "state": "ok",
+          "detail": ".harness/harness.lock"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "capability:engineering-suite",
+      "name": "engineering-suite",
+      "category": "capabilities",
+      "state": "working",
+      "description": "Workflow — задачи, QA и ручная настройка project.json",
+      "off_effect": "Файлы этой capability не установлены в проект.",
+      "depends_on": [
+        "capability:mattpocock-suite"
+      ],
+      "required_by": [
+        "capability:backend-orchestration"
+      ],
+      "sources": [
+        {
+          "kind": "capabilities",
+          "path": "CAPABILITIES.json"
+        },
+        {
+          "kind": "harness.lock",
+          "path": ".harness/harness.lock"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Записана в harness.lock",
+          "state": "ok",
+          "detail": ".harness/harness.lock"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "capability:backend-orchestration",
+      "name": "backend-orchestration",
+      "category": "capabilities",
+      "state": "working",
+      "description": "Backend — workflow и роли; добавляет orchestration.json",
+      "off_effect": "Файлы этой capability не установлены в проект.",
+      "depends_on": [
+        "capability:engineering-suite"
+      ],
+      "required_by": [
+        "orchestration"
+      ],
+      "sources": [
+        {
+          "kind": "capabilities",
+          "path": "CAPABILITIES.json"
+        },
+        {
+          "kind": "harness.lock",
+          "path": ".harness/harness.lock"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Записана в harness.lock",
+          "state": "ok",
+          "detail": ".harness/harness.lock"
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    },
+    {
+      "id": "web-console",
+      "name": "Веб-консоль",
+      "category": "platform",
+      "state": "working",
+      "description": "Эта консоль: сервер на localhost, токен сессии и WebSocket.",
+      "off_effect": "Консоль недоступна, остаётся TUI.",
+      "depends_on": [],
+      "required_by": [],
+      "sources": [
+        {
+          "kind": "runtime",
+          "path": "harness console"
+        }
+      ],
+      "requirements": [
+        {
+          "title": "Сервер консоли отвечает",
+          "state": "ok",
+          "detail": ""
+        }
+      ],
+      "settings": [],
+      "toggle": null
+    }
+  ],
+  "config_digests": {
+    "project.json": "d70beba3708903f7834482b6f95a67072dd9ad5e7c0515ceeaa19256ce786a0c",
+    "orchestration.json": "8a3fec0b0f11df931d9f777b4da855e6b75170836f3c35a7b8ab1cd4d243bdb9"
+  },
+  "transaction_pending": false,
+  "cached": true,
+  "age_seconds": 3
+}

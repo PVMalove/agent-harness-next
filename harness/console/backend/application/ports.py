@@ -125,6 +125,14 @@ class ConfigurationCollector(Protocol):
     def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
+class FeaturesCollector(Protocol):
+    """The Diagnostics features (`kernel.features.collect_features`): the feature registry, the
+    configuration digests it was read from and a pending configuration transaction; blocks until
+    read and never writes."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
 class JobExecutor(Protocol):
     """Emit on the event loop, and finish all output callbacks before returning an exit code.
 

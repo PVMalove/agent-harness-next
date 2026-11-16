@@ -25,6 +25,7 @@ from ...kernel.configuration_snapshot import collect_configuration
 from ...kernel.configuration_wizard import wizard_parameters
 from ...kernel.container_inventory import configured_engine, container_inventory
 from ...kernel.container_route import Authored, read_authored
+from ...kernel.features import collect_features
 from ...kernel.coordinator_api import ApiResult, CoordinatorApi
 from ...kernel.harness_facts import harness_state
 from ...kernel.home_snapshot import StoreFacts
@@ -365,3 +366,9 @@ def configuration_facts(repo: Path) -> dict[str, object]:
     """The masked configuration files with their digests, a pending transaction and the runtime
     adapter preview with the Settings wizard parameter catalog; never writes or recovers."""
     return {**collect_configuration(repo).to_payload(), "wizard": wizard_parameters(repo)}
+
+
+def features_facts(repo: Path) -> dict[str, object]:
+    """The Harness feature registry of Diagnostics with the configuration digests it was read
+    from; reads files and `PATH` only."""
+    return collect_features(repo)

@@ -31,6 +31,7 @@ from ....json_types import JsonObject
 from .ports import (
     Clock,
     ConfigurationCollector,
+    FeaturesCollector,
     HarnessCollector,
     HealthCollector,
     LedgerCollector,
@@ -165,6 +166,7 @@ class ScreenService:
         update_harness: UpdateHarnessCollector | None = None,
         update_diff: UpdateDiffReader | None = None,
         configuration: ConfigurationCollector | None = None,
+        features: FeaturesCollector | None = None,
         board: TaskBoardService | None = None,
         publish_git: GitFacts | None = None,
     ) -> None:
@@ -183,6 +185,7 @@ class ScreenService:
         self._collect_update_harness = update_harness
         self._read_update_diff = update_diff
         self._collect_configuration = configuration
+        self._collect_features = features
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
@@ -197,6 +200,7 @@ class ScreenService:
         self._open_project: _Source[dict[str, object]] = _Source(ttl, clock)
         self._update_harness: _Source[dict[str, object]] = _Source(ttl, clock)
         self._configuration: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._features: _Source[dict[str, object]] = _Source(ttl, clock)
         self._pages = TextPages()
 
     async def _paged(
@@ -393,6 +397,18 @@ class ScreenService:
             "cached": cached,
             "age_seconds": round(age, 3),
         }
+
+    async def features(self, *, force: bool = False) -> dict[str, object]:
+        """The Harness feature registry of Diagnostics with the configuration digests a toggle
+        writes against and whether a configuration write is pending; `NotFound` without its
+        collector."""
+        collect = self._collect_features
+        if collect is None:
+            raise NotFound("features")
+        facts, cached, age = await self._features.get(
+            lambda: collect(self._repo), force=force
+        )
+        return {**facts, "cached": cached, "age_seconds": round(age, 3)}
 
     async def maintenance(self, *, force: bool = False) -> Paged:
         """The cleanup plans with their sizes and the worktree facts of the Harness screen;
