@@ -852,18 +852,59 @@ def test_a_hung_git_is_a_gate_error_and_leaves_no_checkout_directory(
     assert not runs.is_dir() or list(runs.iterdir()) == []
 
 
-def test_a_failed_worktree_cleanup_does_not_mask_the_gate_result(
+def _worktree_list(repo: Path) -> str:
+    return subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+def test_a_clean_run_registers_no_git_worktree_and_leaves_no_checkout_directory(
     tmp_path: Path,
 ) -> None:
     repo, head = _committed_repo(tmp_path)
-    with mock.patch(
-        "harness.gate_runner.gate_runner.subprocess.run",
-        side_effect=_git_failing_run("remove", FileNotFoundError("git")),
-    ):
-        result = run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    before = _worktree_list(repo)
+    result = run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
     assert result.passed
-    runs = storage_path(repo, "runs", "qa")
-    assert list(runs.iterdir()) == []
+    assert _worktree_list(repo) == before
+    assert not (repo / ".git" / "worktrees").exists()
+    assert list(storage_path(repo, "runs", "qa").iterdir()) == []
+
+
+def test_the_clean_checkout_is_a_detached_candidate_with_the_source_refs(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    subprocess.run(["git", "update-ref", "refs/remotes/origin/main", head], cwd=repo, check=True)
+    (repo / "candidate.txt").write_text("unreferenced\n", encoding="utf-8")
+    subprocess.run(["git", "add", "candidate.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "test: unreferenced"], cwd=repo, check=True)
+    candidate = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    subprocess.run(["git", "reset", "-q", "--hard", head], cwd=repo, check=True)
+    seen = tmp_path / "seen"
+    probe = (
+        "import subprocess,sys; g=lambda *a: subprocess.run(['git',*a],capture_output=True,text=True); "
+        "open(sys.argv[1],'w').write('|'.join([g('rev-parse','HEAD').stdout.strip(), "
+        "str(g('symbolic-ref','-q','HEAD').returncode), g('merge-base','HEAD','origin/main').stdout.strip(), "
+        "g('status','--porcelain','--untracked-files=all').stdout, open('candidate.txt').read().strip()]))"
+    )
+    result = run_gate(
+        [[sys.executable, "-c", probe, str(seen)]],
+        CleanRoomPolicy(repo, candidate),
+        stop_on_failure=True,
+    )
+    assert result.passed
+    resolved, symbolic, merge_base, status, content = seen.read_text().split("|")
+    assert resolved == candidate
+    assert symbolic == "1"
+    assert merge_base == head
+    assert status == ""
+    assert content == "unreferenced"
 
 
 def test_an_unlaunchable_git_during_diagnosis_keeps_the_stage_evidence(
