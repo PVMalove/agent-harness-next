@@ -188,7 +188,6 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
               <button
                 key={option}
                 type="button"
-                lang={option}
                 aria-pressed={option === language}
                 aria-label={`${option.toUpperCase()} · ${option === "ru" ? t("Русский язык") : t("Английский язык")}`}
                 onClick={() => setLanguage(option)}
@@ -197,6 +196,16 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
               </button>
             ))}
           </div>
+          {/* A narrow header has room for one button: it shows the current language and switches. */}
+          <button
+            id="language-toggle"
+            className="ds-icon-btn ds-lang-one"
+            type="button"
+            aria-label={`${language.toUpperCase()} · ${language === "ru" ? t("Переключить на английский") : t("Переключить на русский")}`}
+            onClick={() => setLanguage(language === "ru" ? "en" : "ru")}
+          >
+            {language.toUpperCase()}
+          </button>
           <a className="ds-icon-btn" href={href("help")} aria-label={section("Help")} title={section("Help")}>
             <Icon name="help" className="ds-ic" />
           </a>
@@ -235,11 +244,12 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
         ))}
       </div>
       <div id="nav-scrim" className="ds-scrim" hidden={!open} onClick={() => setOpen(false)} />
-      <main id="content" tabIndex={-1} className={legacyPage ? "ds-main ds-main--legacy" : "ds-main"}>
+      {/* The open mobile menu is modal: the page behind it takes no focus and no clicks. */}
+      <main id="content" tabIndex={-1} className={legacyPage ? "ds-main ds-main--legacy" : "ds-main"} inert={open}>
         {children}
       </main>
 
-      <footer className="ds-foot">
+      <footer className="ds-foot" inert={open}>
         <div className="ds-keys">
           <span>
             <b className="ds-kbd">?</b> {section("Help")}

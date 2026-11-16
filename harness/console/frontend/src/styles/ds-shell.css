@@ -57,6 +57,7 @@ body.nav-collapsed .ds-app { --ds-rail-w: 60px; }
 }
 .ds-app .ds-icon-btn:hover { background: var(--ds-hover); color: var(--ds-fg); }
 .ds-menu-toggle { display: none; }
+.ds-lang-one { display: none; border-color: var(--ds-line); font-size: var(--ds-fs-2); font-weight: 600; }
 .ds-brand {
   display: flex;
   align-items: center;
@@ -277,7 +278,9 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
 
 @media (max-width: 900px) {
   .ds-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--ds-top-h) auto minmax(0, 1fr) var(--ds-foot-h); }
-  .ds-menu-toggle { display: inline-grid; }
+  .ds-menu-toggle,
+  .ds-lang-one { display: inline-grid; }
+  .ds-top-end .ds-seg { display: none; }
   .ds-nav-collapse,
   .ds-where,
   .ds-channel,

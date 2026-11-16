@@ -174,13 +174,28 @@ describe("the shell", () => {
     expect(document.body.classList.contains("nav-open")).toBe(true);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(scrim.hidden).toBe(false);
+    // The open menu is modal: the page and the footer behind it are inert, focus is in the menu.
+    expect(document.getElementById("content")!.inert).toBe(true);
+    expect(document.querySelector<HTMLElement>(".ds-foot")!.inert).toBe(true);
+    expect(document.getElementById("navigation")!.contains(document.activeElement)).toBe(true);
     act(() => fireEvent.click(scrim));
     expect(document.body.classList.contains("nav-open")).toBe(false);
+    expect(document.getElementById("content")!.inert).toBe(false);
 
     act(() => fireEvent.click(toggle));
     act(() => fireEvent.keyDown(document, { key: "Escape" }));
     expect(document.body.classList.contains("nav-open")).toBe(false);
     expect(scrim.hidden).toBe(true);
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  test("the narrow header switches the language with one button that names its action", () => {
+    renderApp();
+    const one = screen.getByRole("button", { name: "RU · Переключить на английский" });
+    expect(one.textContent).toBe("RU");
+    act(() => fireEvent.click(one));
+    expect(screen.getByRole("button", { name: "EN · Switch to Russian" }).textContent).toBe("EN");
+    expect(document.documentElement.lang).toBe("en");
   });
 
   test("a remembered collapse is restored on start", () => {
