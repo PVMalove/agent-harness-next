@@ -128,6 +128,24 @@ def test_recommendations_use_project_facts_and_options_describe_limits(
     assert step_for_problem(steps, "что-то без имени поля") is None
 
 
+def test_project_facts_follow_a_changed_makefile_in_a_long_lived_server(
+    tmp_path: Path,
+) -> None:
+    """The web server keeps running while the project changes: a new verify target is seen."""
+    import os
+
+    from harness.console.kernel.project_facts import project_facts
+
+    makefile = tmp_path / "Makefile"
+    makefile.write_text("test:\n\t@true\n", encoding="utf-8")
+    assert project_facts(tmp_path).qa_commands == ("make test",)
+    assert project_facts(tmp_path) is project_facts(tmp_path)  # unchanged files: read once
+    makefile.write_text("verify:\n\t@true\ntest:\n\t@true\n", encoding="utf-8")
+    stamp = makefile.stat().st_mtime_ns + 1_000_000_000
+    os.utime(makefile, ns=(stamp, stamp))
+    assert project_facts(tmp_path).qa_commands == ("make verify",)
+
+
 @pytest.fixture(autouse=True)
 def no_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     from harness.console.kernel import project_facts
