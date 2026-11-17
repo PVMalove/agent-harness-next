@@ -48,7 +48,7 @@ describe("the Recovery route", () => {
     const { request } = renderRecovery();
     expect(request).toMatchObject({ batch: "b-887", skip: [], force: false });
     expect((FACTS as string[]).filter((fact) => !content().includes(fact))).toEqual([]);
-    const current = document.querySelector('nav a[aria-current="page"]');
+    const current = document.querySelector('#navigation a[aria-current="page"]');
     expect(current?.getAttribute("href")).toBe("#/orchestration");
   });
 

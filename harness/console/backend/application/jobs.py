@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import threading
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import cast
@@ -95,6 +95,12 @@ class JobService:
         self._jobs: dict[str, _Execution] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._active_mutation: Job | None = None
+        self._finished_listeners: list[Callable[[str], None]] = []
+
+    def on_finished(self, listener: Callable[[str], None]) -> None:
+        """Call ``listener(command_id)`` when a job ends, before its subscribers are notified,
+        so a reader that reacts to the end never meets a source the job made stale."""
+        self._finished_listeners.append(listener)
 
     @property
     def active_count(self) -> int:
@@ -250,6 +256,12 @@ class JobService:
                 job.phase, job.error = "failed", "journal_write_failed"
             if self._active_mutation is job:
                 self._active_mutation = None
+            for listener in self._finished_listeners:
+                try:
+                    listener(job.command_id)
+                except Exception:
+                    # A listener only drops caches; it never changes how the job ended.
+                    pass
             job.notify()
             finished = [
                 key for key, kept in self._jobs.items() if kept.job.phase != "running"

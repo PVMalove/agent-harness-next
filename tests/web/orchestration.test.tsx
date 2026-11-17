@@ -62,6 +62,10 @@ const TUI_ONLY = new Set([
   "missing 2 · found 1",
 ]);
 const content = () => document.querySelector("main#content")?.textContent ?? "";
+/** Opens a pipeline tab by its label (the marker number precedes it). */
+const openTab = (name: string) =>
+  act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: new RegExp(`${name}$`) })));
+const view = () => document.querySelector('main [role="tabpanel"]:not([hidden])') as HTMLElement;
 
 describe("the Orchestration route", () => {
   beforeEach(() => FakeSocket.reset());
@@ -88,6 +92,7 @@ describe("the Orchestration route", () => {
   test("the QA lane follows the newest batch; the snapshot lists batches newest first", () => {
     renderOrchestration();
     expect(ORCHESTRATION.ledger.batches.map((batch) => batch.ticket)).toEqual(["#887", "#888", "#886"]);
+    openTab("Качество");
     const lane = document.querySelector("#qa-lane") as HTMLElement;
     expect(within(lane).getByRole("heading").textContent).toBe("QA lane · #887");
     expect(lane.querySelectorAll(".qa-attempt")).toHaveLength(2);
@@ -95,7 +100,7 @@ describe("the Orchestration route", () => {
 
   test("a chosen batch opens its chronology and is carried to Recovery and Container route", () => {
     const socket = renderOrchestration();
-    act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: "Runtime" })));
+    openTab("Runtime");
     expect(document.querySelector("#open-recovery")?.getAttribute("href")).toBe("#/recovery");
     openBatch(socket, "b-887");
     expect(content()).toContain("developer → review → qa → developer");
@@ -105,41 +110,91 @@ describe("the Orchestration route", () => {
 
   test("the state filter narrows the history; analytics tabs only switch the rows", () => {
     renderOrchestration();
+    openTab("Runtime");
     const history = () => [...document.querySelectorAll("#batch-history [data-batch]")].map((row) => row.getAttribute("data-batch"));
     expect(history()).toEqual(["b-887", "b-888", "b-886"]);
     act(() => fireEvent.change(document.querySelector("#state-filter") as HTMLElement, { target: { value: "completed" } }));
     expect(history()).toEqual(["b-886"]);
   });
 
-  test("the page follows the mockup: two title actions, one tablist, the moved blocks in their tabs", () => {
+  test("the page is built on the design system: header actions on the right, summary, six pipe tabs and panels", () => {
     renderOrchestration();
-    expect([...document.querySelectorAll(".orch-title .actions > *")].map((item) => item.textContent?.trim())).toEqual(["Обновить", "Отчёты"]);
+    expect(document.querySelector(".ds-page.ds-fit[data-section=Orchestration]")).not.toBeNull();
+    const actions = [...document.querySelectorAll(".ds-page-head .ds-head-actions > *")];
+    expect(actions.map((item) => item.getAttribute("aria-label") ?? item.textContent?.trim())).toEqual(["Обновить", "Отчёты"]);
+    expect(document.querySelectorAll("#orch-summary .ds-stat")).toHaveLength(4);
+    expect(document.querySelector("#orch-summary #orch-mockup-kpis")?.textContent).toContain("QA с первого раза");
     expect(document.querySelectorAll("main [role=tablist]")).toHaveLength(1);
-    expect(document.querySelector("#orch-analytics")).toBeNull();
-    expect(document.querySelector("#orch-kpi")).toBeNull();
-    const tabs = document.querySelector("#orch-tabs") as HTMLElement;
-    const view = () => document.querySelector('main [role="tabpanel"]:not([hidden])') as HTMLElement;
-    const titles = () => [...view().querySelectorAll(".orch-chart h3, .panel h2")].map((title) => title.textContent);
-    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Поток" })));
+    const labels = [...document.querySelectorAll("#orch-tabs .ds-pipe-label")].map((label) => label.textContent);
+    expect(labels).toEqual(["Конвейер", "Поток", "Качество", "Runtime", "Контейнер", "Решения"]);
+    expect(document.querySelector("main .orch-pill, main .orch-status")).toBeNull();
+    const titles = () => [...view().querySelectorAll(".orch-chart h3, .panel h2, .ds-panel-title")].map((title) => title.textContent);
+    expect(view().querySelector("#orch-stage-strip")).not.toBeNull();
+    expect(view().querySelector("#orch-dispatch .ds-panel-body[data-scroll=list]")).not.toBeNull();
+    openTab("Поток");
+    expect(view().querySelector("#orch-scheme")).not.toBeNull();
     expect(view().querySelector(".orch-mini-flow")).not.toBeNull();
     expect(view().querySelector("#pipeline-stats")).not.toBeNull();
-    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Качество" })));
+    openTab("Качество");
     expect(titles()).toEqual(expect.arrayContaining(["Evidence по стадиям", "Local QA attempts"]));
     expect(view().querySelector("#orch-qa-attempts")?.textContent).toContain("лог QA не найден");
-    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Runtime" })));
+    expect(view().querySelector("#qa-lane")).not.toBeNull();
+    openTab("Runtime");
     expect(titles()).toContain("Recovery checks");
     expect(view().textContent).toContain("проверки восстановления в снимке не собираются");
     expect(view().querySelector("#ledger-lock")).not.toBeNull();
-    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Гейты" })));
+    expect(view().querySelector("#batch-history")).not.toBeNull();
+    openTab("Решения");
     answerDecisions(FakeSocket.last);
     expect(within(view()).getByRole("heading", { name: "Ожидающие решения" })).toBeTruthy();
-    const order = [...document.querySelectorAll("#orch-tickets, #batch-history")].map((block) => block.id);
-    expect(order).toEqual(["orch-tickets", "batch-history"]);
+    expect(view().querySelector(".ds-legacy-island")).not.toBeNull();
   });
 
-  test("the tabs follow the mockup: the grouped pipeline map and chart cards over the kernel figures", () => {
+  test("the Container tab lists the ledger's dispatch containers with their states and a route link", () => {
     renderOrchestration();
+    openTab("Контейнер");
+    const rows = [...view().querySelectorAll("#orch-containers [data-container]")];
+    expect(rows.map((row) => [row.getAttribute("data-container"), row.getAttribute("data-state")])).toEqual([
+      ["d-qa", "stopped"],
+      ["d-wip", "running"],
+    ]);
+    expect(view().querySelector('#orch-container-summary [data-state="running"]')?.textContent).toContain("Работает 1");
+    expect(view().querySelector("#orch-containers .ds-panel-meta")?.textContent).toBe("состояние по ledger");
+    act(() => fireEvent.click(rows[1]!));
+    expect(view().querySelector("#orch-container-detail .ds-panel-title")?.textContent).toBe("d-wip");
+    expect(view().querySelector("#orch-container-route")?.getAttribute("href")).toBe("#/container-route?batch=b-887");
+  });
+
+  test("without containers in the snapshot the Container tab explains that there are none", () => {
+    FakeSocket.reset();
+    window.location.hash = "#/orchestration";
+    const client = createConsoleClient({ url: "ws://127.0.0.1:1/ws", WebSocket: FakeSocket, timers: new ManualClock(), probeHealth: async () => false });
+    render(
+      <LanguageProvider>
+        <App client={client} />
+      </LanguageProvider>,
+    );
+    const socket = FakeSocket.last;
+    act(() => socket.open());
+    const { containers: _containers, ...older } = ORCHESTRATION;
+    const request = socket.request("orchestration.snapshot");
+    act(() => socket.reply(screenPage(request.id, "orchestration.snapshot", JSON.stringify(older))));
+    openTab("Контейнер");
+    // An older server says nothing about containers: unknown, not "none" (review of PR #1186).
+    expect(view().querySelector("#orch-containers-empty")?.textContent).toBe(
+      "Контейнеры неизвестны: этот сервер не сообщает о контейнерах dispatch",
+    );
+    expect(view().querySelector("[data-container]")).toBeNull();
+  });
+
+  test("the Flow tab draws the compact grouped pipeline: 11 nodes, 13 edges, 3 groups in 1200×270", () => {
+    renderOrchestration();
+    openTab("Поток");
     const map = document.querySelector("#orch-scheme") as HTMLElement;
+    expect(map.querySelector("svg.orch-map")?.getAttribute("viewBox")).toBe("0 0 1200 270");
+    expect(map.querySelectorAll("[data-node]")).toHaveLength(11);
+    expect(map.querySelectorAll("path.orch-map-edge")).toHaveLength(13);
+    expect([...map.querySelectorAll("rect.orch-map-bg")].every((rect) => rect.getAttribute("height") === "42")).toBe(true);
     expect(map.querySelectorAll(".orch-group")).toHaveLength(3);
     // The live step of each active batch: #888's architect is at work, #887's QA reported and
     // waits for the coordinator's QA gate; #887's older developer stage is open but not live.
@@ -150,25 +205,23 @@ describe("the Orchestration route", () => {
     expect(node("Разработчик").querySelector(".orch-map-count text")?.textContent).toBe("1");
     expect(map.querySelectorAll(".orch-map-edge.active")).toHaveLength(2);
     expect(map.querySelector(".orch-map-statusbar .orch-live")?.textContent).toBe("живой шаг: #887 · Approve QA; #888 · Architect");
-    const tabs = document.querySelector("#orch-tabs") as HTMLElement;
-    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Поток" })));
     const flow = document.querySelector('#orch-tab-view[data-tab="flow"]') as HTMLElement;
     expect([...flow.querySelectorAll(".orch-chart h3")].map((h) => h.textContent)).toContain("Время цикла p50 / p95");
     expect(flow.textContent).toContain("Developer");
     expect(flow.textContent).not.toMatch(/\bcompleted\b/);
-    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Качество" })));
+    openTab("Качество");
     expect(document.querySelector('#orch-tab-view[data-tab="quality"]')?.textContent).toContain("QA с первого раза");
     // A batch card and a ticket row never print a title placeholder.
+    openTab("Конвейер");
     expect(content()).not.toContain("название: нет данных");
   });
 
-  test("the Gates tab draws the kernel's hourly latency trend of the last day", () => {
+  test("the Decisions tab draws the kernel's hourly latency trend of the last day", () => {
     renderOrchestration();
     const gates = ORCHESTRATION.analytics.gates.latency_p50_by_hour;
     expect(gates).toHaveLength(24);
     expect(gates[23]).toBe(600);
-    const tabs = document.querySelector("#orch-tabs") as HTMLElement;
-    act(() => fireEvent.click(within(tabs).getByRole("tab", { name: "Гейты" })));
+    openTab("Решения");
     const trend = document.querySelector("#orch-gate-trend") as HTMLElement;
     expect(trend.querySelector("h3")?.textContent).toBe("Тренд latency за сутки");
     // One hour with a decision: a dot per series, no line, no no-data state.
@@ -189,13 +242,13 @@ describe("the Orchestration route", () => {
   test("English labels come from the catalog", () => {
     renderOrchestration("?lang=en");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Orchestration");
-    act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: "Runtime" })));
+    openTab("Runtime");
     expect(content()).toContain("Ledger lock held: report submit");
     expect(content()).toContain("Pipeline state, batch history and human decisions.");
     expect(content()).toContain("in progress (2)");
   });
 
-  test("after the diagram: three batch cards, five-column dispatch rows and the all-tickets table", () => {
+  test("the Pipeline tab: three batch cards, five-column dispatch rows, the scope and the all-tickets table", () => {
     renderOrchestration();
     const cards = [...document.querySelectorAll(".orch-batches > article.orch-batch")];
     expect(cards).toHaveLength(3);
@@ -204,17 +257,26 @@ describe("the Orchestration route", () => {
     expect(cards[0]!.querySelector(".orch-batch-meta")?.textContent).toContain("QA");
     expect([...cards[0]!.querySelectorAll(".orch-mini .orch-mini-step")].map((step) => step.className.replace("orch-mini-step", "").trim())).toEqual(["", "done", "done", "done", ""]);
     expect(cards[0]!.querySelector('.orch-batch-foot a[href="#/agent-activity"]')).not.toBeNull();
+    expect(cards[0]!.querySelector('.orch-batch-foot a[href="#/recovery?batch=b-887"]')).not.toBeNull();
+    expect(cards[0]!.querySelector('.orch-batch-foot a[href="#/container-route?batch=b-887"]')).not.toBeNull();
+    expect(cards[0]!.querySelector(".orch-batch-head .ds-status")).not.toBeNull();
     const rows = [...document.querySelectorAll("#orch-dispatch-list .orch-dispatch-row")];
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       expect(row.classList.contains("row")).toBe(false);
-      expect([...row.children].map((child) => child.className.split(" ")[0])).toEqual(["orch-role", "orch-dispatch-main", "orch-status", "orch-heartbeat", "orch-link"]);
+      expect([...row.children].map((child) => child.className.split(" ")[0])).toEqual(["orch-role", "orch-dispatch-main", "orch-state", "orch-heartbeat", "orch-link"]);
+      expect(row.querySelector(".orch-state .ds-status")).not.toBeNull();
       expect(row.querySelector(".orch-dispatch-main small")?.textContent).not.toMatch(/T\d{2}:\d{2}/);
     }
     const table = document.querySelector("#orch-tickets .orch-ticket-table") as HTMLElement;
     expect([...table.querySelectorAll(".orch-ticket-head span")].map((cell) => cell.textContent)).toEqual(["тикет", "название", "стадия / роль", "статус", "возраст", "обновлён"]);
     expect(table.querySelectorAll(".orch-ticket-row")).toHaveLength(3);
-    expect(document.querySelector("#orch-tickets .panel-head .small")?.textContent).toBe("3 в выборке");
+    expect(document.querySelector("#orch-tickets .orch-tickets-count")?.textContent).toBe("3 в выборке");
+    // «Активные» keeps the working and blocked dispatches only and drops the ticket list.
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Активные" })));
+    const active = [...document.querySelectorAll("#orch-dispatch-list .orch-dispatch-row")].map((row) => row.getAttribute("data-dispatch"));
+    expect(active.sort()).toEqual(["d-arch-888", "d-wip"]);
+    expect(document.querySelector("#orch-tickets")).toBeNull();
   });
 });
 

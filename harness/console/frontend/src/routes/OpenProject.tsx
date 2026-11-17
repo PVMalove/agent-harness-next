@@ -1,12 +1,21 @@
-/* Open Project (#/open-project): the project this console server serves, its installation plan
-   and the candidate projects of open_project.snapshot. The server is bound to one project and the
+/* Open Project (#/open-project) on the design system v3: a five-step wizard (Выбор проекта,
+   Предварительные проверки, Установка / внедрение, Настройка, Итоговая диагностика) over the
+   project this console server serves, its installation plan and the candidate projects of
+   open_project.snapshot. Counts the snapshot lacks (files, skills and hooks of a composition) are
+   marked «нет данных». The server is bound to one project and the
    page never asks it to switch: another project opens with its own command in a terminal, which
    the page only shows and copies. A typed path is turned into that command in the browser and is
    sent nowhere. The only change the page can start is the installation into the served project,
-   through the CommandPanel of the job section `setup`, and every run opens the confirmation first. */
-import { Fragment, useState } from "react";
+   through the CommandPanel of the job section `setup`, and every run opens the confirmation first.
+   Every step is a TabPanel (kept mounted) built of ds components; only the shared CommandPanel
+   still sits in `.ds-legacy-island`. The KPIs (Harness, Скиллов, Managed, Health) live in the
+   summary only. */
+import { useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
+import { PageHeader, Panel, PipeTabs, StatusIcon, Summary } from "../ds";
+import type { PipeTab, Tone } from "../ds";
+import { NoData } from "../harness/HarnessOverview";
 import { useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";
@@ -22,10 +31,12 @@ import {
   targetSummary,
 } from "../project/format";
 import { useScreen } from "../screens/useScreen";
+import { snapshotClock } from "../update/format";
 import type { LocalJob } from "../ws/jobs";
 import { parseOpenProject } from "../ws/projectScreens";
 import type { Candidate, OpenProjectFacts } from "../ws/projectScreens";
 import { useConsole } from "../useConsole";
+import { TabPanel } from "../views/Tabs";
 import { healthTotal } from "../ws/types";
 import type { HomeSnapshot } from "../ws/types";
 
@@ -96,53 +107,85 @@ function flowNodes(facts: OpenProjectFacts, home: HomeSnapshot | null, chosen: s
   ];
 }
 
-function Stepper({ stage }: { stage: number }) {
-  const { t } = useI18n();
-  return (
-    <div className="install-steps" id="open-project-steps" tabIndex={0} role="region" aria-label={t("Шаги установки")}>
-      <div className="install-steps-track">
-        {STAGES.map((name, index) => (
-          <Fragment key={name}>
-            <span className={`install-step ${index < stage ? "done" : index === stage ? "active" : "pending"}`}>
-              <Icon name={index < stage ? "check" : index === stage ? "play" : "clock"} />
-              {t(name)}
-            </span>
-            {index < STAGES.length - 1 && <i className="install-sep">—</i>}
-          </Fragment>
-        ))}
-      </div>
-      <span className="install-step-count">{t("Шаг {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
-    </div>
-  );
-}
-
-function useCopy(): [string, (text: string) => void] {
+/** Copies through the clipboard API; resolves false where it is missing or refused (plain HTTP on
+    another host, a denied permission), so the caller can offer a manual copy. */
+function useCopy(): [string, (text: string) => Promise<boolean>] {
   const [copied, setCopied] = useState("");
-  const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text).then(
-      () => setCopied(text),
-      () => setCopied(""),
-    );
+  const copy = async (text: string) => {
+    setCopied("");
+    try {
+      if (!navigator.clipboard) return false;
+      await navigator.clipboard.writeText(text);
+      setCopied(text);
+      return true;
+    } catch {
+      return false;
+    }
   };
   return [copied, copy];
 }
 
-type CheckState = "ok" | "warn" | "fail" | "skip";
-const CHECK_ICON: Readonly<Record<CheckState, string>> = { ok: "check", warn: "warning", fail: "x", skip: "clock" };
-const CHECK_WORD: Readonly<Record<CheckState, string>> = { ok: "пройдено", warn: "внимание", fail: "ошибка", skip: "не проверено" };
+/** The spoken word of a check status; the shape is StatusIcon's. */
+const CHECK_LABEL: Readonly<Partial<Record<Tone, string>>> = { ok: "пройдено", warn: "внимание", err: "ошибка", wait: "не проверено" };
 
-function ProjectCheck({ label, state, text }: { label: string; state: CheckState; text: string }) {
+/** The Home health counters of the checks step: the count key, its status and its words. */
+const HEALTH_ROWS: readonly (readonly ["ok" | "warn" | "fail" | "skipped", Tone, string])[] = [
+  ["ok", "ok", "{n} пройдено"],
+  ["warn", "warn", "{n} внимание"],
+  ["fail", "err", "{n} ошибки"],
+  ["skipped", "wait", "{n} не проверено"],
+];
+
+/** One check row of the project details: StatusIcon, the check and its fact. */
+function ProjectCheck({ label, tone, text }: { label: string; tone: Tone; text: string }) {
   const { t } = useI18n();
   return (
-    <div className="project-check">
-      <span className={`project-check-icon ${state}`}>
-        <Icon name={CHECK_ICON[state]} />
+    <li className="ds-row" data-tone={tone}>
+      <StatusIcon tone={tone} label={t(CHECK_LABEL[tone] ?? "")} />
+      <span className="ds-row-main">
+        <span className="ds-row-title">{label}</span>
+        <span className="ds-row-sub">{text}</span>
       </span>
-      <span className="project-check-main">
-        <b>{label}</b>
-        <small>{text}</small>
-      </span>
-      <span className={`project-check-state ${state}`}>{t(CHECK_WORD[state])}</span>
+    </li>
+  );
+}
+
+/** A command for another console with its copy button and the copied notice. */
+function CommandBlock({ command, id, copyId, copyLabel, disabled = false, copied, onCopy }: { command: string; id: string; copyId: string; copyLabel: string; disabled?: boolean; copied: string; onCopy: (text: string) => Promise<boolean> }) {
+  const { t } = useI18n();
+  const [manual, setManual] = useState(false);
+  // No clipboard: the command is selected, so Ctrl+C copies it, and the note says so.
+  const copy = async () => {
+    setManual(false);
+    if (await onCopy(command)) return;
+    setManual(true);
+    const code = document.getElementById(id);
+    const selection = window.getSelection();
+    if (!code || !selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+  return (
+    <div className="ds-project-command">
+      <div className="ds-actions">
+        <span className="ds-sub">{t("Команда для другой консоли")}</span>
+        <button className="ds-btn ds-btn-sm" type="button" id={copyId} disabled={disabled} onClick={() => void copy()}>
+          <Icon name="copy" className="ds-ic-sm" /> {copyLabel}
+        </button>
+      </div>
+      <code id={id}>{command}</code>
+      {copied === command && (
+        <p className="ds-note" role="status">
+          {t("Команда скопирована")}
+        </p>
+      )}
+      {manual && (
+        <p className="ds-note" role="status">
+          {t("Скопируйте текст вручную")}
+        </p>
+      )}
     </div>
   );
 }
@@ -152,7 +195,7 @@ const TRACKER_NAME: Readonly<Record<string, string>> = { github: "GitHub", gitla
 
 /** «Детали проекта». The facts of the served project come from its Home and Open Project
     snapshots; another candidate is only listed, so what the snapshots do not read says so. */
-function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidate; facts: OpenProjectFacts; home: HomeSnapshot | null; copied: string; onCopy: (text: string) => void }) {
+function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidate; facts: OpenProjectFacts; home: HomeSnapshot | null; copied: string; onCopy: (text: string) => Promise<boolean> }) {
   const { t, plural } = useI18n();
   const tracker = home?.project?.tracker ?? "";
   const notRead = t("нет данных · снимок читает только проект этого сервера");
@@ -160,58 +203,54 @@ function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidat
   const drift = home?.drift_counts ?? null;
   const health = home?.health ?? null;
   const target = facts.target;
-  const checks: { label: string; state: CheckState; text: string }[] = item.current
+  const checks: { label: string; tone: Tone; text: string }[] = item.current
     ? [
-        { label: "Git repository", state: target ? "ok" : "fail", text: target ? item.path : t(facts.error || "путь не является Git-репозиторием") },
-        { label: "Harness config", state: item.installed ? "ok" : "warn", text: item.installed ? t(".harness/project.json найден") : t("Harness не установлен") },
-        { label: "Capability", state: install?.capability_names.length ? "ok" : "skip", text: install?.capability_names.join(", ") || t("нет данных") },
+        { label: "Git repository", tone: target ? "ok" : "err", text: target ? item.path : t(facts.error || "путь не является Git-репозиторием") },
+        { label: "Harness config", tone: item.installed ? "ok" : "warn", text: item.installed ? t(".harness/project.json найден") : t("Harness не установлен") },
+        { label: "Capability", tone: install?.capability_names.length ? "ok" : "wait", text: install?.capability_names.join(", ") || t("нет данных") },
         {
           label: "Skills snapshot",
-          state: drift === null || install === null ? "skip" : drift.total ? "warn" : "ok",
+          tone: drift === null || install === null ? "wait" : drift.total ? "warn" : "ok",
           text: install && drift ? t("{skills} навыков · drift {drift}", { skills: install.skills, drift: drift.total }) : t("нет данных · дрейф не прочитан"),
         },
         {
           label: t("Локальные правки управляемых файлов"),
-          state: drift === null ? "skip" : drift.local_changed ? "warn" : "ok",
+          tone: drift === null ? "wait" : drift.local_changed ? "warn" : "ok",
           text: drift === null ? t("нет данных · дрейф не прочитан") : drift.local_changed ? t("{n} файлов с локальными правками", { n: drift.local_changed }) : t("нет локальных правок"),
         },
       ]
     : [
-        { label: "Git repository", state: "skip", text: notRead },
-        { label: "Harness config", state: item.installed ? "ok" : "warn", text: item.installed ? t("Harness установлен") : t("Harness не установлен") },
-        { label: "Capability", state: "skip", text: notRead },
-        { label: "Skills snapshot", state: "skip", text: notRead },
-        { label: t("Локальные правки управляемых файлов"), state: "skip", text: notRead },
+        { label: "Git repository", tone: "wait", text: notRead },
+        { label: "Harness config", tone: item.installed ? "ok" : "warn", text: item.installed ? t("Harness установлен") : t("Harness не установлен") },
+        { label: "Capability", tone: "wait", text: notRead },
+        { label: "Skills snapshot", tone: "wait", text: notRead },
+        { label: t("Локальные правки управляемых файлов"), tone: "wait", text: notRead },
       ];
   return (
-    <section className="panel project-detail-panel" id="open-project-detail">
-      <div className="panel-head">
-        <h2>{t("Детали проекта")}</h2>
-        <span className={`project-pill ${item.current ? "ok" : "muted"}`}>{t(item.current ? "Открыт" : "Не открыт")}</span>
-      </div>
-      <div className="project-detail-body">
-        <div className="project-detail-top">
+    <Panel title={t("Детали проекта")} id="open-project-detail" meta={<span className="ds-tag" data-on={item.current}>{t(item.current ? "Открыт" : "Не открыт")}</span>} fill scroll="text" label={t("Детали проекта")}>
+      <div className="ds-project-about">
+        <p className="ds-sub ds-project-provider">
           {item.current && tracker ? (
-            <span className="project-provider">
-              <Icon name={TRACKER_ICON[tracker] ?? "folder"} /> {TRACKER_NAME[tracker] ?? tracker}
-            </span>
+            <>
+              <Icon name={TRACKER_ICON[tracker] ?? "folder"} className="ds-ic-sm" /> {TRACKER_NAME[tracker] ?? tracker}
+            </>
           ) : (
-            <span className="project-provider">
-              <Icon name="folder" /> {item.current ? t("трекер не определён") : t("локальный путь")}
-            </span>
+            <>
+              <Icon name="folder" className="ds-ic-sm" /> {item.current ? t("трекер не определён") : t("локальный путь")}
+            </>
           )}
-          <code>harness</code>
-        </div>
-        <h3>{projectName(item.path)}</h3>
-        <code className="project-path">{item.path}</code>
-        <div className="project-meta">
+          <span className="ds-tag">harness</span>
+        </p>
+        <h3 className="ds-project-name">{projectName(item.path)}</h3>
+        <code className="ds-row-sub" title={item.path}>{item.path}</code>
+        <p className="ds-sub ds-project-meta">
           {item.current && home?.project ? (
             <>
               <span>
-                <Icon name="branch" /> {home.project.branch ?? "—"}
+                <Icon name="branch" className="ds-ic-sm" /> {home.project.branch ?? "—"}
               </span>
               <span>
-                <Icon name="harness" /> {install?.installed ? install.installed_version : t("не установлен")}
+                <Icon name="harness" className="ds-ic-sm" /> {install?.installed ? install.installed_version : t("не установлен")}
               </span>
               <span>
                 {health
@@ -222,43 +261,30 @@ function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidat
           ) : (
             <span>{item.installed ? t("Harness установлен") : t("Harness не установлен")}</span>
           )}
-        </div>
-        <div className="project-checks">
-          {checks.map((check) => (
-            <ProjectCheck key={check.label} {...check} />
-          ))}
-        </div>
-        <div className="project-command">
-          <div className="project-command-head">
-            <span>{t("Команда для другой консоли")}</span>
-            <button className="btn" type="button" id="open-project-copy" disabled={item.current} onClick={() => onCopy(item.command)}>
-              <Icon name="download" /> {t("Копировать")}
-            </button>
-          </div>
-          <code id="open-project-command">{item.command}</code>
-          {copied === item.command && (
-            <p className="project-hint" role="status">
-              {t("Команда скопирована")}
-            </p>
-          )}
-        </div>
-        <div className="project-actions">
-          {item.current ? (
-            <button className="btn" type="button" disabled>
-              {t("Уже открыт")}
-            </button>
-          ) : null}
-          <span className="project-note">
-            {item.current ? t("Этот проект уже открыт этим сервером") : t("Другой проект открывается своей командой в терминале; сервер не переключается.")}
-          </span>
-        </div>
+        </p>
       </div>
-    </section>
+      <ul className="ds-rows" id="open-project-detail-checks">
+        {checks.map((check) => (
+          <ProjectCheck key={check.label} {...check} />
+        ))}
+      </ul>
+      <CommandBlock command={item.command} id="open-project-command" copyId="open-project-copy" copyLabel={t("Копировать")} disabled={item.current} copied={copied} onCopy={onCopy} />
+      <div className="ds-actions">
+        {item.current ? (
+          <button className="ds-btn" type="button" disabled>
+            {t("Уже открыт")}
+          </button>
+        ) : null}
+        <span className="ds-note">
+          {item.current ? t("Этот проект уже открыт этим сервером") : t("Другой проект открывается своей командой в терминале; сервер не переключается.")}
+        </span>
+      </div>
+    </Panel>
   );
 }
 
 export function OpenProject() {
-  const { t, section } = useI18n();
+  const { t, section, language } = useI18n();
   const { snapshot: home, client } = useConsole();
   const [online, setOnline] = useState(false);
   const [checked, setChecked] = useState("");
@@ -270,6 +296,7 @@ export function OpenProject() {
   const [copied, copy] = useCopy();
   const [request, setRequest] = useState<RunRequest | null>(null);
   const [installed, setInstalled] = useState(false);
+  const [chosenStep, setStep] = useState<string | null>(null);
 
   const target = facts?.target ?? null;
   const candidates = facts?.candidates ?? [];
@@ -278,6 +305,7 @@ export function OpenProject() {
   const blocked = facts?.blockers[chosen] ?? [];
   const summary = target ? targetSummary(target, t) : null;
   const stage = target === null ? 0 : installed ? 3 : 1;
+  const step = chosenStep ?? "0";
   const typed = path.trim();
   const reason = target === null ? t(facts?.error || "План появится после проверки пути.") : blocked.length ? t("заблокировано: {n}", { n: blocked.length }) : "";
   const health = home?.health ?? null;
@@ -303,319 +331,343 @@ export function OpenProject() {
     screen.refresh(true);
   };
 
-  return (
-    <div className="project-page work-page" data-section="Open project">
-      <div className="page-title project-title">
-        <div>
-          <h1>{t("Проект")}</h1>
-          <p>{t("Сервер консоли обслуживает один проект; другой проект открывается своей командой в терминале.")}</p>
-          {facts && (
-            <div className="home-facts" id="open-project-facts" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
-              <span>{home?.project?.name ?? projectName(facts.repo)}</span>
-              <span>{home?.project?.branch ?? t("ветка неизвестна")}</span>
-              <span>{home?.harness?.installed ? home.harness.installed_version : t("Harness не установлен")}</span>
-            </div>
-          )}
+  const steps: PipeTab[] = STAGES.map((name, index) => ({
+    id: String(index),
+    label: t(name),
+    count: index < stage ? "✓" : index + 1,
+  }));
+  const composition = (
+    <dl className="ds-kv" id="open-project-composition-counts">
+      {[t("Файлов"), t("Навыков"), t("Хуков")].map((label) => (
+        <div className="ds-kv-row" key={label}>
+          <dt>{label}</dt>
+          <dd>
+            <NoData />
+          </dd>
         </div>
-        <div className="actions">
-          <a className="btn" href={href("diagnostics")}>
-            <Icon name="pulse" /> {section("Diagnostics")}
-          </a>
-        </div>
-      </div>
+      ))}
+    </dl>
+  );
 
-      <Stepper stage={stage} />
+  return (
+    <div className="ds-page ds-fit" data-section="Open project">
+      <PageHeader
+        title={t("Проект")}
+        subtitle={t("Сервер консоли обслуживает один проект; другой проект открывается своей командой в терминале.")}
+        actions={
+          <a className="ds-btn" href={href("diagnostics")}>
+            <Icon name="pulse" className="ds-ic-sm" /> {section("Diagnostics")}
+          </a>
+        }
+      />
 
       {screen.error && !facts && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
+        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
           {t("Данные не получены")}: {screen.error.message || screen.error.code}
         </p>
       )}
 
-      {facts && (
-        <section className="panel current-project" id="open-project-current">
-          <div className="current-project-icon">
-            <Icon name="folder" />
-          </div>
-          <div className="current-project-main">
-            <span className="eyebrow">{t("Текущий проект")}</span>
-            <h2>{home?.project?.name ?? projectName(facts.repo)}</h2>
-            <code>{facts.repo}</code>
-            {target ? (
-              <div className="current-project-meta">
-                <Icon name="branch" /> {home?.project?.branch ?? t("ветка неизвестна")} · <Icon name={TRACKER_ICON[tracker] ?? "folder"} />{" "}
-                {TRACKER_NAME[tracker] ?? (tracker || t("трекер не определён"))}
-              </div>
-            ) : (
-              <p className="command-refusal err">{t(facts.error)}</p>
-            )}
-          </div>
-          <div className="current-project-stats" id="open-project-kpi">
-            <div>
-              <span>Harness</span>
-              <b>{home?.harness?.installed ? home.harness.installed_version : "—"}</b>
-            </div>
-            <div>
-              <span>{t("Скиллов")}</span>
-              <b>{home?.harness?.skills || "—"}</b>
-            </div>
-            <div>
-              <span>Managed</span>
-              <b>{home?.harness?.managed_files || "—"}</b>
-            </div>
-            <div>
-              <span>Health</span>
-              <b>{health && total ? `${health.ok}/${total}` : "—"}</b>
-            </div>
-          </div>
-        </section>
-      )}
+      <Summary
+        id="open-project-facts"
+        label={t("Текущий проект")}
+        stats={[
+          { label: "Harness", value: home?.harness?.installed ? home.harness.installed_version : "—", caption: home?.harness_version ? t("доступно {version}", { version: home.harness_version }) : <NoData /> },
+          { label: t("Скиллов"), value: home?.harness?.skills || "—" },
+          { label: "Managed", value: home?.harness?.managed_files || "—" },
+          { label: "Health", value: health && total ? `${health.ok}/${total}` : "—" },
+        ]}
+        facts={
+          facts ? (
+            <>
+              <span>{home?.project?.name ?? projectName(facts.repo)}</span>
+              <span>{home?.project?.branch ?? t("ветка неизвестна")}</span>
+              <span>{home?.harness?.installed ? home.harness.installed_version : t("Harness не установлен")}</span>
+            </>
+          ) : undefined
+        }
+        snapshot={
+          facts ? (
+            <span className="ds-project-clock" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+              <Icon name="clock" className="ds-ic-sm" /> {snapshotClock(screen.ageSeconds, language)}
+            </span>
+          ) : undefined
+        }
+      />
+
+      <div className="ds-wizard" id="open-project-steps">
+        <PipeTabs id="open-project-step" label={t("Шаги установки")} tabs={steps} value={step} onChange={(id) => setStep(id)} />
+        <span className="ds-note">{t("Шаг {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
+      </div>
 
       {facts && (
-        <div className="project-grid">
-          <div className="project-left">
-            <section className="panel projects-panel" id="open-project-list">
-              <div className="panel-head">
-                <h2>{t("Проекты")}</h2>
-                <span className="small muted">{t("{count} найдено", { count: candidates.length })}</span>
-              </div>
-              <div className="project-list" role="listbox" aria-label={t("Проекты")}>
-                {candidates.length === 0 && <p className="harness-note">{t("Проектов для открытия не найдено")}</p>}
-                {candidates.map((item) => (
-                  <button
-                    key={item.path}
-                    type="button"
-                    role="option"
-                    aria-selected={item.path === shown?.path}
-                    className={`project-row${item.path === shown?.path ? " on" : ""}`}
-                    data-path={item.path}
-                    onClick={() => setSelected(item.path)}
-                  >
-                    <span className="project-row-icon">
+        <>
+          <TabPanel id="open-project-step" tab="0" value={step} className="ds-tabpanel ds-project-step" keepMounted>
+            <div className="ds-project-select">
+              <div className="ds-project-left">
+                <Panel title={t("Текущий проект")} id="open-project-current">
+                  <div className="ds-row ds-project-current">
+                    <span className="ds-project-icon">
                       <Icon name="folder" />
                     </span>
-                    <span className="project-row-main">
-                      <b>{projectName(item.path)}</b>
-                      <small>{item.path}</small>
-                      <small>
-                        {item.current && home?.project && home.harness?.installed
-                          ? `${home.project.branch ?? "—"} · ${home.harness.installed_version}`
-                          : item.installed
-                            ? t("Harness установлен")
-                            : t("Harness не установлен")}
-                      </small>
-                    </span>
-                    <span className={`project-pill ${item.current ? "ok" : "muted"}`}>{t(item.current ? "Открыт" : "Не открыт")}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="project-list-foot">{t("Выберите проект, чтобы увидеть проверки справа.")}</div>
-            </section>
-            <section className="panel project-path-panel" id="open-project-path">
-              <div className="panel-head">
-                <h2>{t("Путь к другому проекту")}</h2>
-                <span className="small muted">{t("без чтения Git")}</span>
-              </div>
-              <div className="project-path-body">
-                <label className="field">
-                  {t("Путь к локальному Git-проекту")}
-                  <input value={path} placeholder="/home/…/project" onChange={(event) => setPath(event.target.value)} />
-                </label>
-                <button className="btn" type="button" onClick={() => setChecked(t(pathStatus(path)))}>
-                  <Icon name="check" /> {t("Проверить путь")}
-                </button>
-              </div>
-              {typed && (
-                <div className="project-command">
-                  <div className="project-command-head">
-                    <span>{t("Команда для другой консоли")}</span>
-                    <button className="btn" type="button" id="open-project-path-copy" onClick={() => copy(openCommand(typed))}>
-                      <Icon name="download" /> {t("Копировать команду")}
-                    </button>
-                  </div>
-                  <code id="open-project-path-command">{openCommand(typed)}</code>
-                  {copied === openCommand(typed) && (
-                    <p className="project-hint" role="status">
-                      {t("Команда скопирована")}
-                    </p>
-                  )}
-                </div>
-              )}
-              <div className="project-path-info">
-                <span id="open-project-path-status" role="status">{checked}</span>
-                <span className="project-hint">{t("Проверка пути не читает Git и .harness: команда открывает проект своим сервером.")}</span>
-              </div>
-            </section>
-          </div>
-          {shown && <CandidateDetail item={shown} facts={facts} home={home} copied={copied} onCopy={copy} />}
-        </div>
-      )}
-
-      {facts && (
-        <section className="panel install-flow-panel" id="open-project-flow">
-          <div className="panel-head">
-            <h2>{t("Схема внедрения")}</h2>
-            <span className="small muted">{t("путь проекта → harness → capability → runtime → health")}</span>
-          </div>
-          <div className="install-flow">
-            {flowNodes(facts, home, chosen, blocked.length, t).map((node, index, nodes) => (
-              <Fragment key={node.label}>
-                <div className={`install-flow-node ${node.tone}`}>
-                  <span className="install-flow-num">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="install-flow-icon">
-                    <Icon name={node.icon} />
-                  </span>
-                  <b>{node.label}</b>
-                  <span className="install-flow-value" data-flow-cap={node.label === "Capability" ? "" : undefined}>
-                    {node.value}
-                  </span>
-                  <small>{node.sub}</small>
-                </div>
-                {index < nodes.length - 1 && <span className="install-flow-arrow">→</span>}
-              </Fragment>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {facts && (
-        <div className="install-bottom-grid">
-          <section className="panel install-plan" id="open-project-plan">
-            <div className="panel-head">
-              <h2>{t("План установки")}</h2>
-              {target && <span className="update-pill warn">{t(ACTION_WORDS[target.action])}</span>}
-            </div>
-            <div className="install-plan-body">
-              {target && summary ? (
-                <>
-                  <p className={`install-plan-summary ${summary.kind === "warning" ? "warn" : "ok"}`}>
-                    <b>{summary.first}</b> <span>{summary.facts}</span>
-                  </p>
-                  <dl className="install-plan-facts">
-                    <div>
-                      <dt>{t("Проект")}</dt>
-                      <dd>{projectName(target.repo)}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("Состав")}</dt>
-                      <dd>{`${CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![0]) : "Capability"} (${chosen})`}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("Конфликты")}</dt>
-                      <dd className={blocked.length ? "err" : target.conflicts.length ? "warn" : "ok"}>
-                        {blocked.length ? t("заблокировано: {n}", { n: blocked.length }) : target.conflicts.length ? target.conflicts.join(", ") : t("нет")}
-                      </dd>
-                    </div>
-                  </dl>
-                  {target.conflicts.length > 0 && <p className="plan-warning">{t("Force/replace не включены. При конфликте операция остановится.")}</p>}
-                  <div className="install-command-label">{t("Команда")}</div>
-                  <pre id="open-project-install-command" className="install-command">
-                    {installCommand(target, chosen)}
-                  </pre>
-                </>
-              ) : (
-                <p className="harness-note">{reason}</p>
-              )}
-              <div className="install-plan-actions">
-                <button id="open-project-install" className="btn primary" type="button" disabled={!target || blocked.length > 0} title={reason || undefined} onClick={install}>
-                  <Icon name="download" /> {t("Установить")}
-                </button>
-                <span>{reason || t("Потребуется подтверждение")}</span>
-              </div>
-            </div>
-          </section>
-          <section className="panel install-capabilities" id="open-project-capability">
-            <div className="panel-head">
-              <h2>{t("Состав Harness")}</h2>
-              <span className="small muted">{t("что будет установлено")}</span>
-            </div>
-            <div className="cap-list" role="radiogroup" aria-label={t("Состав Harness")}>
-              {Object.entries(facts.blockers).map(([name, paths]) => {
-                const [title, description] = CAPABILITY_TEXT[name] ?? [name, ""];
-                return (
-                  <label key={name} className={`cap-row${name === chosen ? " on" : ""}`}>
-                    <input type="radio" name="open-project-capability" aria-label={`${t(title)} (${name})`} checked={name === chosen} onChange={() => setCapability(name)} />
-                    <span className="cap-copy">
-                      <b>{t(title)}</b>
-                      {target?.capabilities.includes(name) && <span className="cap-status">{t("установлено")}</span>}
-                      <small>{description ? t(description) : name}</small>
-                      {paths.length > 0 && (
-                        <small className="cap-blocked">
-                          <Icon name="x" /> {t("заблокировано: {n}", { n: paths.length })}
-                        </small>
+                    <span className="ds-row-main">
+                      <span className="ds-row-title">{home?.project?.name ?? projectName(facts.repo)}</span>
+                      <code className="ds-row-sub" title={facts.repo}>{facts.repo}</code>
+                      {target ? (
+                        <span className="ds-row-sub ds-project-meta">
+                          <span>
+                            <Icon name="branch" className="ds-ic-sm" /> {home?.project?.branch ?? t("ветка неизвестна")}
+                          </span>
+                          <span>
+                            <Icon name={TRACKER_ICON[tracker] ?? "folder"} className="ds-ic-sm" /> {TRACKER_NAME[tracker] ?? (tracker || t("трекер не определён"))}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="ds-alert ds-alert-err">{t(facts.error)}</span>
                       )}
                     </span>
-                  </label>
-                );
-              })}
-            </div>
-            <p className="cap-footer">{CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![2]) : chosen}</p>
-            {blocked.length > 0 && (
-              <div className="plan-warning" id="open-project-blockers">
-                <p>{t("Установка заблокирована; проверьте собственные/изменённые пути:")}</p>
-                <ul>
-                  {blocked.map((item) => (
-                    <li key={item}>
-                      <code>{item}</code>
-                    </li>
-                  ))}
-                </ul>
+                  </div>
+                </Panel>
+                <Panel title={t("Проекты")} id="open-project-list" meta={t("{count} найдено", { count: candidates.length })} fill scroll="list" label={t("Проекты")}>
+                  {candidates.length === 0 && <p className="ds-empty">{t("Проектов для открытия не найдено")}</p>}
+                  <div className="ds-rows" role="listbox" aria-label={t("Проекты")}>
+                    {candidates.map((item) => (
+                      <button
+                        key={item.path}
+                        type="button"
+                        role="option"
+                        aria-selected={item.path === shown?.path}
+                        className="ds-row ds-row-button"
+                        data-path={item.path}
+                        onClick={() => setSelected(item.path)}
+                      >
+                        <span className="ds-project-icon">
+                          <Icon name="folder" />
+                        </span>
+                        <span className="ds-row-main">
+                          <span className="ds-row-title">{projectName(item.path)}</span>
+                          <span className="ds-row-sub" title={item.path}>{item.path}</span>
+                          <span className="ds-row-sub">
+                            {item.current && home?.project && home.harness?.installed
+                              ? `${home.project.branch ?? "—"} · ${home.harness.installed_version}`
+                              : item.installed
+                                ? t("Harness установлен")
+                                : t("Harness не установлен")}
+                          </span>
+                        </span>
+                        <span className="ds-tag" data-on={item.current}>
+                          {t(item.current ? "Открыт" : "Не открыт")}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="ds-note" id="open-project-list-foot">
+                    {t("Выберите проект, чтобы увидеть проверки справа.")}
+                  </p>
+                </Panel>
+                <Panel title={t("Путь к другому проекту")} id="open-project-path" meta={t("без чтения Git")}>
+                  <div className="ds-actions ds-project-path">
+                    <label className="ds-project-field">
+                      {t("Путь к локальному Git-проекту")}
+                      <input className="ds-input" value={path} placeholder="/home/…/project" onChange={(event) => setPath(event.target.value)} />
+                    </label>
+                    <button className="ds-btn" type="button" onClick={() => setChecked(t(pathStatus(path)))}>
+                      <Icon name="check" className="ds-ic-sm" /> {t("Проверить путь")}
+                    </button>
+                  </div>
+                  {typed && (
+                    <CommandBlock command={openCommand(typed)} id="open-project-path-command" copyId="open-project-path-copy" copyLabel={t("Копировать команду")} copied={copied} onCopy={copy} />
+                  )}
+                  <p className="ds-note">
+                    <span id="open-project-path-status" role="status">
+                      {checked}
+                    </span>{" "}
+                    {t("Проверка пути не читает Git и .harness: команда открывает проект своим сервером.")}
+                  </p>
+                </Panel>
               </div>
-            )}
-          </section>
-          <section className="panel install-checks" id="open-project-checks">
-            <div className="panel-head">
-              <h2>{t("Проверки")}</h2>
-              <span className="small muted">{health ? t("{run} из {total} проверено", { run, total }) : t("нет данных")}</span>
+              {shown && (
+                <div className="ds-project-detail">
+                  <CandidateDetail item={shown} facts={facts} home={home} copied={copied} onCopy={copy} />
+                </div>
+              )}
             </div>
-            <div className="install-checks-body">
-              <div className="install-check-actions">
-                <button className={`chip${online ? "" : " on"}`} type="button" aria-pressed={!online} onClick={() => mode(false)}>
-                  {t("Офлайн")}
-                </button>
-                <button className={`chip${online ? " on" : ""}`} type="button" aria-pressed={online} onClick={() => mode(true)}>
-                  {t("Онлайн")}
-                </button>
-                <a className="btn" href={href("diagnostics")}>
-                  <Icon name="pulse" /> {t("Исправить")}
+          </TabPanel>
+
+          <TabPanel id="open-project-step" tab="1" value={step} className="ds-tabpanel ds-project-step" keepMounted>
+            <Panel title={t("Проверки")} id="open-project-checks" meta={health ? t("{run} из {total} проверено", { run, total }) : t("нет данных")} fill scroll="text">
+              <div className="ds-actions ds-project-check-actions">
+                <span className="ds-filter" role="group" aria-label={t("Режим проверки")}>
+                  <button type="button" aria-pressed={!online} onClick={() => mode(false)}>
+                    {t("Офлайн")}
+                  </button>
+                  <button type="button" aria-pressed={online} onClick={() => mode(true)}>
+                    {t("Онлайн")}
+                  </button>
+                </span>
+                <a className="ds-btn" href={href("diagnostics")}>
+                  <Icon name="pulse" className="ds-ic-sm" /> {t("Исправить")}
                 </a>
-                <a className="btn" href={href("configuration")}>
-                  <Icon name="settings" /> {t("Настройка")}
+                <a className="ds-btn" href={href("configuration")}>
+                  <Icon name="settings" className="ds-ic-sm" /> {t("Настройка")}
                 </a>
               </div>
               {health ? (
                 <>
-                  <div className="install-health">
-                    <span className="ok">
-                      <Icon name="check" /> {t("{n} пройдено", { n: health.ok })}
-                    </span>
-                    <span className="warn">
-                      <Icon name="warning" /> {t("{n} внимание", { n: health.warn })}
-                    </span>
-                    <span className="err">
-                      <Icon name="x" /> {t("{n} ошибки", { n: health.fail })}
-                    </span>
-                    <span className="skip">
-                      <Icon name="clock" /> {t("{n} не проверено", { n: health.skipped })}
-                    </span>
-                  </div>
-                  <div className="install-health-bar" role="img" aria-label={t("{run} из {total} проверено", { run, total })}>
-                    {(["ok", "warn", "fail", "skip"] as const).map((key) => {
-                      const value = key === "skip" ? health.skipped : health[key];
-                      return <span key={key} className={key} style={{ width: `${total ? (value / total) * 100 : 0}%` }} />;
-                    })}
+                  <ul className="ds-rows" id="open-project-health">
+                    {HEALTH_ROWS.map(([key, tone, text]) => (
+                      <li className="ds-row" data-tone={tone} key={key}>
+                        <StatusIcon tone={tone} label={t(CHECK_LABEL[tone] ?? "")} />
+                        <span className="ds-row-main">{t(text, { n: health[key] })}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="ds-project-bar" role="img" aria-label={t("{run} из {total} проверено", { run, total })}>
+                    {HEALTH_ROWS.map(([key, tone]) => (
+                      <span key={key} data-tone={tone} style={{ width: `${total ? (health[key] / total) * 100 : 0}%` }} />
+                    ))}
                   </div>
                 </>
               ) : (
-                <p className="harness-note">{t("нет данных · снимок Home ещё не получен")}</p>
+                <p className="ds-note">{t("нет данных · снимок Home ещё не получен")}</p>
               )}
-              <p className="install-checks-note">{t("Онлайн — отдельная проверка трекера и прав доступа. Проверки песочницы анализируют настройки; фактические доступы могут остаться непроверенными.")}</p>
+              <p className="ds-note">{t("Онлайн — отдельная проверка трекера и прав доступа. Проверки песочницы анализируют настройки; фактические доступы могут остаться непроверенными.")}</p>
+            </Panel>
+          </TabPanel>
+
+          <TabPanel id="open-project-step" tab="2" value={step} className="ds-tabpanel ds-project-step" keepMounted>
+            <Panel title={t("Схема внедрения")} id="open-project-flow" meta={t("путь проекта → harness → capability → runtime → health")}>
+              <ol className="ds-loop ds-project-flow">
+                {flowNodes(facts, home, chosen, blocked.length, t).map((node, index) => (
+                  <li className="ds-loop-node" data-tone={node.tone} key={node.label}>
+                    <Icon name={node.icon} className="ds-ic-sm" />
+                    <span>
+                      <small>{String(index + 1).padStart(2, "0")}</small>
+                      <b>{node.label}</b>
+                      <span className="ds-project-flow-value" data-flow-cap={node.label === "Capability" ? "" : undefined}>
+                        {node.value}
+                      </span>
+                      <small>{node.sub}</small>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </Panel>
+            <div className="ds-project-install">
+              <Panel title={t("План установки")} id="open-project-plan" meta={target ? t(ACTION_WORDS[target.action]) : undefined} fill scroll="text">
+                {target && summary ? (
+                  <>
+                    <p className={summary.kind === "warning" ? "ds-alert ds-alert-warn" : "ds-note"} id="open-project-plan-summary">
+                      <b>{summary.first}</b> <span>{summary.facts}</span>
+                    </p>
+                    <dl className="ds-kv">
+                      <div className="ds-kv-row">
+                        <dt>{t("Проект")}</dt>
+                        <dd>{projectName(target.repo)}</dd>
+                      </div>
+                      <div className="ds-kv-row">
+                        <dt>{t("Состав")}</dt>
+                        <dd>{`${CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![0]) : "Capability"} (${chosen})`}</dd>
+                      </div>
+                      <div className="ds-kv-row">
+                        <dt>{t("Конфликты")}</dt>
+                        <dd data-tone={blocked.length ? "err" : target.conflicts.length ? "warn" : "ok"}>
+                          {blocked.length ? t("заблокировано: {n}", { n: blocked.length }) : target.conflicts.length ? target.conflicts.join(", ") : t("нет")}
+                        </dd>
+                      </div>
+                    </dl>
+                    {target.conflicts.length > 0 && <p className="ds-alert ds-alert-warn">{t("Force/replace не включены. При конфликте операция остановится.")}</p>}
+                    <h3 className="ds-group-title">{t("Команда")}</h3>
+                    <div className="ds-project-command">
+                      <code id="open-project-install-command">{installCommand(target, chosen)}</code>
+                    </div>
+                  </>
+                ) : (
+                  <p className="ds-note">{reason}</p>
+                )}
+                <div className="ds-actions">
+                  <button id="open-project-install" className="ds-btn ds-btn-primary" type="button" disabled={!target || blocked.length > 0} title={reason || undefined} onClick={install}>
+                    <Icon name="download" className="ds-ic-sm" /> {t("Установить")}
+                  </button>
+                  <span className="ds-sub">{reason || t("Потребуется подтверждение")}</span>
+                </div>
+              </Panel>
+              <Panel title={t("Состав Harness")} id="open-project-capability" meta={t("что будет установлено")} fill scroll="list" label={t("Состав Harness")}>
+                <div className="ds-rows ds-project-caps" role="radiogroup" aria-label={t("Состав Harness")}>
+                  {Object.entries(facts.blockers).map(([name, paths]) => {
+                    const [title, description] = CAPABILITY_TEXT[name] ?? [name, ""];
+                    return (
+                      <label key={name} className="ds-row ds-choice" data-on={name === chosen}>
+                        <input type="radio" name="open-project-capability" aria-label={`${t(title)} (${name})`} checked={name === chosen} onChange={() => setCapability(name)} />
+                        <span className="ds-row-main">
+                          <span className="ds-row-title">{t(title)}</span>
+                          <span className="ds-row-sub">{description ? t(description) : name}</span>
+                          {paths.length > 0 && <span className="ds-row-sub ds-verdict-err">{t("заблокировано: {n}", { n: paths.length })}</span>}
+                        </span>
+                        {target?.capabilities.includes(name) && <span className="ds-tag">{t("установлено")}</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="ds-note" id="open-project-capability-footer">
+                  {CAPABILITY_TEXT[chosen] ? t(CAPABILITY_TEXT[chosen]![2]) : chosen}
+                </p>
+                {blocked.length > 0 && (
+                  <div className="ds-alert ds-alert-warn" id="open-project-blockers">
+                    <div>
+                      <p>{t("Установка заблокирована; проверьте собственные/изменённые пути:")}</p>
+                      <ul>
+                        {blocked.map((item) => (
+                          <li key={item}>
+                            <code>{item}</code>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                {composition}
+              </Panel>
             </div>
-          </section>
-        </div>
+          </TabPanel>
+
+          <TabPanel id="open-project-step" tab="3" value={step} className="ds-tabpanel ds-project-step" keepMounted>
+            <Panel title={t("Настройка")} id="open-project-settings" fill>
+              <p className="ds-note">{t("project.json и orchestration.json настраиваются на странице «Настройка»: черновик, проверка и подтверждённая запись.")}</p>
+              <div className="ds-actions">
+                <a className="ds-btn" href={href("configuration")}>
+                  <Icon name="settings" className="ds-ic-sm" /> {t("Настройка")}
+                </a>
+              </div>
+            </Panel>
+          </TabPanel>
+
+          <TabPanel id="open-project-step" tab="4" value={step} className="ds-tabpanel ds-project-step" keepMounted>
+            <Panel title={t("Итоговая диагностика")} id="open-project-final" fill>
+              {health ? (
+                <dl className="ds-kv">
+                  <div className="ds-kv-row"><dt>{t("пройдено")}</dt><dd>{health.ok}</dd></div>
+                  <div className="ds-kv-row"><dt>{t("внимание")}</dt><dd>{health.warn}</dd></div>
+                  <div className="ds-kv-row"><dt>{t("ошибки")}</dt><dd>{health.fail}</dd></div>
+                  <div className="ds-kv-row"><dt>{t("пропущено")}</dt><dd>{health.skipped}</dd></div>
+                </dl>
+              ) : (
+                <p className="ds-empty">
+                  <NoData />
+                </p>
+              )}
+              <div className="ds-actions">
+                <a className="ds-btn" href={href("diagnostics")}>
+                  <Icon name="pulse" className="ds-ic-sm" /> {section("Diagnostics")}
+                </a>
+              </div>
+            </Panel>
+          </TabPanel>
+        </>
       )}
 
-      <CommandPanel section="setup" confirmAll listed={false} request={request} onJobDone={onJobDone} />
+      <div className="ds-legacy-island">
+        <CommandPanel section="setup" confirmAll listed={false} request={request} onJobDone={onJobDone} />
+      </div>
     </div>
   );
 }

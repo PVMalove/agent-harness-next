@@ -23,6 +23,8 @@ export interface RunRequest {
   /** What the page says the run will do, shown in the confirmation instead of the server's
       class reason. */
   reason?: string;
+  /** Lines the confirmation shows under the reason, such as a before/after plan. */
+  context?: string;
 }
 
 type Pending =
@@ -87,6 +89,9 @@ function CommandRow({
 
 const NO_DIGESTS: Readonly<Record<string, string>> = {};
 
+/** Run requests already taken by a panel; outlives a remount of the panel. */
+const TAKEN = new WeakSet<RunRequest>();
+
 export function CommandPanel({
   section,
   planDigests = NO_DIGESTS,
@@ -111,13 +116,12 @@ export function CommandPanel({
   const jobs = useJobs(section);
   const [pending, setPending] = useState<Pending | null>(null);
   const [unavailable, setUnavailable] = useState<string | null>(null);
-  const handled = useRef<number | null>(null);
   const finished = useRef(new Set<string>());
 
   const digest = (command: CommandDescriptor) =>
     command.plan_required ? { plan_digest: planDigests[command.command_id] } : {};
 
-  const run = (command: CommandDescriptor, values: Record<string, string>, reason?: string) => {
+  const run = (command: CommandDescriptor, values: Record<string, string>, reason?: string, context?: string) => {
     setUnavailable(null);
     if (!command.needs_confirmation && !confirmAll) {
       jobs.start({ command_id: command.command_id, values, ...digest(command) });
@@ -133,6 +137,7 @@ export function CommandPanel({
         reason: reason ?? t(command.confirmation_reason ?? command.title),
         typed: command.typed_confirmation,
         action: t("Запустить"),
+        ...(context === undefined ? {} : { context }),
       },
     });
   };
@@ -165,17 +170,19 @@ export function CommandPanel({
 
   const { busy, shown, refusal, commands } = jobs;
 
-  // A page's run request: once per nonce, as soon as the catalog is known.
+  // A page's run request: once per request, as soon as the catalog is known. The page keeps its
+  // request in state, so a remounted panel (a tab switch, a reloading report) sees the same object
+  // again: TAKEN is module wide, so a request never runs twice.
   useEffect(() => {
-    if (!request || commands === null || handled.current === request.nonce) return;
-    handled.current = request.nonce;
+    if (!request || commands === null || TAKEN.has(request)) return;
+    TAKEN.add(request);
     const command = commands.find((item) => item.command_id === request.command_id);
     const blocked = command ? blockedText(t, command, planDigests) : t("Команда недоступна для выбранного проекта");
     if (!command || blocked !== null) {
       setUnavailable(blocked);
       return;
     }
-    run(command, request.values, request.reason);
+    run(command, request.values, request.reason, request.context);
     // `run` and `t` change with every render; the nonce decides.
   }, [request, commands]);
 

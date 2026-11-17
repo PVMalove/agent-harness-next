@@ -30,6 +30,31 @@ After confirmation, "Fix" applies local health repairs and repeats diagnostics.
 `skipped` means a check did not run. Reading sandbox settings files does not prove actual worker
 access. See the [orchestration access chapter](guides/orchestration/access.md).
 
+### Harness features
+
+The "Features" tab of "Diagnostics" shows 26 Harness features in eight categories: execution,
+roles, hooks, context, process, publication, capabilities and platform. The console server builds
+the list (the `features.snapshot` message) from the package capability catalog, the
+`.claude/hooks` and `.claude/agents` files, the hook wiring in the runtime settings and the keys of
+`.harness/project.json` and `.harness/orchestration.json`. A feature is "Working", "Partial",
+"Not working" or "Disabled". A disabled feature is not an error.
+
+Three features with a boolean configuration key have a switch:
+
+| Feature | Key |
+| --- | --- |
+| Worker attestation | `orchestration.json` › `worker_attestation_required` |
+| Project memory | `project.json` › `memory.enabled` |
+| Retry and attention | `orchestration.json` › `infrastructure_retry_policy.enabled` |
+
+The other features show a disabled switch with the reason. The server computes the state after
+the switch and the requirements left unmet: it evaluates the feature again with the key flipped.
+For example, memory without `memory_policy.source_types` and `memory_policy.allow_paths` becomes
+"Partial" once enabled. A switch uses only the confirmed configuration write
+(`configuration-apply`): the confirmation shows what stops working and the before/after plan.
+"Cancel" changes nothing. When a file changed after the snapshot, the write is
+refused and the version conflict text appears next to the feature.
+
 ## Updating Harness
 
 Open "Update Harness" (`2`) and inspect the version, drift and diff of each changed file.
@@ -107,6 +132,31 @@ Moving to another step cancels the pending result.
 
 Taking the answer into the draft is a separate action ("Use AI advice"). Checks and write confirmation remain required.
 Unsupported CLI versions, network, authentication or response errors leave plain hints available.
+
+## Settings in the web console
+
+The web console "Settings" section (`#/configuration`) has five tabs:
+
+- "Overview": the state of `project.json` and `orchestration.json`, the resolved policy values and
+  the runtime adapters with a confirmed update.
+- "Parameters": the wizard by groups. Each parameter shows the schema default, the current value and
+  the console recommendation with its reason. "Accept the console recommendation" changes the draft only.
+- "JSON": both files as text, one tab per file. A JSON edit and an answer on the "Parameters" tab
+  change the same draft.
+- "Changes": the change list of the draft, the version description and the "Save the draft as a
+  version" and "Apply" buttons. Writes start only here, always after a confirmation.
+- "History": the saved versions in `.harness/config_versions/` and the JSON of the selected version
+  with secrets masked. A version that cannot be read shows the reason instead of an empty panel.
+  Restoring a version is available in the TUI only.
+
+AI hints on the "Parameters" tab are off by default: choose "Codex CLI" or "Claude Code CLI" instead
+of "No AI". "Check CLI" shows CLI presence, version support and authorization separately and never
+calls a model. A request is sent only by the "Ask AI" button. The browser sends the server only the
+file and path of the parameter; the server reads the saved files and sends the CLI the same
+allowlisted facts as the TUI. An answer is bounded by 90 seconds. "Cancel", moving to another
+parameter or switching the CLI cancels the request. "Accept AI advice" changes the draft only. On a
+refusal, a timeout or an invalid answer, the reason and the console recommendation are shown and the
+draft does not change.
 
 ## What is not checked automatically
 

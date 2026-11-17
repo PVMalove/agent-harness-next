@@ -11,7 +11,8 @@ the version store, never moves a legacy one and never recovers a transaction.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+import re
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import cast
 
@@ -22,6 +23,7 @@ from harness.configuration import (
     read_config_bundle,
     read_journal,
 )
+from harness.configuration_store import ConfigurationStore
 from harness.json_types import JsonObject
 from harness.runtime_adapters import AdapterStatus
 
@@ -32,8 +34,10 @@ from .configuration import (
     preview_runtime_adapters,
 )
 from .json_shape import json_object, json_str
+from .protocol import CONFIGURATION_VERSION_ID
 
 STORE_DIR = ".harness/config_versions"
+VERSION_ID = re.compile(CONFIGURATION_VERSION_ID)
 _FIELDS = frozenset(
     {
         "schema_installed",
@@ -245,3 +249,62 @@ def collect_configuration(repo: Path) -> ConfigurationFacts:
         files=_read_files(repo),
         adapters=_adapter_facts(repo),
     )
+
+
+def list_versions(repo: Path) -> list[dict[str, object]]:
+    """The saved configuration versions, newest first; none when the store is absent. Reads
+    only: the store is constructed only when it exists, so a legacy one is never moved."""
+    repo = repo.expanduser().resolve()
+    if not (repo / STORE_DIR).is_dir():
+        return []
+    try:
+        versions = ConfigurationStore(repo).versions()
+    except (ValueError, OSError):
+        return []
+    return [{**asdict(item), "files": list(item.files)} for item in versions]
+
+
+def _missing_version(identifier: str) -> dict[str, object]:
+    return {
+        "id": identifier,
+        "error": f"Версия «{identifier}» не найдена в {STORE_DIR}.",
+        "files": {},
+    }
+
+
+def read_version(repo: Path, identifier: str) -> dict[str, object]:
+    """The masked files of one saved version, or `files` empty with the reason in `error`: a
+    clear message for an unknown identifier, the store's message for a damaged version."""
+    repo = repo.expanduser().resolve()
+    if not VERSION_ID.fullmatch(identifier):
+        return _missing_version(identifier)
+    if not (repo / STORE_DIR / identifier).is_dir():
+        return _missing_version(identifier)
+    try:
+        bundle = ConfigurationStore(repo).load(identifier)
+    except (ValueError, OSError) as exc:
+        return {"id": identifier, "error": str(exc) or type(exc).__name__, "files": {}}
+    files: dict[str, object] = {}
+    for name in CONFIG_NAMES:
+        raw = bundle.get(name)
+        try:
+            document = (
+                cast(JsonObject, mask_secrets(parse_object(raw, name)))
+                if raw is not None
+                else {}
+            )
+        except ValueError as exc:
+            files[name] = {
+                "exists": True,
+                "digest": config_digest(raw),
+                "document": {},
+                "error": str(exc),
+            }
+            continue
+        files[name] = {
+            "exists": raw is not None,
+            "digest": config_digest(raw),
+            "document": document,
+            "error": "",
+        }
+    return {"id": identifier, "error": "", "files": files}

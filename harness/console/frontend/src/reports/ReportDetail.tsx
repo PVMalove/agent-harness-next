@@ -2,6 +2,7 @@
    head, the output as the summary, the checks as Evidence rows, then the conclusion (next action
    with the risk and blocker lines) and the actions. The body is untrusted role output: it is only
    ever rendered as React text. */
+import { StatusIcon } from "../ds";
 import { Icon } from "../icons";
 import type { IconName } from "../icons";
 import { useI18n } from "../i18n";
@@ -10,7 +11,7 @@ import { useScreen } from "../screens/useScreen";
 import { roleIcon } from "../steps/ActivityViews";
 import { parseReport } from "../ws/ledger";
 import type { ReportHead, StageHead } from "../ws/ledger";
-import { kindTone, reportSectionLines, stageStatus, statusWords } from "./format";
+import { KIND_TONE, kindTone, reportSectionLines, stageStatus, statusWords } from "./format";
 import type { StatusKind } from "./format";
 import { clockTime } from "./StageList";
 
@@ -27,9 +28,9 @@ export function ReportDetail({ stage, report }: { stage: StageHead; report: Repo
   const { t, language } = useI18n();
   const status = stageStatus(stage, report);
   return (
-    <section className="panel report-detail-panel" id="report-detail">
-      <div className="panel-head">
-        <h2>{t("Детали отчёта")}</h2>
+    <div className="report-detail-panel" id="report-detail">
+      <div className="report-detail-status">
+        <StatusIcon tone={KIND_TONE[status.kind]} label={statusWords(status, language)} />
         <span className={`report-status ${kindTone(status.kind)}`}>{statusWords(status, language)}</span>
       </div>
       <div className="report-detail-body">
@@ -53,7 +54,7 @@ export function ReportDetail({ stage, report }: { stage: StageHead; report: Repo
           </a>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 

@@ -32,10 +32,10 @@ function open(route = "orchestration") {
   const socket = FakeSocket.last;
   act(() => socket.open());
   if (route === "orchestration") {
-    // The pending decisions are the «Гейты» tab of the mockup: open it over the snapshot.
+    // The pending decisions are the «Решения» tab of the mockup: open it over the snapshot.
     const asked = socket.request("orchestration.snapshot");
     act(() => socket.reply(screenPage(asked.id, "orchestration.snapshot", JSON.stringify(ORCHESTRATION))));
-    act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: "Гейты" })));
+    act(() => fireEvent.click(within(document.querySelector("#orch-tabs") as HTMLElement).getByRole("tab", { name: /Решения$/ })));
   }
   return { socket, clock };
 }

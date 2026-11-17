@@ -42,4 +42,25 @@ for (const width of [1440, 390]) {
     await expect(page.locator("#health-ok")).toHaveText("42");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
+
+  test(`the header items at ${width} px do not overlap`, async ({ page }) => {
+    await open(page, width, "");
+    // The header's own children and the brand's text: a clipped or hidden-behind item overlaps.
+    const overlaps = await page.evaluate(() => {
+      const items = [...document.querySelectorAll(".ds-top > *, .ds-top-end > *, .ds-brand > *")].filter((item) => {
+        const box = item.getBoundingClientRect();
+        return box.width > 0 && getComputedStyle(item).visibility !== "hidden" && !item.classList.contains("ds-top-end") && !item.classList.contains("ds-brand");
+      });
+      const found: string[] = [];
+      items.forEach((a, i) =>
+        items.slice(i + 1).forEach((b) => {
+          if (a.contains(b) || b.contains(a)) return;
+          const [x, y] = [a.getBoundingClientRect(), b.getBoundingClientRect()];
+          if (x.left < y.right - 1 && y.left < x.right - 1 && x.top < y.bottom - 1 && y.top < x.bottom - 1) found.push(`${a.id || a.className} × ${b.id || b.className}`);
+        }),
+      );
+      return found;
+    });
+    expect(overlaps).toEqual([]);
+  });
 }

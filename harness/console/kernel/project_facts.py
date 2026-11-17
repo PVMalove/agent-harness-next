@@ -58,8 +58,27 @@ def _default_branch(repo: Path) -> str | None:
     return name if done.returncode == 0 and name else None
 
 
+type _Signature = tuple[tuple[str, int | None, int | None], ...]
+
+# The files the facts come from; the remote HEAD names the default branch.
+_SOURCES = (*_MARKERS, ".git/refs/remotes/origin/HEAD")
+
+
+def _signature(repo: Path) -> _Signature:
+    """The modification time and size of every source file, or None for a missing one."""
+    stamps: list[tuple[str, int | None, int | None]] = []
+    for name in _SOURCES:
+        try:
+            info = (repo / name).stat()
+        except OSError:
+            stamps.append((name, None, None))
+        else:
+            stamps.append((name, info.st_mtime_ns, info.st_size))
+    return tuple(stamps)
+
+
 @lru_cache(maxsize=8)
-def _facts(root: str) -> ProjectFacts:
+def _facts(root: str, _signature: _Signature) -> ProjectFacts:
     repo = Path(root)
     markers = tuple(name for name in _MARKERS if (repo / name).is_file())
     targets = _make_targets(repo / "Makefile") if "Makefile" in markers else set()
@@ -75,5 +94,8 @@ def _facts(root: str) -> ProjectFacts:
 
 
 def project_facts(repo: Path) -> ProjectFacts:
-    """Facts are read once per repository for the process lifetime."""
-    return _facts(str(repo.expanduser().resolve()))
+    """Facts are read again only when a source file changes: the long-lived web server sees a new
+    Makefile target or marker without a restart, and an unchanged project costs a few stat calls.
+    In a linked worktree `.git` is a file, so a moved remote HEAD is seen after a marker changes."""
+    root = repo.expanduser().resolve()
+    return _facts(str(root), _signature(root))

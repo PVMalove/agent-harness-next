@@ -263,7 +263,14 @@ describe("Reports, Orchestration, Recovery and Container route reads", () => {
     const { evidence: _evidence, ...withoutEvidence } = LEDGER;
     expect(parseReports(withoutEvidence)).toBeNull();
     const orchestration = { ledger: LEDGER, lock: { lock: null, error: "занят" }, kpi: KPI, analytics: ANALYTICS };
-    expect(parseOrchestration(orchestration)).toEqual(orchestration);
+    // An older server sends no containers: the field is null, not an empty list.
+    expect(parseOrchestration(orchestration)).toEqual({ ...orchestration, containers: null });
+    const container = { dispatch_id: "d-1", batch_id: "b-1", ticket: "#1", role: "qa", kind: "qa", engine: "", image: "", stage_state: "working", state: "running" };
+    const withContainers = { ...orchestration, containers: { containers: [container], counts: { running: 1 } } };
+    expect(parseOrchestration(withContainers)).toEqual(withContainers);
+    expect(parseOrchestration({ ...withContainers, containers: { containers: [{ ...container, state: "alive" }], counts: {} } })).toBeNull();
+    expect(parseOrchestration({ ...withContainers, containers: { containers: [{ ...container, extra: 1 }], counts: {} } })).toBeNull();
+    expect(parseOrchestration({ ...withContainers, containers: { containers: [], counts: { running: -1 } } })).toBeNull();
     expect(parseOrchestration({ ...orchestration, kpi: { ...KPI, wip: -1 } })).toBeNull();
     const hourly = (values: unknown[]) => ({ ...orchestration, analytics: { ...ANALYTICS, gates: { latency_p50_by_hour: values } } });
     expect(parseOrchestration(hourly([null, 60]))).not.toBeNull();

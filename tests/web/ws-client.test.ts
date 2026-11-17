@@ -37,7 +37,26 @@ describe("the console client", () => {
       snapshot: SNAPSHOT,
       cached: false,
       ageSeconds: 0,
+      activity: null,
     });
+  });
+
+  test("a reply with the contour activity passes it on; a malformed one is dropped, not the snapshot", () => {
+    const { events, client } = setup();
+    const socket = FakeSocket.last;
+    socket.open();
+    const activity = {
+      window_seconds: 300,
+      events_per_minute: 1.2,
+      links: [{ link: "typed", events_per_minute: 1.2, last_event_age_seconds: 4.5 }],
+      last_event_age_seconds: 4.5,
+      events_total_window: 6,
+    };
+    socket.reply({ ...snapshotReply("1-2"), activity });
+    expect(events.at(-1)).toMatchObject({ type: "snapshot", activity });
+    expect(client.requestHome({ force: true })).toBe(true);
+    socket.reply({ ...snapshotReply("1-3"), activity: { ...activity, links: "x" } });
+    expect(events.at(-1)).toMatchObject({ type: "snapshot", activity: null });
   });
 
   test("reconnects with a backoff of 0.5 s doubling to 8 s", () => {
@@ -166,5 +185,33 @@ describe("the console client", () => {
     expect(FakeSocket.last.readyState).toBe(3);
     clock.advance(60000);
     expect(FakeSocket.instances).toHaveLength(1);
+  });
+
+  test("an AI advice request waits 100 s; a closed socket ends it as a fallback", () => {
+    const { clock, client } = setup();
+    const socket = FakeSocket.last;
+    socket.open();
+    socket.reply({ v: 1, id: "1-1", type: "orchestration.subscribe", ok: true, kind: "source", cursor: null, source: null });
+    socket.reply(snapshotReply("1-2"));
+    const advisor: unknown[] = [];
+    client.subscribeAdvisor((event) => advisor.push(event));
+    const id = client.askAdvisor("codex", "project.json", ["language"]);
+    expect(socket.request("advisor.ask")).toEqual({ id, type: "advisor.ask", provider: "codex", file: "project.json", path: ["language"] });
+    clock.advance(99999);
+    expect(socket.readyState).toBe(1);
+    clock.advance(1);
+    expect(socket.readyState).toBe(3);
+    expect(advisor).toEqual([{ type: "advisor-fallback", requestId: id, cause: "closed", reason: "" }]);
+  });
+
+  test("an advisor check that is not answered keeps the ordinary 30 s timeout", () => {
+    const { clock, client } = setup();
+    const socket = FakeSocket.last;
+    socket.open();
+    socket.reply({ v: 1, id: "1-1", type: "orchestration.subscribe", ok: true, kind: "source", cursor: null, source: null });
+    socket.reply(snapshotReply("1-2"));
+    expect(client.checkAdvisor("claude")).toBe(socket.request("advisor.check").id);
+    clock.advance(30000);
+    expect(socket.readyState).toBe(3);
   });
 });

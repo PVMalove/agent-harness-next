@@ -78,6 +78,7 @@
       "path": [
         "approval_policy"
       ],
+      "recommendation": null,
       "type": "enum"
     },
     {
@@ -94,6 +95,7 @@
       "path": [
         "human_approval_gate"
       ],
+      "recommendation": null,
       "type": "enum"
     },
     {
@@ -107,6 +109,7 @@
       "path": [
         "concurrency_budget"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -120,6 +123,7 @@
       "path": [
         "worker_attestation_required"
       ],
+      "recommendation": null,
       "type": "boolean"
     },
     {
@@ -138,6 +142,7 @@
       "path": [
         "auto_retry_min_severity"
       ],
+      "recommendation": null,
       "type": "enum"
     },
     {
@@ -152,6 +157,7 @@
         "retry_policy",
         "max_developer_retries"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -166,6 +172,7 @@
         "infrastructure_retry_policy",
         "enabled"
       ],
+      "recommendation": null,
       "type": "boolean"
     },
     {
@@ -180,6 +187,7 @@
         "attention_policy",
         "max_infrastructure_retries"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -196,6 +204,7 @@
       "path": [
         "language"
       ],
+      "recommendation": null,
       "type": "enum"
     },
     {
@@ -209,6 +218,7 @@
       "path": [
         "base_branch"
       ],
+      "recommendation": null,
       "type": "string"
     },
     {
@@ -225,6 +235,7 @@
       "path": [
         "shell"
       ],
+      "recommendation": null,
       "type": "enum"
     },
     {
@@ -239,6 +250,7 @@
         "execution_policy",
         "qa_lease_seconds"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -253,6 +265,7 @@
         "execution_policy",
         "dispatch_wait_timeout_seconds"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -267,6 +280,7 @@
         "execution_policy",
         "dispatch_poll_interval_seconds"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -281,6 +295,7 @@
         "attention_policy",
         "stale_dispatch_seconds"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -295,6 +310,7 @@
         "attention_policy",
         "heartbeat_interval_seconds"
       ],
+      "recommendation": null,
       "type": "integer"
     },
     {
@@ -308,6 +324,7 @@
       "path": [
         "branch_pattern"
       ],
+      "recommendation": null,
       "type": "string"
     }
   ]

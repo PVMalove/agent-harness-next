@@ -4,27 +4,30 @@
    confirmation that, cancelled, starts nothing. No screenshot baselines (ADR 0029).
 
    Manual mockup-conformance checklist (docs/design/web-console-mockups):
-   #reports
-   - [ ] Title: h1 «Отчёты», subtitle, facts ending with the snapshot time, actions «Обновить» and
-         «Экспорт» (download icon).
-   - [ ] `reports-summary` (4) and `report-kpis` (4): Evidence полно, Stale evidence, Задержка
-         отчёта, QA с первого раза; the risk and blocker tiles sit on the «Качество» tab.
-   - [ ] `reports-grid`: «Отчёты» with type chips, one row (status select, search) and the TUI
-         filters folded under «Ещё фильтры»; compact rows (icon, role · ticket, status words, HH:MM);
-         «Детали отчёта» in the mockup order (summary, Evidence, conclusion, actions).
-   - [ ] QA lane full width under the grid with the QA log folded inside.
+   #reports (v3 shell)
+   - [ ] Page header: h1 «Отчёты», subtitle, the refresh icon and «Экспорт JSON» on the right.
+   - [ ] `reports-summary`: 4 stats and the `report-kpis` facts (Evidence полно, Stale evidence,
+         Задержка отчёта, QA с первого раза) with the snapshot time; risk and blocker tiles sit on
+         the «Качество» tab.
+   - [ ] Pipe tabs Отчёты / Evidence / Качество / Готовность, data from reports.* only.
+   - [ ] «Отчёты»: the list panel with type chips, one row (status select, search) and the TUI
+         filters folded under «Ещё фильтры»; compact rows (icon, role · ticket, status, HH:MM);
+         «Детали отчёта» in the mockup order with the QA lane and its folded log.
+   - [ ] «Готовность»: Release Gate rows with StatusIcon; a candidate opens the shared drawer with
+         Evidence, Качество and Готовность tabs.
    - Deviations: the batch history and chronology stay on Orchestration; «Открыть отчёт» has no
      reader in the web console (docs/design/web-console-mockups/parity-1066.md).
-   #orchestration
-   - [ ] Title with links «Восстановление», «Контейнерный маршрут», «Ход работы», «Отчёты».
-   - [ ] KPI row (`orch-kpis`) of the eight TUI tiles.
-   - [ ] «Аналитика» with tabs Поток работ / Качество / Runtime / Гейты; «Состояние и
-         статистика»; «Lock ledger».
-   - [ ] «История batch» with the state filter; a chosen batch opens its chronology and is carried
-         to Recovery and Container route.
-   - [ ] «Решения»: the pending human decisions with their confirmations.
-   - Deviations: no flow map, heatmap or gate charts (no TUI facts); the TUI command menu is not
-     reproduced (decisions cover the human gate).
+   #orchestration (v3 shell, docs/rfc/web-console-v3/mockup)
+   - [ ] Page header with the refresh icon and «Отчёты» on the right; the summary (batches,
+         dispatch, active, attention) with the pipeline KPI facts and the snapshot time.
+   - [ ] Six pipe tabs: Конвейер (stage strip, dispatch queue with the Активные / Все scope and
+         every ticket, batch cards), Поток (the compact pipeline map 1200×270 and the flow figures),
+         Качество (figures, QA lane), Runtime (figures, «Lock ledger», Recovery / Container route,
+         «История batch»), Контейнер (dispatch containers by ledger state or the empty state),
+         Решения (gate figures and the pending human decisions).
+   - [ ] A chosen batch opens its chronology and is carried to Recovery and Container route.
+   - Deviations: the container state is the ledger's, not runtime liveness; the TUI command menu
+     is not reproduced (decisions cover the human gate).
    #recovery (hidden)
    - [ ] No menu item; «Оркестрация» highlighted; reached from Orchestration with the batch.
    - [ ] History, the recovery gate (mark and reason) and «Открыть recovery».
@@ -116,7 +119,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator("#batch-list")).toHaveCount(0);
     // Every block of the page stays inside its frame, and a report row is one line.
     const wide = await page.evaluate(() =>
-      [...document.querySelectorAll(".reports-page .panel, .reports-page .report-kpis, .reports-page .reports-summary, .report-row, .report-section")]
+      [...document.querySelectorAll(".reports-page .ds-panel, .reports-page .panel, .reports-page .report-kpis, .reports-page .ds-summary, .report-row, .report-section")]
         .filter((box) => box.scrollWidth > box.clientWidth + 1)
         .map((box) => box.className),
     );
@@ -125,30 +128,35 @@ for (const width of [1440, 390]) {
     const rowHeight = await page.locator("#report-list .report-row").first().evaluate((row) => row.getBoundingClientRect().height);
     expect(rowHeight).toBeLessThanOrEqual(width > 600 ? 64 : 96);
     await page.getByRole("tab", { name: "Готовность" }).click();
-    const pills = await page.evaluate(() =>
-      [...document.querySelectorAll("#reports-readiness .orch-pill")].filter((pill) => pill.scrollWidth > pill.clientWidth + 1).length,
-    );
-    expect(pills).toBe(0);
+    await expect(page.locator("#reports-readiness .orch-pill")).toHaveCount(0);
+    await page.locator('#reports-readiness [data-batch="b-887"] .report-ready-open').click();
+    const drawer = page.getByRole("dialog", { name: /Кандидат · #887/ });
+    await expect(drawer.getByRole("tab")).toHaveText(["Evidence", "Качество", "Готовность"]);
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
     expect(await noOverflow(page)).toBe(true);
   });
 
-  test(`publication at ${width} px: five preflight rows whose pill never covers the title`, async ({ page }) => {
+  test(`publication at ${width} px: five preflight rows whose status never covers the title`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "publish", width, "#publish-kpis");
     await expect(page.locator("#publish-preflight-overview .publish-check")).toHaveCount(5);
     const overlaps = await page.evaluate(() =>
       [...document.querySelectorAll("#publish-preflight-overview .publish-check")].filter((row) => {
-        const pill = row.querySelector(".orch-pill")!.getBoundingClientRect();
+        const status = row.querySelector(".ds-status-line")!.getBoundingClientRect();
         const title = row.querySelector("b")!.getBoundingClientRect();
-        return pill.right > title.left;
+        return status.right > title.left;
       }).length,
     );
     expect(overlaps).toBe(0);
-    await expect(page.locator(".publish-candidate .panel-head #publish-batch select")).toBeVisible();
+    await expect(page.locator('#publish-candidates [data-batch="b-887"]')).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Почему" }).click();
     await expect(page.locator("#publish-why li")).toHaveCount(3);
+    await page.getByRole("button", { name: "Открыть кандидата" }).click();
+    await expect(page.getByRole("dialog", { name: /Кандидат · #887/ })).toBeVisible();
+    await page.keyboard.press("Escape");
     const wide = await page.evaluate(() =>
-      [...document.querySelectorAll(".publish-page .panel, .publish-kpis")].filter((box) => box.scrollWidth > box.clientWidth + 1).map((box) => box.className),
+      [...document.querySelectorAll(".publish-page .ds-panel, .publish-page .ds-summary")].filter((box) => box.scrollWidth > box.clientWidth + 1).map((box) => box.className),
     );
     expect(wide).toEqual([]);
     expect(await noOverflow(page)).toBe(true);
@@ -158,25 +166,26 @@ for (const width of [1440, 390]) {
     await mockSocket(page);
     await open(page, "orchestration", width, "#orch-mockup-kpis");
     await expect(page.locator("main [role=tablist]")).toHaveCount(1);
-    await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
+    // The Pipeline tab: three batch cards, five-column dispatch rows and every ticket.
+    await expect(page.locator(".orch-batches > article.orch-batch")).toHaveCount(3);
+    const children = await page.locator(".orch-dispatch-row").evaluateAll((rows) => rows.map((row) => row.children.length));
+    expect(children.every((count) => count === 5)).toBe(true);
+    await expect(page.locator(".orch-ticket-table .orch-ticket-row")).toHaveCount(3);
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Решения/ }).click();
     await expect(page.getByRole("heading", { name: "Ожидающие решения" })).toBeVisible();
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Контейнер/ }).click();
+    await expect(page.locator("#orch-containers [data-container]")).toHaveCount(2);
     await page.locator("#orch-tabs").getByRole("tab", { name: "Runtime" }).click();
     await expect(page.locator("#ledger-lock")).toContainText("Lock ledger занят: report submit");
     await page.locator('#batch-history [data-batch="b-887"]').click();
     await expect(page.locator("#open-recovery")).toHaveAttribute("href", "#/recovery?batch=b-887");
     expect(await noOverflow(page)).toBe(true);
-    // The blocks after the diagram: three batch cards (one row on a wide screen) and five-column dispatch rows.
-    const cards = await page.locator(".orch-batches > article.orch-batch").evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().top)));
-    expect(cards).toHaveLength(3);
-    if (width > 1100) expect(new Set(cards).size).toBe(1);
-    const children = await page.locator(".orch-dispatch-row").evaluateAll((rows) => rows.map((row) => row.children.length));
-    expect(children.every((count) => count === 5)).toBe(true);
-    await expect(page.locator(".orch-ticket-table .orch-ticket-row")).toHaveCount(3);
   });
 
   test(`orchestration at ${width} px: only the live step moves, and never under reduced motion`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "orchestration", width, "#orch-mockup-kpis");
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Поток/ }).click();
     const animations = () =>
       page.locator("#orch-scheme").evaluate((map) => ({
         edges: [...map.querySelectorAll(".orch-map-edge.active")].map((edge) => getComputedStyle(edge).animationName),

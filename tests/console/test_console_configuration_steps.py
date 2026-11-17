@@ -9,7 +9,7 @@ import pytest
 from harness.configuration import parse_object
 from harness.configuration_schema import PACKAGE
 from harness.console.kernel.configuration import ConfigurationDraft
-from harness.console.tui.configuration_steps import steps_for
+from harness.console.kernel.configuration_steps import steps_for
 
 
 @pytest.mark.parametrize("provider", ["none", "native_access", "runtime:factory"])
@@ -77,7 +77,7 @@ def test_absent_optional_parent_does_not_require_children(tmp_path: Path) -> Non
 
 @pytest.mark.parametrize("text", ["NaN", "Infinity", "-Infinity"])
 def test_numeric_steps_reject_non_json_numbers(text: str) -> None:
-    from harness.console.tui.configuration_steps import ConfigurationStep
+    from harness.console.kernel.configuration_steps import ConfigurationStep
 
     step = ConfigurationStep(
         "orchestration.json", ("threshold",), {"type": "number"}, "Threshold", True
@@ -89,7 +89,7 @@ def test_numeric_steps_reject_non_json_numbers(text: str) -> None:
 
 
 def test_nested_nonfinite_values_are_rejected_before_draft_rendering() -> None:
-    from harness.console.tui.configuration_steps import ConfigurationStep
+    from harness.console.kernel.configuration_steps import ConfigurationStep
 
     step = ConfigurationStep(
         "project.json", ("policy",), {"type": "object"}, "Policy", True
@@ -103,8 +103,8 @@ def test_nested_nonfinite_values_are_rejected_before_draft_rendering() -> None:
 def test_recommendations_use_project_facts_and_options_describe_limits(
     tmp_path: Path,
 ) -> None:
-    from harness.console.tui.configuration_steps import step_for_problem
-    from harness.console.tui.project_facts import project_facts
+    from harness.console.kernel.configuration_steps import step_for_problem
+    from harness.console.kernel.project_facts import project_facts
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
     (tmp_path / "Makefile").write_text("verify:\n\t@true\n", encoding="utf-8")
@@ -128,8 +128,26 @@ def test_recommendations_use_project_facts_and_options_describe_limits(
     assert step_for_problem(steps, "что-то без имени поля") is None
 
 
+def test_project_facts_follow_a_changed_makefile_in_a_long_lived_server(
+    tmp_path: Path,
+) -> None:
+    """The web server keeps running while the project changes: a new verify target is seen."""
+    import os
+
+    from harness.console.kernel.project_facts import project_facts
+
+    makefile = tmp_path / "Makefile"
+    makefile.write_text("test:\n\t@true\n", encoding="utf-8")
+    assert project_facts(tmp_path).qa_commands == ("make test",)
+    assert project_facts(tmp_path) is project_facts(tmp_path)  # unchanged files: read once
+    makefile.write_text("verify:\n\t@true\ntest:\n\t@true\n", encoding="utf-8")
+    stamp = makefile.stat().st_mtime_ns + 1_000_000_000
+    os.utime(makefile, ns=(stamp, stamp))
+    assert project_facts(tmp_path).qa_commands == ("make verify",)
+
+
 @pytest.fixture(autouse=True)
 def no_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
-    from harness.console.tui import project_facts
+    from harness.console.kernel import project_facts
 
     monkeypatch.setattr(project_facts, "_default_branch", lambda _repo: None)

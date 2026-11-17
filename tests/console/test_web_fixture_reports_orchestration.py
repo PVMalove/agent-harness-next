@@ -34,6 +34,7 @@ from harness.console.kernel.reports import (
     timeline_payload,
 )
 from harness.console.kernel.batch_history import History, HistoryBatch
+from harness.console.kernel.dispatch_containers import container_payload
 from harness.console.kernel.container_route import Authored
 from harness.console.kernel.coordinator_api import ApiResult, Outcome
 from harness.console.kernel.screen_views import (
@@ -163,9 +164,34 @@ def ledger() -> LedgerView:
     ]
     dispatches: dict[str, JsonObject] = {
         "d-dev": {"role": "developer", "created_at": "2026-11-08T09:10:00+00:00"},
-        "d-rev": {"role": "review", "created_at": "2026-11-08T10:20:00+00:00"},
-        "d-qa": {"role": "qa", "created_at": "2026-11-08T11:15:00+00:00"},
-        "d-wip": {"role": "developer", "created_at": "2026-11-08T11:30:00+00:00"},
+        "d-rev": {
+            "role": "review",
+            "created_at": "2026-11-08T10:20:00+00:00",
+            "execution": {"supervisor": "harness-runtime", "timeout_seconds": 3600},
+        },
+        # The container QA and the docker developer pin their images: they are the dispatch
+        # containers. `execution` alone (the review) is an external worker without a container.
+        "d-qa": {
+            "role": "qa",
+            "created_at": "2026-11-08T11:15:00+00:00",
+            "qa_execution": {
+                "command_timeout_seconds": 900,
+                "poll_interval_seconds": 15,
+                "stop_grace_seconds": 30,
+                "supervisor": "harness-runtime",
+            },
+            "runtime_access": {"container": {"engine": "docker", "worker_image": "harness-qa:local"}},
+            "runtime_images": {"proxy": None, "worker": "sha256:" + "a" * 64},
+        },
+        "d-wip": {
+            "role": "developer",
+            "created_at": "2026-11-08T11:30:00+00:00",
+            "execution": {"supervisor": "harness-runtime", "timeout_seconds": 3600},
+            "runtime_access": {
+                "container": {"engine": "docker", "worker_image": "harness-worker:local"}
+            },
+            "runtime_images": {"proxy": None, "worker": "sha256:" + "b" * 64},
+        },
         "d-old": {"role": "developer", "created_at": "2026-11-01T08:10:00+00:00"},
         "d-arch-888": {"role": "architect", "created_at": "2026-11-08T08:05:00+00:00"},
     }
@@ -324,6 +350,7 @@ def orchestration_payload(view: LedgerView) -> JsonObject:
         "lock": {"lock": LOCK, "error": None},
         "kpi": pipeline_kpi(view, NOW).to_payload(),
         "analytics": pipeline_analytics(view, NOW).to_payload(),
+        "containers": container_payload(view),
     }
 
 

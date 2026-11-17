@@ -90,6 +90,7 @@ async function open(page: Page, width: number) {
   await page.clock.setFixedTime(new Date("2026-11-05T10:41:00Z"));
   await page.goto(`${base()}/#/diagnostics`);
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
+  await page.getByRole("tab", { name: /Проверки/ }).click();
   await expect(page.locator("#diag-total")).toHaveText("12 проверок");
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
@@ -173,17 +174,17 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".command-panel [data-command]")).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width > 600) {
-      // The check list runs down to the window's bottom edge (more than the former three rows),
-      // and the detail keeps its action in view while its body scrolls inside the panel.
-      const list = await page.locator("#diag-list").evaluate((box) => box.getBoundingClientRect());
-      expect(list.height).toBeGreaterThanOrEqual(240);
-      expect(list.bottom).toBeLessThanOrEqual(900);
-      const action = await page.locator("#diag-detail .diag-action").evaluate((box) => {
-        const panel = box.closest(".diag-detail-panel")!.getBoundingClientRect();
-        const own = box.getBoundingClientRect();
-        return own.bottom <= panel.bottom + 1 && own.top >= panel.top;
-      });
-      expect(action).toBe(true);
+      // The check list panel runs down to the window's bottom edge and scrolls inside; so does
+      // the detail panel.
+      for (const panel of ["#diag-checks", "#diag-detail-panel"]) {
+        const box = await page.locator(`${panel} .ds-panel-body`).evaluate((body) => ({
+          ...body.getBoundingClientRect().toJSON(),
+          overflow: getComputedStyle(body).overflowY,
+        }));
+        expect(box.height).toBeGreaterThanOrEqual(240);
+        expect(box.bottom).toBeLessThanOrEqual(900);
+        expect(box.overflow).toBe("auto");
+      }
       const body = page.locator("#diag-detail .diag-detail-body");
       await expect(body).toHaveAttribute("role", "region");
       await expect(body).toHaveAttribute("tabindex", "0");

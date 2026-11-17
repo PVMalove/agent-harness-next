@@ -37,6 +37,417 @@
       "title": "AdapterPayload",
       "type": "object"
     },
+    "AdviceComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "option": {
+          "title": "Option",
+          "type": "string"
+        },
+        "tradeoff": {
+          "title": "Tradeoff",
+          "type": "string"
+        }
+      },
+      "required": [
+        "option",
+        "tradeoff"
+      ],
+      "title": "AdviceComparison",
+      "type": "object"
+    },
+    "AdvicePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "comparison": {
+          "items": {
+            "$ref": "#/$defs/AdviceComparison"
+          },
+          "maxItems": 4,
+          "title": "Comparison",
+          "type": "array"
+        },
+        "impact": {
+          "title": "Impact",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "why": {
+          "title": "Why",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "why",
+        "impact",
+        "comparison"
+      ],
+      "title": "AdvicePayload",
+      "type": "object"
+    },
+    "AdvisorAdviceReply": {
+      "additionalProperties": false,
+      "properties": {
+        "advice": {
+          "$ref": "#/$defs/AdvicePayload"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "outcome": {
+          "const": "advice",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.ask",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "outcome",
+        "advice"
+      ],
+      "title": "AdvisorAdviceReply",
+      "type": "object"
+    },
+    "AdvisorAskRequest": {
+      "additionalProperties": false,
+      "description": "Asks for advice about one parameter; only the file and path travel, never a value.",
+      "properties": {
+        "file": {
+          "enum": [
+            "project.json",
+            "orchestration.json"
+          ],
+          "title": "File",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Id"
+        },
+        "path": {
+          "items": {
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Path",
+          "type": "array"
+        },
+        "provider": {
+          "enum": [
+            "codex",
+            "claude"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.ask",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "provider",
+        "file",
+        "path"
+      ],
+      "title": "AdvisorAskRequest",
+      "type": "object"
+    },
+    "AdvisorCancelReply": {
+      "additionalProperties": false,
+      "properties": {
+        "cancelled": {
+          "title": "Cancelled",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "advisor.cancel",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "cancelled"
+      ],
+      "title": "AdvisorCancelReply",
+      "type": "object"
+    },
+    "AdvisorCancelRequest": {
+      "additionalProperties": false,
+      "description": "Cancels an `advisor.ask` of the same connection.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "advisor.cancel",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "request_id"
+      ],
+      "title": "AdvisorCancelRequest",
+      "type": "object"
+    },
+    "AdvisorCheckReply": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/CliStatusPayload"
+        },
+        "type": {
+          "const": "advisor.check",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "status"
+      ],
+      "title": "AdvisorCheckReply",
+      "type": "object"
+    },
+    "AdvisorCheckRequest": {
+      "additionalProperties": false,
+      "description": "Checks CLI presence, version and login; never invokes a model.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "provider": {
+          "enum": [
+            "codex",
+            "claude"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.check",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "provider"
+      ],
+      "title": "AdvisorCheckRequest",
+      "type": "object"
+    },
+    "AdvisorFallbackReply": {
+      "additionalProperties": false,
+      "description": "No advice: the ordinary hints are shown and the draft does not change.",
+      "properties": {
+        "cause": {
+          "enum": [
+            "refused",
+            "invalid",
+            "timeout",
+            "cancelled"
+          ],
+          "title": "Cause",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "outcome": {
+          "const": "fallback",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "type": {
+          "const": "advisor.ask",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "outcome",
+        "cause",
+        "reason"
+      ],
+      "title": "AdvisorFallbackReply",
+      "type": "object"
+    },
     "AgentStep": {
       "additionalProperties": false,
       "description": "A visible worker step: kind and text only, never thinking, tool inputs or raw JSON.",
@@ -99,6 +510,60 @@
         "observed_at"
       ],
       "title": "AgentStep",
+      "type": "object"
+    },
+    "CliStatusPayload": {
+      "additionalProperties": false,
+      "description": "What the CLI check learned; null for a stage it did not reach.",
+      "properties": {
+        "authorized": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Authorized"
+        },
+        "found": {
+          "title": "Found",
+          "type": "boolean"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "ready": {
+          "title": "Ready",
+          "type": "boolean"
+        },
+        "version_supported": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version Supported"
+        }
+      },
+      "required": [
+        "provider",
+        "found",
+        "version_supported",
+        "authorized",
+        "ready",
+        "message"
+      ],
+      "title": "CliStatusPayload",
       "type": "object"
     },
     "CommandDescriptor": {
@@ -249,6 +714,19 @@
           "const": "configuration.snapshot",
           "title": "Type",
           "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
         }
       },
       "required": [
@@ -293,6 +771,9 @@
           "$ref": "#/$defs/HarnessOverviewReply"
         },
         {
+          "$ref": "#/$defs/FeaturesSnapshotReply"
+        },
+        {
           "$ref": "#/$defs/PagedReply"
         },
         {
@@ -309,17 +790,33 @@
         },
         {
           "$ref": "#/$defs/StepsReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCheckReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorAdviceReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorFallbackReply"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCancelReply"
         }
       ]
     },
     "ConsoleRequest": {
       "discriminator": {
         "mapping": {
+          "advisor.ask": "#/$defs/AdvisorAskRequest",
+          "advisor.cancel": "#/$defs/AdvisorCancelRequest",
+          "advisor.check": "#/$defs/AdvisorCheckRequest",
           "configuration.snapshot": "#/$defs/ConfigurationSnapshotRequest",
           "container_route.snapshot": "#/$defs/ContainerRouteSnapshotRequest",
           "container_route.view": "#/$defs/ContainerRouteViewRequest",
           "decisions.snapshot": "#/$defs/DecisionsSnapshotRequest",
           "diagnostics.snapshot": "#/$defs/DiagnosticsSnapshotRequest",
+          "features.snapshot": "#/$defs/FeaturesSnapshotRequest",
           "harness.maintenance": "#/$defs/HarnessMaintenanceRequest",
           "harness.overview": "#/$defs/HarnessOverviewRequest",
           "harness.snapshot": "#/$defs/HarnessSnapshotRequest",
@@ -427,6 +924,9 @@
           "$ref": "#/$defs/HarnessOverviewRequest"
         },
         {
+          "$ref": "#/$defs/FeaturesSnapshotRequest"
+        },
+        {
           "$ref": "#/$defs/HarnessMaintenanceRequest"
         },
         {
@@ -446,6 +946,15 @@
         },
         {
           "$ref": "#/$defs/ConfigurationSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCheckRequest"
+        },
+        {
+          "$ref": "#/$defs/AdvisorAskRequest"
+        },
+        {
+          "$ref": "#/$defs/AdvisorCancelRequest"
         },
         {
           "$ref": "#/$defs/SnapshotPageRequest"
@@ -971,6 +1480,383 @@
       "title": "ErrorReply",
       "type": "object"
     },
+    "FeaturePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "execution",
+            "roles",
+            "hooks",
+            "context",
+            "process",
+            "publication",
+            "capabilities",
+            "platform"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "off_effect": {
+          "title": "Off Effect",
+          "type": "string"
+        },
+        "required_by": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required By",
+          "type": "array"
+        },
+        "requirements": {
+          "items": {
+            "$ref": "#/$defs/FeatureRequirement"
+          },
+          "title": "Requirements",
+          "type": "array"
+        },
+        "settings": {
+          "items": {
+            "$ref": "#/$defs/FeatureSetting"
+          },
+          "title": "Settings",
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/FeatureSource"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "state": {
+          "enum": [
+            "working",
+            "partial",
+            "not_working",
+            "disabled"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "toggle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeatureToggle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "category",
+        "state",
+        "description",
+        "off_effect",
+        "depends_on",
+        "required_by",
+        "sources",
+        "requirements",
+        "settings",
+        "toggle"
+      ],
+      "title": "FeaturePayload",
+      "type": "object"
+    },
+    "FeatureRequirement": {
+      "additionalProperties": false,
+      "description": "One readiness requirement: a Russian title, its level and the paths or values behind it.",
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "ok",
+            "warn",
+            "err"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "state",
+        "detail"
+      ],
+      "title": "FeatureRequirement",
+      "type": "object"
+    },
+    "FeatureSetting": {
+      "additionalProperties": false,
+      "description": "One configuration key the feature reads: its masked value as compact JSON clipped to 120\ncharacters, or the default text (null: none) when the key is absent.",
+      "properties": {
+        "file": {
+          "enum": [
+            "project.json",
+            "orchestration.json"
+          ],
+          "title": "File",
+          "type": "string"
+        },
+        "path": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Path",
+          "type": "array"
+        },
+        "present": {
+          "title": "Present",
+          "type": "boolean"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "file",
+        "path",
+        "present",
+        "value"
+      ],
+      "title": "FeatureSetting",
+      "type": "object"
+    },
+    "FeatureSource": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "capabilities",
+            "hook",
+            "agent",
+            "project.json",
+            "orchestration.json",
+            "harness.lock",
+            "runtime"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ],
+      "title": "FeatureSource",
+      "type": "object"
+    },
+    "FeatureToggle": {
+      "additionalProperties": false,
+      "description": "The boolean configuration key that switches the feature, its current value and the\nkernel's forecast: the state and requirements of the feature once the key is flipped.",
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "file": {
+          "enum": [
+            "project.json",
+            "orchestration.json"
+          ],
+          "title": "File",
+          "type": "string"
+        },
+        "path": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Path",
+          "type": "array"
+        },
+        "requirements_after": {
+          "items": {
+            "$ref": "#/$defs/FeatureRequirement"
+          },
+          "title": "Requirements After",
+          "type": "array"
+        },
+        "state_after": {
+          "enum": [
+            "working",
+            "partial",
+            "not_working",
+            "disabled"
+          ],
+          "title": "State After",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "path",
+        "enabled",
+        "state_after",
+        "requirements_after"
+      ],
+      "title": "FeatureToggle",
+      "type": "object"
+    },
+    "FeaturesSnapshotReply": {
+      "additionalProperties": false,
+      "description": "The Harness feature registry of Diagnostics, the SHA-256 digests of the configuration\nfiles it was read from (empty: missing file) and whether a configuration write is pending.",
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "config_digests": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "project.json",
+              "orchestration.json"
+            ]
+          },
+          "title": "Config Digests",
+          "type": "object"
+        },
+        "features": {
+          "items": {
+            "$ref": "#/$defs/FeaturePayload"
+          },
+          "title": "Features",
+          "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "transaction_pending": {
+          "title": "Transaction Pending",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "features.snapshot",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "ok",
+        "features",
+        "config_digests",
+        "transaction_pending",
+        "cached",
+        "age_seconds"
+      ],
+      "title": "FeaturesSnapshotReply",
+      "type": "object"
+    },
+    "FeaturesSnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "const": "features.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "FeaturesSnapshotRequest",
+      "type": "object"
+    },
     "HarnessMaintenanceRequest": {
       "additionalProperties": false,
       "properties": {
@@ -1317,6 +2203,50 @@
       "title": "HelpSnapshotRequest",
       "type": "object"
     },
+    "HomeActivityPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "events_per_minute": {
+          "title": "Events Per Minute",
+          "type": "number"
+        },
+        "events_total_window": {
+          "title": "Events Total Window",
+          "type": "integer"
+        },
+        "last_event_age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Event Age Seconds"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/LinkActivityPayload"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "window_seconds": {
+          "title": "Window Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "window_seconds",
+        "events_per_minute",
+        "links",
+        "last_event_age_seconds",
+        "events_total_window"
+      ],
+      "title": "HomeActivityPayload",
+      "type": "object"
+    },
     "HomeProblemsReply": {
       "additionalProperties": false,
       "properties": {
@@ -1420,6 +2350,17 @@
     "HomeSnapshotReply": {
       "additionalProperties": false,
       "properties": {
+        "activity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HomeActivityPayload"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "age_seconds": {
           "title": "Age Seconds",
           "type": "number"
@@ -2149,6 +3090,45 @@
       "type": "object"
     },
     "JsonValue": {},
+    "LinkActivityPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "events_per_minute": {
+          "title": "Events Per Minute",
+          "type": "number"
+        },
+        "last_event_age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Event Age Seconds"
+        },
+        "link": {
+          "enum": [
+            "decision",
+            "typed",
+            "write",
+            "launch",
+            "audit",
+            "receipts"
+          ],
+          "title": "Link",
+          "type": "string"
+        }
+      },
+      "required": [
+        "link",
+        "events_per_minute",
+        "last_event_age_seconds"
+      ],
+      "title": "LinkActivityPayload",
+      "type": "object"
+    },
     "ObservedCheckpoint": {
       "additionalProperties": false,
       "properties": {

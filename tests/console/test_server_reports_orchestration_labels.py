@@ -59,6 +59,8 @@ ROUTE_SOURCES = (
     "orchestration/TabExtras.tsx",
     "orchestration/Charts.tsx",
     "orchestration/BatchHistory.tsx",
+    "orchestration/ContainerTab.tsx",
+    "reports/CandidateDrawer.tsx",
     "routes/Recovery.tsx",
     "routes/ContainerRoute.tsx",
     "views/RowList.tsx",
@@ -212,7 +214,11 @@ def test_the_pages_read_the_fixture_data_over_the_websocket_route(
 
 
 def _catalog_en() -> dict[str, str]:
-    return cast(dict[str, str], json.loads(web_catalog.render())["en"])
+    """The English table the SPA translates with: the kernel catalog and the client table of the
+    v3 screens (`ds.en.json`, whose keys never shadow a kernel string)."""
+    kernel = cast(dict[str, str], json.loads(web_catalog.render())["en"])
+    client = json.loads((FRONTEND / "i18n" / "ds.en.json").read_text(encoding="utf-8"))
+    return {**cast(dict[str, str], client), **kernel}
 
 
 def _page_labels() -> set[str]:

@@ -5,6 +5,7 @@ import { mergeOutput, parseCommands, parseJobSnapshot, parseJobSummary } from ".
 import type { CommandDescriptor, JobSummary, LocalJob } from "./jobs";
 import type {
   ErrorReply,
+  FeaturesSnapshotReply,
   HarnessOverviewReply,
   HomeSnapshotReply,
   HomeSnapshotRequest,
@@ -21,10 +22,12 @@ import type {
 } from "./protocol.gen";
 import { parseStepsReply } from "./steps";
 import type { StepsEvent } from "./steps";
-import { parseHomeSnapshot } from "./types";
-import type { HomeSnapshot } from "./types";
+import { parseHomeActivity, parseHomeSnapshot } from "./types";
+import type { HomeActivity, HomeSnapshot } from "./types";
 import { repoMapReader } from "./repoMap";
 import type { RepoMapEvent } from "./repoMap";
+import { advisorReader } from "./advisor";
+import type { AdvisorEvent, AdvisorProvider } from "./advisor";
 import { decisionsReader } from "./decisions";
 import type { DecisionsEvent } from "./decisions";
 
@@ -55,7 +58,14 @@ export type ClientEvent =
   | { type: "open" }
   | { type: "closed"; wasOpen: boolean; attempt: number; delayMs: number }
   | { type: "health"; reachable: boolean }
-  | { type: "snapshot"; snapshot: HomeSnapshot; cached: boolean; ageSeconds: number }
+  | {
+      type: "snapshot";
+      snapshot: HomeSnapshot;
+      cached: boolean;
+      ageSeconds: number;
+      /** null: the console could not count it (an older server sends no key). */
+      activity?: HomeActivity | null;
+    }
   | { type: "invalid" }
   | { type: "error"; code: string; message: string }
   | { type: "events"; cursor: string; events: unknown[] }
@@ -79,6 +89,7 @@ export type ScreenType =
   | "diagnostics.snapshot"
   | "harness.maintenance"
   | "harness.overview"
+  | "features.snapshot"
   | "reports.snapshot"
   | "reports.report"
   | "reports.timeline"
@@ -93,6 +104,8 @@ export type ScreenType =
   | "task_board.specs"
   | "task_board.snapshot";
 
+/** The typed replies: one frame with the cache facts, no snapshot pages. */
+const TYPED_TYPES: ReadonlySet<string> = new Set(["harness.overview", "features.snapshot"]);
 /** The paged replies without cache facts: a report body, a batch chronology and a file diff. */
 const UNCACHED_TYPES: ReadonlySet<string> = new Set(["reports.report", "reports.timeline", "update_harness.diff"]);
 /** The requests without a `force` field besides the uncached ones: the server refuses it. */
@@ -193,6 +206,13 @@ export interface ConsoleClient {
       False when no socket is open. */
   requestScreen(request: ScreenRequest): boolean;
   subscribeScreens(listener: (event: ScreenEvent) => void): () => void;
+  /** Check a CLI's presence, version and login; never a model call. The request id, or null. */
+  checkAdvisor(provider: AdvisorProvider): string | null;
+  /** Ask for AI advice about one parameter, by file and path only; the request id, or null. */
+  askAdvisor(provider: AdvisorProvider, file: string, path: readonly string[]): string | null;
+  /** Cancel an ask of this connection. */
+  cancelAdvice(requestId: string): boolean;
+  subscribeAdvisor(listener: (event: AdvisorEvent) => void): () => void;
 }
 
 const OPEN = 1;
@@ -211,6 +231,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   const jobListeners = new Set<(event: JobEvent) => void>();
   const mapListeners = new Set<(event: RepoMapEvent) => void>();
   const decisionListeners = new Set<(event: DecisionsEvent) => void>();
+  const advisorListeners = new Set<(event: AdvisorEvent) => void>();
   // The followed jobs by id: the held output and cursor survive reconnects.
   const followed = new Map<string, LocalJob | null>();
   // Open job requests of the current socket by request id.
@@ -268,13 +289,15 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     screenReads.clear();
   };
 
-  const send = (body: Record<string, unknown>): string | null => {
+  /** Sends one request; an unanswered one closes the socket after `timeout` (the AI advice
+      request waits longer than the others). */
+  const send = (body: Record<string, unknown>, timeout: number = timeoutMs): string | null => {
     if (!socket || socket.readyState !== OPEN) return null;
     const id = `${generation}-${++sequence}`;
     const current = socket;
     pending.set(
       id,
-      timers.setTimeout(() => current.close(), timeoutMs),
+      timers.setTimeout(() => current.close(), timeout),
     );
     current.send(JSON.stringify({ id, ...body }));
     return id;
@@ -291,6 +314,9 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
   });
   const decisionReader = decisionsReader(send, settle, (event) => {
     for (const listener of [...decisionListeners]) listener(event);
+  });
+  const advisor = advisorReader(send, settle, (event) => {
+    for (const listener of [...advisorListeners]) listener(event);
   });
 
   const subscribeOrchestration = () => {
@@ -351,9 +377,9 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       screenFailed(key, error?.code ?? "unknown", error?.message ?? "");
       return;
     }
-    if (reply.type === "harness.overview") {
+    if (TYPED_TYPES.has(String(reply.type))) {
       const { v: _v, id: _id, type: _type, ok: _ok, cached, age_seconds, ...value } =
-        reply as unknown as HarnessOverviewReply;
+        reply as unknown as HarnessOverviewReply | FeaturesSnapshotReply;
       if (typeof cached !== "boolean" || typeof age_seconds !== "number") {
         screenFailed(key, "invalid", "");
         return;
@@ -481,6 +507,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     if (typeof id !== "string" || !id.startsWith(`${generation}-`)) return;
     if (mapReader.reply(reply)) return;
     if (decisionReader.reply(reply)) return;
+    if (advisor.reply(reply)) return;
     if (jobRequests.has(id)) {
       onJobReply(id, reply);
       return;
@@ -497,7 +524,13 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
         const ok = reply as unknown as HomeSnapshotReply;
         const snapshot = parseHomeSnapshot(ok.snapshot);
         if (snapshot && typeof ok.cached === "boolean" && typeof ok.age_seconds === "number") {
-          emit({ type: "snapshot", snapshot, cached: ok.cached, ageSeconds: ok.age_seconds });
+          emit({
+            type: "snapshot",
+            snapshot,
+            cached: ok.cached,
+            ageSeconds: ok.age_seconds,
+            activity: parseHomeActivity(ok.activity),
+          });
         } else {
           emit({ type: "invalid" });
         }
@@ -562,6 +595,8 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     clearPending();
     mapReader.reset();
     decisionReader.reset();
+    // A replaced or stopped socket never reaches its onclose: pending advice ends here.
+    advisor.reset();
     latestHome = null;
     subscription = null;
     stepsSubscription = null;
@@ -600,6 +635,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       clearPending();
       mapReader.reset();
       decisionReader.reset();
+      advisor.reset();
       socket = null;
       stepsSubscription = null;
       attempt += 1;
@@ -640,6 +676,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       generation += 1;
       timers.clearTimeout(reconnectTimer);
       clearPending();
+      advisor.reset();
       socket?.close();
       socket = null;
     },
@@ -707,6 +744,13 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     subscribeScreens(listener) {
       screenListeners.add(listener);
       return () => screenListeners.delete(listener);
+    },
+    checkAdvisor: advisor.check,
+    askAdvisor: advisor.ask,
+    cancelAdvice: advisor.cancel,
+    subscribeAdvisor(listener) {
+      advisorListeners.add(listener);
+      return () => advisorListeners.delete(listener);
     },
   };
 }

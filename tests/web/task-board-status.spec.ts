@@ -150,9 +150,9 @@ for (const width of [1440, 390]) {
     await drop(page, "#512", "progress");
     const dialog = page.locator("#board-confirm");
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator(".eyebrow")).toHaveText("СМЕНА СТАТУСА");
+    await expect(dialog.locator(".eyebrow")).toHaveText("Смена статуса");
     await expect(dialog.locator("h2")).toHaveText("#512 → В работе");
-    await expect(dialog.locator(".board-confirm-diff")).toHaveText("ready→progress");
+    await expect(dialog.locator(".board-confirm-diff")).toHaveText("Готово к работе→В работе");
     await expect(dialog.locator(".board-confirm-note")).toHaveText(
       "Сервер запустит смену метки в GitHub как мутирующий job и обновит доску.",
     );

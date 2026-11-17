@@ -54,10 +54,12 @@ export function statusCounts(dispatches: readonly RosterDispatch[]): Record<"all
   return counts;
 }
 
-/** The mockup's list limits: the latest sessions, session events and steps shown at once. */
+/** The mockup's limit of the latest sessions shown at once. */
 export const SESSION_LIMIT = 5;
-export const EVENT_LIMIT = 10;
-export const STEP_LIMIT = 10;
+/** The rows the event and step lists hold before they say how many they leave out; the lists
+    scroll in their block. */
+export const EVENT_LIMIT = 50;
+export const STEP_LIMIT = 100;
 
 /** Whole minutes between an ISO time and `now`; null for an unknown time. */
 export function ageMinutes(iso: string, now: number): number | null {
@@ -516,7 +518,7 @@ export function ActivityStats({
   const minutes = (seconds: number | undefined) => (seconds === undefined ? 0 : Math.round(seconds / 60));
   const maxAge = Math.max(1, ...roles.flatMap((role) => [minutes(open[role]), minutes(p95[role])]));
   return (
-    <section className="panel work-analytics" id="work-stats">
+    <section className="panel work-analytics" id="work-stats" tabIndex={0} role="region" aria-label={t("Статистика")}>
       <div className="panel-head">
         <h2>{t("Статистика")}</h2>
         <span className="small muted">{t("срез последнего часа · только события")}</span>

@@ -1,0 +1,425 @@
+/* Design system v3: the layout of the moved screens (Repo Map, Harness, Help, Diagnostics, Update, Project). General rules
+   live in ds-components.css; nothing here restyles a shared component. */
+.ds-tabpanel { display: flex; flex-direction: column; flex: 1; gap: 12px; min-height: 0; }
+.ds-tabpanel[hidden] { display: none; }
+.ds-foot-note { display: flex; align-items: center; gap: 8px; padding: 0; }
+
+/* Repo Map */
+.ds-files { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-tree { padding: 4px 0; }
+.ds-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 12px;
+  border: 0;
+  background: none;
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-2);
+  text-align: left;
+  cursor: pointer;
+}
+.ds-tree-row:hover { background: var(--ds-hover); }
+.ds-tree-file { font-family: var(--ds-mono); color: var(--ds-muted); }
+.ds-tree-file[aria-pressed="true"] { background: var(--ds-accent-bg); color: var(--ds-fg); box-shadow: inset 2px 0 0 var(--ds-accent); }
+.ds-tree-indent { display: inline-block; flex: none; }
+.ds-tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-tree-status { flex: none; color: var(--ds-muted); font-size: var(--ds-fs-1); font-style: normal; }
+.ds-tree-dir b { font-weight: 600; }
+.ds-file-path { padding: 8px 12px; border-bottom: 1px solid var(--ds-line); color: var(--ds-muted); overflow-wrap: anywhere; }
+.ds-file-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); min-height: 0; }
+.ds-file-code,
+.ds-file-rel { min-width: 0; padding: 8px 12px; }
+.ds-file-rel { border-left: 1px solid var(--ds-line); }
+.ds-rel-title { margin: 0 0 4px; color: var(--ds-muted); font-size: var(--ds-fs-2); font-weight: 600; }
+.ds-rel-group { margin-bottom: 8px; }
+.ds-rel-empty { margin: 0; color: var(--ds-faint); }
+/* Confidence tag on the left, the path (wrapped, so its file name stays visible) with the kind under it. */
+.ds-rel-item { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: baseline; gap: 0 8px; min-height: 28px; padding: 4px 0; }
+.ds-rel-item code { min-width: 0; overflow-wrap: anywhere; }
+.ds-rel-item .ds-tag { text-align: center; }
+.ds-rel-item small { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-faint); font-size: var(--ds-fs-1); }
+/* Signatures wrap under their own text, not under the line number. */
+.ds-file-code .ds-code { white-space: pre-wrap; }
+.ds-line { display: flex; align-items: baseline; }
+.ds-line i { display: inline-block; flex: none; width: 32px; padding-right: 12px; color: var(--ds-faint); font-style: normal; text-align: right; }
+.ds-line code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ds-toolbar-flat { border: 0; border-bottom: 1px solid var(--ds-line); border-radius: 0; background: none; flex-wrap: wrap; }
+.ds-toolbar-flat .ds-input { flex: 1; min-width: 120px; }
+.ds-symbol-row { min-height: 44px; }
+.ds-kind { min-width: 64px; text-align: center; }
+.ds-symbol-name { display: block; font-size: var(--ds-fs-3); font-weight: 600; }
+.ds-graph-scroll { padding: 8px 12px; overflow: auto; }
+/* The graph keeps a readable scale: a narrow panel scrolls it sideways instead of shrinking the text. */
+.ds-graph { width: 100%; min-width: 640px; max-width: 800px; height: auto; }
+.ds-edge { fill: none; stroke: var(--ds-line-strong); stroke-width: 1.5; }
+.ds-node rect { fill: var(--ds-raised); stroke: var(--ds-line-strong); }
+.ds-node:hover rect,
+.ds-node:focus rect { stroke: var(--ds-accent); }
+.ds-node-title { fill: var(--ds-fg); font-family: var(--ds-mono); font-size: var(--ds-fs-2); }
+.ds-link-table { padding: 0 12px 8px; overflow: auto; font-size: var(--ds-fs-2); }
+/* Fixed type and confidence columns keep the rows aligned; the table scrolls sideways when narrow. */
+.ds-link-head,
+.ds-link-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) 136px 120px; gap: 12px; min-width: 600px; padding: 4px 0; border-bottom: 1px solid var(--ds-line); }
+.ds-link-head { color: var(--ds-muted); font-weight: 600; }
+.ds-link-row b { font-family: var(--ds-mono); font-weight: 500; overflow-wrap: anywhere; }
+.ds-link-row span { overflow-wrap: anywhere; }
+.ds-link-row span:nth-child(2) { font-family: var(--ds-mono); }
+/* Hubs: the path takes the free width, the count stays whole on the right. */
+.ds-hubs .ds-kv { grid-template-columns: minmax(0, 1fr) auto; }
+.ds-hubs .ds-kv dt { font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.ds-hubs .ds-kv dd { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: normal; }
+.ds-empty-state { align-items: center; justify-content: center; }
+.ds-empty-state .ds-empty { padding-bottom: 0; }
+.ds-empty-state .ds-note { max-width: 64ch; padding: 4px 16px 8px; font-size: var(--ds-fs-2); text-align: center; }
+.ds-repo .ds-facts-end > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+
+/* Harness */
+.ds-overview-top { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); gap: 12px; flex: 0 1 auto; min-height: 160px; }
+.ds-tiles-panel { flex: 1 0 auto; }
+.ds-tiles-panel .ds-panel-body { display: grid; }
+.ds-tiles-panel .ds-tiles { grid-auto-rows: minmax(56px, 1fr); }
+.ds-loop { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; padding: 8px 12px; }
+.ds-loop-node { overflow-wrap: break-word; display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ds-muted); }
+.ds-loop-node span { min-width: 0; }
+.ds-loop-node b { display: block; color: var(--ds-fg); font-size: var(--ds-fs-2); font-weight: 600; }
+.ds-loop-node small { display: block; font-size: var(--ds-fs-1); }
+.ds-status-line { display: inline-flex; align-items: center; gap: 8px; }
+.ds-container-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--ds-line); }
+.ds-container-stats > div { display: flex; flex-direction: column; padding: 8px 12px; }
+.ds-container-stats > div + div { border-left: 1px solid var(--ds-line); }
+.ds-container-stats span { color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-container-stats b { font-size: var(--ds-fs-3); font-weight: 600; }
+.ds-container-stats small { color: var(--ds-faint); font-size: var(--ds-fs-1); }
+.ds-engine { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 8px 12px; border-bottom: 1px solid var(--ds-line); color: var(--ds-muted); }
+.ds-adapter .ds-row-sub { white-space: normal; }
+
+/* Help */
+.ds-pillars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0 16px 8px; }
+.ds-pillars div { display: flex; flex-direction: column; padding: 8px 12px; border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-raised); }
+.ds-pillars span { color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-app .ds-quick { color: var(--ds-fg); }
+.ds-app a.ds-quick:hover { background: var(--ds-hover); }
+.ds-key-grid { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 8px 12px; }
+.ds-key-grid div { display: flex; align-items: center; gap: 8px; }
+.ds-faq { padding: 4px 12px; }
+.ds-faq details { padding: 8px 0; border-bottom: 1px solid var(--ds-line); }
+.ds-faq summary { font-weight: 600; cursor: pointer; }
+.ds-faq p { margin: 4px 0 0; color: var(--ds-muted); }
+/* Start tab: the reading panel keeps a few readable lines when the window is short. */
+.ds-page[data-section="Help"] .ds-split { min-height: 240px; }
+/* A guide table scrolls sideways inside its block instead of crushing its columns. */
+.ds-page[data-section="Help"] .ds-md th,
+.ds-page[data-section="Help"] .ds-md td { min-width: 96px; }
+/* A search hit's section title lines up with the text under it. */
+#help-search-results .ds-rel-title { padding: 12px 16px 0; }
+#help-search-results .ds-md { padding-top: 4px; }
+
+/* Diagnostics: the Features tab (list, detail, switch plan) and the Checks tab (list, detail) */
+.ds-feature-filters { flex-wrap: wrap; }
+.ds-feature-filters .ds-filter button { display: inline-flex; align-items: center; gap: 4px; }
+.ds-feature-filters .ds-status { width: 20px; height: 20px; }
+.ds-feature-category { display: inline-flex; }
+.ds-feature-note { margin-left: auto; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-features { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr) minmax(240px, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-group-title { margin: 0; padding: 8px 12px 4px; color: var(--ds-muted); font-size: var(--ds-fs-1); font-weight: 600; }
+.ds-feature-detail { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.ds-feature-detail > .ds-note,
+.ds-feature-detail > .ds-alert,
+.ds-feature-detail > .ds-pipe { margin: 0 12px; }
+.ds-feature-head { display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.ds-feature-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--ds-muted); }
+.ds-feature-links { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px; }
+.ds-feature-plan { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.ds-feature-ba { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 8px 12px; padding: 0 12px; color: var(--ds-muted); }
+.ds-feature-counts { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
+.ds-feature-counts > span { display: inline-flex; align-items: center; gap: 4px; color: var(--ds-fg); }
+.ds-feature-counts .ds-status { width: 20px; height: 20px; }
+.ds-faint { color: var(--ds-faint); }
+#features-list .ds-row-button { min-height: 44px; }
+/* Hidden status words (.ds-sr) are absolutely positioned: a scrolling body keeps them inside. */
+.ds-features .ds-panel-body,
+.ds-diag-checks .ds-panel-body,
+.ds-update .ds-panel-body,
+.ds-project-step .ds-panel-body { position: relative; }
+.ds-diag-checks { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-diag-checks .ds-legacy-island { overflow: visible; min-height: 100%; }
+/* Between a phone and a wide window three columns squeeze the detail: the list keeps its column, the detail and the switch plan share the other. */
+@media (min-width: 901px) and (max-width: 1280px) {
+  .ds-features { grid-template-columns: minmax(240px, 1fr) minmax(0, 1.4fr); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); }
+  .ds-features > #features-list { grid-row: 1 / span 2; }
+}
+
+/* Update: the files by drift kind, the selected file and the aside «Как обновить» */
+.ds-update { display: grid; grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr) minmax(280px, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-update-file,
+.ds-update-how { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.ds-update-file > .ds-pipe,
+.ds-update-how > .ds-pipe { margin: 0 12px; }
+.ds-diff { margin: 0 12px; overflow-x: auto; white-space: pre; }
+.ds-diff-line { display: block; }
+.ds-diff-add { color: var(--ds-ok); }
+.ds-diff-del { color: var(--ds-err); }
+.ds-diff-file .ds-diff-path { font-family: var(--ds-mono); font-weight: 500; }
+.ds-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 12px; }
+.ds-choice { cursor: pointer; }
+.ds-choice[data-on="true"] { background: var(--ds-accent-bg); box-shadow: inset 2px 0 0 var(--ds-accent); }
+.ds-update-count b { min-width: 24px; text-align: right; }
+.ds-verdict-ok { color: var(--ds-ok); }
+.ds-verdict-warn { color: var(--ds-warn); }
+.ds-verdict-err { color: var(--ds-err); }
+.ds-panel-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--ds-line); }
+.ds-panel-foot .ds-note { flex: 1 1 100%; padding: 0; }
+#update-how .ds-panel-body { display: flex; flex-direction: column; }
+#update-how .ds-update-how { flex: 1; min-height: 0; overflow: auto; container-type: inline-size; }
+/* A long path loses its start, not its file name: the row reads right to left, the bdi keeps the text order. */
+.ds-diff-file .ds-diff-path { direction: rtl; text-align: left; }
+#update-cache { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#update-versions .ds-facts { padding-block: 8px; }
+#update-versions .ds-facts-main { gap: 4px 16px; }
+#update-versions .ds-stat-caption { white-space: normal; overflow-wrap: anywhere; }
+#update-modes-card .ds-row-title,
+#update-modes-card .ds-row-sub { overflow: visible; white-space: normal; }
+#update-modes-card .ds-row { padding-block: 8px; }
+#update-plan .ds-code { margin: 0 12px; overflow-x: auto; }
+/* The four steps of the aside sit in a grid, so a wrapped tab never starts a row with a separator. */
+.ds-update-how > .ds-pipe { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; }
+.ds-update-how > .ds-pipe .ds-pipe-tab::before { display: none; }
+@container (min-width: 380px) {
+  .ds-update-how > .ds-pipe { grid-template-columns: repeat(4, max-content); justify-content: space-between; }
+}
+/* Four stats do not fit a 1024 px window side by side: two by two, the screen scrolls, the three
+   panels become two over one so the diff keeps a readable width. */
+@media (min-width: 901px) and (max-width: 1279px) {
+  #update-versions .ds-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #update-versions .ds-stat:nth-child(odd) { border-left: 0; }
+  #update-versions .ds-stat:nth-child(n + 3) { border-top: 1px solid var(--ds-line); }
+  .ds-page[data-section="Update Harness"].ds-fit { height: auto; }
+  .ds-page[data-section="Update Harness"] .ds-update { flex: none; grid-template-columns: minmax(240px, 2fr) minmax(0, 3fr); grid-template-rows: 480px auto; }
+  .ds-page[data-section="Update Harness"] .ds-update > :nth-child(3) { grid-column: 1 / -1; }
+}
+@media (min-width: 1280px) {
+  #update-versions .ds-stats { grid-template-columns: minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6fr) minmax(0, 7fr); }
+}
+
+/* Project: the five-step wizard */
+.ds-wizard { display: flex; align-items: center; gap: 12px; }
+.ds-wizard .ds-pipe { flex: 1; min-width: 0; }
+.ds-wizard > .ds-note { flex: none; padding: 0; }
+.ds-project-step[hidden] { display: none; }
+.ds-project-step > .ds-panel:not(.ds-panel-fill) { flex: none; }
+.ds-project-select { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-project-left { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+/* The panels without a list keep their content height; only the project list gives way, down to three rows. */
+.ds-project-left > .ds-panel:not(.ds-panel-fill) { flex: none; }
+/* A short desktop window (1024x768): the list and the plan keep a usable height and the page scrolls;
+   from 820 px tall the whole step fits the window (console-fit.spec.ts). */
+@media (min-width: 901px) and (max-height: 820px) {
+  .ds-project-select { min-height: 576px; }
+  .ds-project-install { min-height: 480px; }
+  #open-project-list { min-height: 168px; }
+}
+.ds-project-detail { display: flex; flex-direction: column; min-height: 0; }
+.ds-project-install { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1 1 200px; min-height: 0; }
+.ds-project-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 8px; background: var(--ds-hover); color: var(--ds-muted); }
+.ds-project-current { border-bottom: 0; }
+.ds-project-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.ds-project-meta > span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.ds-project-current .ds-project-meta { overflow: visible; white-space: normal; }
+.ds-project-clock { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#open-project-path-status:not(:empty) { display: block; }
+.ds-project-about { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; }
+.ds-project-provider { display: flex; align-items: center; gap: 8px; }
+.ds-project-name { margin: 0; font-size: var(--ds-fs-3); font-weight: 600; }
+.ds-project-command { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; }
+.ds-project-command > code { margin: 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--ds-bg); font-family: var(--ds-mono); overflow-wrap: anywhere; white-space: pre-wrap; }
+.ds-project-command > .ds-note { padding-block: 0; }
+.ds-project-path { align-items: flex-end; padding-block: 8px; }
+.ds-project-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; min-width: 0; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-project-check-actions { padding-block: 8px; }
+.ds-project-bar { display: flex; height: 8px; margin: 4px 12px; overflow: hidden; border-radius: 4px; background: var(--ds-hover); }
+.ds-project-bar [data-tone="ok"] { background: var(--ds-ok); }
+.ds-project-bar [data-tone="warn"] { background: var(--ds-warn); }
+.ds-project-bar [data-tone="err"] { background: var(--ds-err); }
+.ds-project-bar [data-tone="wait"] { background: var(--ds-faint); }
+.ds-project-flow { grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; list-style: none; }
+.ds-project-flow .ds-loop-node { align-items: flex-start; }
+.ds-project-flow .ds-loop-node > .ds-ic-sm { margin-top: 2px; }
+.ds-project-flow-value { display: block; color: var(--ds-fg); font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.ds-project-flow [data-tone="ok"] > .ds-ic-sm { color: var(--ds-ok); }
+.ds-project-flow [data-tone="warn"] > .ds-ic-sm { color: var(--ds-warn); }
+.ds-project-flow [data-tone="active"] > .ds-ic-sm { color: var(--ds-accent); }
+.ds-project-caps .ds-row-sub { white-space: normal; }
+.ds-kv dd[data-tone="ok"] { color: var(--ds-ok); }
+.ds-kv dd[data-tone="warn"] { color: var(--ds-warn); }
+.ds-kv dd[data-tone="err"] { color: var(--ds-err); }
+.ds-tag[data-on="true"] { background: var(--ds-ok-bg); color: var(--ds-ok); }
+
+/* Settings: five tabs; the overview and history in two columns whose last panel takes the free
+   height, the wizard of the Parameters tab and the JSON editor. */
+.ds-settings-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1 1 280px; min-height: 0; }
+.ds-settings-col { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+/* A panel that is not the column's last one shows all its rows; the fill panel below takes the rest. */
+.ds-settings-col > .ds-panel:not(.ds-panel-fill) { flex: none; }
+.ds-settings-json { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.ds-settings-files { flex: none; }
+.ds-settings-editor .ds-panel-body { display: flex; flex-direction: column; gap: 8px; }
+.ds-settings-text { flex: 1 1 240px; width: 100%; min-height: 240px; resize: none; font-family: var(--ds-mono); font-size: var(--ds-fs-2); line-height: 1.5; }
+.ds-settings-desc { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-settings-changes code { font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.ds-settings-vfile { margin: 0; padding: 8px 12px 0; color: var(--ds-muted); font-size: var(--ds-fs-2); font-weight: 600; }
+.ds-settings [data-tone="ok"] { color: var(--ds-ok); }
+.ds-settings [data-tone="warn"] { color: var(--ds-warn); }
+.ds-settings [data-tone="err"] { color: var(--ds-err); }
+.ds-settings .ds-tag[data-tone="ok"] { background: var(--ds-ok-bg); }
+.ds-settings .ds-tag[data-tone="warn"] { background: var(--ds-warn-bg); }
+.ds-settings .ds-tag[data-tone="err"] { background: var(--ds-err-bg); }
+.ds-wz { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: 12px; padding: 8px 12px; }
+.ds-wz-side { display: flex; flex-direction: column; gap: 8px; }
+.ds-wz-side-head { display: flex; justify-content: space-between; color: var(--ds-muted); font-size: var(--ds-fs-2); }
+.ds-wz-groups { display: flex; flex-direction: column; gap: 4px; }
+.ds-wz-group { display: flex; justify-content: space-between; min-height: 28px; padding: 2px 8px; border: 1px solid var(--ds-line); border-radius: 8px; background: none; color: var(--ds-fg); font-size: var(--ds-fs-2); text-align: left; cursor: pointer; }
+.ds-wz-group[aria-pressed="true"] { background: var(--ds-accent-bg); border-color: var(--ds-accent); }
+.ds-wz-group:disabled { opacity: 0.5; cursor: default; }
+.ds-wz-progress { display: flex; flex-direction: column; gap: 4px; color: var(--ds-muted); font-size: var(--ds-fs-1); }
+.ds-wz-bar { height: 6px; overflow: hidden; border-radius: 4px; background: var(--ds-hover); }
+.ds-wz-bar i { display: block; height: 100%; background: var(--ds-accent); }
+.ds-wz-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ds-wz-step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--ds-muted); font-size: var(--ds-fs-2); }
+.ds-wz-step .ds-select { flex: 1 1 240px; min-width: 0; }
+.ds-wz-param { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-surface); }
+.ds-wz-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-weight: 600; }
+.ds-wz-head code,
+.ds-wz-line code { font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.ds-wz-desc { margin: 0; color: var(--ds-muted); }
+.ds-wz-line { color: var(--ds-fg); font-size: var(--ds-fs-2); }
+.ds-wz-rec { padding: 8px; border-radius: 8px; background: var(--ds-accent-bg); }
+.ds-wz-muted { color: var(--ds-muted); }
+.ds-wz-toggle { display: inline-flex; align-items: center; gap: 8px; }
+.ds-wz-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ds-wz-empty { padding: 12px; }
+.ds-advisor-choices { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ds-advisor-status { padding: 0; }
+/* The last row of the advisor status is a sentence ("Итог"), not a value: running text, not mono. */
+.ds-advisor-status dd:last-child { font-family: var(--ds-sans); }
+.ds-advisor-compare { margin: 0; padding-left: 16px; color: var(--ds-muted); }
+/* Settings polish: the muted tail of a head and the path code are regular weight, a long field stays
+   a readable length, an advice block spaces its parts, the group list stays in view while the long
+   description scrolls. */
+.ds-wz-head .ds-wz-muted,
+.ds-wz-head code { font-weight: 400; }
+.ds-wz-head code { color: var(--ds-muted); }
+.ds-wz-desc { max-width: 104ch; }
+.ds-wz-param > .ds-input,
+.ds-wz-param > .ds-select { max-width: 640px; }
+.ds-wz-toggle input { accent-color: var(--ds-accent); }
+.ds-wz-empty.ds-panel { border: 0; background: none; }
+.ds-advisor > .ds-note { padding: 0; }
+.ds-advisor #configuration-advice > * + * { margin-top: 8px; }
+.ds-settings-desc { border-top: 1px solid var(--ds-line); }
+.ds-settings-changes .ds-row { flex-wrap: wrap; gap: 4px 12px; }
+.ds-settings-changes .ds-row > code:first-child { color: var(--ds-muted); }
+.ds-settings-changes .ds-row > code:last-child { color: var(--ds-fg); }
+/* A version row wraps its id under the date when the column is narrow, instead of cutting the date. */
+#configuration-versions .ds-row-button { flex-wrap: wrap; gap: 4px 12px; }
+#configuration-versions .ds-row-main { flex: 1 1 200px; }
+#configuration-versions .ds-row-end { margin-left: auto; overflow-wrap: anywhere; white-space: normal; }
+#configuration-versions .ds-panel-body > .ds-btn { max-width: calc(100% - 24px); margin: 0 12px 8px; white-space: normal; text-align: center; }
+@media (min-width: 901px) {
+  .ds-wz-side { position: sticky; top: 8px; align-self: start; }
+}
+/* Four summary tiles are too narrow side by side below ~1400 px: two by two, like the Harness overview. */
+@media (min-width: 901px) and (max-width: 1400px) {
+  #configuration-kpi .ds-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #configuration-kpi .ds-stat:nth-child(odd) { border-left: 0; }
+  #configuration-kpi .ds-stat:nth-child(n + 3) { border-top: 1px solid var(--ds-line); }
+}
+/* Two tiles a row on a phone are about 170 px: label, value and caption stack inside a tile. */
+@media (max-width: 900px) {
+  #configuration-kpi .ds-stat { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "value" "caption"; }
+  #configuration-kpi .ds-stat-value { text-align: left; }
+}
+
+/* Short windows (900-960 px high, RFC section 5): the Harness overview condenses instead of clipping.
+   The page subtitle goes, the installation rows put their caption on the title line and the tile
+   captions take one line, so every panel shows all its rows. */
+@media (max-height: 960px) and (min-width: 901px) {
+  .ds-page[data-section="Harness"] .ds-sub,
+  .ds-page[data-section="Configuration"] .ds-sub { display: none; }
+  .ds-overview .ds-install .ds-row { min-height: 28px; padding-block: 2px; }
+  .ds-overview .ds-install .ds-row-main { display: flex; align-items: baseline; gap: 8px; }
+  .ds-overview .ds-install .ds-row-title { flex: none; }
+  .ds-overview .ds-install .ds-row-sub { flex: 1; min-width: 0; }
+  .ds-overview .ds-tile-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-overview .ds-tiles-panel .ds-tiles { grid-auto-rows: auto; }
+}
+
+/* Harness overview in a window too small for every panel (1024x768, 1366x768): the overview keeps
+   its content height and the page scrolls, instead of squeezing the system loop to a clipped strip.
+   The installation and attention heads wrap their actions rather than cut them. */
+.ds-overview-top .ds-panel-head { flex-wrap: wrap; }
+@media (min-width: 901px) and (max-width: 1180px), (min-width: 901px) and (max-height: 800px) {
+  .ds-page[data-section="Harness"].ds-fit { height: auto; }
+  .ds-page[data-section="Harness"] .ds-tabpanel { flex: none; }
+}
+/* Four summary tiles of 183 px broke the labels mid-word at 1024: two by two there. */
+@media (min-width: 901px) and (max-width: 1180px) {
+  #harness-kpis .ds-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #harness-kpis .ds-stat:nth-child(odd) { border-left: 0; }
+  #harness-kpis .ds-stat:nth-child(n+3) { border-top: 1px solid var(--ds-line); }
+}
+
+/* Narrow windows: last in the sheet, so it wins over the base rules above at equal specificity. */
+@media (max-width: 900px) {
+  /* The page scrolls on a phone: a tab panel or a split keeps its content height, or its stacked
+     panels spill over each other (UI audit 2026-11-17: Help, Repo Map, Reports, Publish). */
+  .ds-tabpanel,
+  .ds-split { flex: none; }
+  .ds-overview-top,
+  .ds-loop,
+  .ds-container-stats { grid-template-columns: minmax(0, 1fr); }
+  .ds-files,
+  .ds-split,
+  .ds-features,
+  .ds-diag-checks,
+  .ds-update,
+  .ds-project-select,
+  .ds-project-install,
+  .ds-file-cols { grid-template-columns: minmax(0, 1fr); }
+  .ds-file-rel { border-left: 0; }
+  .ds-diff-file .ds-diff-path { direction: ltr; }
+  .ds-settings-cols,
+  .ds-wz { grid-template-columns: minmax(0, 1fr); }
+  .ds-settings-cols { flex: none; }
+  .ds-wz-groups { flex-direction: row; flex-wrap: wrap; }
+  .ds-wz-group { flex: 1 1 120px; }
+  /* The page scrolls on a phone: the grids take their content height, never a share of the window. */
+  .ds-features,
+  .ds-diag-checks,
+  .ds-update,
+  .ds-project-select,
+  .ds-project-install,
+  .ds-page[data-section="Help"] .ds-split { flex: none; }
+  .ds-pillars { grid-template-columns: minmax(0, 1fr); }
+  /* Repo Map: the tab panel and its grids take their content height; the tree scrolls inside itself,
+     so the file detail stays one swipe away. */
+  .ds-repo .ds-tabpanel,
+  .ds-repo .ds-files,
+  .ds-repo .ds-split { flex: none; }
+  .ds-repo .ds-files-tree .ds-panel-body { max-height: 320px; overflow: auto; }
+  /* The search takes its own line, the module filter and reset share the next one; the stale alert wraps its button. */
+  .ds-repo .ds-toolbar { flex-wrap: wrap; }
+  .ds-repo .ds-toolbar .ds-search { flex: 1 1 100%; }
+  .ds-repo .ds-toolbar .ds-select { flex: 1 1 160px; min-width: 0; }
+  .ds-repo .ds-alert { flex-wrap: wrap; }
+  .ds-repo .ds-alert > div { flex: 1 1 200px; }
+  /* Project: the step note drops under the tabs instead of squeezing them. */
+  .ds-wizard { flex-wrap: wrap; align-items: flex-start; gap: 4px 12px; }
+  .ds-wizard .ds-pipe { flex: 1 1 100%; }
+  .ds-project-select,
+  .ds-project-install { min-height: 0; }
+  #open-project-list { min-height: 0; }
+}

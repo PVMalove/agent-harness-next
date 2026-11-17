@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 const MOCKUP_CSS = readFileSync(
-  join(resolve(__dirname, "../.."), "docs/design/web-console-mockups/execution-console.css"),
+  join(resolve(__dirname, "../.."), "harness/console/frontend/legacy/execution-console.css"),
   "utf-8",
 );
 
@@ -49,4 +49,56 @@ describe("the mockup palette", () => {
     expect(b).toBeGreaterThanOrEqual(g);
     expect(contrast(tokens.selfg, background)).toBeGreaterThanOrEqual(4.5);
   });
+});
+
+describe("the design system v3 palette", () => {
+  const ds = rootTokens(readFileSync(join(resolve(__dirname, "../.."), "harness/console/frontend/src/styles/ds-tokens.css"), "utf-8"));
+  for (const tone of ["ds-ok", "ds-warn", "ds-err", "ds-muted", "ds-faint", "ds-accent"]) {
+    for (const surface of ["ds-bg", "ds-surface", "ds-raised", "ds-rail"]) {
+      test(`--${tone} text reaches 4.5:1 on --${surface}`, () => {
+        expect(contrast(ds[tone]!, ds[surface]!)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+  for (const [tone, surface] of [["ds-ok", "ds-ok-bg"], ["ds-warn", "ds-warn-bg"], ["ds-err", "ds-err-bg"], ["ds-accent", "ds-accent-bg"]] as const) {
+    test(`--${tone} on its own tint --${surface} reaches 4.5:1`, () => {
+      expect(contrast(ds[tone]!, ds[surface]!)).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+  // A selected or hovered row keeps its secondary text readable (review of the v3 mockup, 2026-11-16).
+  for (const tone of ["ds-muted", "ds-faint", "ds-accent"]) {
+    for (const surface of ["ds-accent-bg", "ds-hover"]) {
+      test(`--${tone} text reaches 4.5:1 on the row background --${surface}`, () => {
+        expect(contrast(ds[tone]!, ds[surface]!)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+  // The border of a field or a switch track is a non-text control edge: 3:1 (WCAG 1.4.11).
+  for (const surface of ["ds-bg", "ds-surface", "ds-raised"]) {
+    test(`the control border --ds-control reaches 3:1 on --${surface}`, () => {
+      expect(contrast(ds["ds-control"]!, ds[surface]!)).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
+
+/* Owner request 2026-11-16: the accent and the three status hues are pastels (light, low chroma),
+ * and the legacy sheet of the not yet moved screens carries the same four hues. */
+describe("the pastel hues", () => {
+  const ds = rootTokens(readFileSync(join(resolve(__dirname, "../.."), "harness/console/frontend/src/styles/ds-tokens.css"), "utf-8"));
+  const channels = (hex: string) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255);
+
+  for (const tone of ["ds-accent", "ds-ok", "ds-warn", "ds-err"]) {
+    test(`--${tone} is light and low in chroma`, () => {
+      const rgb = channels(ds[tone]!);
+      const [max, min] = [Math.max(...rgb), Math.min(...rgb)];
+      expect((max + min) / 2).toBeGreaterThanOrEqual(0.75);
+      expect(max - min).toBeLessThanOrEqual(0.35);
+    });
+  }
+
+  for (const [legacy, tone] of [["primary", "ds-accent"], ["ok", "ds-ok"], ["warn", "ds-warn"], ["err", "ds-err"]] as const) {
+    test(`the legacy --${legacy} equals --${tone}`, () => {
+      expect(tokens[legacy]!.toLowerCase()).toBe(ds[tone]!.toLowerCase());
+    });
+  }
 });

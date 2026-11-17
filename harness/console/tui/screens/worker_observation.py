@@ -265,7 +265,10 @@ class WorkerObservationScreen(ConsoleShell):
         self._events: list[JsonObject] = []
         self._last_operation = "—"
         self._polling = False
-        view = reports.load_ledger_view(repo)
+        # The screen is built on the UI thread, so the read of the runtime store is short.
+        view = reports.load_ledger_view(
+            repo, read_timeout=reports.INTERACTIVE_STORE_READ_TIMEOUT_SECONDS
+        )
         ordered = sorted(view.stages, key=lambda stage: stage.at, reverse=True)
         ordered.sort(key=lambda stage: stage.finished)
         self._stages = {stage.dispatch_id: stage for stage in ordered}
@@ -651,11 +654,19 @@ class WorkerObservationScreen(ConsoleShell):
     def action_open_batch(self) -> None:
         from .reports import BatchTimelineScreen
 
-        timeline = reports.load_ledger_view(self.repo).timeline(
-            self.snapshot.get("batch_id", "")
-        )
-        if timeline:
-            self.app.push_screen(BatchTimelineScreen(timeline, self.repo))
+        repo, batch_id = self.repo, self.snapshot.get("batch_id", "")
+
+        def work() -> None:
+            timeline = reports.load_ledger_view(repo).timeline(batch_id)
+
+            def show() -> None:
+                if timeline and self.is_mounted:
+                    self.app.push_screen(BatchTimelineScreen(timeline, repo))
+
+            call_from_worker(self, show)
+
+        # The ledger is read off the UI thread, like the other screens do.
+        self.run_worker(work, thread=True, group="open-batch", exclusive=True)
 
     def _paint_context(
         self, snapshot: JsonObject, worker: str, lines: list[str]

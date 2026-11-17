@@ -45,7 +45,7 @@ describe("connection views", () => {
     setup();
     act(() => FakeSocket.last.open());
     reply();
-    expect(chip().className).toBe("conn-chip connected");
+    expect(chip().className).toBe("ds-conn ds-conn-connected");
     expect(chip().textContent).toBe("online");
     expect(banner()).toBeNull();
     expect(page()).toBeNull();
@@ -57,7 +57,7 @@ describe("connection views", () => {
     act(() => FakeSocket.last.open());
     reply();
     act(() => FakeSocket.last.close());
-    expect(chip().className).toBe("conn-chip reconnecting");
+    expect(chip().className).toBe("ds-conn ds-conn-reconnecting");
     expect(banner()!.textContent).toContain("Попытка 1 · следующая через 0.5 с · Последний снимок устарел");
     expect(document.getElementById("health-ok")!.textContent).toBe("42");
     const retry = vi.spyOn(client, "retryNow");
@@ -70,7 +70,7 @@ describe("connection views", () => {
     const { client } = setup(false);
     act(() => FakeSocket.last.close());
     await flush();
-    expect(chip().className).toBe("conn-chip offline");
+    expect(chip().className).toBe("ds-conn ds-conn-offline");
     expect(page()!.getAttribute("data-status")).toBe("no_server");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Нет связи с сервером консоли");
     expect(page()!.textContent).toContain("ws://127.0.0.1:1/ws");
@@ -85,7 +85,7 @@ describe("connection views", () => {
     setup(true);
     act(() => FakeSocket.last.close());
     await flush();
-    expect(chip().className).toBe("conn-chip error");
+    expect(chip().className).toBe("ds-conn ds-conn-error");
     expect(page()!.textContent).toContain("Сервер отклонил сессию");
   });
 
@@ -112,7 +112,7 @@ describe("connection views", () => {
     const { client } = setup();
     act(() => FakeSocket.last.open());
     reply({ ...fixture, health: { ok: 0, warn: 0, fail: 0, skipped: 0 }, problems: [], problems_total: 0 });
-    expect(chip().className).toBe("conn-chip empty");
+    expect(chip().className).toBe("ds-conn ds-conn-empty");
     expect(chip().textContent).toBe("пусто");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Данных пока нет");
     const refresh = vi.spyOn(client, "requestHome");

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from harness.console.backend.api.schemas import REPLIES, HarnessOverviewReply
+from harness.console.kernel.check_rationale import RATIONALES
 from harness.console.kernel.health_report import report_from_payload
 from harness.console.kernel.maintenance import MaintenanceView
 from harness.health.report_json import to_json
@@ -31,6 +32,18 @@ def test_the_diagnostics_fixture_is_a_health_report_of_every_status() -> None:
         "fail",
         "skipped",
     }
+
+
+def test_the_57_check_fixture_is_a_health_report_of_registry_checks() -> None:
+    # console-fit.spec.ts measures the check list with it: 57 checks of the real registry ids.
+    payload = _fixture("diagnostics-report-57.json")
+    report = report_from_payload(payload)
+    assert to_json(report) == payload
+    assert len(report.checks) == 57
+    ids = [check.id for check in report.checks]
+    assert len(set(ids)) == 57
+    assert set(ids) <= set(RATIONALES)
+    assert {check.status for check in report.checks} == {"ok", "warn", "fail", "skipped"}
 
 
 def test_the_maintenance_fixture_decodes_with_its_digests_and_totals() -> None:

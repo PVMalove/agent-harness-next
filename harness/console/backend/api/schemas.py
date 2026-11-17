@@ -11,9 +11,14 @@ import json
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictInt, TypeAdapter
 
-from ...kernel.protocol import MAX_ID_CHARS, MAX_PATH_CHARS, MAX_SKIPPED
+from ...kernel.protocol import (
+    CONFIGURATION_VERSION_ID,
+    MAX_ID_CHARS,
+    MAX_PATH_CHARS,
+    MAX_SKIPPED,
+)
 from .request_router import RequestRouter
 
 REGENERATE = "python -m harness.console.backend.api.schemas"
@@ -21,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 OPENAPI_PATH = HERE / "openapi.json"
 WS_SCHEMA_PATH = HERE / "ws-schema.json"
 
-RequestId = Annotated[str, Field(max_length=64)] | int | None
+RequestId = Annotated[str, Field(max_length=64)] | StrictInt | None
 
 
 # Pydantic's synthesized model signatures carry Any; as in harness/json_types.py the explicit-any
@@ -220,6 +225,12 @@ class HarnessOverviewRequest(_Strict):  # type: ignore[explicit-any]
     force: bool = False
 
 
+class FeaturesSnapshotRequest(_Strict):  # type: ignore[explicit-any]
+    id: RequestId = None
+    type: Literal["features.snapshot"]
+    force: bool = False
+
+
 class HarnessMaintenanceRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["harness.maintenance"]
@@ -261,6 +272,41 @@ class ConfigurationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
     id: RequestId = None
     type: Literal["configuration.snapshot"]
     force: bool = False
+    # A saved version whose masked content the reply adds as `version`.
+    version: (
+        Annotated[str, Field(pattern=f"^{CONFIGURATION_VERSION_ID}$")] | None
+    ) = None
+
+
+AdvisorProvider = Literal["codex", "claude"]
+AdvisorPathPart = Annotated[str, Field(pattern="^[A-Za-z0-9_.-]{1,64}$")]
+RequiredId = Annotated[str, Field(min_length=1, max_length=64)] | StrictInt
+
+
+class AdvisorCheckRequest(_Strict):  # type: ignore[explicit-any]
+    """Checks CLI presence, version and login; never invokes a model."""
+
+    id: RequestId = None
+    type: Literal["advisor.check"]
+    provider: AdvisorProvider
+
+
+class AdvisorAskRequest(_Strict):  # type: ignore[explicit-any]
+    """Asks for advice about one parameter; only the file and path travel, never a value."""
+
+    id: RequiredId
+    type: Literal["advisor.ask"]
+    provider: AdvisorProvider
+    file: Literal["project.json", "orchestration.json"]
+    path: Annotated[list[AdvisorPathPart], Field(min_length=1, max_length=8)]
+
+
+class AdvisorCancelRequest(_Strict):  # type: ignore[explicit-any]
+    """Cancels an `advisor.ask` of the same connection."""
+
+    id: RequestId = None
+    type: Literal["advisor.cancel"]
+    request_id: RequiredId
 
 
 class SnapshotPageRequest(_Strict):  # type: ignore[explicit-any]
@@ -319,6 +365,7 @@ ConsoleRequest = Annotated[
     | DiagnosticsSnapshotRequest
     | HarnessSnapshotRequest
     | HarnessOverviewRequest
+    | FeaturesSnapshotRequest
     | HarnessMaintenanceRequest
     | RepoMapSnapshotRequest
     | OpenProjectSnapshotRequest
@@ -326,6 +373,9 @@ ConsoleRequest = Annotated[
     | UpdateHarnessSnapshotRequest
     | UpdateHarnessDiffRequest
     | ConfigurationSnapshotRequest
+    | AdvisorCheckRequest
+    | AdvisorAskRequest
+    | AdvisorCancelRequest
     | SnapshotPageRequest
     | WorkerStepsRequest
     | WorkerSubscribeRequest
@@ -354,6 +404,20 @@ class ErrorReply(_Envelope):  # type: ignore[explicit-any]
     error: ErrorBody
 
 
+class LinkActivityPayload(_Strict):  # type: ignore[explicit-any]
+    link: Literal["decision", "typed", "write", "launch", "audit", "receipts"]
+    events_per_minute: float
+    last_event_age_seconds: float | None
+
+
+class HomeActivityPayload(_Strict):  # type: ignore[explicit-any]
+    window_seconds: int
+    events_per_minute: float
+    links: list[LinkActivityPayload]
+    last_event_age_seconds: float | None
+    events_total_window: int
+
+
 class HomeSnapshotReply(_Envelope):  # type: ignore[explicit-any]
     type: Literal["home.snapshot"]
     ok: Literal[True]
@@ -361,6 +425,9 @@ class HomeSnapshotReply(_Envelope):  # type: ignore[explicit-any]
     age_seconds: float
     snapshot: dict[str, JsonValue]
     problems_snapshot_id: int | None = None
+    # Counted for this reply from the events the console observed, not cached with the
+    # snapshot; null when they cannot be read. Older clients ignore the key.
+    activity: HomeActivityPayload | None = None
 
 
 class HomeProblemsReply(_Envelope):  # type: ignore[explicit-any]
@@ -585,6 +652,88 @@ class HarnessOverviewReply(_Envelope):  # type: ignore[explicit-any]
     age_seconds: float
 
 
+ConfigName = Literal["project.json", "orchestration.json"]
+
+
+class FeatureSource(_Strict):  # type: ignore[explicit-any]
+    kind: Literal[
+        "capabilities",
+        "hook",
+        "agent",
+        "project.json",
+        "orchestration.json",
+        "harness.lock",
+        "runtime",
+    ]
+    path: str
+
+
+class FeatureRequirement(_Strict):  # type: ignore[explicit-any]
+    """One readiness requirement: a Russian title, its level and the paths or values behind it."""
+
+    title: str
+    state: Literal["ok", "warn", "err"]
+    detail: str
+
+
+class FeatureSetting(_Strict):  # type: ignore[explicit-any]
+    """One configuration key the feature reads: its masked value as compact JSON clipped to 120
+    characters, or the default text (null: none) when the key is absent."""
+
+    file: ConfigName
+    path: list[str]
+    present: bool
+    value: str | None
+
+
+class FeatureToggle(_Strict):  # type: ignore[explicit-any]
+    """The boolean configuration key that switches the feature, its current value and the
+    kernel's forecast: the state and requirements of the feature once the key is flipped."""
+
+    file: ConfigName
+    path: Annotated[list[str], Field(min_length=1)]
+    enabled: bool
+    state_after: Literal["working", "partial", "not_working", "disabled"]
+    requirements_after: list[FeatureRequirement]
+
+
+class FeaturePayload(_Strict):  # type: ignore[explicit-any]
+    id: str
+    name: str
+    category: Literal[
+        "execution",
+        "roles",
+        "hooks",
+        "context",
+        "process",
+        "publication",
+        "capabilities",
+        "platform",
+    ]
+    state: Literal["working", "partial", "not_working", "disabled"]
+    description: str
+    off_effect: str
+    depends_on: list[str]
+    required_by: list[str]
+    sources: list[FeatureSource]
+    requirements: list[FeatureRequirement]
+    settings: list[FeatureSetting]
+    toggle: FeatureToggle | None
+
+
+class FeaturesSnapshotReply(_Envelope):  # type: ignore[explicit-any]
+    """The Harness feature registry of Diagnostics, the SHA-256 digests of the configuration
+    files it was read from (empty: missing file) and whether a configuration write is pending."""
+
+    type: Literal["features.snapshot"]
+    ok: Literal[True]
+    features: list[FeaturePayload]
+    config_digests: dict[ConfigName, str]
+    transaction_pending: bool
+    cached: bool
+    age_seconds: float
+
+
 class PagedReply(_Envelope):  # type: ignore[explicit-any]
     """The first page of a report body, a batch chronology or an update diff as JSON text."""
 
@@ -747,6 +896,58 @@ class StepsReply(_Envelope):  # type: ignore[explicit-any]
     steps: list[Annotated[AgentStep | OrchestrationStep, Field(discriminator="origin")]]
 
 
+class CliStatusPayload(_Strict):  # type: ignore[explicit-any]
+    """What the CLI check learned; null for a stage it did not reach."""
+
+    provider: str
+    found: bool
+    version_supported: bool | None
+    authorized: bool | None
+    ready: bool
+    message: str
+
+
+class AdvisorCheckReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["advisor.check"]
+    ok: Literal[True]
+    status: CliStatusPayload
+
+
+class AdviceComparison(_Strict):  # type: ignore[explicit-any]
+    option: str
+    tradeoff: str
+
+
+class AdvicePayload(_Strict):  # type: ignore[explicit-any]
+    value: JsonValue
+    why: str
+    impact: str
+    comparison: Annotated[list[AdviceComparison], Field(max_length=4)]
+
+
+class AdvisorAdviceReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["advisor.ask"]
+    ok: Literal[True]
+    outcome: Literal["advice"]
+    advice: AdvicePayload
+
+
+class AdvisorFallbackReply(_Envelope):  # type: ignore[explicit-any]
+    """No advice: the ordinary hints are shown and the draft does not change."""
+
+    type: Literal["advisor.ask"]
+    ok: Literal[True]
+    outcome: Literal["fallback"]
+    cause: Literal["refused", "invalid", "timeout", "cancelled"]
+    reason: str
+
+
+class AdvisorCancelReply(_Envelope):  # type: ignore[explicit-any]
+    type: Literal["advisor.cancel"]
+    ok: Literal[True]
+    cancelled: bool
+
+
 ConsoleReply = (
     ErrorReply
     | HomeSnapshotReply
@@ -759,12 +960,17 @@ ConsoleReply = (
     | OrchestrationEventsReply
     | ScreenSnapshotReply
     | HarnessOverviewReply
+    | FeaturesSnapshotReply
     | PagedReply
     | SnapshotPageReply
     | OrchestrationLockReply
     | WorkerStepsReply
     | StepsRosterReply
     | StepsReply
+    | AdvisorCheckReply
+    | AdvisorAdviceReply
+    | AdvisorFallbackReply
+    | AdvisorCancelReply
 )
 
 REQUESTS: TypeAdapter[ConsoleRequest] = TypeAdapter(ConsoleRequest)

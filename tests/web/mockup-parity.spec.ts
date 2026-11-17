@@ -81,30 +81,30 @@ const PAGES: PageSpec[] = [
     title: "Состояние харнесса",
     blocks: ["#home-chips", "#home-attention", "#home-context", "#home-tasks", "#home-health", "#home-contour"],
   },
-  { route: "diagnostics", title: "Диагностика", blocks: [".diag-summary", ".diag-grid"] },
+  { route: "diagnostics", title: "Диагностика", blocks: [".ds-page-head", ".ds-pipe"] },
   {
     route: "harness",
     title: "Harness",
-    blocks: ["#harness-kpis", "#harness-install", "#harness-runtime", "#harness-adapters", "#harness-maintenance"],
-    tabs: ["Обзор", "Runtime", "Адаптеры", "Контейнеры", "Команды"],
+    blocks: ["#harness-kpis", "#harness-tabs", "#harness-install", "#harness-attention", "#harness-loop", "#harness-related"],
+    tabs: ["1Обзор", "2Runtime", "3Адаптеры", "4Контейнеры", "5Команды"],
   },
   {
     route: "repo-map",
     title: "Repo Map",
-    blocks: [".repo-kpis", ".repo-tabbar", ".repo-index", ".repo-coverage", ".repo-files-panel"],
-    tabs: ["Обзор", "Символы", "Связи", "Настройки"],
+    blocks: ["#repo-facts", "#repo-tabs", ".ds-toolbar", "#repo-files"],
+    tabs: ["1Файлы", "2Символы", "3Связи"],
   },
   {
     route: "configuration",
     title: "Настройки",
-    blocks: ["#configuration-kpi", ".settings-tabbar", "#configuration-files", "#configuration-policy", ".settings-note", "#configuration-adapters"],
-    tabs: ["Обзор", "Настройки", "project.json", "orchestration.json", "История"],
+    blocks: ["#configuration-kpi", ".ds-pipe", "#configuration-files", "#configuration-policy", "#configuration-adapters"],
+    tabs: ["1Обзор", "2Параметры", "3JSON", "4Изменения", "5История"],
   },
   {
     route: "help",
     title: "Справка",
-    blocks: [".help-kpis", ".help-tabbar", "#help-intro", ".help-quick", "#help-faq"],
-    tabs: ["Начало", "Экраны", "Команды", "Горячие клавиши", "Границы"],
+    blocks: ["#help-kpis", ".ds-toolbar", "#help-tabs", "#help-intro", "#help-next"],
+    tabs: ["1Начало", "13Разделы", "4Клавиши", "6Статусы", "12Безопасность", "4Вопросы", "3Документация"],
   },
   {
     route: "agent-activity",
@@ -115,20 +115,20 @@ const PAGES: PageSpec[] = [
   {
     route: "orchestration",
     title: "Оркестрация",
-    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-scheme", "#orch-batch-cards", "#orch-dispatch", "#qa-lane", "#orch-tickets", "#batch-history"],
-    tabs: ["Схема", "Поток", "Качество", "Runtime", "Гейты"],
+    blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-tabs", "#orch-stage-strip", "#orch-dispatch", "#orch-tickets", "#orch-batch-cards"],
+    tabs: ["1Конвейер", "2Поток", "3Качество", "4Runtime", "5Контейнер", "0Решения"],
   },
   {
     route: "reports",
     title: "Отчёты",
-    blocks: ["#reports-summary", "#reports-kpi", "#report-types", "#report-detail", "#qa-lane"],
-    tabs: ["Отчёты", "Evidence", "Качество", "Готовность"],
+    blocks: ["#reports-summary", "#reports-kpi", "#reports-tabs", "#report-types", "#report-detail", "#qa-lane"],
+    tabs: ["1Отчёты", "2Evidence", "3Качество", "4Готовность"],
   },
   {
     route: "publish",
     title: "Публикация",
-    blocks: ["#publish-kpis", "#publish-candidate", "#publish-batch", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
-    tabs: ["Обзор", "Preflight", "PR / MR", "Evidence"],
+    blocks: ["#publish-kpis", "#publish-tabs", "#publish-candidates", "#publish-candidate", "#publish-gate", "#publish-preflight-overview", "#publish-decision"],
+    tabs: ["1Обзор", "2Preflight", "3PR / MR", "4Evidence"],
   },
   { route: "recovery?batch=b-887", title: "Восстановление", blocks: ["#recovery-note", "#recovery-summary", "#recovery-history"] },
   { route: "container-route?batch=b-887", title: "Контейнерный запуск", blocks: ["#route-summary", "#route-stages", "#route-env"] },
@@ -148,13 +148,13 @@ for (const width of [1440, 390]) {
   test(`shell at ${width} px: title, version, repository, branch, menu captions and counters`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "", width);
-    await expect(page.locator(".brand b")).toHaveText("Harness next");
-    await expect(page.locator(".brand .version")).toHaveText("1.5.1");
-    await expect(page.locator(".brand .channel")).toHaveCount(0);
+    await expect(page.locator(".ds-brand b")).toHaveText("Harness next");
+    await expect(page.locator(".ds-version")).toHaveText("1.5.1");
+    await expect(page.locator(".ds-channel")).toHaveCount(0);
     await expect(page.locator("#project")).toHaveText("claude-agent-harness");
     if (width < 600) await page.locator("#menu-toggle").click();
     const nav = page.getByRole("navigation", { name: "Разделы консоли" });
-    await expect(nav.locator(".nav-label")).toContainText(["Главная", "Диагностика", "Обновление", "Проект"]);
+    await expect(nav.locator(".ds-nav-text")).toContainText(["Главная", "Диагностика", "Обновление", "Проект"]);
     await expect(nav.locator('[data-route="diagnostics"]')).toHaveText("2");
     await expect(nav.locator('[data-route="update-harness"]')).toHaveText("3");
     await expect(nav.locator('[data-route="repo-map"]')).toHaveText("full");
@@ -179,11 +179,11 @@ for (const width of [1440, 390]) {
 test("a mockup tab without a source shows an explicit no-data state", async ({ page }) => {
   await mockSocket(page);
   await open(page, "harness", 1440);
-  await page.getByRole("tab", { name: "Контейнеры" }).click();
+  await page.getByRole("tab", { name: /Контейнеры/ }).click();
   // Running and Disk have no source; the fixture's volume probe failed with its reason.
-  await expect(page.locator("#harness-containers .harness-container-summary .no-data")).toHaveCount(3);
-  await expect(page.locator("[data-fact='images-volumes'] .no-data")).toHaveAttribute("title", /docker volume ls/);
-  await page.getByRole("tab", { name: "Runtime" }).click();
+  await expect(page.locator("#harness-containers #harness-container-summary .ds-nodata")).toHaveCount(3);
+  await expect(page.locator("[data-fact='images-volumes'] .ds-nodata")).toHaveAttribute("title", /docker volume ls/);
+  await page.getByRole("tab", { name: /Runtime/ }).click();
   await expect(page.locator("#harness-tab-runtime")).toContainText("нет данных");
 });
 
@@ -191,6 +191,7 @@ for (const width of [1440, 390]) {
   test(`kernel sources at ${width} px fill the former no-data places`, async ({ page }) => {
     await mockSocket(page);
     await open(page, "diagnostics", width);
+    await page.getByRole("tab", { name: /Проверки/ }).click();
     await page.locator('#diag-list [data-check="hooks.policy"]').click();
     await expect(page.locator(".diag-detail-panel .diag-rationale")).toHaveText(/^Без записанной политики хуков/);
     // An id the kernel catalog does not describe keeps the no-data state.
@@ -199,27 +200,25 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "harness", width);
-    await page.getByRole("tab", { name: "Контейнеры" }).click();
+    await page.getByRole("tab", { name: /Контейнеры/ }).click();
     await expect(page.locator("#harness-engine-line")).toHaveText("docker · 27.4.1 · rootless · cgroup v2 · systemd");
     await expect(page.locator("#harness-engine")).toContainText("SELinux выключен");
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "repo-map", width);
-    const coverage = page.locator(".repo-coverage");
-    await expect(coverage.locator(".orch-legend [data-kind='excluded'] b")).toHaveText("2");
-    await page.getByRole("tab", { name: "Символы" }).click();
-    await expect(page.locator("#repo-kind-chips .chip")).toHaveText(["Все 3", "Functions 2", "Modules 1"]);
-    await expect(page.locator(".repo-symbol-row .repo-kind").first()).toHaveText("function");
+    await page.getByRole("tab", { name: /Символы/ }).click();
+    await expect(page.locator("#repo-kind-chips button")).toHaveText(["Все 3", "Functions 2", "Modules 1"]);
+    await expect(page.locator(".ds-symbol-row .ds-kind").first()).toHaveText("function");
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "orchestration", width);
-    await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
+    await page.locator("#orch-tabs").getByRole("tab", { name: /Решения/ }).click();
     await expect(page.locator("#orch-gate-trend circle")).toHaveCount(2);
     expect(await noOverflow(page)).toBe(true);
 
     await open(page, "reports", width);
     await page.getByRole("tab", { name: "Evidence" }).click();
-    await expect(page.locator("#reports-evidence .report-evidence-row")).toHaveCount(3);
+    await expect(page.locator("#reports-evidence .ds-evidence-row")).toHaveCount(3);
     await page.getByRole("tab", { name: "Готовность" }).click();
     await expect(page.locator("#reports-readiness [data-verdict]")).toHaveText("Заблокировано");
     expect(await noOverflow(page)).toBe(true);

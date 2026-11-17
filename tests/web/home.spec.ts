@@ -5,8 +5,8 @@ import type { Page } from "@playwright/test";
 const base = () => process.env.CONSOLE_BASE_URL!;
 const token = () => process.env.CONSOLE_TOKEN!;
 
-const RU_BLOCKS = [/^Требует внимания$/, /^Контекст$/, /^Последние задачи \d+$/, /^Здоровье$/, /^Контур Harness$/];
-const EN_BLOCKS = [/^Requires attention$/, /^Context$/, /^Recent tasks \d+$/, /^Health$/, /^Harness outline$/];
+const RU_BLOCKS = [/^Требует внимания$/, /^Контекст$/, /^Последние задачи \d+$/, /^Здоровье$/, /^Контур Harness$/, /^Последние события \d+$/];
+const EN_BLOCKS = [/^Requires attention$/, /^Context$/, /^Recent tasks \d+$/, /^Health$/, /^Harness outline$/, /^Recent events \d+$/];
 
 async function watch(page: Page) {
   const errors: string[] = [];
@@ -41,7 +41,7 @@ test("the launch URL opens Home over the cookie and switches language in place",
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected", { timeout: 60000 });
   await expect(blocks(page)).toHaveText(RU_BLOCKS);
   await expect(page.locator("#home h1")).toHaveText("Состояние харнесса");
-  await expect(page.locator("#home-context h3")).toHaveText([/Проект/, /Harness/, /Runtime store/, /Repo Map/, /Память/]);
+  await expect(page.locator("#home-context h3")).toHaveText([/Проект/, /Harness/, /Runtime store/, /Repo Map/, /Память/, /Наблюдение/]);
   await expect(page.locator("#home-health h3")).toHaveText(["По областям", "Проверки"]);
   await expect(page.locator("#home")).not.toContainText("Контур Harness 2.0.0");
   await expect(page.locator("#health-ok")).toHaveText(/^\d+$/);
@@ -75,7 +75,7 @@ for (const width of [1440, 390]) {
   test(`Home and its recent tasks fit ${width} px without horizontal overflow`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`${base()}/?token=${token()}`);
-    await expect(blocks(page)).toHaveCount(5);
+    await expect(blocks(page)).toHaveCount(6);
     const overflow = await page.evaluate(() => {
       const main = document.querySelector("main") as HTMLElement;
       const rows = [...document.querySelectorAll<HTMLElement>("#home-tasks .task-row")];

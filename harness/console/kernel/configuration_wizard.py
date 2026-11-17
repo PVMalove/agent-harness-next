@@ -1,7 +1,8 @@
 """The parameter catalog of the Settings wizard: the scalar settings of project.json and
 orchestration.json the console asks about, grouped like the mockup (Orchestrator, Project, QA,
 Dispatch, Hooks). The type, the choices, the default, the lower bound and the description come
-from the installed schema; only the Russian label and the group are the console's. The wizard
+from the installed schema; only the Russian label and the group are the console's. The console
+recommendation comes from the shared wizard steps over the masked snapshot documents. The wizard
 writes nothing itself: its answers become a configuration draft of the confirmed write path."""
 
 from __future__ import annotations
@@ -10,6 +11,9 @@ from pathlib import Path
 
 from ...configuration_schema import load_schema
 from ...json_types import JsonObject
+from .configuration import ConfigurationDraft
+from .configuration_snapshot import ConfigurationFacts
+from .configuration_steps import ConfigurationStep, steps_for
 
 # (group id, Russian group label), in the mockup order.
 GROUPS: tuple[tuple[str, str], ...] = (
@@ -52,9 +56,42 @@ def _node(schema: JsonObject, path: tuple[str, ...]) -> JsonObject | None:
     return node if isinstance(node, dict) else None
 
 
-def wizard_parameters(repo: Path) -> list[dict[str, object]]:
+_FileSteps = dict[str, tuple[ConfigurationDraft, dict[tuple[str, ...], ConfigurationStep]]]
+
+
+def _steps(repo: Path, facts: ConfigurationFacts | None) -> _FileSteps:
+    """Per file, the draft of the masked snapshot document and its wizard steps by path; a file
+    the snapshot cannot draft has none."""
+    found: _FileSteps = {}
+    if facts is None:
+        return found
+    for file in sorted({file for _group, file, _path, _label in _PARAMETERS}):
+        try:
+            draft = ConfigurationDraft.from_snapshot(repo, facts, (file,))
+            steps = steps_for(draft)
+        except (OSError, ValueError):
+            continue
+        found[file] = (draft, {step.path: step for step in steps if step.file == file})
+    return found
+
+
+def _recommendation(
+    steps: _FileSteps, file: str, path: tuple[str, ...]
+) -> dict[str, object] | None:
+    if file not in steps or path not in steps[file][1]:
+        return None
+    draft, by_path = steps[file]
+    value, reason = by_path[path].recommendation(draft)
+    return None if value is None else {"value": value, "reason": reason}
+
+
+def wizard_parameters(
+    repo: Path, facts: ConfigurationFacts | None = None
+) -> list[dict[str, object]]:
     """The wizard parameters the installed schemas define, in the mockup group order; a schema
-    that cannot be read contributes none, and a path it lacks is left out."""
+    that cannot be read contributes none, and a path it lacks is left out. With the snapshot
+    `facts`, each carries the console recommendation `{value, reason}`, else null."""
+    steps = _steps(repo, facts)
     schemas: dict[str, JsonObject | None] = {}
     found: list[dict[str, object]] = []
     for group, file, path, label in _PARAMETERS:
@@ -79,6 +116,7 @@ def wizard_parameters(repo: Path) -> list[dict[str, object]]:
                 "default": node.get("default"),
                 "minimum": node.get("minimum"),
                 "description": node.get("description", ""),
+                "recommendation": _recommendation(steps, file, path),
             }
         )
     return found

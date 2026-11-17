@@ -1,6 +1,10 @@
 /* WCAG 2.1 AA in the real build (#1066): axe-core finds no violation on the shell and Home, the
    skip link is the first Tab stop, and a tab list follows the WAI-ARIA Tabs pattern with the
-   arrow keys. The page sweep over every section lives in pages.spec.ts. */
+   arrow keys. Orchestration, Reports, Publication, Diagnostics, Update, Project and Settings are
+   checked at the five window sizes of console-fit.spec.ts in every tab and every inner tab (the
+   feature detail, "how to update", the JSON file); the candidate drawer of Reports and Publication
+   is checked opened, in each of its tabs.
+   The page sweep over every section lives in pages.spec.ts. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
@@ -59,3 +63,124 @@ test("tabs move with the arrow keys and every tab controls an existing panel", a
     await expect(page.locator(`[id="${id}"][role="tabpanel"]`)).toHaveCount(1);
   }
 });
+
+const fixture = (name: string) => JSON.parse(readFileSync(resolve(__dirname, "fixtures", name), "utf-8")) as Record<string, unknown>;
+const PAGED: Readonly<Record<string, unknown>> = {
+  "diagnostics.snapshot": fixture("diagnostics-report.json"),
+  "update_harness.snapshot": fixture("update-harness.json"),
+  "open_project.snapshot": fixture("open-project.json"),
+  "reports.snapshot": fixture("reports.json"),
+  "orchestration.snapshot": fixture("orch-snapshot.json"),
+};
+/** Paged replies the server sends without cache facts. */
+const UNCACHED: Readonly<Record<string, unknown>> = {
+  "update_harness.diff": fixture("update-harness-diff.json"),
+  "reports.report": fixture("reports-report.json"),
+  "reports.timeline": fixture("reports-timeline.json"),
+};
+
+const VERSION_ID = "20261116T101500Z-0123456789ab";
+const CONFIGURATION: Record<string, unknown> = {
+  ...fixture("configuration.json"),
+  versions: [{ id: VERSION_ID, created_at: "2026-11-16T10:15:00+00:00", description: "перед QA", files: ["project.json"], package_version: "2.1.0", problem: "" }],
+};
+/** The Settings snapshot; a `version` request adds the content of the saved version. */
+const configuration = (version: unknown) =>
+  version ? { ...CONFIGURATION, version: { id: VERSION_ID, error: "", files: CONFIGURATION.files } } : CONFIGURATION;
+
+/** Home, the feature registry and the paged snapshots of Diagnostics, Update, Project and Settings. */
+async function mockScreens(page: Page) {
+  await page.routeWebSocket("**/ws", (ws) => {
+    ws.onMessage((message) => {
+      const { id, type, version } = JSON.parse(String(message)) as { id: string; type: string; version?: string };
+      const send = (body: Record<string, unknown>) => ws.send(JSON.stringify({ v: 1, id, type, ok: true, ...body }));
+      if (type === "home.snapshot") send({ cached: false, age_seconds: 0, snapshot: HOME });
+      else if (type === "configuration.snapshot") {
+        const text = JSON.stringify(configuration(version));
+        send({ snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
+      }
+      else if (type === "features.snapshot") send(fixture("features-snapshot.json"));
+      else if (type in PAGED) {
+        const text = JSON.stringify(PAGED[type]);
+        send({ snapshot_id: 1, text, next: text.length, done: true, cached: false, age_seconds: 0 });
+      } else if (type in UNCACHED) {
+        const text = JSON.stringify(UNCACHED[type]);
+        send({ snapshot_id: 1, text, next: text.length, done: true });
+      } else if (type === "decisions.snapshot") send({ snapshot: { version: 1, items: [], total: 0, unavailable: false } });
+      else if (type === "job.catalog") send({ commands: [], cancel_reason: "" });
+      else if (type === "job.list") send({ jobs: [] });
+    });
+  });
+}
+
+const SIZES: readonly [number, number][] = [[1920, 1080], [1920, 1010], [1920, 950], [1680, 950], [1440, 900]];
+/** Route -> the tab lists inside its tabs (aria-label) the sweep must reach. */
+const NESTED: Readonly<Record<string, readonly string[]>> = {
+  diagnostics: ["Функция"],
+  "update-harness": ["Как обновить"],
+  "open-project": [],
+  configuration: ["Файл"],
+  orchestration: [],
+  reports: [],
+  publish: [],
+};
+
+for (const [route, ready] of [
+  ["orchestration", "#orch-dispatch-list .orch-dispatch-row"],
+  ["reports", "#report-list [data-stage]"],
+  ["publish", "#publish-candidates [data-batch]"],
+  ["diagnostics", "#features-list [data-feature]"],
+  ["update-harness", "#update-diff .ds-diff-file"],
+  ["open-project", "#open-project-list [data-path]"],
+  ["configuration", "#configuration-files [data-file]"],
+] as const) {
+  for (const [width, height] of SIZES) {
+    test(`${route} at ${width}x${height} has no WCAG 2.1 AA violation in any of its tabs and inner tabs`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await mockScreens(page);
+      await page.goto(`${base()}/#/${route}`);
+      await expect(page.locator(ready).first()).toBeVisible({ timeout: 20000 });
+      const tabs = page.locator("main#content [role=tablist]").first().getByRole("tab");
+      const topId = await page.locator("main#content [role=tablist]").first().getAttribute("id");
+      const reached = new Set<string>();
+      for (let index = 0; index < (await tabs.count()); index++) {
+        await tabs.nth(index).click();
+        expect(await axeViolations(page), `${route} tab ${index + 1}`).toEqual([]);
+        const inner = page.locator(`main#content [role=tablist]:visible:not([id="${topId}"])`);
+        for (let list = 0; list < (await inner.count()); list++) {
+          const label = (await inner.nth(list).getAttribute("aria-label")) ?? "";
+          reached.add(label);
+          const innerTabs = inner.nth(list).getByRole("tab");
+          for (let item = 0; item < (await innerTabs.count()); item++) {
+            await innerTabs.nth(item).click();
+            expect(await axeViolations(page), `${route} tab ${index + 1} › ${label} ${item + 1}`).toEqual([]);
+          }
+        }
+      }
+      expect([...reached].sort()).toEqual([...NESTED[route]].sort());
+    });
+  }
+}
+
+for (const [route, opener] of [
+  ["reports", "#reports-tabs [role=tab]:has-text('Готовность')"],
+  ["publish", "#publish-open-candidate"],
+] as const) {
+  for (const [width, height] of SIZES) {
+    test(`the candidate drawer of ${route} at ${width}x${height} has no WCAG 2.1 AA violation in its tabs`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await mockScreens(page);
+      await page.goto(`${base()}/#/${route}`);
+      await page.locator(opener).click({ timeout: 20000 });
+      if (route === "reports") await page.locator('#reports-readiness [data-batch="b-887"] .report-ready-open').click();
+      const drawer = page.getByRole("dialog", { name: /Кандидат · #887/ });
+      await expect(drawer).toBeVisible();
+      const tabs = drawer.getByRole("tab");
+      await expect(tabs).toHaveCount(3);
+      for (let index = 0; index < 3; index++) {
+        await tabs.nth(index).click();
+        expect(await axeViolations(page), `${route} drawer tab ${index + 1}`).toEqual([]);
+      }
+    });
+  }
+}

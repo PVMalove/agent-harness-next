@@ -3,9 +3,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 
-/** The accepted mockup stylesheet, shipped byte for byte (tests/web/dist.test.ts compares it). */
+/** The stylesheet of the not yet moved screens (once the accepted mockup sheet), shipped byte for
+    byte (tests/web/dist.test.ts compares it). */
 export const MOCKUP_CSS = fileURLToPath(
-  new URL("../../../docs/design/web-console-mockups/execution-console.css", import.meta.url),
+  new URL("./legacy/execution-console.css", import.meta.url),
 );
 const CSS_NAME = "execution-console.css";
 

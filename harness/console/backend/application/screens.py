@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from ...kernel.batch_history import History
+from ...kernel.dispatch_containers import container_payload
 from ...kernel.help_text import help_sections
 from ...kernel.pipeline_kpi import (
     evidence_payload,
@@ -31,6 +32,8 @@ from ....json_types import JsonObject
 from .ports import (
     Clock,
     ConfigurationCollector,
+    ConfigurationVersionCollector,
+    FeaturesCollector,
     HarnessCollector,
     HealthCollector,
     LedgerCollector,
@@ -82,6 +85,8 @@ class _Source(Generic[T]):
         self._value: T | None = None
         self._stamp = 0.0
         self._generation = 0
+        # Bumped by drop(): a rebuild that started before it never stores its value.
+        self._epoch = 0
         self._building: asyncio.Task[tuple[T, bool, float]] | None = None
 
     def _fresh(self) -> tuple[T, bool, float] | None:
@@ -97,10 +102,18 @@ class _Source(Generic[T]):
         if self._generation == generation:
             self._value = None
 
+    def drop(self) -> None:
+        """Forget the value now, whatever its age, and the one a running rebuild will produce."""
+        self._epoch += 1
+        self._value = None
+
     async def _rebuild(self, collect: Callable[[], T]) -> tuple[T, bool, float]:
         self._value = None
+        epoch = self._epoch
         try:
             value = await asyncio.to_thread(collect)
+            if epoch != self._epoch:
+                return value, False, 0.0
             self._value, self._stamp = value, self._clock()
             self._generation += 1
             asyncio.get_running_loop().call_later(
@@ -165,6 +178,8 @@ class ScreenService:
         update_harness: UpdateHarnessCollector | None = None,
         update_diff: UpdateDiffReader | None = None,
         configuration: ConfigurationCollector | None = None,
+        configuration_version: ConfigurationVersionCollector | None = None,
+        features: FeaturesCollector | None = None,
         board: TaskBoardService | None = None,
         publish_git: GitFacts | None = None,
     ) -> None:
@@ -183,6 +198,8 @@ class ScreenService:
         self._collect_update_harness = update_harness
         self._read_update_diff = update_diff
         self._collect_configuration = configuration
+        self._collect_version = configuration_version
+        self._collect_features = features
         self._board = board
         self._ledger: _Source[_Ledger] = _Source(ttl, clock)
         self._history: _Source[History] = _Source(ttl, clock)
@@ -197,6 +214,7 @@ class ScreenService:
         self._open_project: _Source[dict[str, object]] = _Source(ttl, clock)
         self._update_harness: _Source[dict[str, object]] = _Source(ttl, clock)
         self._configuration: _Source[dict[str, object]] = _Source(ttl, clock)
+        self._features: _Source[dict[str, object]] = _Source(ttl, clock)
         self._pages = TextPages()
 
     async def _paged(
@@ -248,18 +266,20 @@ class ScreenService:
         return {"lock": state, "error": None}
 
     async def orchestration(self, *, force: bool = False) -> Paged:
-        """The ledger of the Orchestration screen with the ledger lock state and the pipeline
-        KPIs computed from that ledger."""
+        """The ledger of the Orchestration screen with the ledger lock state, the pipeline
+        KPIs and the dispatch containers computed from that ledger."""
         ledger, cached, age = await self._cached_ledger(force)
         lock = await self.lock()
         kpi = await asyncio.to_thread(pipeline_kpi, ledger.view)
         analytics = await asyncio.to_thread(pipeline_analytics, ledger.view)
+        containers = await asyncio.to_thread(container_payload, ledger.view)
         return await self._paged(
             {
                 "ledger": ledger.payload,
                 "lock": lock,
                 "kpi": kpi.to_payload(),
                 "analytics": analytics.to_payload(),
+                "containers": containers,
             },
             cached,
             age,
@@ -394,6 +414,25 @@ class ScreenService:
             "age_seconds": round(age, 3),
         }
 
+    def job_finished(self, command_id: str) -> None:
+        """Drop the sources that a finished configuration job made stale: Settings and
+        Diagnostics both serve the configuration digests a write is checked against."""
+        if command_id.startswith("configuration-"):
+            self._configuration.drop()
+            self._features.drop()
+
+    async def features(self, *, force: bool = False) -> dict[str, object]:
+        """The Harness feature registry of Diagnostics with the configuration digests a toggle
+        writes against and whether a configuration write is pending; `NotFound` without its
+        collector."""
+        collect = self._collect_features
+        if collect is None:
+            raise NotFound("features")
+        facts, cached, age = await self._features.get(
+            lambda: collect(self._repo), force=force
+        )
+        return {**facts, "cached": cached, "age_seconds": round(age, 3)}
+
     async def maintenance(self, *, force: bool = False) -> Paged:
         """The cleanup plans with their sizes and the worktree facts of the Harness screen;
         `NotFound` without a maintenance collector."""
@@ -460,15 +499,24 @@ class ScreenService:
         text = await asyncio.to_thread(reader, self._repo, path)
         return await self._paged({"path": path, "text": text})
 
-    async def configuration(self, *, force: bool = False) -> Paged:
+    async def configuration(
+        self, *, force: bool = False, version: str | None = None
+    ) -> Paged:
         """The masked configuration files with their digests, a pending transaction and the
-        runtime adapter preview of «Настройка»; `NotFound` without its collector."""
+        runtime adapter preview of «Настройка»; `NotFound` without its collector. A selected
+        `version` is read on every request and merged over the cached facts as `version`."""
         collect = self._collect_configuration
         if collect is None:
             raise NotFound("configuration")
         facts, cached, age = await self._configuration.get(
             lambda: collect(self._repo), force=force
         )
+        if version is not None:
+            read = self._collect_version
+            if read is None:
+                raise NotFound("configuration")
+            selected = await asyncio.to_thread(read, self._repo, version)
+            facts = {**facts, "version": selected}
         return await self._paged(facts, cached, age)
 
     async def task_board_specs(self, *, force: bool = False) -> Paged:

@@ -1,0 +1,434 @@
+{
+  "schema_version": 1,
+  "repo": "/work/project",
+  "online": false,
+  "summary": {
+    "ok": 38,
+    "warn": 4,
+    "fail": 3,
+    "skipped": 12
+  },
+  "checks": [
+    {
+      "id": "files.lock",
+      "group": "files",
+      "status": "ok",
+      "message": "harness.lock на месте и читается",
+      "fix": null
+    },
+    {
+      "id": "files.seed_baseline",
+      "group": "files",
+      "status": "ok",
+      "message": "baseline seed-файлов записан для 41 файла",
+      "fix": null
+    },
+    {
+      "id": "files.agents_md",
+      "group": "files",
+      "status": "ok",
+      "message": "AGENTS.md заполнен, нерешённых плейсхолдеров нет",
+      "fix": null
+    },
+    {
+      "id": "files.discovery_links",
+      "group": "files",
+      "status": "fail",
+      "message": "неисправна discovery-ссылка: .claude/skills -> ../.harness/skills",
+      "fix": {
+        "text": "Восстановите ссылки обновлением",
+        "command": "harness update ."
+      }
+    },
+    {
+      "id": "files.project_json",
+      "group": "files",
+      "status": "ok",
+      "message": "project.json проходит схему",
+      "fix": null
+    },
+    {
+      "id": "files.sandboxes",
+      "group": "files",
+      "status": "ok",
+      "message": "есть доступ на чтение и запись к .harness/.sandboxes",
+      "fix": null
+    },
+    {
+      "id": "files.orchestration_config",
+      "group": "files",
+      "status": "ok",
+      "message": "orchestration.json проходит схему",
+      "fix": null
+    },
+    {
+      "id": "files.skill_snapshot",
+      "group": "files",
+      "status": "warn",
+      "message": "2 навыка отличаются от снэпшота пакета",
+      "fix": {
+        "text": "Посмотрите diff и примените обновление",
+        "command": "harness update ."
+      }
+    },
+    {
+      "id": "files.skill_registry",
+      "group": "files",
+      "status": "ok",
+      "message": "REGISTRY.md совпадает с установленными навыками",
+      "fix": null
+    },
+    {
+      "id": "files.overlay_locks",
+      "group": "files",
+      "status": "ok",
+      "message": "overlay-блокировки согласованы с harness.lock",
+      "fix": null
+    },
+    {
+      "id": "files.integrations",
+      "group": "files",
+      "status": "ok",
+      "message": "интеграции из harness.lock установлены",
+      "fix": null
+    },
+    {
+      "id": "files.verification_routing",
+      "group": "files",
+      "status": "ok",
+      "message": "маршруты проверок покрывают все роли",
+      "fix": null
+    },
+    {
+      "id": "directories.harness",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.sandboxes",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.cache",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes/cache доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.logs",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes/logs доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.scratch",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes/scratch доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.pr_body",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes/pr_body доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.runs",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes/runs доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.reports",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes/reports доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.worktrees",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог .harness/.sandboxes/worktrees доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "directories.orchestration_state",
+      "group": "directories",
+      "status": "ok",
+      "message": "каталог состояния оркестрации доступен на запись",
+      "fix": null
+    },
+    {
+      "id": "repo_map.tier",
+      "group": "repo_map",
+      "status": "warn",
+      "message": "Карта для HEAD не построена",
+      "fix": {
+        "text": "Постройте карту на экране Repo Map",
+        "command": "harness repo-map build ."
+      }
+    },
+    {
+      "id": "memory.index",
+      "group": "memory",
+      "status": "ok",
+      "message": "индекс валиден (FTS5); источников: 34",
+      "fix": null
+    },
+    {
+      "id": "memory.model",
+      "group": "memory",
+      "status": "skipped",
+      "message": "модель не скачана; FTS5 работает без модели",
+      "fix": null
+    },
+    {
+      "id": "environment.os",
+      "group": "environment",
+      "status": "ok",
+      "message": "ОС: Linux 6.8",
+      "fix": null
+    },
+    {
+      "id": "environment.git",
+      "group": "environment",
+      "status": "ok",
+      "message": "git version 2.43.0",
+      "fix": null
+    },
+    {
+      "id": "environment.git_identity",
+      "group": "environment",
+      "status": "ok",
+      "message": "git user.name и user.email заданы",
+      "fix": null
+    },
+    {
+      "id": "environment.gitattributes",
+      "group": "environment",
+      "status": "ok",
+      "message": ".gitattributes есть",
+      "fix": null
+    },
+    {
+      "id": "environment.line_endings",
+      "group": "environment",
+      "status": "ok",
+      "message": "переводы строк не расходятся с атрибутами git",
+      "fix": null
+    },
+    {
+      "id": "environment.python",
+      "group": "environment",
+      "status": "ok",
+      "message": "Python 3.12.3 (.harness/.venv/bin/python)",
+      "fix": null
+    },
+    {
+      "id": "environment.uv",
+      "group": "environment",
+      "status": "ok",
+      "message": "uv 0.12.21",
+      "fix": null
+    },
+    {
+      "id": "environment.dev_env",
+      "group": "environment",
+      "status": "ok",
+      "message": ".harness/.venv синхронизировано с uv.lock",
+      "fix": null
+    },
+    {
+      "id": "environment.output_encoding",
+      "group": "environment",
+      "status": "ok",
+      "message": "кодировка UTF-8 (вывод: utf-8, локаль: UTF-8)",
+      "fix": null
+    },
+    {
+      "id": "environment.codex_sandbox",
+      "group": "environment",
+      "status": "skipped",
+      "message": "codex: утилита и пользовательский конфиг отсутствуют",
+      "fix": null
+    },
+    {
+      "id": "environment.claude_sandbox",
+      "group": "environment",
+      "status": "ok",
+      "message": "Claude Code: настройки песочницы для локальных сокетов заданы",
+      "fix": null
+    },
+    {
+      "id": "environment.codex_uv_cache",
+      "group": "environment",
+      "status": "skipped",
+      "message": "codex: утилита и пользовательский конфиг отсутствуют",
+      "fix": null
+    },
+    {
+      "id": "environment.claude_uv_cache",
+      "group": "environment",
+      "status": "ok",
+      "message": "Claude Code: кеш uv внутри проекта",
+      "fix": null
+    },
+    {
+      "id": "environment.long_paths",
+      "group": "environment",
+      "status": "skipped",
+      "message": "не Windows: LongPathsEnabled не проверяется",
+      "fix": null
+    },
+    {
+      "id": "environment.path_length",
+      "group": "environment",
+      "status": "ok",
+      "message": "путь репозитория 13 символов, запас до 260: 247",
+      "fix": null
+    },
+    {
+      "id": "environment.pytest_temp",
+      "group": "environment",
+      "status": "skipped",
+      "message": "не Windows: каталог pytest-of-<user> не проверяется",
+      "fix": null
+    },
+    {
+      "id": "environment.symlinks",
+      "group": "environment",
+      "status": "skipped",
+      "message": "не Windows: право создавать symlink не проверяется",
+      "fix": null
+    },
+    {
+      "id": "environment.hook_bash",
+      "group": "environment",
+      "status": "skipped",
+      "message": "не Windows: bash для хуков не проверяется",
+      "fix": null
+    },
+    {
+      "id": "hooks.policy",
+      "group": "hooks",
+      "status": "fail",
+      "message": "Нет .harness/hook-policy.json: effective policy не записана",
+      "fix": {
+        "text": "Запишите policy обновлением после review",
+        "command": "harness update ."
+      }
+    },
+    {
+      "id": "hooks.test_author",
+      "group": "hooks",
+      "status": "warn",
+      "message": "Тест-автор: исполнитель не выбран",
+      "fix": {
+        "text": "Выберите исполнителя тест-автора в настройках оркестрации",
+        "command": null
+      }
+    },
+    {
+      "id": "tracker.project",
+      "group": "tracker",
+      "status": "ok",
+      "message": "трекер проекта: github, хост github.com (источник: origin)",
+      "fix": null
+    },
+    {
+      "id": "tracker.auth",
+      "group": "tracker",
+      "status": "skipped",
+      "message": "авторизация gh/glab: не проверено (офлайн)",
+      "fix": null
+    },
+    {
+      "id": "tracker.reachability",
+      "group": "tracker",
+      "status": "skipped",
+      "message": "достижимость origin: не проверено (офлайн)",
+      "fix": null
+    },
+    {
+      "id": "tracker.permissions",
+      "group": "tracker",
+      "status": "skipped",
+      "message": "права в репозитории: не проверено (офлайн)",
+      "fix": null
+    },
+    {
+      "id": "tracker.labels",
+      "group": "tracker",
+      "status": "skipped",
+      "message": "лейблы трекера: не проверено (офлайн)",
+      "fix": null
+    },
+    {
+      "id": "tracker.git_base",
+      "group": "tracker",
+      "status": "skipped",
+      "message": "Git base тикетов: не проверено (офлайн)",
+      "fix": null
+    },
+    {
+      "id": "orchestration.ledger_summary",
+      "group": "orchestration",
+      "status": "ok",
+      "message": "леджер читается: 12 батчей",
+      "fix": null
+    },
+    {
+      "id": "orchestration.unfinished_batches",
+      "group": "orchestration",
+      "status": "warn",
+      "message": "2 незавершённых батча старше 7 дней",
+      "fix": {
+        "text": "Завершите или отмените батчи на экране Оркестрация",
+        "command": null
+      }
+    },
+    {
+      "id": "orchestration.blocked_batches",
+      "group": "orchestration",
+      "status": "ok",
+      "message": "заблокированных батчей нет",
+      "fix": null
+    },
+    {
+      "id": "orchestration.stale_dispatches",
+      "group": "orchestration",
+      "status": "ok",
+      "message": "зависших dispatch нет",
+      "fix": null
+    },
+    {
+      "id": "orchestration.orphaned_worktrees",
+      "group": "orchestration",
+      "status": "fail",
+      "message": "1 worktree без батча: .harness/.sandboxes/worktrees/issue-41",
+      "fix": {
+        "text": "Удалите worktree очисткой на экране Harness",
+        "command": null
+      }
+    },
+    {
+      "id": "orchestration.disposable_data",
+      "group": "orchestration",
+      "status": "ok",
+      "message": "одноразовые данные: 18 МБ",
+      "fix": null
+    }
+  ],
+  "fixes_applied": []
+}

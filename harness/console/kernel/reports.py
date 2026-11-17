@@ -16,15 +16,23 @@ harness/orchestration/workflow/reports.py), поэтому его датой с�
 from __future__ import annotations
 
 import re
+import uuid
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import cast
 
 from ...gate_runner.gate_runner import parse_command_log
 from ...orchestration.core.constants import STATE_REL
 from ...orchestration.core.report_evidence import evidence_is_none
-from ...orchestration.ledger.lifecycle import JsonObject, JsonValue, LifecycleLedger
+from ...orchestration.ledger.lifecycle import (
+    JsonObject,
+    JsonValue,
+    LifecycleLedger,
+    store_is_authority,
+)
 from .export import MarkdownDocument, MarkdownSection
 from .home_snapshot import _bool, _fields, _int, _list, _optional, _str
 from .json_fields import strings, text
@@ -155,6 +163,10 @@ class LedgerView:
         """Все записи диспатчей леджера (для статистики по ролям)."""
         return list(self._dispatches.values())
 
+    def dispatches_by_id(self) -> Mapping[str, JsonObject]:
+        """The ledger's dispatch records by dispatch id, read-only."""
+        return MappingProxyType(self._dispatches)
+
     def timeline(self, batch_id: str) -> BatchTimeline | None:
         """Строит хронологию для указанного батча либо возвращает None, если батч не найден."""
         batch = self._batch_records.get(batch_id)
@@ -180,18 +192,120 @@ def _read_directory(root: Path, directory: str) -> list[JsonObject]:
     return records
 
 
-def _audit_index(root: Path) -> dict[str, list[JsonObject]]:
+# The record directories of one generation that the view reads, by their path under the root.
+_DIRECTORIES = (
+    "audit",
+    "batches",
+    "dispatches",
+    "dispatch-status",
+    "reports",
+    "risk-assessments",
+    "qa-lane/attempts",
+)
+# The runtime store answers each of these collections in one frame; all of them together, or the
+# dispatches and reports collections of a long-lived project, would not fit one.
+_STORE_COLLECTIONS = ("batches", "dispatch-status", "risk-assessments", "qa-lane")
+# The audit of a long-lived project can outgrow one frame, and the view uses it only for the first
+# write timestamps, so it is read last and its failure leaves the view without those timestamps.
+_AUDIT_COLLECTION = "audit"
+# The dispatch and report records are read by path, this many paths per ``state.read``.
+STORE_PATH_CHUNK = 100
+STORE_READ_TIMEOUT_SECONDS = 10
+# A caller that waits on the UI thread bounds its reads shorter: a runtime that is down or busy
+# then costs a moment, not the whole retry window of a background read.
+INTERACTIVE_STORE_READ_TIMEOUT_SECONDS = 2
+
+# ``state.read`` of the runtime store: the records by path of the collections and the paths.
+type StoreRead = Callable[[Sequence[str], Sequence[str]], Mapping[str, object]]
+# A QA gate log: its path under the records root and its lines.
+type QaLog = tuple[str, list[str]]
+
+
+class StoreUnreadable(Exception):
+    """The runtime store did not answer a ``state.read`` of the view."""
+
+
+def _runtime_read(repo: Path, timeout_seconds: float) -> StoreRead:
+    """``state.read`` through the project's runtime; the console never starts the runtime."""
+    from ...orchestration.runtime_client import RuntimeClient, RuntimeClientError
+
+    client = RuntimeClient(repo)
+
+    def read(collections: Sequence[str], paths: Sequence[str]) -> Mapping[str, object]:
+        try:
+            reply = client.call(
+                "state.read",
+                operation_id=f"console.ledger-{uuid.uuid4().hex}",
+                payload={"collections": list(collections), "paths": list(paths)},
+                timeout_seconds=timeout_seconds,
+            )
+        except RuntimeClientError as exc:
+            raise StoreUnreadable(
+                f"runtime store не ответил на state.read ({exc.code})"
+            ) from exc
+        records = reply.result.get("records")
+        if not isinstance(records, dict):
+            raise StoreUnreadable("runtime store ответил на state.read без записей")
+        return records
+
+    return read
+
+
+def _store_records(read: StoreRead) -> dict[str, list[JsonObject]]:
+    """The records of the view from the runtime store, by directory and in path order.
+
+    A dispatch and its report are read by the id that a batch entry or a dispatch status names."""
+    found: dict[str, list[JsonObject]] = {directory: [] for directory in _DIRECTORIES}
+
+    def add(records: Mapping[str, object]) -> None:
+        for path, record in sorted(records.items()):
+            directory = path.rpartition("/")[0]
+            if directory in found and isinstance(record, dict):
+                found[directory].append(cast(JsonObject, record))
+
+    for collection in _STORE_COLLECTIONS:
+        add(read([collection], []))
+    ids = {
+        text(entry.get("dispatch_id"))
+        for batch in found["batches"]
+        for entry in _objects(batch.get("dispatches"))
+    } | {text(status.get("dispatch_id")) for status in found["dispatch-status"]}
+    paths = [
+        f"{directory}/{dispatch_id}.json"
+        for directory in ("dispatches", "reports")
+        for dispatch_id in sorted(ids - {""})
+    ]
+    for start in range(0, len(paths), STORE_PATH_CHUNK):
+        add(read([], paths[start : start + STORE_PATH_CHUNK]))
+    try:
+        add(read([_AUDIT_COLLECTION], []))
+    except StoreUnreadable:
+        found["audit"] = []
+    return found
+
+
+def _file_qa_logs(root: Path) -> Iterable[QaLog]:
+    """The QA gate logs of a file generation, read one at a time."""
+    for path in sorted((root / "qa-artifacts").glob("*.log")):
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        yield f"qa-artifacts/{path.name}", lines
+
+
+def _audit_index(events: list[JsonObject]) -> dict[str, list[JsonObject]]:
     """Строит индекс событий аудита леджера, сгруппированных по относительному пути файла."""
     index: dict[str, list[JsonObject]] = {}
-    for event in _read_directory(root, "audit"):
+    for event in events:
         details = event.get("details")
         if not isinstance(details, dict) or not isinstance(event.get("at"), str):
             continue
         path = details.get("path")
         if isinstance(path, str):
             index.setdefault(path, []).append(event)
-    for events in index.values():
-        events.sort(key=lambda item: text(item.get("at")))
+    for items in index.values():
+        items.sort(key=lambda item: text(item.get("at")))
     return index
 
 
@@ -203,23 +317,48 @@ def _first_write_at(view: LedgerView, relative: str) -> str:
     return ""
 
 
-def load_ledger_view(repo: Path) -> LedgerView:
-    """Загружает полное представление данных леджера оркестрации для указанного репозитория."""
-    root = LifecycleLedger(repo / STATE_REL).records_root_lenient()
+def load_ledger_view(
+    repo: Path,
+    *,
+    store_read: StoreRead | None = None,
+    read_timeout: float = STORE_READ_TIMEOUT_SECONDS,
+) -> LedgerView:
+    """Загружает полное представление данных леджера оркестрации для указанного репозитория.
+
+    In the runtime-store epoch the records come from the store (``store_read``, by default the
+    project's runtime), never from the archived file generation; the store answers no QA gate log
+    to ``state.read``, so the view then has no QA runs. ``read_timeout`` bounds each runtime
+    read; a caller on the UI thread passes ``INTERACTIVE_STORE_READ_TIMEOUT_SECONDS``."""
+    state = repo / STATE_REL
+    if store_is_authority(state):
+        try:
+            records = _store_records(store_read or _runtime_read(repo, read_timeout))
+        except StoreUnreadable as exc:
+            return LedgerView(unavailable=str(exc))
+        return _build_view(records, ())
+    root = LifecycleLedger(state).records_root_lenient()
     if root is None:
         return LedgerView(
             unavailable="леджер оркестрации не найден или не инициализирован"
         )
-    view = LedgerView(_audit=_audit_index(root))
-    for record in _read_directory(root, "dispatches"):
+    records = {directory: _read_directory(root, directory) for directory in _DIRECTORIES}
+    return _build_view(records, _file_qa_logs(root))
+
+
+def _build_view(
+    records: Mapping[str, list[JsonObject]], qa_logs: Iterable[QaLog]
+) -> LedgerView:
+    """The view of the records of one generation, by directory, and of its QA gate logs."""
+    view = LedgerView(_audit=_audit_index(records["audit"]))
+    for record in records["dispatches"]:
         dispatch_id = record.get("dispatch_id")
         if isinstance(dispatch_id, str):
             view._dispatches[dispatch_id] = record
-    for record in _read_directory(root, "risk-assessments"):
+    for record in records["risk-assessments"]:
         risk_id = record.get("risk_assessment_id")
         if isinstance(risk_id, str):
             view._risks[risk_id] = record
-    for record in _read_directory(root, "batches"):
+    for record in records["batches"]:
         batch_id = record.get("batch_id")
         if not isinstance(batch_id, str):
             continue
@@ -234,7 +373,7 @@ def load_ledger_view(repo: Path) -> LedgerView:
             )
         )
     view.batches.sort(key=lambda batch: batch.created_at, reverse=True)
-    for report in _read_directory(root, "reports"):
+    for report in records["reports"]:
         dispatch_id = report.get("dispatch_id")
         if not isinstance(dispatch_id, str):
             continue
@@ -251,8 +390,8 @@ def load_ledger_view(repo: Path) -> LedgerView:
             )
         )
     view.reports.sort(key=lambda entry: entry.reported_at, reverse=True)
-    _load_stages(view, root)
-    _load_qa(view, root)
+    _load_stages(view, records["dispatch-status"])
+    _load_qa(view, qa_logs, records["qa-lane/attempts"])
     return view
 
 
@@ -429,11 +568,8 @@ def report_section_lines(report: JsonObject) -> list[tuple[str, list[ReportLine]
     return sections
 
 
-def _load_stages(view: LedgerView, root: Path) -> None:
-    statuses = {
-        text(record.get("dispatch_id")): record
-        for record in _read_directory(root, "dispatch-status")
-    }
+def _load_stages(view: LedgerView, status_records: list[JsonObject]) -> None:
+    statuses = {text(record.get("dispatch_id")): record for record in status_records}
     dispatches = dict(view._dispatches)
     entries: dict[str, JsonObject] = {}
     for batch_id, batch in view._batch_records.items():
@@ -529,7 +665,9 @@ def select_stages(
     return shown
 
 
-def _load_qa(view: LedgerView, root: Path) -> None:
+def _load_qa(
+    view: LedgerView, qa_logs: Iterable[QaLog], attempts: list[JsonObject]
+) -> None:
     """Загружает логи запусков QA gate и записи неудавшихся попыток qa-lane."""
     reports_by_sha = {
         match.group(1): entry
@@ -537,13 +675,8 @@ def _load_qa(view: LedgerView, root: Path) -> None:
         if entry.role == "qa"
         and (match := _QA_SHA256.search(text(entry.report.get("output")))) is not None
     }
-    for path in sorted((root / "qa-artifacts").glob("*.log")):
-        try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            continue
-        relative = f"qa-artifacts/{path.name}"
-        entry = reports_by_sha.get(path.stem)
+    for relative, lines in qa_logs:
+        entry = reports_by_sha.get(Path(relative).stem)
         view.qa_runs.append(
             QaRun(
                 artifact=relative,
@@ -557,7 +690,7 @@ def _load_qa(view: LedgerView, root: Path) -> None:
             )
         )
     view.qa_runs.sort(key=lambda run: run.logged_at, reverse=True)
-    for record in _read_directory(root, "qa-lane/attempts"):
+    for record in attempts:
         view.qa_attempts.append(
             QaAttempt(
                 dispatch_id=text(record.get("dispatch_id"), "?"),

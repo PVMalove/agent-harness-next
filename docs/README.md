@@ -34,4 +34,5 @@
 
 Порядок выпуска описан в [releases.md](../site/docs/agents/releases.md), рабочий процесс — в
 [git-workflow.md](./agents/git-workflow.md). Дизайн публичного сайта и макеты — в
-[design/](./design/) и [rfc/docs-site.md](./rfc/docs-site.md).
+[design/](./design/), [rfc/docs-site.md](./rfc/docs-site.md) и
+[rfc/web-console-v3.md](./rfc/web-console-v3.md) (редизайн веб-консоли).

@@ -84,10 +84,30 @@ export function blocks(markdown: string): Block[] {
   return found;
 }
 
-export function Markdown({ text }: { text: string }) {
+const plain = (text: string) => text.replace(/[`*]/g, "").replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 $2").toLowerCase();
+
+/** The text a block shows, lower-cased and without markup, for the search of the Help page. */
+export function blockText(block: Block): string {
+  if (block.kind === "heading") return plain(block.text);
+  if (block.kind === "list") return plain(block.items.join(" "));
+  if (block.kind === "table") return plain(block.rows.map((row) => row.join(" ")).join(" "));
+  return plain(block.lines.join(" "));
+}
+
+/** The items a Markdown text lists: list entries and table body rows. */
+export function countItems(markdown: string): number {
+  return blocks(markdown).reduce((n, block) => n + (block.kind === "list" ? block.items.length : block.kind === "table" ? Math.max(block.rows.length - 1, 0) : 0), 0);
+}
+
+/** `match` keeps only the blocks that contain the (lower-cased) query. `title` is the heading of
+    the panel around the text: a leading heading that repeats it is not drawn a second time. */
+export function Markdown({ text, match = "", title }: { text: string; match?: string; title?: string }) {
+  const list = blocks(text);
+  const first = list[0];
+  if (title && first?.kind === "heading" && first.text.trim().toLowerCase() === title.trim().toLowerCase()) list.shift();
   return (
-    <div className="help-markdown">
-      {blocks(text).map((block, index) => {
+    <div className="ds-md">
+      {list.filter((block) => !match || blockText(block).includes(match)).map((block, index) => {
         if (block.kind === "heading") {
           // The page title is the only h1: a guide title and its sections are h2, a subsection h3.
           const Tag = (["h2", "h2", "h3"] as const)[block.level - 1]!;
@@ -105,7 +125,7 @@ export function Markdown({ text }: { text: string }) {
         if (block.kind === "table") {
           const [head, ...rows] = block.rows;
           return (
-            <div className="table-wrap" key={index}>
+            <div className="ds-table-wrap" key={index} role="region" tabIndex={0} aria-label={head ? head.map((cell) => plain(cell)).join(" · ") : "table"}>
               <table>
                 {head && (
                   <thead>
