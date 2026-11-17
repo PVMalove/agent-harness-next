@@ -1,0 +1,5 @@
+interface:
+  display_name: "Developer"
+  short_description: "Implement an agreed change and report its evidence"
+policy:
+  allow_implicit_invocation: true

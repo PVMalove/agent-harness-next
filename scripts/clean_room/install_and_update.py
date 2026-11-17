@@ -323,8 +323,8 @@ def run(ctx: SimpleNamespace) -> None:
             "selecting mattpocock-suite and engineering-suite together unexpectedly succeeded"
         )
 
-    # engineering-suite inherits 25 upstream skills, overrides some of them in place, and adds 7 names;
-    # the clean-room check below expects 32 distinct installed skills (ADR 0001).
+    # engineering-suite inherits 25 upstream skills, overrides some of them in place, and adds 8 names;
+    # the clean-room check below expects 33 distinct installed skills (ADR 0001).
     pv_project = test_root / "pv_project"
     pv_project.mkdir(parents=True)
     run_step(["git", "init", "-q"], cwd=pv_project, check=True)
@@ -542,9 +542,9 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("installed Repo Map did not read the pinned commit")
 
     pv_skill_count = count_skill_files(pv_project / ".harness" / "skills")
-    if pv_skill_count != 32:
+    if pv_skill_count != 33:
         sys.exit(
-            f"expected 32 skills in a engineering-suite project (25 inherited, overrides replaced in place, + 7 additions), found {pv_skill_count}"
+            f"expected 33 skills in a engineering-suite project (25 inherited, overrides replaced in place, + 8 additions), found {pv_skill_count}"
         )
 
     # A failed older update could remove a retired managed skill's SKILL.md but leave
@@ -600,13 +600,24 @@ def run(ctx: SimpleNamespace) -> None:
     for required_text in ("integration next", "separate confirmation", "/qa-gate"):
         if required_text not in pr_step_text:
             sys.exit(f"installed to-pull-requests step lacks: {required_text}")
-    for name in ("grill-me", "grill-with-docs", "diagnosing-bugs", "architect", "tdd"):
+    for name in (
+        "grill-me",
+        "grill-with-docs",
+        "diagnosing-bugs",
+        "architect",
+        "developer",
+        "tdd",
+    ):
         if not filecmp.cmp(
             ROOT / "skills" / "first-party" / "engineering" / name / "SKILL.md",
             pv_project / ".harness" / "skills" / name / "SKILL.md",
             shallow=False,
         ):
             sys.exit(f"engineering-suite override did not install the first-party {name}")
+    # Issue 1156: both runtime discovery links resolve the installed developer skill.
+    for discovery in (".claude", ".agents"):
+        if not (pv_project / discovery / "skills" / "developer" / "SKILL.md").is_file():
+            sys.exit(f"{discovery}/skills does not resolve the developer skill")
     # Issue #552: the installed registry lists the first-party tdd, and the update baseline
     # records no drift for its files.
     _, tdd_description = frontmatter_metadata(
