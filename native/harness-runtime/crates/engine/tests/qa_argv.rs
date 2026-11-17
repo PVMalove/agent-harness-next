@@ -178,7 +178,7 @@ fn the_upstream_proxy_names_reach_the_sidecar_only_and_never_with_a_value() {
     let spec = spec(&plan, &labels);
     let qa = run(&labels, true, &[], &[], &[]);
 
-    let sidecar = argv::proxy_argv(&spec, "harness-d1-qa2");
+    let sidecar = argv::proxy_argv(&spec, "harness-d1-qa2", &[]);
     let worker = argv::create_argv(&spec);
     let command = argv::qa_run_argv(&qa, "probe-1", &QaCommand::Shell("make lint".to_owned()));
 
@@ -582,4 +582,64 @@ fn a_qa_command_gets_the_cache_path_and_a_run_scoped_target_dir_without_a_volume
             "{forbidden} in {joined}"
         );
     }
+}
+
+#[test]
+fn the_upstream_proxy_name_is_pinned_in_the_sidecar_hosts_only() {
+    let plan = plan(&["pypi.org"]);
+    let labels = labels();
+    let spec = spec(&plan, &labels);
+    let upstream = [(
+        "proxy.corp.example".to_owned(),
+        std::net::Ipv4Addr::new(10, 1, 2, 3),
+    )];
+
+    let sidecar = argv::proxy_argv(&spec, "harness-d1-qa2", &upstream);
+    let worker = argv::create_argv(&spec);
+
+    let at = sidecar
+        .iter()
+        .position(|part| part == "--add-host")
+        .expect("add-host");
+    assert_eq!(sidecar[at + 1], "proxy.corp.example:10.1.2.3");
+    assert_eq!(sidecar.last().map(String::as_str), Some("sha256:p"));
+    assert!(
+        !worker.iter().any(|part| part == "--add-host"),
+        "{worker:?}"
+    );
+    assert!(
+        !argv::proxy_argv(&spec, "harness-d1-qa2", &[])
+            .iter()
+            .any(|part| part == "--add-host")
+    );
+}
+
+#[test]
+fn an_upstream_proxy_url_yields_the_name_to_resolve_without_credentials() {
+    let host = |url: &str| argv::upstream_proxy_host(url);
+    assert_eq!(
+        host("http://Proxy.Corp.example:3128"),
+        Some(("proxy.corp.example".to_owned(), 3128))
+    );
+    assert_eq!(
+        host("http://user:secret@proxy.corp.example:8080/"),
+        Some(("proxy.corp.example".to_owned(), 8080))
+    );
+    assert_eq!(
+        host("proxy.corp.example:3128"),
+        Some(("proxy.corp.example".to_owned(), 3128))
+    );
+    assert_eq!(
+        host("https://proxy.corp.example"),
+        Some(("proxy.corp.example".to_owned(), 443))
+    );
+    assert_eq!(
+        host("http://proxy.corp.example"),
+        Some(("proxy.corp.example".to_owned(), 80))
+    );
+    assert_eq!(host("http://10.0.0.5:3128"), None);
+    assert_eq!(host("http://[fd00::5]:3128"), None);
+    assert_eq!(host(""), None);
+    assert_eq!(host("http://proxy:notaport"), None);
+    assert_eq!(host("http://bad name:3128"), None);
 }

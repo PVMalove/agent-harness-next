@@ -3,6 +3,7 @@
 
 use std::fs;
 use std::io;
+use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::time::Duration;
 
@@ -271,6 +272,37 @@ pub struct Sidecar {
     pub objects: Vec<(ObjectKind, String)>,
 }
 
+/// The IPv4 address the host resolves for each upstream proxy name of the runtime's own
+/// environment. A name the host cannot resolve is left out: the sidecar then reports the
+/// unreachable upstream itself.
+fn upstream_proxy_addresses() -> Vec<(String, Ipv4Addr)> {
+    let mut found: Vec<(String, Ipv4Addr)> = Vec::new();
+    for name in argv::PROXY_URL_ENV_NAMES {
+        let Some((host, port)) = std::env::var(name)
+            .ok()
+            .and_then(|url| argv::upstream_proxy_host(&url))
+        else {
+            continue;
+        };
+        if found.iter().any(|(known, _)| *known == host) {
+            continue;
+        }
+        let address = (host.as_str(), port)
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut all| {
+                all.find_map(|address| match address {
+                    SocketAddr::V4(v4) => Some(*v4.ip()),
+                    SocketAddr::V6(_) => None,
+                })
+            });
+        if let Some(address) = address {
+            found.push((host, address));
+        }
+    }
+    found
+}
+
 /// The sidecar stage of the objects named after `base`, only when the plan has hosts: the
 /// internal network, the sidecar on it, its external network, its start.
 fn stage_sidecar(
@@ -305,7 +337,7 @@ fn stage_sidecar(
     };
     let id = staged.run(
         &format!("{name} create (egress proxy)"),
-        &argv::proxy_argv(spec, base),
+        &argv::proxy_argv(spec, base, &upstream_proxy_addresses()),
         Some((ObjectKind::Container, argv::sidecar_name(base))),
         true,
     )?;

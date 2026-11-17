@@ -2,6 +2,7 @@
 //! `proxy_argv`, `network_argv` and `mounts`, plus the operation and execution labels, and the
 //! foreground `run --rm --init` of one QA command (ADR 0022, section 3).
 
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 
 use crate::Kind;
@@ -252,7 +253,7 @@ pub fn egress_network_argv(spec: &Spec<'_>, base: &str) -> Vec<String> {
 
 /// The `<engine> create` of the egress sidecar of the objects named after `base` from its pinned
 /// id, on their internal network.
-pub fn proxy_argv(spec: &Spec<'_>, base: &str) -> Vec<String> {
+pub fn proxy_argv(spec: &Spec<'_>, base: &str, upstream: &[(String, Ipv4Addr)]) -> Vec<String> {
     let engine = spec.plan.engine;
     let mut argv = owned(&[engine.as_str(), "create", "--pull", "never", "--name"]);
     argv.push(sidecar_name(base));
@@ -280,9 +281,46 @@ pub fn proxy_argv(spec: &Spec<'_>, base: &str) -> Vec<String> {
     for name in PROXY_URL_ENV_NAMES.iter().chain(&PROXY_BYPASS_ENV_NAMES) {
         argv.extend(["--env".to_owned(), (*name).to_owned()]);
     }
+    // The upstream proxy's name is resolved on the host and pinned in the sidecar's own hosts
+    // file: the container DNS may not know corporate names, and no other container learns them.
+    for (host, address) in upstream {
+        argv.extend(["--add-host".to_owned(), format!("{host}:{address}")]);
+    }
     argv.extend(labels_argv(spec.labels));
     argv.push(spec.proxy_image_id.unwrap_or_default().to_owned());
     argv
+}
+
+/// The host and port of an upstream proxy URL that need a name lookup: `None` for an empty or
+/// unparsable value and for an address literal, which the sidecar reaches without DNS.
+pub fn upstream_proxy_host(url: &str) -> Option<(String, u16)> {
+    let url = url.trim();
+    let (scheme, rest) = url.split_once("://").unwrap_or(("http", url));
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let authority = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    if authority.starts_with('[') {
+        return None;
+    }
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) => (host, port.parse().ok()?),
+        None => (
+            authority,
+            if scheme.eq_ignore_ascii_case("https") {
+                443
+            } else {
+                80
+            },
+        ),
+    };
+    let valid = host
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.');
+    if host.is_empty() || !valid || host.parse::<IpAddr>().is_ok() {
+        return None;
+    }
+    Some((host.to_ascii_lowercase(), port))
 }
 
 /// What runs one QA command: its words, given to `/bin/sh -c` for a command text.
