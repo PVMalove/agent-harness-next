@@ -104,5 +104,7 @@
   "Полнота": "Completeness",
   "Дерево": "Tree",
   "Блокер": "Blocker",
-  "Список отчётов": "Report list"
+  "Список отчётов": "Report list",
+  "Не создан": "Not created",
+  "Контейнеры неизвестны: этот сервер не сообщает о контейнерах dispatch": "Containers unknown: this server does not report dispatch containers"
 }

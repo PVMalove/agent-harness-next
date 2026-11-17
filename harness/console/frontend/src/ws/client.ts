@@ -595,6 +595,8 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
     clearPending();
     mapReader.reset();
     decisionReader.reset();
+    // A replaced or stopped socket never reaches its onclose: pending advice ends here.
+    advisor.reset();
     latestHome = null;
     subscription = null;
     stepsSubscription = null;
@@ -674,6 +676,7 @@ export function createConsoleClient(options: ClientOptions): ConsoleClient {
       generation += 1;
       timers.clearTimeout(reconnectTimer);
       clearPending();
+      advisor.reset();
       socket?.close();
       socket = null;
     },

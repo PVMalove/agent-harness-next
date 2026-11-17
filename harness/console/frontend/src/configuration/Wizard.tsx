@@ -4,7 +4,7 @@
    (AdvisorPanel). An answer or an accepted hint only changes the shared draft
    (configuration/draft.ts); writing stays on the Changes tab behind the confirmed configuration
    job. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import type { ConfigurationFacts, JsonObject, WizardParam } from "../ws/projectScreens";
 import { AdvisorPanel } from "./AdvisorPanel";
@@ -56,18 +56,38 @@ function ValueField({ param, value, onChange }: { param: WizardParam; value: unk
       </label>
     );
   }
-  const numeric = param.type === "integer" || param.type === "number";
+  if (param.type === "integer" || param.type === "number") return <NumberField param={param} label={label} value={value} onChange={onChange} />;
+  return <input className="ds-input" aria-label={label} type="text" value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value)} />;
+}
+
+/** A number as the user types it: the field keeps its own text, so it can be emptied or hold a
+    partial "-" while typing; only a whole number at or above the schema minimum reaches the
+    draft. A value changed elsewhere (a hint, a reset) replaces the text. */
+function NumberField({ param, label, value, onChange }: { param: WizardParam; label: string; value: unknown; onChange: (value: unknown) => void }) {
+  const outer = value === undefined ? "" : String(value);
+  const [text, setText] = useState(outer);
+  useEffect(() => {
+    setText((typed) => (typed.trim() !== "" && Number(typed) === value ? typed : outer));
+  }, [outer]);
+  const parse = (typed: string): number | null => {
+    if (typed.trim() === "" || !Number.isFinite(Number(typed))) return null;
+    const number = Number(typed);
+    if (param.type === "integer" && !Number.isInteger(number)) return null;
+    if (param.minimum !== null && param.minimum !== undefined && number < param.minimum) return null;
+    return number;
+  };
   return (
     <input
       className="ds-input"
       aria-label={label}
-      type={numeric ? "number" : "text"}
-      min={param.minimum ?? undefined}
-      value={value === undefined ? "" : String(value)}
+      type="text"
+      inputMode={param.type === "integer" ? "numeric" : "decimal"}
+      aria-invalid={text.trim() !== "" && parse(text) === null ? true : undefined}
+      value={text}
       onChange={(event) => {
-        const text = event.target.value;
-        if (!numeric) onChange(text);
-        else if (text.trim() !== "" && Number.isFinite(Number(text))) onChange(param.type === "integer" ? Math.trunc(Number(text)) : Number(text));
+        setText(event.target.value);
+        const number = parse(event.target.value);
+        if (number !== null) onChange(number);
       }}
     />
   );

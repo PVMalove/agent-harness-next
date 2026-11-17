@@ -98,6 +98,23 @@ describe("the Help route", () => {
     expect(document.querySelector("#help-intro")).not.toBeNull();
   });
 
+  // Review of PR #1186: with a query typed, a chosen tab stayed hidden behind the search results.
+  test("choosing a tab during a search clears the search and shows that tab", () => {
+    renderPage();
+    act(() => fireEvent.change(screen.getByRole("searchbox", { name: "Поиск по справке" }), { target: { value: "heartbeat" } }));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Вопросы/ })));
+    expect(document.querySelector("#help-search-results")).toBeNull();
+    expect((screen.getByRole("searchbox", { name: "Поиск по справке" }) as HTMLInputElement).value).toBe("");
+    expect(document.querySelector("#help-faq")).not.toBeNull();
+  });
+
+  test("every tab controls a panel that exists", () => {
+    renderPage();
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(document.getElementById(tab.getAttribute("aria-controls") ?? ""), tab.textContent ?? "").not.toBeNull();
+    }
+  });
+
   test("follows the ru/en switch with a new request", () => {
     const { socket } = renderPage();
     act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));

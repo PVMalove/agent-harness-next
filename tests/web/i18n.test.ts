@@ -41,7 +41,28 @@ function declared(call: "t" | "section" | "fact"): Set<string> {
   return keys;
 }
 
+/** The Russian values of the label tables (`const X_LABEL(S) = { key: "…" }`): the SPA passes
+    them to t() through a lookup, so the literal scan above never sees them (review of PR #1186). */
+function tableLabels(): Set<string> {
+  const keys = new Set<string>();
+  for (const text of sources(SRC)) {
+    for (const table of text.matchAll(/const [A-Z_]+_LABELS?\b[^=]*=\s*\{([\s\S]*?)\};/g)) {
+      for (const value of table[1]!.matchAll(/:\s*("(?:[^"\\]|\\.)*")/g)) {
+        const label = JSON.parse(value[1]!) as string;
+        if (/[а-яё]/i.test(label)) keys.add(label);
+      }
+    }
+  }
+  return keys;
+}
+
 describe("the translation catalog", () => {
+  test("holds every Russian value of a label table", () => {
+    const labels = tableLabels();
+    expect(labels.size).toBeGreaterThan(10);
+    expect([...labels].filter((key) => !(key in catalog.en) && !(key in dsEnglish))).toEqual([]);
+  });
+
   test("holds every string the SPA declares", () => {
     const strings = declared("t");
     for (const group of NAV_GROUPS) strings.add(group.label);

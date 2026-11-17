@@ -24,10 +24,13 @@ export function ContainerTab({ containers }: { containers: ContainerSnapshot | n
   const list = containers?.containers ?? [];
   const [selected, setSelected] = useState<string | null>(null);
   if (list.length === 0) {
+    // null: a server older than the field says nothing, which is not the same as "none".
     return (
       <Panel title={t("Контейнеры")} fill id="orch-containers">
-        <p className="ds-empty" id="orch-containers-empty">
-          {t("Контейнеров нет: ни один dispatch не запускался через контейнерный исполнитель")}
+        <p className="ds-empty" id="orch-containers-empty" data-known={containers !== null}>
+          {containers === null
+            ? t("Контейнеры неизвестны: этот сервер не сообщает о контейнерах dispatch")
+            : t("Контейнеров нет: ни один dispatch не запускался через контейнерный исполнитель")}
         </p>
       </Panel>
     );

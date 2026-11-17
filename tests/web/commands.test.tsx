@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { CommandPanel } from "../../harness/console/frontend/src/commands/CommandPanel";
@@ -291,6 +291,17 @@ describe("the command panel inside a page", () => {
     expect(socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
     rerender({ request: { command_id: "cleanup-apply", values: {}, nonce: 2 } });
     expect(screen.getByRole("alert").textContent).toBe("Нужно превью плана очистки: запустите команду из TUI");
+  });
+
+  // Review of PR #1186: Diagnostics remounted its panel on a tab change and `harness health --fix`
+  // ran again with no click. The page keeps the request in its state, so a remount sees it again.
+  test("a remounted panel does not run the page's request a second time", () => {
+    const request = { command_id: "diff", values: {}, nonce: 7 };
+    const first = renderPanel({ request });
+    expect(first.socket.sent.filter((body) => body.type === "job.start")).toHaveLength(1);
+    cleanup();
+    const second = renderPanel({ request });
+    expect(second.socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
   });
 
   test("confirmAll asks before a reversible command and shows the page's reason", () => {
