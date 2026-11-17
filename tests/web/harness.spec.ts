@@ -62,7 +62,7 @@ async function open(page: Page, width: number) {
   await page.goto(`${base()}/#/harness`);
   await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
   await expect(page.locator("#harness-version")).toHaveText("2.0.0 → 2.0.1");
-  await expect(page.locator("#harness-install .harness-component")).toHaveCount(6);
+  await expect(page.locator("#harness-install .ds-row")).toHaveCount(6);
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
@@ -70,12 +70,14 @@ test("the overview shows the server's facts and the cleanup is bound to the show
   const starts = await mockSocket(page);
   await open(page, 1440);
   await expect(page.locator("#harness-usage")).toHaveCount(0);
-  await expect(page.locator("#harness-tab-overview #harness-adapters .harness-adapter")).toHaveCount(3);
+  await page.getByRole("tab", { name: /Адаптеры/ }).click();
+  await expect(page.locator("#harness-tab-adapters #harness-adapters .ds-adapter")).toHaveCount(3);
+  await page.getByRole("tab", { name: /Обзор/ }).click();
   await expect(page.locator("#harness-tab-overview #harness-maintenance")).toHaveCount(0);
-  await page.getByRole("tab", { name: "Команды" }).click();
+  await page.getByRole("tab", { name: /Команды/ }).click();
   await expect(page.locator("#harness-maintenance")).toContainText("Жёсткий режим: +40.0 MiB");
   await page.getByRole("button", { name: "Очистить…" }).click();
-  await expect(page.getByRole("tab", { name: "Команды" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: /Команды/ })).toHaveAttribute("aria-selected", "true");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("cleanup-apply");
   await dialog.getByRole("button", { name: "Запустить" }).click();
@@ -90,12 +92,12 @@ for (const width of [1440, 390]) {
     await open(page, width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     // The installation rows stay one line each, and no overview panel overflows its frame.
-    const rows = await page.locator("#harness-install .harness-component").evaluateAll((items) =>
+    const rows = await page.locator("#harness-install .ds-row").evaluateAll((items) =>
       items.map((item) => Math.round(item.getBoundingClientRect().height)),
     );
-    expect(Math.max(...rows)).toBeLessThanOrEqual(width > 600 ? 40 : 80);
+    expect(Math.max(...rows)).toBeLessThanOrEqual(width > 600 ? 48 : 112);
     const wide = await page.evaluate(() =>
-      [...document.querySelectorAll("#harness-tab-overview .panel:not(.harness-commands), #harness-kpis")]
+      [...document.querySelectorAll("#harness-tab-overview .ds-panel, #harness-kpis")]
         .filter((box) => box.scrollWidth > box.clientWidth + 1)
         .map((box) => box.className),
     );

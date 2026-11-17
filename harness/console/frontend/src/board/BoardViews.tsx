@@ -3,14 +3,25 @@
    show the server's allowed (drop-ok) and refused (drop-no) targets; a refused drop gets its reason. Ticket text is
    untrusted: React text only. */
 import { useState } from "react";
-// The docs-site mascot (docs/rfc/docs-site.md §5.2), shipped as a local file.
+// The Harness mascot (docs/rfc/docs-site.md §5.2), shipped as a local file.
 import mascot from "../assets/mascot.svg";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { BOARD_COLUMNS } from "../ws/taskBoard";
 import type { BoardCard, BoardColumn, BoardStale, TaskBoard } from "../ws/taskBoard";
-import { ageText, columnLabels, firstLine, priorityLabel, safeUrl, trackerReason, visible } from "./format";
+import {
+  ageText,
+  blockerBadges,
+  columnLabels,
+  firstLine,
+  implementationKind,
+  implementationLabel,
+  priorityLabel,
+  safeUrl,
+  trackerReason,
+  visible,
+} from "./format";
 import type { BoardFilters } from "./format";
 import { dropClass, moveOf, refusalCaption } from "./statusChange";
 
@@ -115,6 +126,8 @@ function Card({
   const link = safeUrl(card.url);
   const what = firstLine(card.what);
   const draggable = onDrag !== undefined;
+  const kind = implementationKind(card);
+  const badges = blockerBadges(card);
   const [dragging, setDragging] = useState(false);
   return (
     <article
@@ -146,16 +159,32 @@ function Card({
     >
       <div className="board-card-meta">
         <span>{card.id}</span>
-        {prio && <em className={`board-prio ${prio.toLowerCase()}`}>{prio}</em>}
+        <span className="board-card-badges">
+          {prio && <em className={`board-prio ${prio.toLowerCase()}`}>{prio}</em>}
+          <em className="board-sp" title={t("Story points")}>
+            {card.sp === null ? t("нет данных") : `${card.sp} SP`}
+          </em>
+        </span>
       </div>
       <h3>{card.title}</h3>
       <p>{what || t("нет данных")}</p>
       <div className="board-card-chips">
         <span className="board-chip command">{card.command}</span>
+        <span className={`board-chip kind ${kind}`} title={t("Тип реализации")}>
+          {implementationLabel(t, kind)}
+        </span>
         {card.dispatch && <span className="board-chip role">{t("dispatch: {role}", { role: card.dispatch })}</span>}
         {!card.closed &&
           (card.open_blockers > 0 ? (
-            <span className="board-chip blocker">{t("блокеров: {count}", { count: card.open_blockers })}</span>
+            <>
+              <span className="board-chip blocker">{t("блокеров: {count}", { count: card.open_blockers })}</span>
+              {badges.ids.map((id) => (
+                <span className="board-chip blocker-id" key={id} title={t("Открытый блокер")}>
+                  {id}
+                </span>
+              ))}
+              {badges.more > 0 && <span className="board-chip blocker-id">+{badges.more}</span>}
+            </>
           ) : (
             <span className="board-chip free">{t("без блокеров")}</span>
           ))}
@@ -194,6 +223,23 @@ export function BoardColumns({
     <>
       <div className="board-count" id="board-count">
         {t("{shown} из {total}", { shown: shown.length, total: board.tickets.length })}
+      </div>
+      {/* Where the columns scroll sideways (narrow screens), an index of them with their counters
+          brings one into view; the page itself never scrolls sideways. A div, not <nav>: the old
+          sheet styles every nav element as the side menu. */}
+      <div className="board-jump" role="navigation" aria-label={t("Колонки доски")}>
+        {BOARD_COLUMNS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() =>
+              document.querySelector<HTMLElement>(`[data-board-col="${id}"]`)?.scrollIntoView({ block: "nearest", inline: "start" })
+            }
+          >
+            {labels[id].name}
+            <span className="board-jump-n">{shown.filter((card) => card.column === id).length}</span>
+          </button>
+        ))}
       </div>
       <div id="board-columns">
         <div className="board-columns">
@@ -281,7 +327,7 @@ export function BoardStatePanel({ kind, onRefresh }: { kind: BoardStateKind; onR
       <div className="board-state-icon">
         <Icon name="board" />
       </div>
-      <span className="eyebrow">{t("ДОСКА · EMPTY")}</span>
+      <span className="eyebrow">{t("Доска · пусто")}</span>
       <h2>{title}</h2>
       <p>{text}</p>
       <div className="actions">
@@ -297,13 +343,17 @@ export function BoardStatePanel({ kind, onRefresh }: { kind: BoardStateKind; onR
 }
 
 /** Over the board while its snapshot is read (the first read, a refresh or a status change): the
-    frame stays readable under it, it never takes the focus, and reduced motion stops the jump. */
+    frame stays readable under it, it never takes the focus, and reduced motion stops the hop.
+    There is no card: the mascot hops on its own floor shadow over a soft scrim. */
 export function BoardUpdating() {
   const { t } = useI18n();
   return (
     <div className="board-updating" id="board-updating" role="status" aria-live="polite">
-      <span className="board-updating-card">
-        <img className="board-mascot" src={mascot} alt="" width={34} height={44} />
+      <span className="board-updating-body">
+        <span className="board-mascot-stage" aria-hidden="true">
+          <span className="board-mascot-shadow" />
+          <img className="board-mascot" src={mascot} alt="" width={48} height={62} />
+        </span>
         {t("Идёт обновление…")}
       </span>
     </div>

@@ -120,9 +120,9 @@ describe("the Task Board status change", () => {
     const socket = renderBoard();
     drop("#512", "progress");
     const dialog = document.querySelector("#board-confirm") as HTMLElement;
-    expect(dialog.querySelector(".eyebrow")?.textContent).toBe("СМЕНА СТАТУСА");
+    expect(dialog.querySelector(".eyebrow")?.textContent).toBe("Смена статуса");
     expect(dialog.querySelector("h2")?.textContent).toBe("#512 → В работе");
-    expect(dialog.querySelector(".board-confirm-diff")?.textContent).toBe("ready→progress");
+    expect(dialog.querySelector(".board-confirm-diff")?.textContent).toBe("Готово к работе→В работе");
     expect(dialog.querySelector(".board-confirm-note")?.textContent).toBe(
       "Сервер запустит смену метки в GitHub как мутирующий job и обновит доску.",
     );
@@ -159,6 +159,10 @@ describe("the Task Board status change", () => {
     expect(overlay()?.getAttribute("role")).toBe("status");
     expect(overlay()?.textContent).toContain("Идёт обновление…");
     expect(overlay()?.querySelector(".board-mascot")).not.toBeNull();
+    // No card around the mascot: it hops on its own floor shadow, hidden from assistive tech.
+    expect(overlay()?.querySelector(".board-updating-card")).toBeNull();
+    expect(overlay()?.querySelector(".board-mascot-stage")?.getAttribute("aria-hidden")).toBe("true");
+    expect(overlay()?.querySelector(".board-mascot-stage .board-mascot-shadow")).not.toBeNull();
     expect(overlay()?.contains(document.activeElement)).toBe(false);
 
     finish(socket, result({ result: "changed", message: "status::ready -> status::in-progress" }));
@@ -239,7 +243,7 @@ describe("the Task Board status change", () => {
     expect(notice()?.textContent).toBe("#511 → “Ready”: Open blockers: #512");
     drop("#512", "progress");
     const dialog = document.querySelector("#board-confirm") as HTMLElement;
-    expect(dialog.querySelector(".eyebrow")?.textContent).toBe("STATUS CHANGE");
+    expect(dialog.querySelector(".eyebrow")?.textContent).toBe("Status change");
     expect(dialog.querySelector("#board-confirm-ok")?.textContent).toBe("Change status");
   });
 });

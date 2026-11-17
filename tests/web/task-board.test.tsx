@@ -94,6 +94,18 @@ describe("the Task Board route", () => {
     expect(content()).toContain("блокеров: 1");
   });
 
+  test("a narrow screen jumps between the scrolling columns from an index with their counters", () => {
+    renderBoard();
+    const index = screen.getByRole("navigation", { name: "Колонки доски" });
+    const jumps = [...index.querySelectorAll("button")];
+    expect(jumps.map((jump) => jump.textContent)).toEqual(["Бэклог2", "Готово к работе2", "В работе1", "Review / QA1", "Готово1"]);
+    const review = document.querySelector<HTMLElement>('[data-board-col="review"]')!;
+    const scrolled = vi.fn();
+    review.scrollIntoView = scrolled;
+    act(() => fireEvent.click(jumps[3]!));
+    expect(scrolled).toHaveBeenCalledWith({ block: "nearest", inline: "start" });
+  });
+
   test("remembers the chosen spec in this browser", () => {
     window.localStorage.setItem(SPEC_KEY, "#502");
     const socket = renderBoard({ board: null });
@@ -298,5 +310,55 @@ describe("the Task Board route", () => {
     expect(document.querySelector("#board-count")?.textContent).toBe("7 of 7");
     expect(content()).toContain("criteria: 2");
     expect(content()).toContain("no data");
+  });
+});
+
+describe("the board card (#1092)", () => {
+  beforeEach(() => {
+    FakeSocket.reset();
+    answered.clear();
+    window.localStorage.clear();
+  });
+
+  const card = (id: string) => document.querySelector(`[data-board-ticket="${id}"]`)!;
+  const meta = (id: string) => card(id).querySelector(".board-card-meta")!.textContent;
+  const chips = (id: string) => [...card(id).querySelectorAll(".board-chip")].map((chip) => chip.textContent);
+
+  test("shows the priority and story points, or no data when the ticket has none", () => {
+    renderBoard();
+    expect(meta("#511")).toBe("#511P13 SP");
+    expect(meta("#512")).toBe("#512P05 SP");
+    expect(meta("#516")).toBe("#516нет данных");
+  });
+
+  test("names the implementation type from the command: full, fast, with a human", () => {
+    renderBoard();
+    expect(chips("#512")).toContain("полная");
+    expect(chips("#513")).toContain("быстрая");
+    expect(chips("#514")).toContain("с человеком");
+    expect(card("#513").querySelector(".board-chip.kind")!.className).toContain("fast");
+  });
+
+  test("lists the open blockers by id; a closed or unknown one is not a badge", () => {
+    renderBoard();
+    expect(chips("#511")).toEqual(["/implement", "полная", "блокеров: 1", "#512"]);
+    expect(chips("#516")).toEqual(["/implement", "полная", "без блокеров"]);
+  });
+
+  test("names more open blockers than the badges hold", () => {
+    const many = {
+      ...BOARD,
+      tickets: BOARD.tickets.map((ticket) =>
+        ticket.id === "#511"
+          ? {
+              ...ticket,
+              open_blockers: 5,
+              blockers: ["#601", "#602", "#603", "#604", "#605"].map((id) => ({ id, n: 1, why: "w", state: "open" })),
+            }
+          : ticket,
+      ),
+    };
+    renderBoard({ board: many });
+    expect(chips("#511")).toEqual(["/implement", "полная", "блокеров: 5", "#601", "#602", "#603", "+2"]);
   });
 });

@@ -131,10 +131,142 @@ def test_the_screen_facts_adapter_is_the_kernel_collector(tmp_path: Path) -> Non
 
     payload = screen_facts.configuration_facts(tmp_path)
     wizard = payload.pop("wizard")
+    assert payload.pop("versions") == []
 
     found = ConfigurationFacts.from_payload(payload)
 
     assert found == collect_configuration(tmp_path)
-    assert wizard == wizard_parameters(tmp_path)
+    assert wizard == wizard_parameters(tmp_path, found)
     service = composition.screen_service(tmp_path)
     assert service._collect_configuration is screen_facts.configuration_facts
+
+
+def _saved_version(repo: Path) -> str:
+    from harness.configuration_store import ConfigurationStore
+    from tests.console._configuration_fixture import installed_project
+
+    raw = installed_project(repo)
+    version = ConfigurationStore(repo).save(
+        {"project.json": raw, "orchestration.json": None}, "первая"
+    )
+    (repo / ".harness/project.json").write_text(
+        json.dumps({**json.loads(raw), "language": "en"}), encoding="utf-8"
+    )
+    return version.id
+
+
+def test_versions_are_listed_without_creating_the_store_or_moving_a_legacy_one(
+    tmp_path: Path,
+) -> None:
+    from harness.console.kernel.configuration_snapshot import list_versions, read_version
+
+    _project(tmp_path)
+    legacy = tmp_path / ".harness/config-versions"
+    legacy.mkdir()
+
+    assert list_versions(tmp_path) == []
+    missing = read_version(tmp_path, "20260101T000000Z-0123456789ab")
+
+    assert legacy.is_dir()
+    assert not (tmp_path / ".harness/config_versions").exists()
+    assert missing["files"] == {}
+    assert "20260101T000000Z-0123456789ab" in str(missing["error"])
+    assert ".harness/config_versions" in str(missing["error"])
+
+
+def test_the_selected_version_is_its_own_masked_content(tmp_path: Path) -> None:
+    from harness.console.kernel.configuration_snapshot import list_versions, read_version
+
+    identifier = _saved_version(tmp_path)
+
+    listed = list_versions(tmp_path)
+    found = read_version(tmp_path, identifier)
+
+    assert [item["id"] for item in listed] == [identifier]
+    assert listed[0]["description"] == "первая"
+    assert listed[0]["files"] == ["project.json"]
+    assert found["id"] == identifier and found["error"] == ""
+    files = found["files"]
+    assert isinstance(files, dict)
+    assert files["project.json"]["document"]["language"] == "ru"
+    assert files["project.json"]["exists"] is True and files["project.json"]["digest"]
+    assert files["orchestration.json"] == {
+        "exists": False,
+        "digest": "",
+        "document": {},
+        "error": "",
+    }
+    for bad in ("../x", "nonsense"):
+        broken = read_version(tmp_path, bad)
+        assert broken["files"] == {} and bad in str(broken["error"])
+
+
+def test_a_damaged_version_names_the_store_problem(tmp_path: Path) -> None:
+    from harness.console.kernel.configuration_snapshot import read_version
+
+    identifier = _saved_version(tmp_path)
+    stored = tmp_path / ".harness/config_versions" / identifier / "project.json"
+    stored.write_text("{}", encoding="utf-8")
+
+    found = read_version(tmp_path, identifier)
+
+    assert found["files"] == {} and "хеш" in str(found["error"])
+
+
+def test_the_snapshot_merges_the_selected_version_uncached(tmp_path: Path) -> None:
+    import asyncio
+
+    identifier = _saved_version(tmp_path)
+    service = composition.screen_service(tmp_path)
+
+    async def scenario() -> tuple[dict[str, object], dict[str, object]]:
+        plain = await service.configuration()
+        chosen = await service.configuration(version=identifier)
+        return json.loads(plain.text), json.loads(chosen.text)
+
+    plain, chosen = asyncio.run(scenario())
+
+    assert "version" not in plain
+    versions, selected = plain["versions"], chosen["version"]
+    assert isinstance(versions, list) and isinstance(selected, dict)
+    assert [item["id"] for item in versions] == [identifier]
+    assert selected["id"] == identifier
+    assert {key: chosen[key] for key in plain} == plain
+
+
+@pytest.mark.parametrize("version", ["../x", "", 5, "20260101T000000Z-XYZ"])
+def test_a_malformed_version_field_is_a_bad_request(
+    tmp_path: Path, version: object
+) -> None:
+    import asyncio
+
+    from harness.console.backend.api.protocol.screens import respond
+
+    service = composition.screen_service(tmp_path)
+    frame = json.dumps({"id": 1, "type": "configuration.snapshot", "version": version})
+    reply = json.loads(asyncio.run(respond(frame, service)))
+    assert reply["error"]["code"] == "bad_request"
+
+
+def test_the_wizard_carries_the_console_recommendation(tmp_path: Path) -> None:
+    from tests.console._configuration_fixture import installed_project
+
+    installed_project(tmp_path)
+    facts = collect_configuration(tmp_path)
+    by_path = {
+        ".".join(item["path"]): item  # type: ignore[arg-type]
+        for item in wizard_parameters(tmp_path, facts)
+    }
+    language = by_path["language"]["recommendation"]
+    assert isinstance(language, dict)
+    assert language["value"] == "ru" and language["reason"]
+    assert all("recommendation" in item for item in by_path.values())
+    # Without the facts there is no draft to recommend from.
+    assert all(item["recommendation"] is None for item in wizard_parameters(tmp_path))
+
+
+@pytest.fixture(autouse=True)
+def no_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.console.kernel import project_facts
+
+    monkeypatch.setattr(project_facts, "_default_branch", lambda _repo: None)

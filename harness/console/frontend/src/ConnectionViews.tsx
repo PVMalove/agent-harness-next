@@ -35,7 +35,7 @@ export function ConnectionChip() {
   return (
     <span
       id="connection-state"
-      className={`conn-chip ${chip.css}`}
+      className={`ds-conn ds-conn-${chip.css}`}
       role="status"
       aria-label={t("Состояние соединения: {state}", { state: label })}
       data-status={state.status}
@@ -52,8 +52,8 @@ export function ConnectionBanner() {
   if (state.status !== "reconnecting") return null;
   const waiting = state.attempt === 0 && state.snapshot === null;
   return (
-    <div id="connection-banner" className="connection-banner" role="status" aria-live="polite">
-      <span className="conn-spinner" />
+    <div id="connection-banner" className="ds-banner" role="status" aria-live="polite">
+      <span className="ds-spinner" />
       <div>
         <b>{waiting ? t("Ожидание снимка") : t("Переподключение к серверу консоли")}</b>
         {waiting ? null : (
@@ -66,7 +66,7 @@ export function ConnectionBanner() {
           </small>
         )}
       </div>
-      <button className="btn" type="button" onClick={() => client.retryNow()}>
+      <button className="ds-btn" type="button" onClick={() => client.retryNow()}>
         {t("Повторить сейчас")}
       </button>
     </div>

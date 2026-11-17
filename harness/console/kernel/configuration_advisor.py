@@ -22,7 +22,7 @@ from threading import Event
 from typing import Callable
 
 from harness.configuration import reject_secrets
-from ..kernel.configuration import ConfigurationDraft
+from .configuration import ConfigurationDraft
 from .configuration_steps import ConfigurationStep
 from .project_facts import project_facts
 
@@ -55,6 +55,34 @@ class AdvisorUnavailable(ValueError):
     """A normal degraded mode, never a reason to block configuration."""
 
 
+class CliMissing(AdvisorUnavailable):
+    """The CLI executable is not on PATH."""
+
+
+class CliUnsupported(AdvisorUnavailable):
+    """This CLI version lacks the flags isolated advice needs."""
+
+
+class CliUnauthorized(AdvisorUnavailable):
+    """The CLI has no valid saved login."""
+
+
+class AdviceRejected(AdvisorUnavailable):
+    """The CLI answered, but the advice is invalid or incompatible."""
+
+
+@dataclass(frozen=True)
+class CliStatus:
+    """What the Check CLI action learned without a model call."""
+
+    provider: str
+    found: bool
+    version_supported: bool | None
+    authorized: bool | None
+    ready: bool
+    message: str
+
+
 @dataclass(frozen=True)
 class Advice:
     value: object
@@ -63,11 +91,12 @@ class Advice:
     comparison: tuple[tuple[str, str], ...] = ()
 
 
-def build_request(draft: ConfigurationDraft, field: ConfigurationStep) -> str:
-    # Authored commands, paths, model names and existing config values are excluded.
+def request_context(draft: ConfigurationDraft, field: ConfigurationStep) -> dict[str, object]:
+    """The allowlisted facts about one field; authored commands, paths, model names,
+    tokens and current config values are excluded."""
     facts = project_facts(draft.repo)
-    recommended = field.recommended(draft)
-    context = {
+    recommended = field.fact_recommendation(draft)[0]
+    context: dict[str, object] = {
         "file": field.file,
         "parameter": ".".join(field.path),
         "type": field.kind,
@@ -81,6 +110,11 @@ def build_request(draft: ConfigurationDraft, field: ConfigurationStep) -> str:
         "console_recommendation": recommended if recommended in field.choices else None,
     }
     reject_secrets(context)
+    return context
+
+
+def build_request(draft: ConfigurationDraft, field: ConfigurationStep) -> str:
+    context = request_context(draft, field)
     return (
         "Помоги выбрать параметр Harness. Ответь по-русски: value, why, impact, comparison. "
         "value — строка: само значение для string, JSON-кодировка для остальных типов. "
@@ -171,8 +205,8 @@ def _comparison(raw: object) -> tuple[tuple[str, str], ...]:
     return tuple(rows)
 
 
-def _reject(reason: str) -> AdvisorUnavailable:
-    return AdvisorUnavailable(
+def _reject(reason: str) -> AdviceRejected:
+    return AdviceRejected(
         f"CLI вернул неподходящую рекомендацию: {reason}.{FALLBACK}"
     )
 
@@ -263,7 +297,8 @@ def parse_response(raw: str, field: ConfigurationStep) -> Advice:
 @dataclass(frozen=True)
 class Provider:
     label: str
-    check: Callable[[str, Path, Event], None]
+    supports: Callable[[str, Path, Event], None]
+    authorize: Callable[[str, Path, Event], None]
     ask: Callable[[str, Path, str, Event], str]
 
 
@@ -289,12 +324,12 @@ _CODEX_FEATURES = (
 
 def _missing(help_text: str, required: tuple[str, ...], label: str) -> None:
     if any(flag not in help_text for flag in required):
-        raise AdvisorUnavailable(
+        raise CliUnsupported(
             f"Эта версия {label} не поддерживает изолированные подсказки." + FALLBACK
         )
 
 
-def _check_codex(executable: str, cwd: Path, cancel: Event) -> None:
+def _supports_codex(executable: str, cwd: Path, cancel: Event) -> None:
     help_text = _run([executable, "exec", "--help"], cwd, "", cancel, 5)
     _missing(
         help_text,
@@ -307,6 +342,9 @@ def _check_codex(executable: str, cwd: Path, cancel: Event) -> None:
         ),
         "Codex CLI",
     )
+
+
+def _authorize_codex(executable: str, cwd: Path, cancel: Event) -> None:
     status = _run(
         [executable, "login", "status"], cwd, "", cancel, 5, merge_stderr=True
     )
@@ -314,10 +352,10 @@ def _check_codex(executable: str, cwd: Path, cancel: Event) -> None:
     if not any(
         re.match(r"logged in\b", line.strip(), re.I) for line in status.splitlines()
     ):
-        raise AdvisorUnavailable("Нет действующей авторизации Codex CLI." + FALLBACK)
+        raise CliUnauthorized("Нет действующей авторизации Codex CLI." + FALLBACK)
 
 
-def _check_claude(executable: str, cwd: Path, cancel: Event) -> None:
+def _supports_claude(executable: str, cwd: Path, cancel: Event) -> None:
     help_text = _run([executable, "--help"], cwd, "", cancel, 5)
     _missing(
         help_text,
@@ -330,11 +368,14 @@ def _check_claude(executable: str, cwd: Path, cancel: Event) -> None:
         ),
         "Claude Code CLI",
     )
+
+
+def _authorize_claude(executable: str, cwd: Path, cancel: Event) -> None:
     status = json.loads(
         _run([executable, "auth", "status", "--json"], cwd, "", cancel, 5)
     )
     if not isinstance(status, dict) or status.get("loggedIn") is not True:
-        raise AdvisorUnavailable(
+        raise CliUnauthorized(
             "Нет действующей авторизации Claude Code CLI." + FALLBACK
         )
 
@@ -391,31 +432,61 @@ def _ask_claude(executable: str, cwd: Path, prompt: str, cancel: Event) -> str:
 
 
 PROVIDERS = {
-    "codex": Provider("Codex CLI", _check_codex, _ask_codex),
-    "claude": Provider("Claude Code CLI", _check_claude, _ask_claude),
+    "codex": Provider("Codex CLI", _supports_codex, _authorize_codex, _ask_codex),
+    "claude": Provider(
+        "Claude Code CLI", _supports_claude, _authorize_claude, _ask_claude
+    ),
 }
 
 
 def _ready(provider: str, cwd: Path, cancel: Event) -> str:
     executable = shutil.which(provider)
     if executable is None:
-        raise AdvisorUnavailable("CLI не найден." + FALLBACK)
-    PROVIDERS[provider].check(executable, cwd, cancel)
+        raise CliMissing("CLI не найден." + FALLBACK)
+    PROVIDERS[provider].supports(executable, cwd, cancel)
+    PROVIDERS[provider].authorize(executable, cwd, cancel)
     return executable
+
+
+def check_cli(provider: str, cancel: Event) -> CliStatus:
+    """CLI presence, version support and login, without a model request or status logging."""
+    if provider not in PROVIDERS:
+        return CliStatus(provider, False, None, None, False, "Неизвестный CLI")
+    executable = shutil.which(provider)
+    if executable is None:
+        return CliStatus(provider, False, None, None, False, "CLI не найден." + FALLBACK)
+    version: bool | None = None
+    authorized: bool | None = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="harness-advisor-check-") as temporary:
+            cwd = Path(temporary)
+            PROVIDERS[provider].supports(executable, cwd, cancel)
+            version = True
+            PROVIDERS[provider].authorize(executable, cwd, cancel)
+            authorized = True
+    except CliUnsupported as exc:
+        version, message = False, str(exc)
+    except CliUnauthorized as exc:
+        authorized, message = False, str(exc)
+    except AdvisorUnavailable as exc:
+        message = str(exc)
+    except (OSError, ValueError):
+        message = "CLI недоступен или состояние авторизации несовместимо." + FALLBACK
+    else:
+        return CliStatus(
+            provider,
+            True,
+            True,
+            True,
+            True,
+            "Готов к запросу; сеть и лимит проверяются при запросе",
+        )
+    return CliStatus(provider, True, version, authorized, False, message)
 
 
 def availability(provider: str, cancel: Event) -> str:
     """Check CLI capabilities/login without making a model request or logging status data."""
-    try:
-        if provider not in PROVIDERS:
-            raise AdvisorUnavailable("Неизвестный CLI")
-        with tempfile.TemporaryDirectory(prefix="harness-advisor-check-") as temporary:
-            _ready(provider, Path(temporary), cancel)
-        return "Готов к запросу; сеть и лимит проверяются при запросе"
-    except AdvisorUnavailable as exc:
-        return str(exc)
-    except (OSError, ValueError):
-        return "CLI недоступен или состояние авторизации несовместимо." + FALLBACK
+    return check_cli(provider, cancel).message
 
 
 def advise(
@@ -437,7 +508,7 @@ def advise(
             )
             candidate.set_value(field.file, field.path, advice.value)
             if set(candidate.problems()) - set(draft.problems()):
-                raise AdvisorUnavailable(
+                raise AdviceRejected(
                     "Рекомендация несовместима со связанными параметрами." + FALLBACK
                 )
             return advice

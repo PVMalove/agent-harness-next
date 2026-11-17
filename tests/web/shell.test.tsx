@@ -72,8 +72,8 @@ describe("the shell", () => {
   test("lists 13 sections in three groups and marks the current one", () => {
     renderApp();
     const nav = navigation();
-    const groups = nav.querySelectorAll(".nav-group");
-    expect([...groups].map((group) => group.querySelector(".nav-group-label")?.textContent)).toEqual([
+    const groups = nav.querySelectorAll(".ds-nav-group");
+    expect([...groups].map((group) => group.querySelector(".ds-nav-label")?.textContent)).toEqual([
       "Обзор",
       "Работа",
       "Контекст",
@@ -130,7 +130,7 @@ describe("the shell", () => {
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
 
-  test("the Diagnostics route renders the health report inside the shell, not a placeholder", async () => {
+  test("the Diagnostics route renders its Features and Checks tabs inside the shell, not a placeholder", async () => {
     renderApp();
     await act(async () => {
       window.location.hash = "#/diagnostics";
@@ -139,7 +139,8 @@ describe("the shell", () => {
     const current = within(navigation()).getByRole("link", { name: "Диагностика" });
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Диагностика");
-    expect(screen.getByRole("heading", { level: 2, name: "Сводка здоровья" }).closest("main")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Функции/ }).closest("main")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Проверки/ }).closest("main")).toBeTruthy();
     expect(screen.queryByText("Этот раздел ещё недоступен в веб-консоли")).toBeNull();
   });
 
@@ -173,13 +174,28 @@ describe("the shell", () => {
     expect(document.body.classList.contains("nav-open")).toBe(true);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(scrim.hidden).toBe(false);
+    // The open menu is modal: the page and the footer behind it are inert, focus is in the menu.
+    expect(document.getElementById("content")!.inert).toBe(true);
+    expect(document.querySelector<HTMLElement>(".ds-foot")!.inert).toBe(true);
+    expect(document.getElementById("navigation")!.contains(document.activeElement)).toBe(true);
     act(() => fireEvent.click(scrim));
     expect(document.body.classList.contains("nav-open")).toBe(false);
+    expect(document.getElementById("content")!.inert).toBe(false);
 
     act(() => fireEvent.click(toggle));
     act(() => fireEvent.keyDown(document, { key: "Escape" }));
     expect(document.body.classList.contains("nav-open")).toBe(false);
     expect(scrim.hidden).toBe(true);
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  test("the narrow header switches the language with one button that names its action", () => {
+    renderApp();
+    const one = screen.getByRole("button", { name: "RU · Переключить на английский" });
+    expect(one.textContent).toBe("RU");
+    act(() => fireEvent.click(one));
+    expect(screen.getByRole("button", { name: "EN · Switch to Russian" }).textContent).toBe("EN");
+    expect(document.documentElement.lang).toBe("en");
   });
 
   test("a remembered collapse is restored on start", () => {
@@ -235,6 +251,44 @@ describe("the shell", () => {
       expect(heading?.textContent?.trim(), item.route).toBe(link?.textContent?.trim());
       unmount();
     }
+  });
+});
+
+describe("the v3 shell contract", () => {
+  beforeEach(() => {
+    window.location.hash = "#/";
+    localStorage.clear();
+    document.body.className = "";
+  });
+
+  test("keeps the ids the e2e specs and shortcuts rely on", () => {
+    renderApp();
+    for (const id of ["app", "navigation", "nav-collapse", "menu-toggle", "nav-scrim", "connection-state", "content", "foot-status"])
+      expect(document.getElementById(id), id).not.toBeNull();
+    expect(document.getElementById("navigation")!.tagName).toBe("DIV");
+    expect(document.getElementById("navigation")!.getAttribute("role")).toBe("navigation");
+  });
+
+  test("the collapse button folds the rail and remembers it", () => {
+    renderApp();
+    const button = document.getElementById("nav-collapse") as HTMLButtonElement;
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    act(() => fireEvent.click(button));
+    expect(document.body.classList.contains("nav-collapsed")).toBe(true);
+    expect(localStorage.getItem("harness-nav-collapsed")).toBe("1");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    act(() => fireEvent.click(button));
+    expect(document.body.classList.contains("nav-collapsed")).toBe(false);
+  });
+
+  test("a screen outside DS_ROUTES renders into the main area that keeps the old page style", async () => {
+    renderApp();
+    await act(async () => {
+      window.location.hash = "#/board";
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    const main = document.getElementById("content")!;
+    expect(main.className).toBe("ds-main ds-main--legacy");
   });
 });
 

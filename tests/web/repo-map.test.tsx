@@ -29,41 +29,40 @@ function facts(socket: FakeSocket, value: unknown = FACTS) {
     next: 1000, done: true, cached: true, age_seconds: 2 }));
 }
 
-test("Repo Map shows the TUI snapshot, selected file signatures, settings and memory", () => {
+test("Repo Map shows the whole-snapshot summary and the signatures of the selected file", () => {
   const { socket } = open();
   facts(socket);
   expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Repo Map");
-  expect(screen.getByText("≈512")).toBeTruthy();
+  const summary = screen.getByLabelText("Сводка Repo Map");
+  expect(within(summary).getByText("≈512")).toBeTruthy();
+  expect(summary.querySelectorAll(".ds-stat-value")).toHaveLength(4);
+  expect(summary.id).toBe("repo-facts");
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["1Файлы", "2Символы", "3Связи"]);
   act(() => fireEvent.click(screen.getByRole("button", { name: "pkg/core.py" })));
   expect(screen.getByText("def load_config(path)")).toBeTruthy();
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
-  expect(screen.getByText("adr")).toBeTruthy();
-  expect(within(screen.getByRole("heading", { name: "Память" }).closest("section")!).getByText("4")).toBeTruthy();
-  expect(within(screen.getByRole("heading", { name: "Парсеры" }).closest("section")!).getByText("python")).toBeTruthy();
+  expect(screen.getByText(/Счётчики сверху — весь снимок/).textContent).toContain("4 файлов, 3 символов и 4 связей");
 });
 
-test("coverage and symbol kinds are the kernel's; a kind the map cannot give says no data", () => {
+test("the file filter narrows the tree and Reset restores it", () => {
   const { socket } = open();
   facts(socket);
-  const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
-  const row = (label: string) => coverage.querySelector(`.orch-legend [data-kind='${label}'] b`)!.textContent;
-  expect([row("source"), row("docs"), row("tests"), row("excluded")]).toEqual(["3", "1", "0", "2"]);
-  expect(coverage.querySelectorAll(".orch-stack > i")).toHaveLength(3);
-  expect(within(coverage).getByText("67% включено")).toBeTruthy();
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Символы" })));
-  const chips = [...document.querySelectorAll("#repo-kind-chips .chip")].map((chip) => chip.textContent);
-  expect(chips).toEqual(["Все 3", "Functions 2", "Modules 1"]);
-  act(() => fireEvent.click(screen.getByRole("button", { name: "Modules 1" })));
-  const kinds = [...document.querySelectorAll(".repo-symbol-row .repo-kind")].map((kind) => kind.textContent);
-  expect(kinds).toEqual(["class"]);
-  expect(screen.getByText("Строка").nextElementSibling!.textContent).toBe("нет данных");
+  act(() => fireEvent.change(screen.getByRole("searchbox", { name: "Поиск файла или пути" }), { target: { value: "cli" } }));
+  expect(screen.queryByRole("button", { name: "pkg/core.py" })).toBeNull();
+  expect(screen.getByRole("button", { name: "pkg/cli.py" })).toBeTruthy();
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Сбросить" })));
+  expect(screen.getByRole("button", { name: "pkg/core.py" })).toBeTruthy();
 });
 
-test("an unknown excluded count and a map without kinds stay explicit no-data states", () => {
+test("symbol kinds are the kernel's; a kind the map cannot give says no data", () => {
   const { socket } = open();
-  facts(socket, { ...FACTS, coverage: { ...FACTS.coverage, excluded: null } });
-  const coverage = screen.getByRole("heading", { name: "Покрытие" }).closest("section")!;
-  expect(coverage.querySelector(".orch-legend [data-kind='excluded'] b")!.textContent).toBe("нет данных");
+  facts(socket);
+  act(() => fireEvent.click(screen.getByRole("tab", { name: /Символы/ })));
+  const chips = [...document.querySelectorAll("#repo-kind-chips button")].map((chip) => chip.textContent);
+  expect(chips).toEqual(["Все 3", "Functions 2", "Modules 1"]);
+  act(() => fireEvent.click(screen.getByRole("button", { name: "Modules 1" })));
+  const kinds = [...document.querySelectorAll(".ds-symbol-row .ds-kind")].map((kind) => kind.textContent);
+  expect(kinds).toEqual(["class"]);
+  expect(screen.getByText("Строка").nextElementSibling!.textContent).toBe("нет данных");
 });
 
 test("building requires confirmation, pins the displayed HEAD and displays an uncached degraded result", () => {
@@ -142,22 +141,13 @@ test("truncated build output cannot become a map and its failure survives a snap
 test("hubs count unique incoming files like TUI and graph selection filters symbols", () => {
   const { socket } = open();
   facts(socket);
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Связи" })));
+  act(() => fireEvent.click(screen.getByRole("tab", { name: /Связи/ })));
   const hubs = screen.getByRole("heading", { name: "Хабы" }).closest("section")!;
   expect(within(hubs).getByText("pkg/core.py").parentElement?.textContent).toBe("pkg/core.py2");
   act(() => fireEvent.click(screen.getByRole("button", { name: "pkg/cli.py" })));
-  expect(screen.getByRole("tab", { name: "Символы" }).getAttribute("aria-selected")).toBe("true");
-  expect(document.querySelectorAll(".repo-symbol-row")).toHaveLength(1);
+  expect(screen.getByRole("tab", { name: /Символы/ }).getAttribute("aria-selected")).toBe("true");
+  expect(document.querySelectorAll(".ds-symbol-row")).toHaveLength(1);
   expect(screen.getAllByText("def main(argv)").length).toBeGreaterThan(0);
-});
-
-test("parser availability respects the TUI source requirement", () => {
-  const { socket } = open();
-  facts(socket, { ...FACTS, parsers: { ...FACTS.parsers, source: null, problem: null } });
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
-  const parsers = screen.getByRole("heading", { name: "Парсеры" }).closest("section")!;
-  expect(parsers.textContent).not.toContain("Bundle готов, режим full доступен");
-  expect(parsers.textContent).toContain("Bundle не готов");
 });
 
 test("a lost start acknowledgement reconciles the running job without replaying the command", () => {
@@ -197,34 +187,24 @@ test("a nonzero CLI exit reports a build error and its diagnostic stderr", () =>
   expect(screen.getByText(/error: bad commit/)).toBeTruthy();
 });
 
-test("English settings translate unavailable policy and inactive memory reasons", () => {
-  const { socket } = open();
-  facts(socket, { ...FACTS, tier: { tier: "full", editable: false,
-    reason: "Режим хранится в orchestration.json: нужна capability backend-orchestration." },
-    memory: { ...FACTS.memory, active: false, inactive: "не заданы allow_paths" } });
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
-  act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
-  expect(screen.getByText("allow_paths is empty")).toBeTruthy();
-  expect(screen.getByText("The mode is kept in orchestration.json: the backend-orchestration capability is required.")).toBeTruthy();
-});
-
-test("the file tree is the mockup hierarchy: indented folder rows that fold, file rows with their status", () => {
+test("the file tree is a hierarchy: indented folder rows that fold, file rows with their status", () => {
   const { socket } = open();
   facts(socket);
-  const rows = () => [...document.querySelectorAll(".repo-tree .repo-dir, .repo-tree .repo-file")];
-  const shape = () => rows().map((row) => [row.className.split(" ")[0], row.querySelector("b")?.textContent, (row.querySelector(".repo-tree-indent") as HTMLElement).style.width]);
+  const rows = () => [...document.querySelectorAll(".ds-tree .ds-tree-dir, .ds-tree .ds-tree-file")];
+  const name = (row: Element) => row.querySelector("b, .ds-tree-name")?.textContent;
+  const shape = () => rows().map((row) => [row.className.split(" ")[1], name(row), (row.querySelector(".ds-tree-indent") as HTMLElement).style.width]);
   expect(shape()).toEqual([
-    ["repo-dir", "pkg/", "0px"],
-    ["repo-file", "core.py", "14px"],
-    ["repo-file", "cli.py", "14px"],
-    ["repo-file", "broken.py", "14px"],
-    ["repo-file", "README.md", "0px"],
+    ["ds-tree-dir", "pkg/", "0px"],
+    ["ds-tree-file", "core.py", "16px"],
+    ["ds-tree-file", "cli.py", "16px"],
+    ["ds-tree-file", "broken.py", "16px"],
+    ["ds-tree-file", "README.md", "0px"],
   ]);
   expect(rows()[0].querySelector("svg[data-icon='folder']")).not.toBeNull();
-  expect(rows()[1].querySelector("em")?.textContent).toMatch(/^\[.+\]$/);
+  expect(rows()[1].querySelector(".ds-tree-status")?.textContent).toBeTruthy();
   act(() => fireEvent.click(rows()[0]));
   expect(rows()[0].getAttribute("aria-expanded")).toBe("false");
-  expect(shape().map(([, name]) => name)).toEqual(["pkg/", "README.md"]);
+  expect(shape().map(([, label]) => label)).toEqual(["pkg/", "README.md"]);
 });
 
 test("without a map for HEAD the latest cached map shows marked stale for HEAD, with Rebuild", () => {
@@ -247,34 +227,22 @@ test("the empty state names the reason and offers Rebuild in place", () => {
   expect(screen.getByRole("dialog")).toBeTruthy();
 });
 
-test("the overview follows the mockup: header actions, KPI captions, index rows with a freshness pill", () => {
+test("the summary separates the whole snapshot from the fragment and keeps the header actions", () => {
   const { socket } = open();
   facts(socket);
-  const actions = [...document.querySelectorAll(".repo-title .actions > button")];
+  const actions = [...document.querySelectorAll(".ds-head-actions > button")];
   expect(actions.map((button) => button.textContent?.trim())).toEqual(["", "Перестроить", "Экспорт"]);
   expect(actions[0]?.getAttribute("aria-label")).toBe("Обновить");
   expect(actions[2]?.querySelector("svg")).toBeTruthy();
-  expect(document.querySelector("#repo-facts")?.textContent).toMatch(/^tier full4 файлов3 символов4 связей\d\d:\d\d:\d\d$/);
-  const captions = [...document.querySelectorAll(".repo-kpis > div")].map((card) =>
-    [card.querySelector("span")?.textContent, card.querySelector("b")?.textContent, card.querySelector("small")?.textContent]);
-  expect(captions).toEqual([
-    ["Уровень", "full", "Python 3.14 · linux_x86_64"],
-    ["Файлы", "4", "3 символов"],
-    ["Связи", "4", "import / unique-name-ref / ambiguous-name-ref"],
-    ["Токены", "≈512", "бюджет 4000"],
-  ]);
-  const index = screen.getByRole("heading", { name: "Индекс" }).closest("section")!;
-  expect(index.querySelector(".panel-head .orch-pill.mint")?.textContent).toBe("fresh");
-  expect([...index.querySelectorAll(".repo-index-row > span")].map((label) => label.textContent))
-    .toEqual(["Уровень", "Generation", "Построен", "Объём"]);
-  expect(index.querySelector(".repo-index-row b")?.textContent).toBe("full · bundle · Python 3.14 · linux_x86_64");
-  expect(within(index).getByText("4 files · 4 edges · ≈512 tokens")).toBeTruthy();
-  expect([...index.querySelectorAll(".repo-index-actions button")].map((button) => button.textContent?.trim()))
-    .toEqual(["Перестроить", "Экспорт"]);
-  expect(screen.queryByRole("heading", { name: "Provenance парсера" })).toBeNull();
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Настройки" })));
-  const provenance = screen.getByRole("heading", { name: "Provenance парсера" }).closest("section")!;
-  expect(within(provenance).getByText("aaaaaaaaaaaa")).toBeTruthy();
-  expect(within(provenance).getByText("parser bundle applied")).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Диагностики" })).toBeTruthy();
+  const stats = [...document.querySelectorAll("#repo-facts .ds-stat")].map((card) =>
+    [card.querySelector(".ds-stat-label")?.textContent, card.querySelector(".ds-stat-value")?.textContent, card.querySelector(".ds-stat-caption")?.textContent ?? null]);
+  expect(stats).toEqual([["Файлы", "4", null], ["Символы", "3", null], ["Связи", "4", null], ["Токены", "≈512", "бюджет 4000"]]);
+  const facts_ = document.querySelector("#repo-facts .ds-facts-main")!.textContent!;
+  expect(facts_).toContain("Уровень full");
+  expect(facts_).toContain("Парсер bundle");
+  expect(facts_).toContain("Python 3.14 · linux_x86_64");
+  expect(facts_).toContain("HEAD индекса aaaaaaaa");
+  expect(document.querySelector("#repo-facts .ds-facts-end")?.textContent).toMatch(/\d\d:\d\d:\d\d$/);
+  // The Settings tab is gone: parser, memory and policy facts are no longer a page of their own.
+  expect(screen.queryByRole("tab", { name: /Настройки/ })).toBeNull();
 });

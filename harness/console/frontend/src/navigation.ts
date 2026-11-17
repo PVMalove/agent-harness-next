@@ -1,4 +1,4 @@
-/* The 13 sections of docs/design/web-console-mockups/navigation-a.md in their three groups. */
+/* The 13 sections of the console menu in their three groups. */
 import type { IconName } from "./icons";
 
 export interface NavItem {
@@ -78,3 +78,7 @@ export const SHORTCUTS: Readonly<Record<string, string>> = {
 };
 
 export const href = (route: string): string => `#/${route}`;
+
+/** Routes already built on the design system v3. The other screens render into a main area that
+    keeps the old page style (`ds-main--legacy`) until their slice of epic #1090 moves them. */
+export const DS_ROUTES: ReadonlySet<string> = new Set<string>(["repo-map", "harness", "help", "diagnostics", "update-harness", "open-project", "orchestration", "reports", "publish", "configuration"]);

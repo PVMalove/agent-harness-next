@@ -80,7 +80,7 @@ for (const width of [1440, 390]) {
     await page.locator("#board-search").fill("");
     const card = page.locator('[data-board-ticket="#511"]');
     await expect(card.locator("h3")).toHaveText("Экран списка задач");
-    await expect(card.locator(".board-chip")).toHaveText(["/implement", "блокеров: 1"]);
+    await expect(card.locator(".board-chip")).toHaveText(["/implement", "полная", "блокеров: 1", "#512"]);
     expect(await noOverflow(page)).toBe(true);
 
     await card.locator("h3").click();
@@ -96,7 +96,7 @@ for (const width of [1440, 390]) {
     await expect(dialog.locator("pre.board-prompt")).toContainText("/implement #511");
     const agent = dialog.getByRole("button", { name: "Промпт агента" });
     await expect(agent).toBeVisible();
-    expect(await agent.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(118, 203, 178)");
+    expect(await agent.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(169, 196, 245)"); // the pastel accent #a9c4f5 (2026-11-16)
     await dialog.getByRole("tab", { name: "Контекст" }).click();
     expect(await noOverflow(page)).toBe(true);
     await dialog.getByRole("button", { name: "Закрыть" }).click();

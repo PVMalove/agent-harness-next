@@ -453,24 +453,40 @@ class DashboardScreen(ConsoleShell):
         self._repaint_sessions()
 
     def _repaint_sessions(self) -> None:
+        """Re-render the session rows; the ledger is read off the UI thread."""
         if not self.is_mounted:
             return
-        stages = {stage.dispatch_id: stage for stage in self._home_sessions()}
-        for item in self.query("#home-sessions > ListItem").results(ListItem):
-            if item.name in stages:
-                item.query_one(Static).update(self._session_row(stages[item.name]))
+        repo = self.repo
+
+        def work() -> None:
+            stages = {stage.dispatch_id: stage for stage in self._home_sessions()}
+
+            def apply() -> None:
+                if not self.is_mounted or self.repo != repo:
+                    return
+                for item in self.query("#home-sessions > ListItem").results(ListItem):
+                    if item.name in stages:
+                        item.query_one(Static).update(
+                            self._session_row(stages[item.name])
+                        )
+
+            call_from_worker(self, apply)
+
+        self.run_worker(work, thread=True, exclusive=True, group="dashboard-sessions")
 
     def _refresh_titles(self) -> None:
         """Read optional tracker facts off the UI thread; only the latest pass may repaint."""
         self._title_generation += 1
         generation, repo = self._title_generation, self.repo
-        tickets = list(dict.fromkeys(stage.ticket for stage in self._home_sessions()))
         self._titles = {}
         self._repaint_sessions()
-        if not tickets:
-            return
 
         def work() -> None:
+            tickets = list(
+                dict.fromkeys(stage.ticket for stage in self._home_sessions())
+            )
+            if not tickets:
+                return
             try:
                 titles = self._collect_titles(repo, tickets)
             except Exception:
@@ -565,7 +581,7 @@ class DashboardScreen(ConsoleShell):
                     id="dashboard-attention-mode",
                     classes="no-i18n",
                 )
-            stages = self._home_sessions()
+            stages = self._home_sessions(interactive=True)
             with SectionCard(
                 title="Рабочие сессии", note=str(len(stages)), id="home-sessions-card"
             ):
@@ -639,9 +655,17 @@ class DashboardScreen(ConsoleShell):
             narrow=self.app.size.width < brand.NARROW_WIDTH,
         )
 
-    def _home_sessions(self) -> list[reports.StageEntry]:
-        """Every unfinished session, the most recently recorded first."""
-        view = reports.load_ledger_view(self.repo)
+    def _home_sessions(self, *, interactive: bool = False) -> list[reports.StageEntry]:
+        """Every unfinished session, the most recently recorded first. A read on the UI thread
+        (`interactive`) waits for the runtime store a shorter time than one in a worker."""
+        view = reports.load_ledger_view(
+            self.repo,
+            read_timeout=(
+                reports.INTERACTIVE_STORE_READ_TIMEOUT_SECONDS
+                if interactive
+                else reports.STORE_READ_TIMEOUT_SECONDS
+            ),
+        )
         return sorted(
             (stage for stage in view.stages if not stage.finished),
             key=lambda stage: stage.at,

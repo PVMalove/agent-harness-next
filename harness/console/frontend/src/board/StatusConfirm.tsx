@@ -34,7 +34,8 @@ export function StatusConfirm({
     else dialog.setAttribute("open", "");
   }, []);
 
-  const name = columnLabels(t)[move.to].name;
+  const labels = columnLabels(t);
+  const name = labels[move.to].name;
   return (
     <dialog
       ref={ref}
@@ -49,7 +50,7 @@ export function StatusConfirm({
       <div id="board-confirm-body">
         <div className="board-modal-head">
           <div>
-            <span className="eyebrow">{t("СМЕНА СТАТУСА")}</span>
+            <span className="eyebrow">{t("Смена статуса")}</span>
             <h2 id={titleId}>
               {move.card.id} → {name}
             </h2>
@@ -60,9 +61,10 @@ export function StatusConfirm({
           </button>
         </div>
         <div className="board-confirm-diff">
-          <s>{move.card.column}</s>
+          {/* Column names, as in the heading; the raw ids meant nothing to the reader. */}
+          <s>{labels[move.card.column].name}</s>
           <b>→</b>
-          <ins>{move.to}</ins>
+          <ins>{name}</ins>
         </div>
         <p className="board-confirm-note">
           {t("Сервер запустит смену метки в {tracker} как мутирующий job и обновит доску.", {

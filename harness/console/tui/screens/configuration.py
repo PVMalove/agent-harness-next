@@ -50,7 +50,7 @@ from ..widgets import (
     RoundRadioButton,
     StatusLine,
 )
-from ..advisor import PROVIDERS, Advice, AdvisorUnavailable, advise, availability
+from ...kernel.configuration_advisor import PROVIDERS, Advice, AdvisorUnavailable, advise, availability
 from ...kernel.configuration import ConfigurationDraft, RuntimeAdapterPreview
 from ...kernel.configuration_snapshot import ConfigurationFacts
 from ..client import ScreenClient
@@ -59,7 +59,7 @@ from ..configuration_gateway import (
     LocalConfiguration,
     ServerConfiguration,
 )
-from ..configuration_steps import (
+from ...kernel.configuration_steps import (
     skeleton,
     CHOICE_PAGE_SIZE,
     ConfigurationStep,

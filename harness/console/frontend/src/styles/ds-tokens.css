@@ -1,0 +1,82 @@
+/* Design system v3 (RFC docs/rfc/web-console-v3.md): tokens and base rules. Every class and custom
+   property carries the ds- prefix, so the stylesheet of the not yet moved screens
+   (/execution-console.css, loaded first) keeps its meaning. Dark theme only: the not yet moved
+   screens and their sheet are dark, so a light or system theme waits until they move.
+   Sizes are rem, so the type follows the browser and OS text scale.
+   Palette «Сланец» in pastels (owner request 2026-11-16): the mid slate ground stays neutral, the
+   accent is a pastel blue, ready is a pastel mint, attention a pastel butter and a blocker a pastel
+   rose; the status shape (StatusIcon) and its word still carry the meaning. */
+:root {
+  --ds-bg: #1f252e;
+  --ds-rail: #252c36;
+  --ds-surface: #2a313c;
+  --ds-raised: #323a46;
+  --ds-hover: #3a4350;
+  --ds-line: #434c59;
+  --ds-line-strong: #5f6a7a;
+  /* The edge of a field or a switch track: 3:1 on every surface (WCAG 1.4.11). */
+  --ds-control: #7a8596;
+  --ds-fg: #f1f4f8;
+  --ds-muted: #b4bcc9;
+  /* 4.5:1 on a selected (--ds-accent-bg) and a hovered row too. */
+  --ds-faint: #a7b0be;
+  --ds-accent: #a9c4f5;
+  --ds-accent-bg: #33435e;
+  --ds-on-accent: #0f1c33;
+  --ds-ok: #a9dcc0;
+  --ds-ok-bg: #2e4239;
+  --ds-warn: #f2d6a2;
+  --ds-warn-bg: #443c2c;
+  --ds-err: #f7a8a8;
+  --ds-err-bg: #4a2f34;
+  --ds-sans: "Segoe UI", system-ui, -apple-system, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --ds-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --ds-radius: 8px;
+  --ds-rail-w: 236px;
+  --ds-top-h: 56px;
+  --ds-foot-h: 32px;
+  --ds-fs-1: 0.6875rem;
+  --ds-fs-2: 0.8125rem;
+  --ds-fs-3: 1rem;
+  --ds-fs-4: 1.25rem;
+  --ds-fs-5: 1.75rem;
+}
+
+.ds-app {
+  background: var(--ds-bg);
+  color: var(--ds-fg);
+  font: var(--ds-fs-2) / 1.5 var(--ds-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+/* Rules on bare elements and pseudo-classes carry the zero-specificity guard :where(:not(.ds-main--legacy *)): the screens
+   that are not moved yet render inside .ds-main--legacy and keep the old stylesheet's look. */
+.ds-app *:where(:not(.ds-main--legacy *)),
+.ds-app *::before:where(:not(.ds-main--legacy *)),
+.ds-app *::after:where(:not(.ds-main--legacy *)) { box-sizing: border-box; }
+.ds-app :focus-visible:where(:not(.ds-main--legacy *)) { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.ds-app code:where(:not(.ds-main--legacy *)),
+.ds-mono { font-family: var(--ds-mono); font-size: inherit; }
+/* A <small> is the smallest step of the scale, never below it (the browser shrinks it to 0.83em). */
+.ds-app small:where(:not(.ds-main--legacy *)) { font-size: var(--ds-fs-1); }
+.ds-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.ds-ic { width: 18px; height: 18px; flex: none; }
+.ds-ic-sm { width: 14px; height: 14px; flex: none; }
+.ds-muted { color: var(--ds-muted); }
+.ds-faint { color: var(--ds-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-app *:where(:not(.ds-main--legacy *)),
+  .ds-app *::before:where(:not(.ds-main--legacy *)),
+  .ds-app *::after:where(:not(.ds-main--legacy *)) {
+    animation: none !important;
+    transition: none !important;
+  }
+}

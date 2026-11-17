@@ -1,7 +1,8 @@
 /* The mockup's Orchestration tabs over the server's snapshot: the grouped pipeline map of
-   "Схема" and the chart cards of "Поток", "Качество", "Runtime" and "Гейты". Every figure is
+   "Поток" and the chart cards of "Поток", "Качество", "Runtime" and "Решения". Every figure is
    the kernel's (analytics) or the ledger's (open stages); a mockup card without a source keeps
    an explicit no-data state with its reason. Only an edge into a running role moves. */
+import { Panel as DsPanel } from "../ds";
 import { useI18n } from "../i18n";
 import { Bar, NoData, roleName } from "../steps/ActivityViews";
 import type { Figure, OrchestrationSnapshot } from "../ws/ledger";
@@ -10,7 +11,18 @@ import { GateTrend } from "./OrchViews";
 
 const ACTIVE = new Set(["working", "dispatched", "approved"]);
 const ATTENTION = new Set(["failed", "blocked", "auto_stop"]);
-const TONES = ["cyan", "mint", "violet", "lavender", "blue", "muted"];
+const DONE = new Set(["completed", "accepted", "merged", "done", "passed", "published", "closed"]);
+const WAITING = new Set(["awaiting", "awaiting_decision", "needs_decision", "queued", "pending", "held"]);
+/** A state's tone by its meaning, so a waiting state is never painted in the blocker hue: attention
+    in rose, live work in the accent, finished work in mint, waiting in sand; any other key takes the
+    neutral tones in turn (UI audit 2026-11-17: the tone used to follow the position). */
+function toneOf(key: string, index: number): string {
+  if (ATTENTION.has(key)) return "violet";
+  if (ACTIVE.has(key)) return "cyan";
+  if (DONE.has(key)) return "mint";
+  if (WAITING.has(key)) return "lavender";
+  return ["blue", "muted"][index % 2]!;
+}
 
 type Counts = Record<string, number>;
 const counts = (figure: Figure | undefined): Counts =>
@@ -63,13 +75,13 @@ function Stack({ values, name }: { values: Counts; name: (key: string) => string
     <>
       <div className="orch-stack">
         {entries.map(([key, value], index) => (
-          <i key={key} className={TONES[index % TONES.length]} style={{ width: `${Math.round((value / sum) * 100)}%` }} title={`${name(key)}: ${value}`} />
+          <i key={key} className={toneOf(key, index)} style={{ width: `${Math.round((value / sum) * 100)}%` }} title={`${name(key)}: ${value}`} />
         ))}
       </div>
       <div className="orch-legend">
         {entries.map(([key, value], index) => (
           <span key={key}>
-            <i className={TONES[index % TONES.length]} />
+            <i className={toneOf(key, index)} />
             {name(key)} <b>{value}</b>
           </span>
         ))}
@@ -90,7 +102,7 @@ function Pairs({ p50, p95 }: { p50: Counts; p95: Counts }) {
         <div className="orch-stage-row" key={key}>
           <span>{roleName(key)}</span>
           <div className="orch-stage-bars">
-            {([[p50[key], "cyan"], [p95[key], "violet"]] as const).map(([value, tone]) => (
+            {([[p50[key], "cyan"], [p95[key], "lavender"]] as const).map(([value, tone]) => (
               <div key={tone}>
                 <Bar value={minutes(value ?? 0)} max={max} tone={tone} />
                 <small>{value === undefined ? "—" : minutes(value)}</small>
@@ -105,7 +117,7 @@ function Pairs({ p50, p95 }: { p50: Counts; p95: Counts }) {
           p50
         </span>
         <span>
-          <i className="violet" />
+          <i className="lavender" />
           p95
         </span>
       </div>
@@ -123,15 +135,14 @@ function Missing({ title, why }: { title: string; why: string }) {
   );
 }
 
-function Panel({ tab, title, note, children }: { tab: string; title: string; note: string; children: React.ReactNode }) {
+/** The body of an analytics tab. The v3 panel around it carries the tab's title, so this draws no
+    frame and no heading of its own, only the tab's note above the charts. */
+function Panel({ tab, note, children }: { tab: string; title: string; note: string; children: React.ReactNode }) {
   return (
-    <section className="panel orch-analytics" id="orch-tab-view" data-tab={tab}>
-      <div className="orch-analytics-head">
-        <h2>{title}</h2>
-        <span>{note}</span>
-      </div>
+    <div className="orch-analytics ds-analytics" id="orch-tab-view" data-tab={tab}>
+      <p className="ds-note">{note}</p>
       <div className="orch-analytics-grid">{children}</div>
-    </section>
+    </div>
   );
 }
 
@@ -336,20 +347,22 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
   const blocked = batches.filter((batch) => ATTENTION.has(batch.state)).length;
   const awaiting = batches.filter((batch) => batch.state === "awaiting_approval").length;
   const gate = typeof data.analytics.gates.awaiting === "number" && data.analytics.gates.awaiting > 0 ? "wait" : "idle";
-  const node = (x: number, y: number, w: number, h: number, type: string, tone: string, title: string, sub: string, at?: Place, name: string = title) => (
+  // The mockup's compact geometry (screens-orch-map.js): 1200×270, every node 42 high.
+  const h = 42;
+  const node = (x: number, y: number, w: number, type: string, tone: string, title: string, sub: string, at?: Place, name: string = title) => (
     <g className={`orch-map-node ${type} ${tone}${type !== "role" && liveNodes.has(name) ? " live" : ""}`} data-node={title}>
-      <rect x={x} y={y} width={w} height={h} rx="7" className="orch-map-bg" />
+      <rect x={x} y={y} width={w} height={h} rx="8" className="orch-map-bg" />
       <rect x={x} y={y + 9} width="3" height={h - 18} rx="1.5" className="orch-map-accent" />
-      <text className="orch-map-title" x={x + 14} y={y + 21}>
+      <text className="orch-map-title" x={x + 14} y={y + 18}>
         {title}
       </text>
-      <text className="orch-map-sub" x={x + 14} y={y + 36}>
+      <text className="orch-map-sub" x={x + 14} y={y + 34}>
         {at?.chip ? `${at.chip} · ` : ""}
         {sub}
       </text>
       <g className={`orch-map-count ${at?.count ? "on" : ""}`}>
-        <circle cx={x + w - 12} cy={y + 11} r="8" />
-        <text x={x + w - 12} y={y + 14} textAnchor="middle">
+        <circle cx={x + w - 14} cy={y + 14} r="9" />
+        <text x={x + w - 14} y={y + 18} textAnchor="middle">
           {at?.count ?? 0}
         </text>
       </g>
@@ -358,13 +371,8 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
   const edge = (d: string, tone: string, into?: Place, dashed = false) => (
     <path className={`orch-map-edge ${tone} ${into?.tone === "active" ? "active" : ""} ${dashed ? "dashed" : ""}`} d={d} markerEnd={`url(#om-${tone})`} />
   );
-  return (
-    <section className="panel orch-map-panel orch-scheme" id="orch-scheme">
-      <div className="panel-head">
-        <h2>{t("Пайплайн")}</h2>
-        <span className="small muted">{t("сгруппированный поток · текущие задачи в узлах")}</span>
-      </div>
-      <div className="orch-map-statusbar">
+  const status = (
+      <span className="orch-map-statusbar">
         <span className="ok">
           <b>{working}</b> {t("в работе")}
         </span>
@@ -380,16 +388,20 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
             ? `${t("живой шаг")}: ${live.map((step) => `${step.ticket} · ${step.kind === "role" ? roleName(step.role) : step.node === "Approve QA" ? "Approve QA" : t(step.node)}`).join("; ")}`
             : t("живого шага нет")}
         </span>
-      </div>
-      <div className="orch-map-scroll" tabIndex={0} role="region" aria-label={t("Схема ролей оркестрации")}>
-        <svg className="orch-map" viewBox="0 0 1200 416" role="img" aria-label={t("Схема ролей оркестрации")}>
+      </span>
+  );
+  return (
+    <DsPanel title={t("Пайплайн")} meta={status} id="orch-scheme" className="orch-map-panel orch-scheme">
+      {/* A phone scrolls the map sideways inside this focusable region, so the keyboard reaches it (WCAG 2.1.1). */}
+      <div className="orch-map-scroll" role="region" tabIndex={0} aria-label={t("Пайплайн")}>
+        <svg className="orch-map" viewBox="0 0 1200 270" role="img" aria-label={t("Схема ролей оркестрации")}>
           <defs>
             {(
               [
-                ["aqua", "#7fc9bb"],
-                ["sky", "#70c2d8"],
-                ["rose", "#b79ae8"],
-                ["orange", "#6f9fe0"],
+                ["aqua", "#a9dcc0"],
+                ["sky", "#a6d5e8"], // matches `.orch-map-edge.sky` in app.css
+                ["rose", "#cbb8f0"], // matches `.orch-map-edge.rose` in app.css
+                ["orange", "#a9c4f5"],
               ] as const
             ).map(([id, fill]) => (
               <marker key={id} id={`om-${id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
@@ -399,45 +411,45 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
           </defs>
           {(
             [
-              ["violet", 20, 220, t("01 · План и approve")],
-              ["sky", 260, 560, t("02 · Сборка и review с находками")],
-              ["peach", 840, 340, t("03 · Evidence и публикация")],
+              ["violet", 8, 224, t("01 · План и approve")],
+              ["sky", 252, 580, t("02 · Сборка и review с находками")],
+              ["peach", 852, 340, t("03 · Evidence и публикация")],
             ] as const
           ).map(([tone, x, w, label]) => (
             <g className={`orch-group ${tone}`} key={tone}>
-              <rect x={x} y="24" width={w} height="372" rx="8" className="orch-group-bg" />
-              <text className="orch-group-label" x={x + 16} y="44">
+              <rect x={x} y="4" width={w} height="262" rx="10" className="orch-group-bg" />
+              <text className="orch-group-label" x={x + 16} y="21">
                 {label}
               </text>
-              <line x1={x} y1="56" x2={x + w} y2="56" className="orch-group-line" />
+              <line x1={x} y1="28" x2={x + w} y2="28" className="orch-group-line" />
             </g>
           ))}
-          {node(40, 80, 180, 58, "human", "idle", t("Approve плана"), t("гейт человека"))}
-          {node(280, 80, 220, 52, "role", arch.tone, t("Архитектор"), t("разбор задачи"), arch)}
-          {node(280, 145, 220, 52, "role", dev.tone, t("Разработчик"), t("контекст + TDD"), dev)}
-          {node(280, 210, 220, 52, "role", rev.tone, "Code review", t("свежесть базы"), rev)}
-          {node(280, 275, 220, 52, "role", qa.tone, "QA · clean-room", t("закреплённый SHA"), qa)}
-          {node(540, 210, 240, 52, "exception", "review", t("Находки review"), t("возврат в Developer"))}
-          {node(540, 275, 240, 52, "exception", "qa", t("Находки QA"), t("повтор или дефект"))}
-          {node(860, 80, 280, 52, "human", gate, "Approve QA", t("гейт человека"), undefined, "Approve QA")}
-          {node(860, 145, 280, 52, "coord", "idle", t("Итоговый отчёт"), t("evidence + решение"), undefined, "Итоговый отчёт")}
-          {node(860, 210, 280, 52, "coord", "idle", t("Публикация"), t("принятый SHA"))}
-          {node(860, 275, 280, 52, "human", "idle", "/to-pull-requests", t("передача человеку"))}
-          {edge("M220 109H280", "aqua", arch)}
-          {edge("M390 132V145", "aqua", dev)}
-          {edge("M390 197V210", "sky", rev)}
-          {edge("M390 262V275", "aqua", qa)}
-          {edge("M500 236H540", "rose")}
-          {edge("M500 301H540", "rose")}
-          {edge("M540 236H520V160H500", "rose", undefined, true)}
-          {edge("M540 301H510V205H440V197", "rose", undefined, true)}
-          {edge("M390 327V350H800V106H860", "aqua", gateLive("Approve QA"))}
-          {edge("M780 301H810V171H860", "orange", undefined, true)}
-          {edge("M1000 132V145", "aqua", gateLive("Итоговый отчёт"))}
-          {edge("M1000 197V210", "aqua")}
-          {edge("M1000 262V275", "aqua")}
+          {node(24, 36, 192, "human", "idle", t("Approve плана"), t("гейт человека"))}
+          {node(268, 36, 228, "role", arch.tone, t("Архитектор"), t("разбор задачи"), arch)}
+          {node(268, 90, 228, "role", dev.tone, t("Разработчик"), t("контекст + TDD"), dev)}
+          {node(268, 144, 228, "role", rev.tone, "Code review", t("свежесть базы"), rev)}
+          {node(268, 198, 228, "role", qa.tone, "QA · clean-room", t("закреплённый SHA"), qa)}
+          {node(540, 144, 240, "exception", "review", t("Находки review"), t("возврат в Developer"))}
+          {node(540, 198, 240, "exception", "qa", t("Находки QA"), t("повтор или дефект"))}
+          {node(868, 36, 308, "human", gate, "Approve QA", t("гейт человека"), undefined, "Approve QA")}
+          {node(868, 90, 308, "coord", "idle", t("Итоговый отчёт"), t("evidence + решение"), undefined, "Итоговый отчёт")}
+          {node(868, 144, 308, "coord", "idle", t("Публикация"), t("принятый SHA"))}
+          {node(868, 198, 308, "human", "idle", "/to-pull-requests", t("передача человеку"))}
+          {edge("M216 57H268", "aqua", arch)}
+          {edge("M382 78V90", "aqua", dev)}
+          {edge("M382 132V144", "sky", rev)}
+          {edge("M382 186V198", "aqua", qa)}
+          {edge("M496 165H540", "rose")}
+          {edge("M496 219H540", "rose")}
+          {edge("M540 165H518V111H496", "rose", undefined, true)}
+          {edge("M540 219H508V138H434V132", "rose", undefined, true)}
+          {edge("M382 240V252H800V57H868", "aqua", gateLive("Approve QA"))}
+          {edge("M780 219H820V111H868", "orange", undefined, true)}
+          {edge("M1022 78V90", "aqua", gateLive("Итоговый отчёт"))}
+          {edge("M1022 132V144", "aqua")}
+          {edge("M1022 186V198", "aqua")}
         </svg>
       </div>
-    </section>
+    </DsPanel>
   );
 }

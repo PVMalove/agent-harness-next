@@ -69,28 +69,28 @@ describe("the Harness route", () => {
   test("shows the overview facts; the pipeline usage block of no mockup slot is gone", () => {
     const { socket } = renderHarness();
     expect(socket.request("harness.overview")).toMatchObject({ force: false });
-    expect(screen.getByRole("tab", { name: "Обзор" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Обзор/ }).getAttribute("aria-selected")).toBe("true");
     expect(document.querySelector("#harness-version")?.textContent).toBe("2.0.0 → 2.0.1");
-    expect([...kpis().querySelectorAll(":scope > div > span:first-child")].map((label) => label.textContent)).toEqual([
+    expect([...kpis().querySelectorAll(".ds-stat-label")].map((label) => label.textContent)).toEqual([
       "Установлено",
       "Runtime store",
       "Audit chain",
       "Skills",
     ]);
-    expect(within(kpis()).getByText("schema 3")).toBeTruthy();
+    expect(within(kpis()).getByText("schema 3", { selector: ".ds-stat-value" })).toBeTruthy();
     expect(kpis().textContent).toContain("cutover не выполнен");
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-      "Обзор",
-      "Runtime",
-      "Адаптеры",
-      "Контейнеры",
-      "Команды",
+      "1Обзор",
+      "2Runtime",
+      "3Адаптеры",
+      "4Контейнеры",
+      "5Команды",
     ]);
     expect(document.querySelector("#harness-usage")).toBeNull();
     expect(within(document.querySelector("#harness-install") as HTMLElement).getByText("engineering-suite")).toBeTruthy();
   });
 
-  test("overview in the mockup's order: facts, KPI captions, six installation rows, runtime, adapters, quick commands", () => {
+  test("the overview: summary captions, six installation rows with a status shape, attention, loop and related tiles", () => {
     renderHarness({
       ...HARNESS_OVERVIEW,
       integrations: [
@@ -99,13 +99,11 @@ describe("the Harness route", () => {
         { name: "GitHub", kind: "tracker", status: "current", cli: true, detail: "github.com/owner/repo" },
       ],
     });
-    const facts = [...document.querySelectorAll(".harness-title .home-facts span")].map((item) => item.textContent);
-    expect(facts.at(-1)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
-    expect(facts).not.toContain("→ 2.0.1");
-    expect(kpis().querySelector("div small")?.textContent).toBe("доступно 2.0.1");
+    expect(document.querySelector("#harness-updated")?.textContent).toMatch(/\d{2}:\d{2}:\d{2}$/);
+    expect(kpis().querySelector(".ds-stat-caption")?.textContent).toBe("доступно 2.0.1");
     const install = document.querySelector("#harness-install") as HTMLElement;
-    const rows = [...install.querySelectorAll(".harness-component")];
-    expect(rows.map((row) => row.querySelector("span")?.textContent)).toEqual([
+    const rows = [...install.querySelectorAll(".ds-row")];
+    expect(rows.map((row) => row.querySelector(".ds-row-title")?.textContent)).toEqual([
       "Harness package",
       "Skills snapshot",
       "Managed files",
@@ -113,22 +111,22 @@ describe("the Harness route", () => {
       "Runtime store",
       "harness.lock",
     ]);
-    expect(rows.every((row) => row.querySelector("em.orch-pill")?.textContent)).toBe(true);
+    // Colour is never the only carrier: every row has a status shape with hidden text.
+    expect(rows.every((row) => row.querySelector(".ds-status svg") !== null && row.querySelector(".ds-status .ds-sr")?.textContent)).toBe(true);
     const overview = document.querySelector("#harness-tab-overview") as HTMLElement;
-    expect(overview.querySelector("#harness-runtime .panel-head .orch-pill")?.textContent).toBe("file-ledger");
-    expect(overview.querySelectorAll("#harness-adapters .harness-adapter")).toHaveLength(3);
-    const quick = overview.querySelector("#harness-quick-commands") as HTMLElement;
-    expect(quick.querySelectorAll(".harness-command-row").length).toBeGreaterThan(0);
-    expect(quick.querySelectorAll(".harness-command-row").length).toBeLessThanOrEqual(3);
+    expect(overview.querySelector("#harness-attention")).not.toBeNull();
+    expect(overview.querySelectorAll("#harness-loop .ds-loop-node")).toHaveLength(6);
+    const related = overview.querySelector("#harness-related") as HTMLElement;
+    expect(within(related).getAllByRole("link")).toHaveLength(6);
+    expect(within(related).getByRole("link", { name: /Диагностика/ }).getAttribute("href")).toBe("#/diagnostics");
     expect(overview.querySelector("#harness-maintenance")).toBeNull();
     expect(document.querySelector("#harness-tab-commands #harness-maintenance")).not.toBeNull();
-    act(() => fireEvent.click(within(quick).getAllByRole("button", { name: "Показать" })[0]!));
-    expect(screen.getByRole("tab", { name: "Команды" }).getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector("#harness-tab-commands .ds-legacy-island")).not.toBeNull();
   });
 
   test("the maintenance panel shows the server's plan, skips and worktree reasons", () => {
     renderHarness();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Команды" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Команды/ })));
     const panel = document.querySelector("#harness-maintenance") as HTMLElement;
     expect(within(panel).getByText("runs/tests: 2.0 KiB · 3")).toBeTruthy();
     expect(within(panel).getByText("Жёсткий режим: +2.0 KiB")).toBeTruthy();
@@ -143,9 +141,9 @@ describe("the Harness route", () => {
 
   test("Очистить… switches to Commands and opens the server confirmation bound to the soft plan", () => {
     const { socket } = renderHarness();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Команды" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Команды/ })));
     act(() => fireEvent.click(screen.getByRole("button", { name: "Очистить…" })));
-    expect(screen.getByRole("tab", { name: "Команды" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Команды/ }).getAttribute("aria-selected")).toBe("true");
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(CLEANUP.confirmation_reason!)).toBeTruthy();
     act(() => fireEvent.click(within(dialog).getByRole("button", { name: "Запустить" })));
@@ -158,7 +156,7 @@ describe("the Harness route", () => {
 
   test("a worktree removal asks with the worktree path, and a finished job refreshes the facts", () => {
     const { socket } = renderHarness();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Команды" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Команды/ })));
     act(() => fireEvent.click(screen.getByRole("button", { name: "Удалить… issue-1-done" })));
     act(() => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Запустить" })));
     const start = socket.request("job.start");
@@ -181,27 +179,27 @@ describe("the Harness route", () => {
   test("in English the page labels and the reasons are translated", () => {
     renderHarness(HARNESS_OVERVIEW, "?lang=en");
     expect(screen.getByRole("heading", { level: 2, name: "Installation" })).toBeTruthy();
-    expect(document.querySelectorAll("#harness-install .harness-component em")[1]?.textContent).toBe("Drift");
+    expect(document.querySelectorAll("#harness-install .ds-row .ds-tag")[1]?.textContent).toBe("Drift");
     expect(screen.getByText(/worktree has uncommitted changes/)).toBeTruthy();
   });
 
   test("Runtime, Adapters and Containers show the overview facts and say what has no source", () => {
     renderHarness();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Runtime" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Runtime/ })));
     const runtime = document.querySelector("#harness-tab-runtime") as HTMLElement;
     expect(within(runtime).getByText("generation-1")).toBeTruthy();
     expect(within(runtime).getByRole("heading", { level: 2, name: "Audit chain" })).toBeTruthy();
     expect(within(runtime).getAllByText("нет данных").length).toBeGreaterThan(0);
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Адаптеры" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Адаптеры/ })));
     const adapters = document.querySelector("#harness-tab-adapters") as HTMLElement;
     expect(within(adapters).getAllByText("нет данных").length).toBeGreaterThan(0);
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Контейнеры" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Контейнеры/ })));
     const containers = document.querySelector("#harness-tab-containers") as HTMLElement;
     // Every probe failed: the engine is named, each fact says no data with the probe's reason.
     expect(within(containers).getByText("docker", { selector: "b" })).toBeTruthy();
-    const daemon = containers.querySelector("#harness-engine .no-data") as HTMLElement;
+    const daemon = containers.querySelector("#harness-engine .ds-nodata") as HTMLElement;
     expect(daemon.title).toBe("docker info: код 1: Cannot connect to the Docker daemon");
-    const counts = containers.querySelectorAll("[data-fact='images-volumes'] .no-data");
+    const counts = containers.querySelectorAll("[data-fact='images-volumes'] .ds-nodata");
     expect([...counts].map((item) => (item as HTMLElement).title)).toEqual(["docker images: код 1", "docker volume ls: код 1"]);
     expect(within(containers).getAllByText("нет данных").length).toBeGreaterThan(4);
   });
@@ -216,22 +214,22 @@ describe("the Harness route", () => {
         { name: "GitHub", kind: "tracker", status: "current", cli: true, detail: "github.com/owner/repo" },
       ],
     });
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Runtime" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Runtime/ })));
     const runtime = document.querySelector("#harness-tab-runtime #harness-runtime") as HTMLElement;
-    expect(runtime.querySelector(".panel-head .orch-pill")?.textContent).toBe("работает");
+    expect(runtime.querySelector(".ds-status-line > span[aria-hidden]")?.textContent).toBe("работает");
     expect(within(runtime).getByText("41")).toBeTruthy();
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Адаптеры" })));
-    const cards = [...document.querySelectorAll("#harness-tab-adapters .harness-adapter")];
-    expect(cards.map((card) => card.querySelector("h3")?.textContent)).toEqual(["Claude Code", "Codex", "GitHub"]);
-    expect(cards.map((card) => card.querySelector(".harness-adapter-head svg")?.getAttribute("data-icon"))).toEqual(["terminal", "command", "github-mark"]);
-    expect(cards.map((card) => card.querySelector("em")?.textContent)).not.toContain("current");
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Адаптеры/ })));
+    const cards = [...document.querySelectorAll("#harness-tab-adapters .ds-adapter")];
+    expect(cards.map((card) => card.querySelector(".ds-row-title")?.textContent)).toEqual(["Claude Code", "Codex", "GitHub"]);
+    expect(cards.map((card) => card.querySelector(":scope > svg")?.getAttribute("data-icon"))).toEqual(["terminal", "command", "github-mark"]);
+    expect(cards.map((card) => card.querySelector(".ds-tag")?.textContent)).not.toContain("current");
   });
 
   test("a runtime that does not answer says why; maintenance actions carry icons", () => {
     renderHarness({ ...HARNESS_OVERVIEW, runtime: { state: "offline", revision: null, reason: "runtime не отвечает (runtime_unavailable)" } });
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Runtime" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Runtime/ })));
     const runtime = document.querySelector("#harness-tab-runtime #harness-runtime") as HTMLElement;
-    expect(runtime.querySelector(".panel-head .orch-pill")?.textContent).toBe("не отвечает");
+    expect(runtime.querySelector(".ds-status-line > span[aria-hidden]")?.textContent).toBe("не отвечает");
     expect(runtime.textContent).toContain("runtime не отвечает (runtime_unavailable)");
     const buttons = [...document.querySelectorAll("#harness-maintenance button")];
     expect(buttons.length).toBeGreaterThan(2);
@@ -246,23 +244,21 @@ describe("the Harness route", () => {
         rootless: true, info_problem: null, images: 3, images_problem: null, volumes: 2, volumes_problem: null,
       },
     });
-    act(() => fireEvent.click(screen.getByRole("tab", { name: "Контейнеры" })));
+    act(() => fireEvent.click(screen.getByRole("tab", { name: /Контейнеры/ })));
     expect(document.querySelector("#harness-engine-line")?.textContent).toBe("podman · 5.2.0 · rootless · cgroup v2 · systemd");
     expect(document.querySelector("[data-fact='images-volumes']")?.textContent).toBe("3 / 2");
     const engine = document.querySelector("#harness-engine")?.textContent ?? "";
     expect(engine).toContain("daemon отвечает");
     expect(engine).toContain("SELinux включён");
-    const blocks = [...document.querySelectorAll(".harness-container-grid > .harness-container-block")];
-    expect(blocks.map((block) => block.querySelector("h3")?.textContent)).toEqual(["Images", "Networks / volumes"]);
-    expect(blocks[0]?.querySelector(".harness-block-head > span")?.textContent).toBe("3");
-    expect(blocks[1]?.querySelector(".harness-block-head > span")?.textContent).toContain("2");
-    expect(blocks[1]?.querySelector(".harness-cleanup")).toBeTruthy();
+    const blocks = [...document.querySelectorAll("#harness-container-grid > section")];
+    expect(blocks.map((block) => block.querySelector("h3")?.textContent)).toEqual(["Images · 3", "Networks / volumes · — / 2"]);
+    expect(blocks[1]?.textContent).toContain("Очистка");
   });
 
   test("in English the overview tab reads Overview, apart from folder browsing", () => {
     renderHarness(HARNESS_OVERVIEW, "?lang=en");
-    expect(screen.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tab", { name: "Commands" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Overview/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Commands/ })).toBeTruthy();
     expect(translate("en", "Обзор папок")).toBe("Browse folders");
   });
 });

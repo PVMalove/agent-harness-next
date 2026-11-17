@@ -12,6 +12,7 @@ from ....json_types import JsonObject
 from ...kernel.batch_history import History
 from ...kernel.container_route import Authored
 from ...kernel.coordinator_api import ApiResult
+from ...kernel.home_activity import HomeActivity
 from ...kernel.home_snapshot import HomeSnapshot
 from ...kernel.reports import LedgerView
 from ...kernel.protocol import _clip
@@ -124,6 +125,21 @@ class ConfigurationCollector(Protocol):
     def __call__(self, repo: Path, /) -> dict[str, object]: ...
 
 
+class ConfigurationVersionCollector(Protocol):
+    """One saved configuration version of «Настройка» (`read_version`): its masked files, or
+    `files` empty with the reason in `error`; blocks until read and never writes."""
+
+    def __call__(self, repo: Path, identifier: str, /) -> dict[str, object]: ...
+
+
+class FeaturesCollector(Protocol):
+    """The Diagnostics features (`kernel.features.collect_features`): the feature registry, the
+    configuration digests it was read from and a pending configuration transaction; blocks until
+    read and never writes."""
+
+    def __call__(self, repo: Path, /) -> dict[str, object]: ...
+
+
 class JobExecutor(Protocol):
     """Emit on the event loop, and finish all output callbacks before returning an exit code.
 
@@ -189,6 +205,12 @@ class OrchestrationReader(Protocol):
 
 class JournalUnavailable(Exception):
     """The event journal cannot be read or written."""
+
+
+class ActivitySource(Protocol):
+    """The Home contour activity of this moment; None when the events cannot be read."""
+
+    def __call__(self) -> HomeActivity | None: ...
 
 
 class EventJournal(Protocol):
@@ -305,4 +327,27 @@ class StepsLogReader(Protocol):
         offset: int,
         budget: int,
         /,
+    ) -> Mapping[str, object]: ...
+
+
+class AdviceNotFound(LookupError):
+    """The configuration has no wizard parameter at the requested file and path."""
+
+
+class AdvisorPort(Protocol):
+    """AI advice through the user's own CLI login; both calls block and stop soon after `cancel`
+    is set. `check` runs only the presence, version and login checks and returns the `CliStatus`
+    fields; it never invokes a model. `ask` reads the saved configuration on the server, sends
+    only the allowlisted facts of that one parameter and returns `{"outcome": "advice",
+    "advice": {...}}` or `{"outcome": "fallback", "cause": "refused" | "invalid", "reason"}`;
+    it raises `AdviceNotFound` for an unknown parameter and never writes."""
+
+    def check(self, provider: str, cancel: threading.Event) -> Mapping[str, object]: ...
+
+    def ask(
+        self,
+        provider: str,
+        file: str,
+        path: tuple[str, ...],
+        cancel: threading.Event,
     ) -> Mapping[str, object]: ...

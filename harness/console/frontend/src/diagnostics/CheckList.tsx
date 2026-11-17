@@ -52,6 +52,7 @@ export function CheckList({
   onQuery,
   onSelect,
   cli,
+  bare = false,
 }: {
   report: HealthReport;
   filter: CheckFilter;
@@ -62,6 +63,8 @@ export function CheckList({
   onQuery: (query: string) => void;
   onSelect: (id: string) => void;
   cli: string;
+  /** Inside a v3 panel that carries the title and the count: no panel and no header of its own. */
+  bare?: boolean;
 }) {
   const { t, language, state, check: checkName } = useI18n();
   const { summary } = report;
@@ -77,14 +80,8 @@ export function CheckList({
     ["skipped", t("Пропущено")],
     ["ok", t("Пройдено")],
   ];
-  return (
-    <section className="panel diag-list-panel">
-      <div className="panel-head">
-        <h2>{t("Проверки")}</h2>
-        <span className="small muted" id="diag-count">
-          {t("{shown} из {total}", { shown: visible.length, total: report.checks.length })}
-        </span>
-      </div>
+  const content = (
+    <>
       <div className="diag-tools">
         <div className="chips">
           {chips.map(([key, label]) => (
@@ -159,6 +156,18 @@ export function CheckList({
       <div className="diag-list-foot">
         {t("Полный отчёт")}: <code>{cli}</code>
       </div>
+    </>
+  );
+  if (bare) return <div className="diag-list-panel diag-list-bare">{content}</div>;
+  return (
+    <section className="panel diag-list-panel">
+      <div className="panel-head">
+        <h2>{t("Проверки")}</h2>
+        <span className="small muted" id="diag-count">
+          {t("{shown} из {total}", { shown: visible.length, total: report.checks.length })}
+        </span>
+      </div>
+      {content}
     </section>
   );
 }

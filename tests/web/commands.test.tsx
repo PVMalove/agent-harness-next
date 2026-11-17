@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
 import { CommandPanel } from "../../harness/console/frontend/src/commands/CommandPanel";
@@ -40,7 +40,7 @@ function renderHarness(
   );
   const list = socket.request("job.list");
   act(() => answerHarness(socket, HARNESS_OVERVIEW, maintenance));
-  act(() => fireEvent.click(screen.getByRole("tab", { name: "Команды" })));
+  act(() => fireEvent.click(screen.getByRole("tab", { name: /Команды/ })));
   return { client, clock, socket, list };
 }
 
@@ -57,7 +57,7 @@ describe("the Harness commands panel", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Harness");
     expect(within(row("diff")).getByText("✔ обратимо")).toBeTruthy();
     expect(within(row("uninstall-apply")).getByText("✖ удаление")).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Команды" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Команды/ }).getAttribute("aria-selected")).toBe("true");
   });
 
   test("a reversible command starts at once and its output grows with the subscription", () => {
@@ -293,6 +293,17 @@ describe("the command panel inside a page", () => {
     expect(screen.getByRole("alert").textContent).toBe("Нужно превью плана очистки: запустите команду из TUI");
   });
 
+  // Review of PR #1186: Diagnostics remounted its panel on a tab change and `harness health --fix`
+  // ran again with no click. The page keeps the request in its state, so a remount sees it again.
+  test("a remounted panel does not run the page's request a second time", () => {
+    const request = { command_id: "diff", values: {}, nonce: 7 };
+    const first = renderPanel({ request });
+    expect(first.socket.sent.filter((body) => body.type === "job.start")).toHaveLength(1);
+    cleanup();
+    const second = renderPanel({ request });
+    expect(second.socket.sent.filter((body) => body.type === "job.start")).toEqual([]);
+  });
+
   test("confirmAll asks before a reversible command and shows the page's reason", () => {
     const request = { command_id: "diff", values: { json: "1" }, nonce: 1, reason: "Перечитать конфигурацию batch." };
     const { socket } = renderPanel({ request, confirmAll: true });
@@ -306,6 +317,14 @@ describe("the command panel inside a page", () => {
     const starts = socket.sent.filter((body) => body.type === "job.start");
     expect(starts).toHaveLength(1);
     expect(starts[0]).toMatchObject({ command_id: "diff", confirmed: true });
+  });
+
+  test("a page's context shows in the confirmation under its reason", () => {
+    const request = { command_id: "diff", values: {}, nonce: 1, reason: "Выключить функцию.", context: "a › b: true → false\nРаботает → Выключена" };
+    renderPanel({ request, confirmAll: true });
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Выключить функцию.")).toBeTruthy();
+    expect(dialog.querySelector("pre")!.textContent).toBe("a › b: true → false\nРаботает → Выключена");
   });
 
   test("the page learns once that the shown job finished", () => {

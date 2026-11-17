@@ -36,6 +36,10 @@ MAINTENANCE_REQUEST = "harness.maintenance"
 # The Harness screen of the Web console: the same state and drift as `harness.snapshot` with the
 # pipeline usage counted on the server, one typed reply instead of the paged ledger.
 HARNESS_OVERVIEW_REQUEST = "harness.overview"
+# The Diagnostics features: the Harness feature registry with its states, dependencies, sources
+# and settings rows, and the configuration digests a feature toggle writes against. One typed
+# reply, read only: a toggle is the confirmed `configuration-apply` job.
+FEATURES_REQUEST = "features.snapshot"
 # The Repo Map screen: HEAD, its cached map, the tier, the parser bundle and the memory status.
 REPO_MAP_REQUEST = "repo_map.snapshot"
 # «Открыть проект»: the installation state of the served project and the candidate projects, each
@@ -50,6 +54,16 @@ UPDATE_DIFF_REQUEST = "update_harness.diff"
 # «Настройка»: the configuration files with their secrets masked and their digests, the version
 # store, a pending transaction and the runtime adapter preview; never written or recovered.
 CONFIGURATION_REQUEST = "configuration.snapshot"
+# A saved version `configuration.snapshot` may select, as the version store names it.
+CONFIGURATION_VERSION_ID = r"[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}"
+# AI advice in «Настройка»: a CLI check that never invokes a model, an advice request about one
+# parameter sent only on an explicit button press, and its cancellation. An ask is bounded by
+# ADVICE_TIMEOUT_SECONDS, a check by CHECK_TIMEOUT_SECONDS.
+ADVISOR_CHECK_REQUEST = "advisor.check"
+ADVISOR_ASK_REQUEST = "advisor.ask"
+ADVISOR_CANCEL_REQUEST = "advisor.cancel"
+ADVICE_TIMEOUT_SECONDS = 90
+CHECK_TIMEOUT_SECONDS = 15
 # The longest project-relative path a request may name.
 MAX_PATH_CHARS = 512
 # Worker steps: one page of a dispatch's worker log from a byte offset the client keeps, and a

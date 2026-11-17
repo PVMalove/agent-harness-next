@@ -27,8 +27,8 @@ async function open(page: Page, route: string, width: number) {
   });
   await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
   await page.goto(`${process.env.CONSOLE_BASE_URL}/#/${route}`);
-  // On Orchestration the pending decisions are the mockup's «Гейты» tab.
-  if (route === "orchestration") await page.locator("#orch-tabs").getByRole("tab", { name: "Гейты" }).click();
+  // On Orchestration the pending decisions are the mockup's «Решения» tab.
+  if (route === "orchestration") await page.locator("#orch-tabs").getByRole("tab", { name: /Решения/ }).click();
   await expect(page.getByRole("heading", { name: "Ожидающие решения" })).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   return starts;

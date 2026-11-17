@@ -1,6 +1,6 @@
 /* The connection state the shell shows, as a pure reducer over client events. */
 import type { ClientEvent } from "./ws/client";
-import type { HomeSnapshot } from "./ws/types";
+import type { HomeActivity, HomeSnapshot } from "./ws/types";
 import { healthTotal } from "./ws/types";
 
 export type ConnectionStatus = "connected" | "reconnecting" | "no_server" | "error" | "empty";
@@ -18,6 +18,9 @@ export interface ConnectionState {
   snapshot: HomeSnapshot | null;
   cached: boolean;
   ageSeconds: number | null;
+  /** The contour counters of the last reply; null when none came, the server could not count
+      them or the socket dropped (they describe the moment of the reply only). */
+  activity: HomeActivity | null;
   stale: boolean;
   /** Why the state is `error`: a server error code, `invalid_snapshot` or `session_rejected`. */
   errorCode: string | null;
@@ -30,6 +33,7 @@ export const INITIAL: ConnectionState = {
   snapshot: null,
   cached: false,
   ageSeconds: null,
+  activity: null,
   stale: false,
   errorCode: null,
 };
@@ -49,6 +53,7 @@ export function reduce(state: ConnectionState, event: ClientEvent): ConnectionSt
         snapshot: event.snapshot,
         cached: event.cached,
         ageSeconds: event.ageSeconds,
+        activity: event.activity ?? null,
         stale: false,
         errorCode: null,
       };
@@ -59,6 +64,7 @@ export function reduce(state: ConnectionState, event: ClientEvent): ConnectionSt
         status: event.wasOpen ? "reconnecting" : state.status,
         attempt: event.attempt,
         nextDelayMs: event.delayMs,
+        activity: null,
         stale: state.snapshot !== null,
       };
     case "health": {

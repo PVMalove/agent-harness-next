@@ -85,6 +85,22 @@ describe("the Open Project, Update Harness, Configuration and Help parsers", () 
     expect(parseConfiguration({ ...CONFIGURATION, transaction_pending: "no" })).toBeNull();
   });
 
+  test("Configuration carries the saved versions, the selected version and the recommendations", () => {
+    const versions = [{ id: "20261116T101500Z-0123456789ab", created_at: "2026-11-16", description: "", files: ["project.json"], package_version: "2.1.0", problem: "" }];
+    const version = { id: versions[0]!.id, error: "", files: { "project.json": CONFIGURATION.files["project.json"] } };
+    expect(parseConfiguration({ ...CONFIGURATION, versions, version })).toMatchObject({ versions, version });
+    expect(parseConfiguration({ ...CONFIGURATION, versions: [{ id: 1 }] })).toBeNull();
+    expect(parseConfiguration({ ...CONFIGURATION, version: { ...version, files: { "x.json": {} } } })).toBeNull();
+    const first = {
+      group: "orchestrator", file: "orchestration.json", path: ["approval_policy"], label: "Политика согласования", type: "enum",
+      choices: ["manual_all", "auto"], default: "manual_all", minimum: null, description: "",
+    };
+    expect(parseConfiguration({ ...CONFIGURATION, wizard: [first] })?.wizard).toEqual([first]);
+    const wizard = [{ ...first, recommendation: { value: "manual_all", reason: "почему" } }, { ...first, recommendation: null }];
+    expect(parseConfiguration({ ...CONFIGURATION, wizard })?.wizard?.[0]?.recommendation?.value).toBe("manual_all");
+    expect(parseConfiguration({ ...CONFIGURATION, wizard: [{ ...first, recommendation: { value: 1 } }] })).toBeNull();
+  });
+
   test("Help is a language, an intro and titled Markdown sections", () => {
     const help = { language: "ru", intro: "# Справка", sections: [{ title: "Разделы", markdown: "## Разделы" }] };
     expect(parseHelp(help)).toEqual(help);

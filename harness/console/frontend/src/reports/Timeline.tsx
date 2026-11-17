@@ -5,12 +5,14 @@ import { useScreen } from "../screens/useScreen";
 import { parseTimeline } from "../ws/ledger";
 import { batchStartText, batchStatus, batchTimingText, renderStatus, roleFlowText } from "./format";
 
-export function Timeline({ batchId }: { batchId: string }) {
+/** `id` keeps the element unique where two timelines are mounted at once (Publish Evidence and
+    the candidate drawer). */
+export function Timeline({ batchId, id = "report-timeline" }: { batchId: string; id?: string }) {
   const { t, language } = useI18n();
   const screen = useScreen({ type: "reports.timeline", params: { batch_id: batchId } }, parseTimeline);
   const timeline = screen.data;
   return (
-    <section className="panel report-timeline" id="report-timeline">
+    <section className="panel report-timeline" id={id}>
       <div className="panel-head">
         <h2>{t("Хронология batch")}</h2>
         <code>{batchId}</code>

@@ -88,6 +88,8 @@ REPLY_TIMEOUT = 300.0
 CLOSE_TIMEOUT = 1.0
 # A running job is polled with `job.get`, never waited on under the connection lock.
 JOB_POLL_SECONDS = 0.5
+# The keys of a `configuration.snapshot` reply that only the Web console reads.
+_WEB_ONLY = frozenset({"wizard", "versions", "version"})
 
 
 class ConsoleClientError(Exception):
@@ -668,8 +670,11 @@ class ConsoleClient:
         schema is `MalformedReply`."""
         found = self._paged({"type": CONFIGURATION_REQUEST, "force": force})
         if isinstance(found, dict):
-            # The web Settings wizard catalog rides along with the facts; the TUI has no wizard.
-            found = {key: value for key, value in found.items() if key != "wizard"}
+            # The web Settings wizard catalog, the version list and a selected version ride
+            # along with the facts; the TUI reads its versions through its own screen.
+            found = {
+                key: value for key, value in found.items() if key not in _WEB_ONLY
+            }
         return self._decoded(
             ConfigurationFacts.from_payload, found, "снимок «Настройка»"
         )

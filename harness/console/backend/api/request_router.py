@@ -10,6 +10,9 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 
+from ..application.advisor import AdvisorService
+from .protocol.advisor import Pending, advisor_request_type
+from .protocol.advisor import respond as respond_advisor
 from ..application.decisions import DecisionService
 from .protocol.decisions import is_decisions_request
 from .protocol.decisions import respond as respond_decisions
@@ -22,13 +25,18 @@ from .protocol.events import replies as event_replies
 from ..application.screens import ScreenService
 from .protocol.screens import is_screen_request
 from .protocol.screens import respond as respond_screens
+from ..application.ports import ActivitySource
 from ..application.snapshots import SnapshotService
 from .protocol.snapshots import busy, respond
 from ..application.live_steps import LiveSteps
 from .protocol.steps import is_steps_request
 from .protocol.steps import replies as step_replies
 from ..application.worker_steps import WorkerStepsQuery
-from ...kernel.protocol import WORKER_SUBSCRIBE_REQUEST
+from ...kernel.protocol import (
+    ADVISOR_ASK_REQUEST,
+    ADVISOR_CANCEL_REQUEST,
+    WORKER_SUBSCRIBE_REQUEST,
+)
 from .protocol.workers import worker_request_type
 from .protocol.workers import replies as worker_replies
 
@@ -55,6 +63,8 @@ class RouterConnection:
         self.lock = asyncio.Lock()
         self._requests: set[asyncio.Task[None]] = set()
         self._subscriptions: set[asyncio.Task[None]] = set()
+        # The advice requests of this connection; only they can be cancelled from it.
+        self._advice: Pending = {}
 
     @property
     def unfinished(self) -> int:
@@ -62,6 +72,11 @@ class RouterConnection:
 
     async def submit(self, raw: str) -> None:
         """Start answering one text frame, or reply busy when its slots are full."""
+        if advisor_request_type(raw) == ADVISOR_CANCEL_REQUEST:
+            # A cancel only sets an event and never awaits the CLI, so it takes no slot: a
+            # connection with every request slot busy can still stop its advice request.
+            await self._reply(await respond_advisor(raw, self._router.advisor, self._advice))
+            return
         job_type = job_request_type(raw)
         pending, limit = (
             (self._subscriptions, MAX_SUBSCRIPTIONS)
@@ -69,6 +84,8 @@ class RouterConnection:
             or is_orchestration_request(raw)
             or worker_request_type(raw) == WORKER_SUBSCRIBE_REQUEST
             or is_steps_request(raw)
+            # An advice request waits for the CLI up to its bound, like a stream.
+            or advisor_request_type(raw) == ADVISOR_ASK_REQUEST
             else (self._requests, MAX_UNFINISHED_REQUESTS)
         )
         if len(pending) >= limit:
@@ -107,12 +124,16 @@ class RouterConnection:
                     step_replies(raw, router.steps)
                 ) as replies:
                     await self._stream(replies)
+            elif advisor_request_type(raw) is not None:
+                await self._reply(
+                    await respond_advisor(raw, router.advisor, self._advice)
+                )
             elif is_decisions_request(raw):
                 await self._reply(await respond_decisions(raw, router.decisions))
             elif is_screen_request(raw):
                 await self._reply(await respond_screens(raw, router.screens))
             else:
-                await self._reply(await respond(raw, router.snapshots))
+                await self._reply(await respond(raw, router.snapshots, router.activity))
         except Exception:
             # A reply that cannot be produced or sent ends the connection.
             if self._on_failure is not None:
@@ -121,6 +142,8 @@ class RouterConnection:
     async def aclose(self) -> None:
         """Cancel and await every unfinished answer of this connection."""
         unfinished = self._requests | self._subscriptions
+        for cancel in self._advice.values():
+            cancel.set()
         for task in unfinished:
             task.cancel()
         await asyncio.gather(*unfinished, return_exceptions=True)
@@ -138,7 +161,12 @@ class RequestRouter:
         screens: ScreenService,
         workers: WorkerStepsQuery,
         steps: LiveSteps,
+        activity: ActivitySource | None = None,
+        *,
+        advisor: AdvisorService | None = None,
     ) -> None:
+        self.activity = activity
+        self.advisor = advisor
         self.snapshots = snapshots
         self.jobs = jobs
         self.decisions = decisions
